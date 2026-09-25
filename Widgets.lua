@@ -121,7 +121,8 @@ function W:Input(parent, width, placeholder, onChange)
 	box.placeholder = Theme:Text(box, "body", placeholder, C.faint)
 	box.placeholder:SetPoint("LEFT", 9, 0)
 	local function UpdatePlaceholder()
-		box.placeholder:SetShown(box:GetText() == "" and not box:HasFocus())
+		-- Shown until something is typed, focused or not: a dialog focuses its box straight away
+		box.placeholder:SetShown(box:GetText() == "")
 	end
 	box:SetScript("OnEditFocusGained", function(self)
 		Theme:SetBorderColor(self, C.accent)

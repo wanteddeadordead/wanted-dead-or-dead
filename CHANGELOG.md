@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Trust levels in bounty tooltips and /wanted rep: Trusted, Reliable, Unproven or New poster, Doubtful, Untrustworthy.
 - Bounty rows show each poster's and hunter's record in a few coloured words: unpaid, paid, disputed, level.
 - An entry in the game's Options > AddOns list with buttons to open Wanted and the Nearby window.
 - Test data is gone from released versions: no test data card on the Tools page, no simulate or purge commands.

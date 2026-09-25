@@ -581,6 +581,10 @@ check(aceLevel >= 3 and aceStars == 5 and ace.disputed == 0, "Ace: high level, f
 check(shadyLevel == 0 and shadyStars == 0 and shady.disputed == 2 and shady.lone >= 1, "Shady: level 0, no reliability, 2 disputed, got level "..shadyLevel.." stars "..shadyStars.." disputed "..shady.disputed)
 check(R:GetTally("Grix Tallowbane").unpaid == 2, "Deadbeat: 2 unpaid, got "..R:GetTally("Grix Tallowbane").unpaid)
 check(R:GetTally("Maribel Stonehollow").paid == 6 and R:GetTally("Maribel Stonehollow").unpaid == 0, "Honest: 6 paid, none unpaid")
+check(R:GetHunterTrust(ace) == "Trusted" and R:GetHunterTrust(shady) == "Untrustworthy", "hunter trust: Kaelen trusted, Vorn untrustworthy, got "..tostring(R:GetHunterTrust(ace)).." / "..tostring(R:GetHunterTrust(shady)))
+check(R:GetPosterTrust(R:GetTally("Maribel Stonehollow")) == "Trusted" and R:GetPosterTrust(R:GetTally("Grix Tallowbane")) == "Untrustworthy", "poster trust: Maribel trusted, Grix untrustworthy")
+check(R:GetLine("Grix Tallowbane"):find("as a poster: Untrustworthy", 1, true), "rep line leads with trust")
+for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do ns.Rows:ShowBountyTooltip(NewMock(), item) end
 check(R:GetLine("Grix Tallowbane"):find("2 UNPAID", 1, true) and R:GetLine("Vorn Ashgrip"):find("2 disputed", 1, true), "record lines show UNPAID and disputed")
 local posters = {}
 for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do posters[item.poster] = true end

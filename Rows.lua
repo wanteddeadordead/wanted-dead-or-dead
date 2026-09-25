@@ -176,22 +176,18 @@ function Rows:ShowBountyTooltip(row, info)
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddDoubleLine("Bounty", Theme:Money(info.amount), 1, 1, 1, 1, 1, 1)
 	GameTooltip:AddDoubleLine("Posted by", info.mine and "you" or info.poster, 1, 1, 1, C.text[1], C.text[2], C.text[3])
+	if not info.mine then
+		Reputation:AddTrustLines("Poster trust", Reputation:GetPosterTrust(Reputation:GetTally(info.poster)))
+	end
 	if info.hunters and #info.hunters > 0 then
 		GameTooltip:AddDoubleLine("Hunting now", table.concat(info.hunters, ", "), 1, 1, 1, C.blue[1], C.blue[2], C.blue[3])
-	end
-	local posterRep = not info.mine and Reputation:GetLine(info.poster)
-	if posterRep then
-		GameTooltip:AddLine(posterRep, C.muted[1], C.muted[2], C.muted[3], true)
 	end
 	if info.claim then
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddDoubleLine("Claimed by", info.hunter, 1, 1, 1, C.text[1], C.text[2], C.text[3])
 		local witnesses = Bounties:GetWitnesses(info.claim)
 		GameTooltip:AddLine(#witnesses > 0 and ("Seen by "..table.concat(witnesses, ", ")) or "Nobody else saw the kill", C.muted[1], C.muted[2], C.muted[3], true)
-		local hunterRep = Reputation:GetLine(info.hunter)
-		if hunterRep then
-			GameTooltip:AddLine(hunterRep, C.muted[1], C.muted[2], C.muted[3], true)
-		end
+		Reputation:AddTrustLines("Hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
 	end
 	GameTooltip:Show()
 end

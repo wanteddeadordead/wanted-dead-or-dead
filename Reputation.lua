@@ -146,6 +146,14 @@ function Reputation:GetLine(origin)
 		return nil
 	end
 	local parts = {}
+	local posterTrust = Reputation:GetPosterTrust(tally)
+	local hunterTrust = Reputation:GetHunterTrust(tally)
+	if posterTrust then
+		tinsert(parts, "as a poster: "..posterTrust)
+	end
+	if hunterTrust then
+		tinsert(parts, "as a hunter: "..hunterTrust)
+	end
 	if tally.posted > 0 then
 		local poster = format("posted %d, paid %d", tally.posted, tally.paid)
 		if tally.unpaid > 0 then
@@ -161,6 +169,68 @@ function Reputation:GetLine(origin)
 		end
 	end
 	return table.concat(parts, "; ")
+end
+
+---How far to trust a hunter's claims, from how many were verified and how many were disputed.
+---@param tally table
+---@return string? label nil when they've never claimed
+---@return table? color
+---@return string? detail
+function Reputation:GetHunterTrust(tally)
+	if tally.claims == 0 then
+		return nil
+	end
+	local C = Wanted.Theme.C
+	local good = tally.witnessed + tally.confirmed
+	local level, stars = Reputation:GetRank(tally)
+	local detail = format("Level %d. %d of %d kill%s verified, %d unseen, %d disputed. Earned %s.", level, good, tally.claims, tally.claims == 1 and "" or "s", tally.lone, tally.disputed, Bounties:FormatMoney(tally.earned))
+	if good + tally.disputed == 0 then
+		return "Unproven", C.muted, detail
+	elseif stars <= 2 then
+		return "Untrustworthy", C.red, detail
+	elseif tally.disputed > 0 then
+		return "Doubtful", C.amber, detail
+	elseif good >= 5 then
+		return "Trusted", C.green, detail
+	end
+	return "Reliable", C.green, detail
+end
+
+---How far to trust a poster to pay, from claims paid against claims left unpaid.
+---@param tally table
+---@return string? label nil when they've never posted
+---@return table? color
+---@return string? detail
+function Reputation:GetPosterTrust(tally)
+	if tally.posted == 0 then
+		return nil
+	end
+	local C = Wanted.Theme.C
+	local detail = format("Paid %d of %d claim%s owed, %d unpaid. %d bount%s posted.", tally.paid, tally.paid + tally.unpaid, tally.paid + tally.unpaid == 1 and "" or "s", tally.unpaid, tally.posted, tally.posted == 1 and "y" or "ies")
+	if tally.paid + tally.unpaid == 0 then
+		return "New poster", C.muted, detail
+	elseif tally.unpaid > 0 and tally.unpaid >= tally.paid then
+		return "Untrustworthy", C.red, detail
+	elseif tally.unpaid > 0 then
+		return "Doubtful", C.amber, detail
+	elseif tally.paid >= 5 then
+		return "Trusted", C.green, detail
+	end
+	return "Reliable", C.green, detail
+end
+
+---Adds a trust line and its detail to the game tooltip.
+---@param title string "Poster trust" or "Hunter trust"
+---@param label string?
+---@param color table?
+---@param detail string?
+function Reputation:AddTrustLines(title, label, color, detail)
+	if not label then
+		return
+	end
+	local C = Wanted.Theme.C
+	GameTooltip:AddDoubleLine(title, label, 1, 1, 1, color[1], color[2], color[3])
+	GameTooltip:AddLine(detail, C.muted[1], C.muted[2], C.muted[3], true)
 end
 
 ---A few words on a poster's record for a bounty row: red when they've left claims unpaid, green once

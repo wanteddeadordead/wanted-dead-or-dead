@@ -112,6 +112,8 @@ function GetRealmName() return "Realm" end
 function GetNormalizedRealmName() return "Realm" end
 function RegionalUniqueNamesEnabled() return true end
 function GetZoneText() return "Durotar" end
+local subZone = ""
+function GetSubZoneText() return subZone end
 function IsInInstance() return false end
 function GetChannelName() return 6 end
 function JoinPermanentChannel() end
@@ -872,12 +874,19 @@ check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "no call without Local Defense")
 localDefense = "4"
 check(ns.EnemyMenu:GetLocalDefenseChannel() == 4, "Local Defense found as channel 4")
 local help = ns.EnemyMenu:BuildHelpText()
-check(help:find("^Need help at Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+%d+ more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
+check(help:find("^Need help in Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+%d+ more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
 check(help:find("Stabby Mcstab", 1, true) < (help:find("Invader", 1, true) or 1e9), "whoever is on you comes first")
+subZone = "Razor Hill"
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help in Razor Hill, Durotar 45,25 %- "), "help names the area when there is one: "..help)
+subZone = "Durotar"
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help in Durotar 45,25 %- "), "an area named like the zone isn't repeated: "..help)
+subZone = ""
 chatSent = {}
 local typed
 ChatFrameUtil = { OpenChat = function(text) typed = text end }
-check(ns.EnemyMenu:CallForHelp("CHANNEL") and #chatSent == 0 and typed and typed:find("^/4 Need help at Durotar") and #typed <= 255, "Local Defense help is typed into the chat box, not sent, got "..tostring(typed))
+check(ns.EnemyMenu:CallForHelp("CHANNEL") and #chatSent == 0 and typed and typed:find("^/4 Need help in Durotar") and #typed <= 255, "Local Defense help is typed into the chat box, not sent, got "..tostring(typed))
 check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "a second call right away waits")
 check(ns.EnemyMenu:CallForHelp("GUILD"), "the guild is a separate channel")
 ns.EnemyMenu:ShowHelpMenu()

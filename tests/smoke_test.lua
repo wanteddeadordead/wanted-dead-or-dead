@@ -705,7 +705,7 @@ ns.Bounties:Hunt(huntBounty)
 local hunts = ns.Model:GetMyHunts()
 local hunted
 for _, item in ipairs(hunts) do if item.bounty == huntBounty then hunted = item end end
-check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt "..ns.Theme:Left(ns.Bounties.HUNT_SECONDS), 1, true), "the hunt shows under Your hunts with its time left, got "..(hunted and ns.Model:GetDetail(hunted) or "nothing"))
+check(hunted and hunted.huntEnds and ns.Model:GetStateLabel(hunted) == "Hunting, "..ns.Theme:Left(ns.Bounties.HUNT_SECONDS), "the hunt shows its time left on the label, got "..(hunted and ns.Model:GetStateLabel(hunted) or "nothing"))
 check(hunted.actions[1] == "stophunt" and hunted.actions[2] == "renew", "a hunt offers Stop and Renew")
 ns.UI:Show("hunts")
 check(ns.UI:IsShown("hunts"), "Your hunts is its own page")

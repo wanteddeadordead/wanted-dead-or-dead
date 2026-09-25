@@ -123,7 +123,8 @@ function Model:GetStateLabel(info)
 	local state = info.state
 	if state == STATE.OPEN then
 		if info.iHunt then
-			return "You're hunting", C.blue
+			-- The hunt's time left belongs where it's always seen (the detail line gets cut off)
+			return info.huntEnds and ("Hunting, "..Wanted.Theme:Left(info.huntEnds - GetServerTime())) or "You're hunting", C.blue
 		elseif info.mine and #info.hunters > 0 then
 			return "Being hunted", C.amber
 		end
@@ -168,9 +169,6 @@ function Model:GetDetail(info)
 	if state == STATE.OPEN then
 		tinsert(parts, Theme:Left(info.expiry - now))
 		local hunters = #info.hunters
-		if info.huntEnds then
-			tinsert(parts, "hunt "..Theme:Left(info.huntEnds - now))
-		end
 		if hunters > 0 then
 			tinsert(parts, info.iHunt and (hunters == 1 and "only you hunting" or format("you and %d other%s hunting", hunters - 1, hunters == 2 and "" or "s")) or format("%d hunting", hunters))
 		end

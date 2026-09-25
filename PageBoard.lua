@@ -247,7 +247,7 @@ function private.RefreshList()
 		end
 	end
 	private.count:SetText(#items == 0 and "" or format("%d bount%s  -  %s open", #items, #items == 1 and "y" or "ies", Theme:Money(total)))
-	private.list:SetItems(items, "No bounties on the board.", "Post one above, or clear the filters. Test data: Tools > Simulate.")
+	private.list:SetItems(items, "No bounties on the board.", "Post one above, or clear the filters.")
 end
 
 

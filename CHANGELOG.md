@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Your wanted poster (/wanted poster, or Your bounties > Your wanted poster): your character on a painted
+## [0.1.0-beta.3] - 2026-09-25
+
+- Your wanted poster (in the main menu, or /wanted poster): your character on a painted
   poster with the price on your head, every bounty the other faction has posted on you, paid or not. Take
   screenshot saves it for sharing; Set amount shows any reward you like, allegedly.
 - Bounty notices across factions: Battle.net friends on the other faction who also run Wanted pass on the

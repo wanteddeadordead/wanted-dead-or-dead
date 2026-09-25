@@ -5,6 +5,7 @@ manual-changelog:
   markup-type: markdown
 
 ignore:
+  - Debug.lua
   - tests
   - docs
   - .github

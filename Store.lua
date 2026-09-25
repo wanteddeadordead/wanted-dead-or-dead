@@ -263,6 +263,7 @@ function Store:PurgeTest()
 	return removed
 end
 
+--@debug@
 ---Clears every shared record (bounties, kills, deaths, claims, payments...) and starts this player's record
 ---chain again from the beginning. Settings, Kill on Sight, Ignore, enemy statistics and sightings stay. Only
 ---safe before any other player has received this client's records: theirs would no longer match.
@@ -279,6 +280,7 @@ function Store:FreshStart()
 	private.ownChain = db.chains[private.origin]
 	return removed
 end
+--@end-debug@
 
 ---Gets a record by id.
 ---@param id string

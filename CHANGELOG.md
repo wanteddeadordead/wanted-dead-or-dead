@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- An entry in the game's Options > AddOns list with buttons to open Wanted and the Nearby window.
 - Test data is gone from released versions: no test data card on the Tools page, no simulate or purge commands.
 - Call for help: a button under the Nearby list sends where you are and who's around to your party or raid or
   your guild, or types it into your chat box for Local Defense (the game lets only you post there: press Enter). Enemies also get a Tell Local Defense option.

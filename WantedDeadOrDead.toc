@@ -46,3 +46,4 @@ Report.lua
 MapPins.lua
 MapPins.xml
 Minimap.lua
+OptionsPanel.lua

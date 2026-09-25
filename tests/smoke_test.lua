@@ -171,6 +171,13 @@ WorldMapFrame.AcquirePin = function(self, template, ...)
 	return pin
 end
 WorldMapFrame.WorldMapTrackingOptionsButton = NewMock()
+local optionsCategory
+Settings = {
+	RegisterCanvasLayoutCategory = function(frame, name) optionsCategory = { frame = frame, name = name } return optionsCategory end,
+	RegisterAddOnCategory = function(category) category.registered = true end,
+}
+SettingsPanel = NewMock()
+SettingsPanel.ExitWithCommit = function(self) self._shown = false end
 local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
@@ -564,6 +571,14 @@ enemyUnits.nameplate30, enemyUnits.nameplate31 = nil, nil
 -- A blocked action is noted with what was going on
 Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
 check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1, true), "blocked action noted with context")
+-- The game's Options > AddOns entry: registered, and its buttons close Options and open Wanted
+check(optionsCategory and optionsCategory.registered and optionsCategory.name == "Wanted: Dead or... Dead", "Options > AddOns entry registered")
+SettingsPanel._shown = true
+ns.OptionsPanel.openButton:Click()
+check(not SettingsPanel._shown and ns.UI:IsShown(), "Open Wanted closes Options and opens Wanted")
+SettingsPanel._shown = true
+ns.OptionsPanel.nearbyButton:Click()
+check(not SettingsPanel._shown and ns.NearbyWindow:IsShown(), "Nearby window button opens it")
 -- Bug report and the beta welcome
 ns:NoteProblem("test problem")
 local report = ns.Report:Build()

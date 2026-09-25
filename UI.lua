@@ -222,6 +222,21 @@ function private.Create()
 	private.LayoutNav()
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
+	-- Report a bug stays in reach with the Tools page hidden: the foot of the menu, above the version
+	local bug = CreateFrame("Button", nil, sidebar)
+	bug:SetSize(SIDEBAR_WIDTH - 1, 34)
+	bug:SetPoint("BOTTOMLEFT", 0, 34)
+	bug.bg = Theme:Fill(bug, C.transparent)
+	bug.line = Theme:Line(bug)
+	bug.line:SetPoint("TOPLEFT", 16, 0)
+	bug.line:SetPoint("TOPRIGHT", -16, 0)
+	bug.label = Theme:Text(bug, "body", "Report a bug", C.amber)
+	bug.label:SetPoint("LEFT", 22, 0)
+	bug:SetScript("OnClick", function() Wanted.Report:Show() end)
+	bug:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
+	bug:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
+	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy, with the address to send it to. Also /wanted bug.")
+	private.bugButton = bug
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)

@@ -670,6 +670,9 @@ end
 check(kaelenProof, "Kaelen's test claim has a proof")
 ns.UI:Show("settings")
 ns:RunCommand("purge", "")
+-- Report a bug from the foot of the menu
+ns.UI:Show("board")
+ns.Report:Show()
 -- The game's Options > AddOns entry: registered, and its buttons close Options and open Wanted
 check(optionsCategory and optionsCategory.registered and optionsCategory.name == "Wanted: Dead or... Dead", "Options > AddOns entry registered")
 SettingsPanel._shown = true

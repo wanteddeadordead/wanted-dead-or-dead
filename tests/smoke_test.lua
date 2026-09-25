@@ -301,7 +301,7 @@ for _, item in ipairs(ns.Model:GetMyBounties()) do
 	check(not ns.Model:IsFinished(item), "live list has no finished bounties")
 end
 local foundWithdrawn = false
-for _, item in ipairs(ns.Model:GetMyHistory()) do
+for _, item in ipairs(ns.Model:GetMyHistory("poster")) do
 	if item.state == "withdrawn" then foundWithdrawn = true end
 end
 check(foundWithdrawn, "withdrawn bounty is in history")
@@ -696,6 +696,10 @@ ns.UI:Show("hunts")
 check(ns.UI:IsShown("hunts"), "Your hunts is its own page")
 ns.HuntsPage:ShowClaims()
 check(ns.UI:IsShown("hunts"), "Your claims is on Your hunts")
+ns:RunCommand("record", "hunter")
+check(ns.UI:IsShown("hunts"), "/wanted record hunter opens Your hunts")
+for _, item in ipairs(ns.Model:GetMyHistory("poster")) do check(item.state, "poster history holds only bounties") end
+for _, item in ipairs(ns.Model:GetMyHistory("hunter")) do check(not item.state and item.claim, "hunter history holds only claims") end
 ns.Rows:DoAction("renew", hunted)
 ns.Rows:DoAction("stophunt", ns.Model:GetBountyInfo(huntBounty))
 check(not ns.Model:GetBountyInfo(huntBounty).iHunt, "stopped")

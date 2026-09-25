@@ -38,6 +38,7 @@ EnemyMenu.lua
 TargetFile.lua
 NearbyWindow.lua
 PageBoard.lua
+TrustPanel.lua
 PageMine.lua
 PageHunts.lua
 PageHunters.lua

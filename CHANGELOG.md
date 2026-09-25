@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Split by role: Your bounties holds everything as a poster (owe, open, paid out, history, record) and Your
+  hunts everything as a hunter (owed to you, hunting now, earned, claims, history, record).
 - Hunts last 24 hours (was 2), renewable.
 - The file on a target: click a bounty (or right-click an enemy > Where they've been, or /wanted file) for last
   seen, usual zones, usual hours, every sighting and their deaths. Sightings of wanted players are kept a month.

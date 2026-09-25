@@ -333,23 +333,29 @@ function Model:GetMyActiveClaims()
 end
 
 ---Finished bounties the player posted and finished claims they made, newest first.
+---Finished business for one side: as a poster, bounties that were paid, expired or withdrawn; as a hunter,
+---claims that were paid, beaten or disputed. Newest first.
+---@param role string "poster" or "hunter"
 ---@return table[]
-function Model:GetMyHistory()
+function Model:GetMyHistory(role)
 	local items = {}
 	local me = Store:GetOrigin()
-	for bounty in Store:Iterator("bounty") do
-		if bounty.origin == me then
-			local info = Model:GetBountyInfo(bounty)
-			if Model:IsFinished(info) then
-				info.sortT = bounty.t
-				tinsert(items, info)
+	if role == "poster" then
+		for bounty in Store:Iterator("bounty") do
+			if bounty.origin == me then
+				local info = Model:GetBountyInfo(bounty)
+				if Model:IsFinished(info) then
+					info.sortT = bounty.t
+					tinsert(items, info)
+				end
 			end
 		end
-	end
-	for _, item in ipairs(Model:GetMyClaims()) do
-		if item.finished then
-			item.sortT = item.t
-			tinsert(items, item)
+	else
+		for _, item in ipairs(Model:GetMyClaims()) do
+			if item.finished then
+				item.sortT = item.t
+				tinsert(items, item)
+			end
 		end
 	end
 	sort(items, function(a, b) return a.sortT > b.sortT end)
@@ -410,7 +416,11 @@ end
 ---Totals for the summary tiles.
 ---@return table
 function Model:GetMySummary()
-	local summary = { owe = 0, oweCount = 0, owed = 0, owedCount = 0, open = 0, openCount = 0, decide = 0 }
+	local summary = {
+		owe = 0, oweCount = 0, open = 0, openCount = 0, decide = 0, paidOut = 0, paidOutCount = 0, -- as a poster
+		owed = 0, owedCount = 0, earned = 0, earnedCount = 0, hunting = 0, huntingCount = 0, -- as a hunter
+	}
+	local me = Store:GetOrigin()
 	for _, info in ipairs(Model:GetMyBounties()) do
 		if info.state == STATE.OWED then
 			summary.owe = summary.owe + info.amount
@@ -427,6 +437,29 @@ function Model:GetMySummary()
 			summary.owed = summary.owed + item.amount
 			summary.owedCount = summary.owedCount + 1
 		end
+	end
+	-- Payments: both sides record one, so each claim counts once
+	local counted = {}
+	for payment in Store:Iterator("payment") do
+		local claimId = payment.data.claim
+		local claim = claimId and Store:Get(claimId)
+		local bounty = payment.data.bounty and Store:Get(payment.data.bounty)
+		if claimId and not counted[claimId] then
+			counted[claimId] = true
+			local amount = payment.data.amount or 0
+			if bounty and bounty.origin == me then
+				summary.paidOut = summary.paidOut + amount
+				summary.paidOutCount = summary.paidOutCount + 1
+			end
+			if claim and claim.origin == me then
+				summary.earned = summary.earned + amount
+				summary.earnedCount = summary.earnedCount + 1
+			end
+		end
+	end
+	for _, info in ipairs(Model:GetMyHunts()) do
+		summary.hunting = summary.hunting + info.amount
+		summary.huntingCount = summary.huntingCount + 1
 	end
 	return summary
 end

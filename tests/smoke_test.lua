@@ -545,6 +545,9 @@ SlashCmdList.WANTED("synctest")
 check(ns.Sync:GetInfo().stats.throttled == throttledBefore + 1 and #addonSent == 0, "throttled message counted, nothing sent")
 RunTimers()
 check(#addonSent == 1 and addonSent[1].text:find("^H:"), "throttled message sent again")
+-- A blocked action is noted with what was going on
+Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
+check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1, true), "blocked action noted with context")
 -- Bug report and the beta welcome
 ns:NoteProblem("test problem")
 local report = ns.Report:Build()

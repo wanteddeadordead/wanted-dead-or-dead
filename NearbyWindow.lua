@@ -115,6 +115,10 @@ function Nearby:ForceLayout()
 	Nearby:Refresh()
 end
 
+function Nearby:IsShown()
+	return private.frame and private.frame:IsShown() or false
+end
+
 function Nearby:Toggle()
 	Nearby:SetShown(not (private.frame and private.frame:IsShown()))
 end

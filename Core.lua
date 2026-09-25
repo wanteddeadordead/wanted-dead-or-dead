@@ -394,6 +394,30 @@ end
 -- Lifecycle
 -- ============================================================================
 
+---What was going on when the client blocked something: the blocked function is often UNKNOWN on this
+---client, so combat, what the mouse was over and which windows were open are the clues.
+function private.BlockContext()
+	local parts = { InCombatLockdown() and "in combat" or "out of combat" }
+	local ok, text = pcall(function()
+		local foci = GetMouseFoci and GetMouseFoci() or (GetMouseFocus and { GetMouseFocus() }) or {}
+		local focus = foci[1]
+		if focus and focus.GetDebugName then
+			tinsert(parts, "mouse over "..tostring(focus:GetDebugName()))
+		end
+		if WorldMapFrame and WorldMapFrame:IsShown() then
+			tinsert(parts, "world map open")
+		end
+		if Wanted.NearbyWindow and Wanted.NearbyWindow.IsShown and Wanted.NearbyWindow:IsShown() then
+			tinsert(parts, "Nearby window open")
+		end
+		if Wanted.UI and Wanted.UI.IsShown and Wanted.UI:IsShown() then
+			tinsert(parts, "Wanted window open")
+		end
+		return table.concat(parts, ", ")
+	end)
+	return ok and text or table.concat(parts, ", ")
+end
+
 private.frame:RegisterEvent("ADDON_LOADED")
 private.frame:RegisterEvent("PLAYER_LOGIN")
 -- These name the function the client refused, which the popup on this client does not
@@ -411,7 +435,7 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		private.CallModules("OnEnable")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		if arg1 == ADDON_NAME then
-			Wanted:NoteProblem(event..": "..tostring(arg2))
+			Wanted:NoteProblem(event..": "..tostring(arg2).." ("..private.BlockContext()..")")
 			Wanted:Print("The client blocked %s. /wanted bug makes a report you can send.", tostring(arg2))
 		end
 	end

@@ -300,8 +300,9 @@ function W:StatTile(parent, label, accent)
 	tile.label:SetPoint("TOPLEFT", 16, -12)
 	tile.value = Theme:Text(tile, "stat", "")
 	tile.value:SetPoint("TOPLEFT", 16, -28)
+	-- The note sits beside the value, not the label: on a narrow tile a long label and note ran together
 	tile.note = Theme:Text(tile, "tiny", "")
-	tile.note:SetPoint("TOPRIGHT", -12, -12)
+	tile.note:SetPoint("BOTTOMRIGHT", -12, 14)
 	tile.note:SetJustifyH("RIGHT")
 	return tile
 end

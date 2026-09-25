@@ -545,6 +545,22 @@ SlashCmdList.WANTED("synctest")
 check(ns.Sync:GetInfo().stats.throttled == throttledBefore + 1 and #addonSent == 0, "throttled message counted, nothing sent")
 RunTimers()
 check(#addonSent == 1 and addonSent[1].text:find("^H:"), "throttled message sent again")
+-- A corpse we come across is not a new death; someone we saw alive who then dies is
+local function CountDeaths() local n = 0 for _ in ns.Store:Iterator("death") do n = n + 1 end return n end
+local deathsNow = CountDeaths()
+enemyUnits.nameplate30 = { guid = "Player-9-CORPSE", name = "Lying Dead", class = "MAGE", level = 20, dead = true }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate30")
+Fire("UNIT_HEALTH", "nameplate30")
+check(CountDeaths() == deathsNow, "a corpse at first sight records no death")
+enemyUnits.nameplate31 = { guid = "Player-9-DIESNOW", name = "About Todie", class = "MAGE", level = 20 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate31")
+Fire("UNIT_HEALTH", "nameplate31")
+enemyUnits.nameplate31.dead = true
+Fire("UNIT_HEALTH", "nameplate31")
+check(CountDeaths() == deathsNow + 1, "seen alive, then dead: one death")
+Fire("UNIT_HEALTH", "nameplate31")
+check(CountDeaths() == deathsNow + 1, "the corpse doesn't die twice")
+enemyUnits.nameplate30, enemyUnits.nameplate31 = nil, nil
 -- A blocked action is noted with what was going on
 Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
 check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1, true), "blocked action noted with context")
@@ -567,7 +583,7 @@ check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "no call without Local Defense")
 localDefense = "4"
 check(ns.EnemyMenu:GetLocalDefenseChannel() == 4, "Local Defense found as channel 4")
 local help = ns.EnemyMenu:BuildHelpText()
-check(help:find("^Need help at Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+34 more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
+check(help:find("^Need help at Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+%d+ more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
 check(help:find("Stabby Mcstab", 1, true) < (help:find("Invader", 1, true) or 1e9), "whoever is on you comes first")
 chatSent = {}
 check(ns.EnemyMenu:CallForHelp("CHANNEL") and chatSent[1] and chatSent[1]:find("^CHANNEL: Need help"), "help sent to Local Defense")

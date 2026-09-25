@@ -12,6 +12,7 @@ local private = {
 	tracked = {}, -- unit token -> guid of an enemy player being watched
 	lastSighting = {}, -- guid -> time
 	recentDeaths = {}, -- guid -> time the death was recorded
+	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	playerGUID = nil,
 	playerFaction = nil,
@@ -143,6 +144,7 @@ function private.Track(unit)
 		return
 	end
 	private.tracked[unit] = guid
+	private.NoteAlive(unit, guid)
 	local now = GetTime()
 	if private.lastSighting[guid] and now - private.lastSighting[guid] < SIGHTING_INTERVAL then
 		return
@@ -173,10 +175,28 @@ function private.CheckDeath(unit)
 	end
 	-- Health is always secret on this client; whether the unit is dead is not
 	local dead = UnitIsDeadOrGhost(unit)
-	if not dead or (issecretvalue and issecretvalue(dead)) then
+	if issecretvalue and issecretvalue(dead) then
 		return
 	end
+	if not dead then
+		private.seenAlive[guid] = true
+		return
+	end
+	-- Only a death we saw happen: someone already dead when we found them (a corpse at login, say) died
+	-- earlier, maybe hours ago
+	if not private.seenAlive[guid] then
+		return
+	end
+	private.seenAlive[guid] = nil
 	private.RecordDeath(guid, GetUnitName(unit, true))
+end
+
+---Remembers that a watched enemy was alive when seen.
+function private.NoteAlive(unit, guid)
+	local dead = UnitIsDeadOrGhost(unit)
+	if dead == false then
+		private.seenAlive[guid] = true
+	end
 end
 
 ---The client's death event for any unit near us; an enemy player dying is a witnessed death.

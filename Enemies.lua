@@ -29,8 +29,10 @@ local SCAN_SECONDS = 1
 -- put down to whoever was on that token this recently
 local TOKEN_GRACE_SECONDS = 2
 -- The game doesn't report Stealth or Vanish at all (not even as a hidden cast): the player's nameplate just
--- goes. A nameplate also goes when someone walks out of view, but that's far away; one that goes while its
--- player is within 28 yards and alive went into stealth. What it was is guessed from who they are.
+-- goes, and if they were your target, the target is dropped too. A nameplate also goes when the camera turns
+-- away or a wall is in the way (the target stays), and both go when someone walks out of view (far away). So
+-- only your target counts: nameplate and target gone together while they were within 28 yards and alive.
+-- What it was is guessed from who they are.
 local CLOSE_DISTANCE_INDEX = 4 -- CheckInteractDistance: within about 28 yards
 local CLOSE_FRESH_SECONDS = 1.5 -- "within 28 yards" from the last scan still counts this long
 local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen, your own teleport) aren't stealth
@@ -347,8 +349,9 @@ function private.IsClose(unit)
 	return ok and private.Readable(close) or nil
 end
 
----A nameplate went. The unit still answers for this moment: if its player was close and alive, they may have
----gone into stealth. Decided a moment later, once it's clear it wasn't every nameplate going at once.
+---A nameplate went. The unit still answers for this moment: if it was your target, close and alive, they may
+---have gone into stealth. Decided a moment later, once it's clear the target went too and it wasn't every
+---nameplate going at once.
 function private.OnPlateRemoved(unit)
 	local known = private.tokens[unit]
 	local now = GetTime()
@@ -358,7 +361,7 @@ function private.OnPlateRemoved(unit)
 	end
 	known.t = now
 	local entry = private.nearby[known.guid]
-	if not entry or private.Readable(UnitIsDeadOrGhost(unit)) then
+	if not entry or private.Readable(UnitGUID("target")) ~= known.guid or private.Readable(UnitIsDeadOrGhost(unit)) then
 		return
 	end
 	local close = private.IsClose(unit) == true or (entry.closeAt and now - entry.closeAt <= CLOSE_FRESH_SECONDS)
@@ -375,6 +378,10 @@ function private.OnPlateRemoved(unit)
 			end
 		end
 		if together >= MASS_REMOVAL or private.Readable(UnitIsDeadOrGhost("player")) or private.Readable(UnitOnTaxi("player")) then
+			return
+		end
+		-- Still targeted means the camera turned or a wall got in the way
+		if private.Readable(UnitGUID("target")) == entry.guid then
 			return
 		end
 		private.GuessStealth(entry)

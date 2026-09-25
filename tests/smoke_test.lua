@@ -413,19 +413,30 @@ check(#stealthEvents == 2, "but not long after, when the token may be someone el
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 -- The game hides enemy spells (a secret value) and doesn't report Stealth or Vanish at all: the nameplate just
--- goes. One that goes while its player is within 28 yards and alive went into stealth; walking out of view
--- happens far away. The unit still answers for the moment its nameplate goes.
+-- goes, and the target with it. Only your target counts (a nameplate also goes when the camera turns away,
+-- and the target stays), and only within 28 yards (walking out of view drops both, far away).
 SECRET_SPELL = setmetatable({}, { __tostring = function() return "secret" end })
 function issecretvalue(value) return value == SECRET_SPELL end
 for i = #stealthEvents, 1, -1 do stealthEvents[i] = nil end
-local function Vanish(unit) Fire("NAME_PLATE_UNIT_REMOVED", unit) enemyUnits[unit] = nil RunTimers() end
-local function Appear(unit, who) clock = clock + 10 enemyUnits[unit] = who Fire("NAME_PLATE_UNIT_ADDED", unit) end
+local function Vanish(unit) Fire("NAME_PLATE_UNIT_REMOVED", unit) enemyUnits[unit] = nil enemyUnits.target = nil Fire("PLAYER_TARGET_CHANGED") RunTimers() end
+local function Appear(unit, who) clock = clock + 10 enemyUnits[unit] = who enemyUnits.target = who Fire("NAME_PLATE_UNIT_ADDED", unit) Fire("PLAYER_TARGET_CHANGED") end
 stabUnit.close = true
 Appear("nameplate1", stabUnit)
 Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
 check(#stealthEvents == 0, "a hidden cast on its own is no alarm")
 Vanish("nameplate1")
-check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Stealth", "a rogue gone from view within 28 yards went into stealth")
+check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Stealth", "your target gone from view within 28 yards went into stealth")
+Appear("nameplate1", stabUnit)
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+RunTimers()
+check(#stealthEvents == 1, "the nameplate going while you keep the target (camera turned, a wall) is not stealth")
+enemyUnits.target = nil
+Fire("PLAYER_TARGET_CHANGED")
+Appear("nameplate1", stabUnit)
+enemyUnits.target = nil
+Fire("PLAYER_TARGET_CHANGED")
+Vanish("nameplate1")
+check(#stealthEvents == 1, "someone you haven't targeted is not checked (no way to tell stealth from the camera)")
 stabUnit.close = false
 Appear("nameplate1", stabUnit)
 clock = clock + 5

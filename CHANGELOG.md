@@ -6,7 +6,8 @@
 - The file on a target: click a bounty (or right-click an enemy > Where they've been, or /wanted file) for last
   seen, usual zones, usual hours, every sighting and their deaths. Sightings of wanted players are kept a month.
 - Your hunts (Your bounties > Your hunts): every bounty you're hunting, with the time left and Renew or Stop.
-- Kill proof: a stamped screenshot when your kill claims a bounty, shown on the claim, with the Forever PvP
+- Kill proof: a stamped screenshot when your kill claims a bounty (taken once combat ends, so it never hitches
+  a fight), shown on the claim, with the Forever PvP
   Discord (#pvp-salt) for disputes. On by default, in Settings > Sharing and display.
 - Your record (Your bounties > Your record, /wanted record): your trust as a poster and as a hunter, what it
   means, and how to improve it, with a key to every trust level.

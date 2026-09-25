@@ -4,6 +4,9 @@
 -- see it on the claim. The picture itself stays on your computer: if the kill is disputed, post it in the
 -- Forever PvP Discord. A screenshot can be edited, so it is evidence for people to weigh, not something
 -- that changes anyone's trust by itself.
+--
+-- Saving a screenshot makes the game hitch for a moment, so none is taken in combat: a kill mid-fight
+-- waits until the fight is over, and the stamp still shows when the kill happened.
 
 local _, Wanted = ...
 local Proof = Wanted:NewModule("Proof")
@@ -12,12 +15,14 @@ local Bounties = Wanted.Bounties
 local private = {
 	frame = CreateFrame("Frame"),
 	pending = {}, -- kill id -> { claims, victimName, zone } gathered for one stamp
-	shooting = nil, -- the pending entry whose screenshot is being taken
+	queue = {}, -- kills waiting for their screenshot (combat, or another shot in flight)
+	shooting = nil, -- the entry whose screenshot is being taken
 }
 Proof.DISCORD_URL = "https://discord.com/invite/wow-forever-pvp"
 Proof.DISCORD_CHANNEL = "#pvp-salt"
 local GATHER_SECONDS = 0.5 -- one kill can claim several bounties; they share one screenshot
 local STAMP_SECONDS = 3 -- the stamp comes down after this even if the game never answers
+local NEXT_SHOT_SECONDS = 0.5 -- between queued screenshots
 
 
 
@@ -29,8 +34,13 @@ function Proof:OnEnable()
 	Store:OnRecord("claim", private.OnClaim)
 	private.frame:RegisterEvent("SCREENSHOT_SUCCEEDED")
 	private.frame:RegisterEvent("SCREENSHOT_FAILED")
+	private.frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 	private.frame:SetScript("OnEvent", function(_, event)
-		private.OnScreenshot(event == "SCREENSHOT_SUCCEEDED")
+		if event == "PLAYER_REGEN_ENABLED" then
+			private.Next()
+		else
+			private.OnScreenshot(event == "SCREENSHOT_SUCCEEDED")
+		end
 	end)
 end
 
@@ -43,7 +53,12 @@ function private.OnClaim(claim, isOwn)
 	if not entry then
 		entry = { key = key, claims = {}, victimName = claim.data.victimName, zone = claim.data.zone }
 		private.pending[key] = entry
-		C_Timer.After(GATHER_SECONDS, function() private.Shoot(entry) end)
+		entry.killedAt = date("%Y-%m-%d %H:%M:%S")
+		C_Timer.After(GATHER_SECONDS, function()
+			private.pending[key] = nil
+			tinsert(private.queue, entry)
+			private.Next()
+		end)
 	end
 	tinsert(entry.claims, claim)
 end
@@ -87,17 +102,21 @@ function Proof:BuildStamp(entry)
 		end
 	end
 	local title = "WANTED: KILL PROOF"
-	local line1 = format("%s killed %s in %s, %s", Store:GetOrigin() or "?", entry.victimName or "?", entry.zone or "?", date("%Y-%m-%d %H:%M:%S"))
+	local line1 = format("%s killed %s in %s, %s", Store:GetOrigin() or "?", entry.victimName or "?", entry.zone or "?", entry.killedAt or date("%Y-%m-%d %H:%M:%S"))
 	local line2 = format("Bount%s: %s.  Kill id %s", #bounties == 1 and "y" or "ies", table.concat(bounties, ", "), tostring(entry.key))
 	return title, line1, line2
 end
 
-function private.Shoot(entry)
-	private.pending[entry.key] = nil
-	if private.shooting then
-		-- Another shot is in flight; this kill's claims still stand without a picture
+---Takes the next queued screenshot, unless one is in flight or the player is in combat (the save would
+---hitch the game mid-fight; combat ending calls this again).
+function private.Next()
+	if private.shooting or #private.queue == 0 or InCombatLockdown() then
 		return
 	end
+	private.Shoot(tremove(private.queue, 1))
+end
+
+function private.Shoot(entry)
 	local stamp = private.GetStamp()
 	local title, line1, line2 = Proof:BuildStamp(entry)
 	stamp.title:SetText(title)
@@ -113,6 +132,7 @@ function private.Shoot(entry)
 		if private.shooting == entry then
 			private.shooting = nil
 			stamp:Hide()
+			private.Next()
 		end
 	end)
 end
@@ -125,6 +145,8 @@ function private.OnScreenshot(succeeded)
 	end
 	private.shooting = nil
 	private.GetStamp():Hide()
+	-- Any other kill waiting gets its turn in a moment
+	C_Timer.After(NEXT_SHOT_SECONDS, private.Next)
 	if not succeeded then
 		Wanted:Log("Proof: the screenshot failed")
 		return

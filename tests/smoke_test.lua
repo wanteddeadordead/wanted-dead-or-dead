@@ -133,7 +133,8 @@ function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and
 function UnitIsDeadOrGhost(unit) local e = enemyUnits[unit] return e and e.dead or false end
 function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
 function GetPlayerInfoByGUID(guid) if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end return nil end
-function InCombatLockdown() return false end
+inCombat = false
+function InCombatLockdown() return inCombat end
 function IsInGroup() return true end
 function IsInRaid() return false end
 function IsInGuild() return true end
@@ -634,6 +635,18 @@ local proof = ns.Proof:Get(proofClaim.id)
 check(proof and proof.data.deathId == proofClaim.data.deathId, "a proof record on the claim")
 local title, line1, line2 = ns.Proof:BuildStamp({ claims = { proofClaim }, victimName = "Stabby Mcstab", zone = "Durotar", key = proofClaim.data.deathId })
 check(title == "WANTED: KILL PROOF" and line1:find("killed Stabby Mcstab in Durotar", 1, true) and line2:find("70s from Maribel Stonehollow", 1, true) and line2:find(proofClaim.data.deathId, 1, true), "the stamp names the kill, the bounty and the kill id: "..line1.." / "..line2)
+-- In combat the screenshot waits for the fight to end (saving one hitches the game)
+ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 6000, level = 19, zone = "Durotar" }, clock - 5)
+clock = clock + 30
+inCombat = true
+shotsBefore = screenshots
+Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+RunTimers()
+check(screenshots == shotsBefore, "no screenshot during combat")
+inCombat = false
+Fire("PLAYER_REGEN_ENABLED")
+RunTimers()
+check(screenshots == shotsBefore + 1, "the screenshot comes when combat ends")
 -- A proof only counts from the hunter's own client
 local otherBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 100, level = 19, zone = "Durotar" }, clock)
 local otherClaim = ns.Store:InsertTest("claim", "Vorn Ashgrip", { bounty = otherBounty.id, victim = "Player-9-ENEMY", zone = "Durotar", killT = clock }, clock)

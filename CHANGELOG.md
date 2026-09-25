@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.6] - 2026-09-25
+
 - No more "Please enter a password for 'WantedNetHorde'" box at login: Wanted answers it for its own channel.
 - Posting a bounty no longer counts as seeing the target, so "last seen" stays when they were really last seen.
 ## [0.1.0-beta.5] - 2026-09-25

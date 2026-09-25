@@ -158,6 +158,20 @@ SOUNDKIT = { RAID_WARNING = 1, UI_RAID_BOSS_WHISPER_WARNING = 2, IG_PLAYER_INVIT
 C_Spell = { GetSpellName = function() return nil end }
 local MAP_NAMES = { [1] = "Durotar", [10] = "The Barrens" }
 C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = function() return { x = 0.446, y = 0.25 } end, GetMapInfo = function(id) return MAP_NAMES[id] and { name = MAP_NAMES[id] } end }
+-- Named areas on the map as the world map's hover labels find them: { name, left, top, right, bottom }
+local exploredAreas = {}
+function CreateVector2D(x, y) return { x = x, y = y } end
+C_Map.GetAreaInfo = function(areaId) return exploredAreas[areaId] and exploredAreas[areaId][1] end
+C_Map.GetMapWorldSize = function() return 5000, 3333 end
+C_MapExplorationInfo = { GetExploredAreaIDsAtPosition = function(_, pos)
+	local ids = {}
+	for id, a in pairs(exploredAreas) do
+		if pos.x >= a[2] and pos.x <= a[4] and pos.y >= a[3] and pos.y <= a[5] then
+			ids[#ids + 1] = id
+		end
+	end
+	return #ids > 0 and ids or nil
+end }
 local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
 -- The world map's pin system, enough to drive a data provider
@@ -883,6 +897,22 @@ subZone = "Durotar"
 help = ns.EnemyMenu:BuildHelpText()
 check(help:find("^Need help in Durotar 45,25 %- "), "an area named like the zone isn't repeated: "..help)
 subZone = ""
+exploredAreas = { [101] = { "Razor Hill", 0.55, 0.2, 0.65, 0.3 }, [102] = { "Durotar", 0, 0, 1, 1 } }
+Fire("ZONE_CHANGED_NEW_AREA")
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help west of Razor Hill, Durotar 45,25 %- "), "help names the nearest area and which way it is: "..help)
+exploredAreas[103] = { "Kolkar Crag", 0.4, 0.2, 0.5, 0.3 }
+Fire("ZONE_CHANGED_NEW_AREA")
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help near Kolkar Crag, Durotar 45,25 %- "), "an area you're standing in that the game doesn't name says near: "..help)
+exploredAreas = { [101] = { "Razor Hill", 0.4, 0.5, 0.5, 0.6 } }
+Fire("ZONE_CHANGED_NEW_AREA")
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help north of Razor Hill, Durotar 45,25 %- "), "north is up the map: "..help)
+exploredAreas = {}
+Fire("ZONE_CHANGED_NEW_AREA")
+help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help in Durotar 45,25 %- "), "no named areas leaves the zone and coordinates: "..help)
 chatSent = {}
 local typed
 ChatFrameUtil = { OpenChat = function(text) typed = text end }

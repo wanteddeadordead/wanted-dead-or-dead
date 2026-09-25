@@ -17,6 +17,7 @@ local private = {
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	playerGUID = nil,
 	playerFaction = nil,
+	places = nil, -- the named-area grid of one map, see private.ScanPlaces
 }
 -- The same enemy is not re-sighted more often than this
 local SIGHTING_INTERVAL = 30
@@ -29,6 +30,9 @@ local DEATH_CONFIRM_SECONDS = 4
 local HONOR_MATCH_WINDOW = 10
 local MAX_LOG_LINES = 20
 local UNITS = { "target", "mouseover" }
+-- The zone map is read in a grid this many cells across for its named areas
+local PLACE_GRID = 50
+local DIRECTIONS = { "east", "northeast", "north", "northwest", "west", "southwest", "south", "southeast" }
 
 
 
@@ -39,7 +43,7 @@ local UNITS = { "target", "mouseover" }
 function Recorder:OnEnable()
 	private.playerGUID = UnitGUID("player")
 	private.playerFaction = UnitFactionGroup("player")
-	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED" }) do
+	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED", "ZONE_CHANGED_NEW_AREA" }) do
 		Wanted:Log("Recorder: registering %s", event)
 		private.frame:RegisterEvent(event)
 	end
@@ -74,6 +78,10 @@ function private.OnEvent(_, event, arg1, arg2)
 		private.HandlePartyKill(arg1, arg2)
 	elseif event == "UNIT_DIED" then
 		private.OnUnitDied(arg1)
+	elseif event == "ZONE_CHANGED_NEW_AREA" then
+		-- Read the new zone's areas now rather than when help is called
+		private.places = nil
+		private.GetPlaces()
 	end
 end
 
@@ -98,6 +106,105 @@ function Recorder:GetPosition()
 		return zone, nil, nil, mapId
 	end
 	return zone, floor(pos.x * 1000 + 0.5) / 10, floor(pos.y * 1000 + 0.5) / 10, mapId
+end
+
+---Where the player is, for other players to find them: "in Ratchet, The Barrens 62,38" where the game names
+---the area, otherwise the nearest named area and which way it is ("west of Razor Hill, Durotar 47,40"), or
+---just "Durotar 47,40".
+---@return string
+function Recorder:DescribePlace()
+	local zone, x, y = Recorder:GetPosition()
+	local coords = x and format(" %.0f,%.0f", x, y) or ""
+	local area = GetSubZoneText()
+	if area and area ~= "" and area ~= zone then
+		return "in "..area..", "..zone..coords
+	end
+	local near, direction = private.NearestPlace(zone, x, y)
+	if near then
+		return (direction and direction.." of " or "near ")..near..", "..zone..coords
+	end
+	return "in "..zone..coords
+end
+
+---The named areas of the player's map, read once per zone from the world map's hover labels (only the areas
+---this character has uncovered have them): a grid of area names by cell, and each area's centre.
+---@return table? { mapId, cells = { [index] = name }, centres = { [name] = { x, y } }, width, height }
+function private.GetPlaces()
+	local mapId = C_Map.GetBestMapForUnit("player")
+	if not mapId or not C_MapExplorationInfo or not C_Map.GetAreaInfo then
+		return nil
+	end
+	if private.places and private.places.mapId == mapId then
+		return private.places
+	end
+	local zone = GetZoneText()
+	local cells, sums = {}, {}
+	for row = 0, PLACE_GRID - 1 do
+		for col = 0, PLACE_GRID - 1 do
+			local x, y = (col + 0.5) / PLACE_GRID, (row + 0.5) / PLACE_GRID
+			for _, areaId in ipairs(C_MapExplorationInfo.GetExploredAreaIDsAtPosition(mapId, CreateVector2D(x, y)) or {}) do
+				local name = C_Map.GetAreaInfo(areaId)
+				if name and name ~= "" and name ~= zone then
+					cells[row * PLACE_GRID + col] = name
+					local sum = sums[name] or { 0, 0, 0 }
+					sum[1], sum[2], sum[3] = sum[1] + x, sum[2] + y, sum[3] + 1
+					sums[name] = sum
+					break
+				end
+			end
+		end
+	end
+	local centres = {}
+	for name, sum in pairs(sums) do
+		centres[name] = { sum[1] / sum[3], sum[2] / sum[3] }
+	end
+	-- Distances in yards where the map says its size, so a wide map doesn't bend directions
+	local width, height
+	if C_Map.GetMapWorldSize then
+		width, height = C_Map.GetMapWorldSize(mapId)
+	end
+	if not width or width <= 0 or not height or height <= 0 then
+		width, height = 1, 1
+	end
+	private.places = { mapId = mapId, cells = cells, centres = centres, width = width, height = height }
+	return private.places
+end
+
+---The named area nearest the player and the direction from its centre to them, or no direction when the
+---player stands in it (the game doesn't name every spot inside an area).
+---@param zone string
+---@param x number? 0-100
+---@param y number? 0-100
+---@return string? name
+---@return string? direction
+function private.NearestPlace(zone, x, y)
+	local places = x and private.GetPlaces()
+	if not places then
+		return nil
+	end
+	x, y = x / 100, y / 100
+	local col, row = floor(x * PLACE_GRID), floor(y * PLACE_GRID)
+	local here = places.cells[row * PLACE_GRID + col]
+	if here then
+		return here, nil
+	end
+	local nearest, bestDistance
+	for index, name in pairs(places.cells) do
+		local dx = ((index % PLACE_GRID) + 0.5) / PLACE_GRID - x
+		local dy = (floor(index / PLACE_GRID) + 0.5) / PLACE_GRID - y
+		local distance = (dx * places.width) ^ 2 + (dy * places.height) ^ 2
+		if not bestDistance or distance < bestDistance then
+			nearest, bestDistance = name, distance
+		end
+	end
+	if not nearest then
+		return nil
+	end
+	-- Map y grows southward; turn it round so north is up
+	local centre = places.centres[nearest]
+	local angle = math.atan2((centre[2] - y) * places.height, (x - centre[1]) * places.width)
+	local sector = floor(angle / (math.pi / 4) + 0.5) % 8
+	return nearest, DIRECTIONS[sector + 1]
 end
 
 ---A unit's guild name, or nil (no guild, or not readable).

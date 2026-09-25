@@ -42,7 +42,7 @@ end
 
 ---Sends plain text to a chat type ("RAID", "PARTY", "GUILD" or "CHANNEL" with its number). The client
 ---blocks addons from posting in public channels like Local Defense, even from a click, so for a channel the
----message is typed into your chat box instead ("/4 Need help in ...") and you press Enter to send it.
+---message is typed into your chat box instead ("/4 Need help near ...") and you press Enter to send it.
 local function Send(text, chatType, channelNumber)
 	if chatType == "CHANNEL" then
 		local line = "/"..channelNumber.." "..text
@@ -83,20 +83,11 @@ local function Announce(channel, d, channelNumber)
 	Send(table.concat(parts, " "), channel, channelNumber)
 end
 
----"Need help in Ratchet, The Barrens 62,38 - 3 enemies: Stabby 22 Rogue (on me), Sam 24 Mage, Bob 20 Warrior"
+---"Need help west of Razor Hill, Durotar 47,40 - 3 enemies: Stabby 22 Rogue (on me), Sam 24 Mage, Bob 20 Warrior"
 ---in plain text (colour codes or links get a chat message dropped), those attacking you first.
 ---@return string
 function EnemyMenu:BuildHelpText()
-	local zone, x, y = Wanted.Recorder:GetPosition()
-	local where = zone or "?"
-	-- The area within the zone (Ratchet, Brill), when there is one
-	local area = GetSubZoneText()
-	if area and area ~= "" and area ~= zone then
-		where = area..", "..where
-	end
-	if x then
-		where = format("%s %.0f,%.0f", where, x, y)
-	end
+	local where = Wanted.Recorder:DescribePlace()
 	local nearby = {}
 	for _, d in ipairs(Enemies:GetNearby()) do
 		tinsert(nearby, d)
@@ -107,9 +98,9 @@ function EnemyMenu:BuildHelpText()
 	end
 	sort(nearby, function(a, b) return a.helpOrder < b.helpOrder end)
 	if #nearby == 0 then
-		return "Need help in "..where.."!"
+		return "Need help "..where.."!"
 	end
-	local text = format("Need help in %s - %d enem%s:", where, #nearby, #nearby == 1 and "y" or "ies")
+	local text = format("Need help %s - %d enem%s:", where, #nearby, #nearby == 1 and "y" or "ies")
 	for i, d in ipairs(nearby) do
 		local part = " "..d.name
 		if d.level then

@@ -7,7 +7,8 @@
 - Alerts, the TARGETED warning and the Nearby window only speak up while you can be attacked (PvP flagged,
   not in a sanctuary); getting flagged with enemies around opens the window. Settings > Alerts to turn off.
 - The Nearby window hides itself after 5 minutes with no enemies (Settings > Nearby window: never, 2, 5 or 10 min).
-- Call for help names the area you're in along with the zone and coordinates ("Need help in Brill, Tirisfal Glades 61,52").
+- Call for help says where you are in words: the area you're in ("Need help in Brill, Tirisfal Glades 61,52") or,
+  between areas, the nearest one and which way ("Need help west of Razor Hill, Durotar 47,40").
 
 ## [0.1.0-beta.1] - 2026-09-25
 

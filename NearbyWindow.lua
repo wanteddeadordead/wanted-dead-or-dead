@@ -149,6 +149,11 @@ function private.CheckAutoHide()
 end
 
 ---Shows or hides the window (after combat, if in combat now).
+---Quiet mode was switched: whether you count as exposed may have changed with it.
+function Nearby:UpdateExposure()
+	private.OnExposureChanged()
+end
+
 function Nearby:SetShown(shown)
 	if InCombatLockdown() or not private.frame then
 		private.pendingShow = shown

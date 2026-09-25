@@ -15,10 +15,10 @@ local COLUMNS = {
 	{ key = "name", label = "Name", x = 42 },
 	{ key = "level", label = "Lvl", x = 250 },
 	{ key = "guild", label = "Guild", x = 290 },
-	{ key = "wins", label = "Won", x = 450 },
-	{ key = "losses", label = "Lost", x = 500 },
-	{ key = "detections", label = "Seen", x = 550 },
-	{ key = "lastSeen", label = "Last seen", x = 610 },
+	{ key = "wins", label = "Won", x = 440 },
+	{ key = "losses", label = "Lost", x = 488 },
+	{ key = "detections", label = "Seen", x = 536 },
+	{ key = "lastSeen", label = "Last seen", x = 584 },
 }
 
 function private.CreateRow(row)
@@ -39,15 +39,17 @@ function private.CreateRow(row)
 	row.level:SetPoint("LEFT", 250, 0)
 	row.guild = Theme:Text(row, "small", "")
 	row.guild:SetPoint("LEFT", 290, 0)
-	row.guild:SetWidth(150)
+	row.guild:SetWidth(142)
 	row.wins = Theme:Text(row, "body", "")
-	row.wins:SetPoint("LEFT", 450, 0)
+	row.wins:SetPoint("LEFT", 440, 0)
 	row.losses = Theme:Text(row, "body", "")
-	row.losses:SetPoint("LEFT", 500, 0)
+	row.losses:SetPoint("LEFT", 488, 0)
 	row.seen = Theme:Text(row, "body", "")
-	row.seen:SetPoint("LEFT", 550, 0)
+	row.seen:SetPoint("LEFT", 536, 0)
 	row.last = Theme:Text(row, "small", "")
-	row.last:SetPoint("LEFT", 610, 0)
+	row.last:SetPoint("LEFT", 584, 0)
+	row.last:SetPoint("RIGHT", -4, 0)
+	row.last:SetWordWrap(false)
 end
 
 function private.UpdateRow(row, d)
@@ -136,10 +138,10 @@ UI:RegisterPage("enemies", {
 		}, function(key)
 			private.filter = key ~= "all" and key or nil
 			private.Refresh()
-		end, 120)
+		end, 108)
 		filter:SetPoint("TOPLEFT")
 		filter:Select("all", true)
-		private.search = W:Input(container, 200, "Search name or guild", function() private.Refresh() end)
+		private.search = W:Input(container, 170, "Search name or guild", function() private.Refresh() end)
 		private.search:SetPoint("LEFT", filter, "RIGHT", 12, 0)
 		local nearby = W:Button(container, "Nearby window", "secondary", 130, 26, function() Wanted.NearbyWindow:Toggle() end)
 		nearby:SetPoint("TOPRIGHT")

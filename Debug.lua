@@ -45,10 +45,31 @@ local function KeepLine(line)
 	log.lines[log.pos] = line
 end
 
+-- /wanted netwatch: the network lines also print to chat as they happen (weird ones in red), leaving out
+-- the low-level ones (message parts, byte counts)
+local NETWATCH_SKIP = { "^Sync: SendAddonMessage part", "^Sync: received %d+ bytes" }
+
+local function Watch(msg)
+	if not (Wanted.db and Wanted.db.devNetwatch) then
+		return
+	end
+	local weird = strfind(msg, "^!! ") ~= nil
+	if not weird and not (strfind(msg, "^Sync: ") or strfind(msg, "^Bridge: ") or strfind(msg, "^Store: ")) then
+		return
+	end
+	for _, pattern in ipairs(NETWATCH_SKIP) do
+		if strfind(msg, pattern) then
+			return
+		end
+	end
+	DEFAULT_CHAT_FRAME:AddMessage((weird and "|cffff4040net|r " or "|cff7fa7ffnet|r ")..(weird and ("|cffff8080"..msg.."|r") or msg))
+end
+
 function Wanted:Log(fmt, ...)
 	realLog(self, fmt, ...)
 	local msg = select("#", ...) > 0 and format(fmt, ...) or fmt
 	KeepLine(date("%m-%d %H:%M:%S").." "..msg)
+	Watch(msg)
 end
 
 function Debug:OnLoad()
@@ -73,6 +94,12 @@ function Debug:GetDevLog()
 	end
 	return lines
 end
+
+Wanted:RegisterCommand("netwatch", "Development builds: print network activity to chat as it happens (again to stop): /wanted netwatch", function()
+	Wanted.db.devNetwatch = not Wanted.db.devNetwatch or nil
+	Wanted:Print(Wanted.db.devNetwatch and "Netwatch on: network activity prints to chat (weird events in red). /wanted netwatch again to stop."
+		or "Netwatch off.")
+end)
 
 Wanted:RegisterCommand("netlog", "Development builds: network summary and the last weird events (!!) from the kept log: /wanted netlog", function()
 	Wanted:Print(Wanted.Sync:Status())

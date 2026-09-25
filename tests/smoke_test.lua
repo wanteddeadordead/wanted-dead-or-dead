@@ -1332,6 +1332,18 @@ local kept = ns.Debug:GetDevLog()
 check(#kept > 0 and kept[#kept]:find("!! Test: something odd", 1, true), "the log is kept in the saved data: "..tostring(kept[#kept]))
 check(ns.db.devLog and ns.db.devLog.pos > 0, "as WantedDB.devLog")
 ns:RunCommand("netlog", "")
+-- /wanted netwatch prints network lines to chat while on, weird ones in red, but not the low-level ones
+local watched = #printed
+ns:RunCommand("netwatch", "")
+ns:Log("Sync: send R, 200 bytes in 1 part(s)")
+ns:Log("Sync: SendAddonMessage part 1/1 -> 0")
+ns:Log("!! Sync: badly framed message from Someone")
+ns:Log("Enemies: not network")
+local netLines = {}
+for i = watched + 1, #printed do if printed[i]:find("net|r") then netLines[#netLines + 1] = printed[i] end end
+check(#netLines == 2 and netLines[2]:find("ff4040", 1, true), "netwatch shows sends and weird lines, not message parts: "..#netLines)
+ns:RunCommand("netwatch", "")
+check(not ns.db.devNetwatch, "and turns off again")
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

@@ -70,7 +70,7 @@ function private.BuildAlerts(panel, width)
 	end, 130)
 	private.alerts:SetPoint("TOPLEFT", 16, -188)
 	-- Lost contact: still shown as in sight for a while (they're likely still around), then shaded, then gone
-	local inSightLabel = Theme:Text(card, "small", "Out of view, still show as in sight for")
+	local inSightLabel = Theme:Text(card, "small", "Out of view, still show as nearby for")
 	inSightLabel:SetPoint("TOPLEFT", 440, -150)
 	private.inSight = W:Segmented(card, {
 		{ key = "30", label = "30s" },
@@ -178,13 +178,13 @@ function private.BuildNearby(panel, width)
 		{ "guild", "Guild", "<Guild name> on the second line." },
 		{ "bounty", "Bounty", "The bounty gold on them, and a gold marker." },
 		{ "kos", "Kill on Sight", "The Kill on Sight tag with your reason, and a red marker." },
-		{ "state", "Active / in sight / not seen", "Whether they're acting, in view, or out of sight and for how long." },
+		{ "state", "Active / in sight / nearby / not seen", "Whether they're acting, on your screen (in sight, clickable), out of view but likely still around (nearby), or gone and for how long." },
 		{ "record", "Wins and losses", "Your record against them, e.g. 2-1." },
 		{ "health", "Health bar", "A thin health bar along the bottom while they're in view." },
 		{ "tint", "Class colour wash", "A faint wash of their class colour behind the row." },
 		{ "targeting", "Targeting you", "A red > before the name when they target you." },
 		{ "pvp", "Your PvP status", "A strip under the tabs: PvP on or off, and how long until the flag wears off." },
-		{ "fade", "Shade out of sight", "Dim a row once the player has been out of view longer than the in-sight time (Alerts tab)." },
+		{ "fade", "Shade the long gone", "Dim a row once the player has been out of view longer than the nearby time (Alerts tab)." },
 	}
 	for i, item in ipairs(items) do
 		local column = (i - 1) % 3

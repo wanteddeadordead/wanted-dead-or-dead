@@ -44,6 +44,9 @@ local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
 -- inSight), then show shaded (settings: timeout), then leave the list
 local DEFAULT_IN_SIGHT = 60
+-- On screen now (a unit token showed them in the last scan, so they can be clicked): "in sight". Out of view
+-- but seen within the in-sight setting: "nearby".
+local VISIBLE_SECONDS = SCAN_SECONDS + 1.5
 local DEFAULT_SHADED = 30
 local TARGETER_SECONDS = 2.2 -- seen targeting us within this long counts as targeting us now
 local LAST_HOUR = 3600
@@ -653,7 +656,9 @@ function Enemies:Describe(guid)
 		y = entry and entry.y or player.y,
 		lastSeen = entry and (GetServerTime() - (GetTime() - entry.lastSeen)) or player.lastSeen or stats.last,
 		nearby = entry ~= nil,
-		-- In sight: a unit token showed them in the last scan. Active: casting or targeting us lately.
+		-- Visible: on screen in the last scan. In sight (the setting): seen that recently, shown as nearby once
+		-- out of view. Active: casting or targeting us lately.
+		visible = entry and GetTime() - entry.lastSeen <= VISIBLE_SECONDS or false,
 		inSight = entry and GetTime() - entry.lastSeen < private.InSightSeconds() or false,
 		goneFor = entry and floor(GetTime() - entry.lastSeen) or nil,
 		active = entry and ((entry.lastActive and GetTime() - entry.lastActive < ACTIVE_SECONDS) or (entry.targetingMe and GetTime() - entry.targetingMe < ACTIVE_SECONDS)) or false,

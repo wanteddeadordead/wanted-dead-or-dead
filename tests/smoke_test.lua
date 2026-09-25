@@ -1074,15 +1074,17 @@ ns.Alerts.Warn = realWarn
 ns.UI:Show("hotspots")
 ns.UI:Show("settings")
 clock = surgeClock
--- Leaving: out of view the enemy still shows as in sight for a minute, then shaded for 30s, then leaves
+-- Leaving: on screen they're in sight (clickable); out of view they still show as nearby for a minute, then
+-- shaded for 30s, then leave
 local function Tick() for _, f in ipairs(tickers) do f() end end
 Tick() -- a scan while their nameplate is still up
+local function Near(guid) for _, d in ipairs(ns.Enemies:GetNearby()) do if d.guid == guid then return d end end end
+check(Near("Player-9-ENEMY").visible, "on screen: in sight")
 enemyUnits.nameplate1 = nil
 Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-local function Near(guid) for _, d in ipairs(ns.Enemies:GetNearby()) do if d.guid == guid then return d end end end
 clock = clock + 45
 Tick()
-check(Near("Player-9-ENEMY") and Near("Player-9-ENEMY").inSight, "45s out of view still shows as in sight")
+check(Near("Player-9-ENEMY") and Near("Player-9-ENEMY").inSight and not Near("Player-9-ENEMY").visible, "45s out of view: nearby, no longer in sight")
 clock = clock + 30
 Tick()
 check(Near("Player-9-ENEMY") and not Near("Player-9-ENEMY").inSight, "75s out of view is listed but shaded")

@@ -731,8 +731,11 @@ function private.Draw(row, info)
 		if info.nearby then
 			if info.active then
 				tinsert(sub, Theme:Colorize("active", C.green))
-			elseif info.inSight then
+			elseif info.visible then
 				tinsert(sub, Theme:Colorize("in sight", C.blue))
+			elseif info.inSight then
+				-- Out of view, so they can't be clicked, but likely still around
+				tinsert(sub, Theme:Colorize("nearby", C.blue))
 			else
 				tinsert(sub, Theme:Colorize(format("not seen for %ds", info.goneFor or 0), C.faint))
 			end

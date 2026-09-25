@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Bounty rows show each poster's and hunter's record in a few coloured words: unpaid, paid, disputed, level.
 - An entry in the game's Options > AddOns list with buttons to open Wanted and the Nearby window.
 - Test data is gone from released versions: no test data card on the Tools page, no simulate or purge commands.
 - Call for help: a button under the Nearby list sends where you are and who's around to your party or raid or

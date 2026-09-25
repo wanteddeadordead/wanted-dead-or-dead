@@ -163,6 +163,36 @@ function Reputation:GetLine(origin)
 	return table.concat(parts, "; ")
 end
 
+---A few words on a poster's record for a bounty row: red when they've left claims unpaid, green once
+---they've paid, nothing for a newcomer.
+---@param origin string
+---@return string?
+function Reputation:GetPosterBadge(origin)
+	local tally = Reputation:GetTally(origin)
+	local C = Wanted.Theme.C
+	if tally.unpaid > 0 then
+		return Wanted.Theme:Colorize(format("%d unpaid", tally.unpaid), C.red)
+	elseif tally.paid > 0 then
+		return Wanted.Theme:Colorize(format("paid %d", tally.paid), C.green)
+	end
+	return nil
+end
+
+---A few words on a hunter's record for a claim: red with disputed claims, green with a level.
+---@param origin string
+---@return string?
+function Reputation:GetHunterBadge(origin)
+	local tally = Reputation:GetTally(origin)
+	local C = Wanted.Theme.C
+	if tally.disputed > 0 then
+		return Wanted.Theme:Colorize(format("%d disputed", tally.disputed), C.red)
+	elseif tally.claims > 0 then
+		local level = Reputation:GetRank(tally)
+		return Wanted.Theme:Colorize(format("level %d", level), level > 0 and C.green or C.muted)
+	end
+	return nil
+end
+
 ---All origins the records mention as posters or hunters.
 ---@return string[]
 function Reputation:GetOrigins()

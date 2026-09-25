@@ -9,10 +9,10 @@ local Bounties = Wanted.Bounties
 local Recorder = Wanted.Recorder
 
 local TARGET_GUID = "Player-TEST-00000001"
-local TARGET_NAME = "Testy Alliance"
-local HUNTER = "Test Hunter"
-local WITNESS = "Test Witness"
-local OTHER_POSTER = "Test Poster"
+local TARGET_NAME = "Corvin Ashdale"
+local HUNTER = "Rhea Stormtide"
+local WITNESS = "Tobin Greaves"
+local OTHER_POSTER = "Hallam Voss"
 
 -- Development builds only: released versions have no test data at all
 if not Wanted.DEV then
@@ -20,12 +20,14 @@ if not Wanted.DEV then
 end
 
 -- The reputation cast for /wanted simulate rep: made-up players with records that differ on purpose
-local ACE, SHADY, HONEST, DEADBEAT = "Ace Tracker", "Shady Claimer", "Honest Poster", "Deadbeat Poster"
+-- Realistic names so screenshots and tests read like the real thing: a reliable hunter, a doubtful one, a
+-- poster who pays and one who doesn't
+local ACE, SHADY, HONEST, DEADBEAT = "Kaelen Duskbrand", "Vorn Ashgrip", "Maribel Stonehollow", "Grix Tallowbane"
 
 ---Builds a record history where good and bad reputations sit side by side:
----  Ace Tracker: witnessed and confirmed kills, paid. High level, full reliability.
----  Shady Claimer: kills nobody saw, two disputed by the poster. Level 0, no reliability.
----  Honest Poster: posts and pays. Deadbeat Poster: two confirmed claims never paid (UNPAID).
+---  Kaelen Duskbrand: witnessed and confirmed kills, paid. High level, full reliability.
+---  Vorn Ashgrip: kills nobody saw, two disputed by the poster. Level 0, no reliability.
+---  Maribel Stonehollow: posts and pays. Grix Tallowbane: two confirmed claims never paid (UNPAID).
 ---Plus open bounties from both posters on the Board, and two of yours with claims to confirm or dispute.
 function Debug:SimulateReputation()
 	Store:PurgeTest()
@@ -34,9 +36,9 @@ function Debug:SimulateReputation()
 	local now = GetServerTime()
 	local day = 86400
 	local targets = {}
-	for i, def in ipairs({ { "Marked Mage", "MAGE", 21 }, { "Marked Warrior", "WARRIOR", 23 }, { "Marked Priest", "PRIEST", 20 }, { "Marked Hunter", "HUNTER", 22 } }) do
+	for i, def in ipairs({ { "Elyra Moonwhisper", "MAGE", 21 }, { "Dorran Ironvale", "WARRIOR", 23 }, { "Sella Brightwell", "PRIEST", 20 }, { "Thane Oakcrest", "HUNTER", 22 } }) do
 		local guid = format("Player-TEST-%08d", 100 + i)
-		Store:UpdatePlayer(guid, { name = def[1], class = def[2], level = def[3], faction = "Alliance", guild = "Test Gankers", zone = zone, mapId = mapId, x = x, y = y })
+		Store:UpdatePlayer(guid, { name = def[1], class = def[2], level = def[3], faction = "Alliance", guild = "Crimson Vanguard", zone = zone, mapId = mapId, x = x, y = y })
 		targets[i] = { guid = guid, name = def[1], level = def[3] }
 	end
 	local function Bounty(poster, target, amount, t)
@@ -45,9 +47,9 @@ function Debug:SimulateReputation()
 	-- A kill by the hunter, seen by a witness when witnessed is set; returns the claim on the bounty
 	local function Claim(hunter, bounty, target, t, witnessed)
 		local deathId = Store:Hash(strjoin("|", target.guid, hunter, tostring(t)))
-		local kill = Store:InsertTest("kill", hunter, { killer = "Player-TEST-"..hunter, killerName = hunter, victim = target.guid, victimName = target.name, victimGuild = "Test Gankers", deathId = deathId, zone = zone, x = x, y = y, honor = true }, t)
+		local kill = Store:InsertTest("kill", hunter, { killer = "Player-TEST-"..hunter, killerName = hunter, victim = target.guid, victimName = target.name, victimGuild = "Crimson Vanguard", deathId = deathId, zone = zone, x = x, y = y, honor = true }, t)
 		if witnessed then
-			Store:InsertTest("death", WITNESS, { deathId = deathId, victim = target.guid, victimName = target.name, victimGuild = "Test Gankers", zone = zone, x = x, y = y }, t + 1)
+			Store:InsertTest("death", WITNESS, { deathId = deathId, victim = target.guid, victimName = target.name, victimGuild = "Crimson Vanguard", zone = zone, x = x, y = y }, t + 1)
 		end
 		return Store:InsertTest("claim", hunter, { bounty = bounty.id, kill = kill.id, deathId = deathId, victim = target.guid, victimName = target.name, zone = zone, killT = t }, t + 2)
 	end
@@ -57,7 +59,7 @@ function Debug:SimulateReputation()
 	local function Pay(poster, hunter, claim, bounty)
 		Store:InsertTest("payment", poster, { claim = claim.id, bounty = bounty.id, to = hunter, amount = Bounties:GetAmount(bounty), side = "payer" }, claim.t + 3600)
 	end
-	-- Ace Tracker: six kills on Honest Poster's bounties over three weeks, witnessed, confirmed and paid
+	-- Kaelen Duskbrand: six kills on Maribel Stonehollow's bounties over three weeks, witnessed, confirmed and paid
 	for i = 1, 6 do
 		local t = now - (3 + i * 3) * day
 		local target = targets[(i - 1) % #targets + 1]
@@ -66,13 +68,13 @@ function Debug:SimulateReputation()
 		Confirm(HONEST, claim)
 		Pay(HONEST, ACE, claim, bounty)
 	end
-	-- Deadbeat Poster: two of Ace's kills confirmed days ago and never paid
+	-- Grix Tallowbane: two of Ace's kills confirmed days ago and never paid
 	for i = 1, 2 do
 		local t = now - (3 + i) * day
 		local bounty = Bounty(DEADBEAT, targets[i], 60 * 100, t - day)
 		Confirm(DEADBEAT, Claim(ACE, bounty, targets[i], t, true))
 	end
-	-- Shady Claimer: three kills nobody saw, two of them disputed by the poster
+	-- Vorn Ashgrip: three kills nobody saw, two of them disputed by the poster
 	for i = 1, 3 do
 		-- Half a day off Ace's kills: a witness is matched by victim, zone and time
 		local t = now - (8 + i) * day + day / 2
@@ -118,7 +120,7 @@ Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witn
 	end
 	Store:PurgeTest()
 	-- An enemy, seen twice
-	Store:UpdatePlayer(TARGET_GUID, { name = TARGET_NAME, class = "ROGUE", level = 22, faction = "Alliance", guild = "Test Gankers", zone = zone, mapId = mapId, x = x, y = y })
+	Store:UpdatePlayer(TARGET_GUID, { name = TARGET_NAME, class = "ROGUE", level = 22, faction = "Alliance", guild = "Crimson Vanguard", zone = zone, mapId = mapId, x = x, y = y })
 	Store:AddSighting(TARGET_GUID, zone, x, y, mapId)
 	-- Your bounty on them, posted yesterday, raised today
 	local bounty = Store:InsertTest("bounty", me, { target = TARGET_GUID, targetName = TARGET_NAME, amount = 50 * 100, level = 22, zone = zone }, now - 86400)
@@ -128,8 +130,8 @@ Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witn
 	-- A hunter killed them ten minutes ago with honor credit, and a bystander saw the death
 	local killT = now - 600
 	local deathId = Store:Hash(strjoin("|", TARGET_GUID, zone, floor(killT / 10)))
-	local kill = Store:InsertTest("kill", HUNTER, { killer = "Player-TEST-00000002", killerName = HUNTER, killerGuild = "Test Hunters Guild", victim = TARGET_GUID, victimName = TARGET_NAME, victimGuild = "Test Gankers", deathId = deathId, zone = zone, x = x, y = y, honor = true }, killT)
-	Store:InsertTest("death", WITNESS, { deathId = deathId, victim = TARGET_GUID, victimName = TARGET_NAME, victimGuild = "Test Gankers", zone = zone, x = x, y = y }, killT + 1)
+	local kill = Store:InsertTest("kill", HUNTER, { killer = "Player-TEST-00000002", killerName = HUNTER, killerGuild = "Bloodfang Syndicate", victim = TARGET_GUID, victimName = TARGET_NAME, victimGuild = "Crimson Vanguard", deathId = deathId, zone = zone, x = x, y = y, honor = true }, killT)
+	Store:InsertTest("death", WITNESS, { deathId = deathId, victim = TARGET_GUID, victimName = TARGET_NAME, victimGuild = "Crimson Vanguard", zone = zone, x = x, y = y }, killT + 1)
 	-- Their claims on both bounties
 	Store:InsertTest("claim", HUNTER, { bounty = bounty.id, kill = kill.id, deathId = deathId, victim = TARGET_GUID, victimName = TARGET_NAME, zone = zone, killT = killT }, killT + 2)
 	local others = {}

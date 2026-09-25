@@ -255,25 +255,25 @@ ns:RunCommand("simulate", "paid")
 check(ns.Model:GetBountyInfo(board[1].bounty).state == "paid", "paid after simulate paid")
 
 -- Post a bounty through the board page, then raise it and dispute nothing
-ns.Store:UpdatePlayer("Player-TEST-00000001", { name = "Testy Alliance", faction = "Alliance", level = 22 })
-local bounty = ns.Bounties:Post("Player-TEST-00000001", "Testy Alliance", 20000)
+ns.Store:UpdatePlayer("Player-TEST-00000001", { name = "Corvin Ashdale", faction = "Alliance", level = 22 })
+local bounty = ns.Bounties:Post("Player-TEST-00000001", "Corvin Ashdale", 20000)
 check(bounty, "post works")
 local mine = ns.Model:GetBountyInfo(bounty)
 check(mine.state == "open" and mine.actions[2] == "raise", "own open bounty offers raise")
 ns.Rows:DoAction("raise", mine)
 ConfirmDialog("50s")
 check(ns.Bounties:GetAmount(bounty) == 25000, "raise adds 50s")
-check(ns.Bounties:Post("Player-TEST-00000001", "Testy Alliance", 500) == nil, "minimum enforced")
-check(ns.Bounties:Post("Player-TEST-00000001", "Testy Alliance", 30000) == nil, "no second bounty on the same target")
+check(ns.Bounties:Post("Player-TEST-00000001", "Corvin Ashdale", 500) == nil, "minimum enforced")
+check(ns.Bounties:Post("Player-TEST-00000001", "Corvin Ashdale", 30000) == nil, "no second bounty on the same target")
 check(mine.actions[1] == "withdraw" and mine.actions[2] == "raise", "own open bounty offers withdraw and raise")
 ns.Rows:DoAction("withdraw", ns.Model:GetBountyInfo(bounty))
 ConfirmDialog()
 check(ns.Model:GetBountyInfo(bounty).state == "withdrawn", "withdrawn")
 check(ns.Bounties:GetMyOpen("Player-TEST-00000001") == nil, "withdrawn bounty is not open")
-local again = ns.Bounties:Post("Player-TEST-00000001", "Testy Alliance", 20000)
+local again = ns.Bounties:Post("Player-TEST-00000001", "Corvin Ashdale", 20000)
 check(again, "can post again after withdrawing")
 -- Another hunter commits: the poster can no longer withdraw
-ns.Store:InsertTest("hunt", "Test Hunter", { bounty = again.id }, clock)
+ns.Store:InsertTest("hunt", "Rhea Stormtide", { bounty = again.id }, clock)
 local hunted = ns.Model:GetBountyInfo(again)
 check(#hunted.hunters == 1 and hunted.actions[1] == "raise", "hunted bounty offers raise only")
 check(not ns.Bounties:Withdraw(again), "withdraw refused while hunted")
@@ -285,14 +285,14 @@ clock = clock + ns.Bounties.HUNT_SECONDS + 10
 check(#ns.Bounties:GetActiveHunters(again) == 0, "hunt expired")
 check(ns.Bounties:Withdraw(again), "withdraw allowed after the hunt lapsed")
 check(ns.Bounties:IsWithdrawn(again), "withdrawn after the hunt lapsed")
-local again2 = ns.Bounties:Post("Player-TEST-00000001", "Testy Alliance", 20000)
+local again2 = ns.Bounties:Post("Player-TEST-00000001", "Corvin Ashdale", 20000)
 check(again2, "repost")
 -- Two hunters on it; the later kill is filed first but the earlier kill wins
-ns.Store:InsertTest("hunt", "Test Hunter", { bounty = again2.id }, clock)
+ns.Store:InsertTest("hunt", "Rhea Stormtide", { bounty = again2.id }, clock)
 ns.Store:InsertTest("hunt", "Rival Hunter", { bounty = again2.id }, clock)
 check(#ns.Bounties:GetActiveHunters(again2) == 2, "two hunters at once")
-ns.Store:InsertTest("claim", "Rival Hunter", { bounty = again2.id, victim = "Player-TEST-00000001", victimName = "Testy Alliance", zone = "Durotar", killT = clock + 120 }, clock + 121)
-ns.Store:InsertTest("claim", "Test Hunter", { bounty = again2.id, victim = "Player-TEST-00000001", victimName = "Testy Alliance", zone = "Durotar", killT = clock + 60 }, clock + 200)
+ns.Store:InsertTest("claim", "Rival Hunter", { bounty = again2.id, victim = "Player-TEST-00000001", victimName = "Corvin Ashdale", zone = "Durotar", killT = clock + 120 }, clock + 121)
+ns.Store:InsertTest("claim", "Rhea Stormtide", { bounty = again2.id, victim = "Player-TEST-00000001", victimName = "Corvin Ashdale", zone = "Durotar", killT = clock + 60 }, clock + 200)
 for _, item in ipairs(ns.Model:GetMyBounties()) do
 	check(not ns.Model:IsFinished(item), "live list has no finished bounties")
 end
@@ -302,11 +302,11 @@ for _, item in ipairs(ns.Model:GetMyHistory()) do
 end
 check(foundWithdrawn, "withdrawn bounty is in history")
 -- Guild bounty: posted on the guild, claimed by a member's kill
-local guildBounty = ns.Bounties:PostGuild("Test Gankers", "Alliance", 30000)
+local guildBounty = ns.Bounties:PostGuild("Crimson Vanguard", "Alliance", 30000)
 check(guildBounty, "guild bounty posts")
-check(ns.Bounties:PostGuild("Test Gankers", "Alliance", 30000) == nil, "one guild bounty per poster per guild")
+check(ns.Bounties:PostGuild("Crimson Vanguard", "Alliance", 30000) == nil, "one guild bounty per poster per guild")
 check(ns.Bounties:PostGuild("Our Guild", "Horde", 30000) == nil, "no guild bounty on your own faction")
-ns.Store:NewRecord("kill", { killer = "Player-1-ME", killerName = ns.Store:GetOrigin(), victim = "Player-TEST-00000001", victimName = "Testy Alliance", victimGuild = "Test Gankers", deathId = "g1", zone = "Durotar", honor = true })
+ns.Store:NewRecord("kill", { killer = "Player-1-ME", killerName = ns.Store:GetOrigin(), victim = "Player-TEST-00000001", victimName = "Corvin Ashdale", victimGuild = "Crimson Vanguard", deathId = "g1", zone = "Durotar", honor = true })
 local guildClaimed = false
 for claim in ns.Store:Iterator("claim") do
 	if claim.data.bounty == guildBounty.id then guildClaimed = true end
@@ -315,14 +315,14 @@ check(not guildClaimed, "own guild bounty is not claimed by yourself")
 local gboard = ns.Model:GetGuildBoard()
 check(#gboard > 0 and gboard[1].name ~= nil, "guild board lists guilds")
 local foundGankers = false
-for _, g in ipairs(gboard) do if g.name == "Test Gankers" then foundGankers = g.deaths > 0 and g.bounties > 0 end end
-check(foundGankers, "Test Gankers has deaths and a bounty")
+for _, g in ipairs(gboard) do if g.name == "Crimson Vanguard" then foundGankers = g.deaths > 0 and g.bounties > 0 end end
+check(foundGankers, "Crimson Vanguard has deaths and a bounty")
 local raced = ns.Model:GetBountyInfo(again2)
-check(raced.hunter == "Test Hunter", "earliest kill wins, got "..tostring(raced.hunter))
+check(raced.hunter == "Rhea Stormtide", "earliest kill wins, got "..tostring(raced.hunter))
 
 -- Leaderboards, going rate, activity, and a refresh of every page after all that
 local hunters, posters = ns.Model:GetLeaderboards()
-check(#hunters == 2 and hunters[1].origin == "Test Hunter" and hunters[1].kills == 4, "two hunters, the test hunter first with 4 kills")
+check(#hunters == 2 and hunters[1].origin == "Rhea Stormtide" and hunters[1].kills == 4, "two hunters, the test hunter first with 4 kills")
 check(#posters == 2, "two posters")
 check(ns.Model:GetGoingRate(22, 10000), "going rate text")
 check(#ns.Model:GetActivity() > 0, "activity has entries")
@@ -336,11 +336,11 @@ ns:RunCommand("purge", "")
 check(#ns.Model:GetBoard({ minAmount = 0, showPassed = true }) == 2, "purge leaves the reposted bounty and the guild bounty")
 
 -- Enemy detection: a nameplate appears, gets listed, alerts, targets us, casts stealth
-local STAB = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 19, guild = "Test Gankers", targetsMe = true }
+local STAB = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 19, guild = "Crimson Vanguard", targetsMe = true }
 enemyUnits.nameplate1 = STAB
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 local near = ns.Enemies:GetNearby()
-check(#near == 1 and near[1].name == "Stabby Mcstab" and near[1].guild == "Test Gankers", "enemy listed as nearby")
+check(#near == 1 and near[1].name == "Stabby Mcstab" and near[1].guild == "Crimson Vanguard", "enemy listed as nearby")
 check(ns.Enemies:GetStats("Player-9-ENEMY").detections == 1, "detection counted")
 ns.NearbyWindow:SetShown(true)
 ns.NearbyWindow:Refresh()
@@ -574,21 +574,28 @@ check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1
 -- The reputation cast: good and bad records side by side
 ns:RunCommand("simulate", "rep")
 local R = ns.Reputation
-local ace, shady = R:GetTally("Ace Tracker"), R:GetTally("Shady Claimer")
+local ace, shady = R:GetTally("Kaelen Duskbrand"), R:GetTally("Vorn Ashgrip")
 local aceLevel, aceStars = R:GetRank(ace)
 local shadyLevel, shadyStars = R:GetRank(shady)
 check(aceLevel >= 3 and aceStars == 5 and ace.disputed == 0, "Ace: high level, full reliability, got level "..aceLevel.." stars "..aceStars)
 check(shadyLevel == 0 and shadyStars == 0 and shady.disputed == 2 and shady.lone >= 1, "Shady: level 0, no reliability, 2 disputed, got level "..shadyLevel.." stars "..shadyStars.." disputed "..shady.disputed)
-check(R:GetTally("Deadbeat Poster").unpaid == 2, "Deadbeat: 2 unpaid, got "..R:GetTally("Deadbeat Poster").unpaid)
-check(R:GetTally("Honest Poster").paid == 6 and R:GetTally("Honest Poster").unpaid == 0, "Honest: 6 paid, none unpaid")
-check(R:GetLine("Deadbeat Poster"):find("2 UNPAID", 1, true) and R:GetLine("Shady Claimer"):find("2 disputed", 1, true), "record lines show UNPAID and disputed")
+check(R:GetTally("Grix Tallowbane").unpaid == 2, "Deadbeat: 2 unpaid, got "..R:GetTally("Grix Tallowbane").unpaid)
+check(R:GetTally("Maribel Stonehollow").paid == 6 and R:GetTally("Maribel Stonehollow").unpaid == 0, "Honest: 6 paid, none unpaid")
+check(R:GetLine("Grix Tallowbane"):find("2 UNPAID", 1, true) and R:GetLine("Vorn Ashgrip"):find("2 disputed", 1, true), "record lines show UNPAID and disputed")
 local posters = {}
 for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do posters[item.poster] = true end
-check(posters["Honest Poster"] and posters["Deadbeat Poster"], "both posters have open bounties on the Board")
+check(posters["Maribel Stonehollow"] and posters["Grix Tallowbane"], "both posters have open bounties on the Board")
+local details = {}
+for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do details[#details + 1] = ns.Model:GetDetail(item) end
+local all = table.concat(details, "\n")
+check(all:find("^By Grix Tallowbane %(.-2 unpaid") or all:find("\nBy Grix Tallowbane %(.-2 unpaid"), "the unpaid badge leads the row, got\n"..all)
+check(all:find("By Maribel Stonehollow %(.-paid %d"), "the paid badge shows")
+check(all:find("Vorn Ashgrip %(.-2 disputed.-%) claims it, unseen"), "the disputed badge shows on Vorn's claim")
+check(all:find("Kaelen Duskbrand %(.-level %d"), "the level badge shows on Kaelen's claim")
 for _, key in ipairs({ "board", "mine", "hunters" }) do ns.UI:Show(key) end
-ns:RunCommand("rep", "Deadbeat Poster")
+ns:RunCommand("rep", "Grix Tallowbane")
 ns:RunCommand("purge", "")
-check(R:GetTally("Ace Tracker").claims == 0, "purge clears the cast")
+check(R:GetTally("Kaelen Duskbrand").claims == 0, "purge clears the cast")
 -- The game's Options > AddOns entry: registered, and its buttons close Options and open Wanted
 check(optionsCategory and optionsCategory.registered and optionsCategory.name == "Wanted: Dead or... Dead", "Options > AddOns entry registered")
 SettingsPanel._shown = true

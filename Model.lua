@@ -150,10 +150,18 @@ function Model:GetDetail(info)
 	local Theme = Wanted.Theme
 	local now = GetServerTime()
 	local parts = {}
-	if info.test then
-		tinsert(parts, "Test data")
+	local Reputation = Wanted.Reputation
+	-- Each name carries its record in a few words, right after it, so the line's cut-off never hides it
+	local function Hunter()
+		local badge = Reputation:GetHunterBadge(info.hunter)
+		return info.hunter..(badge and (" ("..badge..")") or "")
 	end
-	tinsert(parts, info.mine and "Posted by you" or ("Posted by "..info.poster))
+	if info.mine then
+		tinsert(parts, "Posted by you")
+	else
+		local badge = Reputation:GetPosterBadge(info.poster)
+		tinsert(parts, "By "..info.poster..(badge and (" ("..badge..")") or ""))
+	end
 	local state = info.state
 	if state == STATE.OPEN then
 		tinsert(parts, Theme:Left(info.expiry - now))
@@ -162,10 +170,10 @@ function Model:GetDetail(info)
 			tinsert(parts, info.iHunt and (hunters == 1 and "only you hunting" or format("you and %d other%s hunting", hunters - 1, hunters == 2 and "" or "s")) or format("%d hunting", hunters))
 		end
 	elseif state == STATE.UNVERIFIED then
-		tinsert(parts, info.hunter.." claims the kill, no witness")
+		tinsert(parts, Hunter().." claims it, unseen")
 	elseif state == STATE.CLAIMED then
 		local witnesses = #Bounties:GetWitnesses(info.claim)
-		tinsert(parts, format("%s claims the kill, %d witness%s", info.hunter, witnesses, witnesses == 1 and "" or "es"))
+		tinsert(parts, format("%s claims it, %d witness%s", Hunter(), witnesses, witnesses == 1 and "" or "es"))
 	elseif state == STATE.OWED then
 		tinsert(parts, info.mine and ("pay "..info.hunter) or (info.hunter.." earned it"))
 	elseif state == STATE.PAID then
@@ -174,6 +182,9 @@ function Model:GetDetail(info)
 		tinsert(parts, "taken down")
 	else
 		tinsert(parts, "no taker")
+	end
+	if info.test then
+		tinsert(parts, "Test data")
 	end
 	return table.concat(parts, "  -  ")
 end

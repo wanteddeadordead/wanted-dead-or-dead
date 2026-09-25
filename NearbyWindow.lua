@@ -27,7 +27,7 @@ local MIN_ROWS = 3
 local NORMAL_ROWS, COMPACT_ROWS = 10, 16
 local MAX_ROWS = COMPACT_ROWS
 local COMPACT_ABOVE = 8 -- more enemies than this switches to single-line rows
-local FOOTER = 34
+local FOOTER_GAP = 8 -- space above the footer text (a divider sits in it) and below it
 local VIEWS = {
 	{ key = "nearby", label = "Nearby" },
 	{ key = "hour", label = "Last hour" },
@@ -208,10 +208,15 @@ function private.Create()
 		Nearby:Refresh()
 	end)
 	private.footer = Theme:Text(frame, "tiny", "")
-	private.footer:SetPoint("BOTTOMLEFT", 10, 6)
-	private.footer:SetPoint("BOTTOMRIGHT", -10, 6)
+	private.footer:SetPoint("BOTTOMLEFT", 10, FOOTER_GAP)
+	private.footer:SetWidth(WIDTH - 20)
 	private.footer:SetWordWrap(true)
 	private.footer:SetJustifyV("BOTTOM")
+	private.footer:SetSpacing(2)
+	private.footerLine = Theme:Line(frame)
+	private.footerLine:SetPoint("LEFT", 1, 0)
+	private.footerLine:SetPoint("RIGHT", -1, 0)
+	private.footerLine:SetPoint("BOTTOM", private.footer, "TOP", 0, FOOTER_GAP / 2)
 	private.empty = Theme:Text(frame, "small", "", C.faint)
 	private.empty:SetPoint("TOP", 0, -HEADER - 14)
 	private.empty:SetJustifyH("CENTER")
@@ -432,8 +437,11 @@ function Nearby:Refresh()
 	private.offset = min(private.offset, max(#items - capacity, 0))
 	local numRows = min(max(#items - private.offset, MIN_ROWS), capacity)
 	local overflow = #items > capacity
-	private.frame:SetHeight(HEADER + numRows * rowHeight + (overflow and FOOTER or 8))
+	-- The footer (position and classes) gets the height its text needs, so it never runs into the rows
 	private.footer:SetText(overflow and private.FooterText(items, capacity) or "")
+	private.footerLine:SetShown(overflow)
+	local footerHeight = overflow and (ceil(private.footer:GetStringHeight()) + FOOTER_GAP * 2) or 8
+	private.frame:SetHeight(HEADER + numRows * rowHeight + footerHeight)
 	for i, row in ipairs(private.rows) do
 		if row.layoutKey ~= (compact and "c" or "n")..(private.Show().icon and "i" or "") then
 			private.LayoutRow(row, i, compact)

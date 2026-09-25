@@ -48,6 +48,7 @@ function Methods:IsVisible() return self._shown end
 function Methods:SetText(t) self._text = t or "" if self._fs then self._fs._text = t or "" end end
 function Methods:GetText() return self._text end
 function Methods:GetStringWidth() return #tostring(self._text) * 6 end
+function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
 function Methods:SetEnabled(v) self._enabled = v and true or false end
 function Methods:Enable() self._enabled = true end

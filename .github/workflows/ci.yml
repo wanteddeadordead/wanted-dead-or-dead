@@ -19,3 +19,26 @@ jobs:
         run: for f in $(git ls-files '*.lua'); do luac5.4 -p "$f"; done
       - name: Smoke test
         run: lua5.4 tests/smoke_test.lua
+
+  # Builds the package the way a release does (nothing uploaded) and checks the test-data and
+  # database-wiping commands are not in it: they're for development builds only.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Package without uploading
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: -d -z
+      - name: No development-only commands in the package
+        run: |
+          set -e
+          pkg=.release/WantedDeadOrDead
+          test -f "$pkg/WantedDeadOrDead.toc"
+          if test -e "$pkg/Debug.lua"; then echo "Debug.lua is in the package"; exit 1; fi
+          if grep -q '^Debug.lua' "$pkg/WantedDeadOrDead.toc"; then echo "the toc still loads Debug.lua"; exit 1; fi
+          if grep -rq 'RegisterCommand("\(simulate\|purge\|freshstart\)"' "$pkg"; then echo "a development command is registered"; exit 1; fi
+          grep -q '\[===\[@debug@' "$pkg/Store.lua" || { echo "Store:FreshStart is not stripped"; exit 1; }
+          echo "Package is clean"

@@ -183,7 +183,10 @@ function Reputation:GetHunterTrust(tally)
 	local C = Wanted.Theme.C
 	local good = tally.witnessed + tally.confirmed
 	local level, stars = Reputation:GetRank(tally)
-	local detail = format("Level %d. %d of %d kill%s verified, %d unseen, %d disputed. Earned %s.", level, good, tally.claims, tally.claims == 1 and "" or "s", tally.lone, tally.disputed, Bounties:FormatMoney(tally.earned))
+	local detail = format("Level %d. %d of %d kill%s verified, %d unseen, %d disputed.", level, good, tally.claims, tally.claims == 1 and "" or "s", tally.lone, tally.disputed)
+	if tally.earned > 0 then
+		detail = detail.." Earned "..Bounties:FormatMoney(tally.earned).."."
+	end
 	if good + tally.disputed == 0 then
 		return "Unproven", C.muted, detail
 	elseif stars <= 2 then

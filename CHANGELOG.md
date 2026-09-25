@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Your record (Your bounties > Your record, /wanted record): your trust as a poster and as a hunter, what it
+  means, and how to improve it, with a key to every trust level.
 - Trust levels in bounty tooltips and /wanted rep: Trusted, Reliable, Unproven or New poster, Doubtful, Untrustworthy.
 - Bounty rows show each poster's and hunter's record in a few coloured words: unpaid, paid, disputed, level.
 - An entry in the game's Options > AddOns list with buttons to open Wanted and the Nearby window.

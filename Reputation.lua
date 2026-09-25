@@ -21,6 +21,7 @@ local WEIGHTS = {
 	bountyUnpaid = -20,
 }
 local RANK_POINTS_PER_LEVEL = 20
+local TRUSTED_AT = 5 -- verified kills (hunter) or paid claims (poster) with a clean record to be Trusted
 local DECAY_DAYS = 90
 
 
@@ -193,7 +194,7 @@ function Reputation:GetHunterTrust(tally)
 		return "Untrustworthy", C.red, detail
 	elseif tally.disputed > 0 then
 		return "Doubtful", C.amber, detail
-	elseif good >= 5 then
+	elseif good >= TRUSTED_AT then
 		return "Trusted", C.green, detail
 	end
 	return "Reliable", C.green, detail
@@ -216,10 +217,72 @@ function Reputation:GetPosterTrust(tally)
 		return "Untrustworthy", C.red, detail
 	elseif tally.unpaid > 0 then
 		return "Doubtful", C.amber, detail
-	elseif tally.paid >= 5 then
+	elseif tally.paid >= TRUSTED_AT then
 		return "Trusted", C.green, detail
 	end
 	return "Reliable", C.green, detail
+end
+
+local POSTER_MEANING = {
+	["Trusted"] = "Hunters can count on you: you've paid every claim you owed, five or more.",
+	["Reliable"] = "You've paid every claim you owed so far.",
+	["New poster"] = "No claim on your bounties has come due yet, so hunters can't tell whether you pay.",
+	["Doubtful"] = "You've left some claims unpaid, though you've paid more than you haven't.",
+	["Untrustworthy"] = "You've left as many claims unpaid as you've paid, or more. Hunters may pass on your bounties.",
+}
+local HUNTER_MEANING = {
+	["Trusted"] = "Your kills check out: five or more verified by a witness or the poster, none disputed.",
+	["Reliable"] = "Your verified kills check out and none were disputed.",
+	["Unproven"] = "Nobody else saw your kills and no poster has confirmed one yet.",
+	["Doubtful"] = "Some of your claims were disputed, though most were verified.",
+	["Untrustworthy"] = "At least as many of your claims were disputed as verified. Posters may doubt your claims.",
+}
+
+---What a player's poster trust means and what to do about it.
+---@param tally table
+---@return string meaning
+---@return string advice
+function Reputation:GetPosterAdvice(tally)
+	local label = Reputation:GetPosterTrust(tally)
+	if not label then
+		return "You haven't posted a bounty yet.", "Post one from the Board. Paying the hunters who claim it builds your trust."
+	end
+	local advice
+	if tally.unpaid > 0 then
+		advice = format("Pay your %d unpaid claim%s: find %s under Your live bounties and press Pay at a mailbox. A late payment still counts as paid.", tally.unpaid, tally.unpaid == 1 and "" or "s", tally.unpaid == 1 and "it" or "them")
+	elseif label == "New poster" then
+		advice = "When a hunter claims one of your bounties, confirm a real kill and pay them by mail within 2 days."
+	elseif label == "Reliable" then
+		local more = TRUSTED_AT - tally.paid
+		advice = format("Pay %d more claim%s, with none left unpaid, to become Trusted.", more, more == 1 and "" or "s")
+	else
+		advice = "Keep paying confirmed claims within 2 days to stay Trusted."
+	end
+	return POSTER_MEANING[label], advice
+end
+
+---What a player's hunter trust means and what to do about it.
+---@param tally table
+---@return string meaning
+---@return string advice
+function Reputation:GetHunterAdvice(tally)
+	local label = Reputation:GetHunterTrust(tally)
+	if not label then
+		return "You haven't claimed a bounty yet.", "Pick a bounty on the Board and press Hunt. The claim files itself when you get the kill."
+	end
+	local good = tally.witnessed + tally.confirmed
+	local advice
+	if tally.disputed > 0 then
+		advice = "Disputes stay on your record, and every verified kill counts in your favour. Hunt where other Wanted users can see the kill, and only claim kills you made."
+	elseif label == "Unproven" then
+		advice = "A kill is verified when another Wanted user sees it or the poster confirms it. Hunt near other players running Wanted."
+	elseif label == "Reliable" then
+		local more = TRUSTED_AT - good
+		advice = format("%d more verified kill%s, with no disputes, makes you Trusted.", more, more == 1 and "" or "s")
+	else
+		advice = "Keep claiming only kills you made to stay Trusted."
+	end
+	return HUNTER_MEANING[label], advice
 end
 
 ---Adds a trust line and its detail to the game tooltip.

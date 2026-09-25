@@ -197,7 +197,18 @@ function private.GetHud()
 	hud.glow = hud:CreateTexture(nil, "BACKGROUND")
 	hud.glow:SetPoint("TOPLEFT", -10, 6)
 	hud.glow:SetPoint("BOTTOMRIGHT", 10, -6)
-	hud.glow:SetColorTexture(0.5, 0, 0, 0.35)
+	-- Near black so the red title reads over any sky (a red wash vanished over the Barrens at dusk), with red
+	-- edges to keep it looking like a warning
+	hud.glow:SetColorTexture(0.07, 0.01, 0.01, 0.75)
+	hud.edges = {}
+	for _, side in ipairs({ "TOP", "BOTTOM" }) do
+		local edge = hud:CreateTexture(nil, "BORDER")
+		edge:SetHeight(2)
+		edge:SetPoint(side.."LEFT", hud.glow, side.."LEFT")
+		edge:SetPoint(side.."RIGHT", hud.glow, side.."RIGHT")
+		edge:SetColorTexture(0.9, 0.15, 0.12, 0.9)
+		tinsert(hud.edges, edge)
+	end
 	hud.title = hud:CreateFontString(nil, "OVERLAY")
 	hud.title:SetFontObject(Theme:MakeFont("WantedFontHudTitle", 26, nil, "OUTLINE"))
 	hud.title:SetPoint("TOP", 0, 0)
@@ -225,7 +236,9 @@ function private.GetHud()
 		self.t = (self.t or 0) + elapsed
 		local pulse = 0.75 + 0.25 * math.sin(self.t * 5)
 		self.title:SetAlpha(pulse)
-		self.glow:SetAlpha(pulse * 0.9)
+		for _, edge in ipairs(self.edges) do
+			edge:SetAlpha(pulse)
+		end
 		if self.hideAt and GetTime() >= self.hideAt and not self.moving then
 			self:Hide()
 		end

@@ -563,9 +563,10 @@ local function CreateMenu()
 	return frame
 end
 
----Shows a menu at the cursor.
+---Shows a menu under the frame that opened it, or at the cursor.
 ---@param items table[] { text, color?, onClick?, header?, disabled? } or "-" for a divider
-function W:Menu(items)
+---@param anchor table? the button that opened it
+function W:Menu(items, anchor)
 	menu = menu or CreateMenu()
 	for _, item in ipairs(menu.items) do
 		item:Hide()
@@ -624,9 +625,14 @@ function W:Menu(items)
 		item:Show()
 	end
 	menu:SetSize(width, -y + 6)
-	local scale = UIParent:GetEffectiveScale()
-	local x, cy = GetCursorPosition()
 	menu:ClearAllPoints()
-	menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, cy / scale)
+	menu:SetClampedToScreen(true)
+	if anchor then
+		menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+	else
+		local scale = menu:GetEffectiveScale()
+		local x, cy = GetCursorPosition()
+		menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, cy / scale)
+	end
 	menu:Show()
 end

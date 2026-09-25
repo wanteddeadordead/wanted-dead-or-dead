@@ -149,7 +149,8 @@ function EnemyMenu:CallForHelp(chatType)
 end
 
 ---The call-for-help menu: Local Defense, your raid or party, your guild.
-function EnemyMenu:ShowHelpMenu()
+---@param anchor table? the button that opened it
+function EnemyMenu:ShowHelpMenu(anchor)
 	local items = {
 		{ text = "Call for help", header = true },
 	}
@@ -163,7 +164,7 @@ function EnemyMenu:ShowHelpMenu()
 	if IsInGuild and IsInGuild() then
 		tinsert(items, { text = "Your guild", onClick = function() EnemyMenu:CallForHelp("GUILD") end })
 	end
-	W:Menu(items)
+	W:Menu(items, anchor)
 end
 
 function EnemyMenu:SetReason(d)

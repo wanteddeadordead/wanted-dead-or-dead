@@ -14,6 +14,7 @@ local Board = {}
 Wanted.BoardPage = Board
 local private = {}
 local QUICK_AMOUNTS = { { "25s", 2500 }, { "50s", 5000 }, { "1g", 10000 }, { "5g", 50000 } }
+local SORT_LABELS = { amount = "Highest amount", newest = "Newest", name = "Name (A-Z)", zone = "Zone (A-Z)", seen = "Last seen" }
 local MIN_BOUNTY = 1000
 
 
@@ -224,8 +225,24 @@ function private.BuildFilters(parent, width)
 		private.RefreshList()
 	end)
 	private.passedToggle:SetPoint("LEFT", private.zoneToggle, "RIGHT", 16, 0)
-	private.count = Theme:Text(bar, "small", "")
-	private.count:SetPoint("RIGHT", 0, 0)
+	private.sortButton = W:Button(bar, "", "secondary", 160, 24, function(self)
+		local items = { { text = "Sort by", header = true } }
+		for _, key in ipairs(Model.BOARD_SORTS) do
+			tinsert(items, {
+				text = SORT_LABELS[key],
+				color = key == Wanted.db.settings.boardSort and C.accent or nil,
+				onClick = function()
+					Wanted.db.settings.boardSort = key
+					private.RefreshList()
+				end,
+			})
+		end
+		W:Menu(items, self)
+	end)
+	private.sortButton:SetPoint("RIGHT")
+	W:AttachTooltip(private.sortButton, "Sort", "Highest amount, newest, name, the zone they were last seen in, or who was seen most recently. Bounties waiting on you stay on top.")
+	private.count = Theme:Text(bar, "tiny", "")
+	private.count:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, -4)
 	private.count:SetJustifyH("RIGHT")
 end
 
@@ -239,7 +256,9 @@ function private.RefreshList()
 		minAmount = settings.minBounty or 0,
 		zone = settings.zoneFilter,
 		showPassed = settings.showPassed,
+		sort = settings.boardSort,
 	})
+	private.sortButton:SetText("Sort: "..(SORT_LABELS[settings.boardSort] or SORT_LABELS.amount))
 	local total = 0
 	for _, info in ipairs(items) do
 		if info.state == Model.STATE.OPEN then
@@ -263,7 +282,7 @@ UI:RegisterPage("board", {
 	build = function(container, width, height)
 		private.BuildPostCard(container, width)
 		private.BuildFilters(container, width)
-		local listTop = 176
+		local listTop = 188
 		local numRows = floor((height - listTop) / Rows.HEIGHT)
 		local list = W:List(container, Rows.HEIGHT, numRows, function(row) Rows:Create(row) end, function(row, info) Rows:UpdateBounty(row, info) end)
 		list:SetPoint("TOPLEFT", 0, -listTop)

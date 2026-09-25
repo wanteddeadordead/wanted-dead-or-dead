@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Sort the bounty board: highest amount, newest, name, the zone they were last seen in, or who was seen most
+  recently. Bounties waiting on you stay on top.
 - The wanted poster's name and reward are lettered in a western wood-type font (Rye), and the reward reads
   like a poster ("5,000 GOLD"). Long names shrink to fit.
 

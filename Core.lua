@@ -24,6 +24,7 @@ local DEFAULTS = {
 		zoneFilter = nil, -- a zone name, or nil for all
 		announce = false, -- nothing is announced in public chat (decided 2026-09-24)
 		showPassed = false,
+		boardSort = "amount", -- the board's order: amount, newest, name, zone or seen (Model.BOARD_SORTS)
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)

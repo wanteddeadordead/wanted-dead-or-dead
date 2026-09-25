@@ -1266,6 +1266,28 @@ amountButton:GetScript("OnClick")(amountButton)
 check(posterFrame.reward:GetText() == "4 GOLD 50 SILVER" and amountButton:GetText() == "Set amount", "Real amount puts the true total back")
 posterButtons["Close"]:GetScript("OnClick")(posterButtons["Close"])
 check(not ns.Poster:IsShown(), "Close hides the poster")
+-- Sorting the board: by amount (the default), newest, name, last-seen zone, and how recently they were seen
+local function SortTarget(guid, name, amount, zone, seenAgo)
+	ns.Store:UpdatePlayer(guid, { name = name, zone = zone })
+	ns.Store:GetPlayer(guid).lastSeen = seenAgo and (clock - seenAgo) or nil
+	clock = clock + 1
+	return ns.Store:NewRecord("bounty", { target = guid, targetName = name, amount = amount })
+end
+SortTarget("Player-9-SORTA", "Sortme Alpha", 10000, "Durotar", 10)
+SortTarget("Player-9-SORTB", "Sortme Bravo", 20000, "The Barrens", nil)
+SortTarget("Player-9-SORTC", "Sortme Charlie", 30000, "Ashenvale", 100)
+local function SortedNames(sortKey)
+	local names = {}
+	for _, info in ipairs(ns.Model:GetBoard({ minAmount = 0, search = "sortme", sort = sortKey })) do
+		names[#names + 1] = info.targetName:gsub("Sortme ", "")
+	end
+	return table.concat(names, ",")
+end
+check(SortedNames(nil) == "Charlie,Bravo,Alpha", "the board sorts by amount by default: "..SortedNames(nil))
+check(SortedNames("newest") == "Charlie,Bravo,Alpha", "newest first")
+check(SortedNames("name") == "Alpha,Bravo,Charlie", "by name: "..SortedNames("name"))
+check(SortedNames("zone") == "Charlie,Alpha,Bravo", "by last-seen zone (Ashenvale, Durotar, The Barrens): "..SortedNames("zone"))
+check(SortedNames("seen") == "Alpha,Charlie,Bravo", "most recently seen first, never seen last: "..SortedNames("seen"))
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

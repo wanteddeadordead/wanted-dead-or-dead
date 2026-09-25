@@ -221,8 +221,45 @@ function Model:GetLastSeen(info)
 	return format("%s, %s", player.zone or "?", Wanted.Theme:Ago(GetServerTime() - player.lastSeen))
 end
 
+-- Orders for the board within each urgency group; bounties nobody has seen sort last by zone and by seen
+local function Newest(a, b)
+	return a.t > b.t
+end
+local BOARD_SORTS = {
+	amount = function(a, b)
+		if a.amount ~= b.amount then
+			return a.amount > b.amount
+		end
+		return Newest(a, b)
+	end,
+	newest = Newest,
+	name = function(a, b)
+		local an, bn = strlower(a.targetName), strlower(b.targetName)
+		if an ~= bn then
+			return an < bn
+		end
+		return Newest(a, b)
+	end,
+	zone = function(a, b)
+		if a.seenZone ~= b.seenZone then
+			if not a.seenZone or not b.seenZone then
+				return a.seenZone ~= nil
+			end
+			return strlower(a.seenZone) < strlower(b.seenZone)
+		end
+		return Newest(a, b)
+	end,
+	seen = function(a, b)
+		if a.seenAt ~= b.seenAt then
+			return (a.seenAt or 0) > (b.seenAt or 0)
+		end
+		return Newest(a, b)
+	end,
+}
+Model.BOARD_SORTS = { "amount", "newest", "name", "zone", "seen" }
+
 ---The board: what a hunter or poster should see now, most urgent first.
----@param filters table search, minAmount, zone, showPassed
+---@param filters table search, minAmount, zone, showPassed, sort (a key of BOARD_SORTS; amount by default)
 ---@return table[] infos
 function Model:GetBoard(filters)
 	local items = {}
@@ -251,17 +288,20 @@ function Model:GetBoard(filters)
 		end
 		if show then
 			info.order = info.needsMe and 0 or ((info.state == STATE.OPEN or info.state == STATE.UNVERIFIED) and 1 or 2)
+			-- Where and when the target (for a guild bounty, its most recently seen member) was last seen
+			local seen = info.guild and Model:GetGuildMembers(info.guild)[1] or info.player
+			info.seenZone = seen and seen.zone or bounty.data.zone
+			info.seenAt = seen and seen.lastSeen or nil
 			tinsert(items, info)
 		end
 	end
+	local within = BOARD_SORTS[filters.sort or "amount"] or BOARD_SORTS.amount
+	-- What needs the player stays on top whatever the order
 	sort(items, function(a, b)
 		if a.order ~= b.order then
 			return a.order < b.order
 		end
-		if a.amount ~= b.amount then
-			return a.amount > b.amount
-		end
-		return a.t > b.t
+		return within(a, b)
 	end)
 	return items
 end

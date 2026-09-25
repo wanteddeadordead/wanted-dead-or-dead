@@ -40,9 +40,19 @@ function EnemyMenu:GetLocalDefenseChannel()
 	return nil
 end
 
----Sends plain text to a chat type ("RAID", "PARTY", "GUILD" or "CHANNEL" with its number).
+---Sends plain text to a chat type ("RAID", "PARTY", "GUILD" or "CHANNEL" with its number). The client
+---blocks addons from posting in public channels like Local Defense, even from a click, so for a channel the
+---message is typed into your chat box instead ("/4 Need help at ...") and you press Enter to send it.
 local function Send(text, chatType, channelNumber)
-	C_ChatInfo.SendChatMessage(strsub(text, 1, MAX_CHAT_LENGTH), chatType, nil, channelNumber and tostring(channelNumber) or nil)
+	if chatType == "CHANNEL" then
+		local line = "/"..channelNumber.." "..text
+		local OpenChat = ChatFrameUtil and ChatFrameUtil.OpenChat or ChatFrame_OpenChat
+		if OpenChat then
+			OpenChat(strsub(line, 1, MAX_CHAT_LENGTH))
+		end
+		return
+	end
+	C_ChatInfo.SendChatMessage(strsub(text, 1, MAX_CHAT_LENGTH), chatType)
 end
 
 local function Announce(channel, d, channelNumber)
@@ -108,7 +118,7 @@ function EnemyMenu:BuildHelpText()
 		end
 		part = part..(i < #nearby and "," or "")
 		local more = format(" +%d more", #nearby - i)
-		if #text + #part + #more > MAX_CHAT_LENGTH then
+		if #text + #part + #more > MAX_CHAT_LENGTH - 4 then
 			return text..format(" +%d more", #nearby - i + 1)
 		end
 		text = text..part
@@ -144,7 +154,7 @@ function EnemyMenu:ShowHelpMenu()
 		{ text = "Call for help", header = true },
 	}
 	local localDefense = EnemyMenu:GetLocalDefenseChannel()
-	tinsert(items, { text = localDefense and format("Local Defense (/%d)", localDefense) or "Local Defense (not here)", color = C.red, disabled = not localDefense, onClick = function() EnemyMenu:CallForHelp("CHANNEL") end })
+	tinsert(items, { text = localDefense and format("Local Defense (/%d, press Enter)", localDefense) or "Local Defense (not here)", color = C.red, disabled = not localDefense, onClick = function() EnemyMenu:CallForHelp("CHANNEL") end })
 	if IsInRaid and IsInRaid() then
 		tinsert(items, { text = "Your raid", onClick = function() EnemyMenu:CallForHelp("RAID") end })
 	elseif IsInGroup and IsInGroup() then
@@ -200,7 +210,7 @@ function EnemyMenu:Show(d)
 	if canParty or canGuild or localDefense then
 		tinsert(items, "-")
 		if localDefense then
-			tinsert(items, { text = "Tell Local Defense", onClick = function() Announce("CHANNEL", d, localDefense) end })
+			tinsert(items, { text = "Tell Local Defense (press Enter)", onClick = function() Announce("CHANNEL", d, localDefense) end })
 		end
 		if canRaid then
 			tinsert(items, { text = "Tell your raid", onClick = function() Announce("RAID", d) end })

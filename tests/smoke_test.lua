@@ -586,7 +586,9 @@ local help = ns.EnemyMenu:BuildHelpText()
 check(help:find("^Need help at Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+%d+ more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
 check(help:find("Stabby Mcstab", 1, true) < (help:find("Invader", 1, true) or 1e9), "whoever is on you comes first")
 chatSent = {}
-check(ns.EnemyMenu:CallForHelp("CHANNEL") and chatSent[1] and chatSent[1]:find("^CHANNEL: Need help"), "help sent to Local Defense")
+local typed
+ChatFrameUtil = { OpenChat = function(text) typed = text end }
+check(ns.EnemyMenu:CallForHelp("CHANNEL") and #chatSent == 0 and typed and typed:find("^/4 Need help at Durotar") and #typed <= 255, "Local Defense help is typed into the chat box, not sent, got "..tostring(typed))
 check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "a second call right away waits")
 check(ns.EnemyMenu:CallForHelp("GUILD"), "the guild is a separate channel")
 ns.EnemyMenu:ShowHelpMenu()

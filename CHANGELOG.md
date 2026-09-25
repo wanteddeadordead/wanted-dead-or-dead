@@ -2,8 +2,8 @@
 
 ## [Unreleased]
 
-- Call for help: a button under the Nearby list posts where you are and who's around to Local Defense, your
-  party or raid, or your guild. Enemies also get a Tell Local Defense option.
+- Call for help: a button under the Nearby list sends where you are and who's around to your party or raid or
+  your guild, or types it into your chat box for Local Defense (the game lets only you post there: press Enter). Enemies also get a Tell Local Defense option.
 - Rising-zone alerts: RISING FAST: <zone> when a zone fills up with enemies (on by default, Settings or Hotspots).
 - Sightings are shared in batches with their own budget, and an enemy someone just shared isn't sent again, so a
   big fight no longer pauses bounty and kill sync. Messages the game holds back are sent again.

@@ -24,6 +24,7 @@ Bounties.lua
 Payments.lua
 Reputation.lua
 Enemies.lua
+Hotspots.lua
 Debug.lua
 Theme.lua
 Widgets.lua
@@ -38,6 +39,7 @@ PageMine.lua
 PageHunters.lua
 PageActivity.lua
 PageEnemies.lua
+PageHotspots.lua
 PageSettings.lua
 PageTools.lua
 Report.lua

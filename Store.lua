@@ -12,6 +12,7 @@ local private = {
 	listeners = {}, -- kind -> { func, ... }
 }
 local MAX_SIGHTINGS = 500
+Store.MAX_SIGHTINGS = MAX_SIGHTINGS
 
 
 

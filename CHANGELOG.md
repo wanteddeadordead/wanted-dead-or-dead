@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Hotspots page (/wanted hotspots): the zones where enemy players were seen in the last hour, busiest first,
+  with levels, the biggest guild there, PvP deaths and whether it's getting busier. Top zones on the minimap tooltip.
+- The Tools page is off by default; turn it on in Settings.
+
 ## [0.1.0-beta.1] - 2026-09-24
 
 First public beta, for WoW Forever (client 1.60.1).

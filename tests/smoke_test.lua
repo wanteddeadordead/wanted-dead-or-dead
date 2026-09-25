@@ -143,7 +143,10 @@ function GetClassAtlas(c) return "classicon-"..c:lower() end
 function PlaySoundFile() return true end
 SOUNDKIT = { RAID_WARNING = 1, UI_RAID_BOSS_WHISPER_WARNING = 2, IG_PLAYER_INVITE = 3 }
 C_Spell = { GetSpellName = function() return nil end }
-C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = function() return { x = 0.446, y = 0.25 } end }
+local MAP_NAMES = { [1] = "Durotar", [10] = "The Barrens" }
+C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = function() return { x = 0.446, y = 0.25 } end, GetMapInfo = function(id) return MAP_NAMES[id] and { name = MAP_NAMES[id] } end }
+local mapOpened
+function OpenWorldMap(mapId) mapOpened = mapId end
 local chatSent = {}
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function() return 0 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0" end }
@@ -369,7 +372,7 @@ for _, view in ipairs({ "nearby", "hour", "kos", "ignore" }) do
 	ns.NearbyWindow:Refresh()
 end
 ns.db.settings.showTools = true
-for _, key in ipairs({ "board", "mine", "enemies", "hunters", "activity", "settings", "tools" }) do
+for _, key in ipairs({ "board", "mine", "enemies", "hotspots", "hunters", "activity", "settings", "tools" }) do
 	ns.UI:Show(key)
 end
 ns.db.settings.showTools = false
@@ -385,6 +388,40 @@ ns.NearbyWindow:Refresh()
 check(#ns.Enemies:GetNearby() >= 40, "raid all on Nearby")
 check(#ns.Enemies:GetLastHour() >= 40, "raid all on Last hour, got "..#ns.Enemies:GetLastHour())
 for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
+-- Hotspots: the raid makes Durotar the busiest; three of one guild in the Barrens name that guild
+for i = 1, 3 do
+	ns.Store:UpdatePlayer("Player-9-GANK"..i, { name = "Ganker"..i, class = "WARRIOR", level = i == 3 and -1 or 30 + i, faction = "Alliance", guild = "Road Campers", zone = "The Barrens", mapId = 10 })
+end
+local function FindZone(list, zone)
+	for _, group in ipairs(list) do
+		if group.zone == zone then
+			return group
+		end
+	end
+end
+local spots = ns.Hotspots:Get()
+local durotar, barrens = FindZone(spots, "Durotar"), FindZone(spots, "The Barrens")
+check(spots[1] == durotar and durotar.mapId == 1 and durotar.recent >= 40, "Durotar is the busiest hotspot, got "..tostring(spots[1] and spots[1].zone))
+check(durotar.deaths >= 1, "the kill in Durotar joins the Durotar hotspot by name")
+check(durotar.trend == "up", "the raid makes Durotar rising, got "..tostring(durotar.trend))
+check(barrens and barrens.guild == "Road Campers" and barrens.guildCount == 3, "three of one guild are named")
+check(barrens.hour == 3, "the ignored enemy in the Barrens is left out, got "..tostring(barrens and barrens.hour))
+check(ns.Hotspots:FormatLevels(barrens) == "31-32 + ??", "level range with a skull, got "..ns.Hotspots:FormatLevels(barrens))
+check(#ns.Hotspots:GetTop(3) == 2, "two zones busy now")
+check(ns.Hotspots:OpenMap(durotar) and mapOpened == 1, "clicking a hotspot opens its map")
+ns.UI:Show("hotspots")
+WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
+-- 20 minutes on nobody is there now: Durotar is quiet and falling, but still in the hour
+local savedClock = clock
+clock = clock + 20 * 60
+durotar = FindZone(ns.Hotspots:Get(), "Durotar")
+check(durotar.recent == 0 and durotar.hour >= 40 and durotar.trend == "down", "Durotar quiet and falling later, got "..tostring(durotar.trend))
+check(#ns.Hotspots:GetTop(3) == 0, "no zone busy now")
+ns.UI:Refresh()
+-- After an hour it drops off
+clock = clock + 3600
+check(FindZone(ns.Hotspots:Get(), "The Barrens") == nil, "the Barrens drops off after an hour")
+clock = savedClock
 -- Display settings: every option off, compact forced, then back
 local show = ns.db.settings.nearby
 for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade" }) do show[key] = false end

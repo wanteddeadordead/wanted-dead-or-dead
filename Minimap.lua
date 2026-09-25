@@ -78,6 +78,14 @@ function private.ShowTooltip(owner)
 		if #kos > 0 then
 			GameTooltip:AddLine("Wanted nearby: "..table.concat(kos, ", "), 1, 0.3, 0.3, true)
 		end
+		local hotspots = Wanted.Hotspots:GetTop(3)
+		if #hotspots > 0 then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine("Hotspots, last 15 minutes", 1, 0.82, 0)
+			for _, group in ipairs(hotspots) do
+				GameTooltip:AddDoubleLine(group.zone, format("%d enem%s", group.recent, group.recent == 1 and "y" or "ies"), 1, 1, 1, 1, 1, 1)
+			end
+		end
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine("Click: open Wanted.  Right-click: Nearby window.  Drag: move.", 0.7, 0.7, 0.7, true)
 		if Wanted.BETA then

@@ -34,6 +34,8 @@ happened.
   **TARGETED** warning that stays up while enemies have you targeted.
 - Wins and losses against every enemy, and a sortable, searchable enemies list.
 - Recent sightings, yours and other players', on the world map.
+- **Hotspots**: the zones where enemy players are right now, busiest first, with their levels, the biggest
+  guild there, PvP deaths and whether it's getting busier. Click a zone to open its map.
 
 ## Install
 

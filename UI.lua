@@ -389,7 +389,11 @@ end
 -- Commands
 -- ============================================================================
 
-Wanted:RegisterCommand("show", "Opens the window: /wanted show [board|mine|hunters|activity|tools].", function(args)
+Wanted:RegisterCommand("show", "Opens the window: /wanted show [board|mine|enemies|hotspots|hunters|activity|settings].", function(args)
 	local key = strtrim(args or "")
 	UI:Show(key ~= "" and key or nil)
+end)
+
+Wanted:RegisterCommand("hotspots", "Opens the Hotspots page: where enemy players are right now.", function()
+	UI:Show("hotspots")
 end)

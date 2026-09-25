@@ -268,7 +268,7 @@ function private.GetHaveTable()
 end
 
 function private.SendHello()
-	private.Send(TAG_HELLO, { c = private.GetHaveTable() })
+	private.Send(TAG_HELLO, { c = private.GetHaveTable(), v = Wanted.VERSION })
 end
 
 function private.OnOwnRecord(record, isOwn)
@@ -375,6 +375,7 @@ function private.HandleMessage(tag, tbl, sender)
 		return
 	end
 	if tag == TAG_HELLO or tag == TAG_HAVE then
+		Wanted:NoteVersion(tbl.v)
 		if type(tbl.c) ~= "table" then
 			return
 		end
@@ -437,7 +438,7 @@ function private.HandleHave(chains, sender, isHello)
 		end
 		if hasMore then
 			C_Timer.After(1 + math.random() * 3, function()
-				private.Send(TAG_HAVE, { c = mine })
+				private.Send(TAG_HAVE, { c = mine, v = Wanted.VERSION })
 			end)
 		end
 	end
@@ -506,7 +507,7 @@ Wanted:RegisterCommand("synctest", "Sends a message through the channel and repo
 		return
 	end
 	private.testStartedAt = GetTime()
-	if private.Send(TAG_HELLO, { c = private.GetHaveTable() }) then
+	if private.Send(TAG_HELLO, { c = private.GetHaveTable(), v = Wanted.VERSION }) then
 		Wanted:Print("Sync test: message sent on channel #%d, waiting for it to come back...", private.channelId)
 		C_Timer.After(5, function()
 			if private.testStartedAt then

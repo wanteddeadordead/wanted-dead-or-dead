@@ -6,6 +6,8 @@ _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
 Wanted.FOLDER = ADDON_NAME
+-- The newest release another player's client has reported, when it is newer than this one
+Wanted.newerVersion = nil
 -- Beta: a label in the window, a one-time welcome, and bug reports
 Wanted.BETA = true
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
@@ -233,6 +235,68 @@ end
 -- ============================================================================
 
 private.commands = {}
+
+---Parses "1.2.3", "1.2.3-beta.4" or "1.2.3-alpha.4" (anything after that, like "-dev", is ignored).
+---@param version any
+---@return table? { major, minor, patch, stage (1 alpha, 2 beta, 3 release), pre }
+function Wanted:ParseVersion(version)
+	if type(version) ~= "string" or #version > 32 then
+		return nil
+	end
+	local major, minor, patch, rest = strmatch(version, "^(%d+)%.(%d+)%.(%d+)(.*)$")
+	if not major then
+		return nil
+	end
+	local stage, pre = 3, 0
+	local alpha, beta = strmatch(rest, "^%-alpha%.(%d+)"), strmatch(rest, "^%-beta%.(%d+)")
+	if alpha then
+		stage, pre = 1, tonumber(alpha)
+	elseif beta then
+		stage, pre = 2, tonumber(beta)
+	end
+	return { tonumber(major), tonumber(minor), tonumber(patch), stage, pre }
+end
+
+---Whether version a is newer than version b. False when either can't be read.
+function Wanted:IsNewerVersion(a, b)
+	local pa, pb = Wanted:ParseVersion(a), Wanted:ParseVersion(b)
+	if not pa or not pb then
+		return false
+	end
+	for i = 1, 5 do
+		if pa[i] ~= pb[i] then
+			return pa[i] > pb[i]
+		end
+	end
+	return false
+end
+
+---Formats a parsed version back into text, so nothing a peer sent is shown as is.
+function private.VersionText(parsed)
+	local text = format("%d.%d.%d", parsed[1], parsed[2], parsed[3])
+	if parsed[4] == 1 then
+		return text.."-alpha."..parsed[5]
+	elseif parsed[4] == 2 then
+		return text.."-beta."..parsed[5]
+	end
+	return text
+end
+
+---Another player's client reported its version: note it once when it's newer than ours.
+---@param version any
+function Wanted:NoteVersion(version)
+	if not Wanted:IsNewerVersion(version, Wanted.VERSION) then
+		return
+	end
+	if Wanted.newerVersion and not Wanted:IsNewerVersion(version, Wanted.newerVersion) then
+		return
+	end
+	local announce = not Wanted.newerVersion
+	Wanted.newerVersion = private.VersionText(Wanted:ParseVersion(version))
+	if announce then
+		Wanted:Print("A newer version (%s) is out. Update from CurseForge to get the latest fixes.", Wanted.newerVersion)
+	end
+end
 
 ---Registers a /wanted subcommand.
 ---@param name string

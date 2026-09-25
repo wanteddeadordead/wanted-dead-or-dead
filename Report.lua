@@ -17,7 +17,7 @@ function Report:Build()
 		tinsert(lines, select("#", ...) > 0 and format(fmt, ...) or fmt)
 	end
 	local version, build = GetBuildInfo()
-	Add("Wanted: Dead or... Dead %s%s", tostring(Wanted.VERSION), Wanted.BETA and " (beta)" or "")
+	Add("Wanted: Dead or... Dead %s%s%s", tostring(Wanted.VERSION), Wanted.BETA and " (beta)" or "", Wanted.newerVersion and (", newer version seen: "..Wanted.newerVersion) or "")
 	Add("Game client %s (build %s), locale %s", tostring(version), tostring(build), tostring(GetLocale and GetLocale() or "?"))
 	Add("Faction %s, level %s, zone %s", tostring(UnitFactionGroup("player")), tostring(UnitLevel("player")), tostring(GetZoneText()))
 	local detect = Wanted.db and Wanted.db.settings.detect or {}

@@ -148,7 +148,8 @@ C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = fu
 local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
 local chatSent = {}
-C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function() return 0 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
+addonSent = {}
+C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text) addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
@@ -432,6 +433,31 @@ show.layout = "normal"
 for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade" }) do show[key] = true end
 ns.NearbyWindow:ForceLayout()
 ns.UI:Show("settings")
+-- Versions: newer releases are noticed from other clients' hellos, never shown as sent
+check(ns:IsNewerVersion("0.1.0-beta.2", "0.1.0-beta.1"), "beta 2 is newer than beta 1")
+check(ns:IsNewerVersion("0.1.0", "0.1.0-beta.9"), "a release is newer than its betas")
+check(ns:IsNewerVersion("0.1.0-beta.1", "0.1.0-alpha.3"), "beta is newer than alpha")
+check(ns:IsNewerVersion("1.0.0", "0.9.9"), "major wins")
+check(not ns:IsNewerVersion("0.1.0-beta.1-dev", "0.1.0-beta.1"), "a dev build is not newer")
+check(not ns:IsNewerVersion("@project-version@", "0.1.0"), "an unpackaged version is ignored")
+ns:NoteVersion("0.0.9")
+check(ns.newerVersion == nil, "an older peer is not news")
+-- A real hello, sent as version 0.3.0, comes back from another player
+ns.VERSION = "0.3.0"
+addonSent = {}
+clock = clock + 61 -- the earlier tests used up this minute's send limit
+SlashCmdList.WANTED("synctest")
+ns.VERSION = "0.1.0"
+check(#addonSent == 1 and addonSent[1].text:find("^H:"), "the sync test sends a hello")
+local hello = addonSent[1].text:gsub("^H:%w+:", "H:zz9:")
+Fire("CHAT_MSG_ADDON", "WNTD", hello, "CHANNEL", "Other Player", nil, nil, nil, "WantedNetHorde")
+check(ns.newerVersion == "0.3.0", "a newer peer's version is noticed, got "..tostring(ns.newerVersion))
+ns:NoteVersion("0.2.5")
+check(ns.newerVersion == "0.3.0", "an older one doesn't replace it")
+ns:NoteVersion("0.4.0|cffff0000evil")
+check(ns.newerVersion == "0.4.0", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
+WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
+check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
 -- Bug report and the beta welcome
 ns:NoteProblem("test problem")
 local report = ns.Report:Build()

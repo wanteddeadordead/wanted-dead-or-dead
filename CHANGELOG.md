@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.8] - 2026-09-25
+
 - Shared sightings of wanted players. Seeing someone with an open bounty shares where and when (at most every
   5 minutes per target), and it syncs like everything else: to players who were offline and across realms. So
   every hunter's file on a target has everyone's sightings, from before they took the bounty too. Kill on

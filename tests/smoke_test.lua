@@ -1290,6 +1290,36 @@ check(SortedNames("newest") == "Charlie,Bravo,Alpha", "newest first")
 check(SortedNames("name") == "Alpha,Bravo,Charlie", "by name: "..SortedNames("name"))
 check(SortedNames("zone") == "Charlie,Alpha,Bravo", "by last-seen zone (Ashenvale, Durotar, The Barrens): "..SortedNames("zone"))
 check(SortedNames("seen") == "Alpha,Charlie,Bravo", "most recently seen first, never seen last: "..SortedNames("seen"))
+-- Emote buttons: seven favourites by default in list order; clicking an emote in Settings moves it from
+-- favourite to the list to hidden and back, never past seven favourites; the one-time tip can turn them off
+local Emotes = ns.Emotes
+local function FavKeys() local keys = {} for _, def in ipairs(Emotes:GetFavourites()) do keys[#keys + 1] = def[1] end return table.concat(keys, ",") end
+check(FavKeys() == "lol,flex,rude,train,violin,doom,bye", "the default favourites: "..FavKeys())
+check(Emotes:GetState("gloat") == "list" and select(2, Emotes:CountShown()) == #Emotes.LIST - 7, "every other emote is in the list")
+check(Emotes:CycleState("lol") == "list" and Emotes:CycleState("lol") == "hidden" and Emotes:CycleState("lol") == "fav", "favourite, list, hidden, favourite")
+Emotes:CycleState("gloat")
+check(Emotes:CycleState("gloat") == "list", "an eighth favourite goes to the list instead")
+ns.db.settings.emotes.state.gloat = nil
+check(#Emotes:GetFavourites() == 7 and WantedEmoteFlyout and not WantedEmoteFlyout:IsShown(), "the pop-out starts closed")
+ns.db.settings.emotes.tipShown = false
+ns.Enemies:ClearNearby()
+local autoHideBefore = ns.db.settings.detect.autoHide
+ns.db.settings.detect.autoHide = 0 -- the empty list would hide the window before the tip
+ns.NearbyWindow:SetShown(true)
+local realIsDialogShown = ns.Widgets.IsDialogShown
+ns.Widgets.IsDialogShown = function() return false end -- earlier tests left their dialogs up
+lastDialog = nil
+for _, f in ipairs(tickers) do f() end
+check(lastDialog and lastDialog.title == "Emote buttons" and lastDialog.cancelLabel == "Turn off", "the one-time emote tip")
+lastDialog.onCancel()
+check(ns.db.settings.emotes.enabled == false, "Turn off hides the emote buttons")
+lastDialog = nil
+for _, f in ipairs(tickers) do f() end
+check(lastDialog == nil, "the tip shows once")
+ns.Widgets.IsDialogShown = realIsDialogShown
+ns.db.settings.detect.autoHide = autoHideBefore
+ns.db.settings.emotes.enabled = true
+ns.NearbyWindow:ForceLayout()
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

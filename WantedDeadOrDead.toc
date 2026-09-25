@@ -41,6 +41,7 @@ UI.lua
 Rows.lua
 EnemyMenu.lua
 TargetFile.lua
+Emotes.lua
 NearbyWindow.lua
 PageBoard.lua
 TrustPanel.lua

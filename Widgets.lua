@@ -64,8 +64,9 @@ local function RefreshButton(button)
 	button.label:SetTextColor(text[1], text[2], text[3])
 end
 
-function W:Button(parent, text, style, width, height, onClick)
-	local button = CreateFrame("Button", nil, parent)
+---@param template string? e.g. "SecureActionButtonTemplate" for a button that runs a macro
+function W:Button(parent, text, style, width, height, onClick, template)
+	local button = CreateFrame("Button", nil, parent, template)
 	button:SetSize(width or 96, height or 26)
 	Theme:Skin(button, C.transparent, C.transparent)
 	button.label = Theme:Text(button, "body", text)
@@ -461,6 +462,9 @@ local function CreateDialog()
 	frame.confirm:SetPoint("BOTTOMRIGHT", -16, 16)
 	frame.cancel:SetScript("OnClick", function()
 		blocker:Hide()
+		if frame.options and frame.options.onCancel then
+			frame.options.onCancel()
+		end
 	end)
 	frame.confirm:SetScript("OnClick", function()
 		local options = frame.options
@@ -493,6 +497,11 @@ end
 
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value }, confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value)
+---Whether a dialog is up (one at a time).
+function W:IsDialogShown()
+	return dialog ~= nil and dialog:IsShown()
+end
+
 function W:Dialog(options)
 	dialog = dialog or CreateDialog()
 	local frame = dialog.frame

@@ -1,12 +1,14 @@
--- Wanted: settings, in three tabs: Alerts (detection and sounds), Nearby window (what each row shows),
--- and Sharing and display (network, map, minimap, class icons).
+-- Wanted: settings, in four tabs: Alerts (detection and sounds), Nearby window (what each row shows),
+-- Sharing and display (network, map, minimap, class icons), and Emotes (the emote buttons).
 
 local _, Wanted = ...
 local UI = Wanted.UI
 local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
-local private = { toggles = {}, panels = {}, view = "alerts", iconButtons = {} }
+local private = { toggles = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {} }
+local EMOTE_STYLES = { fav = "selected", list = "chip", hidden = "ghost" }
+local EMOTE_CHIP_WIDTH, EMOTE_COLUMNS = 82, 8
 
 local function Detect()
 	return Wanted.db.settings.detect
@@ -257,10 +259,66 @@ end
 -- Page
 -- ============================================================================
 
+function private.BuildEmotes(panel, width)
+	local Emotes = Wanted.Emotes
+	local card = private.Card(panel, 0, 392, "Emote buttons", width)
+	private.Toggle(card, function() return Wanted.db.settings.emotes end, "enabled", "Show emote buttons in the Nearby window",
+		"Favourites along the bottom of the Nearby window and a ... button with the rest. Each emotes at your target, even mid-fight.", 16, -38, RefreshNearby)
+	private.emoteCount = Theme:Text(card, "small", "")
+	private.emoteCount:SetPoint("TOPRIGHT", -16, -40)
+	private.emoteCount:SetJustifyH("RIGHT")
+	local legend = Theme:Text(card, "tiny", "Click an emote to change it:  "..Theme:Colorize("gold", C.accent).." = favourite (in the Nearby window, up to "
+		..Emotes.MAX_FAVOURITES..")   outlined = in the ... list   faint = hidden")
+	legend:SetPoint("TOPLEFT", 16, -64)
+	local y = -86
+	for _, group in ipairs(Emotes.GROUPS) do
+		local heading = W:SectionLabel(card, group.label)
+		heading:SetPoint("TOPLEFT", 16, y)
+		y = y - 18
+		local column = 0
+		for _, def in ipairs(Emotes.LIST) do
+			if def[4] == group.key then
+				local chip = W:Button(card, def[2], "chip", EMOTE_CHIP_WIDTH, 22, function(self)
+					local before = Emotes:GetState(self.key)
+					local state = Emotes:CycleState(self.key)
+					if before == "hidden" and state == "list" then
+						UI:Toast(format("Up to %d favourites; %s is in the ... list.", Emotes.MAX_FAVOURITES, self.label:GetText()), C.amber)
+					end
+					private.RefreshEmotes()
+					RefreshNearby()
+				end)
+				chip.key = def[1]
+				chip:SetPoint("TOPLEFT", 16 + column * (EMOTE_CHIP_WIDTH + 4), y)
+				W:AttachTooltip(chip, def[2], def[3].." at your target.")
+				tinsert(private.emoteChips, chip)
+				column = column + 1
+				if column == EMOTE_COLUMNS then
+					column = 0
+					y = y - 26
+				end
+			end
+		end
+		y = y - (column > 0 and 26 or 0) - 6
+	end
+	local hint = Theme:Text(card, "tiny", "Changes show in the Nearby window straight away, or after combat if you're in one.")
+	hint:SetPoint("TOPLEFT", 16, y - 2)
+end
+
+---The emote chips' look and the count, from the saved states.
+function private.RefreshEmotes()
+	local Emotes = Wanted.Emotes
+	for _, chip in ipairs(private.emoteChips) do
+		chip:SetStyle(EMOTE_STYLES[Emotes:GetState(chip.key)])
+	end
+	local favourites, listed = Emotes:CountShown()
+	private.emoteCount:SetText(format("%d favourite%s, %d in the list", favourites, favourites == 1 and "" or "s", listed))
+end
+
 function private.Refresh()
 	if not private.alerts then
 		return
 	end
+	private.RefreshEmotes()
 	for _, entry in ipairs(private.toggles) do
 		entry.toggle:SetChecked(entry.getTable()[entry.key])
 	end
@@ -292,13 +350,14 @@ UI:RegisterPage("settings", {
 			{ key = "alerts", label = "Alerts" },
 			{ key = "nearby", label = "Nearby window" },
 			{ key = "sharing", label = "Sharing and display" },
+			{ key = "emotes", label = "Emotes" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
 		end, 150)
 		tabs:SetPoint("TOPLEFT")
 		tabs:Select("alerts", true)
-		for _, key in ipairs({ "alerts", "nearby", "sharing" }) do
+		for _, key in ipairs({ "alerts", "nearby", "sharing", "emotes" }) do
 			local panel = CreateFrame("Frame", nil, container)
 			panel:SetPoint("TOPLEFT", 0, -40)
 			panel:SetSize(width, height - 40)
@@ -309,6 +368,7 @@ UI:RegisterPage("settings", {
 		private.BuildTargeted(private.panels.alerts, width)
 		private.BuildNearby(private.panels.nearby, width)
 		private.BuildSharing(private.panels.sharing, width)
+		private.BuildEmotes(private.panels.emotes, width)
 	end,
 	refresh = private.Refresh,
 })

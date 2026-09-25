@@ -31,6 +31,8 @@ local MAX_ROWS = COMPACT_ROWS
 local COMPACT_ABOVE = 8 -- more enemies than this switches to single-line rows
 local FOOTER_GAP = 8 -- space above the footer text (a divider sits in it) and below it
 local HELP_HEIGHT = 30 -- the Call for help bar under the Nearby list
+local EMOTE_COLUMNS = 4 -- the emote favourites and "..." above Call for help (Emotes)
+local EMOTE_GAP = 4
 local VIEWS = {
 	{ key = "nearby", label = "Nearby" },
 	{ key = "hour", label = "Last hour" },
@@ -83,6 +85,11 @@ function Nearby:OnEnable()
 			private.CheckAutoHide()
 		end
 		private.MaybeQuietTip()
+		-- The emote tip waits its turn behind the quiet mode one
+		if private.frame and private.frame:IsShown() and not private.quietTipPending and #Enemies:GetNearby() == 0
+			and (private.Settings().tab or "nearby") == "nearby" then
+			Wanted.Emotes:MaybeTip()
+		end
 	end)
 	-- Stepping out of a sanctuary or getting flagged with enemies already around opens the window then
 	private.flagFrame = CreateFrame("Frame")
@@ -340,6 +347,16 @@ function private.Create()
 		Wanted.EnemyMenu:ShowHelpMenu(private.help)
 	end)
 	W:AttachTooltip(private.help, "Call for help", "Where you are and who's around, for Local Defense (typed into your chat box: press Enter to send), your party or raid, or your guild.")
+	-- Emote favourites and the "..." pop-out, above Call for help (macro buttons: made now, out of combat)
+	local emoteWidth = floor((WIDTH - 12 - (EMOTE_COLUMNS - 1) * EMOTE_GAP) / EMOTE_COLUMNS)
+	private.emoteButtons = {}
+	for i = 1, Wanted.Emotes.MAX_FAVOURITES do
+		private.emoteButtons[i] = Wanted.Emotes:CreateButton(frame, emoteWidth)
+		private.emoteButtons[i]:Hide()
+	end
+	private.emoteMore = Wanted.Emotes:CreateMoreButton(frame, emoteWidth)
+	private.emoteMore:Hide()
+	private.emoteWidth = emoteWidth
 	private.footerLine = Theme:Line(frame)
 	private.footerLine:SetPoint("LEFT", 1, 0)
 	private.footerLine:SetPoint("RIGHT", -1, 0)
@@ -611,6 +628,7 @@ function Nearby:Refresh()
 		private.help:SetPoint("BOTTOM", 0, footerHeight)
 		footerHeight = footerHeight + HELP_HEIGHT
 	end
+	footerHeight = footerHeight + private.LayoutEmotes(showHelp, footerHeight)
 	private.pvp:SetShown(private.Show().pvp ~= false)
 	private.empty:ClearAllPoints()
 	private.empty:SetPoint("TOP", 0, -private.Header() - 14)
@@ -630,6 +648,34 @@ function Nearby:Refresh()
 		private.Draw(row, info)
 		row:SetShown(i <= numRows)
 	end
+end
+
+---Places the emote favourites and "..." in rows above Call for help (Nearby tab, emotes on), or hides them.
+---Out of combat only. Returns the height they take.
+function private.LayoutEmotes(show, bottom)
+	local Emotes = Wanted.Emotes
+	show = show and Emotes:IsEnabled()
+	local favourites = show and Emotes:GetFavourites() or {}
+	for i, button in ipairs(private.emoteButtons) do
+		Emotes:SetButtonEmote(button, favourites[i])
+		button:SetShown(favourites[i] ~= nil)
+	end
+	private.emoteMore:SetShown(show)
+	if not show then
+		Emotes:HideFlyout()
+		return 0
+	end
+	Emotes:LayoutFlyout()
+	local slots = #favourites + 1
+	local rows = ceil(slots / EMOTE_COLUMNS)
+	local step = Emotes.BUTTON_HEIGHT + EMOTE_GAP
+	for i = 1, slots do
+		local button = i <= #favourites and private.emoteButtons[i] or private.emoteMore
+		local column, row = (i - 1) % EMOTE_COLUMNS, floor((i - 1) / EMOTE_COLUMNS)
+		button:ClearAllPoints()
+		button:SetPoint("BOTTOMLEFT", 6 + column * (private.emoteWidth + EMOTE_GAP), bottom + 2 + (rows - 1 - row) * step)
+	end
+	return rows * step + 2
 end
 
 ---Fades a row's contents: full strength for someone in sight, shaded once they're gone. The row itself is

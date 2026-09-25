@@ -31,6 +31,11 @@ local TOKEN_GRACE_SECONDS = 2
 -- stealth (running out of range doesn't come right after a cast); what it was is guessed from who they are.
 local VANISH_WINDOW_SECONDS = 0.6
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
+-- The game doesn't report Vanish or Stealth at all. What it does: the stealthed player's nameplate goes and,
+-- if they were your target, the target is dropped in the same instant. Out of range keeps the target, a death
+-- keeps it, clearing it keeps the nameplate. A cast bar that just ended (Hearthstone, a teleport) explains it.
+local TARGET_VANISH_SECONDS = 0.3
+local CAST_BAR_GRACE_SECONDS = 1.5
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -68,7 +73,7 @@ end
 
 function Enemies:OnEnable()
 	private.playerFaction = UnitFactionGroup("player")
-	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_FOCUS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_DEAD", "UNIT_TARGET" }) do
+	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_FOCUS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_STOP", "PLAYER_DEAD", "UNIT_TARGET" }) do
 		private.frame:RegisterEvent(event)
 	end
 	private.frame:SetScript("OnEvent", private.OnEvent)
@@ -128,14 +133,32 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.Scan(arg1)
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
 		private.plates[arg1] = nil
-		if private.tokens[arg1] then
-			private.tokens[arg1].t = GetTime()
+		local known = private.tokens[arg1]
+		if known then
+			known.t = GetTime()
 			private.CheckVanished(arg1)
+			local entry = private.nearby[known.guid]
+			if entry then
+				entry.plateGoneAt = known.t
+				-- The target may already be gone by now (the order of the two isn't fixed)
+				local target = private.tokens.target
+				if target and target.guid == known.guid and target.lostAt and known.t - target.lostAt <= TARGET_VANISH_SECONDS then
+					private.GuessStealth(entry)
+				end
+			end
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
-		-- Vanish also drops the rogue from your target
-		if not private.Readable(UnitExists("target")) then
+		-- Stealth drops the player from your target, in the same instant their nameplate goes
+		local target = private.tokens.target
+		if not private.Readable(UnitExists("target")) and target then
+			local now = GetTime()
+			target.lostAt = now
+			target.t = now
 			private.CheckVanished("target")
+			local entry = private.nearby[target.guid]
+			if entry and entry.plateGoneAt and now - entry.plateGoneAt <= TARGET_VANISH_SECONDS then
+				private.GuessStealth(entry)
+			end
 		end
 		private.Scan("target")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
@@ -144,6 +167,8 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.Scan("focus")
 	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
 		private.OnCast(arg1, arg3)
+	elseif event == "UNIT_SPELLCAST_STOP" then
+		private.OnCastBarEnd(arg1)
 	elseif event == "PLAYER_DEAD" then
 		private.OnPlayerDead()
 	elseif event == "UNIT_TARGET" then
@@ -350,10 +375,14 @@ end
 ---for a class and race without a stealth ability.
 function private.GuessStealth(entry)
 	local kind = entry.class == "ROGUE" and "Stealth" or entry.class == "DRUID" and "Prowl"
-		or entry.raceFile == "NightElf" and "Shadowmeld" or nil
+		or entry.class == "MAGE" and "Invisibility" or entry.raceFile == "NightElf" and "Shadowmeld" or nil
 	local now = GetTime()
 	entry.lastCastAt = nil
 	if not kind or (entry.stealthed and now - entry.stealthed < STEALTH_REPEAT_SECONDS) then
+		return
+	end
+	if entry.castBarEndAt and now - entry.castBarEndAt <= CAST_BAR_GRACE_SECONDS then
+		-- Hearthstone or a teleport finishing, not stealth
 		return
 	end
 	entry.stealthed = now
@@ -368,6 +397,18 @@ function private.LastOnToken(unit)
 		return nil
 	end
 	return private.nearby[known.guid]
+end
+
+---An enemy's cast bar ended (the spell is hidden): remembered, since one that just finished a Hearthstone or a
+---teleport disappears the same way a stealthed one does.
+function private.OnCastBarEnd(unit)
+	if type(unit) ~= "string" or not (unit == "target" or unit == "focus" or strfind(unit, "^nameplate%d+$")) then
+		return
+	end
+	local entry = private.Scan(unit) or private.LastOnToken(unit)
+	if entry then
+		entry.castBarEndAt = GetTime()
+	end
 end
 
 function private.OnCast(unit, spellID)

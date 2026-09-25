@@ -444,6 +444,42 @@ Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate61", "cast", SECRET_SPELL)
 enemyUnits.nameplate61 = nil
 Fire("NAME_PLATE_UNIT_REMOVED", "nameplate61")
 check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
+-- The game doesn't report Vanish or Stealth at all (seen in game): the targeted rogue's nameplate goes and the
+-- target is dropped in the same instant. Running out of range keeps the target; clearing it keeps the
+-- nameplate; a finished Hearthstone or teleport (a cast bar ending) is not stealth
+local function TargetStab() clock = clock + 10 enemyUnits.nameplate1 = stabUnit enemyUnits.target = stabUnit Fire("NAME_PLATE_UNIT_ADDED", "nameplate1") Fire("PLAYER_TARGET_CHANGED") end
+local function StabVanishes() enemyUnits.nameplate1 = nil Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1") enemyUnits.target = nil Fire("PLAYER_TARGET_CHANGED") end
+TargetStab()
+StabVanishes()
+check(#stealthEvents == 4 and stealthEvents[4].guid == "Player-9-ENEMY" and stealthEvents[4].stealthKind == "Stealth", "the targeted rogue's nameplate and target go together: stealth")
+TargetStab()
+enemyUnits.target = nil
+Fire("PLAYER_TARGET_CHANGED")
+check(#stealthEvents == 4, "clearing the target yourself is not stealth")
+TargetStab()
+enemyUnits.nameplate1 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+clock = clock + 3
+check(#stealthEvents == 4, "running out of nameplate range keeps the target: not stealth")
+enemyUnits.target = nil
+Fire("PLAYER_TARGET_CHANGED")
+check(#stealthEvents == 4, "and losing the target much later isn't either")
+TargetStab()
+Fire("UNIT_SPELLCAST_STOP", "nameplate1")
+StabVanishes()
+check(#stealthEvents == 4, "a finished cast bar (Hearthstone, teleport) right before vanishing is not stealth")
+local mage = { guid = "Player-9-MAGE", name = "Frost Mage", class = "MAGE", level = 20 }
+clock = clock + 10
+enemyUnits.nameplate62, enemyUnits.target = mage, mage
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate62")
+Fire("PLAYER_TARGET_CHANGED")
+enemyUnits.nameplate62 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate62")
+enemyUnits.target = nil
+Fire("PLAYER_TARGET_CHANGED")
+check(#stealthEvents == 5 and stealthEvents[5].stealthKind == "Invisibility", "a mage vanishing from target is Invisibility")
+enemyUnits.nameplate1 = stabUnit
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 -- We kill them: the client's kill event records a kill and a win
 Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
 check(ns.Enemies:GetStats("Player-9-ENEMY").wins == 1, "win counted from the kill event")

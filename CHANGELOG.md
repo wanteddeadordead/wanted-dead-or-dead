@@ -2,9 +2,10 @@
 
 ## [Unreleased]
 
-- The stealth alarm works again. The game no longer tells addons which spell an enemy cast, so Wanted now
-  spots the moment instead: a rogue, druid or night elf who casts something and drops out of sight right away
-  has gone into stealth (Stealth, Prowl or Shadowmeld).
+- The stealth alarm works again for the enemy you have targeted. The game no longer tells addons about
+  Stealth or Vanish at all, so Wanted spots the moment instead: your target's nameplate and your target vanish
+  together (running out of range or dying never does both). Rogues show STEALTH, druids PROWL, mages
+  INVISIBILITY, night elves SHADOWMELD; a Hearthstone or teleport finishing doesn't count.
 
 ## [0.1.0-beta.3] - 2026-09-25
 

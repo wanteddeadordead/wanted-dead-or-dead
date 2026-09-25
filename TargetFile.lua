@@ -260,9 +260,10 @@ function TargetFile:ShowPlayer(guid, name)
 	frame.post:SetText(#bounties > 0 and "Add a bounty" or "Post a bounty")
 	frame.post:Show()
 	local entries = Tracks:Get(guid)
-	if #entries == 0 and player.lastSeen then
-		-- No history kept yet: at least where the records last put them
-		entries = { { t = player.lastSeen, zone = player.zone, mapId = player.mapId, x = player.x, y = player.y, by = player.seenBy } }
+	-- The player's own last-seen note can be newer than the kept history (seen before they were wanted, or
+	-- between history entries): put it on top so Last seen agrees with the rest of Wanted
+	if player.lastSeen and (not entries[1] or player.lastSeen - entries[1].t > 60) then
+		tinsert(entries, 1, { t = player.lastSeen, zone = player.zone, mapId = player.mapId, x = player.x, y = player.y, by = player.seenBy })
 	end
 	private.FillSummary(frame, entries, Tracks:GetDeaths(guid), Wanted.Enemies:GetStats(guid))
 	frame:Show()

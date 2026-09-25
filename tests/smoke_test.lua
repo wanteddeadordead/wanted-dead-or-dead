@@ -829,6 +829,10 @@ check(#ns.Tracks:GetDeaths(trackedGuid) == 1 and ns.Tracks:GetDeaths(trackedGuid
 -- The file: from the Board, from a command, and for a guild bounty
 ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(trackedBounty))
 check(ns.TargetFile:IsShown(), "the file opens from a bounty")
+ns.Store:UpdatePlayer(trackedGuid, { zone = "Durotar", mapId = 1 })
+clock = clock + 600
+ns.Store:UpdatePlayer(trackedGuid, { zone = "Durotar", mapId = 1 })
+ns.TargetFile:ShowPlayer(trackedGuid)
 ns:RunCommand("file", "Wanted Walter")
 local guildBounty2 = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { guild = "Road Campers", targetFaction = "Alliance", amount = 20000 }, clock)
 ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(guildBounty2))

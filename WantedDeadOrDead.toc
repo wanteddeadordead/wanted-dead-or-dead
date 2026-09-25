@@ -53,6 +53,7 @@ PageHotspots.lua
 PageSettings.lua
 PageTools.lua
 Report.lua
+Poster.lua
 MapPins.lua
 MapPins.xml
 Minimap.lua

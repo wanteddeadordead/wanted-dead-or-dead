@@ -1145,6 +1145,23 @@ ns.Store:NewRecord("bounty", { target = "Player-9-ALLY2", targetName = "Ally Two
 RunTimers()
 check(#bnSent == 0, "with the setting off nothing goes across")
 ns.db.settings.bridge = true
+-- The wanted poster: the player's model, name and the price on their head; Take screenshot hides the buttons
+-- for the shot and brings them back
+local posterButtons = {}
+local realButton = ns.Widgets.Button
+ns.Widgets.Button = function(self, parent, label, ...) local b = realButton(self, parent, label, ...) posterButtons[label] = b return b end
+ns:RunCommand("poster", "")
+ns.Widgets.Button = realButton
+local posterFrame = WantedPosterFrame
+check(ns.Poster:IsShown() and posterFrame.reward:GetText() == ns.Bounties:FormatMoney(45000), "the poster shows the price on our head: "..tostring(posterFrame.reward:GetText()))
+check(posterFrame.name:GetText() == "TEST PLAYER" and posterFrame.rewardNote:GetText() == "2 bounties from 2 players", "name and how many bounties: "..tostring(posterFrame.rewardNote:GetText()))
+local shotsBefore = screenshots
+posterButtons["Take screenshot"]:GetScript("OnClick")(posterButtons["Take screenshot"])
+check(not posterFrame.buttons:IsShown(), "the buttons hide for the shot")
+RunTimers()
+check(screenshots == shotsBefore + 1 and posterFrame.buttons:IsShown(), "the screenshot is taken and the buttons come back")
+posterButtons["Close"]:GetScript("OnClick")(posterButtons["Close"])
+check(not ns.Poster:IsShown(), "Close hides the poster")
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end
@@ -1156,4 +1173,7 @@ local kosAfter = 0
 for _ in pairs(ns.db.kos) do kosAfter = kosAfter + 1 end
 check(kosAfter == kosBefore and next(ns.db.players) ~= nil, "Kill on Sight and players stay")
 ns:RunCommand("freshstart", "")
+ns.Poster:Show()
+check(WantedPosterFrame.reward:GetText() == "No price on your head yet", "with no bounties the poster says so")
+ns.Poster:Hide()
 print("wanted smoke: all checks pass")

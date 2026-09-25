@@ -63,6 +63,11 @@ UI:RegisterPage("mine", {
 		segment:SetPoint("TOPLEFT", 0, -84)
 		segment:Select("posted", true)
 		private.segment = segment
+		local poster = W:Button(container, "Your wanted poster", "secondary", 160, 26, function()
+			Wanted.Poster:Show()
+		end)
+		poster:SetPoint("TOPRIGHT", 0, -84)
+		W:AttachTooltip(poster, "Your wanted poster", "The price the other faction has put on your head, on a poster with your character, to screenshot and share.")
 
 		local list = W:List(container, Rows.HEIGHT, floor((height - LIST_TOP) / Rows.HEIGHT), function(row) Rows:Create(row) end, function(row, info)
 			Rows:UpdateBounty(row, info)

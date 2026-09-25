@@ -27,12 +27,13 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
 
 All addons must be free under Blizzard's UI Add-On Development Policy; this one has no paid tier.
 
-## Beta
+## Versions
 
-While `Wanted.BETA` is true in `Core.lua`, the window shows a BETA label and a one-time welcome note, and
-releases should use beta tags (`v0.1.0-beta.1`, `v0.1.0-beta.2`, ...), which CurseForge labels Beta. For
-the first stable release set `Wanted.BETA = false`, drop "[Beta]" from the toc Notes and the CurseForge
-summary, and tag `v1.0.0`.
+1.0.0 was the first stable release (the betas were `v0.1.0-beta.1` to `v0.1.0-beta.8`). `Wanted.BETA` in
+`Core.lua` is now false: no BETA label or beta welcome. Stable releases use plain tags (`v1.0.1`, `v1.1.0`),
+which CurseForge labels Release; a `-beta.N` suffix still makes a Beta file for a test build.
+Bump the patch number for fixes, the minor for new features, and the major for a change that breaks saved
+data or the network protocol for older versions.
 
 ## Releasing
 

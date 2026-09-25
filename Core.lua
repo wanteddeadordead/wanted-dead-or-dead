@@ -12,7 +12,7 @@ Wanted.DEV = strfind(Wanted.VERSION, "%-dev") ~= nil or strfind(Wanted.VERSION, 
 -- The newest release another player's client has reported, when it is newer than this one
 Wanted.newerVersion = nil
 -- Beta: a label in the window, a one-time welcome, and bug reports
-Wanted.BETA = true
+Wanted.BETA = false
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
 Wanted.DB_VERSION = 1

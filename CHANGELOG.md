@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-25
+
+The first stable release, for WoW Forever (client 1.60.x). Everything from the betas, plus:
+
+- The BETA label and beta welcome are gone. Report a bug stays in the title bar (or /wanted bug).
+
+What Wanted: Dead or... Dead does, in short:
+
+- A bounty board for enemy players and whole guilds: post, raise, hunt, claim by killing, witnessed by other
+  players' clients, confirmed by the poster and paid by mail, with kill-proof screenshots.
+- Reputation from the record: hunter levels and ratings, posters' payment records, leaderboards.
+- Your wanted poster, with the price the other faction has put on your head.
+- Enemy awareness: the Nearby window, Kill on Sight and Ignore lists, alerts, a stealth alarm, the TARGETED
+  warning, hotspots, map markers, Call for help that says where you are, quiet mode, and emote buttons.
+- Shared player to player with no server: on each realm's channel, across realms by hidden whispers, and
+  bounty notices across factions through Battle.net friends.
+
 ## [0.1.0-beta.8] - 2026-09-25
 
 - Shared sightings of wanted players. Seeing someone with an open bounty shares where and when (at most every

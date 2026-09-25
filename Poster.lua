@@ -14,6 +14,8 @@ local private = {
 	customAmount = nil, -- copper; a made-up reward to show instead, just for fun (never saved or shared)
 }
 local TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\poster"
+-- Rye (SIL Open Font License, see THIRD_PARTY_NOTICES.md): western wood type, like the painted WANTED
+local POSTER_FONT = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\Rye.ttf"
 -- The painting fills the top of a 512x1024 texture; its own shape, and where its empty spaces are, as
 -- fractions of the painting (left, top, right, bottom)
 local PAINTING_HEIGHT = 763 / 1024
@@ -62,6 +64,29 @@ end
 -- ============================================================================
 -- The poster
 -- ============================================================================
+
+local function PosterFont(name, size)
+	local font = CreateFont(name)
+	font:SetFont(POSTER_FONT, size, "")
+	return font
+end
+
+local function Commas(number)
+	local text, count = tostring(number), 1
+	while count > 0 do
+		text, count = gsub(text, "^(%d+)(%d%d%d)", "%1,%2")
+	end
+	return text
+end
+
+---A reward the way a poster prints it: "5,000 GOLD", "4 GOLD 50 SILVER", "75 SILVER".
+function private.FormatReward(copper)
+	local gold, silver = floor(copper / 10000), floor(copper % 10000 / 100)
+	if gold == 0 then
+		return (silver > 0 and silver or 1).." SILVER"
+	end
+	return Commas(gold).." GOLD"..(silver > 0 and (" "..silver.." SILVER") or "")
+end
 
 ---Places a region inside the painting by fractions of it.
 local function Place(region, painting, box)
@@ -115,11 +140,14 @@ function private.GetFrame()
 	local nameBand = CreateFrame("Frame", nil, text)
 	Place(nameBand, painting, NAME_BAND)
 	frame.name = nameBand:CreateFontString(nil, "OVERLAY")
-	frame.name:SetFontObject(Theme:MakeFont("WantedFontPosterName", floor(height * 0.036), nil, nil))
+	frame.nameFont = PosterFont("WantedFontPosterName", floor(height * 0.034))
+	frame.nameFontSmall = PosterFont("WantedFontPosterNameSmall", floor(height * 0.024))
+	frame.nameWidth = (NAME_BAND[3] - NAME_BAND[1]) * painting:GetWidth() - 16
+	frame.name:SetFontObject(frame.nameFont)
 	frame.name:SetPoint("TOP", 0, -height * 0.006)
 	frame.name:SetTextColor(INK[1], INK[2], INK[3])
 	frame.who = nameBand:CreateFontString(nil, "OVERLAY")
-	frame.who:SetFontObject(Theme:MakeFont("WantedFontPosterWho", floor(height * 0.017), nil, nil))
+	frame.who:SetFontObject(PosterFont("WantedFontPosterWho", floor(height * 0.017)))
 	frame.who:SetPoint("BOTTOM", 0, height * 0.006)
 	frame.who:SetTextColor(INK[1], INK[2], INK[3], 0.85)
 
@@ -127,11 +155,11 @@ function private.GetFrame()
 	local rewardBand = CreateFrame("Frame", nil, text)
 	Place(rewardBand, painting, REWARD_BAND)
 	frame.reward = rewardBand:CreateFontString(nil, "OVERLAY")
-	frame.reward:SetFontObject(Theme:MakeFont("WantedFontPosterReward", floor(height * 0.036), nil, nil))
+	frame.reward:SetFontObject(PosterFont("WantedFontPosterReward", floor(height * 0.036)))
 	frame.reward:SetPoint("CENTER", 0, 0)
 	frame.reward:SetTextColor(INK[1], INK[2], INK[3])
 	frame.rewardNote = text:CreateFontString(nil, "OVERLAY")
-	frame.rewardNote:SetFontObject(Theme:MakeFont("WantedFontPosterNote", floor(height * 0.015), nil, nil))
+	frame.rewardNote:SetFontObject(PosterFont("WantedFontPosterNote", floor(height * 0.016)))
 	frame.rewardNote:SetPoint("TOP", rewardBand, "BOTTOM", 0, -height * 0.004)
 	frame.rewardNote:SetTextColor(INK[1], INK[2], INK[3], 0.85)
 
@@ -166,7 +194,19 @@ function private.Fill(frame)
 	frame.model:SetCamDistanceScale(1)
 	frame.model:SetRotation(0)
 	local first, last = UnitName("player")
+	-- Long names (Forever's two-part names run to about 25 letters) step down a size, then shrink to fit the band
+	frame.name:SetFontObject(frame.nameFont)
+	if frame.name.SetTextScale then
+		frame.name:SetTextScale(1)
+	end
 	frame.name:SetText(strupper(last and last ~= "" and (first.." "..last) or first or "?"))
+	if frame.name:GetStringWidth() > frame.nameWidth then
+		frame.name:SetFontObject(frame.nameFontSmall)
+		local width = frame.name:GetStringWidth()
+		if width > frame.nameWidth and frame.name.SetTextScale then
+			frame.name:SetTextScale(frame.nameWidth / width)
+		end
+	end
 	local _, class = UnitClass("player")
 	local who = { "Level "..(UnitLevel("player") or "?") }
 	if class then
@@ -180,10 +220,10 @@ function private.Fill(frame)
 	frame.amountButton:SetText(private.customAmount and "Real amount" or "Set amount")
 	local total, count, posters = Wanted.Bridge:GetPriceOnMe()
 	if private.customAmount then
-		frame.reward:SetText(Wanted.Bounties:FormatMoney(private.customAmount))
+		frame.reward:SetText(private.FormatReward(private.customAmount))
 		frame.rewardNote:SetText("(allegedly)")
 	elseif total > 0 then
-		frame.reward:SetText(Wanted.Bounties:FormatMoney(total))
+		frame.reward:SetText(private.FormatReward(total))
 		frame.rewardNote:SetText(format("%d bount%s from %d player%s", count, count == 1 and "y" or "ies", posters, posters == 1 and "" or "s"))
 	else
 		frame.reward:SetText("No price on your head yet")

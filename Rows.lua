@@ -98,7 +98,12 @@ function Rows:UpdateBounty(row, info)
 			button.action = action
 			button:SetText(def.label)
 			button:SetStyle(def.style)
-			W:AttachTooltip(button, def.label, def.tip)
+			local tip = def.tip
+			-- Deciding on a claim: say when the hunter has a screenshot of the kill
+			if (action == "confirm" or action == "dispute") and info.claim and Wanted.Proof:Get(info.claim.id) then
+				tip = tip..format("\n\n%s has a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL)
+			end
+			W:AttachTooltip(button, def.label, tip)
 			button:Show()
 		else
 			button.action = nil
@@ -270,7 +275,8 @@ function Rows:DoAction(action, info)
 		local witnesses = #Bounties:GetWitnesses(info.claim)
 		W:Dialog({
 			title = "Confirm the kill",
-			text = format("You agree %s killed %s, and you owe them %s.%s", info.hunter, name, Theme:Money(info.amount), witnesses == 0 and "\n\nNobody else saw this kill." or ""),
+			text = format("You agree %s killed %s, and you owe them %s.%s%s", info.hunter, name, Theme:Money(info.amount), witnesses == 0 and "\n\nNobody else saw this kill." or "",
+				Wanted.Proof:Get(info.claim.id) and format("\n\n%s has a screenshot of the kill.", info.hunter) or ""),
 			confirmLabel = "Confirm",
 			confirmStyle = "success",
 			onConfirm = function()

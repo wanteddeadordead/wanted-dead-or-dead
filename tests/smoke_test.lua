@@ -710,6 +710,21 @@ for _, item in ipairs(ns.Model:GetMyBounties()) do
 	ns.Rows:ShowBountyTooltip(NewMock(), item)
 end
 check(kaelenProof, "Kaelen's test claim has a proof")
+local proofRow = { buttons = {} }
+for slot = 1, 2 do proofRow.buttons[slot] = NewMock() end
+for _, item in ipairs(ns.Model:GetMyBounties()) do
+	if item.hunter == "Kaelen Duskbrand" then
+		local row = NewMock()
+		ns.Rows:Create(row)
+		ns.Rows:UpdateBounty(row, item)
+		local found = false
+		for _, button in ipairs(row.buttons) do
+			if button.action == "confirm" and tostring(button.tooltipText):find("Kaelen Duskbrand has a screenshot", 1, true) then found = true end
+		end
+		check(found, "the Confirm button says Kaelen has a screenshot")
+		ns.Rows:DoAction("confirm", item)
+	end
+end
 ns.Store:InsertTest("kill", "Kaelen Duskbrand", { victim = "Player-TEST-00000777", victimName = "Only Test", victimGuild = "Test Only Guild", deathId = "testonly", zone = "The Barrens" }, clock)
 for _, guild in ipairs(ns.Model:GetGuildBoard()) do check(guild.name ~= "Test Only Guild", "test data stays off the guild board") end
 check(#ns.Tracks:Get("Player-TEST-00000101") >= 10 and ns.Tracks:Summarize(ns.Tracks:Get("Player-TEST-00000101")).days >= 5, "the rep test data gives its targets a history")

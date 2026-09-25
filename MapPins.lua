@@ -38,9 +38,18 @@ function private.GetOverlay()
 	local canvas = WorldMapFrame:GetCanvas()
 	local overlay = CreateFrame("Frame", nil, canvas)
 	overlay:SetAllPoints(canvas)
-	overlay:SetFrameLevel(canvas:GetFrameLevel() + 50)
 	private.overlay = overlay
+	private.PlaceOverlay()
 	return overlay
+end
+
+---Puts the markers above the map artwork. The map's own layers start at frame level 2000 (the zone
+---artwork among them), so a level picked relative to the canvas lands underneath it. Group member dots
+---are near the top of the map's layers, which is where enemies belong too.
+function private.PlaceOverlay()
+	local manager = WorldMapFrame.GetPinFrameLevelsManager and WorldMapFrame:GetPinFrameLevelsManager()
+	local level = manager and manager:GetValidFrameLevel("PIN_FRAME_LEVEL_GROUP_MEMBER")
+	private.overlay:SetFrameLevel(level or (WorldMapFrame:GetCanvas():GetFrameLevel() + 3000))
 end
 
 function private.GetPin(index)
@@ -80,6 +89,8 @@ function MapPins:Refresh()
 	end
 	local shown = 0
 	if Wanted.db.settings.detect.mapPins then
+		private.GetOverlay()
+		private.PlaceOverlay()
 		local mapId = WorldMapFrame:GetMapID()
 		local canvas = WorldMapFrame:GetCanvas()
 		local width, height = canvas:GetWidth(), canvas:GetHeight()

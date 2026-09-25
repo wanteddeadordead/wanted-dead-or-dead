@@ -16,7 +16,7 @@ local OTHER_POSTER = "Test Poster"
 
 Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witnessed claim on it, and another poster's bounty. /wanted simulate paid adds the payment.", function(args)
 	local me = Store:GetOrigin()
-	local zone, x, y = Recorder:GetPosition()
+	local zone, x, y, mapId = Recorder:GetPosition()
 	local now = GetServerTime()
 	if strtrim(args or "") == "paid" then
 		-- Collect first: adding records while walking the record table can skip some
@@ -35,8 +35,8 @@ Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witn
 	end
 	Store:PurgeTest()
 	-- An enemy, seen twice
-	Store:UpdatePlayer(TARGET_GUID, { name = TARGET_NAME, class = "ROGUE", level = 22, faction = "Alliance", guild = "Test Gankers", zone = zone, x = x, y = y })
-	Store:AddSighting(TARGET_GUID, zone, x, y)
+	Store:UpdatePlayer(TARGET_GUID, { name = TARGET_NAME, class = "ROGUE", level = 22, faction = "Alliance", guild = "Test Gankers", zone = zone, mapId = mapId, x = x, y = y })
+	Store:AddSighting(TARGET_GUID, zone, x, y, mapId)
 	-- Your bounty on them, posted yesterday, raised today
 	local bounty = Store:InsertTest("bounty", me, { target = TARGET_GUID, targetName = TARGET_NAME, amount = 50 * 100, level = 22, zone = zone }, now - 86400)
 	Store:InsertTest("raise", me, { bounty = bounty.id, amount = 30 * 100 }, now - 3600)

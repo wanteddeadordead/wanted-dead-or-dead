@@ -59,6 +59,7 @@ function Methods:GetWidth() return self._w end
 function Methods:GetHeight() return self._h end
 function Methods:HasFocus() return false end
 function Methods:GetFrameLevel() return 1 end
+function Methods:SetFrameLevel(level) self._level = level lastFrameLevel = level end
 function Methods:GetCenter() return 0, 0 end
 function Methods:GetEffectiveScale() return 1 end
 function Methods:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
@@ -412,6 +413,20 @@ check(#ns.Hotspots:GetTop(3) == 2, "two zones busy now")
 check(ns.Hotspots:OpenMap(durotar) and mapOpened == 1, "clicking a hotspot opens its map")
 ns.UI:Show("hotspots")
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
+-- The world map: enemy markers go above the map artwork (its layers start at frame level 2000)
+WorldMapFrame = NewMock()
+local mapCanvas = NewMock()
+WorldMapFrame.GetCanvas = function() return mapCanvas end
+WorldMapFrame.GetMapID = function() return 1 end
+WorldMapFrame.ScrollContainer = NewMock()
+WorldMapFrame.ScrollContainer.GetCanvasScale = function() return 1 end
+WorldMapFrame.GetPinFrameLevelsManager = function()
+	return { GetValidFrameLevel = function(_, levelType) return levelType == "PIN_FRAME_LEVEL_GROUP_MEMBER" and 2040 or 2000 end }
+end
+lastFrameLevel = nil
+ns.MapPins:Refresh()
+check(lastFrameLevel and lastFrameLevel >= 2040, "map markers sit above the map artwork, got level "..tostring(lastFrameLevel))
+WorldMapFrame = nil
 -- 20 minutes on nobody is there now: Durotar is quiet and falling, but still in the hour
 local savedClock = clock
 clock = clock + 20 * 60

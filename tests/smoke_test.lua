@@ -694,6 +694,8 @@ check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt "..ns
 check(hunted.actions[1] == "stophunt" and hunted.actions[2] == "renew", "a hunt offers Stop and Renew")
 ns.UI:Show("hunts")
 check(ns.UI:IsShown("hunts"), "Your hunts is its own page")
+ns.HuntsPage:ShowClaims()
+check(ns.UI:IsShown("hunts"), "Your claims is on Your hunts")
 ns.Rows:DoAction("renew", hunted)
 ns.Rows:DoAction("stophunt", ns.Model:GetBountyInfo(huntBounty))
 check(not ns.Model:GetBountyInfo(huntBounty).iHunt, "stopped")

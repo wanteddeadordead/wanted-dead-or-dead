@@ -1,5 +1,5 @@
 -- Wanted: the player's own business. What they owe and are owed at a glance, the bounties they posted
--- (with the decisions waiting on them first), the claims they made as a hunter, and their own record:
+-- (with the decisions waiting on them first), their history, and their own record:
 -- how far other players can trust them as a poster and as a hunter, what that means, and how to improve it.
 
 local _, Wanted = ...
@@ -114,8 +114,6 @@ function private.Refresh()
 		private.RefreshRecord()
 	elseif private.view == "posted" then
 		private.list:SetItems(Model:GetMyBounties(), "No live bounties.", "Post one from the Board. Finished ones are under History.")
-	elseif private.view == "claims" then
-		private.list:SetItems(Model:GetMyActiveClaims(), "No claims in play.", "Kill a player with a bounty on them and the claim files itself.")
 	else
 		private.list:SetItems(Model:GetMyHistory(), "Nothing finished yet.", "Paid, expired and withdrawn bounties, and finished claims, end up here.")
 	end
@@ -123,7 +121,7 @@ end
 
 UI:RegisterPage("mine", {
 	title = "Your bounties",
-	subtitle = "Your live bounties and claims, what you owe and are owed. Finished ones move to History.",
+	subtitle = "Your live bounties, what you owe and are owed. Finished bounties and claims move to History.",
 	order = 2,
 	badge = function() return Model:GetActionCount() end,
 	build = function(container, width, height)
@@ -140,7 +138,6 @@ UI:RegisterPage("mine", {
 
 		local segment = W:Segmented(container, {
 			{ key = "posted", label = "Your live bounties" },
-			{ key = "claims", label = "Your claims" },
 			{ key = "history", label = "History" },
 			{ key = "record", label = "Your record" },
 		}, function(key)

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.7] - 2026-09-25
+
 - Sync across realms. WoW Forever's one world has several realm names (e.g. Classic Beta PvP and Classic Beta
   PvP 2), and a chat channel belongs to one, so players on different realm names never heard each other.
   Wanted now links them by hidden addon whispers, found through Battle.net friends, anyone who greets you, and

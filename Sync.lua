@@ -43,6 +43,7 @@ local private = {
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
+	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
 	forwardQueue = {}, -- name -> records to forward to that link
 	reshareQueue = {}, -- records from a link to share on this realm's channel
 	forwardDue = false,
@@ -96,7 +97,7 @@ local MAX_FILL_PER_REQUEST = 200
 -- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list
 local MAX_LINK_PARTS_PER_MINUTE = 40
 local LINK_HAVE_SECONDS = 60
-local LINK_TIMEOUT = 15 * 60 -- a link nobody has heard from this long is dropped (and greeted again later)
+local LINK_TIMEOUT = 3 * 60 -- a link that misses a few resyncs is dropped (and greeted again later)
 local LINK_FORWARD_SECONDS = 2
 local MAX_FORWARD_QUEUE = 200
 local MAX_NEED_ORIGINS_LINK = 40
@@ -118,6 +119,7 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("CHAT_MSG_ADDON")
 	private.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 	private.frame:RegisterEvent("CHANNEL_PASSWORD_REQUEST")
+	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
 	private.frame:SetScript("OnEvent", private.OnEvent)
 	Store:OnRecord("kill", private.OnOwnRecord)
 	Store:OnRecord("death", private.OnOwnRecord)
@@ -203,6 +205,8 @@ function private.OnEvent(_, event, ...)
 		C_Timer.After(5, private.TryJoin)
 	elseif event == "CHANNEL_PASSWORD_REQUEST" then
 		private.OnPasswordRequest(...)
+	elseif event == "CHAT_MSG_SYSTEM" then
+		private.OnSystemMessage(...)
 	end
 end
 
@@ -1017,19 +1021,42 @@ function private.GreetRemembered()
 	end
 end
 
----Hides the game's "No player named ... is currently playing." for a player we greeted a moment ago (a
----remembered link who isn't online).
-function private.HideNotFound(_, _, msg)
+---The player a "No player named ... is currently playing." message is about, if it's one we greeted a moment
+---ago or a realm link (they logged off).
+function private.NotFoundName(msg)
 	if type(msg) ~= "string" or not ERR_CHAT_PLAYER_NOT_FOUND_S then
-		return false
+		return nil
 	end
 	local now = GetTime()
-	for name, t in pairs(private.greeted) do
-		if now - t < NOT_FOUND_SECONDS and msg == format(ERR_CHAT_PLAYER_NOT_FOUND_S, name) then
-			return true
+	for name in pairs(private.links) do
+		if msg == format(ERR_CHAT_PLAYER_NOT_FOUND_S, name) then
+			return name
 		end
 	end
-	return false
+	for _, names in ipairs({ private.greeted, private.endedLinks }) do
+		for name, t in pairs(names) do
+			if now - t < NOT_FOUND_SECONDS and msg == format(ERR_CHAT_PLAYER_NOT_FOUND_S, name) then
+				return name
+			end
+		end
+	end
+	return nil
+end
+
+---Hides that message for our own whispers: a remembered link who isn't online, or a link who just logged off.
+function private.HideNotFound(_, _, msg)
+	return private.NotFoundName(msg) ~= nil
+end
+
+---A link who logged off: end the link at once, so nothing more is whispered to them.
+function private.OnSystemMessage(msg)
+	local name = private.NotFoundName(msg)
+	if name and private.links[name] then
+		private.links[name] = nil
+		private.forwardQueue[name] = nil
+		private.endedLinks[name] = GetTime()
+		Wanted:Log("Sync: realm link %s is offline; link ended", name)
+	end
 end
 
 ---The realm links now: name -> { realm, since, heard, sent, received }.

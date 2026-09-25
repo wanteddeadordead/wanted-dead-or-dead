@@ -1411,6 +1411,18 @@ ns.Sync:Greet("Quick Asker", "Fourth Realm")
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { [ns.Store:GetOrigin()] = 1 } }), "WHISPER", "Quick Asker")
 check(ns.Sync:GetLinks()["Quick Asker"] and #Sent("WHISPER", "Quick Asker") >= 1, "a request from someone we just greeted is answered before their hello arrives")
+-- A link who logs off: the game's "No player named ... is currently playing" for them ends the link at once
+-- (nothing more is sent to them) and the message is hidden
+check(ns.Sync:GetLinks()["Far Friend"] ~= nil, "Far Friend is still a link")
+local offlineMsg = "No player named 'Far Friend' is currently playing."
+check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", offlineMsg) == true, "the offline message for a link is hidden")
+Fire("CHAT_MSG_SYSTEM", offlineMsg)
+check(ns.Sync:GetLinks()["Far Friend"] == nil, "and the link ends")
+check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", offlineMsg) == true, "the message stays hidden even if the link ended first")
+ClearSent()
+ns.Store:NewRecord("pass", { bounty = "after-offline" })
+RunTimers()
+check(#Sent("WHISPER", "Far Friend") == 0, "nothing more is sent to them")
 -- Battle.net friends on our faction and another realm name are greeted as realm links
 ClearSent()
 bnFriends[#bnFriends + 1] = { id = 105, program = "WoW", faction = "Horde", realm = "Other Realm", name = "Horde Far" }

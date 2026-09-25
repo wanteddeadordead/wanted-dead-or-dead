@@ -1441,6 +1441,36 @@ ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Post
 	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
 local known = ns.Store:GetPlayer("Player-9-KNOWN")
 check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
+-- Shared sightings: seeing someone with an open bounty records a "spotted" record (at most every 5 minutes per
+-- target), which syncs like any record, so every hunter's target file has everyone's sightings; others'
+-- spotted records land in the history "by" them, even before their bounty arrives; old ones are pruned
+local function SpottedCount(guid) local n = 0 for r in ns.Store:Iterator("spotted") do if r.data.target == guid then n = n + 1 end end return n end
+clock = clock + 31 -- the wanted list is rebuilt every 30 seconds
+ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 22, 69, 1434)
+check(SpottedCount("Player-9-SNAP") == 1, "seeing a wanted player records a shared sighting")
+local spot = nil
+for r in ns.Store:Iterator("spotted") do if r.data.target == "Player-9-SNAP" then spot = r end end
+check(spot.data.zone == "Stranglethorn Vale" and spot.data.x == 22 and spot.data.mapId == 1434, "with where they were")
+clock = clock + 60
+ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 23, 70, 1434)
+check(SpottedCount("Player-9-SNAP") == 1, "not again within five minutes")
+clock = clock + 300
+ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 24, 71, 1434)
+check(SpottedCount("Player-9-SNAP") == 2, "again after five minutes")
+ns.Store:AddSighting("Player-9-NOTWANTED", "Durotar", 50, 50, 1411)
+check(SpottedCount("Player-9-NOTWANTED") == 0, "someone without a bounty isn't shared (sightings stay passing news)")
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", t = clock - 7200,
+	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } })
+local farTrack = ns.Tracks:Get("Player-9-FARWANTED")
+check(#farTrack == 1 and farTrack[1].zone == "Ashenvale" and farTrack[1].by == "Spotter Far" and farTrack[1].t == clock - 7200, "someone else's sighting lands in the history by them, even before the bounty arrives")
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", t = clock - 9000,
+	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } })
+farTrack = ns.Tracks:Get("Player-9-FARWANTED")
+check(#farTrack == 2 and farTrack[1].zone == "Ashenvale" and farTrack[2].zone == "Darkshore", "an older sighting arriving later still sorts into place")
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", t = clock - 40 * 86400,
+	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } })
+ns.Tracks:PruneSpotted()
+check(ns.Store:Get("Spotter Far:3") == nil and ns.Store:Get("Spotter Far:1") ~= nil, "shared sightings over a month old are pruned")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
 ns:Log("!! Test: something odd")
 local kept = ns.Debug:GetDevLog()

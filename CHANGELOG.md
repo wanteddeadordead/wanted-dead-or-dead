@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Shared sightings of wanted players. Seeing someone with an open bounty shares where and when (at most every
+  5 minutes per target), and it syncs like everything else: to players who were offline and across realms. So
+  every hunter's file on a target has everyone's sightings, from before they took the bounty too. Kill on
+  Sight sightings stay private.
 - A bounty carries what its poster knew about the target (class, race, level, guild, where and when last seen),
   so hunters who never saw them, on another realm or offline at the time, still know who and where to look.
 - A realm link no longer loses the other side's first request when it arrives ahead of their hello.

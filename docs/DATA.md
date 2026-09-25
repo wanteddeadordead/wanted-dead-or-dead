@@ -25,6 +25,11 @@ Rules for a change:
 `faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target
 fills its player notes from them (never overwriting its own), marked as seen by the poster.
 
+`spotted` records (from 0.1.0-beta.8) share a sighting of someone with an open bounty: `target` (GUID), `zone`,
+`x`, `y`, `mapId`; the record's origin is who saw them and its `t` when. At most one per target every 5
+minutes per client. Clients put them into the target's history (`WantedDB.tracks`) and drop spotted records
+older than 30 days at login (the history's length). Kill on Sight sightings are never shared.
+
 `WantedDB.farPeers` (name -> `{ realm, seen }`, the last 20, a week) remembers realm links: players on another
 realm name of the same world, synced by hidden whisper (Sync). They're greeted again at login.
 

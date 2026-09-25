@@ -2,6 +2,11 @@
 -- bounty on them or their guild, or on your Kill on Sight list, are kept per player for a month, so a
 -- hunter can see their usual zones and the hours they're about. Other enemies aren't kept: the saved data
 -- would grow with every player you ever pass.
+--
+-- Seeing someone with an open bounty also makes a "spotted" record (at most every few minutes per target),
+-- which syncs like any record: across the channel, to players catching up, and over realm links. So every
+-- hunter's history has everyone's sightings, from before they took the bounty too. Kill on Sight sightings
+-- stay private (the list is personal). Spotted records are dropped once they're older than the history.
 
 local _, Wanted = ...
 local Tracks = Wanted:NewModule("Tracks")
@@ -12,15 +17,67 @@ local MAX_PER_PLAYER = 300
 local KEEP_SECONDS = 30 * 24 * 60 * 60
 local MIN_GAP = 60 -- one entry a minute per player, unless they changed zone
 local WATCHED_REFRESH = 30 -- seconds between rebuilding the list of who is wanted
+local SPOT_SECONDS = 5 * 60 -- one shared sighting per wanted player this often
 
 function Tracks:OnLoad()
 	Wanted.db.tracks = Wanted.db.tracks or {}
+	Tracks:PruneSpotted()
 end
 
 function Tracks:OnEnable()
+	private.lastSpotted = {} -- guid -> when we last recorded a shared sighting of them
 	Store:OnRecord("sighting", function(record)
 		Tracks:Add(record.sighting)
+		private.MaybeSpotted(record.sighting)
 	end)
+	Store:OnRecord("spotted", private.OnSpotted)
+	-- A new bounty makes its target wanted straight away, not at the next rebuild of the list
+	Store:OnRecord("bounty", function()
+		private.watched = nil
+	end)
+end
+
+---Our own sighting of someone with an open bounty (not just Kill on Sight) becomes a shared record.
+function private.MaybeSpotted(sighting)
+	if not sighting or sighting.by or not sighting.guid or not private.IsBountyTarget(sighting.guid) then
+		return
+	end
+	local now = GetTime()
+	if private.lastSpotted[sighting.guid] and now - private.lastSpotted[sighting.guid] < SPOT_SECONDS then
+		return
+	end
+	private.lastSpotted[sighting.guid] = now
+	Store:NewRecord("spotted", { target = sighting.guid, zone = sighting.zone, x = sighting.x, y = sighting.y, mapId = sighting.mapId })
+end
+
+---Whether a player has an open bounty on them or their guild.
+function private.IsBountyTarget(guid)
+	local watched = private.GetWatched()
+	if watched.bountyPlayers[guid] then
+		return true
+	end
+	local player = Store:GetPlayer(guid)
+	return player and type(player.guild) == "string" and watched.guilds[player.guild] or false
+end
+
+---Someone else's shared sighting: into the target's history, by them (whether or not their bounty is here yet).
+function private.OnSpotted(record, isOwn)
+	local d = record.data
+	if isOwn or type(d.target) ~= "string" or Store:IsTest(record) then
+		return
+	end
+	Tracks:Add({ guid = d.target, zone = d.zone, mapId = d.mapId, x = d.x, y = d.y, by = record.origin, t = record.t }, true)
+end
+
+---Drops spotted records older than the history keeps.
+function Tracks:PruneSpotted()
+	local records = Wanted.db.records
+	local cutoff = GetServerTime() - KEEP_SECONDS
+	for id, record in pairs(records) do
+		if record.kind == "spotted" and (record.t or 0) < cutoff then
+			records[id] = nil
+		end
+	end
 end
 
 ---Players and guilds worth keeping a history of: open bounties and Kill on Sight.
@@ -29,10 +86,11 @@ function private.GetWatched()
 	if private.watched and now - private.watchedAt < WATCHED_REFRESH then
 		return private.watched
 	end
-	local watched = { players = {}, guilds = {} }
+	local watched = { players = {}, guilds = {}, bountyPlayers = {} }
 	for bounty in Bounties:OpenIterator() do
 		if bounty.data.target then
 			watched.players[bounty.data.target] = true
+			watched.bountyPlayers[bounty.data.target] = true
 		elseif bounty.data.guild then
 			watched.guilds[bounty.data.guild] = true
 		end
@@ -56,10 +114,11 @@ function Tracks:IsWatched(guid)
 	return player and type(player.guild) == "string" and watched.guilds[player.guild] or false
 end
 
----Adds a sighting to the player's history if they're wanted.
+---Adds a sighting to the player's history if they're wanted (or it's a shared sighting, which says they are).
 ---@param sighting table { guid, zone, mapId, x, y, by, t }
-function Tracks:Add(sighting)
-	if not sighting or not sighting.guid or not Tracks:IsWatched(sighting.guid) then
+---@param shared boolean? a spotted record: kept even if their bounty hasn't arrived here yet
+function Tracks:Add(sighting, shared)
+	if not sighting or not sighting.guid or (not shared and not Tracks:IsWatched(sighting.guid)) then
 		return
 	end
 	local tracks = Wanted.db.tracks
@@ -70,13 +129,20 @@ function Tracks:Add(sighting)
 	end
 	local last = list[#list]
 	local entry = { t = sighting.t, zone = sighting.zone, mapId = sighting.mapId, x = sighting.x, y = sighting.y, by = sighting.by }
-	if last and sighting.t - last.t < MIN_GAP and last.zone == sighting.zone then
+	if last and sighting.t < last.t then
+		-- An older one arriving late (a shared sighting from a catch-up): into its place in time
+		local at = #list
+		while at > 0 and list[at].t > sighting.t do
+			at = at - 1
+		end
+		tinsert(list, at + 1, entry)
+	elseif last and sighting.t - last.t < MIN_GAP and last.zone == sighting.zone then
 		-- Still around the same place: keep the newest position
 		list[#list] = entry
 	else
 		tinsert(list, entry)
 	end
-	private.Trim(list, sighting.t)
+	private.Trim(list, GetServerTime())
 end
 
 function private.Trim(list, now)

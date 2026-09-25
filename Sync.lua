@@ -132,6 +132,7 @@ function Sync:OnEnable()
 	Store:OnRecord("withdraw", private.OnOwnRecord)
 	Store:OnRecord("hunt", private.OnOwnRecord)
 	Store:OnRecord("proof", private.OnOwnRecord)
+	Store:OnRecord("spotted", private.OnOwnRecord)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
 	-- Realm links

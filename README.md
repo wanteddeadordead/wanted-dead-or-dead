@@ -15,7 +15,11 @@ happened.
 **Bounty board**
 - Post a bounty on an enemy player, or on **every member of a guild**. One per target; posting again adds
   to it.
-- Hunters mark a bounty they're chasing. While anyone is hunting it, the poster can't pull it.
+- Hunters mark a bounty they're chasing, for a day at a time (renew to keep going). While anyone is
+  hunting it, the poster can't pull it.
+- **The file on every target:** click a bounty for where they were last seen, the zones they keep to, the
+  hours they're usually about, every sighting by you and other Wanted users, and their deaths. Sightings of
+  wanted players are kept for a month.
 - Kill the target and the claim files itself from your honorable kill. Another player's client that saw
   the death **witnesses** it. The earliest kill wins.
 - The poster confirms or disputes, then pays by mail in one click. Both sides' clients record the

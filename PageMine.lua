@@ -116,7 +116,7 @@ function private.Refresh()
 	elseif private.view == "posted" then
 		private.list:SetItems(Model:GetMyBounties(), "No live bounties.", "Post one from the Board. Finished ones are under History.")
 	elseif private.view == "hunts" then
-		private.list:SetItems(Model:GetMyHunts(), "You're not hunting anyone.", "Press Hunt on a bounty on the Board. A hunt lasts 2 hours; Renew starts it again.")
+		private.list:SetItems(Model:GetMyHunts(), "You're not hunting anyone.", "Press Hunt on a bounty on the Board. A hunt lasts 24 hours; Renew starts it again.")
 	elseif private.view == "claims" then
 		private.list:SetItems(Model:GetMyActiveClaims(), "No claims in play.", "Kill a player with a bounty on them and the claim files itself.")
 	else
@@ -165,6 +165,11 @@ UI:RegisterPage("mine", {
 				Rows:UpdateClaim(row, item)
 			end
 		end)
+		list.onClick = function(item)
+			if item.state then
+				Wanted.TargetFile:ShowBounty(item)
+			end
+		end
 		list.onEnter = function(row, item)
 			if item.state then
 				Rows:ShowBountyTooltip(row, item)

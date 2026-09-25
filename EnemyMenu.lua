@@ -196,6 +196,7 @@ function EnemyMenu:Show(d)
 		tinsert(items, { text = "Ignore (no alerts)", onClick = function() Enemies:SetIgnored(d.guid, d.name, true) end })
 	end
 	tinsert(items, "-")
+	tinsert(items, { text = "Where they've been...", onClick = function() Wanted.TargetFile:ShowPlayer(d.guid, d.name) end })
 	tinsert(items, { text = d.bounty > 0 and "Add to the bounty..." or "Put a bounty on them...", color = C.gold, onClick = function()
 		Wanted.UI:Show("board")
 		Wanted.BoardPage:PrefillTarget(d.name)

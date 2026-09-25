@@ -25,6 +25,7 @@ Payments.lua
 Proof.lua
 Reputation.lua
 Enemies.lua
+Tracks.lua
 Hotspots.lua
 Debug.lua
 Theme.lua
@@ -34,6 +35,7 @@ Alerts.lua
 UI.lua
 Rows.lua
 EnemyMenu.lua
+TargetFile.lua
 NearbyWindow.lua
 PageBoard.lua
 PageMine.lua

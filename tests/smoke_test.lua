@@ -283,7 +283,7 @@ check(not ns.Bounties:Withdraw(again), "withdraw refused while hunted")
 -- A withdrawal record that raced a hunt does not count
 ns.Store:InsertTest("withdraw", ns.Store:GetOrigin(), { bounty = again.id }, clock + 1)
 check(not ns.Bounties:IsWithdrawn(again), "withdrawal during a hunt is void")
--- The hunt ends after 2 hours, then a withdrawal counts
+-- The hunt ends after a day, then a withdrawal counts
 clock = clock + ns.Bounties.HUNT_SECONDS + 10
 check(#ns.Bounties:GetActiveHunters(again) == 0, "hunt expired")
 check(ns.Bounties:Withdraw(again), "withdraw allowed after the hunt lapsed")
@@ -677,11 +677,45 @@ ns.Bounties:Hunt(huntBounty)
 local hunts = ns.Model:GetMyHunts()
 local hunted
 for _, item in ipairs(hunts) do if item.bounty == huntBounty then hunted = item end end
-check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt 2h left", 1, true), "the hunt shows under Your hunts with its time left, got "..(hunted and ns.Model:GetDetail(hunted) or "nothing"))
+check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt "..ns.Theme:Left(ns.Bounties.HUNT_SECONDS), 1, true), "the hunt shows under Your hunts with its time left, got "..(hunted and ns.Model:GetDetail(hunted) or "nothing"))
 check(hunted.actions[1] == "stophunt" and hunted.actions[2] == "renew", "a hunt offers Stop and Renew")
 ns.Rows:DoAction("renew", hunted)
 ns.Rows:DoAction("stophunt", ns.Model:GetBountyInfo(huntBounty))
 check(not ns.Model:GetBountyInfo(huntBounty).iHunt, "stopped")
+-- Whereabouts of wanted players: kept for anyone with a bounty, merged within a minute, summarised
+local clockBeforeTracks = clock
+local trackedGuid, strangerGuid = "Player-9-TRACKED", "Player-9-STRANGER"
+ns.Store:UpdatePlayer(trackedGuid, { name = "Wanted Walter", class = "PALADIN", level = 24, faction = "Alliance", guild = "Road Campers", zone = "The Barrens", mapId = 10 })
+ns.Store:UpdatePlayer(strangerGuid, { name = "Passing Paul", class = "MAGE", level = 20, faction = "Alliance", zone = "The Barrens", mapId = 10 })
+local trackedBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = trackedGuid, targetName = "Wanted Walter", amount = 9000, level = 24, zone = "The Barrens" }, clock)
+clock = clock + 31 -- past the watched-list cache
+local trackStart = clock
+ns.Store:AddSighting(trackedGuid, "The Barrens", 50, 40, 10)
+clock = clock + 20
+ns.Store:AddSighting(trackedGuid, "The Barrens", 51, 41, 10, "Some Friend")
+clock = clock + 3600
+ns.Store:AddSighting(trackedGuid, "Ashenvale", 30, 60, 11, "Some Friend")
+clock = clock + 86400
+ns.Store:AddSighting(trackedGuid, "The Barrens", 62, 38, 10)
+ns.Store:AddSighting(strangerGuid, "The Barrens", 62, 38, 10)
+check(ns.db.tracks[trackedGuid] and #ns.db.tracks[trackedGuid] == 3, "a wanted player's sightings are kept, one a minute, got "..(ns.db.tracks[trackedGuid] and #ns.db.tracks[trackedGuid] or 0))
+check(ns.db.tracks[strangerGuid] == nil, "a player nobody wants isn't kept")
+local entries = ns.Tracks:Get(trackedGuid)
+check(entries[1].zone == "The Barrens" and entries[1].t == clock, "newest first")
+local summary = ns.Tracks:Summarize(entries)
+check(summary.zones[1].zone == "The Barrens" and summary.zones[1].count >= 2 and summary.days == 2 and #summary.hours >= 1, "zones, hours and days summarised")
+-- A kill of them shows in the file's record
+ns.Store:InsertTest("kill", "Kaelen Duskbrand", { victim = trackedGuid, victimName = "Wanted Walter", deathId = "walter1", zone = "The Barrens", x = 62, y = 38 }, clock - 100)
+check(#ns.Tracks:GetDeaths(trackedGuid) == 1 and ns.Tracks:GetDeaths(trackedGuid)[1].killer == "Kaelen Duskbrand", "deaths found")
+-- The file: from the Board, from a command, and for a guild bounty
+ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(trackedBounty))
+check(ns.TargetFile:IsShown(), "the file opens from a bounty")
+ns:RunCommand("file", "Wanted Walter")
+local guildBounty2 = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { guild = "Road Campers", targetFaction = "Alliance", amount = 20000 }, clock)
+ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(guildBounty2))
+check(ns.db.tracks[trackedGuid][1].name == nil, "the guild file doesn't write into the saved history")
+ns:RunCommand("file", "Nobody Here")
+clock = clockBeforeTracks
 -- Report a bug from the foot of the menu
 ns.UI:Show("board")
 ns.Report:Show()

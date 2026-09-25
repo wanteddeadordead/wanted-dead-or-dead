@@ -11,7 +11,10 @@ local private = {}
 local EXPIRY_SECONDS = 7 * 24 * 60 * 60
 local MIN_BOUNTY = 10 * 100 -- 10s
 -- A hunter's commitment holds this long (renewable); while it does, the poster can't withdraw the bounty
-local HUNT_SECONDS = 2 * 60 * 60
+-- A hunt lasts a day: finding one player online in the open world can take days, and Renew starts the day
+-- again. Every client must agree on this to agree whether a withdrawal counted, so it only changes with a
+-- release everyone takes.
+local HUNT_SECONDS = 24 * 60 * 60
 Bounties.HUNT_SECONDS = HUNT_SECONDS
 -- A death record from another client counts as a witness within this many seconds of the kill
 local WITNESS_WINDOW = 30

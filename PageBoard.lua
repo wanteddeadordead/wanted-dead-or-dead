@@ -269,6 +269,7 @@ UI:RegisterPage("board", {
 		list:SetPoint("TOPLEFT", 0, -listTop)
 		list:SetPoint("TOPRIGHT", 0, -listTop)
 		list.onEnter = function(row, info) Rows:ShowBountyTooltip(row, info) end
+		list.onClick = function(info) Wanted.TargetFile:ShowBounty(info) end
 		private.list = list
 		private.OnFormChanged()
 	end,

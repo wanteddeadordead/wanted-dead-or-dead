@@ -171,7 +171,8 @@ WorldMapFrame.RemoveAllPinsByTemplate = function(self) self.pins = {} end
 WorldMapFrame.AcquirePin = function(self, template, ...)
 	local pin = {} -- plain, so unset fields read as nil like a real frame's
 	for k, v in pairs(_G[template:gsub("Template$", "Mixin")]) do pin[k] = v end
-	pin.Dot = NewMock()
+	pin.Dot, pin.Count = NewMock(), NewMock()
+	pin.SetSize = function() end
 	pin:OnLoad()
 	pin:OnAcquired(...)
 	table.insert(self.pins, pin)
@@ -464,8 +465,12 @@ WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 -- The world map: markers come through the map's own pin system, in their own layer under group members
 check(insertedLevel == "PIN_FRAME_LEVEL_WANTED_ENEMY below PIN_FRAME_LEVEL_GROUP_MEMBER", "own map layer, got "..tostring(insertedLevel))
 ns.MapPins:Refresh()
-check(#WorldMapFrame.pins >= 40, "a marker per enemy seen on this map, got "..#WorldMapFrame.pins)
+local markedEnemies = 0
+for _, p in ipairs(WorldMapFrame.pins) do markedEnemies = markedEnemies + #p.group.members end
+check(markedEnemies >= 40 and #WorldMapFrame.pins < markedEnemies, "enemies seen from one spot share a marker: "..#WorldMapFrame.pins.." markers for "..markedEnemies)
 local pin = WorldMapFrame.pins[1]
+for _, p in ipairs(WorldMapFrame.pins) do if #p.group.members > 1 then pin = p end end
+check(pin.Count._text ~= "" and tonumber(pin.Count._text) == #pin.group.members, "a merged marker shows its count")
 check(pin._levelType == "PIN_FRAME_LEVEL_WANTED_ENEMY" and pin._x > 0 and pin._x < 1, "marker in our layer at a map position")
 pin:OnMouseEnter()
 pin:OnMouseLeave()
@@ -478,7 +483,7 @@ checkbox.setSelected()
 check(not ns.db.settings.detect.mapPins and #WorldMapFrame.pins == 0, "unchecking it hides the markers")
 ns.UI:Show("hotspots")
 ns.MapPins:SetShown(true)
-check(#WorldMapFrame.pins >= 40 and checkbox.isSelected(), "the Hotspots switch brings them back")
+check(#WorldMapFrame.pins >= 1 and checkbox.isSelected(), "the Hotspots switch brings them back")
 -- 20 minutes on nobody is there now: Durotar is quiet and falling, but still in the hour
 local savedClock = clock
 clock = clock + 20 * 60

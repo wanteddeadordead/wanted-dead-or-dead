@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Map markers for enemies seen in the same spot merge into one, with a count and everyone listed in its tooltip.
 - A death is confirmed after 4 seconds, so a hunter's Feign Death no longer counts as one.
 - Your PvP status in the Nearby window: PvP on, off, the countdown while the flag wears off, sanctuary, or free-for-all.
 - Split by role: Your bounties holds everything as a poster (owe, open, paid out, history, record) and Your

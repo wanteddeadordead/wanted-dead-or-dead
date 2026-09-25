@@ -1,5 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<!-- An enemy marker on the world map: a coloured dot with a dark edge. Behaviour is in MapPins.lua. -->
+	<!-- An enemy marker on the world map: a coloured dot with a dark edge, and a count when it stands for
+	     several enemies seen in the same spot. Behaviour is in MapPins.lua. -->
 	<Frame name="WantedDeadOrDeadEnemyPinTemplate" mixin="WantedDeadOrDeadEnemyPinMixin" enableMouseMotion="true" virtual="true">
 		<Size x="12" y="12"/>
 		<Layers>
@@ -15,6 +16,14 @@
 						<Anchor point="BOTTOMRIGHT" x="-2" y="2"/>
 					</Anchors>
 				</Texture>
+			</Layer>
+			<Layer level="OVERLAY">
+				<!-- How many enemies a merged marker holds -->
+				<FontString parentKey="Count" inherits="GameFontHighlightSmall">
+					<Anchors>
+						<Anchor point="CENTER" x="0" y="0"/>
+					</Anchors>
+				</FontString>
 			</Layer>
 		</Layers>
 	</Frame>

@@ -129,7 +129,7 @@ function GetUnitName(unit) local e = enemy(unit) return e and e.name end
 function UnitIsEnemy(_, unit) return enemy(unit) ~= nil end
 function UnitClass(unit) local e = enemy(unit) return e and "Rogue", e and e.class end
 function UnitLevel(unit) local e = enemy(unit) return e and e.level or 10 end
-function UnitRace(unit) return enemy(unit) and "Human" end
+function UnitRace(unit) local e = enemy(unit) return e and "Human", e and (e.raceFile or "Human") end
 function UnitHealth(unit) return enemy(unit) and 50 or 100 end
 function UnitHealthMax() return 100 end
 function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and e.targetsMe and b == "player") and true or false end
@@ -409,6 +409,41 @@ Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 26889)
 check(#stealthEvents == 2, "but not long after, when the token may be someone else")
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+-- The game hides which spell an enemy cast (a secret value). One who casts something and is out of sight a
+-- moment later went into stealth: the alarm goes off for rogues, druids and night elves
+SECRET_SPELL = setmetatable({}, { __tostring = function() return "secret" end })
+function issecretvalue(value) return value == SECRET_SPELL end
+for i = #stealthEvents, 1, -1 do stealthEvents[i] = nil end
+local function RestoreStab() clock = clock + 10 enemyUnits.nameplate1 = stabUnit Fire("NAME_PLATE_UNIT_ADDED", "nameplate1") end
+clock = clock + 10
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
+check(#stealthEvents == 0, "a hidden cast on its own is no alarm")
+enemyUnits.nameplate1 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Stealth", "a rogue who casts and is gone at once went into stealth")
+RestoreStab()
+enemyUnits.nameplate1 = nil
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
+check(#stealthEvents == 2, "a hidden cast from a rogue already out of sight")
+RestoreStab()
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
+clock = clock + 2
+enemyUnits.nameplate1 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+check(#stealthEvents == 2, "gone two seconds after casting is running off, not stealth")
+RestoreStab()
+enemyUnits.nameplate60 = { guid = "Player-9-WARRIOR", name = "War Rior", class = "WARRIOR", level = 20 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate60")
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate60", "cast", SECRET_SPELL)
+enemyUnits.nameplate60 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate60")
+check(#stealthEvents == 2, "a warrior can't stealth")
+enemyUnits.nameplate61 = { guid = "Player-9-ELF", name = "Night Hunter", class = "HUNTER", level = 20, raceFile = "NightElf" }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate61")
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate61", "cast", SECRET_SPELL)
+enemyUnits.nameplate61 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate61")
+check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
 -- We kill them: the client's kill event records a kill and a win
 Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
 check(ns.Enemies:GetStats("Player-9-ENEMY").wins == 1, "win counted from the kill event")

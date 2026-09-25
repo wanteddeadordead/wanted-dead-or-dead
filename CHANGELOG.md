@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
-- The stealth alarm goes off when an enemy vanishes or stealths in front of you. Their nameplate is gone by the
-  time the game reports the cast, so the alarm used to miss them.
+- The stealth alarm works again. The game no longer tells addons which spell an enemy cast, so Wanted now
+  spots the moment instead: a rogue, druid or night elf who casts something and drops out of sight right away
+  has gone into stealth (Stealth, Prowl or Shadowmeld).
 
 ## [0.1.0-beta.3] - 2026-09-25
 

@@ -27,6 +27,10 @@ local SCAN_SECONDS = 1
 -- A cast that makes the caster invisible (Vanish, Stealth) arrives when their unit no longer resolves; it's
 -- put down to whoever was on that token this recently
 local TOKEN_GRACE_SECONDS = 2
+-- The game hides which spell an enemy cast. One who casts and drops out of sight this soon after went into
+-- stealth (running out of range doesn't come right after a cast); what it was is guessed from who they are.
+local VANISH_WINDOW_SECONDS = 0.6
+local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -126,8 +130,13 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.plates[arg1] = nil
 		if private.tokens[arg1] then
 			private.tokens[arg1].t = GetTime()
+			private.CheckVanished(arg1)
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
+		-- Vanish also drops the rogue from your target
+		if not private.Readable(UnitExists("target")) then
+			private.CheckVanished("target")
+		end
 		private.Scan("target")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		private.Scan("mouseover")
@@ -268,7 +277,9 @@ function private.Scan(unit)
 	local level = private.Readable(UnitLevel(unit))
 	entry.level = (level and level > 0) and level or entry.level
 	entry.skull = level == -1
-	entry.race = private.Readable((UnitRace(unit))) or entry.race
+	local race, raceFile = UnitRace(unit)
+	entry.race = private.Readable(race) or entry.race
+	entry.raceFile = private.Readable(raceFile) or entry.raceFile
 	entry.guild = Wanted.Recorder:GetUnitGuild(unit) or entry.guild
 
 	local zone, x, y, mapId = Wanted.Recorder:GetPosition()
@@ -326,6 +337,30 @@ function private.StealthKind(spellID)
 	return kind
 end
 
+---A token stopped showing its enemy (nameplate gone, target lost): right after a cast, that's stealth.
+function private.CheckVanished(unit)
+	local known = private.tokens[unit]
+	local entry = known and private.nearby[known.guid]
+	if entry and entry.lastCastAt and GetTime() - entry.lastCastAt <= VANISH_WINDOW_SECONDS then
+		private.GuessStealth(entry)
+	end
+end
+
+---Raises the stealth alarm for an enemy who cast and vanished, named for what they could have used; nothing
+---for a class and race without a stealth ability.
+function private.GuessStealth(entry)
+	local kind = entry.class == "ROGUE" and "Stealth" or entry.class == "DRUID" and "Prowl"
+		or entry.raceFile == "NightElf" and "Shadowmeld" or nil
+	local now = GetTime()
+	entry.lastCastAt = nil
+	if not kind or (entry.stealthed and now - entry.stealthed < STEALTH_REPEAT_SECONDS) then
+		return
+	end
+	entry.stealthed = now
+	entry.stealthKind = kind
+	Fire("stealth", entry)
+end
+
 ---The nearby enemy last seen on a token that no longer resolves, if that was only a moment ago.
 function private.LastOnToken(unit)
 	local known = private.tokens[unit]
@@ -340,8 +375,13 @@ function private.OnCast(unit, spellID)
 		return
 	end
 	spellID = private.Readable(spellID)
-	local entry = private.Scan(unit) or private.LastOnToken(unit)
-	if not entry or type(spellID) ~= "number" then
+	local entry = private.Scan(unit)
+	local outOfSight = false
+	if not entry then
+		entry = private.LastOnToken(unit)
+		outOfSight = entry ~= nil
+	end
+	if not entry then
 		local kind = type(spellID) == "number" and private.StealthKind(spellID)
 		if kind then
 			Wanted:Log("Enemies: %s cast on %s, but nobody known was on it", kind, unit)
@@ -349,6 +389,14 @@ function private.OnCast(unit, spellID)
 		return
 	end
 	entry.lastActive = GetTime()
+	if type(spellID) ~= "number" then
+		-- Which spell is hidden from addons: note the cast, and if they're already out of sight it was stealth
+		entry.lastCastAt = GetTime()
+		if outOfSight then
+			private.GuessStealth(entry)
+		end
+		return
+	end
 	local key = entry.guid..":"..spellID
 	local now = GetTime()
 	-- One cast is reported once for every token pointing at the caster

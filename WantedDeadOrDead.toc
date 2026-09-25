@@ -1,5 +1,9 @@
 ## Interface: 16001
 ## Title: Wanted: Dead or... Dead
+## IconTexture: Interface\AddOns\WantedDeadOrDead\Media\icon
+## AddonCompartmentFunc: WantedDeadOrDead_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: WantedDeadOrDead_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: WantedDeadOrDead_OnCompartmentLeave
 ## Notes: [Beta] World PvP bounties, enemy awareness and reputation, shared player to player.
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@

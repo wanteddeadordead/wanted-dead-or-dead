@@ -1,11 +1,14 @@
 -- Wanted: a minimap button that opens the window and shows how many things wait on the player.
 
-local _, Wanted = ...
+local ADDON_FOLDER, Wanted = ...
 local Minimap_ = Wanted:NewModule("Minimap")
 Wanted.Minimap = Minimap_
 local private = {}
-local ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
-local RADIUS = 80
+-- The addon's own icon, from the folder it's installed in
+local ICON = "Interface\\AddOns\\"..ADDON_FOLDER.."\\Media\\icon"
+local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
+-- How far outside the minimap's edge the button's centre sits
+local EDGE_OFFSET = 10
 
 function Minimap_:OnEnable()
 	local button = CreateFrame("Button", "WantedMinimapButton", Minimap)
@@ -20,8 +23,10 @@ function Minimap_:OnEnable()
 	background:SetPoint("TOPLEFT", 7, -5)
 	local icon = button:CreateTexture(nil, "ARTWORK")
 	icon:SetSize(17, 17)
-	icon:SetTexture(ICON)
-	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	if not icon:SetTexture(ICON) then
+		icon:SetTexture(FALLBACK_ICON)
+		icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	end
 	icon:SetPoint("TOPLEFT", 7, -6)
 	local border = button:CreateTexture(nil, "OVERLAY")
 	border:SetSize(53, 53)
@@ -45,7 +50,18 @@ function Minimap_:OnEnable()
 		self:SetScript("OnUpdate", nil)
 	end)
 	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		private.ShowTooltip(self)
+	end)
+	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	private.button = button
+	Minimap_:Update()
+	C_Timer.NewTicker(10, function() Minimap_:Update() end)
+end
+
+---The tooltip for the minimap button and the entry in the game's addon menu.
+function private.ShowTooltip(owner)
+	do
+		GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
 		GameTooltip:SetText("Wanted: Dead or... Dead", 1, 0.82, 0)
 		local count = Wanted.Model:GetActionCount()
 		if count > 0 then
@@ -68,11 +84,24 @@ function Minimap_:OnEnable()
 			GameTooltip:AddLine("Beta: found a problem? /wanted bug", 1, 0.7, 0.2, true)
 		end
 		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	private.button = button
-	Minimap_:Update()
-	C_Timer.NewTicker(10, function() Minimap_:Update() end)
+	end
+end
+
+-- The game's addon menu on the minimap (toc: AddonCompartmentFunc and friends) calls these globals
+function WantedDeadOrDead_OnCompartmentClick(_, mouseButton)
+	if mouseButton == "RightButton" then
+		Wanted.NearbyWindow:Toggle()
+	else
+		Wanted.UI:Toggle()
+	end
+end
+
+function WantedDeadOrDead_OnCompartmentEnter(_, menuButton)
+	private.ShowTooltip(menuButton)
+end
+
+function WantedDeadOrDead_OnCompartmentLeave()
+	GameTooltip:Hide()
 end
 
 function private.OnDragUpdate()
@@ -95,8 +124,10 @@ function Minimap_:Update()
 		return
 	end
 	local angle = math.rad(settings.angle or 200)
+	-- Sit on the rim of whatever minimap this client has, rather than a distance tuned for another client
+	local radius = (Minimap:GetWidth() / 2) + EDGE_OFFSET
 	button:ClearAllPoints()
-	button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * RADIUS, math.sin(angle) * RADIUS)
+	button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
 	local count = Wanted.Model:GetActionCount()
 	button.badge:SetText(count > 0 and tostring(count) or "")
 	button:Show()

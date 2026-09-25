@@ -34,6 +34,12 @@ Rules for a change:
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be
   read by old versions; it only has to read the old records it will still find.
+- `notice` records (from 0.1.0-beta.3) carry a bounty from the other faction's network across, by a
+  Battle.net friend's client (`Bridge.lua`): `bounty` (the other side's bounty id), `target` (a GUID on this
+  faction), `targetName`, `amount` (copper, the highest seen), `poster` (a hash of the poster, for counting,
+  never their name) and `postedAt`. The same bounty can arrive as several notices (raises, several bridges);
+  readers take the highest amount per `bounty`. `WantedDB.seenNotices` (bounty id -> amount) remembers which
+  bounties on this player have been announced.
 
 ## Fresh start (development builds)
 

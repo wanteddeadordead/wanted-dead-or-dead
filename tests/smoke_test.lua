@@ -211,6 +211,21 @@ local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
 addonSent = {}
+-- Battle.net friends (Bridge): who each is in game, as C_BattleNet reports them
+local bnFriends = {
+	{ id = 101, program = "WoW", faction = "Alliance", realm = "Realm", name = "Ally Bridge" },
+	{ id = 102, program = "WoW", faction = "Horde", realm = "Realm", name = "Horde Pal" },
+	{ id = 103, program = "Pro" },
+	{ id = 104, program = "WoW", faction = "Alliance", realm = "Other Realm", name = "Far Away" },
+}
+local bnSent = {}
+local function BnGame(f) return f and { gameAccountID = f.id, isOnline = true, isAppearOffline = false, clientProgram = f.program, factionName = f.faction, realmName = f.realm, characterName = f.name } end
+function BNGetNumFriends() return #bnFriends end
+C_BattleNet = {
+	GetFriendAccountInfo = function(i) return { gameAccountInfo = BnGame(bnFriends[i]) } end,
+	GetGameAccountInfoByID = function(id) for _, f in ipairs(bnFriends) do if f.id == id then return BnGame(f) end end end,
+	SendGameData = function(id, prefix, data) bnSent[#bnSent + 1] = { id = id, prefix = prefix, data = data } end,
+}
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text)
 	if throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0
@@ -1068,6 +1083,68 @@ ns.NearbyWindow:SetShown(false)
 ns.Alerts.Warn = realWarn2
 ns.Enemies:SetKoS("Player-9-QUIET", "Quiet Kos", false)
 pvpFlag = false
+-- Bounty notices across factions (Bridge): a hello only to the friend in WoW on this ruleset and the other
+-- faction; their answer makes them a bridge; our bounties go across as notices (again when raised); notices
+-- about us become records once, add up to the price on our head, and raise one alert
+local function ClearBn() for i = #bnSent, 1, -1 do bnSent[i] = nil end end
+local function BnDecode(i) return ns.Sync:Decode(bnSent[i].data) end
+ClearBn()
+clock = clock + 601
+Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
+RunTimers()
+check(#bnSent == 1 and bnSent[1].id == 101 and bnSent[1].prefix == "WNTDB" and BnDecode(1).k == "H", "hello only to the Alliance friend on this ruleset, got "..#bnSent)
+ClearBn()
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "0.1.0" }), "WHISPER", 101)
+RunTimers()
+check(ns.Bridge:Status():find("^Bridge: 1 Battle.net friends"), "the answer makes a bridge: "..ns.Bridge:Status())
+ClearBn()
+local crossBounty = ns.Store:NewRecord("bounty", { target = "Player-9-ALLY", targetName = "Ally Target", amount = 50000 })
+RunTimers()
+local sentNotice = #bnSent == 1 and BnDecode(1)
+check(sentNotice and sentNotice.k == "N" and sentNotice.n[1].b == crossBounty.id and sentNotice.n[1].a == 50000 and sentNotice.n[1].p ~= "Test Player", "a new bounty goes across as a notice, poster hashed")
+ClearBn()
+ns.Store:NewRecord("raise", { bounty = crossBounty.id, amount = 25000 })
+RunTimers()
+check(#bnSent == 1 and BnDecode(1).n[1].a == 75000, "a raise sends the notice again at the new amount")
+ClearBn()
+ns.Store:NewRecord("bounty", { guild = "Some Guild", targetName = "<Some Guild>", amount = 90000 })
+RunTimers()
+check(#bnSent == 0, "guild bounties don't go across")
+local warnedPrice
+local realWarn3 = ns.Alerts.Warn
+ns.Alerts.Warn = function(self, title, sub, ...) if title == "PRICE ON YOUR HEAD" then warnedPrice = sub end return realWarn3(self, title, sub, ...) end
+local onMe = { b = "Horde Poster:7", g = "Player-1-ME", n = "Test Player", a = 20000, p = "abcd1234", t = clock - 100 }
+local noticeMsg = ns.Sync:Encode({ k = "N", n = { onMe, { b = "Horde Poster:8", g = "Player-1-OTHER", n = "Someone Else", a = 5000, p = "abcd1234", t = clock } } })
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", noticeMsg, "WHISPER", 101)
+RunTimers()
+local total, count, posters = ns.Bridge:GetPriceOnMe()
+check(total == 20000 and count == 1 and posters == 1, "a notice about us counts toward the price on our head, got "..total.." "..count.." "..posters)
+check(warnedPrice and warnedPrice:find("A bounty of") and warnedPrice:find("Lifetime"), "one alert for the new bounty: "..tostring(warnedPrice))
+local noticesBefore = 0
+for _ in ns.Store:Iterator("notice") do noticesBefore = noticesBefore + 1 end
+warnedPrice = nil
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", noticeMsg, "WHISPER", 101)
+RunTimers()
+local noticesAfter = 0
+for _ in ns.Store:Iterator("notice") do noticesAfter = noticesAfter + 1 end
+check(noticesAfter == noticesBefore and not warnedPrice, "the same notices again make no new records and no alert")
+onMe.a = 35000
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "N", n = { onMe, { b = "Horde Poster:9", g = "Player-1-ME", n = "Test Player", a = 10000, p = "ffff0000", t = clock } } }), "WHISPER", 101)
+RunTimers()
+total, count, posters = ns.Bridge:GetPriceOnMe()
+check(total == 45000 and count == 2 and posters == 2, "a raise counts once at its new amount; paid or not, every bounty adds up, got "..total.." "..count.." "..posters)
+check(warnedPrice and warnedPrice:find("^1 new bount") == nil, "raise plus new bounty make one alert: "..tostring(warnedPrice))
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "N", n = { { b = "Horde Poster:10", g = "Player-1-ME", n = "Test Player", a = 99999, p = "x", t = clock } } }), "WHISPER", 102)
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "N", n = { { b = "Horde Poster:11", g = "Player-1-ME", n = "Test Player", a = -5, p = "x", t = clock } } }), "WHISPER", 101)
+RunTimers()
+check(ns.Bridge:GetPriceOnMe() == 45000, "notices from our own faction or with a bad amount are ignored")
+ns.Alerts.Warn = realWarn3
+ns.db.settings.bridge = false
+ClearBn()
+ns.Store:NewRecord("bounty", { target = "Player-9-ALLY2", targetName = "Ally Two", amount = 10000 })
+RunTimers()
+check(#bnSent == 0, "with the setting off nothing goes across")
+ns.db.settings.bridge = true
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

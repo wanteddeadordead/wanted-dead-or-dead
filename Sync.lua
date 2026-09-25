@@ -98,6 +98,7 @@ function Sync:OnEnable()
 	Store:OnRecord("payment", private.OnOwnRecord)
 	Store:OnRecord("mark", private.OnOwnRecord)
 	Store:OnRecord("raise", private.OnOwnRecord)
+	Store:OnRecord("notice", private.OnOwnRecord)
 	Store:OnRecord("pass", private.OnOwnRecord)
 	Store:OnRecord("confirm", private.OnOwnRecord)
 	Store:OnRecord("withdraw", private.OnOwnRecord)
@@ -213,6 +214,15 @@ local function Decode(str)
 	end
 	local ok, tbl = LibSerialize:Deserialize(serialized)
 	return ok and tbl or nil
+end
+
+---The same encoding for other hidden messages (Battle.net game data, see Bridge).
+function Sync:Encode(tbl)
+	return Encode(tbl)
+end
+
+function Sync:Decode(str)
+	return Decode(str)
 end
 
 local function PruneTimes(times, now)

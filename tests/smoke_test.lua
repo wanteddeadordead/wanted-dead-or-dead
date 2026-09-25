@@ -174,7 +174,10 @@ local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
 addonSent = {}
-C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text) addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
+C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text)
+	if throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
+	addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0
+end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
@@ -501,6 +504,46 @@ ns:NoteVersion("0.4.0|cffff0000evil")
 check(ns.newerVersion == "0.4.0", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
+-- Sync under load: a 40-player raid goes out as a few batched messages within the sightings budget, and
+-- never holds up the records
+clock = clock + 61
+addonSent = {}
+for i = 1, 40 do
+	enemyUnits["nameplate"..(i + 1)] = { guid = format("Player-9-INVADE%02d", i), name = "Invader Number"..i, class = CLASSES[i % 5 + 1], level = 24 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate"..(i + 1))
+end
+RunTimers()
+local sightingParts, singleParts = 0, 0
+for _, m in ipairs(addonSent) do
+	if m.text:find("^S:") then sightingParts = sightingParts + 1 elseif m.text:find("^E:") then singleParts = singleParts + 1 end
+end
+check(singleParts == 0 and sightingParts >= 1 and sightingParts <= 6, "raid sightings batched within budget, got "..sightingParts.." batch parts and "..singleParts.." single")
+check(not ns.Sync:GetInfo().paused, "a raid doesn't pause sync")
+addonSent = {}
+SlashCmdList.WANTED("synctest")
+check(#addonSent == 1 and addonSent[1].text:find("^H:"), "records still go out after the raid")
+for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
+-- Another player's batch: stored, shown, and not sent again by us
+local LibSerialize, LibDeflate = LibStub("LibSerialize"), LibStub("LibDeflate")
+local function Message(tag, tbl)
+	return tag..":zz"..tag..":1/1:"..LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(LibSerialize:Serialize(tbl)))
+end
+Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { s = { { g = "Player-9-SHARED", n = "Shared Sam", c = "MAGE", l = 25, z = "The Barrens", m = 10, x = 50, y = 50 } } }), "CHANNEL", "Other Player", nil, nil, nil, "WantedNetHorde")
+check(ns.Store:GetPlayer("Player-9-SHARED") and ns.Store:GetPlayer("Player-9-SHARED").seenBy == "Other Player", "a shared batch is stored")
+local skippedBefore = ns.Sync:GetInfo().stats.skipped
+ns.Sync:QueueSighting({ g = "Player-9-SHARED", n = "Shared Sam" }, false)
+check(ns.Sync:GetInfo().stats.skipped == skippedBefore + 1, "an enemy someone just shared isn't sent again")
+-- A first-version single sighting is still understood
+Fire("CHAT_MSG_ADDON", "WNTD", Message("E", { g = "Player-9-OLDCLIENT", n = "Old Client", z = "Durotar", m = 1, x = 40, y = 40 }), "CHANNEL", "Older Player", nil, nil, nil, "WantedNetHorde")
+check(ns.Store:GetPlayer("Player-9-OLDCLIENT") ~= nil, "a single sighting from an older client is stored")
+-- The game throttles a message: it is sent again a few seconds later
+addonSent = {}
+throttleNext = 1
+local throttledBefore = ns.Sync:GetInfo().stats.throttled
+SlashCmdList.WANTED("synctest")
+check(ns.Sync:GetInfo().stats.throttled == throttledBefore + 1 and #addonSent == 0, "throttled message counted, nothing sent")
+RunTimers()
+check(#addonSent == 1 and addonSent[1].text:find("^H:"), "throttled message sent again")
 -- Bug report and the beta welcome
 ns:NoteProblem("test problem")
 local report = ns.Report:Build()

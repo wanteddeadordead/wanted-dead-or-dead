@@ -23,7 +23,14 @@ local private = {
 	ownMessages = {}, -- tag:msgId -> time sent, to recognise our own echoes
 	pendingNeedAnswers = {}, -- origin -> { from, t } scheduled answers
 	recentFills = {}, -- origin -> highest seq seen filled by anyone recently
-	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0 },
+	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
+	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
+	sightingQueue = {}, -- guid -> { data, urgent, t } waiting for the next batch
+	flushDue = nil,
+	flushGen = 0,
+	recentSightings = {}, -- guid -> when anyone (us included) last shared them
+	retryQueue = {}, -- { tag, tbl, attempt } throttled by the game, sent again shortly
+	retryScheduled = false,
 	testStartedAt = nil,
 }
 local PREFIX = "WNTD"
@@ -36,11 +43,27 @@ local CHUNK_LEN = 240
 local PARTIAL_TIMEOUT = 30
 -- Tags
 local TAG_HELLO, TAG_HAVE, TAG_NEED, TAG_LIVE, TAG_FILL = "H", "V", "N", "R", "F"
--- Enemy sightings are passing news, not records: never stored in a chain, never re-sent
-local TAG_ENEMY = "E"
+-- Enemy sightings are passing news, not records: never stored in a chain, never re-sent. They go out in
+-- batches ("S"); single sightings ("E") are what the first version sent, still understood when received.
+local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 -- Limits, the same shape as AskPrice's: a hard ceiling on everything sent, a cap on what any one sender may
 -- push at us, and a pause when the ceiling is hit two minutes running
 local MAX_SENT_PER_MINUTE = 20
+-- Sightings have their own, smaller budget and never trigger the pause, so a big fight can't hold up bounties,
+-- kills and claims. A new enemy waits up to 8s to share a message with others seen around the same time;
+-- Kill on Sight, bounty and stealthed enemies go within 2s. An enemy someone shared in the last minute isn't
+-- sent again: everyone nearby sees the same raid, and one report of it is enough.
+local MAX_SIGHTING_MESSAGES_PER_MINUTE = 6
+local SIGHTING_BATCH_SECONDS = 8
+local SIGHTING_URGENT_SECONDS = 2
+local MAX_SIGHTINGS_PER_BATCH = 15
+local SIGHTING_FRESH_SECONDS = 60
+-- The game's own addon message limits (SendAddonMessage results AddonMessageThrottle and ChannelThrottle).
+-- Records caught by them are sent again a few seconds later; sightings are let go.
+local RESULT_THROTTLED = { [3] = true, [8] = true }
+local RETRY_SECONDS = 5
+local MAX_RETRIES = 3
+local MAX_RETRY_QUEUE = 30
 local MAX_INBOUND_PER_SENDER_PER_MINUTE = 60
 local PAUSE_SECONDS = 10 * 60
 local JOIN_RETRY_SECONDS = 10
@@ -107,7 +130,7 @@ function Sync:Status()
 			numPeers = numPeers + 1
 		end
 	end
-	return format("Sync: channel %s (%s), %d peers in the last 10 min; sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", numPeers, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, now < private.pausedUntil and " PAUSED" or "")
+	return format("Sync: channel %s (%s), %d peers in the last 10 min; sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", numPeers, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
 end
 
 function private.OnEvent(_, event, ...)
@@ -197,21 +220,28 @@ end
 ---Sends a table as one or more addon messages. Returns whether it was sent.
 ---@param tag string
 ---@param tbl table
+---@param attempt number? how many times the game has throttled it already
 ---@return boolean
-function private.Send(tag, tbl)
+function private.Send(tag, tbl, attempt)
 	if not private.channelId then
 		return false
 	end
 	local now = GetTime()
-	if now < private.pausedUntil then
+	local isSighting = tag == TAG_SIGHTINGS
+	if not isSighting and now < private.pausedUntil then
 		private.stats.dropped = private.stats.dropped + 1
 		return false
 	end
 	local payload = Encode(tbl)
 	local total = ceil(#payload / CHUNK_LEN)
-	PruneTimes(private.sentTimes, now)
+	local times = isSighting and private.sightingTimes or private.sentTimes
+	PruneTimes(times, now)
 	Wanted:Log("Sync: send %s, %d bytes in %d part(s)", tag, #payload, total)
-	if #private.sentTimes + total > MAX_SENT_PER_MINUTE then
+	if isSighting and #times + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
+		Wanted:Log("Sync: sighting budget reached, dropping a batch")
+		private.stats.dropped = private.stats.dropped + 1
+		return false
+	elseif not isSighting and #times + total > MAX_SENT_PER_MINUTE then
 		Wanted:Log("Sync: send limit reached, dropping %s", tag)
 		local minute = floor(now / 60)
 		if private.ceilingHitMinute and minute == private.ceilingHitMinute + 1 then
@@ -238,11 +268,131 @@ function private.Send(tag, tbl)
 			C_Timer.After(JOIN_SETTLE_SECONDS, private.TryJoin)
 			private.stats.dropped = private.stats.dropped + 1
 			return false
+		elseif RESULT_THROTTLED[result] then
+			-- The game is holding addon messages back. Receivers drop the unfinished message after a while.
+			private.stats.throttled = private.stats.throttled + 1
+			Wanted:Log("Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, tag)
+			if not isSighting then
+				private.QueueRetry(tag, tbl, attempt)
+			end
+			return false
 		end
-		tinsert(private.sentTimes, now)
+		tinsert(times, now)
 		private.stats.sent = private.stats.sent + 1
 	end
 	return true
+end
+
+---Sends a throttled message again in a few seconds, up to a few times.
+function private.QueueRetry(tag, tbl, attempt)
+	attempt = (attempt or 0) + 1
+	if attempt > MAX_RETRIES or #private.retryQueue >= MAX_RETRY_QUEUE then
+		private.stats.dropped = private.stats.dropped + 1
+		return
+	end
+	tinsert(private.retryQueue, { tag = tag, tbl = tbl, attempt = attempt })
+	private.ScheduleRetries()
+end
+
+function private.ScheduleRetries()
+	if private.retryScheduled or #private.retryQueue == 0 then
+		return
+	end
+	private.retryScheduled = true
+	C_Timer.After(RETRY_SECONDS, private.RunRetries)
+end
+
+function private.RunRetries()
+	private.retryScheduled = false
+	local queue = private.retryQueue
+	private.retryQueue = {}
+	for i, item in ipairs(queue) do
+		if not private.Send(item.tag, item.tbl, item.attempt) then
+			-- Throttled again (Send queued it) or held by a limit: the rest waits for the next round
+			for j = i + 1, #queue do
+				tinsert(private.retryQueue, queue[j])
+			end
+			break
+		end
+	end
+	private.ScheduleRetries()
+end
+
+---Queues an enemy sighting for the next batch.
+---@param data table the sighting (g = guid, n = name, c, l, r, u, z, m, x, y, s)
+---@param urgent boolean? Kill on Sight, bounty or stealthed: send within a couple of seconds
+function Sync:QueueSighting(data, urgent)
+	local now = GetTime()
+	local last = private.recentSightings[data.g]
+	if not urgent and last and now - last < SIGHTING_FRESH_SECONDS then
+		-- Someone shared them a moment ago
+		private.stats.skipped = private.stats.skipped + 1
+		return
+	end
+	local queued = private.sightingQueue[data.g]
+	private.sightingQueue[data.g] = { data = data, urgent = urgent or (queued and queued.urgent) or false, t = now }
+	private.ScheduleFlush(urgent and SIGHTING_URGENT_SECONDS or SIGHTING_BATCH_SECONDS)
+end
+
+---Flushes the sighting queue after a delay, keeping an earlier flush if one is already due sooner.
+function private.ScheduleFlush(delay)
+	local due = GetTime() + delay
+	if private.flushDue and private.flushDue <= due then
+		return
+	end
+	private.flushDue = due
+	private.flushGen = private.flushGen + 1
+	local gen = private.flushGen
+	C_Timer.After(delay, function()
+		if gen == private.flushGen then
+			private.FlushSightings()
+		end
+	end)
+end
+
+---Sends the queued sightings as one message: urgent ones first, then the newest, up to the batch size.
+function private.FlushSightings()
+	private.flushDue = nil
+	local now = GetTime()
+	local list = {}
+	for guid, item in pairs(private.sightingQueue) do
+		local last = private.recentSightings[guid]
+		if now - item.t > SIGHTING_FRESH_SECONDS or (not item.urgent and last and last >= item.t) then
+			-- Stale, or someone else shared them while this waited
+			private.sightingQueue[guid] = nil
+			private.stats.skipped = private.stats.skipped + 1
+		else
+			tinsert(list, item)
+		end
+	end
+	for guid, t in pairs(private.recentSightings) do
+		if now - t > 5 * SIGHTING_FRESH_SECONDS then
+			private.recentSightings[guid] = nil
+		end
+	end
+	if #list == 0 or not private.channelId then
+		return
+	end
+	sort(list, function(a, b)
+		if a.urgent ~= b.urgent then
+			return a.urgent
+		end
+		return a.t > b.t
+	end)
+	local batch = {}
+	for i = 1, min(#list, MAX_SIGHTINGS_PER_BATCH) do
+		batch[i] = list[i].data
+		-- Sent or not, this news is used up: a dropped batch isn't worth sending late
+		private.sightingQueue[list[i].data.g] = nil
+	end
+	if private.Send(TAG_SIGHTINGS, { s = batch }) then
+		for _, data in ipairs(batch) do
+			private.recentSightings[data.g] = now
+		end
+	end
+	if next(private.sightingQueue) then
+		private.ScheduleFlush(SIGHTING_BATCH_SECONDS)
+	end
 end
 
 function private.ToBase36(n)
@@ -361,16 +511,23 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	private.HandleMessage(tag, tbl, sender)
 end
 
----Tells other Wanted users about an enemy just seen.
----@param data table
-function Sync:ShareSighting(data)
-	private.Send(TAG_ENEMY, data)
-end
-
 function private.HandleMessage(tag, tbl, sender)
-	if tag == TAG_ENEMY then
-		if Wanted.Enemies then
-			Wanted.Enemies:OnSharedSighting(tbl, sender)
+	if tag == TAG_ENEMY or tag == TAG_SIGHTINGS then
+		local list = tag == TAG_SIGHTINGS and tbl.s or { tbl }
+		if type(list) ~= "table" then
+			return
+		end
+		local now = GetTime()
+		for i, data in ipairs(list) do
+			if i > MAX_SIGHTINGS_PER_BATCH then
+				break
+			end
+			if type(data) == "table" and type(data.g) == "string" then
+				private.recentSightings[data.g] = now
+				if Wanted.Enemies then
+					Wanted.Enemies:OnSharedSighting(data, sender)
+				end
+			end
 		end
 		return
 	end

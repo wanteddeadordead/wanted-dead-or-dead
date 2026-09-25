@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Sightings are shared in batches with their own budget, and an enemy someone just shared isn't sent again, so a
+  big fight no longer pauses bounty and kill sync. Messages the game holds back are sent again.
 - Hotspots page (/wanted hotspots): the zones where enemy players were seen in the last hour, busiest first,
   with levels, the biggest guild there, PvP deaths and whether it's getting busier. Top zones on the minimap tooltip.
 - The Tools page is off by default; turn it on in Settings.

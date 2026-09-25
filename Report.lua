@@ -25,7 +25,7 @@ function Report:Build()
 	local info = Wanted.Sync and Wanted.Sync:GetInfo()
 	if info then
 		local stats = info.stats
-		Add("Network: channel %s, peers %d, sent %d, received %d, merged %d, invalid %d, dropped %d%s", info.channelId and ("#"..info.channelId) or "not joined", info.peers, stats.sent, stats.received, stats.merged, stats.invalid, stats.dropped, info.paused and ", PAUSED" or "")
+		Add("Network: channel %s, peers %d, sent %d, received %d, merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s", info.channelId and ("#"..info.channelId) or "not joined", info.peers, stats.sent, stats.received, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped, info.paused and ", PAUSED" or "")
 	end
 	Add("")
 	local problems = Wanted:GetProblems()

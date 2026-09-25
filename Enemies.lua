@@ -659,11 +659,12 @@ function private.Share(entry)
 		return
 	end
 	private.lastShared[entry.guid] = GetTime()
-	Wanted.Sync:ShareSighting({
+	local stealthed = entry.stealthed and GetTime() - entry.stealthed < 30 or nil
+	local d = Enemies:Describe(entry.guid)
+	Wanted.Sync:QueueSighting({
 		g = entry.guid, n = entry.name, c = entry.class, l = entry.level, r = entry.race, u = entry.guild,
-		z = entry.zone, m = entry.mapId, x = entry.x, y = entry.y,
-		s = entry.stealthed and GetTime() - entry.stealthed < 30 or nil,
-	})
+		z = entry.zone, m = entry.mapId, x = entry.x, y = entry.y, s = stealthed,
+	}, d.kos or d.bounty > 0 or stealthed or false)
 end
 
 ---A sighting another Wanted user shared.

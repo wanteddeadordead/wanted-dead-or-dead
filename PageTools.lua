@@ -102,7 +102,7 @@ function private.Refresh()
 	private.dot:SetColorTexture(color[1], color[2], color[3], 1)
 	private.netTitle:SetText(title)
 	local stats = info.stats
-	private.netStats:SetText(format("Messages sent %d, received %d. Records merged from others %d. Rejected %d, dropped by limits %d.", stats.sent, stats.received - stats.echoed, stats.merged, stats.invalid, stats.dropped))
+	private.netStats:SetText(format("Messages sent %d, received %d. Records merged from others %d. Rejected %d, dropped by limits %d, held back by the game %d, repeat sightings skipped %d.", stats.sent, stats.received - stats.echoed, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped))
 	private.logText = table.concat(Wanted:GetLogLines(), "\n")
 	private.logBox:SetText(private.logText)
 end

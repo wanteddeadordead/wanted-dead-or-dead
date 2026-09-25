@@ -180,6 +180,7 @@ function private.Insert(record)
 	if record.hash ~= Store:Hash(Canonical(record)) then
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
+		Wanted:Log("!! Store: %s record %s doesn't match its hash (altered)", tostring(record.kind), tostring(record.id))
 	end
 	local chain = db.chains[record.origin]
 	if not chain then
@@ -189,12 +190,14 @@ function private.Insert(record)
 	if record.seq == chain.seq + 1 then
 		if record.prev ~= chain.lastHash then
 			record.brokenChain = true
+			Wanted:Log("!! Store: record %s doesn't follow %s's previous record (broken chain)", tostring(record.id), tostring(record.origin))
 		end
 		chain.seq = record.seq
 		chain.lastHash = record.hash
 	elseif record.seq <= chain.seq then
 		-- Older than what we hold for this origin, and not stored: a rewritten history
 		record.brokenChain = true
+		Wanted:Log("!! Store: record %s is older than %s's chain (rewritten history)", tostring(record.id), tostring(record.origin))
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record

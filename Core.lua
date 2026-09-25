@@ -379,6 +379,7 @@ function Wanted:NoteVersion(version)
 		return
 	end
 	Wanted.db.requiredVersion = { version = text, seen = GetServerTime() }
+	Wanted:Log("!! Version: %s is newer than ours; shared features wait for the update", text)
 	Wanted.newerVersion = text
 	Wanted:Print("Wanted %s is out and other players are on it (you have %s). Bounties, claims and sharing are paused until you update from CurseForge. The Nearby window, alerts, hotspots and the map keep working.", text, tostring(Wanted.VERSION))
 	if Wanted.UI and Wanted.UI.Refresh then

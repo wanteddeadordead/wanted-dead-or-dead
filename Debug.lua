@@ -19,6 +19,79 @@ if not Wanted.DEV then
 	return
 end
 
+-- ============================================================================
+-- Network log (development builds only)
+-- ============================================================================
+
+-- Every debug log line also goes into the saved data, so a session's network traffic can be read back after
+-- a /reload or logout (WantedDB.devLog, the last DEV_LOG_LINES lines). Lines starting "!!" are the weird
+-- ones: altered records, broken chains, bad messages, limits hit, version locks, rejected notices.
+local DEV_LOG_LINES = 5000
+local pendingLog = {} -- lines logged before the saved data is ready
+local realLog = Wanted.Log
+
+local function KeepLine(line)
+	local db = Wanted.db
+	if not db then
+		tinsert(pendingLog, line)
+		return
+	end
+	local log = db.devLog
+	if type(log) ~= "table" or type(log.lines) ~= "table" then
+		log = { lines = {}, pos = 0 }
+		db.devLog = log
+	end
+	log.pos = log.pos % DEV_LOG_LINES + 1
+	log.lines[log.pos] = line
+end
+
+function Wanted:Log(fmt, ...)
+	realLog(self, fmt, ...)
+	local msg = select("#", ...) > 0 and format(fmt, ...) or fmt
+	KeepLine(date("%m-%d %H:%M:%S").." "..msg)
+end
+
+function Debug:OnLoad()
+	for _, line in ipairs(pendingLog) do
+		KeepLine(line)
+	end
+	wipe(pendingLog)
+end
+
+---The kept network log lines, oldest first.
+function Debug:GetDevLog()
+	local log = Wanted.db and Wanted.db.devLog
+	local lines = {}
+	if type(log) ~= "table" or type(log.lines) ~= "table" then
+		return lines
+	end
+	for i = 1, DEV_LOG_LINES do
+		local line = log.lines[(log.pos + i - 1) % DEV_LOG_LINES + 1]
+		if line then
+			tinsert(lines, line)
+		end
+	end
+	return lines
+end
+
+Wanted:RegisterCommand("netlog", "Development builds: network summary and the last weird events (!!) from the kept log: /wanted netlog", function()
+	Wanted:Print(Wanted.Sync:Status())
+	if Wanted.Bridge then
+		Wanted:Print(Wanted.Bridge:Status())
+	end
+	local lines = Debug:GetDevLog()
+	local weird = {}
+	for _, line in ipairs(lines) do
+		if strfind(line, " !! ", 1, true) then
+			tinsert(weird, line)
+		end
+	end
+	Wanted:Print("Kept log: %d lines, %d weird (!!). The last %d:", #lines, #weird, min(#weird, 20))
+	for i = max(1, #weird - 19), #weird do
+		Wanted:Print("  %s", weird[i])
+	end
+end)
+
 -- The reputation cast for /wanted simulate rep: made-up players with records that differ on purpose
 -- Realistic names so screenshots and tests read like the real thing: a reliable hunter, a doubtful one, a
 -- poster who pays and one who doesn't

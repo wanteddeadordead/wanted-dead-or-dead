@@ -262,10 +262,11 @@ function private.Send(tag, tbl, attempt)
 		private.stats.dropped = private.stats.dropped + 1
 		return false
 	elseif not isSighting and #times + total > MAX_SENT_PER_MINUTE then
-		Wanted:Log("Sync: send limit reached, dropping %s", tag)
+		Wanted:Log("!! Sync: send limit reached, dropping %s", tag)
 		local minute = floor(now / 60)
 		if private.ceilingHitMinute and minute == private.ceilingHitMinute + 1 then
 			private.pausedUntil = now + PAUSE_SECONDS
+			Wanted:Log("!! Sync: send limit two minutes running, paused for %d minutes", PAUSE_SECONDS / 60)
 			Wanted:Print("Sync hit its send limit two minutes running, so it is paused for %d minutes.", PAUSE_SECONDS / 60)
 		end
 		private.ceilingHitMinute = minute
@@ -291,7 +292,7 @@ function private.Send(tag, tbl, attempt)
 		elseif RESULT_THROTTLED[result] then
 			-- The game is holding addon messages back. Receivers drop the unfinished message after a while.
 			private.stats.throttled = private.stats.throttled + 1
-			Wanted:Log("Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, tag)
+			Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, tag)
 			if not isSighting then
 				private.QueueRetry(tag, tbl, attempt)
 			end
@@ -505,12 +506,16 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	end
 	inbound.count = inbound.count + 1
 	if inbound.count > MAX_INBOUND_PER_SENDER_PER_MINUTE then
+		if inbound.count == MAX_INBOUND_PER_SENDER_PER_MINUTE + 1 then
+			Wanted:Log("!! Sync: %s sent over %d messages this minute; ignoring the rest", tostring(sender), MAX_INBOUND_PER_SENDER_PER_MINUTE)
+		end
 		return
 	end
 	-- Framing
 	local tag, msgId, part, total, chunk = strmatch(text, "^(%u):(%w+):(%d+)/(%d+):(.*)$")
 	if not tag then
 		private.stats.invalid = private.stats.invalid + 1
+		Wanted:Log("!! Sync: badly framed message from %s", tostring(sender))
 		return
 	end
 	part, total = tonumber(part), tonumber(total)
@@ -537,7 +542,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	local tbl = Decode(payload)
 	if type(tbl) ~= "table" then
 		private.stats.invalid = private.stats.invalid + 1
-		Wanted:Log("Sync: could not decode a %s message from %s", tag, sender)
+		Wanted:Log("!! Sync: could not decode a %s message from %s", tag, sender)
 		return
 	end
 	Wanted:Log("Sync: handling %s from %s", tag, sender)

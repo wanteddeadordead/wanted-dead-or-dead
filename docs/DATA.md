@@ -21,6 +21,11 @@ Rules for a change:
    and add a smoke test that loads a table in the old layout and checks the result.
 3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration.
 
+Development builds only: `WantedDB.devLog` keeps the last 5000 debug log lines (`{ lines, pos }`, a ring) so
+network traffic can be read back after a session; `/wanted netlog` summarises it. Lines starting `!!` mark
+anomalies (altered records, broken chains, bad messages, limits hit, version locks, rejected notices).
+Released builds never write it (it lives in `Debug.lua`, which packages leave out).
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

@@ -174,6 +174,8 @@ function private.OnMessage(text, senderID)
 	local game = C_BattleNet.GetGameAccountInfoByID and C_BattleNet.GetGameAccountInfoByID(senderID)
 	if not game or not game.factionName or private.IsOwnFaction(game.factionName) or not private.IsOwnRealm(game.realmName) then
 		private.stats.skipped = private.stats.skipped + 1
+		Wanted:Log("!! Bridge: ignored a message from %s (%s, %s): not the other faction on this ruleset",
+			tostring(game and game.characterName), tostring(game and game.factionName), tostring(game and game.realmName))
 		return
 	end
 	if tbl.k == TAG_HELLO or tbl.k == TAG_ANSWER then
@@ -287,6 +289,7 @@ function private.Receive(notice)
 		or not ValidText(notice.n, 48) or type(notice.a) ~= "number" or notice.a <= 0 or notice.a > MAX_AMOUNT
 		or type(notice.t) ~= "number" or (notice.p ~= nil and not ValidText(notice.p, 16)) then
 		private.stats.skipped = private.stats.skipped + 1
+		Wanted:Log("!! Bridge: rejected a malformed bounty notice")
 		return
 	end
 	private.stats.noticesReceived = private.stats.noticesReceived + 1

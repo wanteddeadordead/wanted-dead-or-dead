@@ -1320,6 +1320,12 @@ ns.Widgets.IsDialogShown = realIsDialogShown
 ns.db.settings.detect.autoHide = autoHideBefore
 ns.db.settings.emotes.enabled = true
 ns.NearbyWindow:ForceLayout()
+-- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
+ns:Log("!! Test: something odd")
+local kept = ns.Debug:GetDevLog()
+check(#kept > 0 and kept[#kept]:find("!! Test: something odd", 1, true), "the log is kept in the saved data: "..tostring(kept[#kept]))
+check(ns.db.devLog and ns.db.devLog.pos > 0, "as WantedDB.devLog")
+ns:RunCommand("netlog", "")
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

@@ -1404,6 +1404,13 @@ clock = clock + 61 -- the catch-up above used this minute's realm link budget
 Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Third Realm" }), "WHISPER", "Newcomer")
 local answer = Sent("WHISPER", "Newcomer")
 check(ns.Sync:GetLinks()["Newcomer"] and #answer == 1 and answer[1].tbl.a, "someone greeting us from another realm is linked and answered")
+-- Someone we greeted can answer out of order (their request arrives before their longer hello): it still counts
+ClearSent()
+clock = clock + 400
+ns.Sync:Greet("Quick Asker", "Fourth Realm")
+ClearSent()
+Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { [ns.Store:GetOrigin()] = 1 } }), "WHISPER", "Quick Asker")
+check(ns.Sync:GetLinks()["Quick Asker"] and #Sent("WHISPER", "Quick Asker") >= 1, "a request from someone we just greeted is answered before their hello arrives")
 -- Battle.net friends on our faction and another realm name are greeted as realm links
 ClearSent()
 bnFriends[#bnFriends + 1] = { id = 105, program = "WoW", faction = "Horde", realm = "Other Realm", name = "Horde Far" }

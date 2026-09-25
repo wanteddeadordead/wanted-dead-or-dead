@@ -42,6 +42,7 @@ local private = {
 	links = {}, -- name -> { realm, heard, since, sent, received } realm links (players on another realm name)
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
 	greeted = {}, -- name -> when we last greeted them over a whisper
+	greetedRealm = {}, -- name -> the realm they were greeted on
 	forwardQueue = {}, -- name -> records to forward to that link
 	reshareQueue = {}, -- records from a link to share on this realm's channel
 	forwardDue = false,
@@ -859,6 +860,7 @@ function Sync:Greet(name, realm)
 		return
 	end
 	private.greeted[name] = now
+	private.greetedRealm[name] = realm
 	Wanted:Log("Sync: greeting %s (%s) as a realm link", name, tostring(realm))
 	private.SendLinkHello(name, false)
 end
@@ -907,6 +909,10 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		end
 		private.HandleHave(tbl.c, sender, false, true)
 		return
+	end
+	if not link and private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS then
+		-- We greeted them and their answer's parts are still on the way: their shorter messages can arrive first
+		link = private.AddLink(sender, private.greetedRealm[sender] or "?")
 	end
 	if not link then
 		Wanted:Log("!! Sync: %s whispered a %s without being a realm link; ignored", tostring(sender), tag)

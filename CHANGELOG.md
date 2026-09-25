@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A realm link no longer loses the other side's first request when it arrives ahead of their hello.
 ## [0.1.0-beta.7] - 2026-09-25
 
 - Sync across realms. WoW Forever's one world has several realm names (e.g. Classic Beta PvP and Classic Beta

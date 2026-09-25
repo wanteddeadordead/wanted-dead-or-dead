@@ -514,6 +514,8 @@ ns.NearbyWindow:ForceLayout()
 ns.UI:Show("settings")
 -- Versions: newer releases are noticed from other clients' hellos, never shown as sent
 check(ns:IsNewerVersion("0.1.0-beta.2", "0.1.0-beta.1"), "beta 2 is newer than beta 1")
+check(ns:IsNewerVersion("v0.1.0-beta.2", "v0.1.0-beta.1") and ns:IsNewerVersion("v0.2.0", "0.1.0-beta.1-dev"), "released versions carry a v and still compare")
+check(not ns:IsNewerVersion("v0.1.0-beta.1", "0.1.0-beta.1-dev"), "a release and the dev build of it are the same version")
 check(ns:IsNewerVersion("0.1.0", "0.1.0-beta.9"), "a release is newer than its betas")
 check(ns:IsNewerVersion("0.1.0-beta.1", "0.1.0-alpha.3"), "beta is newer than alpha")
 check(ns:IsNewerVersion("1.0.0", "0.9.9"), "major wins")

@@ -288,14 +288,16 @@ end
 
 private.commands = {}
 
----Parses "1.2.3", "1.2.3-beta.4" or "1.2.3-alpha.4" (anything after that, like "-dev", is ignored).
+---Parses "1.2.3", "1.2.3-beta.4" or "1.2.3-alpha.4", with or without a leading "v" (anything after, like
+---"-dev", is ignored).
 ---@param version any
 ---@return table? { major, minor, patch, stage (1 alpha, 2 beta, 3 release), pre }
 function Wanted:ParseVersion(version)
 	if type(version) ~= "string" or #version > 32 then
 		return nil
 	end
-	local major, minor, patch, rest = strmatch(version, "^(%d+)%.(%d+)%.(%d+)(.*)$")
+	-- Released versions carry the tag's "v" (v0.1.0-beta.1); development ones don't
+	local major, minor, patch, rest = strmatch(version, "^v?(%d+)%.(%d+)%.(%d+)(.*)$")
 	if not major then
 		return nil
 	end

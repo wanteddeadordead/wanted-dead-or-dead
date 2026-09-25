@@ -11,8 +11,8 @@ local Reputation = Wanted.Reputation
 local private = { view = "hunters", period = "all" }
 local ROW_HEIGHT = 38
 local PERIODS = { week = 7 * 86400, month = 30 * 86400, all = nil }
-local HUNTER_COLUMNS = { { "#", 16 }, { "Hunter", 56 }, { "Rank", 280 }, { "Reliability", 360 }, { "Kills", 470 }, { "Earned", 560 } }
-local POSTER_COLUMNS = { { "#", 16 }, { "Poster", 56 }, { "Posted", 300 }, { "Paid", 380 }, { "Unpaid", 460 }, { "Paid out", 560 } }
+local HUNTER_COLUMNS = { { "#", 16 }, { "Hunter", 56 }, { "Rank", 280 }, { "Rating", 360 }, { "Kills", 470 }, { "Earned", 560 } }
+local POSTER_COLUMNS = { { "#", 16 }, { "Poster", 56 }, { "Rating", 280 }, { "Paid", 390 }, { "Unpaid", 460 }, { "Paid out", 560 } }
 local GUILD_COLUMNS = { { "#", 16 }, { "Guild", 56 }, { "Kills", 300 }, { "Deaths", 380 }, { "Seen", 460 }, { "Bounties on them", 540 } }
 
 function private.SetColumns(columns)
@@ -32,8 +32,8 @@ function private.CreateRow(row)
 	row.name:SetWidth(210)
 	row.level = W:Pill(row)
 	row.level:SetPoint("LEFT", 280, 0)
-	row.pips = W:Pips(row, 5)
-	row.pips:SetPoint("LEFT", 360, 0)
+	-- Stars, or "new" before anyone has had to rely on them
+	row.stars = Theme:Text(row, "body", "")
 	row.col3 = Theme:Text(row, "body", "")
 	row.col4 = Theme:Text(row, "body", "")
 	row.col5 = Theme:Text(row, "body", "")
@@ -53,7 +53,7 @@ function private.UpdateRow(row, item, index)
 		local color = item.mine and C.blue or C.red
 		row.name:SetText(Theme:Colorize("<"..item.name..">", color)..Theme:Colorize(item.faction and ("  "..item.faction) or "", C.faint))
 		row.level:Hide()
-		row.pips:Hide()
+		row.stars:SetText("")
 		row.col3:SetPoint("LEFT", 300, 0)
 		row.col3:SetText(item.kills > 0 and tostring(item.kills) or Theme:Colorize("0", C.faint))
 		row.col4:SetPoint("LEFT", 380, 0)
@@ -64,8 +64,9 @@ function private.UpdateRow(row, item, index)
 		row.col6:SetText(item.bounties > 0 and (Theme:Money(item.gold)..Theme:Colorize(format("  (%d)", item.bounties), C.muted)) or Theme:Colorize("none", C.faint))
 	elseif private.view == "hunters" then
 		row.level:Set("Level "..item.level, item.level >= 5 and C.gold or C.blue)
-		row.pips:SetValue(item.stars, item.disputed > 0 and C.amber or C.gold)
-		row.pips:Show()
+		row.stars:ClearAllPoints()
+		row.stars:SetPoint("LEFT", 360, 0)
+		row.stars:SetText(item.rating and Theme:Stars(item.rating, 14) or Theme:Colorize("new", C.faint))
 		row.col3:SetText("")
 		row.col4:SetText("")
 		row.col5:SetPoint("LEFT", 470, 0)
@@ -74,10 +75,11 @@ function private.UpdateRow(row, item, index)
 		row.col6:SetText(Theme:Money(item.earned))
 	else
 		row.level:Hide()
-		row.pips:Hide()
-		row.col3:SetPoint("LEFT", 300, 0)
-		row.col3:SetText(item.posted)
-		row.col4:SetPoint("LEFT", 380, 0)
+		row.stars:ClearAllPoints()
+		row.stars:SetPoint("LEFT", 280, 0)
+		row.stars:SetText(item.rating and Theme:Stars(item.rating, 14) or Theme:Colorize("new", C.faint))
+		row.col3:SetText("")
+		row.col4:SetPoint("LEFT", 390, 0)
 		row.col4:SetText(Theme:Colorize(tostring(item.paid), C.green))
 		row.col5:SetPoint("LEFT", 460, 0)
 		row.col5:SetText(item.unpaid > 0 and Theme:Colorize(tostring(item.unpaid), C.red) or Theme:Colorize("0", C.faint))

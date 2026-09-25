@@ -157,13 +157,13 @@ function Model:GetDetail(info)
 	-- Each name carries its record in a few words, right after it, so the line's cut-off never hides it
 	local function Hunter()
 		local badge = Reputation:GetHunterBadge(info.hunter)
-		return info.hunter..(badge and (" ("..badge..")") or "")
+		return info.hunter..(badge and (" "..badge) or "")
 	end
 	if info.mine then
 		tinsert(parts, "Posted by you")
 	else
 		local badge = Reputation:GetPosterBadge(info.poster)
-		tinsert(parts, "By "..info.poster..(badge and (" ("..badge..")") or ""))
+		tinsert(parts, "By "..info.poster..(badge and (" "..badge) or ""))
 	end
 	local state = info.state
 	if state == STATE.OPEN then
@@ -534,11 +534,10 @@ function Model:GetLeaderboards(since)
 	for _, origin in ipairs(Reputation:GetOrigins()) do
 		local tally = Reputation:GetTally(origin, since)
 		if tally.claims > 0 then
-			local level, stars = Reputation:GetRank(tally)
-			tinsert(hunters, { origin = origin, me = origin == me, level = level, stars = stars, kills = tally.kills, earned = tally.earned, points = tally.points, disputed = tally.disputed, tally = tally })
+			tinsert(hunters, { origin = origin, me = origin == me, level = Reputation:GetRank(tally), rating = Reputation:GetHunterStars(tally), kills = tally.kills, earned = tally.earned, points = tally.points, disputed = tally.disputed, tally = tally })
 		end
 		if tally.posted > 0 then
-			tinsert(posters, { origin = origin, me = origin == me, posted = tally.posted, paid = tally.paid, unpaid = tally.unpaid, gold = tally.paidGold, tally = tally })
+			tinsert(posters, { origin = origin, me = origin == me, posted = tally.posted, paid = tally.paid, unpaid = tally.unpaid, gold = tally.paidGold, rating = Reputation:GetPosterStars(tally), tally = tally })
 		end
 	end
 	sort(hunters, function(a, b)

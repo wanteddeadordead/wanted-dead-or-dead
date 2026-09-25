@@ -607,12 +607,15 @@ check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1
 ns:RunCommand("simulate", "rep")
 local R = ns.Reputation
 local ace, shady = R:GetTally("Kaelen Duskbrand"), R:GetTally("Vorn Ashgrip")
-local aceLevel, aceStars = R:GetRank(ace)
-local shadyLevel, shadyStars = R:GetRank(shady)
-check(aceLevel >= 3 and aceStars == 5 and ace.disputed == 0, "Ace: high level, full reliability, got level "..aceLevel.." stars "..aceStars)
-check(shadyLevel == 0 and shadyStars == 0 and shady.disputed == 2 and shady.lone >= 1, "Shady: level 0, no reliability, 2 disputed, got level "..shadyLevel.." stars "..shadyStars.." disputed "..shady.disputed)
+local aceLevel, shadyLevel = R:GetRank(ace), R:GetRank(shady)
+check(aceLevel >= 3 and ace.disputed == 0, "Kaelen: high level, got "..aceLevel)
+check(shadyLevel == 0 and shady.disputed == 2 and shady.lone >= 1, "Vorn: level 0, 2 disputed, got level "..shadyLevel.." disputed "..shady.disputed)
 check(R:GetTally("Grix Tallowbane").unpaid == 2, "Deadbeat: 2 unpaid, got "..R:GetTally("Grix Tallowbane").unpaid)
 check(R:GetTally("Maribel Stonehollow").paid == 6 and R:GetTally("Maribel Stonehollow").unpaid == 0, "Honest: 6 paid, none unpaid")
+check(R:GetHunterStars(ace) == 5 and R:GetHunterStars(shady) == 0.5, "stars: Kaelen 5, Vorn half a star, got "..tostring(R:GetHunterStars(ace)).." / "..tostring(R:GetHunterStars(shady)))
+check(R:GetPosterStars(R:GetTally("Maribel Stonehollow")) == 5 and R:GetPosterStars(R:GetTally("Grix Tallowbane")) == 0.5, "poster stars: Maribel 5, Grix half")
+check(R:GetHunterStars(R:GetTally("Nobody Atall")) == nil, "no record, no stars")
+check(select(2, ns.Theme:Stars(3.5):gsub("|T", "")) == 5, "five star images")
 check(R:GetHunterTrust(ace) == "Trusted" and R:GetHunterTrust(shady) == "Untrustworthy", "hunter trust: Kaelen trusted, Vorn untrustworthy, got "..tostring(R:GetHunterTrust(ace)).." / "..tostring(R:GetHunterTrust(shady)))
 check(R:GetPosterTrust(R:GetTally("Maribel Stonehollow")) == "Trusted" and R:GetPosterTrust(R:GetTally("Grix Tallowbane")) == "Untrustworthy", "poster trust: Maribel trusted, Grix untrustworthy")
 check(R:GetLine("Grix Tallowbane"):find("as a poster: Untrustworthy", 1, true), "rep line leads with trust")
@@ -624,10 +627,8 @@ check(posters["Maribel Stonehollow"] and posters["Grix Tallowbane"], "both poste
 local details = {}
 for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do details[#details + 1] = ns.Model:GetDetail(item) end
 local all = table.concat(details, "\n")
-check(all:find("^By Grix Tallowbane %(.-2 unpaid") or all:find("\nBy Grix Tallowbane %(.-2 unpaid"), "the unpaid badge leads the row, got\n"..all)
-check(all:find("By Maribel Stonehollow %(.-paid %d"), "the paid badge shows")
-check(all:find("Vorn Ashgrip %(.-2 disputed.-%) claims it, unseen"), "the disputed badge shows on Vorn's claim")
-check(all:find("Kaelen Duskbrand %(.-level %d"), "the level badge shows on Kaelen's claim")
+check(all:find("By Grix Tallowbane |T", 1, true) and all:find("By Maribel Stonehollow |T", 1, true), "posters carry stars on their rows")
+check(all:find("Vorn Ashgrip |T", 1, true) and all:find("Kaelen Duskbrand |T", 1, true), "hunters carry stars on their claims")
 for _, key in ipairs({ "board", "mine", "hunters" }) do ns.UI:Show(key) end
 -- Advice for each record
 local meaning, advice = R:GetPosterAdvice(R:GetTally("Grix Tallowbane"))

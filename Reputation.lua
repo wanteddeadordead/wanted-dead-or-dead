@@ -21,7 +21,7 @@ local WEIGHTS = {
 	bountyUnpaid = -20,
 }
 local RANK_POINTS_PER_LEVEL = 20
-local TRUSTED_AT = 5 -- verified kills (hunter) or paid claims (poster) with a clean record to be Trusted
+local TRUSTED_AT = 4 -- verified kills (hunter) or paid claims (poster), next to none against, for 4.5 stars
 local DECAY_DAYS = 90
 
 
@@ -124,18 +124,11 @@ function Reputation:GetTally(origin, since)
 	return tally
 end
 
----Hunter rank from points: level and stars (reliability).
+---Hunter rank from points (how much they've done; the star rating says how far to trust it).
 ---@param tally table
 ---@return number level
----@return number stars 0-5
 function Reputation:GetRank(tally)
-	local level = max(floor(tally.points / RANK_POINTS_PER_LEVEL), 0)
-	local decided = tally.witnessed + tally.confirmed + tally.disputed
-	local stars = 0
-	if decided > 0 then
-		stars = floor(5 * (tally.witnessed + tally.confirmed) / decided + 0.5)
-	end
-	return level, stars
+	return max(floor(tally.points / RANK_POINTS_PER_LEVEL), 0)
 end
 
 ---One line summing a player up, or nil if the records say nothing about them.
@@ -147,13 +140,13 @@ function Reputation:GetLine(origin)
 		return nil
 	end
 	local parts = {}
-	local posterTrust = Reputation:GetPosterTrust(tally)
-	local hunterTrust = Reputation:GetHunterTrust(tally)
+	local posterTrust, _, _, posterStars = Reputation:GetPosterTrust(tally)
+	local hunterTrust, _, _, hunterStars = Reputation:GetHunterTrust(tally)
 	if posterTrust then
-		tinsert(parts, "as a poster: "..posterTrust)
+		tinsert(parts, "as a poster: "..posterTrust..(posterStars and format(" (%s/5)", posterStars) or ""))
 	end
 	if hunterTrust then
-		tinsert(parts, "as a hunter: "..hunterTrust)
+		tinsert(parts, "as a hunter: "..hunterTrust..(hunterStars and format(" (%s/5)", hunterStars) or ""))
 	end
 	if tally.posted > 0 then
 		local poster = format("posted %d, paid %d", tally.posted, tally.paid)
@@ -163,8 +156,7 @@ function Reputation:GetLine(origin)
 		tinsert(parts, poster)
 	end
 	if tally.claims > 0 then
-		local level, stars = Reputation:GetRank(tally)
-		tinsert(parts, format("hunter level %d %s, %d kills, earned %s", level, strrep("*", stars)..strrep("-", 5 - stars), tally.kills, Bounties:FormatMoney(tally.earned)))
+		tinsert(parts, format("hunter level %d, %d kills, earned %s", Reputation:GetRank(tally), tally.kills, Bounties:FormatMoney(tally.earned)))
 		if tally.disputed > 0 then
 			tinsert(parts, format("%d disputed", tally.disputed))
 		end
@@ -172,69 +164,103 @@ function Reputation:GetLine(origin)
 	return table.concat(parts, "; ")
 end
 
----How far to trust a hunter's claims, from how many were verified and how many were disputed.
+---A star rating from good and bad results: the share that went well, in half stars. A newcomer can't reach
+---the top on a few results: the most is 3 stars after one good result, rising half a star with each, to 5
+---at five. Anyone rated has at least half a star, so a bad record never looks like no record.
+---@param good number verified kills or paid claims
+---@param bad number disputed claims or unpaid ones
+---@return number? stars 0.5 to 5, nil with nothing to judge yet
+local function StarsFrom(good, bad)
+	if good + bad == 0 then
+		return nil
+	end
+	local share = 5 * good / (good + bad)
+	local most = min(5, 2.5 + 0.5 * good)
+	return max(0.5, floor(min(share, most) * 2 + 0.5) / 2)
+end
+
+---The trust word and colour for a star rating.
+local function TrustFromStars(stars)
+	local C = Wanted.Theme.C
+	if stars >= 4.5 then
+		return "Trusted", C.green
+	elseif stars >= 3 then
+		return "Reliable", C.green
+	elseif stars >= 2 then
+		return "Doubtful", C.amber
+	end
+	return "Untrustworthy", C.red
+end
+
+---A hunter's star rating: verified kills against disputed ones (kills nobody saw don't count either way).
+---@param tally table
+---@return number?
+function Reputation:GetHunterStars(tally)
+	return StarsFrom(tally.witnessed + tally.confirmed, tally.disputed)
+end
+
+---A poster's star rating: claims paid against claims left unpaid.
+---@param tally table
+---@return number?
+function Reputation:GetPosterStars(tally)
+	return StarsFrom(tally.paid, tally.unpaid)
+end
+
+---How far to trust a hunter's claims.
 ---@param tally table
 ---@return string? label nil when they've never claimed
 ---@return table? color
 ---@return string? detail
+---@return number? stars
 function Reputation:GetHunterTrust(tally)
 	if tally.claims == 0 then
 		return nil
 	end
-	local C = Wanted.Theme.C
 	local good = tally.witnessed + tally.confirmed
-	local level, stars = Reputation:GetRank(tally)
+	local level = Reputation:GetRank(tally)
 	local detail = format("Level %d. %d of %d kill%s verified, %d unseen, %d disputed.", level, good, tally.claims, tally.claims == 1 and "" or "s", tally.lone, tally.disputed)
 	if tally.earned > 0 then
 		detail = detail.." Earned "..Bounties:FormatMoney(tally.earned).."."
 	end
-	if good + tally.disputed == 0 then
-		return "Unproven", C.muted, detail
-	elseif stars <= 2 then
-		return "Untrustworthy", C.red, detail
-	elseif tally.disputed > 0 then
-		return "Doubtful", C.amber, detail
-	elseif good >= TRUSTED_AT then
-		return "Trusted", C.green, detail
+	local stars = Reputation:GetHunterStars(tally)
+	if not stars then
+		return "Unproven", Wanted.Theme.C.muted, detail, nil
 	end
-	return "Reliable", C.green, detail
+	local label, color = TrustFromStars(stars)
+	return label, color, detail, stars
 end
 
----How far to trust a poster to pay, from claims paid against claims left unpaid.
+---How far to trust a poster to pay.
 ---@param tally table
 ---@return string? label nil when they've never posted
 ---@return table? color
 ---@return string? detail
+---@return number? stars
 function Reputation:GetPosterTrust(tally)
 	if tally.posted == 0 then
 		return nil
 	end
-	local C = Wanted.Theme.C
 	local detail = format("Paid %d of %d claim%s owed, %d unpaid. %d bount%s posted.", tally.paid, tally.paid + tally.unpaid, tally.paid + tally.unpaid == 1 and "" or "s", tally.unpaid, tally.posted, tally.posted == 1 and "y" or "ies")
-	if tally.paid + tally.unpaid == 0 then
-		return "New poster", C.muted, detail
-	elseif tally.unpaid > 0 and tally.unpaid >= tally.paid then
-		return "Untrustworthy", C.red, detail
-	elseif tally.unpaid > 0 then
-		return "Doubtful", C.amber, detail
-	elseif tally.paid >= TRUSTED_AT then
-		return "Trusted", C.green, detail
+	local stars = Reputation:GetPosterStars(tally)
+	if not stars then
+		return "New poster", Wanted.Theme.C.muted, detail, nil
 	end
-	return "Reliable", C.green, detail
+	local label, color = TrustFromStars(stars)
+	return label, color, detail, stars
 end
 
 local POSTER_MEANING = {
-	["Trusted"] = "Hunters can count on you: you've paid every claim you owed, five or more.",
-	["Reliable"] = "You've paid every claim you owed so far.",
+	["Trusted"] = "Hunters can count on you: four or more claims paid, next to none left unpaid.",
+	["Reliable"] = "You've mostly paid the claims you owed.",
 	["New poster"] = "No claim on your bounties has come due yet, so hunters can't tell whether you pay.",
-	["Doubtful"] = "You've left some claims unpaid, though you've paid more than you haven't.",
+	["Doubtful"] = "You've left a fair share of the claims you owed unpaid.",
 	["Untrustworthy"] = "You've left as many claims unpaid as you've paid, or more. Hunters may pass on your bounties.",
 }
 local HUNTER_MEANING = {
-	["Trusted"] = "Your kills check out: five or more verified by a witness or the poster, none disputed.",
-	["Reliable"] = "Your verified kills check out and none were disputed.",
+	["Trusted"] = "Your kills check out: four or more verified by a witness or the poster, next to none disputed.",
+	["Reliable"] = "Your kills mostly check out.",
 	["Unproven"] = "Nobody else saw your kills and no poster has confirmed one yet.",
-	["Doubtful"] = "Some of your claims were disputed, though most were verified.",
+	["Doubtful"] = "A fair share of your claims were disputed.",
 	["Untrustworthy"] = "At least as many of your claims were disputed as verified. Posters may doubt your claims.",
 }
 
@@ -253,7 +279,7 @@ function Reputation:GetPosterAdvice(tally)
 	elseif label == "New poster" then
 		advice = "When a hunter claims one of your bounties, confirm a real kill and pay them by mail within 2 days."
 	elseif label == "Reliable" then
-		local more = TRUSTED_AT - tally.paid
+		local more = max(1, TRUSTED_AT - tally.paid)
 		advice = format("Pay %d more claim%s, with none left unpaid, to become Trusted.", more, more == 1 and "" or "s")
 	else
 		advice = "Keep paying confirmed claims within 2 days to stay Trusted."
@@ -277,7 +303,7 @@ function Reputation:GetHunterAdvice(tally)
 	elseif label == "Unproven" then
 		advice = "A kill is verified when another Wanted user sees it or the poster confirms it. Hunt near other players running Wanted."
 	elseif label == "Reliable" then
-		local more = TRUSTED_AT - good
+		local more = max(1, TRUSTED_AT - good)
 		advice = format("%d more verified kill%s, with no disputes, makes you Trusted.", more, more == 1 and "" or "s")
 	else
 		advice = "Keep claiming only kills you made to stay Trusted."
@@ -285,48 +311,36 @@ function Reputation:GetHunterAdvice(tally)
 	return HUNTER_MEANING[label], advice
 end
 
----Adds a trust line and its detail to the game tooltip.
+
+---A poster's stars for a bounty row, or "new" for a poster nobody has had to rely on yet.
+---@param origin string
+---@return string?
+function Reputation:GetPosterBadge(origin)
+	local stars = Reputation:GetPosterStars(Reputation:GetTally(origin))
+	return stars and Wanted.Theme:Stars(stars, 10) or Wanted.Theme:Colorize("new", Wanted.Theme.C.faint)
+end
+
+---A hunter's stars for a claim, or "new" for a hunter with no verified or disputed kill yet.
+---@param origin string
+---@return string?
+function Reputation:GetHunterBadge(origin)
+	local stars = Reputation:GetHunterStars(Reputation:GetTally(origin))
+	return stars and Wanted.Theme:Stars(stars, 10) or Wanted.Theme:Colorize("new", Wanted.Theme.C.faint)
+end
+
+---Adds a trust line to the game tooltip: stars and the trust word, then the numbers behind them.
 ---@param title string "Poster trust" or "Hunter trust"
 ---@param label string?
 ---@param color table?
 ---@param detail string?
-function Reputation:AddTrustLines(title, label, color, detail)
+---@param stars number?
+function Reputation:AddTrustLines(title, label, color, detail, stars)
 	if not label then
 		return
 	end
 	local C = Wanted.Theme.C
-	GameTooltip:AddDoubleLine(title, label, 1, 1, 1, color[1], color[2], color[3])
+	GameTooltip:AddDoubleLine(title, (stars and (Wanted.Theme:Stars(stars, 12).."  ") or "")..label, 1, 1, 1, color[1], color[2], color[3])
 	GameTooltip:AddLine(detail, C.muted[1], C.muted[2], C.muted[3], true)
-end
-
----A few words on a poster's record for a bounty row: red when they've left claims unpaid, green once
----they've paid, nothing for a newcomer.
----@param origin string
----@return string?
-function Reputation:GetPosterBadge(origin)
-	local tally = Reputation:GetTally(origin)
-	local C = Wanted.Theme.C
-	if tally.unpaid > 0 then
-		return Wanted.Theme:Colorize(format("%d unpaid", tally.unpaid), C.red)
-	elseif tally.paid > 0 then
-		return Wanted.Theme:Colorize(format("paid %d", tally.paid), C.green)
-	end
-	return nil
-end
-
----A few words on a hunter's record for a claim: red with disputed claims, green with a level.
----@param origin string
----@return string?
-function Reputation:GetHunterBadge(origin)
-	local tally = Reputation:GetTally(origin)
-	local C = Wanted.Theme.C
-	if tally.disputed > 0 then
-		return Wanted.Theme:Colorize(format("%d disputed", tally.disputed), C.red)
-	elseif tally.claims > 0 then
-		local level = Reputation:GetRank(tally)
-		return Wanted.Theme:Colorize(format("level %d", level), level > 0 and C.green or C.muted)
-	end
-	return nil
 end
 
 ---All origins the records mention as posters or hunters.
@@ -412,8 +426,7 @@ Wanted:RegisterCommand("top", "Scoreboard: hunters by rank and earnings, posters
 	for _, origin in ipairs(Reputation:GetOrigins()) do
 		local tally = Reputation:GetTally(origin)
 		if tally.claims > 0 then
-			local level, stars = Reputation:GetRank(tally)
-			tinsert(hunters, { origin = origin, level = level, stars = stars, earned = tally.earned, kills = tally.kills, points = tally.points })
+			tinsert(hunters, { origin = origin, level = Reputation:GetRank(tally), rating = Reputation:GetHunterStars(tally), earned = tally.earned, kills = tally.kills, points = tally.points })
 		end
 		if tally.posted > 0 then
 			tinsert(posters, { origin = origin, posted = tally.posted, paid = tally.paid, unpaid = tally.unpaid, gold = tally.paidGold })
@@ -427,7 +440,7 @@ Wanted:RegisterCommand("top", "Scoreboard: hunters by rank and earnings, posters
 	end
 	for i = 1, min(#hunters, 10) do
 		local h = hunters[i]
-		Wanted:Print("  %d. %s - level %d %s, %d kills, %s earned", i, h.origin, h.level, strrep("*", h.stars)..strrep("-", 5 - h.stars), h.kills, Bounties:FormatMoney(h.earned))
+		Wanted:Print("  %d. %s - level %d, %s, %d kills, %s earned", i, h.origin, h.level, h.rating and format("%s/5 stars", h.rating) or "new", h.kills, Bounties:FormatMoney(h.earned))
 	end
 	Wanted:Print("Top posters:")
 	if #posters == 0 then

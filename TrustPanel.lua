@@ -13,18 +13,18 @@ local CARD_HEIGHT = 196
 
 local KEYS = {
 	poster = {
-		{ "Trusted", C.green, "Five or more claims paid, none left unpaid." },
-		{ "Reliable", C.green, "Every claim owed so far paid." },
-		{ "New poster", C.muted, "No claim on your bounties has come due yet." },
-		{ "Doubtful", C.amber, "Some claims unpaid, though more paid than not." },
-		{ "Untrustworthy", C.red, "As many claims unpaid as paid, or more." },
+		{ 5, "Trusted", C.green, "4 or more claims paid, next to none unpaid." },
+		{ 3.5, "Reliable", C.green, "Most claims owed paid." },
+		{ nil, "New poster", C.muted, "No claim on your bounties has come due yet." },
+		{ 2, "Doubtful", C.amber, "A fair share of claims left unpaid." },
+		{ 0.5, "Untrustworthy", C.red, "As many claims unpaid as paid, or more." },
 	},
 	hunter = {
-		{ "Trusted", C.green, "Five or more kills verified, none disputed." },
-		{ "Reliable", C.green, "Verified kills, none disputed." },
-		{ "Unproven", C.muted, "No kill verified by a witness or the poster yet." },
-		{ "Doubtful", C.amber, "Some claims disputed, though most were verified." },
-		{ "Untrustworthy", C.red, "As many claims disputed as verified, or more." },
+		{ 5, "Trusted", C.green, "4 or more kills verified, next to none disputed." },
+		{ 3.5, "Reliable", C.green, "Most kills verified." },
+		{ nil, "Unproven", C.muted, "No kill verified by a witness or the poster yet." },
+		{ 2, "Doubtful", C.amber, "A fair share of claims disputed." },
+		{ 0.5, "Untrustworthy", C.red, "As many claims disputed as verified, or more." },
 	},
 }
 
@@ -46,8 +46,10 @@ function TrustPanel:Create(parent, top, width, height, role, onOwe)
 	card:SetSize(width, CARD_HEIGHT)
 	local label = W:SectionLabel(card, role == "poster" and "Your trust as a poster" or "Your trust as a hunter")
 	label:SetPoint("TOPLEFT", 16, -14)
+	card.stars = Theme:Text(card, "stat", "")
+	card.stars:SetPoint("TOPLEFT", 16, -32)
 	card.level = Theme:Text(card, "stat", "")
-	card.level:SetPoint("TOPLEFT", 16, -34)
+	card.level:SetPoint("LEFT", card.stars, "RIGHT", 12, 0)
 	card.detail = Theme:Text(card, "small", "", C.muted)
 	card.detail:SetPoint("TOPLEFT", 16, -64)
 	card.detail:SetPoint("RIGHT", -16, 0)
@@ -76,22 +78,25 @@ function TrustPanel:Create(parent, top, width, height, role, onOwe)
 	local note = Theme:Text(key, "tiny", "Shown to other players on your "..(role == "poster" and "bounties" or "claims")..". From records only.", C.faint)
 	note:SetPoint("TOPRIGHT", -16, -15)
 	for i, entry in ipairs(KEYS[role]) do
-		local name = Theme:Text(key, "body", entry[1], entry[2])
-		name:SetPoint("TOPLEFT", 16, -36 - (i - 1) * 20)
-		local text = Theme:Text(key, "small", entry[3], C.muted)
-		text:SetPoint("TOPLEFT", 150, -38 - (i - 1) * 20)
+		local stars = Theme:Text(key, "body", Theme:Stars(entry[1], 13))
+		stars:SetPoint("TOPLEFT", 16, -36 - (i - 1) * 20)
+		local name = Theme:Text(key, "body", entry[2], entry[3])
+		name:SetPoint("TOPLEFT", 100, -36 - (i - 1) * 20)
+		local text = Theme:Text(key, "small", entry[4], C.muted)
+		text:SetPoint("TOPLEFT", 220, -38 - (i - 1) * 20)
 	end
 
 	function panel:Refresh()
 		local tally = Reputation:GetTally(Wanted.Store:GetOrigin())
-		local level, color, detail, meaning, advice
+		local level, color, detail, stars, meaning, advice
 		if role == "poster" then
-			level, color, detail = Reputation:GetPosterTrust(tally)
+			level, color, detail, stars = Reputation:GetPosterTrust(tally)
 			meaning, advice = Reputation:GetPosterAdvice(tally)
 		else
-			level, color, detail = Reputation:GetHunterTrust(tally)
+			level, color, detail, stars = Reputation:GetHunterTrust(tally)
 			meaning, advice = Reputation:GetHunterAdvice(tally)
 		end
+		card.stars:SetText(Theme:Stars(stars, 22))
 		card.level:SetText(level or "No record yet")
 		local c = color or C.muted
 		card.level:SetTextColor(c[1], c[2], c[3])

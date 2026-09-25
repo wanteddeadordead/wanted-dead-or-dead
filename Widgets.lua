@@ -1,5 +1,5 @@
 -- Wanted: the widget set. Flat buttons with hover and pressed states, inputs with placeholders, toggles,
--- segmented controls, pills, star pips, cards, stat tiles, a virtual scrolling list, and a modal dialog.
+-- segmented controls, pills, cards, stat tiles, a virtual scrolling list, and a modal dialog.
 
 local _, Wanted = ...
 local W = {}
@@ -254,7 +254,7 @@ end
 
 
 -- ============================================================================
--- Pill, pips, card, stat tile
+-- Pill, card, stat tile
 -- ============================================================================
 
 function W:Pill(parent)
@@ -280,29 +280,6 @@ function W:Pill(parent)
 	return pill
 end
 
-function W:Pips(parent, count)
-	local pips = CreateFrame("Frame", nil, parent)
-	pips:SetSize(count * 11, 8)
-	pips.textures = {}
-	for i = 1, count do
-		local texture = pips:CreateTexture(nil, "ARTWORK")
-		texture:SetSize(8, 8)
-		texture:SetPoint("LEFT", (i - 1) * 11, 0)
-		pips.textures[i] = texture
-	end
-	function pips:SetValue(value, color)
-		color = color or C.gold
-		for i, texture in ipairs(self.textures) do
-			if i <= value then
-				texture:SetColorTexture(color[1], color[2], color[3], 1)
-			else
-				texture:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
-			end
-		end
-	end
-	pips:SetValue(0)
-	return pips
-end
 
 function W:Card(parent)
 	local card = CreateFrame("Frame", nil, parent)

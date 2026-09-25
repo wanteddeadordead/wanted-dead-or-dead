@@ -173,6 +173,23 @@ function Theme:Money(copper)
 	return Wanted.Bounties:FormatMoney(copper)
 end
 
+-- Star ratings: one sprite with a full, a half and an empty star side by side
+local STAR_FILE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\stars"
+
+---Five stars as inline text (works in any font string or tooltip), in half steps. nil gives five empty stars.
+---@param rating number? 0 to 5
+---@param size number? height in pixels
+---@return string
+function Theme:Stars(rating, size)
+	size = size or 12
+	local parts = {}
+	for i = 1, 5 do
+		local slot = (rating and rating >= i) and 0 or ((rating and rating >= i - 0.5) and 1 or 2)
+		tinsert(parts, format("|T%s:%d:%d:0:0:256:64:%d:%d:0:64|t", STAR_FILE, size, size, slot * 64, slot * 64 + 64))
+	end
+	return table.concat(parts)
+end
+
 ---A player name in their class colour.
 function Theme:ClassName(name, class)
 	local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]

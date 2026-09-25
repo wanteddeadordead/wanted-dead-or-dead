@@ -19,5 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Release notes (this version's CHANGELOG section)
+        run: bash .github/release-notes.sh "$GITHUB_REF_NAME"
       - name: Package and upload
         uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1

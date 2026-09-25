@@ -3,7 +3,7 @@
 Releases are built by the [BigWigs packager](https://github.com/BigWigsMods/packager) when a `v*` tag is
 pushed. It reads `## Interface: 16001` from the toc (interfaces starting `16` map to CurseForge's
 **Forever** game type), replaces `@project-version@` with the tag, leaves out what `.pkgmeta` ignores,
-uses `CHANGELOG.md` as the release notes, and uploads `WantedDeadOrDead-<tag>.zip` to CurseForge and a
+posts that version's section of `CHANGELOG.md` as the release notes (`.github/release-notes.sh`), and uploads `WantedDeadOrDead-<tag>.zip` to CurseForge and a
 GitHub release. Until a CurseForge project ID and token exist, it only makes the GitHub release.
 
 ## One-time CurseForge setup

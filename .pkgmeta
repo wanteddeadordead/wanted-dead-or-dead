@@ -1,7 +1,8 @@
 package-as: WantedDeadOrDead
 
+# Written by .github/release-notes.sh from CHANGELOG.md: only the version being released
 manual-changelog:
-  filename: CHANGELOG.md
+  filename: RELEASE_NOTES.md
   markup-type: markdown
 
 ignore:

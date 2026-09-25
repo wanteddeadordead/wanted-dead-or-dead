@@ -1,0 +1,11 @@
+package-as: WantedDeadOrDead
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - tests
+  - docs
+  - .github
+  - .pkgmeta

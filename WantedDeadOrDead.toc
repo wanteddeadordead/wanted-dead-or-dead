@@ -1,0 +1,40 @@
+## Interface: 16001
+## Title: Wanted: Dead or... Dead
+## Notes: World PvP bounties, enemy awareness and reputation, shared player to player.
+## Author: Wanted: Dead or... Dead
+## Version: @project-version@
+## SavedVariables: WantedDB
+## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
+## X-License: MIT
+## Category: PvP
+
+Libs\LibStub\LibStub.lua
+Libs\LibDeflate\LibDeflate.lua
+Libs\LibSerialize\LibSerialize.lua
+
+Core.lua
+Store.lua
+Recorder.lua
+Sync.lua
+Bounties.lua
+Payments.lua
+Reputation.lua
+Enemies.lua
+Debug.lua
+Theme.lua
+Widgets.lua
+Model.lua
+Alerts.lua
+UI.lua
+Rows.lua
+EnemyMenu.lua
+NearbyWindow.lua
+PageBoard.lua
+PageMine.lua
+PageHunters.lua
+PageActivity.lua
+PageEnemies.lua
+PageSettings.lua
+PageTools.lua
+MapPins.lua
+Minimap.lua

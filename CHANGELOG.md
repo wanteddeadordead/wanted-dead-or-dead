@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Posting a bounty no longer counts as seeing the target, so "last seen" stays when they were really last seen.
 ## [0.1.0-beta.5] - 2026-09-25
 
 - Emote buttons in the Nearby window: your favourites along the bottom (LOL, Flex, Doom, Rude, Train, Violin,

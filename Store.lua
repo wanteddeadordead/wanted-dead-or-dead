@@ -335,10 +335,12 @@ end
 -- Players and sightings
 -- ============================================================================
 
----Records what is known about a player.
+---Records what is known about a player, and that they were seen now unless seen is false (a bounty posted on
+---them by name, say, isn't a sighting).
 ---@param guid string
 ---@param info table name, class, level, faction (any may be nil)
-function Store:UpdatePlayer(guid, info)
+---@param seen boolean? false to leave "last seen" alone
+function Store:UpdatePlayer(guid, info, seen)
 	local players = Wanted.db.players
 	local player = players[guid]
 	if not player then
@@ -348,7 +350,9 @@ function Store:UpdatePlayer(guid, info)
 	for key, value in pairs(info) do
 		player[key] = value
 	end
-	player.lastSeen = GetServerTime()
+	if seen ~= false then
+		player.lastSeen = GetServerTime()
+	end
 end
 
 ---Gets what is known about a player.

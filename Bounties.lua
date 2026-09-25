@@ -385,7 +385,7 @@ function Bounties:Post(guid, name, amount)
 	if player and player.faction and player.faction == UnitFactionGroup("player") then
 		return nil, "bounties are for the other faction only"
 	end
-	Store:UpdatePlayer(guid, { name = name })
+	Store:UpdatePlayer(guid, { name = name }, false)
 	local bounty = Store:NewRecord("bounty", {
 		target = guid,
 		targetName = name,

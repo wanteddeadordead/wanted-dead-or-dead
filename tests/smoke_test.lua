@@ -1320,6 +1320,12 @@ ns.Widgets.IsDialogShown = realIsDialogShown
 ns.db.settings.detect.autoHide = autoHideBefore
 ns.db.settings.emotes.enabled = true
 ns.NearbyWindow:ForceLayout()
+-- Posting a bounty doesn't count as seeing the target: "last seen" stays when they were really last seen
+ns.Store:UpdatePlayer("Player-9-SEENOLD", { name = "Seen Long Ago", zone = "Stranglethorn Vale", faction = "Alliance" })
+local seenAt = clock - 3 * 3600
+ns.Store:GetPlayer("Player-9-SEENOLD").lastSeen = seenAt
+ns.Bounties:Post("Player-9-SEENOLD", "Seen Long Ago", 10000)
+check(ns.Store:GetPlayer("Player-9-SEENOLD").lastSeen == seenAt, "posting a bounty leaves last seen alone")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
 ns:Log("!! Test: something odd")
 local kept = ns.Debug:GetDevLog()

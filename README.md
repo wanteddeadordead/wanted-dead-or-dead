@@ -70,8 +70,8 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
 ## How it works
 
 - **Seeing enemies.** WoW Forever doesn't let addons read the combat log, so the addon watches what the
-  client does allow: nameplates, your target, focus and mouseover, enemy spell casts (for stealth), the
-  client's kill and death events, and the death recap. Someone who never appears on your screen can't be
+  client does allow: nameplates, your target, focus and mouseover, the moment your target vanishes close by
+  (for stealth), the client's kill and death events, and the death recap. Someone who never appears on your screen can't be
   seen by any addon.
 - **Sharing.** Copies of the addon on the same faction talk through a hidden custom chat channel using
   addon messages, which only the addon sees. Each copy keeps the full record and fills in what it missed

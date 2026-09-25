@@ -156,7 +156,7 @@ function private.BuildNearby(panel, width)
 	end, 60)
 	private.opacity:SetPoint("TOPLEFT", 440, -38)
 
-	local shown = private.Card(panel, -132, 200, "Show on each row", width)
+	local shown = private.Card(panel, -132, 152, "Show on each row", width)
 	local items = {
 		{ "icon", "Class icon", "The class icon at the start of the row (style under Sharing and display)." },
 		{ "className", "Class name", "The class spelled out next to the level (two-line rows)." },

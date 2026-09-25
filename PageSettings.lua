@@ -156,7 +156,7 @@ function private.BuildNearby(panel, width)
 	end, 60)
 	private.opacity:SetPoint("TOPLEFT", 440, -38)
 
-	local shown = private.Card(panel, -132, 152, "Show on each row", width)
+	local shown = private.Card(panel, -132, 178, "Show in the Nearby window", width)
 	local items = {
 		{ "icon", "Class icon", "The class icon at the start of the row (style under Sharing and display)." },
 		{ "className", "Class name", "The class spelled out next to the level (two-line rows)." },
@@ -169,6 +169,7 @@ function private.BuildNearby(panel, width)
 		{ "health", "Health bar", "A thin health bar along the bottom while they're in view." },
 		{ "tint", "Class colour wash", "A faint wash of their class colour behind the row." },
 		{ "targeting", "Targeting you", "A red > before the name when they target you." },
+		{ "pvp", "Your PvP status", "A strip under the tabs: PvP on or off, and how long until the flag wears off." },
 		{ "fade", "Shade out of sight", "Dim a row once the player has been out of view longer than the in-sight time (Alerts tab)." },
 	}
 	for i, item in ipairs(items) do

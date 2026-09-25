@@ -42,6 +42,7 @@ local DEFAULTS = {
 			tint = true, -- class colour wash
 			targeting = true, -- ">" when they target you
 			fade = true, -- shade enemies out of sight
+			pvp = true, -- your own PvP status under the tabs
 			opacity = 1,
 		},
 		detect = {

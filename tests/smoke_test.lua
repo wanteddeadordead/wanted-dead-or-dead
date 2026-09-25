@@ -135,6 +135,12 @@ function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
 function GetPlayerInfoByGUID(guid) if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end return nil end
 inCombat = false
 function InCombatLockdown() return inCombat end
+pvpFlag, pvpTimer = false, nil
+function UnitIsPVP(unit) return unit == "player" and pvpFlag end
+function UnitIsPVPFreeForAll() return false end
+function UnitIsPVPSanctuary() return false end
+function IsPVPTimerRunning() return pvpTimer ~= nil end
+function GetPVPTimer() return pvpTimer or 301000 end
 function IsInGroup() return true end
 function IsInRaid() return false end
 function IsInGuild() return true end
@@ -481,14 +487,21 @@ ns.UI:Refresh()
 clock = clock + 3600
 check(FindZone(ns.Hotspots:Get(), "The Barrens") == nil, "the Barrens drops off after an hour")
 clock = savedClock
+-- Your PvP status on the Nearby window
+check(ns.NearbyWindow:GetPvPStatus() == "PvP off", "not flagged")
+pvpFlag = true
+check(ns.NearbyWindow:GetPvPStatus():find("^PvP ON"), "flagged")
+pvpTimer = 272000
+check(ns.NearbyWindow:GetPvPStatus() == "PvP ON, off in 4:32", "wearing off, got "..ns.NearbyWindow:GetPvPStatus())
+pvpFlag, pvpTimer = false, nil
 -- Display settings: every option off, compact forced, then back
 local show = ns.db.settings.nearby
-for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade" }) do show[key] = false end
+for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade", "pvp" }) do show[key] = false end
 show.layout = "compact"
 show.opacity = 0.5
 ns.NearbyWindow:ForceLayout()
 show.layout = "normal"
-for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade" }) do show[key] = true end
+for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade", "pvp" }) do show[key] = true end
 ns.NearbyWindow:ForceLayout()
 ns.UI:Show("settings")
 -- Versions: newer releases are noticed from other clients' hellos, never shown as sent

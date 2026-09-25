@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Your PvP status in the Nearby window: PvP on, off, the countdown while the flag wears off, sanctuary, or free-for-all.
 - Split by role: Your bounties holds everything as a poster (owe, open, paid out, history, record) and Your
   hunts everything as a hunter (owed to you, hunting now, earned, claims, history, record).
 - Hunts last 24 hours (was 2), renewable.

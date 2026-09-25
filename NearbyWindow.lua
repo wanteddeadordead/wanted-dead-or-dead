@@ -20,7 +20,9 @@ local private = {
 	combatFrame = CreateFrame("Frame"),
 }
 local WIDTH = 260
-local HEADER = 58
+local HEADER = 58 -- title bar and tabs; the PvP status strip adds PVP_HEIGHT under them when shown
+local PVP_HEIGHT = 20
+local PVP_UPDATE_SECONDS = 0.5
 local ROW_HEIGHT = 32
 local COMPACT_HEIGHT = 20
 local MIN_ROWS = 3
@@ -134,7 +136,7 @@ function private.Create()
 		return
 	end
 	local frame = CreateFrame("Frame", "WantedNearbyFrame", UIParent)
-	frame:SetSize(WIDTH, HEADER + ROW_HEIGHT * MIN_ROWS + 8)
+	frame:SetSize(WIDTH, private.Header() + ROW_HEIGHT * MIN_ROWS + 8)
 	frame:SetFrameStrata("MEDIUM")
 	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
@@ -207,6 +209,29 @@ function private.Create()
 	end
 	private.tabs:Select(private.Settings().tab or "nearby", true)
 
+	-- Your PvP status, under the tabs: can enemies attack you right now?
+	local pvp = CreateFrame("Frame", nil, frame)
+	pvp:SetPoint("TOPLEFT", 1, -HEADER + 2)
+	pvp:SetPoint("TOPRIGHT", -1, -HEADER + 2)
+	pvp:SetHeight(PVP_HEIGHT)
+	pvp.bg = Theme:Fill(pvp, C.transparent)
+	pvp.dot = pvp:CreateTexture(nil, "ARTWORK")
+	pvp.dot:SetSize(7, 7)
+	pvp.dot:SetPoint("LEFT", 10, 0)
+	pvp.text = Theme:Text(pvp, "small", "")
+	pvp.text:SetPoint("LEFT", pvp.dot, "RIGHT", 7, 0)
+	pvp:EnableMouse(true)
+	W:AttachTooltip(pvp, "Your PvP status", "Whether enemy players can attack you. When the flag is wearing off, how long until it's gone. Hide it in Settings > Nearby window.")
+	local elapsed = PVP_UPDATE_SECONDS
+	pvp:SetScript("OnUpdate", function(_, delta)
+		elapsed = elapsed + delta
+		if elapsed >= PVP_UPDATE_SECONDS then
+			elapsed = 0
+			private.UpdatePvP()
+		end
+	end)
+	private.pvp = pvp
+
 	-- Scroll with the wheel (not in combat: the rows are secure and can't be re-pointed then)
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)
@@ -232,7 +257,7 @@ function private.Create()
 	private.footerLine:SetPoint("RIGHT", -1, 0)
 	private.footerLine:SetPoint("BOTTOM", private.footer, "TOP", 0, FOOTER_GAP / 2)
 	private.empty = Theme:Text(frame, "small", "", C.faint)
-	private.empty:SetPoint("TOP", 0, -HEADER - 14)
+	private.empty:SetPoint("TOP", 0, -private.Header() - 14)
 	private.empty:SetJustifyH("CENTER")
 
 	for i = 1, MAX_ROWS do
@@ -242,13 +267,58 @@ function private.Create()
 end
 
 ---Places a row for normal (two lines) or compact (one line) layout. Out of combat only.
+---Height above the first row: the title bar and tabs, and the PvP strip when it's shown.
+function private.Header()
+	return HEADER + (private.Show().pvp ~= false and PVP_HEIGHT or 0)
+end
+
+---What a row's layout depends on, so a change re-lays it.
+function private.LayoutKey(compact)
+	return (compact and "c" or "n")..(private.Show().icon and "i" or "")..(private.Show().pvp ~= false and "p" or "")
+end
+
+local function Readable(value)
+	if issecretvalue and issecretvalue(value) then
+		return nil
+	end
+	return value
+end
+
+---Your own PvP status: sanctuary, free-for-all, flagged (with the countdown when it's wearing off) or not.
+---@return string text
+---@return table color
+---@return boolean? flagged
+function Nearby:GetPvPStatus()
+	if UnitIsPVPSanctuary and Readable(UnitIsPVPSanctuary("player")) then
+		return "Sanctuary: no PvP here", C.blue, false
+	elseif UnitIsPVPFreeForAll and Readable(UnitIsPVPFreeForAll("player")) then
+		return "Free-for-all PvP: anyone can attack you", C.red, true
+	elseif Readable(UnitIsPVP("player")) then
+		if IsPVPTimerRunning and Readable(IsPVPTimerRunning()) then
+			local seconds = floor((Readable(GetPVPTimer()) or 0) / 1000)
+			return format("PvP ON, off in %d:%02d", floor(seconds / 60), seconds % 60), C.amber, true
+		end
+		return "PvP ON: enemy players can attack you", C.red, true
+	end
+	return "PvP off", C.faint, false
+end
+
+function private.UpdatePvP()
+	local text, color, flagged = Nearby:GetPvPStatus()
+	local strip = private.pvp
+	strip.text:SetText(text)
+	strip.text:SetTextColor(color[1], color[2], color[3])
+	strip.dot:SetColorTexture(color[1], color[2], color[3], 1)
+	strip.bg:SetColorTexture(color[1], color[2], color[3], flagged and 0.12 or 0)
+end
+
 function private.LayoutRow(row, index, compact)
 	local showIcon = private.Show().icon
 	local height = compact and COMPACT_HEIGHT or ROW_HEIGHT
 	row:SetHeight(height)
 	row:ClearAllPoints()
-	row:SetPoint("TOPLEFT", 1, -HEADER - (index - 1) * height)
-	row:SetPoint("TOPRIGHT", -1, -HEADER - (index - 1) * height)
+	row:SetPoint("TOPLEFT", 1, -private.Header() - (index - 1) * height)
+	row:SetPoint("TOPRIGHT", -1, -private.Header() - (index - 1) * height)
 	row.name:ClearAllPoints()
 	row.right:ClearAllPoints()
 	row.icon:ClearAllPoints()
@@ -270,14 +340,14 @@ function private.LayoutRow(row, index, compact)
 		row.sub:Show()
 	end
 	row.compact = compact
-	row.layoutKey = (compact and "c" or "n")..(showIcon and "i" or "")
+	row.layoutKey = private.LayoutKey(compact)
 end
 
 function private.CreateRow(parent, index)
 	local row = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate")
 	row:SetHeight(ROW_HEIGHT)
-	row:SetPoint("TOPLEFT", 1, -HEADER - (index - 1) * ROW_HEIGHT)
-	row:SetPoint("TOPRIGHT", -1, -HEADER - (index - 1) * ROW_HEIGHT)
+	row:SetPoint("TOPLEFT", 1, -private.Header() - (index - 1) * ROW_HEIGHT)
+	row:SetPoint("TOPRIGHT", -1, -private.Header() - (index - 1) * ROW_HEIGHT)
 	-- Act on the mouse release whatever the "cast on key down" setting says: with that setting on, a secure
 	-- button otherwise waits for a press that a release-only button never gets, and nothing happens
 	row:RegisterForClicks("AnyUp")
@@ -453,9 +523,12 @@ function Nearby:Refresh()
 		private.help:SetPoint("BOTTOM", 0, footerHeight)
 		footerHeight = footerHeight + HELP_HEIGHT
 	end
-	private.frame:SetHeight(HEADER + numRows * rowHeight + footerHeight)
+	private.pvp:SetShown(private.Show().pvp ~= false)
+	private.empty:ClearAllPoints()
+	private.empty:SetPoint("TOP", 0, -private.Header() - 14)
+	private.frame:SetHeight(private.Header() + numRows * rowHeight + footerHeight)
 	for i, row in ipairs(private.rows) do
-		if row.layoutKey ~= (compact and "c" or "n")..(private.Show().icon and "i" or "") then
+		if row.layoutKey ~= private.LayoutKey(compact) then
 			private.LayoutRow(row, i, compact)
 		end
 		local info = items[i + private.offset]

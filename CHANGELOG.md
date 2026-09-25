@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-09-25
+
 - Emote buttons in the Nearby window: your favourites along the bottom (LOL, Flex, Doom, Rude, Train, Violin,
   Bye to start) and a ... button with all 46, grouped (taunts, after a kill, losing, mid-fight). They emote at
   your target and work mid-fight. Pick favourites, or turn them off, in Settings > Emotes.

@@ -70,7 +70,7 @@ Emotes.LIST = {
 	{ "surrender", "Surrender", "/surrender", "lose" },
 	{ "helpme", "Help me", "/helpme", "voice" },
 	{ "incoming", "Incoming", "/incoming", "voice" },
-	{ "attack", "Attack", "/attackmytarget", "voice" },
+	{ "attack", "Attack", "/attacktarget", "voice" },
 	{ "openfire", "Open fire", "/openfire", "voice" },
 	{ "oom", "OOM", "/oom", "voice" },
 	{ "retreat", "Retreat", "/retreat", "voice" },

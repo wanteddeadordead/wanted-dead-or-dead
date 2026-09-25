@@ -6,7 +6,7 @@ _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
 Wanted.FOLDER = ADDON_NAME
--- Still being tested with real players: labelled in the window, the welcome note and bug reports
+-- Beta: a label in the window, a one-time welcome, and bug reports
 Wanted.BETA = true
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- Bumped when the saved data layout changes; an older layout is reset rather than migrated while in beta

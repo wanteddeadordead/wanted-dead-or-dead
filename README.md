@@ -58,13 +58,14 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
 - **No public chat.** The addon never posts in General, Trade or any public channel. The only chat it sends
   is when you press "Tell your party / raid / guild" yourself.
 
-## Limits
+## Good to know
 
 - WoW Forever only (client 1.60.x).
 - During combat the game won't let an addon re-point clickable rows, so new enemies in the Nearby window
   become clickable once combat ends.
 - Enemy health is drawn by the game, not read by the addon, so the bar shows length but not a colour change.
-- The network needs other players running the addon. Alone, it still detects, alerts and keeps your lists.
+- It gets better the more hunters run it: bounties, sightings and witnesses all come from other players.
+  On your own it still detects, alerts and keeps your lists.
 
 ## Development
 

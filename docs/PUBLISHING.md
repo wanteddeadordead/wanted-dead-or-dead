@@ -13,8 +13,7 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
    - Name: `Wanted: Dead or... Dead`. Slug suggestion: `wanted-dead-or-dead`.
    - Summary (short line): "[Beta] World PvP bounties, enemy awareness and reputation for WoW Forever,
      shared player to player."
-   - Description: the short beta line, then the Features and How it works sections of `README.md`. Keep
-     the beta wording light (a label and where to report), not a list of what's untested.
+   - Description: the short beta line, then the Features and How it works sections of `README.md`.
    - Issues URL: <https://github.com/wanteddeadordead/wanted-dead-or-dead/issues> (so CurseForge's "Issues" link
      goes to the bug report form).
    - Primary category: PvP. Secondary: Combat, Chat & Communication.

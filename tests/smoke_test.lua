@@ -83,9 +83,10 @@ end
 
 -- Timers
 local timers = {}
+tickers = {}
 C_Timer = {
 	After = function(_, f) timers[#timers + 1] = f end,
-	NewTicker = function() return NewMock() end,
+	NewTicker = function(_, f) tickers[#tickers + 1] = f return NewMock() end,
 	NewTimer = function() return NewMock() end,
 }
 local function RunTimers()
@@ -508,10 +509,38 @@ ns.Report:Show()
 ns.db.welcomed = nil
 ns.UI:Show("board")
 RunTimers()
--- Leaving: after the timeout the enemy drops off Nearby
+-- Leaving: out of view the enemy still shows as in sight for a minute, then shaded for 30s, then leaves
+local function Tick() for _, f in ipairs(tickers) do f() end end
+Tick() -- a scan while their nameplate is still up
 enemyUnits.nameplate1 = nil
 Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-clock = clock + 120
-RunTimers()
+local function Near(guid) for _, d in ipairs(ns.Enemies:GetNearby()) do if d.guid == guid then return d end end end
+clock = clock + 45
+Tick()
+check(Near("Player-9-ENEMY") and Near("Player-9-ENEMY").inSight, "45s out of view still shows as in sight")
+clock = clock + 30
+Tick()
+check(Near("Player-9-ENEMY") and not Near("Player-9-ENEMY").inSight, "75s out of view is listed but shaded")
+ns.NearbyWindow:Refresh()
+clock = clock + 20
+Tick()
+check(not Near("Player-9-ENEMY"), "95s out of view has left the list")
+-- The settings change the timing
+ns.db.settings.detect.inSight, ns.db.settings.detect.timeout = 120, 60
+enemyUnits.nameplate1 = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 22 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+Tick()
+enemyUnits.nameplate1 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+clock = clock + 100
+Tick()
+check(Near("Player-9-ENEMY") and Near("Player-9-ENEMY").inSight, "a 2 minute in-sight setting keeps them in sight at 100s")
+clock = clock + 70
+Tick()
+check(Near("Player-9-ENEMY") and not Near("Player-9-ENEMY").inSight, "then shaded")
+clock = clock + 60
+Tick()
+check(not Near("Player-9-ENEMY"), "then gone after 3 minutes")
+ns.db.settings.detect.inSight, ns.db.settings.detect.timeout = 60, 30
 RunTimers()
 print("wanted smoke: all checks pass")

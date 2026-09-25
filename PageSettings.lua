@@ -68,8 +68,20 @@ function private.BuildAlerts(panel, width)
 		Detect().alerts = key
 	end, 130)
 	private.alerts:SetPoint("TOPLEFT", 16, -168)
-	local timeoutLabel = Theme:Text(card, "small", "Remove enemies out of sight after")
-	timeoutLabel:SetPoint("TOPLEFT", 440, -150)
+	-- Lost contact: still shown as in sight for a while (they're likely still around), then shaded, then gone
+	local inSightLabel = Theme:Text(card, "small", "Out of view, still show as in sight for")
+	inSightLabel:SetPoint("TOPLEFT", 440, -150)
+	private.inSight = W:Segmented(card, {
+		{ key = "30", label = "30s" },
+		{ key = "60", label = "1m" },
+		{ key = "120", label = "2m" },
+	}, function(key)
+		Detect().inSight = tonumber(key)
+		RefreshNearby()
+	end, 56)
+	private.inSight:SetPoint("TOPLEFT", 440, -168)
+	local timeoutLabel = Theme:Text(card, "small", "Then shade them for, before they leave the list")
+	timeoutLabel:SetPoint("TOPLEFT", 440, -198)
 	private.timeout = W:Segmented(card, {
 		{ key = "20", label = "20s" },
 		{ key = "30", label = "30s" },
@@ -78,7 +90,7 @@ function private.BuildAlerts(panel, width)
 	}, function(key)
 		Detect().timeout = tonumber(key)
 	end, 56)
-	private.timeout:SetPoint("TOPLEFT", 440, -168)
+	private.timeout:SetPoint("TOPLEFT", 440, -216)
 	local previewLabel = Theme:Text(card, "small", "Hear them")
 	previewLabel:SetPoint("TOPLEFT", 440, -38)
 	local previous = nil
@@ -156,7 +168,7 @@ function private.BuildNearby(panel, width)
 		{ "health", "Health bar", "A thin health bar along the bottom while they're in view." },
 		{ "tint", "Class colour wash", "A faint wash of their class colour behind the row." },
 		{ "targeting", "Targeting you", "A red > before the name when they target you." },
-		{ "fade", "Shade out of sight", "Dim a row once the player is out of view." },
+		{ "fade", "Shade out of sight", "Dim a row once the player has been out of view longer than the in-sight time (Alerts tab)." },
 	}
 	for i, item in ipairs(items) do
 		local column = (i - 1) % 3
@@ -227,6 +239,7 @@ function private.Refresh()
 	end
 	local detect = Detect()
 	private.alerts:Select(detect.alerts or "all", true)
+	private.inSight:Select(tostring(detect.inSight or 60), true)
 	private.timeout:Select(tostring(detect.timeout or 30), true)
 	private.layout:Select(NearbyShow().layout or "auto", true)
 	private.opacity:Select(tostring(NearbyShow().opacity or 1), true)

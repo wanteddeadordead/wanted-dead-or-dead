@@ -9,6 +9,8 @@
 - Enemy markers now show on the world map, drawn through the map's own pin system so they work alongside other
   map addons such as Leatrix Maps.
 - Show or hide the enemy markers from the map's filter menu, the Hotspots page or Settings.
+- Nearby window timing: an enemy out of view still shows as in sight for a minute, then shaded for 30 seconds,
+  then leaves the list. Both times are in Settings.
 
 ## [0.1.0-beta.1] - 2026-09-24
 

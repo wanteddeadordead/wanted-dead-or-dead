@@ -24,9 +24,11 @@ local private = {
 }
 local SCAN_SECONDS = 1
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
--- Nameplates only exist while a player is on screen, so turning the camera away hides someone who is still
--- next to you: count them as in sight for a while after the last sighting before shading them
-local IN_SIGHT_SECONDS = 12
+-- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
+-- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
+-- inSight), then show shaded (settings: timeout), then leave the list
+local DEFAULT_IN_SIGHT = 60
+local DEFAULT_SHADED = 30
 local TARGETER_SECONDS = 2.2 -- seen targeting us within this long counts as targeting us now
 local LAST_HOUR = 3600
 local TARGETING_WINDOW = 6 -- had us targeted within this long before we died
@@ -204,9 +206,9 @@ function private.Tick()
 	end
 	private.Scan("target")
 	private.Scan("focus")
-	-- Enemies nobody has seen for the timeout leave the Nearby list
+	-- Enemies nobody has seen for the in-sight time plus the shaded time leave the Nearby list
 	local now = GetTime()
-	local timeout = private.Settings().timeout or 60
+	local timeout = private.InSightSeconds() + (private.Settings().timeout or DEFAULT_SHADED)
 	for guid, entry in pairs(private.nearby) do
 		if now - entry.lastSeen > timeout then
 			private.nearby[guid] = nil
@@ -500,6 +502,11 @@ end
 
 ---Everything known about an enemy, merged from the Nearby entry, the player store and the lists.
 ---@param guid string
+---How long an enemy out of view still counts as in sight.
+function private.InSightSeconds()
+	return private.Settings().inSight or DEFAULT_IN_SIGHT
+end
+
 ---@return table
 function Enemies:Describe(guid)
 	local entry = private.nearby[guid]
@@ -528,7 +535,7 @@ function Enemies:Describe(guid)
 		lastSeen = entry and (GetServerTime() - (GetTime() - entry.lastSeen)) or player.lastSeen or stats.last,
 		nearby = entry ~= nil,
 		-- In sight: a unit token showed them in the last scan. Active: casting or targeting us lately.
-		inSight = entry and GetTime() - entry.lastSeen < IN_SIGHT_SECONDS or false,
+		inSight = entry and GetTime() - entry.lastSeen < private.InSightSeconds() or false,
 		goneFor = entry and floor(GetTime() - entry.lastSeen) or nil,
 		active = entry and ((entry.lastActive and GetTime() - entry.lastActive < ACTIVE_SECONDS) or (entry.targetingMe and GetTime() - entry.targetingMe < ACTIVE_SECONDS)) or false,
 		stealthed = entry and entry.stealthed and GetTime() - entry.stealthed < 30,

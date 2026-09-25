@@ -244,7 +244,9 @@ function private.Create()
 	private.footer = Theme:Text(frame, "tiny", "")
 	private.footer:SetPoint("BOTTOMLEFT", 10, FOOTER_GAP)
 	private.footer:SetWidth(WIDTH - 20)
-	private.footer:SetWordWrap(false)
+	-- Wrapping stays on: with it off the client puts the whole footer on one line, ignoring line breaks. The
+	-- class lines are built three classes long, short enough never to wrap themselves.
+	private.footer:SetWordWrap(true)
 	private.footer:SetJustifyV("BOTTOM")
 	private.footer:SetSpacing(2)
 	-- Call for help: always there on the Nearby tab (the window can't change size in combat, when it's needed)

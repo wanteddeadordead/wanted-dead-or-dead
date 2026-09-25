@@ -2,6 +2,13 @@
 -- broadcasts its own new records once; a client that logs in says what it holds, peers answer with what
 -- they hold, and gaps are filled by whoever answers first. No relay of live traffic, no server, no owner.
 -- Everything sent is addon messages (data only, invisible to normal chat), through C_ChatInfo.
+--
+-- Realm links: WoW Forever's one shared world has several realm names, and a custom channel belongs to one,
+-- so players on another realm name can't hear this channel. They're reached by hidden addon whispers
+-- instead, which do cross: the same messages, sent to one player. A link catches both sides up, then
+-- forwards every new record both ways, and records that arrive over a link are shared once on this realm's
+-- channel. Links are found through Battle.net friends (Bridge), anyone who greets us from another realm,
+-- and the ones remembered from before.
 
 local _, Wanted = ...
 local Sync = Wanted:NewModule("Sync")
@@ -29,9 +36,16 @@ local private = {
 	flushDue = nil,
 	flushGen = 0,
 	recentSightings = {}, -- guid -> when anyone (us included) last shared them
-	retryQueue = {}, -- { tag, tbl, attempt } throttled by the game, sent again shortly
+	retryQueue = {}, -- { tag, tbl, attempt, target } throttled by the game, sent again shortly
 	retryScheduled = false,
 	testStartedAt = nil,
+	links = {}, -- name -> { realm, heard, since, sent, received } realm links (players on another realm name)
+	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
+	greeted = {}, -- name -> when we last greeted them over a whisper
+	forwardQueue = {}, -- name -> records to forward to that link
+	reshareQueue = {}, -- records from a link to share on this realm's channel
+	forwardDue = false,
+	currentSource = nil, -- the link whose records are being merged (not sent back to it)
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
@@ -77,6 +91,18 @@ local PEER_TIMEOUT = 10 * 60
 -- How many records a fill answer sends per message batch and per request
 local FILL_BATCH = 8
 local MAX_FILL_PER_REQUEST = 200
+-- Realm links (whispers to players on another realm name): their own budget, a resync every minute so a
+-- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list
+local MAX_LINK_PARTS_PER_MINUTE = 40
+local LINK_HAVE_SECONDS = 60
+local LINK_TIMEOUT = 15 * 60 -- a link nobody has heard from this long is dropped (and greeted again later)
+local LINK_FORWARD_SECONDS = 2
+local MAX_FORWARD_QUEUE = 200
+local MAX_NEED_ORIGINS_LINK = 40
+local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
+local MAX_REMEMBERED_LINKS = 20
+local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
+local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone just greeted is hidden this long
 
 
 
@@ -107,6 +133,14 @@ function Sync:OnEnable()
 	Store:OnRecord("proof", private.OnOwnRecord)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
+	-- Realm links
+	Store:OnRecord("*", private.OnAnyRecord)
+	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
+	C_Timer.After(15, private.GreetRemembered)
+	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
+	if addFilter then
+		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
+	end
 end
 
 ---Connection facts for the interface.
@@ -116,6 +150,12 @@ function Sync:GetInfo()
 	local now = GetTime()
 	for _, t in pairs(private.peers) do
 		if now - t < PEER_TIMEOUT then
+			numPeers = numPeers + 1
+		end
+	end
+	-- Players on other realm names linked by whisper count too
+	for _, link in pairs(private.links) do
+		if now - (link.heard or 0) < PEER_TIMEOUT then
 			numPeers = numPeers + 1
 		end
 	end
@@ -136,7 +176,19 @@ function Sync:Status()
 			numPeers = numPeers + 1
 		end
 	end
-	return format("Sync: channel %s (%s), %d peers in the last 10 min; sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", numPeers, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
+	-- Players on other realm names linked by whisper count too
+	for _, link in pairs(private.links) do
+		if now - (link.heard or 0) < PEER_TIMEOUT then
+			numPeers = numPeers + 1
+		end
+	end
+	local numLinks = 0
+	for _, link in pairs(private.links) do
+		if now - (link.heard or 0) < LINK_TIMEOUT then
+			numLinks = numLinks + 1
+		end
+	end
+	return format("Sync: channel %s (%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
 end
 
 function private.OnEvent(_, event, ...)
@@ -250,13 +302,15 @@ local function PruneTimes(times, now)
 	end
 end
 
----Sends a table as one or more addon messages. Returns whether it was sent.
+---Sends a table as one or more addon messages, on the channel or to one player by whisper (a realm link).
+---Returns whether it was sent.
 ---@param tag string
 ---@param tbl table
 ---@param attempt number? how many times the game has throttled it already
+---@param target string? a player to whisper instead of the channel
 ---@return boolean
-function private.Send(tag, tbl, attempt)
-	if not private.channelId then
+function private.Send(tag, tbl, attempt, target)
+	if not target and not private.channelId then
 		return false
 	end
 	local now = GetTime()
@@ -273,10 +327,16 @@ function private.Send(tag, tbl, attempt)
 	end
 	local payload = Encode(tbl)
 	local total = ceil(#payload / CHUNK_LEN)
-	local times = isSighting and private.sightingTimes or private.sentTimes
+	local times = target and private.linkTimes or (isSighting and private.sightingTimes or private.sentTimes)
 	PruneTimes(times, now)
-	Wanted:Log("Sync: send %s, %d bytes in %d part(s)", tag, #payload, total)
-	if isSighting and #times + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
+	Wanted:Log("Sync: send %s%s, %d bytes in %d part(s)", tag, target and (" to "..target) or "", #payload, total)
+	if target and #times + total > MAX_LINK_PARTS_PER_MINUTE then
+		Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
+		private.stats.dropped = private.stats.dropped + 1
+		return false
+	elseif target then
+		-- Within the link budget; the channel's limits and pause don't apply to whispers
+	elseif isSighting and #times + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
 		Wanted:Log("Sync: sighting budget reached, dropping a batch")
 		private.stats.dropped = private.stats.dropped + 1
 		return false
@@ -294,14 +354,22 @@ function private.Send(tag, tbl, attempt)
 	end
 	private.msgCounter = (private.msgCounter % 46655) + 1
 	local msgId = private.ToBase36(private.msgCounter)
-	private.ownMessages[tag..":"..msgId] = now
+	if not target then
+		-- Channel messages come back to us; whispers don't
+		private.ownMessages[tag..":"..msgId] = now
+	end
 	for part = 1, total do
 		local chunk = strsub(payload, (part - 1) * CHUNK_LEN + 1, part * CHUNK_LEN)
 		local text = tag..":"..msgId..":"..part.."/"..total..":"..chunk
 		assert(#text <= MAX_MESSAGE_LEN)
-		local result = C_ChatInfo.SendAddonMessage(PREFIX, text, "CHANNEL", tostring(private.channelId))
+		local result
+		if target then
+			result = C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", target)
+		else
+			result = C_ChatInfo.SendAddonMessage(PREFIX, text, "CHANNEL", tostring(private.channelId))
+		end
 		Wanted:Log("Sync: SendAddonMessage part %d/%d -> %s", part, total, tostring(result))
-		if result == RESULT_INVALID_CHANNEL then
+		if not target and result == RESULT_INVALID_CHANNEL then
 			-- Not really in the channel (yet): look it up again shortly and say hello then
 			private.channelId = nil
 			private.joinAttempts = 0
@@ -313,24 +381,27 @@ function private.Send(tag, tbl, attempt)
 			private.stats.throttled = private.stats.throttled + 1
 			Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, tag)
 			if not isSighting then
-				private.QueueRetry(tag, tbl, attempt)
+				private.QueueRetry(tag, tbl, attempt, target)
 			end
 			return false
 		end
 		tinsert(times, now)
 		private.stats.sent = private.stats.sent + 1
 	end
+	if target and private.links[target] then
+		private.links[target].sent = private.links[target].sent + 1
+	end
 	return true
 end
 
 ---Sends a throttled message again in a few seconds, up to a few times.
-function private.QueueRetry(tag, tbl, attempt)
+function private.QueueRetry(tag, tbl, attempt, target)
 	attempt = (attempt or 0) + 1
 	if attempt > MAX_RETRIES or #private.retryQueue >= MAX_RETRY_QUEUE then
 		private.stats.dropped = private.stats.dropped + 1
 		return
 	end
-	tinsert(private.retryQueue, { tag = tag, tbl = tbl, attempt = attempt })
+	tinsert(private.retryQueue, { tag = tag, tbl = tbl, attempt = attempt, target = target })
 	private.ScheduleRetries()
 end
 
@@ -347,7 +418,7 @@ function private.RunRetries()
 	local queue = private.retryQueue
 	private.retryQueue = {}
 	for i, item in ipairs(queue) do
-		if not private.Send(item.tag, item.tbl, item.attempt) then
+		if not private.Send(item.tag, item.tbl, item.attempt, item.target) then
 			-- Throttled again (Send queued it) or held by a limit: the rest waits for the next round
 			for j = i + 1, #queue do
 				tinsert(private.retryQueue, queue[j])
@@ -487,25 +558,32 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
-	if channel ~= "CHANNEL" then
-		return
-	end
-	if channelName and channelName ~= "" and strlower(channelName) ~= strlower(private.channelName) then
-		return
+	-- Whispers carry realm links (players on another realm name); anything else must be our channel
+	local viaLink = channel == "WHISPER"
+	if not viaLink then
+		if channel ~= "CHANNEL" then
+			return
+		end
+		if channelName and channelName ~= "" and strlower(channelName) ~= strlower(private.channelName) then
+			return
+		end
 	end
 	local now = GetTime()
 	private.stats.received = private.stats.received + 1
 	-- Our own messages come back to us; recognise them by the id we just sent rather than by name, and let the
 	-- store learn how the server names us as a sender
-	local echoTag, echoId = strmatch(text, "^(%u):(%w+):")
-	local isSelf = echoTag and private.ownMessages[echoTag..":"..echoId] and now - private.ownMessages[echoTag..":"..echoId] < 30
-	if isSelf then
-		private.ownMessages[echoTag..":"..echoId] = nil
-		Store:LearnOrigin(sender)
-	elseif sender == Store:GetOrigin() then
-		isSelf = true
+	local isSelf = false
+	if not viaLink then
+		local echoTag, echoId = strmatch(text, "^(%u):(%w+):")
+		isSelf = echoTag and private.ownMessages[echoTag..":"..echoId] and now - private.ownMessages[echoTag..":"..echoId] < 30
+		if isSelf then
+			private.ownMessages[echoTag..":"..echoId] = nil
+			Store:LearnOrigin(sender)
+		elseif sender == Store:GetOrigin() then
+			isSelf = true
+		end
 	end
-	Wanted:Log("Sync: received %d bytes from %s%s on %s", #text, sender, isSelf and " (self)" or "", tostring(channelName))
+	Wanted:Log("Sync: received %d bytes from %s%s %s", #text, sender, isSelf and " (self)" or "", viaLink and "by whisper" or ("on "..tostring(channelName)))
 	if isSelf then
 		-- Our own messages come back to us too, which is the transport check in /wanted synctest
 		private.stats.echoed = private.stats.echoed + 1
@@ -515,7 +593,9 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
-	private.peers[sender] = now
+	if not viaLink then
+		private.peers[sender] = now
+	end
 	-- Per-sender inbound cap
 	local minute = floor(now / 60)
 	local inbound = private.inbound[sender]
@@ -564,8 +644,8 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		Wanted:Log("!! Sync: could not decode a %s message from %s", tag, sender)
 		return
 	end
-	Wanted:Log("Sync: handling %s from %s", tag, sender)
-	private.HandleMessage(tag, tbl, sender)
+	Wanted:Log("Sync: handling %s from %s%s", tag, sender, viaLink and " (realm link)" or "")
+	private.HandleMessage(tag, tbl, sender, viaLink)
 end
 
 ---Tells a player on an older version, privately and at most every few minutes, to update.
@@ -582,7 +662,7 @@ function private.TellOutdated(sender)
 	Wanted:Log("Sync: told %s to update", tostring(sender))
 end
 
-function private.HandleMessage(tag, tbl, sender)
+function private.HandleMessage(tag, tbl, sender, viaLink)
 	-- The newest version wins: a newer sender may lock this client (Core); an older one's news is ignored
 	Wanted:NoteVersion(tbl.v)
 	if type(tbl.v) == "string" and Wanted:IsNewerVersion(Wanted.VERSION, tbl.v) then
@@ -593,6 +673,10 @@ function private.HandleMessage(tag, tbl, sender)
 	end
 	-- Waiting for an update: take nothing in until this client can read what newer versions write
 	if Wanted:GetRequiredUpdate() then
+		return
+	end
+	if viaLink then
+		private.HandleLinkMessage(tag, tbl, sender)
 		return
 	end
 	if tag == TAG_ENEMY or tag == TAG_SIGHTINGS then
@@ -646,20 +730,24 @@ function private.HandleMessage(tag, tbl, sender)
 	end
 end
 
----A peer told us what it holds. Ask for what we lack, and if this was a HELLO, tell it what we hold.
-function private.HandleHave(chains, sender, isHello)
+---A peer told us what it holds. Ask for what we lack, and if this was a HELLO, tell it what we hold. Over a
+---realm link the request goes straight back to that player, for more origins at once.
+function private.HandleHave(chains, sender, isHello, viaLink)
 	local need = {}
 	local numNeed = 0
+	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, seq in pairs(chains) do
 		if type(origin) == "string" and type(seq) == "number" and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
 			need[origin] = Store:GetChainSeq(origin) + 1
 			numNeed = numNeed + 1
-			if numNeed >= 5 then
+			if numNeed >= maxNeed then
 				break
 			end
 		end
 	end
-	if numNeed > 0 then
+	if numNeed > 0 and viaLink then
+		private.Send(TAG_NEED, { n = need }, nil, sender)
+	elseif numNeed > 0 then
 		-- Spread requests so a busy channel is not hit by everyone at once
 		C_Timer.After(0.5 + math.random() * 2.5, function()
 			private.Send(TAG_NEED, { n = need })
@@ -683,8 +771,17 @@ function private.HandleHave(chains, sender, isHello)
 	end
 end
 
----A peer asked for records. Answer after a random delay unless someone else already filled that range.
-function private.HandleNeed(need, sender)
+---A peer asked for records. Answer after a random delay unless someone else already filled that range (over a
+---realm link nobody else can: answer that player straight away).
+function private.HandleNeed(need, sender, viaLink)
+	if viaLink then
+		for origin, fromSeq in pairs(need) do
+			if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
+				private.SendFill(origin, fromSeq, sender)
+			end
+		end
+		return
+	end
 	for origin, fromSeq in pairs(need) do
 		if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
 			private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
@@ -704,13 +801,13 @@ function private.HandleNeed(need, sender)
 	end
 end
 
-function private.SendFill(origin, fromSeq)
+---Sends an origin's records from a seq on, on the channel or to one player. Every kind: notices and proofs
+---too, which the first list here left out.
+function private.SendFill(origin, fromSeq, target)
 	local records = {}
-	for _, kind in ipairs({ "kill", "death", "bounty", "claim", "payment", "mark", "raise", "pass", "confirm", "withdraw", "hunt" }) do
-		for record in Store:Iterator(kind) do
-			if record.origin == origin and record.seq >= fromSeq and not Store:IsTest(record) then
-				tinsert(records, record)
-			end
+	for _, record in pairs(Wanted.db.records) do
+		if record.origin == origin and type(record.seq) == "number" and record.seq >= fromSeq and not Store:IsTest(record) then
+			tinsert(records, record)
 		end
 	end
 	sort(records, function(a, b) return a.seq < b.seq end)
@@ -720,7 +817,7 @@ function private.SendFill(origin, fromSeq)
 		for j = i, min(i + FILL_BATCH - 1, #records) do
 			tinsert(batch, records[j])
 		end
-		if not private.Send(TAG_FILL, { r = batch }) then
+		if not private.Send(TAG_FILL, { r = batch }, nil, target) then
 			return
 		end
 		numSent = numSent + #batch
@@ -728,6 +825,209 @@ function private.SendFill(origin, fromSeq)
 			return
 		end
 	end
+end
+
+
+
+-- ============================================================================
+-- Realm links
+-- ============================================================================
+
+local function NormalizeRealm(name)
+	return type(name) == "string" and strlower((gsub(name, "[%s%-']", ""))) or nil
+end
+
+---Whether a realm name (as the game or Battle.net gives it) is this player's.
+---@param name string?
+---@return boolean
+function Sync:IsOwnRealm(name)
+	local mine = NormalizeRealm(GetRealmName())
+	return mine ~= nil and NormalizeRealm(name) == mine
+end
+
+---Greets a player on another realm name by hidden whisper. A Wanted client answers, and the two become a realm
+---link: they catch each other up and forward new records both ways from then on.
+---@param name string the player's name as a whisper takes it
+---@param realm string? where they are, if known
+function Sync:Greet(name, realm)
+	if type(name) ~= "string" or name == "" or name == Store:GetOrigin() or (realm and Sync:IsOwnRealm(realm)) then
+		return
+	end
+	local now = GetTime()
+	local link = private.links[name]
+	if (link and now - link.heard < LINK_TIMEOUT) or (private.greeted[name] and now - private.greeted[name] < GREET_SECONDS) then
+		return
+	end
+	private.greeted[name] = now
+	Wanted:Log("Sync: greeting %s (%s) as a realm link", name, tostring(realm))
+	private.SendLinkHello(name, false)
+end
+
+function private.SendLinkHello(name, isAnswer)
+	private.Send(TAG_HELLO, { c = private.GetHaveTable(), r = GetRealmName(), a = isAnswer or nil }, nil, name)
+end
+
+function private.AddLink(name, realm)
+	local now = GetTime()
+	local link = private.links[name]
+	if not link then
+		link = { realm = realm, since = now, sent = 0, received = 0 }
+		private.links[name] = link
+		Wanted:Log("Sync: realm link with %s on %s", name, tostring(realm))
+	end
+	link.realm, link.heard = realm, now
+	-- Remember them for next time: the most recent few, for a week
+	local far = Wanted.db.farPeers
+	far[name] = { realm = realm, seen = GetServerTime() }
+	local names = {}
+	for other in pairs(far) do
+		tinsert(names, other)
+	end
+	if #names > MAX_REMEMBERED_LINKS then
+		sort(names, function(a, b) return far[a].seen > far[b].seen end)
+		for i = MAX_REMEMBERED_LINKS + 1, #names do
+			far[names[i]] = nil
+		end
+	end
+	return link
+end
+
+---A realm link message (a whisper). A HELLO from another realm makes the link; everything else needs one.
+function private.HandleLinkMessage(tag, tbl, sender)
+	local link = private.links[sender]
+	if tag == TAG_HELLO then
+		if type(tbl.r) ~= "string" or Sync:IsOwnRealm(tbl.r) or type(tbl.c) ~= "table" then
+			Wanted:Log("!! Sync: %s greeted us by whisper from our own realm or without one; ignored", tostring(sender))
+			return
+		end
+		link = private.AddLink(sender, tbl.r)
+		link.received = link.received + 1
+		if not tbl.a then
+			private.SendLinkHello(sender, true)
+		end
+		private.HandleHave(tbl.c, sender, false, true)
+		return
+	end
+	if not link then
+		Wanted:Log("!! Sync: %s whispered a %s without being a realm link; ignored", tostring(sender), tag)
+		return
+	end
+	link.heard = GetTime()
+	link.received = link.received + 1
+	if tag == TAG_HAVE and type(tbl.c) == "table" then
+		private.HandleHave(tbl.c, sender, false, true)
+	elseif tag == TAG_NEED and type(tbl.n) == "table" then
+		private.HandleNeed(tbl.n, sender, true)
+	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then
+		private.currentSource = sender
+		for _, record in ipairs(tbl.r) do
+			local isNew = Store:MergeRelayed(record)
+			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or "known or rejected")
+			if isNew then
+				private.stats.merged = private.stats.merged + 1
+			end
+		end
+		private.currentSource = nil
+	end
+end
+
+---Every new record, whoever made it: forwarded to the realm links (not back to the one it came from), and one
+---that came over a link is shared once on this realm's channel. Records are only new once, so nothing loops.
+function private.OnAnyRecord(record)
+	-- Sightings are announced like records but aren't (no id, never forwarded)
+	if type(record.id) ~= "string" or Store:IsTest(record) then
+		return
+	end
+	local source = private.currentSource
+	local now = GetTime()
+	local queued = false
+	for name, link in pairs(private.links) do
+		if name ~= source and now - (link.heard or 0) < LINK_TIMEOUT then
+			local queue = private.forwardQueue[name] or {}
+			private.forwardQueue[name] = queue
+			if #queue < MAX_FORWARD_QUEUE then
+				tinsert(queue, record)
+				queued = true
+			end
+		end
+	end
+	if source and #private.reshareQueue < MAX_FORWARD_QUEUE then
+		tinsert(private.reshareQueue, record)
+		queued = true
+	end
+	if queued and not private.forwardDue then
+		private.forwardDue = true
+		C_Timer.After(LINK_FORWARD_SECONDS, private.FlushForward)
+	end
+end
+
+local function SendInBatches(records, target)
+	for i = 1, #records, FILL_BATCH do
+		local batch = {}
+		for j = i, min(i + FILL_BATCH - 1, #records) do
+			tinsert(batch, records[j])
+		end
+		if not private.Send(TAG_FILL, { r = batch }, nil, target) then
+			return
+		end
+	end
+end
+
+function private.FlushForward()
+	private.forwardDue = false
+	for name, queue in pairs(private.forwardQueue) do
+		private.forwardQueue[name] = nil
+		SendInBatches(queue, name)
+	end
+	local reshare = private.reshareQueue
+	private.reshareQueue = {}
+	if #reshare > 0 then
+		SendInBatches(reshare, nil)
+	end
+end
+
+---Once a minute: each live link hears what we hold (a catch-up the budget cut short carries on), and links
+---nobody has heard from in a while are dropped.
+function private.LinkTick()
+	local now = GetTime()
+	for name, link in pairs(private.links) do
+		if now - (link.heard or 0) >= LINK_TIMEOUT then
+			private.links[name] = nil
+			Wanted:Log("Sync: realm link with %s went quiet; dropped", name)
+		else
+			private.Send(TAG_HAVE, { c = private.GetHaveTable() }, nil, name)
+		end
+	end
+end
+
+---At login: greet the realm links remembered from the last week.
+function private.GreetRemembered()
+	local cutoff = GetServerTime() - REMEMBER_LINK_SECONDS
+	for name, info in pairs(Wanted.db.farPeers) do
+		if type(info) == "table" and (info.seen or 0) >= cutoff then
+			Sync:Greet(name, info.realm)
+		end
+	end
+end
+
+---Hides the game's "No player named ... is currently playing." for a player we greeted a moment ago (a
+---remembered link who isn't online).
+function private.HideNotFound(_, _, msg)
+	if type(msg) ~= "string" or not ERR_CHAT_PLAYER_NOT_FOUND_S then
+		return false
+	end
+	local now = GetTime()
+	for name, t in pairs(private.greeted) do
+		if now - t < NOT_FOUND_SECONDS and msg == format(ERR_CHAT_PLAYER_NOT_FOUND_S, name) then
+			return true
+		end
+	end
+	return false
+end
+
+---The realm links now: name -> { realm, since, heard, sent, received }.
+function Sync:GetLinks()
+	return private.links
 end
 
 

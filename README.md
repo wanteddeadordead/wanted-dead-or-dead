@@ -77,6 +77,10 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
   addon messages, which only the addon sees. Each copy keeps the full record and fills in what it missed
   from whoever is online. Every record carries a hash of the sender's previous one, so a rewritten history
   shows.
+- **Across realms.** WoW Forever's one world has several realm names, and a chat channel belongs to one. So
+  copies on different realm names link up by hidden addon whispers instead: through Battle.net friends,
+  anyone who greets them, and the links remembered from before. A link catches both sides up and passes new
+  records both ways; each side shares what it gets on its own channel.
 - **Across factions.** Each faction's copies only hear each other, so the price on your head comes from
   Battle.net friends: when a player on the other side who runs the addon has a Battle.net friend on yours
   who does too, their clients pass bounty notices across as hidden game data (never chat). Only the target,

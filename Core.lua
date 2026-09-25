@@ -79,6 +79,7 @@ local DEFAULTS = {
 	},
 	kos = {}, -- guid -> { name, reason, t }
 	seenNotices = {}, -- bounty id -> amount of the bounties on this player already announced (Bridge)
+	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
 	ignore = {}, -- guid -> { name, t }
 	enemyStats = {}, -- guid -> { wins, losses, detections, first, last }
 }

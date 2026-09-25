@@ -106,11 +106,21 @@ function private.IsCandidate(game)
 	return private.IsOwnRealm(game.realmName)
 end
 
+---A friend's game account on our faction but another realm name: a realm link for the sync (Sync:Greet).
+---@param game table? BNetGameAccountInfo
+---@return boolean
+function private.IsRealmLinkCandidate(game)
+	if not game or not game.isOnline or game.isAppearOffline or type(game.characterName) ~= "string" then
+		return false
+	end
+	if game.clientProgram ~= (BNET_CLIENT_WOW or "WoW") or not game.factionName or not private.IsOwnFaction(game.factionName) then
+		return false
+	end
+	return type(game.realmName) == "string" and not private.IsOwnRealm(game.realmName)
+end
+
 ---Says hello to every friend who could be a bridge; the ones running Wanted answer.
 function private.Scan()
-	if not private.Enabled() then
-		return
-	end
 	local now = GetTime()
 	if private.lastScan and now - private.lastScan < SCAN_INTERVAL then
 		if not private.scanScheduled then
@@ -126,7 +136,10 @@ function private.Scan()
 	for i = 1, BNGetNumFriends() do
 		local account = C_BattleNet.GetFriendAccountInfo(i)
 		local game = account and account.gameAccountInfo
-		if private.IsCandidate(game) then
+		if private.IsRealmLinkCandidate(game) then
+			-- Our faction on another realm name: can't hear our channel, but a hidden whisper reaches them (Sync)
+			Wanted.Sync:Greet(game.characterName, game.realmName)
+		elseif private.Enabled() and private.IsCandidate(game) then
 			local id = game.gameAccountID
 			if not private.helloSent[id] or now - private.helloSent[id] >= HELLO_INTERVAL then
 				private.helloSent[id] = now
@@ -405,4 +418,8 @@ Wanted:RegisterCommand("bridge", "Battle.net friends on the other faction who ca
 	end
 	local total, count, posters = Bridge:GetPriceOnMe()
 	Wanted:Print("Price on your head: %s from %d bounties by %d players.", Bounties:FormatMoney(total), count, posters)
+	local now = GetTime()
+	for name, link in pairs(Wanted.Sync:GetLinks()) do
+		Wanted:Print("  Realm link: %s on %s, heard %ds ago, %d sent, %d received", name, tostring(link.realm), floor(now - (link.heard or now)), link.sent, link.received)
+	end
 end)

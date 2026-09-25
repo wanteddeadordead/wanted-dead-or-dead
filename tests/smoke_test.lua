@@ -217,6 +217,10 @@ local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
 addonSent = {}
+-- Chat filters (the realm links hide "No player named ..." for someone just greeted)
+local chatFilters = {}
+ChatFrameUtil = { AddMessageEventFilter = function(event, func) chatFilters[event] = func end }
+ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
 -- Battle.net friends (Bridge): who each is in game, as C_BattleNet reports them
 local bnFriends = {
 	{ id = 101, program = "WoW", faction = "Alliance", realm = "Realm", name = "Ally Bridge" },
@@ -232,9 +236,9 @@ C_BattleNet = {
 	GetGameAccountInfoByID = function(id) for _, f in ipairs(bnFriends) do if f.id == id then return BnGame(f) end end end,
 	SendGameData = function(id, prefix, data) bnSent[#bnSent + 1] = { id = id, prefix = prefix, data = data } end,
 }
-C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text)
+C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text, chatType, target)
 	if throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
-	addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0
+	addonSent[#addonSent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target } return 0
 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
@@ -1339,6 +1343,75 @@ check(#hiddenPopups >= 1 and hiddenPopups[#hiddenPopups].which == "CHAT_CHANNEL_
 Fire("CHANNEL_PASSWORD_REQUEST", "SomeoneElsesChannel")
 RunTimers()
 check(#joinedWith == 1, "someone else's channel is left to the player")
+-- Realm links: a player on another realm name can't hear our channel, so the sync reaches them by hidden
+-- whisper. Greet, link, catch each other up, forward new records both ways, share theirs once on our
+-- channel, never send a record back where it came from; strangers are ignored
+local function Sent(chatType, target)
+	-- Whole messages, reassembled from their parts, in the order they finished
+	local out, partial = {}, {}
+	for _, m in ipairs(addonSent) do
+		if m.chatType == chatType and (not target or m.target == target) then
+			local tag, msgId, part, total, chunk = m.text:match("^(%u):(%w+):(%d+)/(%d+):(.*)$")
+			if tag then
+				local key = tag..msgId
+				partial[key] = partial[key] or {}
+				partial[key][tonumber(part)] = chunk
+				if #partial[key] == tonumber(total) then
+					out[#out + 1] = { tag = tag, tbl = ns.Sync:Decode(table.concat(partial[key])) }
+				end
+			end
+		end
+	end
+	return out
+end
+local function ClearSent() for i = #addonSent, 1, -1 do addonSent[i] = nil end end
+local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", t = clock, data = { bounty = "far-"..seq } } end
+ClearSent()
+clock = clock + 700
+ns.Sync:Greet("Far Friend", "Other Realm")
+local hellos = Sent("WHISPER", "Far Friend")
+check(#hellos == 1 and hellos[1].tag == "H" and hellos[1].tbl.r == "Realm" and type(hellos[1].tbl.c) == "table" and not hellos[1].tbl.a, "a realm link starts with a whispered hello carrying our realm")
+check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Far Friend' is currently playing.") == true
+	and chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing.") == false, "the game's 'not online' for someone just greeted is hidden, others aren't")
+ClearSent()
+Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { ["Far Origin"] = 2 }, r = "Other Realm", a = 1 }), "WHISPER", "Far Friend")
+local needs = Sent("WHISPER", "Far Friend")
+check(ns.Sync:GetLinks()["Far Friend"] and #needs == 1 and needs[1].tag == "N" and needs[1].tbl.n["Far Origin"] == 1, "their answer makes the link and we ask for what we lack")
+check(ns.db.farPeers["Far Friend"] and ns.db.farPeers["Far Friend"].realm == "Other Realm", "and they're remembered for next time")
+check(ns.Sync:GetInfo().peers >= 1, "a realm link counts as another player online")
+ClearSent()
+Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { FarRecord(1), FarRecord(2) } }), "WHISPER", "Far Friend")
+check(ns.Store:Get("Far Origin:1") and ns.Store:Get("Far Origin:2"), "their records are merged")
+RunTimers()
+local reshared = Sent("CHANNEL")
+check(#reshared >= 1 and reshared[1].tag == "F" and #reshared[1].tbl.r == 2, "and shared once on our realm's channel")
+check(#Sent("WHISPER", "Far Friend") == 0, "never sent back to the link they came from")
+ClearSent()
+local mine = ns.Store:NewRecord("pass", { bounty = "near-1" })
+RunTimers()
+local forwarded = Sent("WHISPER", "Far Friend")
+check(#forwarded == 1 and forwarded[1].tag == "F" and forwarded[1].tbl.r[1].id == mine.id, "a new record here is forwarded to the realm link")
+ClearSent()
+Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { [ns.Store:GetOrigin()] = 1 } }), "WHISPER", "Far Friend")
+local fills = Sent("WHISPER", "Far Friend")
+check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them straight back")
+ClearSent()
+Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", t = clock, data = {} } } }), "WHISPER", "Stranger")
+check(ns.Store:Get("Stranger:1") == nil, "records whispered by someone who isn't a link are ignored")
+Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm" }), "WHISPER", "Same Realmer")
+check(ns.Sync:GetLinks()["Same Realmer"] == nil and #Sent("WHISPER", "Same Realmer") == 0, "a whispered hello from our own realm isn't a link (the channel covers them)")
+clock = clock + 61 -- the catch-up above used this minute's realm link budget
+Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Third Realm" }), "WHISPER", "Newcomer")
+local answer = Sent("WHISPER", "Newcomer")
+check(ns.Sync:GetLinks()["Newcomer"] and #answer == 1 and answer[1].tbl.a, "someone greeting us from another realm is linked and answered")
+-- Battle.net friends on our faction and another realm name are greeted as realm links
+ClearSent()
+bnFriends[#bnFriends + 1] = { id = 105, program = "WoW", faction = "Horde", realm = "Other Realm", name = "Horde Far" }
+clock = clock + 700
+Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
+RunTimers()
+check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
+bnFriends[#bnFriends] = nil
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
 ns:Log("!! Test: something odd")
 local kept = ns.Debug:GetDevLog()

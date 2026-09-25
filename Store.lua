@@ -307,7 +307,7 @@ function Store:Iterator(kind)
 	end
 end
 
----Registers a function called with (record, isOwn) whenever a record of a kind is added.
+---Registers a function called with (record, isOwn) whenever a record of a kind is added ("*" for every kind).
 ---@param kind string
 ---@param func fun(record: table, isOwn: boolean)
 function Store:OnRecord(kind, func)
@@ -317,6 +317,9 @@ end
 
 function private.Notify(record, isOwn)
 	for _, func in ipairs(private.listeners[record.kind] or {}) do
+		func(record, isOwn)
+	end
+	for _, func in ipairs(private.listeners["*"] or {}) do
 		func(record, isOwn)
 	end
 end

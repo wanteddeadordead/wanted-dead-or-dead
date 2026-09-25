@@ -21,6 +21,9 @@ Rules for a change:
    and add a smoke test that loads a table in the old layout and checks the result.
 3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration.
 
+`WantedDB.farPeers` (name -> `{ realm, seen }`, the last 20, a week) remembers realm links: players on another
+realm name of the same world, synced by hidden whisper (Sync). They're greeted again at login.
+
 Development builds only: `WantedDB.devLog` keeps the last 5000 debug log lines (`{ lines, pos }`, a ring) so
 network traffic can be read back after a session; `/wanted netlog` summarises it. Lines starting `!!` mark
 anomalies (altered records, broken chains, bad messages, limits hit, version locks, rejected notices).

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Sync across realms. WoW Forever's one world has several realm names (e.g. Classic Beta PvP and Classic Beta
+  PvP 2), and a chat channel belongs to one, so players on different realm names never heard each other.
+  Wanted now links them by hidden addon whispers, found through Battle.net friends, anyone who greets you, and
+  links remembered from before. Bounties, hunts, kills, claims and payments cross; enemy sightings stay local.
+  /wanted bridge lists the links.
+- Players catching up now also get bounty notices and kill proofs, which the catch-up used to leave out.
 ## [0.1.0-beta.6] - 2026-09-25
 
 - No more "Please enter a password for 'WantedNetHorde'" box at login: Wanted answers it for its own channel.

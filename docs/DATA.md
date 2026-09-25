@@ -21,6 +21,10 @@ Rules for a change:
    and add a smoke test that loads a table in the old layout and checks the result.
 3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration.
 
+`bounty` records (from 0.1.0-beta.8) can also carry the poster's notes on the target: `class`, `race`,
+`faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target
+fills its player notes from them (never overwriting its own), marked as seen by the poster.
+
 `WantedDB.farPeers` (name -> `{ realm, seen }`, the last 20, a week) remembers realm links: players on another
 realm name of the same world, synced by hidden whisper (Sync). They're greeted again at login.
 

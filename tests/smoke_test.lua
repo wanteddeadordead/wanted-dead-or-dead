@@ -1419,6 +1419,28 @@ Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
 RunTimers()
 check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
 bnFriends[#bnFriends] = nil
+-- A bounty carries what its poster knew about the target, so a client that never saw them (another realm, or
+-- offline at the time) still has their class, level, guild and where they were last seen, by the poster;
+-- it only fills gaps and never counts as this client seeing them
+ns.Store:UpdatePlayer("Player-9-SNAP", { name = "Snap Shot", class = "HUNTER", race = "NightElf", level = 20, guild = "Polarity Check", faction = "Alliance", zone = "Stranglethorn Vale", x = 21.8, y = 68.9, mapId = 1434 })
+local snapSeen = clock - 7 * 3600
+ns.Store:GetPlayer("Player-9-SNAP").lastSeen = snapSeen
+local snapBounty = ns.Bounties:Post("Player-9-SNAP", "Snap Shot", 5000)
+local sd = snapBounty.data
+check(sd.class == "HUNTER" and sd.race == "NightElf" and sd.level == 20 and sd.targetGuild == "Polarity Check" and sd.seenAt == snapSeen and sd.x == 21.8 and sd.mapId == 1434, "a bounty records what the poster knew about the target")
+local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", t = clock, data = {
+	target = "Player-9-UNKNOWN", targetName = "Never Seen", targetGuild = "Some Guild", amount = 5000, level = 22, zone = "The Barrens",
+	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
+ns.Store:MergeRelayed(farBounty)
+local learnt = ns.Store:GetPlayer("Player-9-UNKNOWN")
+check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.guild == "Some Guild" and learnt.zone == "The Barrens"
+	and learnt.lastSeen == clock - 3600 and learnt.seenBy == "Far Poster", "a client that never saw the target learns them from the bounty, seen by the poster")
+ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
+local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
+ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", t = clock, data = {
+	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
+local known = ns.Store:GetPlayer("Player-9-KNOWN")
+check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
 ns:Log("!! Test: something odd")
 local kept = ns.Debug:GetDevLog()

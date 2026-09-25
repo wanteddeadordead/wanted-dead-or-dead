@@ -27,6 +27,41 @@ local WITNESS_WINDOW = 30
 
 function Bounties:OnEnable()
 	Store:OnRecord("kill", private.OnKill)
+	Store:OnRecord("bounty", private.LearnTarget)
+end
+
+---What a bounty says about its target (the poster's notes when they posted it), for a client that doesn't know
+---them: fills only what this client doesn't know, and a last sighting only if newer than its own, marked as
+---seen by the poster. Never counts as this client seeing them.
+function private.LearnTarget(bounty, isOwn)
+	local d = bounty.data
+	if isOwn or type(d.target) ~= "string" or Store:IsTest(bounty) then
+		return
+	end
+	local player = Store:GetPlayer(d.target) or {}
+	local info = {}
+	local function Fill(key, value, kind)
+		if player[key] == nil and type(value) == kind then
+			info[key] = value
+		end
+	end
+	Fill("name", d.targetName, "string")
+	Fill("class", d.class, "string")
+	Fill("race", d.race, "string")
+	Fill("level", d.level, "number")
+	Fill("guild", d.targetGuild, "string")
+	Fill("faction", d.faction, "string")
+	if type(d.seenAt) == "number" and d.seenAt <= GetServerTime() and d.seenAt > (player.lastSeen or 0) then
+		info.lastSeen = d.seenAt
+		info.seenBy = bounty.origin
+		info.zone = type(d.zone) == "string" and d.zone or nil
+		info.x = type(d.x) == "number" and d.x or nil
+		info.y = type(d.y) == "number" and d.y or nil
+		info.mapId = type(d.mapId) == "number" and d.mapId or nil
+	end
+	if next(info) then
+		Store:UpdatePlayer(d.target, info, false)
+	end
 end
 
 function Bounties:Status()
@@ -386,6 +421,8 @@ function Bounties:Post(guid, name, amount)
 		return nil, "bounties are for the other faction only"
 	end
 	Store:UpdatePlayer(guid, { name = name }, false)
+	-- What we know about them goes with it, so hunters who never saw them (another realm, or offline at the
+	-- time) still know who and where to look (LearnTarget)
 	local bounty = Store:NewRecord("bounty", {
 		target = guid,
 		targetName = name,
@@ -393,6 +430,13 @@ function Bounties:Post(guid, name, amount)
 		amount = amount,
 		level = player and player.level or nil,
 		zone = player and player.zone or nil,
+		class = player and player.class or nil,
+		race = player and player.race or nil,
+		faction = player and player.faction or nil,
+		seenAt = player and player.lastSeen or nil,
+		x = player and player.x or nil,
+		y = player and player.y or nil,
+		mapId = player and player.mapId or nil,
 	})
 	Wanted:Log("Bounties: posted %s on %s", Bounties:FormatMoney(amount), name)
 	return bounty

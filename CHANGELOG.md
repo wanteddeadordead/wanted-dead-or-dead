@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A bounty carries what its poster knew about the target (class, race, level, guild, where and when last seen),
+  so hunters who never saw them, on another realm or offline at the time, still know who and where to look.
 - A realm link no longer loses the other side's first request when it arrives ahead of their hello.
 ## [0.1.0-beta.7] - 2026-09-25
 

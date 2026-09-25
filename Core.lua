@@ -53,6 +53,8 @@ local DEFAULTS = {
 			inSight = 60, -- seconds an enemy who drops out of view still shows as in sight (they're likely still around)
 			timeout = 30, -- then seconds they stay on the Nearby list, shaded, before leaving it
 			risingAlerts = true, -- warn when a zone fills up with enemies fast (Hotspots)
+			onlyWhenExposed = true, -- alerts and the Nearby window only while you can be attacked
+			autoHide = 300, -- seconds with no enemies before the Nearby window hides (0 = never)
 			autoShow = true, -- open the Nearby window when an enemy appears
 			share = true, -- tell other Wanted users about enemies seen
 			sharedAlerts = true, -- alert when others see a Kill on Sight or bounty target

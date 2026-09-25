@@ -80,20 +80,71 @@ function Nearby:OnEnable()
 	C_Timer.NewTicker(1, function()
 		if private.frame and private.frame:IsShown() then
 			Nearby:Refresh()
+			private.CheckAutoHide()
 		end
+	end)
+	-- Stepping out of a sanctuary or getting flagged with enemies already around opens the window then
+	private.flagFrame = CreateFrame("Frame")
+	for _, event in ipairs({ "PLAYER_FLAGS_CHANGED", "UNIT_FACTION", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
+		private.flagFrame:RegisterEvent(event)
+	end
+	private.flagFrame:SetScript("OnEvent", function(_, event, unit)
+		if event == "UNIT_FACTION" and unit ~= "player" then
+			return
+		end
+		private.OnExposureChanged()
 	end)
 end
 
-function private.OnEnemyEvent(event, entry)
+---Opens the window on the Nearby tab when enemies turn up (settings: autoShow), but only while they could
+---attack you (Enemies:ShouldAlert).
+function private.AutoShow()
 	local settings = private.Settings()
-	if event == "new" and settings.autoShow and settings.enabled then
-		if private.Settings().tab ~= "nearby" then
-			private.Settings().tab = "nearby"
-		end
-		Nearby:SetShown(true)
+	if not settings.autoShow or not Enemies:ShouldAlert() then
+		return
+	end
+	if settings.tab ~= "nearby" then
+		settings.tab = "nearby"
+	end
+	private.emptySince = nil
+	Nearby:SetShown(true)
+end
+
+function private.OnEnemyEvent(event, entry)
+	if event == "new" then
+		private.AutoShow()
 	end
 	if private.frame and private.frame:IsShown() then
 		Nearby:Refresh()
+	end
+end
+
+---Called when the player's flag or zone may have changed.
+function private.OnExposureChanged()
+	local exposed = Enemies:ShouldAlert()
+	if exposed and not private.wasExposed and #Enemies:GetNearby() > 0 then
+		private.AutoShow()
+	end
+	private.wasExposed = exposed
+	if Wanted.Alerts then
+		Wanted.Alerts:UpdateTargetedHud()
+	end
+end
+
+---Hides the window once the Nearby list has been empty for a while (settings: autoHide). Only on the
+---Nearby tab: someone looking at Last hour or Kill on Sight opened it for that.
+function private.CheckAutoHide()
+	local settings = private.Settings()
+	local after = settings.autoHide or 0
+	if after <= 0 or (settings.tab or "nearby") ~= "nearby" or #Enemies:GetNearby() > 0 then
+		private.emptySince = nil
+		return
+	end
+	local now = GetTime()
+	private.emptySince = private.emptySince or now
+	if now - private.emptySince >= after then
+		private.emptySince = nil
+		Nearby:SetShown(false)
 	end
 end
 

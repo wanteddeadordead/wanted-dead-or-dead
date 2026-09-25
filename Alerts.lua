@@ -138,7 +138,7 @@ end
 
 function private.OnEnemyEvent(event, entry)
 	local settings = private.Settings()
-	if not settings.enabled or settings.alerts == "none" or not entry or not entry.guid then
+	if not Wanted.Enemies:ShouldAlert() or settings.alerts == "none" or not entry or not entry.guid then
 		return
 	end
 	local d = Wanted.Enemies:Describe(entry.guid)
@@ -288,7 +288,7 @@ function Alerts:UpdateTargetedHud()
 	if hud.moving then
 		return
 	end
-	local targeters = settings.enabled and settings.targetWarn and Wanted.Enemies:GetTargeters() or {}
+	local targeters = Wanted.Enemies:ShouldAlert() and settings.targetWarn and Wanted.Enemies:GetTargeters() or {}
 	if #targeters == 0 then
 		if settings.targetHold then
 			hud:Hide()
@@ -319,7 +319,7 @@ end
 
 function private.OnTargeting(event, entry)
 	local settings = private.Settings()
-	if event == "newTargeter" and settings.enabled and settings.targetWarn and settings.targetSound and not Alerts:IsMuted() then
+	if event == "newTargeter" and Wanted.Enemies:ShouldAlert() and settings.targetWarn and settings.targetSound and not Alerts:IsMuted() then
 		-- Its own sound, not held back by the spacing of the other alerts
 		Alerts:PlayRaw("targeted")
 	end

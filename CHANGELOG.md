@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Alerts, the TARGETED warning and the Nearby window only speak up while you can be attacked (PvP flagged,
+  not in a sanctuary); getting flagged with enemies around opens the window. Settings > Alerts to turn off.
+- The Nearby window hides itself after 5 minutes with no enemies (Settings > Nearby window: never, 2, 5 or 10 min).
+
 ## [0.1.0-beta.1] - 2026-09-25
 
 First public beta, for WoW Forever (client 1.60.1).

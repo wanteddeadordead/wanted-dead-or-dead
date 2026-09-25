@@ -138,7 +138,8 @@ function InCombatLockdown() return inCombat end
 pvpFlag, pvpTimer = false, nil
 function UnitIsPVP(unit) return unit == "player" and pvpFlag end
 function UnitIsPVPFreeForAll() return false end
-function UnitIsPVPSanctuary() return false end
+pvpSanctuary = false
+function UnitIsPVPSanctuary() return pvpSanctuary end
 function IsPVPTimerRunning() return pvpTimer ~= nil end
 function GetPVPTimer() return pvpTimer or 301000 end
 function IsInGroup() return true end
@@ -948,6 +949,41 @@ Tick()
 check(not Near("Player-9-ENEMY"), "then gone after 3 minutes")
 ns.db.settings.detect.inSight, ns.db.settings.detect.timeout = 60, 30
 RunTimers()
+-- Only when you can be attacked: unflagged, a new enemy neither opens the window nor alerts; getting
+-- flagged with enemies around opens it; a sanctuary counts as safe even flagged
+local function Ticks() for _, f in ipairs(tickers) do f() end end
+ns.db.settings.detect.autoShow = true
+ns.NearbyWindow:SetShown(false)
+ns.Enemies:ClearNearby()
+pvpFlag = false
+local warnings2 = {}
+local realWarn2 = ns.Alerts.Warn
+ns.Alerts.Warn = function(self, title, ...) warnings2[#warnings2 + 1] = title return realWarn2(self, title, ...) end
+ns.Enemies:SetKoS("Player-9-QUIET", "Quiet Kos", true)
+enemyUnits.nameplate50 = { guid = "Player-9-QUIET", name = "Quiet Kos", class = "MAGE", level = 20 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate50")
+check(not ns.NearbyWindow:IsShown() and #warnings2 == 0, "unflagged: no window and no alert for a new enemy")
+check(not ns.Enemies:IsExposed(), "unflagged is not exposed")
+pvpFlag = true
+Fire("PLAYER_FLAGS_CHANGED", "player")
+check(ns.NearbyWindow:IsShown(), "getting flagged with enemies around opens the window")
+pvpSanctuary = true
+check(not ns.Enemies:IsExposed(), "a sanctuary is safe even flagged")
+pvpSanctuary = false
+-- Auto-hide: five minutes with nobody around and the window goes
+enemyUnits.nameplate50 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate50")
+ns.Enemies:ClearNearby()
+Ticks()
+clock = clock + 200
+Ticks()
+check(ns.NearbyWindow:IsShown(), "still up after 200s")
+clock = clock + 120
+Ticks()
+check(not ns.NearbyWindow:IsShown(), "hidden after five minutes with no enemies")
+ns.Alerts.Warn = realWarn2
+ns.Enemies:SetKoS("Player-9-QUIET", "Quiet Kos", false)
+pvpFlag = false
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays
 local kosBefore = 0
 for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end

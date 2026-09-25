@@ -600,6 +600,27 @@ function Enemies:GetLastHour()
 	return list
 end
 
+---Whether enemy players can attack you right now: PvP flagged (or in a free-for-all area), and not in a
+---sanctuary. Alerts and the Nearby window stay quiet otherwise, when the player chooses (settings:
+---onlyWhenExposed); detection itself keeps running either way.
+---@return boolean
+function Enemies:IsExposed()
+	if UnitIsPVPSanctuary and private.Readable(UnitIsPVPSanctuary("player")) then
+		return false
+	end
+	if UnitIsPVPFreeForAll and private.Readable(UnitIsPVPFreeForAll("player")) then
+		return true
+	end
+	return private.Readable(UnitIsPVP("player")) and true or false
+end
+
+---Whether alerts and the Nearby window should speak up now.
+---@return boolean
+function Enemies:ShouldAlert()
+	local settings = private.Settings()
+	return settings.enabled and (not settings.onlyWhenExposed or Enemies:IsExposed())
+end
+
 function Enemies:GetKoSList()
 	local list = {}
 	for guid in pairs(Wanted.db.kos) do

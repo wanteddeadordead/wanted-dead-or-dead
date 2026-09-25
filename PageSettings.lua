@@ -92,6 +92,7 @@ function private.BuildAlerts(panel, width)
 		Detect().timeout = tonumber(key)
 	end, 56)
 	private.timeout:SetPoint("TOPLEFT", 440, -216)
+	private.Toggle(card, Detect, "onlyWhenExposed", "Only when I can be attacked", "Alerts, the TARGETED warning and the Nearby window stay quiet while you're not PvP flagged or are in a sanctuary. Enemies are still seen and shared.", 440, -100)
 	local previewLabel = Theme:Text(card, "small", "Hear them")
 	previewLabel:SetPoint("TOPLEFT", 440, -38)
 	local previous = nil
@@ -131,7 +132,7 @@ function private.BuildTargeted(panel, width)
 end
 
 function private.BuildNearby(panel, width)
-	local card = private.Card(panel, 0, 120, "Row layout", width)
+	local card = private.Card(panel, 0, 130, "Row layout", width)
 	private.layout = W:Segmented(card, {
 		{ key = "auto", label = "Automatic" },
 		{ key = "normal", label = "Always normal" },
@@ -155,8 +156,19 @@ function private.BuildNearby(panel, width)
 		RefreshNearby()
 	end, 60)
 	private.opacity:SetPoint("TOPLEFT", 440, -38)
+	local hideLabel = Theme:Text(card, "small", "Hide it after no enemies for")
+	hideLabel:SetPoint("TOPLEFT", 440, -74)
+	private.autoHide = W:Segmented(card, {
+		{ key = "0", label = "Never" },
+		{ key = "120", label = "2m" },
+		{ key = "300", label = "5m" },
+		{ key = "600", label = "10m" },
+	}, function(key)
+		Detect().autoHide = tonumber(key)
+	end, 60)
+	private.autoHide:SetPoint("TOPLEFT", 440, -92)
 
-	local shown = private.Card(panel, -132, 178, "Show in the Nearby window", width)
+	local shown = private.Card(panel, -142, 178, "Show in the Nearby window", width)
 	local items = {
 		{ "icon", "Class icon", "The class icon at the start of the row (style under Sharing and display)." },
 		{ "className", "Class name", "The class spelled out next to the level (two-line rows)." },
@@ -252,6 +264,7 @@ function private.Refresh()
 	local detect = Detect()
 	private.alerts:Select(detect.alerts or "all", true)
 	private.inSight:Select(tostring(detect.inSight or 60), true)
+	private.autoHide:Select(tostring(detect.autoHide or 300), true)
 	private.timeout:Select(tostring(detect.timeout or 30), true)
 	private.layout:Select(NearbyShow().layout or "auto", true)
 	private.opacity:Select(tostring(NearbyShow().opacity or 1), true)

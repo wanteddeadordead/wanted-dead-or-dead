@@ -197,6 +197,8 @@ function private.BuildSharing(panel, width)
 	iconLabel:SetPoint("TOPLEFT", 360, -20)
 	local previous = nil
 	for _, style in ipairs(Theme.ICON_STYLES) do
+		-- Styles marked hidden aren't offered: they look the same as Crest here
+		if not style.hidden then
 		local button = W:Button(display, "", "secondary", 58, 58, function()
 			Wanted.db.settings.iconStyle = style.key
 			private.Refresh()
@@ -222,6 +224,7 @@ function private.BuildSharing(panel, width)
 		button.styleKey = style.key
 		tinsert(private.iconButtons, button)
 		previous = button
+		end
 	end
 end
 

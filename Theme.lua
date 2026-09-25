@@ -224,11 +224,13 @@ Theme.ICON_STYLES = {
 	{ key = "crest", label = "Crest", atlas = function(class) return "classicon-"..strlower(class) end },
 	{ key = "round", label = "Round", atlas = function(class) return "groupfinder-icon-class-"..strlower(class) end },
 	{ key = "color", label = "Coloured", atlas = function(class) return "groupfinder-icon-class-color-"..strlower(class) end },
-	{ key = "square", label = "Square", file = function(class)
+	-- Square and Classic show the same crest artwork as Crest on this client, so they're not offered as choices;
+	-- they stay as fallbacks for a client missing the atlases
+	{ key = "square", label = "Square", hidden = true, file = function(class)
 		local name = class == "DEATHKNIGHT" and "DeathKnight" or (strsub(class, 1, 1)..strlower(strsub(class, 2)))
 		return "Interface\\Icons\\ClassIcon_"..name
 	end },
-	{ key = "classic", label = "Classic", sheet = true },
+	{ key = "classic", label = "Classic", hidden = true, sheet = true },
 }
 
 local function AtlasExists(atlas)

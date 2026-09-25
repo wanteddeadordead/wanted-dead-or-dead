@@ -189,6 +189,10 @@ function private.Create()
 		Nearby:Refresh()
 	end)
 	clear:SetPoint("RIGHT", private.mute, "LEFT", -2, 0)
+	-- The title stops at the buttons, whatever its length
+	private.title:SetPoint("RIGHT", clear, "LEFT", -4, 0)
+	private.title:SetJustifyH("LEFT")
+	private.title:SetWordWrap(false)
 	W:AttachTooltip(clear, "Clear", "Empty the Nearby list. Enemies still around come back on their next sighting.")
 
 	-- View tabs
@@ -391,17 +395,8 @@ function Nearby:Refresh()
 			label = v.label
 		end
 	end
-	local inSight = 0
-	for _, info in ipairs(items) do
-		if info.inSight or info.active then
-			inSight = inSight + 1
-		end
-	end
-	local countText = tostring(#items)
-	if view == "nearby" and inSight ~= #items then
-		countText = format("%d  (%d in sight)", #items, inSight)
-	end
-	private.title:SetText(format("%s  %s", label, Theme:Colorize(countText, C.muted)))
+	-- Just the count: "(2 in sight)" didn't fit beside the buttons, and shaded rows already show who's gone
+	private.title:SetText(format("%s  %s", label, Theme:Colorize(tostring(#items), C.muted)))
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)

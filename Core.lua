@@ -125,6 +125,11 @@ function private.LoadDB()
 	end
 	CopyDefaults(WantedDB, DEFAULTS)
 	Wanted.db = WantedDB
+	-- Square and Classic icons are no longer offered (the same artwork as Crest on this client)
+	local iconStyle = WantedDB.settings.iconStyle
+	if iconStyle == "square" or iconStyle == "classic" then
+		WantedDB.settings.iconStyle = "crest"
+	end
 	-- The first default was a minute; gone enemies now leave sooner
 	local detect = WantedDB.settings.detect
 	if detect and not detect.timeoutV2 then

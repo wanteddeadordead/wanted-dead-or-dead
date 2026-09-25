@@ -571,6 +571,24 @@ enemyUnits.nameplate30, enemyUnits.nameplate31 = nil, nil
 -- A blocked action is noted with what was going on
 Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
 check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: UNKNOWN() (out of combat", 1, true), "blocked action noted with context")
+-- The reputation cast: good and bad records side by side
+ns:RunCommand("simulate", "rep")
+local R = ns.Reputation
+local ace, shady = R:GetTally("Ace Tracker"), R:GetTally("Shady Claimer")
+local aceLevel, aceStars = R:GetRank(ace)
+local shadyLevel, shadyStars = R:GetRank(shady)
+check(aceLevel >= 3 and aceStars == 5 and ace.disputed == 0, "Ace: high level, full reliability, got level "..aceLevel.." stars "..aceStars)
+check(shadyLevel == 0 and shadyStars == 0 and shady.disputed == 2 and shady.lone >= 1, "Shady: level 0, no reliability, 2 disputed, got level "..shadyLevel.." stars "..shadyStars.." disputed "..shady.disputed)
+check(R:GetTally("Deadbeat Poster").unpaid == 2, "Deadbeat: 2 unpaid, got "..R:GetTally("Deadbeat Poster").unpaid)
+check(R:GetTally("Honest Poster").paid == 6 and R:GetTally("Honest Poster").unpaid == 0, "Honest: 6 paid, none unpaid")
+check(R:GetLine("Deadbeat Poster"):find("2 UNPAID", 1, true) and R:GetLine("Shady Claimer"):find("2 disputed", 1, true), "record lines show UNPAID and disputed")
+local posters = {}
+for _, item in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do posters[item.poster] = true end
+check(posters["Honest Poster"] and posters["Deadbeat Poster"], "both posters have open bounties on the Board")
+for _, key in ipairs({ "board", "mine", "hunters" }) do ns.UI:Show(key) end
+ns:RunCommand("rep", "Deadbeat Poster")
+ns:RunCommand("purge", "")
+check(R:GetTally("Ace Tracker").claims == 0, "purge clears the cast")
 -- The game's Options > AddOns entry: registered, and its buttons close Options and open Wanted
 check(optionsCategory and optionsCategory.registered and optionsCategory.name == "Wanted: Dead or... Dead", "Options > AddOns entry registered")
 SettingsPanel._shown = true

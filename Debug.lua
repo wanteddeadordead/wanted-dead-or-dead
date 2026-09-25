@@ -19,10 +19,88 @@ if not Wanted.DEV then
 	return
 end
 
-Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witnessed claim on it, and another poster's bounty. /wanted simulate paid adds the payment.", function(args)
+-- The reputation cast for /wanted simulate rep: made-up players with records that differ on purpose
+local ACE, SHADY, HONEST, DEADBEAT = "Ace Tracker", "Shady Claimer", "Honest Poster", "Deadbeat Poster"
+
+---Builds a record history where good and bad reputations sit side by side:
+---  Ace Tracker: witnessed and confirmed kills, paid. High level, full reliability.
+---  Shady Claimer: kills nobody saw, two disputed by the poster. Level 0, no reliability.
+---  Honest Poster: posts and pays. Deadbeat Poster: two confirmed claims never paid (UNPAID).
+---Plus open bounties from both posters on the Board, and two of yours with claims to confirm or dispute.
+function Debug:SimulateReputation()
+	Store:PurgeTest()
 	local me = Store:GetOrigin()
 	local zone, x, y, mapId = Recorder:GetPosition()
 	local now = GetServerTime()
+	local day = 86400
+	local targets = {}
+	for i, def in ipairs({ { "Marked Mage", "MAGE", 21 }, { "Marked Warrior", "WARRIOR", 23 }, { "Marked Priest", "PRIEST", 20 }, { "Marked Hunter", "HUNTER", 22 } }) do
+		local guid = format("Player-TEST-%08d", 100 + i)
+		Store:UpdatePlayer(guid, { name = def[1], class = def[2], level = def[3], faction = "Alliance", guild = "Test Gankers", zone = zone, mapId = mapId, x = x, y = y })
+		targets[i] = { guid = guid, name = def[1], level = def[3] }
+	end
+	local function Bounty(poster, target, amount, t)
+		return Store:InsertTest("bounty", poster, { target = target.guid, targetName = target.name, amount = amount, level = target.level, zone = zone }, t)
+	end
+	-- A kill by the hunter, seen by a witness when witnessed is set; returns the claim on the bounty
+	local function Claim(hunter, bounty, target, t, witnessed)
+		local deathId = Store:Hash(strjoin("|", target.guid, hunter, tostring(t)))
+		local kill = Store:InsertTest("kill", hunter, { killer = "Player-TEST-"..hunter, killerName = hunter, victim = target.guid, victimName = target.name, victimGuild = "Test Gankers", deathId = deathId, zone = zone, x = x, y = y, honor = true }, t)
+		if witnessed then
+			Store:InsertTest("death", WITNESS, { deathId = deathId, victim = target.guid, victimName = target.name, victimGuild = "Test Gankers", zone = zone, x = x, y = y }, t + 1)
+		end
+		return Store:InsertTest("claim", hunter, { bounty = bounty.id, kill = kill.id, deathId = deathId, victim = target.guid, victimName = target.name, zone = zone, killT = t }, t + 2)
+	end
+	local function Confirm(poster, claim, disputed)
+		Store:InsertTest("confirm", poster, { claim = claim.id, disputed = disputed or nil }, claim.t + 1800)
+	end
+	local function Pay(poster, hunter, claim, bounty)
+		Store:InsertTest("payment", poster, { claim = claim.id, bounty = bounty.id, to = hunter, amount = Bounties:GetAmount(bounty), side = "payer" }, claim.t + 3600)
+	end
+	-- Ace Tracker: six kills on Honest Poster's bounties over three weeks, witnessed, confirmed and paid
+	for i = 1, 6 do
+		local t = now - (3 + i * 3) * day
+		local target = targets[(i - 1) % #targets + 1]
+		local bounty = Bounty(HONEST, target, (40 + i * 10) * 100, t - day)
+		local claim = Claim(ACE, bounty, target, t, true)
+		Confirm(HONEST, claim)
+		Pay(HONEST, ACE, claim, bounty)
+	end
+	-- Deadbeat Poster: two of Ace's kills confirmed days ago and never paid
+	for i = 1, 2 do
+		local t = now - (3 + i) * day
+		local bounty = Bounty(DEADBEAT, targets[i], 60 * 100, t - day)
+		Confirm(DEADBEAT, Claim(ACE, bounty, targets[i], t, true))
+	end
+	-- Shady Claimer: three kills nobody saw, two of them disputed by the poster
+	for i = 1, 3 do
+		-- Half a day off Ace's kills: a witness is matched by victim, zone and time
+		local t = now - (8 + i) * day + day / 2
+		local bounty = Bounty(HONEST, targets[i + 1], 30 * 100, t - day)
+		local claim = Claim(SHADY, bounty, targets[i + 1], t, false)
+		if i <= 2 then
+			Confirm(HONEST, claim, true)
+		end
+	end
+	-- Open bounties on the Board, so each poster's record shows on a row
+	Bounty(HONEST, targets[3], 75 * 100, now - 7200)
+	Bounty(DEADBEAT, targets[4], 90 * 100, now - 3600)
+	-- Two of yours: Ace's witnessed kill to confirm and pay, Shady's unseen one to dispute
+	local mine1 = Bounty(me, targets[1], 50 * 100, now - day)
+	Claim(ACE, mine1, targets[1], now - 1200, true)
+	local mine2 = Bounty(me, targets[2], 50 * 100, now - day)
+	Claim(SHADY, mine2, targets[2], now - 900, false)
+	Wanted:Print("Simulated reputations: %s (reliable hunter), %s (disputed claims), %s (pays), %s (2 unpaid). See the Board, Your bounties > Your live bounties, Leaderboards, and /wanted rep <name>. /wanted purge removes it all.", ACE, SHADY, HONEST, DEADBEAT)
+end
+
+Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witnessed claim on it, and another poster's bounty. /wanted simulate paid adds the payment; /wanted simulate rep builds players with good and bad records.", function(args)
+	local me = Store:GetOrigin()
+	local zone, x, y, mapId = Recorder:GetPosition()
+	local now = GetServerTime()
+	if strtrim(args or "") == "rep" then
+		Debug:SimulateReputation()
+		return
+	end
 	if strtrim(args or "") == "paid" then
 		-- Collect first: adding records while walking the record table can skip some
 		local unpaid = {}

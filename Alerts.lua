@@ -235,7 +235,8 @@ function private.GetHud()
 	hud:SetScript("OnUpdate", function(self, elapsed)
 		self.t = (self.t or 0) + elapsed
 		local pulse = 0.75 + 0.25 * math.sin(self.t * 5)
-		self.title:SetAlpha(pulse)
+		-- The title only dims a little (dimmer read as washed out); the edges carry the pulse
+		self.title:SetAlpha(0.85 + 0.15 * (pulse - 0.5) / 0.5)
 		for _, edge in ipairs(self.edges) do
 			edge:SetAlpha(pulse)
 		end

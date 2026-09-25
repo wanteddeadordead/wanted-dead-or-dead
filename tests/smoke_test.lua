@@ -134,6 +134,9 @@ function UnitHealth(unit) return enemy(unit) and 50 or 100 end
 function UnitHealthMax() return 100 end
 function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and e.targetsMe and b == "player") and true or false end
 function UnitIsDeadOrGhost(unit) local e = enemyUnits[unit] return e and e.dead or false end
+function CheckInteractDistance(unit, index) local e = enemyUnits[unit] return e and e.close == true or false end
+playerOnTaxi = false
+function UnitOnTaxi(unit) return unit == "player" and playerOnTaxi end
 function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
 function GetPlayerInfoByGUID(guid) if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end return nil end
 inCombat = false
@@ -409,75 +412,69 @@ Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 26889)
 check(#stealthEvents == 2, "but not long after, when the token may be someone else")
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
--- The game hides which spell an enemy cast (a secret value). One who casts something and is out of sight a
--- moment later went into stealth: the alarm goes off for rogues, druids and night elves
+-- The game hides enemy spells (a secret value) and doesn't report Stealth or Vanish at all: the nameplate just
+-- goes. One that goes while its player is within 28 yards and alive went into stealth; walking out of view
+-- happens far away. The unit still answers for the moment its nameplate goes.
 SECRET_SPELL = setmetatable({}, { __tostring = function() return "secret" end })
 function issecretvalue(value) return value == SECRET_SPELL end
 for i = #stealthEvents, 1, -1 do stealthEvents[i] = nil end
-local function RestoreStab() clock = clock + 10 enemyUnits.nameplate1 = stabUnit Fire("NAME_PLATE_UNIT_ADDED", "nameplate1") end
-clock = clock + 10
+local function Vanish(unit) Fire("NAME_PLATE_UNIT_REMOVED", unit) enemyUnits[unit] = nil RunTimers() end
+local function Appear(unit, who) clock = clock + 10 enemyUnits[unit] = who Fire("NAME_PLATE_UNIT_ADDED", unit) end
+stabUnit.close = true
+Appear("nameplate1", stabUnit)
 Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
 check(#stealthEvents == 0, "a hidden cast on its own is no alarm")
-enemyUnits.nameplate1 = nil
-Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Stealth", "a rogue who casts and is gone at once went into stealth")
-RestoreStab()
-enemyUnits.nameplate1 = nil
-Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
-check(#stealthEvents == 2, "a hidden cast from a rogue already out of sight")
-RestoreStab()
-Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", SECRET_SPELL)
-clock = clock + 2
-enemyUnits.nameplate1 = nil
-Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-check(#stealthEvents == 2, "gone two seconds after casting is running off, not stealth")
-RestoreStab()
-enemyUnits.nameplate60 = { guid = "Player-9-WARRIOR", name = "War Rior", class = "WARRIOR", level = 20 }
-Fire("NAME_PLATE_UNIT_ADDED", "nameplate60")
-Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate60", "cast", SECRET_SPELL)
-enemyUnits.nameplate60 = nil
-Fire("NAME_PLATE_UNIT_REMOVED", "nameplate60")
-check(#stealthEvents == 2, "a warrior can't stealth")
-enemyUnits.nameplate61 = { guid = "Player-9-ELF", name = "Night Hunter", class = "HUNTER", level = 20, raceFile = "NightElf" }
-Fire("NAME_PLATE_UNIT_ADDED", "nameplate61")
-Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate61", "cast", SECRET_SPELL)
-enemyUnits.nameplate61 = nil
-Fire("NAME_PLATE_UNIT_REMOVED", "nameplate61")
-check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
--- The game doesn't report Vanish or Stealth at all (seen in game): the targeted rogue's nameplate goes and the
--- target is dropped in the same instant. Running out of range keeps the target; clearing it keeps the
--- nameplate; a finished Hearthstone or teleport (a cast bar ending) is not stealth
-local function TargetStab() clock = clock + 10 enemyUnits.nameplate1 = stabUnit enemyUnits.target = stabUnit Fire("NAME_PLATE_UNIT_ADDED", "nameplate1") Fire("PLAYER_TARGET_CHANGED") end
-local function StabVanishes() enemyUnits.nameplate1 = nil Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1") enemyUnits.target = nil Fire("PLAYER_TARGET_CHANGED") end
-TargetStab()
-StabVanishes()
-check(#stealthEvents == 4 and stealthEvents[4].guid == "Player-9-ENEMY" and stealthEvents[4].stealthKind == "Stealth", "the targeted rogue's nameplate and target go together: stealth")
-TargetStab()
-enemyUnits.target = nil
-Fire("PLAYER_TARGET_CHANGED")
-check(#stealthEvents == 4, "clearing the target yourself is not stealth")
-TargetStab()
-enemyUnits.nameplate1 = nil
-Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
-clock = clock + 3
-check(#stealthEvents == 4, "running out of nameplate range keeps the target: not stealth")
-enemyUnits.target = nil
-Fire("PLAYER_TARGET_CHANGED")
-check(#stealthEvents == 4, "and losing the target much later isn't either")
-TargetStab()
+Vanish("nameplate1")
+check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Stealth", "a rogue gone from view within 28 yards went into stealth")
+stabUnit.close = false
+Appear("nameplate1", stabUnit)
+clock = clock + 5
+Vanish("nameplate1")
+check(#stealthEvents == 1, "a rogue walking out of view far away is not stealth")
+stabUnit.close = true
+Appear("nameplate1", stabUnit)
+stabUnit.close = false
+clock = clock + 1
+Vanish("nameplate1")
+check(#stealthEvents == 2, "within 28 yards at the last scan a moment ago still counts")
+stabUnit.close = true
+Appear("nameplate1", stabUnit)
 Fire("UNIT_SPELLCAST_STOP", "nameplate1")
-StabVanishes()
-check(#stealthEvents == 4, "a finished cast bar (Hearthstone, teleport) right before vanishing is not stealth")
-local mage = { guid = "Player-9-MAGE", name = "Frost Mage", class = "MAGE", level = 20 }
-clock = clock + 10
-enemyUnits.nameplate62, enemyUnits.target = mage, mage
+Vanish("nameplate1")
+check(#stealthEvents == 2, "a finished cast bar (Hearthstone, teleport) right before vanishing is not stealth")
+Appear("nameplate1", stabUnit)
+stabUnit.dead = true
+Vanish("nameplate1")
+stabUnit.dead = nil
+check(#stealthEvents == 2, "a dead rogue's nameplate going is not stealth")
+Appear("nameplate1", stabUnit)
+playerOnTaxi = true
+Vanish("nameplate1")
+playerOnTaxi = false
+check(#stealthEvents == 2, "nothing while you're on a flight path")
+local warrior = { guid = "Player-9-WARRIOR", name = "War Rior", class = "WARRIOR", level = 20, close = true }
+local mage = { guid = "Player-9-MAGE", name = "Frost Mage", class = "MAGE", level = 20, close = true }
+local elf = { guid = "Player-9-ELF", name = "Night Hunter", class = "HUNTER", level = 20, raceFile = "NightElf", close = true }
+Appear("nameplate1", stabUnit)
+enemyUnits.nameplate60, enemyUnits.nameplate62 = warrior, mage
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate60")
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate62")
-Fire("PLAYER_TARGET_CHANGED")
-enemyUnits.nameplate62 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate60")
 Fire("NAME_PLATE_UNIT_REMOVED", "nameplate62")
-enemyUnits.target = nil
-Fire("PLAYER_TARGET_CHANGED")
-check(#stealthEvents == 5 and stealthEvents[5].stealthKind == "Invisibility", "a mage vanishing from target is Invisibility")
+enemyUnits.nameplate1, enemyUnits.nameplate60, enemyUnits.nameplate62 = nil, nil, nil
+RunTimers()
+check(#stealthEvents == 2, "every nameplate going at once (a loading screen) is not stealth")
+Appear("nameplate60", warrior)
+Vanish("nameplate60")
+check(#stealthEvents == 2, "a warrior can't stealth")
+Appear("nameplate62", mage)
+Vanish("nameplate62")
+check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Invisibility", "a mage close by is Invisibility")
+Appear("nameplate61", elf)
+Vanish("nameplate61")
+check(#stealthEvents == 4 and stealthEvents[4].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
+stabUnit.close = nil
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 -- We kill them: the client's kill event records a kill and a win

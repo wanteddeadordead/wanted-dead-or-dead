@@ -2,10 +2,10 @@
 
 ## [Unreleased]
 
-- The stealth alarm works again for the enemy you have targeted. The game no longer tells addons about
-  Stealth or Vanish at all, so Wanted spots the moment instead: your target's nameplate and your target vanish
-  together (running out of range or dying never does both). Rogues show STEALTH, druids PROWL, mages
-  INVISIBILITY, night elves SHADOWMELD; a Hearthstone or teleport finishing doesn't count.
+- The stealth alarm works again. The game no longer tells addons about Stealth or Vanish at all, so Wanted
+  spots the moment instead: an enemy who disappears from view while within 28 yards and alive has gone into
+  stealth (walking out of view happens much further away). Rogues show STEALTH, druids PROWL, mages
+  INVISIBILITY, night elves SHADOWMELD; a Hearthstone or teleport finishing, or a loading screen, doesn't count.
 
 ## [0.1.0-beta.3] - 2026-09-25
 

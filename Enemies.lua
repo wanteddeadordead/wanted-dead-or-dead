@@ -17,6 +17,7 @@ local private = {
 	targetingMe = {}, -- guid -> time they last had us targeted
 	recentCasts = {}, -- guid..spell -> time
 	tokens = {}, -- unit token -> { guid, t } the enemy last seen on it, and when (or when its nameplate went)
+	removals = {}, -- times of recent nameplate removals (many at once is a loading screen, not stealth)
 	lastShared = {}, -- guid -> time we last shared a sighting of them
 	targeters = {}, -- guid -> true for enemies targeting us now
 	lastRecapId = nil,
@@ -27,15 +28,15 @@ local SCAN_SECONDS = 1
 -- A cast that makes the caster invisible (Vanish, Stealth) arrives when their unit no longer resolves; it's
 -- put down to whoever was on that token this recently
 local TOKEN_GRACE_SECONDS = 2
--- The game hides which spell an enemy cast. One who casts and drops out of sight this soon after went into
--- stealth (running out of range doesn't come right after a cast); what it was is guessed from who they are.
-local VANISH_WINDOW_SECONDS = 0.6
+-- The game doesn't report Stealth or Vanish at all (not even as a hidden cast): the player's nameplate just
+-- goes. A nameplate also goes when someone walks out of view, but that's far away; one that goes while its
+-- player is within 28 yards and alive went into stealth. What it was is guessed from who they are.
+local CLOSE_DISTANCE_INDEX = 4 -- CheckInteractDistance: within about 28 yards
+local CLOSE_FRESH_SECONDS = 1.5 -- "within 28 yards" from the last scan still counts this long
+local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen, your own teleport) aren't stealth
+local MASS_REMOVAL = 3
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
--- The game doesn't report Vanish or Stealth at all. What it does: the stealthed player's nameplate goes and,
--- if they were your target, the target is dropped in the same instant. Out of range keeps the target, a death
--- keeps it, clearing it keeps the nameplate. A cast bar that just ended (Hearthstone, a teleport) explains it.
-local TARGET_VANISH_SECONDS = 0.3
-local CAST_BAR_GRACE_SECONDS = 1.5
+local CAST_BAR_GRACE_SECONDS = 1.5 -- a cast bar that just ended (Hearthstone, a teleport) explains a vanish
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -133,33 +134,8 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.Scan(arg1)
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
 		private.plates[arg1] = nil
-		local known = private.tokens[arg1]
-		if known then
-			known.t = GetTime()
-			private.CheckVanished(arg1)
-			local entry = private.nearby[known.guid]
-			if entry then
-				entry.plateGoneAt = known.t
-				-- The target may already be gone by now (the order of the two isn't fixed)
-				local target = private.tokens.target
-				if target and target.guid == known.guid and target.lostAt and known.t - target.lostAt <= TARGET_VANISH_SECONDS then
-					private.GuessStealth(entry)
-				end
-			end
-		end
+		private.OnPlateRemoved(arg1)
 	elseif event == "PLAYER_TARGET_CHANGED" then
-		-- Stealth drops the player from your target, in the same instant their nameplate goes
-		local target = private.tokens.target
-		if not private.Readable(UnitExists("target")) and target then
-			local now = GetTime()
-			target.lostAt = now
-			target.t = now
-			private.CheckVanished("target")
-			local entry = private.nearby[target.guid]
-			if entry and entry.plateGoneAt and now - entry.plateGoneAt <= TARGET_VANISH_SECONDS then
-				private.GuessStealth(entry)
-			end
-		end
 		private.Scan("target")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		private.Scan("mouseover")
@@ -297,6 +273,9 @@ function private.Scan(unit)
 	entry.name = name
 	entry.unit = unit
 	entry.lastSeen = now
+	if private.IsClose(unit) then
+		entry.closeAt = now -- for telling stealth from walking out of view (OnPlateRemoved)
+	end
 	local _, class = UnitClass(unit)
 	entry.class = private.Readable(class) or entry.class
 	local level = private.Readable(UnitLevel(unit))
@@ -362,22 +341,52 @@ function private.StealthKind(spellID)
 	return kind
 end
 
----A token stopped showing its enemy (nameplate gone, target lost): right after a cast, that's stealth.
-function private.CheckVanished(unit)
-	local known = private.tokens[unit]
-	local entry = known and private.nearby[known.guid]
-	if entry and entry.lastCastAt and GetTime() - entry.lastCastAt <= VANISH_WINDOW_SECONDS then
-		private.GuessStealth(entry)
-	end
+---Whether a unit is within about 28 yards; nil when the game won't say.
+function private.IsClose(unit)
+	local ok, close = pcall(CheckInteractDistance, unit, CLOSE_DISTANCE_INDEX)
+	return ok and private.Readable(close) or nil
 end
 
----Raises the stealth alarm for an enemy who cast and vanished, named for what they could have used; nothing
+---A nameplate went. The unit still answers for this moment: if its player was close and alive, they may have
+---gone into stealth. Decided a moment later, once it's clear it wasn't every nameplate going at once.
+function private.OnPlateRemoved(unit)
+	local known = private.tokens[unit]
+	local now = GetTime()
+	tinsert(private.removals, now)
+	if not known then
+		return
+	end
+	known.t = now
+	local entry = private.nearby[known.guid]
+	if not entry or private.Readable(UnitIsDeadOrGhost(unit)) then
+		return
+	end
+	local close = private.IsClose(unit) == true or (entry.closeAt and now - entry.closeAt <= CLOSE_FRESH_SECONDS)
+	if not close then
+		return
+	end
+	C_Timer.After(VANISH_SETTLE_SECONDS, function()
+		local together = 0
+		for i = #private.removals, 1, -1 do
+			if GetTime() - private.removals[i] > VANISH_SETTLE_SECONDS * 2 then
+				tremove(private.removals, i)
+			else
+				together = together + 1
+			end
+		end
+		if together >= MASS_REMOVAL or private.Readable(UnitIsDeadOrGhost("player")) or private.Readable(UnitOnTaxi("player")) then
+			return
+		end
+		private.GuessStealth(entry)
+	end)
+end
+
+---Raises the stealth alarm for an enemy who vanished close by, named for what they could have used; nothing
 ---for a class and race without a stealth ability.
 function private.GuessStealth(entry)
 	local kind = entry.class == "ROGUE" and "Stealth" or entry.class == "DRUID" and "Prowl"
 		or entry.class == "MAGE" and "Invisibility" or entry.raceFile == "NightElf" and "Shadowmeld" or nil
 	local now = GetTime()
-	entry.lastCastAt = nil
 	if not kind or (entry.stealthed and now - entry.stealthed < STEALTH_REPEAT_SECONDS) then
 		return
 	end
@@ -415,27 +424,14 @@ function private.OnCast(unit, spellID)
 	if type(unit) ~= "string" or not (unit == "target" or unit == "focus" or unit == "mouseover" or strfind(unit, "^nameplate%d+$")) then
 		return
 	end
+	-- Enemy spells are hidden from addons on Forever (a secret value); a readable one is still checked
 	spellID = private.Readable(spellID)
-	local entry = private.Scan(unit)
-	local outOfSight = false
+	local entry = private.Scan(unit) or private.LastOnToken(unit)
 	if not entry then
-		entry = private.LastOnToken(unit)
-		outOfSight = entry ~= nil
-	end
-	if not entry then
-		local kind = type(spellID) == "number" and private.StealthKind(spellID)
-		if kind then
-			Wanted:Log("Enemies: %s cast on %s, but nobody known was on it", kind, unit)
-		end
 		return
 	end
 	entry.lastActive = GetTime()
 	if type(spellID) ~= "number" then
-		-- Which spell is hidden from addons: note the cast, and if they're already out of sight it was stealth
-		entry.lastCastAt = GetTime()
-		if outOfSight then
-			private.GuessStealth(entry)
-		end
 		return
 	end
 	local key = entry.guid..":"..spellID

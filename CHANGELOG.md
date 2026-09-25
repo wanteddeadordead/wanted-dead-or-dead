@@ -4,8 +4,9 @@
 
 ## [0.1.0-beta.2] - 2026-09-25
 
-- Alerts, the TARGETED warning and the Nearby window only speak up while you can be attacked (PvP flagged,
-  not in a sanctuary); getting flagged with enemies around opens the window. Settings > Alerts to turn off.
+- Quiet mode (Settings > Alerts > Only when I can be attacked): alerts, the TARGETED warning and the Nearby
+  window stay silent until you can be attacked (PvP flagged, not in a sanctuary); getting flagged with enemies
+  around opens the window. Off by default; after your first run-in with enemies a one-time tip offers it.
 - The Nearby window hides itself after 5 minutes with no enemies (Settings > Nearby window: never, 2, 5 or 10 min).
 - Call for help says where you are in words: the area you're in ("Need help in Brill, Tirisfal Glades 61,52") or,
   between areas, the nearest one and which way ("Need help west of Razor Hill, Durotar 47,40").

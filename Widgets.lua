@@ -518,6 +518,7 @@ function W:Dialog(options)
 	frame.message:SetText(options.text or "")
 	frame.error:SetText("")
 	frame.confirm:SetText(options.confirmLabel or "OK")
+	frame.cancel:SetText(options.cancelLabel or "Cancel")
 	frame.confirm:SetStyle(options.confirmStyle == "danger" and "danger" or (options.confirmStyle or "primary"))
 	frame.input:ClearAllPoints()
 	if options.input then

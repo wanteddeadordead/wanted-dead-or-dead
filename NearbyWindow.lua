@@ -82,6 +82,7 @@ function Nearby:OnEnable()
 			Nearby:Refresh()
 			private.CheckAutoHide()
 		end
+		private.MaybeQuietTip()
 	end)
 	-- Stepping out of a sanctuary or getting flagged with enemies already around opens the window then
 	private.flagFrame = CreateFrame("Frame")
@@ -108,6 +109,33 @@ function private.AutoShow()
 	end
 	private.emptySince = nil
 	Nearby:SetShown(true)
+	if not settings.onlyWhenExposed and not settings.quietTipShown then
+		private.quietTipPending = true
+	end
+end
+
+---The first time the window opened by itself, once that encounter is over (nobody left, out of combat so it
+---can't cover the screen in a fight), offers quiet mode, once.
+function private.MaybeQuietTip()
+	local settings = private.Settings()
+	if not private.quietTipPending or InCombatLockdown() or #Enemies:GetNearby() > 0 then
+		return
+	end
+	private.quietTipPending = nil
+	if settings.quietTipShown or settings.onlyWhenExposed then
+		return
+	end
+	settings.quietTipShown = true
+	W:Dialog({
+		title = "Quiet mode",
+		text = "Wanted warns you about every enemy player it sees, flagged or not.\n\nOnly want warnings while you're PvP flagged? Quiet mode keeps alerts and the Nearby window silent until you can be attacked. Change it any time in Settings > Alerts > Only when I can be attacked.",
+		cancelLabel = "Keep all",
+		confirmLabel = "Quiet mode",
+		onConfirm = function()
+			settings.onlyWhenExposed = true
+			Nearby:UpdateExposure()
+		end,
+	})
 end
 
 function private.OnEnemyEvent(event, entry)

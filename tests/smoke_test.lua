@@ -991,6 +991,9 @@ RunTimers()
 -- Only when you can be attacked: unflagged, a new enemy neither opens the window nor alerts; getting
 -- flagged with enemies around opens it; a sanctuary counts as safe even flagged
 local function Ticks() for _, f in ipairs(tickers) do f() end end
+check(ns.db.settings.detect.onlyWhenExposed == false, "quiet mode is off by default")
+ns.db.settings.detect.onlyWhenExposed = true
+ns.NearbyWindow:UpdateExposure()
 ns.db.settings.detect.autoShow = true
 ns.NearbyWindow:SetShown(false)
 ns.Enemies:ClearNearby()
@@ -1020,6 +1023,38 @@ check(ns.NearbyWindow:IsShown(), "still up after 200s")
 clock = clock + 120
 Ticks()
 check(not ns.NearbyWindow:IsShown(), "hidden after five minutes with no enemies")
+-- Quiet mode off: unflagged, a new enemy opens the window; once that encounter is over (nobody left, out of
+-- combat) a one-time tip offers quiet mode
+ns.db.settings.detect.onlyWhenExposed = false
+ns.db.settings.detect.quietTipShown = false -- earlier tests ran with quiet mode off too
+pvpFlag = false
+lastDialog = nil
+enemyUnits.nameplate51 = { guid = "Player-9-TIPPED", name = "Tip Rogue", class = "ROGUE", level = 20 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate51")
+check(ns.NearbyWindow:IsShown(), "quiet mode off: unflagged, a new enemy opens the window")
+Ticks()
+check(lastDialog == nil, "no tip while the enemy is still around")
+enemyUnits.nameplate51 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate51")
+ns.Enemies:ClearNearby()
+inCombat = true
+Ticks()
+check(lastDialog == nil, "no tip in combat")
+inCombat = false
+Ticks()
+check(lastDialog and lastDialog.title == "Quiet mode" and lastDialog.cancelLabel, "the quiet mode tip once the encounter is over")
+ConfirmDialog()
+check(ns.db.settings.detect.onlyWhenExposed == true, "the tip's button turns quiet mode on")
+ns.db.settings.detect.onlyWhenExposed = false
+ns.NearbyWindow:SetShown(false)
+enemyUnits.nameplate51 = { guid = "Player-9-TIPPED2", name = "Tip Mage", class = "MAGE", level = 20 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate51")
+enemyUnits.nameplate51 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate51")
+ns.Enemies:ClearNearby()
+Ticks()
+check(lastDialog == nil, "the tip shows only once")
+ns.NearbyWindow:SetShown(false)
 ns.Alerts.Warn = realWarn2
 ns.Enemies:SetKoS("Player-9-QUIET", "Quiet Kos", false)
 pvpFlag = false

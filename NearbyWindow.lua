@@ -244,7 +244,7 @@ function private.Create()
 	private.footer = Theme:Text(frame, "tiny", "")
 	private.footer:SetPoint("BOTTOMLEFT", 10, FOOTER_GAP)
 	private.footer:SetWidth(WIDTH - 20)
-	private.footer:SetWordWrap(true)
+	private.footer:SetWordWrap(false)
 	private.footer:SetJustifyV("BOTTOM")
 	private.footer:SetSpacing(2)
 	-- Call for help: always there on the Nearby tab (the window can't change size in combat, when it's needed)
@@ -566,13 +566,22 @@ function private.FooterText(items, capacity)
 		tinsert(list, { class = class, count = count })
 	end
 	sort(list, function(a, b) return a.count > b.count end)
-	local parts = {}
+	-- Three classes a line, laid out here: left to the text's own wrapping, a count and its class could land on
+	-- different lines
+	local lines, line = {}, {}
 	for i = 1, min(#list, 6) do
 		local entry = list[i]
-		tinsert(parts, Theme:ClassName(entry.count.." "..Theme:ClassLabel(entry.class ~= "?" and entry.class or nil), entry.class))
+		tinsert(line, Theme:ClassName(entry.count.." "..Theme:ClassLabel(entry.class ~= "?" and entry.class or nil), entry.class))
+		if #line == 3 then
+			tinsert(lines, table.concat(line, "  "))
+			line = {}
+		end
+	end
+	if #line > 0 then
+		tinsert(lines, table.concat(line, "  "))
 	end
 	local scroll = InCombatLockdown() and "Scroll after combat." or "Wheel to scroll."
-	return format("%d-%d of %d. %s\n%s", first, last, #items, scroll, table.concat(parts, "  "))
+	return format("%d-%d of %d. %s\n%s", first, last, #items, scroll, table.concat(lines, "\n"))
 end
 
 function private.Draw(row, info)

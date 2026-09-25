@@ -73,7 +73,7 @@ function private.AddPlayers(groups, byName, now, recent)
 	for guid, player in pairs(Wanted.db.players) do
 		local lastSeen = player.lastSeen
 		if lastSeen and now - lastSeen <= HOUR and player.faction and player.faction ~= myFaction
-				and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") and (player.mapId or player.zone) then
+				and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and (player.mapId or player.zone) then
 			local group = private.GetGroup(groups, byName, player.mapId, player.zone)
 			group.hour = group.hour + 1
 			if now - lastSeen <= recent then
@@ -107,7 +107,7 @@ function private.AddEarlier(groups, byName, now, recent)
 	for sighting in Store:SightingIterator() do
 		count = count + 1
 		oldest = min(oldest, sighting.t or now)
-		if sighting.t and sighting.t >= from and sighting.t < to and not Wanted.db.ignore[sighting.guid] then
+		if sighting.t and sighting.t >= from and sighting.t < to and not Wanted.db.ignore[sighting.guid] and not strfind(sighting.guid, "^Player%-TEST%-") then
 			local key = (sighting.mapId or sighting.zone or "?").."|"..sighting.guid
 			if not seen[key] then
 				seen[key] = true
@@ -129,7 +129,7 @@ function private.AddDeaths(groups, byName, now)
 		for record in Store:Iterator(kind) do
 			local data = record.data
 			local key = data.deathId or record.id
-			if record.t and now - record.t <= HOUR and data.zone and not counted[key] then
+			if record.t and now - record.t <= HOUR and data.zone and not counted[key] and not Store:IsTest(record) then
 				counted[key] = true
 				local group = private.GetGroup(groups, byName, nil, data.zone)
 				group.deaths = group.deaths + 1

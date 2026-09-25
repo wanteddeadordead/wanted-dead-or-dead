@@ -802,8 +802,10 @@ for i = 1, 6 do
 	ns.Store:UpdatePlayer(guid, { name = "Surger"..i, class = "WARRIOR", level = 25, faction = "Alliance", zone = "The Barrens", mapId = 10, x = 50, y = 50 })
 	ns.Store:AddSighting(guid, "The Barrens", 50, 50, 10)
 end
+ns.Store:UpdatePlayer("Player-TEST-99999999", { name = "Fake Person", class = "MAGE", level = 25, faction = "Alliance", zone = "The Barrens", mapId = 10 })
 local surging = ns.Hotspots:GetSurging()
-check(#surging == 1 and surging[1].zone == "The Barrens" and surging[1].recent == 6, "the Barrens is rising fast, got "..tostring(surging[1] and surging[1].zone))
+check(#surging == 1 and surging[1].zone == "The Barrens" and surging[1].recent == 6, -- the test player isn't counted
+ "the Barrens is rising fast, got "..tostring(surging[1] and surging[1].zone))
 ns.Hotspots:CheckSurges()
 ns.Hotspots:CheckSurges()
 check(#warnings == 1 and warnings[1] == "RISING FAST: The Barrens", "one rising warning, got "..#warnings)

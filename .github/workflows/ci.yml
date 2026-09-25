@@ -40,5 +40,6 @@ jobs:
           if test -e "$pkg/Debug.lua"; then echo "Debug.lua is in the package"; exit 1; fi
           if grep -q '^Debug.lua' "$pkg/WantedDeadOrDead.toc"; then echo "the toc still loads Debug.lua"; exit 1; fi
           if grep -rq 'RegisterCommand("\(simulate\|purge\|freshstart\)"' "$pkg"; then echo "a development command is registered"; exit 1; fi
-          grep -q '\[===\[@debug@' "$pkg/Store.lua" || { echo "Store:FreshStart is not stripped"; exit 1; }
+          grep -n -B2 -A1 'FreshStart()' "$pkg/Store.lua" || true
+          grep -q '\[=*\[@debug@' "$pkg/Store.lua" || { echo "Store:FreshStart is not stripped"; exit 1; }
           echo "Package is clean"

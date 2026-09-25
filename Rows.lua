@@ -18,6 +18,7 @@ local ACTION_BUTTONS = {
 	withdraw = { label = "Withdraw", style = "ghost", tip = "Take your bounty down. Only possible while nobody is hunting or has claimed it." },
 	hunt = { label = "Hunt", style = "primary", tip = "Tell everyone you're going after this target. For the next 2 hours the poster can't withdraw the bounty." },
 	stophunt = { label = "Stop", style = "ghost", tip = "Stop hunting. The poster can withdraw the bounty again once nobody is hunting it." },
+	renew = { label = "Renew", style = "secondary", tip = "Start your 2 hours again, keeping the bounty locked while you hunt." },
 	pass = { label = "Pass", style = "ghost", tip = "Hide this bounty from your board, e.g. because it pays too little." },
 	confirm = { label = "Confirm", style = "success", tip = "Agree the kill happened. You then owe the hunter the bounty." },
 	dispute = { label = "Dispute", style = "danger", tip = "Say the claim is false. It goes on the hunter's record and the bounty opens again." },
@@ -248,9 +249,16 @@ function Rows:DoAction(action, info)
 	elseif action == "hunt" then
 		local ok, err = Bounties:Hunt(info.bounty)
 		if ok then
-			Done(format("You're hunting %s. The bounty is locked for 2 hours; press Hunt again later to renew.", info.targetName))
+			Done(format("You're hunting %s. The bounty is locked for 2 hours; renew it under Your bounties > Your hunts.", info.targetName))
 		else
 			Done("Couldn't start the hunt: "..tostring(err)..".", C.red)
+		end
+	elseif action == "renew" then
+		local ok, err = Bounties:Hunt(info.bounty)
+		if ok then
+			Done(format("Renewed your hunt on %s for another 2 hours.", info.targetName))
+		else
+			Done("Couldn't renew the hunt: "..tostring(err)..".", C.red)
 		end
 	elseif action == "stophunt" then
 		Bounties:Hunt(info.bounty, true)

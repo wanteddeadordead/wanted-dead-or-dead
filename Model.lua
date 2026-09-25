@@ -84,6 +84,7 @@ function Model:GetBountyInfo(bounty)
 			info.iHunt = true
 		end
 	end
+	info.huntEnds = info.iHunt and Bounties:GetMyHuntEnds(bounty) or nil
 	-- What the viewer can do with it
 	local actions = {}
 	if info.mine then
@@ -102,6 +103,7 @@ function Model:GetBountyInfo(bounty)
 	elseif (info.state == STATE.OPEN or info.state == STATE.UNVERIFIED) and not info.passed then
 		if info.iHunt then
 			tinsert(actions, "stophunt")
+			tinsert(actions, "renew")
 		else
 			tinsert(actions, "pass")
 			tinsert(actions, "hunt")
@@ -166,6 +168,9 @@ function Model:GetDetail(info)
 	if state == STATE.OPEN then
 		tinsert(parts, Theme:Left(info.expiry - now))
 		local hunters = #info.hunters
+		if info.huntEnds then
+			tinsert(parts, "hunt "..Theme:Left(info.huntEnds - now))
+		end
 		if hunters > 0 then
 			tinsert(parts, info.iHunt and (hunters == 1 and "only you hunting" or format("you and %d other%s hunting", hunters - 1, hunters == 2 and "" or "s")) or format("%d hunting", hunters))
 		end
@@ -290,6 +295,25 @@ function Model:GetMyBounties()
 	sort(items, function(a, b)
 		if a.order ~= b.order then
 			return a.order < b.order
+		end
+		return a.t > b.t
+	end)
+	return items
+end
+
+---Bounties the player is hunting right now, biggest first.
+---@return table[]
+function Model:GetMyHunts()
+	local items = {}
+	for bounty in Store:Iterator("bounty") do
+		local info = Model:GetBountyInfo(bounty)
+		if info.iHunt then
+			tinsert(items, info)
+		end
+	end
+	sort(items, function(a, b)
+		if a.amount ~= b.amount then
+			return a.amount > b.amount
 		end
 		return a.t > b.t
 	end)

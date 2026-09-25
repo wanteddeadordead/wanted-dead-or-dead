@@ -1,5 +1,6 @@
 -- Wanted: the player's own business. What they owe and are owed at a glance, the bounties they posted
--- (with the decisions waiting on them first), the claims they made as a hunter, and their own record:
+-- (with the decisions waiting on them first), the bounties they're hunting, the claims they made as a
+-- hunter, and their own record:
 -- how far other players can trust them as a poster and as a hunter, what that means, and how to improve it.
 
 local _, Wanted = ...
@@ -114,6 +115,8 @@ function private.Refresh()
 		private.RefreshRecord()
 	elseif private.view == "posted" then
 		private.list:SetItems(Model:GetMyBounties(), "No live bounties.", "Post one from the Board. Finished ones are under History.")
+	elseif private.view == "hunts" then
+		private.list:SetItems(Model:GetMyHunts(), "You're not hunting anyone.", "Press Hunt on a bounty on the Board. A hunt lasts 2 hours; Renew starts it again.")
 	elseif private.view == "claims" then
 		private.list:SetItems(Model:GetMyActiveClaims(), "No claims in play.", "Kill a player with a bounty on them and the claim files itself.")
 	else
@@ -140,13 +143,14 @@ UI:RegisterPage("mine", {
 
 		local segment = W:Segmented(container, {
 			{ key = "posted", label = "Your live bounties" },
+			{ key = "hunts", label = "Your hunts" },
 			{ key = "claims", label = "Your claims" },
 			{ key = "history", label = "History" },
 			{ key = "record", label = "Your record" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
-		end, 170)
+		end, 140)
 		segment:SetPoint("TOPLEFT", 0, -84)
 		segment:Select("posted", true)
 		private.segment = segment

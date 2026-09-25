@@ -670,6 +670,18 @@ end
 check(kaelenProof, "Kaelen's test claim has a proof")
 ns.UI:Show("settings")
 ns:RunCommand("purge", "")
+-- Your hunts: a bounty you hunt shows there with its time left, and can be renewed or stopped
+local huntBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-OTHER", targetName = "Sneaky Pete", amount = 6000, level = 20, zone = "The Barrens" }, clock - 60)
+check(#ns.Model:GetMyHunts() == 0 or not ns.Model:GetBountyInfo(huntBounty).iHunt, "not hunting it yet")
+ns.Bounties:Hunt(huntBounty)
+local hunts = ns.Model:GetMyHunts()
+local hunted
+for _, item in ipairs(hunts) do if item.bounty == huntBounty then hunted = item end end
+check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt 2h left", 1, true), "the hunt shows under Your hunts with its time left, got "..(hunted and ns.Model:GetDetail(hunted) or "nothing"))
+check(hunted.actions[1] == "stophunt" and hunted.actions[2] == "renew", "a hunt offers Stop and Renew")
+ns.Rows:DoAction("renew", hunted)
+ns.Rows:DoAction("stophunt", ns.Model:GetBountyInfo(huntBounty))
+check(not ns.Model:GetBountyInfo(huntBounty).iHunt, "stopped")
 -- Report a bug from the foot of the menu
 ns.UI:Show("board")
 ns.Report:Show()

@@ -181,6 +181,23 @@ function Bounties:GetActiveHunters(bounty, at)
 	return hunters
 end
 
+---When this client's hunt on a bounty runs out, or nil if it isn't hunting it.
+---@param bounty table
+---@return number? serverTime
+function Bounties:GetMyHuntEnds(bounty)
+	local me = Store:GetOrigin()
+	local latest
+	for hunt in Store:Iterator("hunt") do
+		if hunt.origin == me and hunt.data.bounty == bounty.id and (not latest or hunt.t > latest.t or (hunt.t == latest.t and hunt.seq > latest.seq)) then
+			latest = hunt
+		end
+	end
+	if not latest or latest.data.stop or GetServerTime() - latest.t >= HUNT_SECONDS then
+		return nil
+	end
+	return latest.t + HUNT_SECONDS
+end
+
 ---Whether this client is hunting a bounty now.
 ---@param bounty table
 ---@return boolean

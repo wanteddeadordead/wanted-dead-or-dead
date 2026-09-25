@@ -10,6 +10,7 @@
 ## SavedVariables: WantedDB
 ## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
 ## X-License: MIT
+## X-Curse-Project-ID: 1710798
 ## Category: PvP
 
 Libs\LibStub\LibStub.lua

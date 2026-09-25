@@ -39,6 +39,7 @@ TargetFile.lua
 NearbyWindow.lua
 PageBoard.lua
 PageMine.lua
+PageHunts.lua
 PageHunters.lua
 PageActivity.lua
 PageEnemies.lua

@@ -249,7 +249,7 @@ function Rows:DoAction(action, info)
 	elseif action == "hunt" then
 		local ok, err = Bounties:Hunt(info.bounty)
 		if ok then
-			Done(format("You're hunting %s. The bounty is locked for 24 hours; renew it under Your bounties > Your hunts.", info.targetName))
+			Done(format("You're hunting %s. The bounty is locked for 24 hours; renew it under Your hunts.", info.targetName))
 		else
 			Done("Couldn't start the hunt: "..tostring(err)..".", C.red)
 		end

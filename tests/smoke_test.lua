@@ -413,7 +413,7 @@ for _, view in ipairs({ "nearby", "hour", "kos", "ignore" }) do
 	ns.NearbyWindow:Refresh()
 end
 ns.db.settings.showTools = true
-for _, key in ipairs({ "board", "mine", "enemies", "hotspots", "hunters", "activity", "settings", "tools" }) do
+for _, key in ipairs({ "board", "mine", "hunts", "enemies", "hotspots", "hunters", "activity", "settings", "tools" }) do
 	ns.UI:Show(key)
 end
 ns.db.settings.showTools = false
@@ -692,6 +692,8 @@ local hunted
 for _, item in ipairs(hunts) do if item.bounty == huntBounty then hunted = item end end
 check(hunted and hunted.huntEnds and ns.Model:GetDetail(hunted):find("hunt "..ns.Theme:Left(ns.Bounties.HUNT_SECONDS), 1, true), "the hunt shows under Your hunts with its time left, got "..(hunted and ns.Model:GetDetail(hunted) or "nothing"))
 check(hunted.actions[1] == "stophunt" and hunted.actions[2] == "renew", "a hunt offers Stop and Renew")
+ns.UI:Show("hunts")
+check(ns.UI:IsShown("hunts"), "Your hunts is its own page")
 ns.Rows:DoAction("renew", hunted)
 ns.Rows:DoAction("stophunt", ns.Model:GetBountyInfo(huntBounty))
 check(not ns.Model:GetBountyInfo(huntBounty).iHunt, "stopped")

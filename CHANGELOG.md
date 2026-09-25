@@ -6,7 +6,9 @@
   with levels, the biggest guild there, PvP deaths and whether it's getting busier. Top zones on the minimap tooltip.
 - The Tools page is off by default; turn it on in Settings.
 - A note when another player's client reports a newer release (chat, minimap tooltip, bug report).
-- Enemy markers now show on the world map (they were drawn underneath the map artwork).
+- Enemy markers now show on the world map, drawn through the map's own pin system so they work alongside other
+  map addons such as Leatrix Maps.
+- Show or hide the enemy markers from the map's filter menu, the Hotspots page or Settings.
 
 ## [0.1.0-beta.1] - 2026-09-24
 

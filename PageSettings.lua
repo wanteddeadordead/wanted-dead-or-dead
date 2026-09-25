@@ -173,7 +173,7 @@ function private.BuildSharing(panel, width)
 	note:SetPoint("TOPLEFT", 16, -94)
 
 	local display = private.Card(panel, -142, 150, "Display", width)
-	private.Toggle(display, Detect, "mapPins", "Show enemies on the world map", "Recent sightings, yours and shared, drawn on the world map for the last 30 minutes.", 16, -38)
+	private.Toggle(display, Detect, "mapPins", "Show enemies on the world map", "Recent sightings, yours and shared, drawn on the world map for the last 30 minutes. Also in the map's own filter menu.", 16, -38, function() Wanted.MapPins:Refresh() end)
 	private.minimap = W:Toggle(display, "Minimap button", function(checked)
 		Wanted.db.settings.minimap.hide = not checked
 		Wanted.Minimap:Update()

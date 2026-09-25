@@ -44,4 +44,5 @@ PageSettings.lua
 PageTools.lua
 Report.lua
 MapPins.lua
+MapPins.xml
 Minimap.lua

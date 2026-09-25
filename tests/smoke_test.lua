@@ -148,6 +148,29 @@ local MAP_NAMES = { [1] = "Durotar", [10] = "The Barrens" }
 C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = function() return { x = 0.446, y = 0.25 } end, GetMapInfo = function(id) return MAP_NAMES[id] and { name = MAP_NAMES[id] } end }
 local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
+-- The world map's pin system, enough to drive a data provider
+function CreateFromMixins(...) local t = {} for _, m in ipairs({ ... }) do for k, v in pairs(m) do t[k] = v end end return t end
+MapCanvasPinMixin = { SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end }
+MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, GetMap = function(self) return self.owningMap end }
+local insertedLevel
+WorldMapFrame = NewMock()
+WorldMapFrame.pins = {}
+WorldMapFrame.GetMapID = function() return 1 end
+WorldMapFrame.AddDataProvider = function(self, provider) self.provider = provider provider:OnAdded(self) end
+WorldMapFrame.GetPinFrameLevelsManager = function() return { InsertFrameLevelBelow = function(_, name, below) insertedLevel = name.." below "..below end } end
+WorldMapFrame.RemoveAllPinsByTemplate = function(self) self.pins = {} end
+WorldMapFrame.AcquirePin = function(self, template, ...)
+	local pin = {} -- plain, so unset fields read as nil like a real frame's
+	for k, v in pairs(_G[template:gsub("Template$", "Mixin")]) do pin[k] = v end
+	pin.Dot = NewMock()
+	pin:OnLoad()
+	pin:OnAcquired(...)
+	table.insert(self.pins, pin)
+	return pin
+end
+WorldMapFrame.WorldMapTrackingOptionsButton = NewMock()
+local menus = {}
+Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
 addonSent = {}
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text) addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
@@ -164,7 +187,7 @@ SlashCmdList = {}
 local ns = {}
 for line in io.lines(ADDON.."WantedDeadOrDead.toc") do
 	line = line:gsub("\r", "")
-	if line ~= "" and not line:match("^#") then
+	if line ~= "" and not line:match("^#") and not line:match("%.xml$") then
 		local chunk = assert(loadfile(ADDON..line:gsub("\\", "/")))
 		chunk("WantedDeadOrDead", ns)
 	end
@@ -413,20 +436,24 @@ check(#ns.Hotspots:GetTop(3) == 2, "two zones busy now")
 check(ns.Hotspots:OpenMap(durotar) and mapOpened == 1, "clicking a hotspot opens its map")
 ns.UI:Show("hotspots")
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
--- The world map: enemy markers go above the map artwork (its layers start at frame level 2000)
-WorldMapFrame = NewMock()
-local mapCanvas = NewMock()
-WorldMapFrame.GetCanvas = function() return mapCanvas end
-WorldMapFrame.GetMapID = function() return 1 end
-WorldMapFrame.ScrollContainer = NewMock()
-WorldMapFrame.ScrollContainer.GetCanvasScale = function() return 1 end
-WorldMapFrame.GetPinFrameLevelsManager = function()
-	return { GetValidFrameLevel = function(_, levelType) return levelType == "PIN_FRAME_LEVEL_GROUP_MEMBER" and 2040 or 2000 end }
-end
-lastFrameLevel = nil
+-- The world map: markers come through the map's own pin system, in their own layer under group members
+check(insertedLevel == "PIN_FRAME_LEVEL_WANTED_ENEMY below PIN_FRAME_LEVEL_GROUP_MEMBER", "own map layer, got "..tostring(insertedLevel))
 ns.MapPins:Refresh()
-check(lastFrameLevel and lastFrameLevel >= 2040, "map markers sit above the map artwork, got level "..tostring(lastFrameLevel))
-WorldMapFrame = nil
+check(#WorldMapFrame.pins >= 40, "a marker per enemy seen on this map, got "..#WorldMapFrame.pins)
+local pin = WorldMapFrame.pins[1]
+check(pin._levelType == "PIN_FRAME_LEVEL_WANTED_ENEMY" and pin._x > 0 and pin._x < 1, "marker in our layer at a map position")
+pin:OnMouseEnter()
+pin:OnMouseLeave()
+-- Show / hide from the map's filter menu
+local checkbox
+local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = { text = text, isSelected = isSelected, setSelected = setSelected } end }
+menus.MENU_WORLD_MAP_TRACKING(nil, root)
+check(checkbox and checkbox.text == "Enemy sightings" and checkbox.isSelected(), "map filter menu has a checked Enemy sightings entry")
+checkbox.setSelected()
+check(not ns.db.settings.detect.mapPins and #WorldMapFrame.pins == 0, "unchecking it hides the markers")
+ns.UI:Show("hotspots")
+ns.MapPins:SetShown(true)
+check(#WorldMapFrame.pins >= 40 and checkbox.isSelected(), "the Hotspots switch brings them back")
 -- 20 minutes on nobody is there now: Durotar is quiet and falling, but still in the hour
 local savedClock = clock
 clock = clock + 20 * 60

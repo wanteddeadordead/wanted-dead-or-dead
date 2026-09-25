@@ -1,0 +1,21 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<!-- An enemy marker on the world map: a coloured dot with a dark edge. Behaviour is in MapPins.lua. -->
+	<Frame name="WantedDeadOrDeadEnemyPinTemplate" mixin="WantedDeadOrDeadEnemyPinMixin" enableMouseMotion="true" virtual="true">
+		<Size x="12" y="12"/>
+		<Layers>
+			<Layer level="BORDER">
+				<Texture parentKey="Border" setAllPoints="true">
+					<Color r="0" g="0" b="0" a="1"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Dot">
+					<Anchors>
+						<Anchor point="TOPLEFT" x="2" y="-2"/>
+						<Anchor point="BOTTOMRIGHT" x="-2" y="2"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+		</Layers>
+	</Frame>
+</Ui>

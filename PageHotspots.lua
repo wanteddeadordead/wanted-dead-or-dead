@@ -108,6 +108,7 @@ function private.Refresh()
 	if not private.list then
 		return
 	end
+	private.mapToggle:SetChecked(Wanted.MapPins:IsShown())
 	local groups = Hotspots:Get()
 	local busy = 0
 	for _, group in ipairs(groups) do
@@ -125,13 +126,18 @@ UI:RegisterPage("hotspots", {
 	order = 3.5,
 	build = function(container, width, height)
 		private.count = Theme:Text(container, "small", "")
-		private.count:SetPoint("TOPLEFT", 0, -4)
+		private.count:SetPoint("TOPLEFT", 0, -2)
+		private.mapToggle = W:Toggle(container, "Enemies on the world map", function(checked)
+			Wanted.MapPins:SetShown(checked)
+		end)
+		private.mapToggle:SetPoint("TOPRIGHT", 0, 0)
+		W:AttachTooltip(private.mapToggle, "Enemies on the world map", "Dots where enemies were seen in the last 30 minutes. Also in the map's own filter menu.")
 		local note = Theme:Text(container, "tiny", "Now = last 15 minutes. Counts only enemies a Wanted user has seen.", C.faint)
-		note:SetPoint("TOPRIGHT", 0, -6)
+		note:SetPoint("TOPLEFT", 0, -18)
 
 		local headerBar = CreateFrame("Frame", nil, container)
-		headerBar:SetPoint("TOPLEFT", 0, -28)
-		headerBar:SetPoint("TOPRIGHT", 0, -28)
+		headerBar:SetPoint("TOPLEFT", 0, -34)
+		headerBar:SetPoint("TOPRIGHT", 0, -34)
 		headerBar:SetHeight(24)
 		local line = Theme:Line(headerBar)
 		line:SetPoint("BOTTOMLEFT")
@@ -141,7 +147,7 @@ UI:RegisterPage("hotspots", {
 			label:SetPoint("LEFT", col.x, 0)
 		end
 
-		local listTop = 56
+		local listTop = 62
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
 		list:SetPoint("TOPLEFT", 0, -listTop)
 		list:SetPoint("TOPRIGHT", 0, -listTop)

@@ -31,6 +31,9 @@ function private.BuildNetwork(container, width)
 	W:AttachTooltip(test, "Test connection", "Sends a message through the channel and reports when it comes back.")
 	local reconnect = W:Button(card, "Reconnect", "ghost", 100, 26, function() private.RunAndToast("reconnect") end)
 	reconnect:SetPoint("LEFT", test, "RIGHT", 6, 0)
+	local bug = W:Button(card, "Report a bug", "primary", 120, 26, function() Wanted.Report:Show() end)
+	bug:SetPoint("BOTTOMRIGHT", -16, 12)
+	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy and shows where to send it. Also /wanted bug.")
 
 end
 

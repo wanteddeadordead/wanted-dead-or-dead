@@ -11,9 +11,11 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
 1. Sign in at <https://authors.curseforge.com> and create a project:
    - Game: World of Warcraft. Game version / flavor: **Forever**.
    - Name: `Wanted: Dead or... Dead`. Slug suggestion: `wanted-dead-or-dead`.
-   - Summary (short line): "World PvP bounties, enemy awareness and reputation for WoW Forever, shared
-     player to player."
-   - Description: the Features and How it works sections of `README.md`.
+   - Summary (short line): "[Beta] World PvP bounties, enemy awareness and reputation for WoW Forever,
+     shared player to player."
+   - Description: the beta notice, then the Features and How it works sections of `README.md`.
+   - Issues URL: <https://github.com/wanteddeadordead/wanted-dead-or-dead/issues> (so CurseForge's "Issues" link
+     goes to the bug report form).
    - Primary category: PvP. Secondary: Combat, Chat & Communication.
    - License: MIT.
    - Logo: `docs/media/logo.png` (400 x 400).
@@ -24,6 +26,13 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
    repository as the Actions secret `CF_API_KEY` (Settings > Secrets and variables > Actions).
 
 All addons must be free under Blizzard's UI Add-On Development Policy; this one has no paid tier.
+
+## Beta
+
+While `Wanted.BETA` is true in `Core.lua`, the window shows a BETA label and a one-time welcome note, and
+releases should use beta tags (`v0.1.0-beta.1`, `v0.1.0-beta.2`, ...), which CurseForge labels Beta. For
+the first stable release set `Wanted.BETA = false`, drop "[Beta]" from the toc Notes and the CurseForge
+summary, and tag `v1.0.0`.
 
 ## Releasing
 

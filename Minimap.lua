@@ -64,6 +64,9 @@ function Minimap_:OnEnable()
 		end
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine("Click: open Wanted.  Right-click: Nearby window.  Drag: move.", 0.7, 0.7, 0.7, true)
+		if Wanted.BETA then
+			GameTooltip:AddLine("Beta: found a problem? /wanted bug", 1, 0.7, 0.2, true)
+		end
 		GameTooltip:Show()
 	end)
 	button:SetScript("OnLeave", function() GameTooltip:Hide() end)

@@ -1,5 +1,9 @@
 # Wanted: Dead or... Dead
 
+> **Beta.** This addon is new and still being tested with real players, so expect rough edges. If something
+> goes wrong, press **Report a bug** in the addon's title bar (or type `/wanted bug`), then
+> [open a bug report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose) and paste it in.
+
 World PvP bounties, enemy awareness and reputation for **WoW Forever**, shared player to player.
 
 Put a price on a ganker's head. Hunt the people with gold on theirs. See who's around, who's targeting

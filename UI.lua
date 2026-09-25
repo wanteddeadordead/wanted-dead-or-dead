@@ -140,17 +140,27 @@ function private.Create()
 	mark:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 	local brand = Theme:Text(titleBar, "brand", "WANTED: "..Theme:Colorize("DEAD OR...", C.muted).." "..Theme:Colorize("DEAD", C.accent))
 	brand:SetPoint("LEFT", mark, "RIGHT", 10, 1)
+	local anchor = brand
+	if Wanted.BETA then
+		local beta = W:Pill(titleBar)
+		beta:Set("BETA", C.amber)
+		beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
+		anchor = beta
+	end
 	local tagline = Theme:Text(titleBar, "small", "World PvP bounties, player to player")
-	tagline:SetPoint("LEFT", brand, "RIGHT", 14, -1)
+	tagline:SetPoint("LEFT", anchor, "RIGHT", 12, -1)
 
 	local close = W:Button(titleBar, "X", "ghost", 30, 30, function() frame:Hide() end)
 	close:SetPoint("RIGHT", -10, 0)
 	W:AttachTooltip(close, "Close", "Escape also closes the window.")
+	local bug = W:Button(titleBar, "Report a bug", "ghost", 100, 26, function() Wanted.Report:Show() end)
+	bug:SetPoint("RIGHT", close, "LEFT", -6, 0)
+	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy (versions, settings, errors, recent log) and shows where to send it.")
 
 	-- Connection indicator
 	local connection = CreateFrame("Button", nil, titleBar)
 	connection:SetSize(210, 30)
-	connection:SetPoint("RIGHT", close, "LEFT", -10, 0)
+	connection:SetPoint("RIGHT", bug, "LEFT", -10, 0)
 	connection.dot = connection:CreateTexture(nil, "ARTWORK")
 	connection.dot:SetSize(8, 8)
 	connection.text = Theme:Text(connection, "small", "")
@@ -255,6 +265,9 @@ function UI:Show(key)
 	end
 	private.frame:Show()
 	UI:Refresh()
+	if Wanted.Report then
+		Wanted.Report:MaybeWelcome()
+	end
 end
 
 ---Places the sidebar buttons, leaving out pages that are switched off (e.g. Tools).

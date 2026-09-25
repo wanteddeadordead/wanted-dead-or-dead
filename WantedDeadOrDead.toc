@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Wanted: Dead or... Dead
-## Notes: World PvP bounties, enemy awareness and reputation, shared player to player.
+## Notes: [Beta] World PvP bounties, enemy awareness and reputation, shared player to player.
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@
 ## SavedVariables: WantedDB
@@ -36,5 +36,6 @@ PageActivity.lua
 PageEnemies.lua
 PageSettings.lua
 PageTools.lua
+Report.lua
 MapPins.lua
 Minimap.lua

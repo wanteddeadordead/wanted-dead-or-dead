@@ -5,6 +5,10 @@ local ADDON_NAME, Wanted = ...
 _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
+Wanted.FOLDER = ADDON_NAME
+-- Still being tested with real players: labelled in the window, the welcome note and bug reports
+Wanted.BETA = true
+Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- Bumped when the saved data layout changes; an older layout is reset rather than migrated while in beta
 Wanted.DB_VERSION = 1
 
@@ -168,6 +172,22 @@ private.log = {}
 private.logPos = 0
 local MAX_LOG = 300
 
+private.problems = {} -- errors and blocked actions this session, for bug reports
+local MAX_PROBLEMS = 20
+
+---Notes an error or a blocked action for the bug report.
+function Wanted:NoteProblem(text)
+	if #private.problems >= MAX_PROBLEMS then
+		tremove(private.problems, 1)
+	end
+	tinsert(private.problems, date("%H:%M:%S").." "..tostring(text))
+	Wanted:Log("Problem: %s", tostring(text))
+end
+
+function Wanted:GetProblems()
+	return private.problems
+end
+
 ---Appends a line to the debug log, and to the client's log file on disk when the client offers it.
 function Wanted:Log(fmt, ...)
 	local msg = select("#", ...) > 0 and format(fmt, ...) or fmt
@@ -282,6 +302,29 @@ end)
 
 
 -- ============================================================================
+-- Error capture (for bug reports)
+-- ============================================================================
+
+---Notes Lua errors that come from this addon's files, then hands every error on to whatever handler was
+---there before (the default one, or an error-collecting addon), so nothing else changes.
+function private.WatchErrors()
+	if not geterrorhandler or not seterrorhandler then
+		return
+	end
+	local previous = geterrorhandler()
+	seterrorhandler(function(err, ...)
+		if type(err) == "string" and strfind(err, "AddOns[/\\]"..ADDON_NAME.."[/\\]") then
+			pcall(Wanted.NoteProblem, Wanted, err)
+		end
+		if previous then
+			return previous(err, ...)
+		end
+	end)
+end
+
+
+
+-- ============================================================================
 -- Lifecycle
 -- ============================================================================
 
@@ -292,6 +335,7 @@ private.frame:RegisterEvent("ADDON_ACTION_BLOCKED")
 private.frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 	if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+		private.WatchErrors()
 		private.LoadDB()
 		Wanted:Log("Loaded v%s, data layout %d", Wanted.VERSION, Wanted.db.version)
 		private.CallModules("OnLoad")
@@ -301,8 +345,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		private.CallModules("OnEnable")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		if arg1 == ADDON_NAME then
-			Wanted:Log("%s: %s", event, tostring(arg2))
-			Wanted:Print("The client blocked %s. See /wanted debug.", tostring(arg2))
+			Wanted:NoteProblem(event..": "..tostring(arg2))
+			Wanted:Print("The client blocked %s. /wanted bug makes a report you can send.", tostring(arg2))
 		end
 	end
 end)

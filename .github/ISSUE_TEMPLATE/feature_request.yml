@@ -1,0 +1,16 @@
+name: Idea or request
+description: Something you'd like the addon to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe it the way you'd use it in game.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: The situation where you wanted it.

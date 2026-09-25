@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in the addon doesn't work or looks wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing! In game, **Report a bug** in the Wanted window's title bar (or `/wanted bug`)
+        builds a report with your versions, settings, errors and recent log. Please paste it below.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can it be reproduced?
+      description: The steps that lead to it, if you know them. "It happened once while sniping in Ratchet" is useful too.
+  - type: textarea
+    id: report
+    attributes:
+      label: Report from the game
+      description: Paste the text from Report a bug (/wanted bug) here.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: The exact red error text, if the game showed one. A screenshot is fine too (drag it into the box).
+  - type: dropdown
+    id: others
+    attributes:
+      label: Were other Wanted users around?
+      options:
+        - I don't know
+        - No, just me
+        - Yes

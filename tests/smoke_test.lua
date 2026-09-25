@@ -137,6 +137,8 @@ function IsInGuild() return true end
 function IsShiftKeyDown() return false end
 function IsControlKeyDown() return false end
 function PlaySound() end
+function GetBuildInfo() return "1.60.1", "69977" end
+function GetLocale() return "enUS" end
 function GetClassAtlas(c) return "classicon-"..c:lower() end
 function PlaySoundFile() return true end
 SOUNDKIT = { RAID_WARNING = 1, UI_RAID_BOSS_WHISPER_WARNING = 2, IG_PLAYER_INVITE = 3 }
@@ -393,6 +395,14 @@ show.layout = "normal"
 for _, key in ipairs({ "icon", "className", "level", "guild", "bounty", "kos", "state", "record", "health", "tint", "targeting", "fade" }) do show[key] = true end
 ns.NearbyWindow:ForceLayout()
 ns.UI:Show("settings")
+-- Bug report and the beta welcome
+ns:NoteProblem("test problem")
+local report = ns.Report:Build()
+check(report:find("test problem", 1, true) and report:find("Game client 1.60.1", 1, true), "bug report text")
+ns.Report:Show()
+ns.db.welcomed = nil
+ns.UI:Show("board")
+RunTimers()
 -- Leaving: after the timeout the enemy drops off Nearby
 enemyUnits.nameplate1 = nil
 Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")

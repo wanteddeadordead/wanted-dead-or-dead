@@ -1,8 +1,7 @@
 # Wanted: Dead or... Dead
 
-> **Beta.** This addon is new and still being tested with real players, so expect rough edges. If something
-> goes wrong, press **Report a bug** in the addon's title bar (or type `/wanted bug`), then
-> [open a bug report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose) and paste it in.
+> **Beta.** Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type
+> `/wanted bug`) and [open a report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose).
 
 World PvP bounties, enemy awareness and reputation for **WoW Forever**, shared player to player.
 

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for testing! In game, **Report a bug** in the Wanted window's title bar (or `/wanted bug`)
+        Thanks! In game, **Report a bug** in the Wanted window's title bar (or `/wanted bug`)
         builds a report with your versions, settings, errors and recent log. Please paste it below.
   - type: textarea
     id: what

@@ -4,10 +4,9 @@
 
 ## [0.1.0-beta.1] - 2026-09-24
 
-First public beta, for WoW Forever (client 1.60.1). Still being tested with real players: please report
-anything odd with Report a bug (/wanted bug) and the GitHub bug report form.
+First public beta, for WoW Forever (client 1.60.1).
 
-- Beta label, a one-time welcome note, and an in-game bug report to copy into GitHub issues.
+- Report a bug (/wanted bug): a ready-made report to paste into the GitHub bug report form.
 
 - Bounty board: post bounties on enemy players or whole guilds, raise, withdraw, pass, hunt.
 - Claims from your own honorable kills; witnessed by other players' clients; first kill wins.

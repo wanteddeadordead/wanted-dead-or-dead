@@ -117,7 +117,10 @@ local subZone = ""
 function GetSubZoneText() return subZone end
 function IsInInstance() return false end
 function GetChannelName() return 6 end
-function JoinPermanentChannel() end
+local joinedWith = {}
+function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
+local hiddenPopups = {}
+function StaticPopup_Hide(which, data) hiddenPopups[#hiddenPopups + 1] = { which = which, data = data } end
 function LeaveChannelByName() end
 function hooksecurefunc() end
 function GetInboxNumItems() return 0 end
@@ -1326,6 +1329,16 @@ local seenAt = clock - 3 * 3600
 ns.Store:GetPlayer("Player-9-SEENOLD").lastSeen = seenAt
 ns.Bounties:Post("Player-9-SEENOLD", "Seen Long Ago", 10000)
 check(ns.Store:GetPlayer("Player-9-SEENOLD").lastSeen == seenAt, "posting a bounty leaves last seen alone")
+-- The game asks for the sync channel's password when it rejoins remembered channels at login (without the
+-- password): Wanted answers for its own channel and closes the game's box; another channel is left alone
+for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+Fire("CHANNEL_PASSWORD_REQUEST", "WantedNetHorde")
+RunTimers()
+check(#joinedWith == 1 and joinedWith[1].name == "WantedNetHorde" and joinedWith[1].password == "wnt1", "rejoins the sync channel with its password")
+check(#hiddenPopups >= 1 and hiddenPopups[#hiddenPopups].which == "CHAT_CHANNEL_PASSWORD", "and closes the game's password box")
+Fire("CHANNEL_PASSWORD_REQUEST", "SomeoneElsesChannel")
+RunTimers()
+check(#joinedWith == 1, "someone else's channel is left to the player")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
 ns:Log("!! Test: something odd")
 local kept = ns.Debug:GetDevLog()

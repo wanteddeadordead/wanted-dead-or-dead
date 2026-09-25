@@ -90,6 +90,7 @@ function Sync:OnEnable()
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
 	private.frame:RegisterEvent("CHAT_MSG_ADDON")
 	private.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+	private.frame:RegisterEvent("CHANNEL_PASSWORD_REQUEST")
 	private.frame:SetScript("OnEvent", private.OnEvent)
 	Store:OnRecord("kill", private.OnOwnRecord)
 	Store:OnRecord("death", private.OnOwnRecord)
@@ -146,7 +147,25 @@ function private.OnEvent(_, event, ...)
 		private.channelId = nil
 		private.joinAttempts = 0
 		C_Timer.After(5, private.TryJoin)
+	elseif event == "CHANNEL_PASSWORD_REQUEST" then
+		private.OnPasswordRequest(...)
 	end
+end
+
+---The game rejoins the channels it remembers at login without their passwords, then pops up a box asking for
+---one. For the sync channel, Wanted answers with its password and closes the box (a moment later, once the
+---game's own handler has shown it).
+function private.OnPasswordRequest(channel)
+	if type(channel) ~= "string" or strlower(channel) ~= strlower(private.channelName or "") then
+		return
+	end
+	Wanted:Log("Sync: the game asked for the %s password; joining with it", channel)
+	JoinPermanentChannel(private.channelName, CHANNEL_PASSWORD)
+	C_Timer.After(0, function()
+		if StaticPopup_Hide then
+			StaticPopup_Hide("CHAT_CHANNEL_PASSWORD", channel)
+		end
+	end)
 end
 
 

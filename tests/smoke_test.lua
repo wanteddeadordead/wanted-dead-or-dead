@@ -179,7 +179,7 @@ C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMe
 	if throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text } return 0
 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
-C_AddOns = { GetAddOnMetadata = function() return "0.1.0" end }
+C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
 Enum = { TooltipDataType = { Unit = 2 } }

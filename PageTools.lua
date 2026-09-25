@@ -1,4 +1,4 @@
--- Wanted: the network, test data and the debug log, with the settings that don't belong elsewhere.
+-- Wanted: the network and the debug log.
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -14,7 +14,7 @@ end
 function private.BuildNetwork(container, width)
 	local card = W:Card(container)
 	card:SetPoint("TOPLEFT")
-	card:SetSize(width, 112)
+	card:SetSize(width, 132)
 	local label = W:SectionLabel(card, "Network")
 	label:SetPoint("TOPLEFT", 16, -14)
 	private.dot = card:CreateTexture(nil, "ARTWORK")
@@ -37,29 +37,10 @@ function private.BuildNetwork(container, width)
 
 end
 
-function private.BuildTestData(container, width)
-	local card = W:Card(container)
-	card:SetPoint("TOPLEFT", 0, -124)
-	card:SetSize(width, 96)
-	local label = W:SectionLabel(card, "Test data")
-	label:SetPoint("TOPLEFT", 16, -14)
-	local text = Theme:Text(card, "small", "Fill the board with a made-up bounty, claim, witness and history to try every button. It never leaves your client.")
-	text:SetPoint("TOPLEFT", 16, -32)
-	text:SetPoint("RIGHT", -16, 0)
-	text:SetWordWrap(true)
-	local simulate = W:Button(card, "Add test data", "secondary", 120, 26, function() private.RunAndToast("simulate") end)
-	simulate:SetPoint("BOTTOMLEFT", 16, 12)
-	local paid = W:Button(card, "Simulate payment", "secondary", 136, 26, function() private.RunAndToast("simulate", "paid") end)
-	paid:SetPoint("LEFT", simulate, "RIGHT", 6, 0)
-	W:AttachTooltip(paid, "Simulate payment", "Pretends the test hunter received the gold for every unpaid test claim.")
-	local purge = W:Button(card, "Remove test data", "danger", 136, 26, function() private.RunAndToast("purge") end)
-	purge:SetPoint("LEFT", paid, "RIGHT", 6, 0)
-end
-
 function private.BuildLog(container, width, height)
 	local card = W:Card(container)
-	card:SetPoint("TOPLEFT", 0, -232)
-	card:SetSize(width, height - 232)
+	card:SetPoint("TOPLEFT", 0, -144)
+	card:SetSize(width, height - 144)
 	local label = W:SectionLabel(card, "Debug log")
 	label:SetPoint("TOPLEFT", 16, -14)
 	local hint = Theme:Text(card, "tiny", "Click the text, Ctrl+A, Ctrl+C to copy it.")
@@ -109,12 +90,11 @@ end
 
 UI:RegisterPage("tools", {
 	title = "Tools",
-	subtitle = "The player-to-player network, test data, and the log to send when something looks wrong.",
+	subtitle = "The player-to-player network and the log to send when something looks wrong.",
 	hidden = function() return not Wanted.db.settings.showTools end,
 	order = 7,
 	build = function(container, width, height)
 		private.BuildNetwork(container, width)
-		private.BuildTestData(container, width)
 		private.BuildLog(container, width, height)
 	end,
 	refresh = private.Refresh,

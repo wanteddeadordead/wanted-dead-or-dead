@@ -14,6 +14,11 @@ local HUNTER = "Test Hunter"
 local WITNESS = "Test Witness"
 local OTHER_POSTER = "Test Poster"
 
+-- Development builds only: released versions have no test data at all
+if not Wanted.DEV then
+	return
+end
+
 Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witnessed claim on it, and another poster's bounty. /wanted simulate paid adds the payment.", function(args)
 	local me = Store:GetOrigin()
 	local zone, x, y, mapId = Recorder:GetPosition()

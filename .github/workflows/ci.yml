@@ -36,6 +36,8 @@ jobs:
         run: |
           set -e
           pkg=.release/WantedDeadOrDead
+          # The packager leaves a commit that carries a release tag to the release workflow
+          if ! test -d "$pkg" && git tag --points-at HEAD | grep -q '^v'; then echo "Tagged release commit: packaged by the release workflow"; exit 0; fi
           test -f "$pkg/WantedDeadOrDead.toc"
           if test -e "$pkg/Debug.lua"; then echo "Debug.lua is in the package"; exit 1; fi
           if grep -q '^Debug.lua' "$pkg/WantedDeadOrDead.toc"; then echo "the toc still loads Debug.lua"; exit 1; fi

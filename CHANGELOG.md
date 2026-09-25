@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The newest version wins: when a newer release shows up on the network, bounties, claims and sharing pause
+  until you update (the Nearby window, alerts, hotspots and the map keep working). Older clients are told to update.
+- Saved data is upgraded step by step between versions instead of being reset, and data from a newer version
+  is left untouched.
 - Star ratings (five stars, half steps) for hunters and posters on the leaderboards, board rows, tooltips and
   Your record, so anyone can see at a glance who pays and whose kills check out.
 - Map markers for enemies seen in the same spot merge into one, with a count and everyone listed in its tooltip.

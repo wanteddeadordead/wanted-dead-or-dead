@@ -458,7 +458,8 @@ end
 
 ---A kill of ours matched against open bounties creates claims.
 function private.OnKill(kill, isOwn)
-	if not isOwn then
+	-- Claims are shared records: none while this client waits for an update
+	if not isOwn or Wanted:GetRequiredUpdate() then
 		return
 	end
 	local victim = kill.data.victim

@@ -175,6 +175,22 @@ Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witn
 	Wanted:Print("Simulated: %s (%s) has an 80s bounty from you and a 15s one from %s; %s killed them 10 minutes ago, %s saw it. Look at Bounties, Claims, Owed, Top, and /wanted rep %s. /wanted purge removes it all.", TARGET_NAME, "level 22 rogue", OTHER_POSTER, HUNTER, WITNESS, HUNTER)
 end)
 
+Wanted:RegisterCommand("freshstart", "Deletes every bounty, kill, death, claim and payment and starts your record again. Before release only.", function()
+	Wanted.Widgets:Dialog({
+		title = "Start fresh",
+		text = "Deletes every bounty, kill, death, claim and payment on this client and starts your record again. Settings, Kill on Sight, Ignore, enemy statistics and sightings stay.\n\nOnly do this before anyone else has synced with you: their copies of your records would no longer match.",
+		confirmLabel = "Start fresh",
+		confirmStyle = "danger",
+		onConfirm = function()
+			local removed = Store:FreshStart()
+			Wanted:Print("Fresh start: removed %d records. Your record starts again from here.", removed)
+			if Wanted.UI then
+				Wanted.UI:Refresh()
+			end
+		end,
+	})
+end)
+
 Wanted:RegisterCommand("purge", "Removes all test data.", function()
 	local removed = Store:PurgeTest()
 	Wanted:Print("Removed %d test records.", removed)

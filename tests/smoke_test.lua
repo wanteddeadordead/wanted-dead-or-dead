@@ -537,6 +537,56 @@ ns:NoteVersion("0.4.0|cffff0000evil")
 check(ns.newerVersion == "0.4.0", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
+-- The newest version wins: that newer peer locked the shared side until this client updates
+check(ns:GetRequiredUpdate() == "0.4.0", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
+addonSent = {}
+clock = clock + 61
+ns:RunCommand("post", "1g Stabby Mcstab")
+SlashCmdList.WANTED("synctest")
+ns.Sync:QueueSighting({ g = "Player-9-LOCKTEST", n = "Lock Test" }, true)
+RunTimers()
+local sentWhileLocked = {}
+for _, m in ipairs(addonSent) do sentWhileLocked[#sentWhileLocked + 1] = m.text:sub(1, 1) end
+check(table.concat(sentWhileLocked) == "H", "locked: only a hello goes out, got "..table.concat(sentWhileLocked, ","))
+ns.UI:Show("board")
+ns.UI:Show("enemies")
+WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
+-- A made-up version far ahead doesn't lock anyone
+ns.db.requiredVersion = nil
+ns:NoteVersion("99.0.0")
+check(ns:GetRequiredUpdate() == nil, "an implausible version is ignored")
+-- Updating lifts the lock at load; so does nobody on that version being seen for three days
+ns:NoteVersion("0.4.0")
+ns.VERSION = "0.4.0"
+ns:LoadSavedData()
+check(ns:GetRequiredUpdate() == nil, "on the new version the lock is gone")
+ns.VERSION = "0.1.0"
+ns:NoteVersion("0.4.0")
+clock = clock + 4 * 86400
+ns:LoadSavedData()
+check(ns:GetRequiredUpdate() == nil, "a version nobody has shown for days stops locking")
+-- A player on an older version is told to update, privately, and their news isn't taken in
+addonSent = {}
+local LibSerialize0, LibDeflate0 = LibStub("LibSerialize"), LibStub("LibDeflate")
+local function OldMessage(tag, tbl) return tag..":zo"..tag..":1/1:"..LibDeflate0:EncodeForWoWAddonChannel(LibDeflate0:CompressDeflate(LibSerialize0:Serialize(tbl))) end
+Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Player-9-OLDNEWS", n = "Old News", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Old Timer", nil, nil, nil, "WantedNetHorde")
+check(ns.Store:GetPlayer("Player-9-OLDNEWS") == nil, "an older version's news isn't taken in")
+check(#addonSent == 1 and addonSent[1].text:find("^U:"), "the older player is told to update")
+-- And an update notice whispered to us locks us
+Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")
+check(ns:GetRequiredUpdate() == "0.2.0", "an update notice locks this client")
+ns.db.requiredVersion, ns.newerVersion = nil, nil
+-- Saved data from a newer layout is left alone; older tables load and upgrade
+local realDB = WantedDB
+WantedDB = { version = 99, marker = true }
+ns:LoadSavedData()
+check(WantedDB.marker and ns.db ~= WantedDB and ns:GetNewerSavedLayout() == 99, "newer saved data is left untouched")
+WantedDB = { records = {} }
+ns:LoadSavedData()
+check(WantedDB.version == ns.DB_VERSION and ns.db == WantedDB, "a table without a layout number loads as layout 1")
+WantedDB = realDB
+ns:LoadSavedData()
+check(ns.db == realDB, "back on the real data")
 -- Sync under load: a 40-player raid goes out as a few batched messages within the sightings budget, and
 -- never holds up the records
 clock = clock + 61
@@ -892,4 +942,15 @@ Tick()
 check(not Near("Player-9-ENEMY"), "then gone after 3 minutes")
 ns.db.settings.detect.inSight, ns.db.settings.detect.timeout = 60, 30
 RunTimers()
+-- Fresh start: every shared record gone, the record chain starts again, the rest stays
+local kosBefore = 0
+for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end
+ns.Store:FreshStart()
+check(next(ns.db.records) == nil, "fresh start clears the records")
+local first = ns.Store:NewRecord("pass", { bounty = "x" })
+check(first.seq == 1 and first.prev == "0", "the chain starts again")
+local kosAfter = 0
+for _ in pairs(ns.db.kos) do kosAfter = kosAfter + 1 end
+check(kosAfter == kosBefore and next(ns.db.players) ~= nil, "Kill on Sight and players stay")
+ns:RunCommand("freshstart", "")
 print("wanted smoke: all checks pass")

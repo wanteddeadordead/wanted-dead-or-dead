@@ -14,7 +14,7 @@ Wanted.newerVersion = nil
 -- Beta: a label in the window, a one-time welcome, and bug reports
 Wanted.BETA = true
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
--- Bumped when the saved data layout changes; an older layout is reset rather than migrated while in beta
+-- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
 Wanted.DB_VERSION = 1
 
 local DEFAULTS = {
@@ -122,21 +122,61 @@ local function CopyDefaults(target, defaults)
 	end
 end
 
-function private.LoadDB()
-	if type(WantedDB) ~= "table" or WantedDB.version ~= Wanted.DB_VERSION then
-		-- Nothing saved, or an older layout: start fresh. The Forever client does not write saved variables on
-		-- logout, so an empty table here is the normal case until the restore watcher includes WantedDB.
+-- Upgrades between saved data layouts. MIGRATIONS[n] turns a layout n-1 table into layout n, in place,
+-- keeping everything it can. Saved data is never wiped for being old. Add a step here, bump DB_VERSION, and
+-- add a test that loads a table in the old layout (docs/DATA.md).
+local MIGRATIONS = {
+	-- [2] = function(db) ... end,
+}
+
+---Loads (or starts) the saved data, upgrading an older layout step by step. Data saved by a newer version
+---(someone went back to an older release) is left exactly as it is: this session runs on a scratch copy and
+---saves nothing, so going forward again finds it intact.
+function Wanted:LoadSavedData()
+	if type(WantedDB) ~= "table" then
 		WantedDB = { version = Wanted.DB_VERSION }
 	end
-	CopyDefaults(WantedDB, DEFAULTS)
-	Wanted.db = WantedDB
+	-- Tables saved before the layout was numbered are layout 1
+	local version = tonumber(WantedDB.version) or 1
+	private.newerData = nil
+	local db = WantedDB
+	if version > Wanted.DB_VERSION then
+		private.newerData = version
+		db = { version = Wanted.DB_VERSION }
+	else
+		for step = version + 1, Wanted.DB_VERSION do
+			if MIGRATIONS[step] then
+				MIGRATIONS[step](WantedDB)
+			end
+			WantedDB.version = step
+		end
+		WantedDB.version = Wanted.DB_VERSION
+	end
+	CopyDefaults(db, DEFAULTS)
+	Wanted.db = db
+	private.FixSettings(db)
+	private.CheckRequiredUpdate(db)
+end
+
+---Whether this session is running without saving because the saved data came from a newer version.
+---@return number? layout the saved data's layout, when newer
+function Wanted:GetNewerSavedLayout()
+	return private.newerData
+end
+
+function private.LoadDB()
+	Wanted:LoadSavedData()
+end
+
+---Small corrections to settings that don't need a layout change.
+function private.FixSettings(db)
 	-- Square and Classic icons are no longer offered (the same artwork as Crest on this client)
-	local iconStyle = WantedDB.settings.iconStyle
+	local iconStyle = db.settings.iconStyle
 	if iconStyle == "square" or iconStyle == "classic" then
-		WantedDB.settings.iconStyle = "crest"
+		db.settings.iconStyle = "crest"
 	end
 	-- The first default was a minute; gone enemies now leave sooner
-	local detect = WantedDB.settings.detect
+	local detect = db.settings.detect
 	if detect and not detect.timeoutV2 then
 		detect.timeoutV2 = true
 		if detect.timeout == 60 then
@@ -294,21 +334,67 @@ function private.VersionText(parsed)
 	return text
 end
 
----Another player's client reported its version: note it once when it's newer than ours.
+-- The newest version wins: once another player's client reports a newer release, the shared side of Wanted
+-- (bounties, claims, payments, sync) pauses until this client is updated, so old and new never write
+-- different things to the same network. What only reads the game (Nearby window, alerts, hotspots, map)
+-- keeps working. Anyone can claim any version number, so a claim has to look like a real release (at most
+-- one major version ahead), and a lock lifts when nobody on that version has been seen for three days.
+local REQUIRED_KEEP_SECONDS = 3 * 24 * 60 * 60
+
+---Whether a reported version could be a real release after ours.
+function private.IsPlausibleUpdate(version)
+	local theirs, ours = Wanted:ParseVersion(version), Wanted:ParseVersion(Wanted.VERSION)
+	return theirs ~= nil and ours ~= nil and theirs[1] <= ours[1] + 1
+end
+
+---Another player's client reported its version. A newer, plausible one means this client must update.
 ---@param version any
 function Wanted:NoteVersion(version)
-	if not Wanted:IsNewerVersion(version, Wanted.VERSION) then
+	if not Wanted:IsNewerVersion(version, Wanted.VERSION) or not Wanted.db then
 		return
 	end
-	if Wanted.newerVersion and not Wanted:IsNewerVersion(version, Wanted.newerVersion) then
+	if not private.IsPlausibleUpdate(version) then
+		Wanted:Log("Version %s reported, too far ahead to be real; ignored", tostring(version))
 		return
 	end
-	local announce = not Wanted.newerVersion
-	Wanted.newerVersion = private.VersionText(Wanted:ParseVersion(version))
-	if announce then
-		Wanted:Print("A newer version (%s) is out. Update from CurseForge to get the latest fixes.", Wanted.newerVersion)
+	local text = private.VersionText(Wanted:ParseVersion(version))
+	local required = Wanted.db.requiredVersion
+	if required and not Wanted:IsNewerVersion(text, required.version) then
+		if text == required.version then
+			required.seen = GetServerTime()
+		end
+		return
+	end
+	Wanted.db.requiredVersion = { version = text, seen = GetServerTime() }
+	Wanted.newerVersion = text
+	Wanted:Print("Wanted %s is out and other players are on it (you have %s). Bounties, claims and sharing are paused until you update from CurseForge. The Nearby window, alerts, hotspots and the map keep working.", text, tostring(Wanted.VERSION))
+	if Wanted.UI and Wanted.UI.Refresh then
+		Wanted.UI:Refresh()
 	end
 end
+
+---The version this client has to update to before its shared side works again, or nil.
+---@return string?
+function Wanted:GetRequiredUpdate()
+	local required = Wanted.db and Wanted.db.requiredVersion
+	return required and required.version or nil
+end
+
+---Lifts the update lock once this client is on that version, or when nobody on it has been seen for a while.
+function private.CheckRequiredUpdate(db)
+	local required = db.requiredVersion
+	if not required then
+		return
+	end
+	if not Wanted:IsNewerVersion(required.version, Wanted.VERSION) or GetServerTime() - (required.seen or 0) > REQUIRED_KEEP_SECONDS then
+		db.requiredVersion = nil
+		return
+	end
+	Wanted.newerVersion = required.version
+end
+
+-- Commands that change shared records; paused while an update is required
+local SHARED_COMMANDS = { post = true, raise = true, pass = true, confirm = true, dispute = true, pay = true }
 
 ---Registers a /wanted subcommand.
 ---@param name string
@@ -323,7 +409,9 @@ end
 ---@param args string
 function Wanted:RunCommand(cmd, args)
 	local info = private.commands[cmd]
-	if info then
+	if info and SHARED_COMMANDS[cmd] and Wanted:GetRequiredUpdate() then
+		Wanted:Print("Update Wanted to %s first: bounties, claims and payments are paused until you do.", Wanted:GetRequiredUpdate())
+	elseif info then
 		info.func(args or "")
 	else
 		Wanted:Print("No such view: %s", tostring(cmd))
@@ -353,7 +441,7 @@ function private.OnSlashCommand(input)
 		end
 		return
 	end
-	info.func(args)
+	Wanted:RunCommand(cmd, args)
 end
 
 SLASH_WANTED1 = "/wanted"
@@ -442,6 +530,9 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		private.loaded = true
 	elseif event == "PLAYER_LOGIN" then
 		Wanted:Log("Login as %s (%s)", UnitName("player"), UnitFactionGroup("player") or "?")
+		if private.newerData then
+			Wanted:Print("Your saved data is from a newer version of Wanted. Update the addon to use it; until then nothing you do this session is saved, and your data is left as it is.")
+		end
 		private.CallModules("OnEnable")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		if arg1 == ADDON_NAME then

@@ -263,6 +263,23 @@ function Store:PurgeTest()
 	return removed
 end
 
+---Clears every shared record (bounties, kills, deaths, claims, payments...) and starts this player's record
+---chain again from the beginning. Settings, Kill on Sight, Ignore, enemy statistics and sightings stay. Only
+---safe before any other player has received this client's records: theirs would no longer match.
+---@return number removed
+function Store:FreshStart()
+	local db = Wanted.db
+	local removed = 0
+	for _ in pairs(db.records) do
+		removed = removed + 1
+	end
+	db.records = {}
+	db.chains = {}
+	db.chains[private.origin] = { seq = 0, lastHash = "0" }
+	private.ownChain = db.chains[private.origin]
+	return removed
+end
+
 ---Gets a record by id.
 ---@param id string
 ---@return table?

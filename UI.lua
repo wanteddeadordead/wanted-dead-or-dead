@@ -260,6 +260,36 @@ function private.Create()
 		def.container = container
 		def.build(container, pageWidth, pageHeight)
 	end
+
+	-- Waiting for an update: the pages that share records with other players are covered by this
+	local update = CreateFrame("Frame", nil, content)
+	update:SetPoint("TOPLEFT", 0, -HEADER_HEIGHT)
+	update:SetSize(pageWidth, pageHeight)
+	update:SetFrameLevel(content:GetFrameLevel() + 50)
+	update:EnableMouse(true)
+	Theme:Fill(update, C.bg)
+	update.title = Theme:Text(update, "title", "Update required", C.red)
+	update.title:SetPoint("TOP", 0, -90)
+	update.text = Theme:Text(update, "body", "", C.text)
+	update.text:SetPoint("TOP", update.title, "BOTTOM", 0, -14)
+	update.text:SetWidth(pageWidth - 120)
+	update.text:SetJustifyH("CENTER")
+	update.text:SetWordWrap(true)
+	update.text:SetSpacing(4)
+	update:Hide()
+	private.updateCover = update
+end
+
+-- Pages that share records with other players: paused while an update is required
+local SHARED_PAGES = { board = true, mine = true, hunts = true, hunters = true }
+
+function private.UpdateCover()
+	local required = Wanted:GetRequiredUpdate()
+	local cover = private.updateCover
+	cover:SetShown(required ~= nil and SHARED_PAGES[private.current] or false)
+	if required then
+		cover.text:SetText(format("Other players are on Wanted %s and you have %s. Bounties, claims, payments and sharing are paused until you update from CurseForge, then /reload.\n\nThe Nearby window, alerts, Enemies, Hotspots, Activity and the map keep working.", required, tostring(Wanted.VERSION)))
+	end
 end
 
 
@@ -347,6 +377,7 @@ function UI:Refresh()
 		def.refresh()
 	end
 	private.UpdateConnection()
+	private.UpdateCover()
 end
 
 function private.UpdateConnection()
@@ -355,7 +386,9 @@ function private.UpdateConnection()
 	end
 	local info = Wanted.Sync and Wanted.Sync:GetInfo()
 	local color, text
-	if not info or not info.channelId then
+	if Wanted:GetRequiredUpdate() then
+		color, text = C.red, "Update required: "..Wanted:GetRequiredUpdate()
+	elseif not info or not info.channelId then
 		color, text = C.red, "Offline"
 	elseif info.paused then
 		color, text = C.amber, "Paused (flood protection)"

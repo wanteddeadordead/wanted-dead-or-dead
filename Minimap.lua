@@ -88,8 +88,8 @@ function private.ShowTooltip(owner)
 		end
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine("Click: open Wanted.  Right-click: Nearby window.  Drag: move.", 0.7, 0.7, 0.7, true)
-		if Wanted.newerVersion then
-			GameTooltip:AddLine("Update available: "..Wanted.newerVersion, 0.36, 0.8, 0.46, true)
+		if Wanted:GetRequiredUpdate() then
+			GameTooltip:AddLine("Update required: "..Wanted:GetRequiredUpdate()..". Bounties and sharing are paused until you update.", 1, 0.3, 0.3, true)
 		end
 		if Wanted.BETA then
 			GameTooltip:AddLine("Beta: found a problem? /wanted bug", 1, 0.7, 0.2, true)

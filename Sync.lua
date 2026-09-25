@@ -46,6 +46,9 @@ local TAG_HELLO, TAG_HAVE, TAG_NEED, TAG_LIVE, TAG_FILL = "H", "V", "N", "R", "F
 -- Enemy sightings are passing news, not records: never stored in a chain, never re-sent. They go out in
 -- batches ("S"); single sightings ("E") are what the first version sent, still understood when received.
 local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
+-- Sent privately (addon whisper) to a player on an older version: update
+local TAG_UPDATE = "U"
+local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- Limits, the same shape as AskPrice's: a hard ceiling on everything sent, a cap on what any one sender may
 -- push at us, and a pause when the ceiling is hit two minutes running
 local MAX_SENT_PER_MINUTE = 20
@@ -229,6 +232,12 @@ function private.Send(tag, tbl, attempt)
 	end
 	local now = GetTime()
 	local isSighting = tag == TAG_SIGHTINGS
+	-- Waiting for an update: only say hello (so others know which version this is); share nothing
+	if Wanted:GetRequiredUpdate() and tag ~= TAG_HELLO then
+		return false
+	end
+	-- Every message says which version sent it: the newest version wins (Core)
+	tbl.v = Wanted.VERSION
 	if not isSighting and now < private.pausedUntil then
 		private.stats.dropped = private.stats.dropped + 1
 		return false
@@ -435,7 +444,20 @@ end
 -- ============================================================================
 
 function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelName)
-	if prefix ~= PREFIX or channel ~= "CHANNEL" then
+	if prefix ~= PREFIX then
+		return
+	end
+	-- The one private message: a newer client telling this one to update
+	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_UPDATE..":" then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" then
+			Wanted:Log("Sync: %s says we must update to %s", tostring(sender), tostring(tbl.v))
+			Wanted:NoteVersion(tbl.v)
+		end
+		return
+	end
+	if channel ~= "CHANNEL" then
 		return
 	end
 	if channelName and channelName ~= "" and strlower(channelName) ~= strlower(private.channelName) then
@@ -512,7 +534,33 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	private.HandleMessage(tag, tbl, sender)
 end
 
+---Tells a player on an older version, privately and at most every few minutes, to update.
+function private.TellOutdated(sender)
+	private.toldOutdated = private.toldOutdated or {}
+	local now = GetTime()
+	if private.toldOutdated[sender] and now - private.toldOutdated[sender] < TELL_OUTDATED_SECONDS then
+		return
+	end
+	private.toldOutdated[sender] = now
+	private.msgCounter = (private.msgCounter % 46655) + 1
+	local text = TAG_UPDATE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode({ v = Wanted.VERSION })
+	C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", sender)
+	Wanted:Log("Sync: told %s to update", tostring(sender))
+end
+
 function private.HandleMessage(tag, tbl, sender)
+	-- The newest version wins: a newer sender may lock this client (Core); an older one's news is ignored
+	Wanted:NoteVersion(tbl.v)
+	if type(tbl.v) == "string" and Wanted:IsNewerVersion(Wanted.VERSION, tbl.v) then
+		private.TellOutdated(sender)
+		if tag ~= TAG_HELLO and tag ~= TAG_HAVE and tag ~= TAG_NEED then
+			return
+		end
+	end
+	-- Waiting for an update: take nothing in until this client can read what newer versions write
+	if Wanted:GetRequiredUpdate() then
+		return
+	end
 	if tag == TAG_ENEMY or tag == TAG_SIGHTINGS then
 		local list = tag == TAG_SIGHTINGS and tbl.s or { tbl }
 		if type(list) ~= "table" then
@@ -533,7 +581,6 @@ function private.HandleMessage(tag, tbl, sender)
 		return
 	end
 	if tag == TAG_HELLO or tag == TAG_HAVE then
-		Wanted:NoteVersion(tbl.v)
 		if type(tbl.c) ~= "table" then
 			return
 		end

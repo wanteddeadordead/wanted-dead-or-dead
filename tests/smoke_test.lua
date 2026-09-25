@@ -178,6 +178,9 @@ Settings = {
 }
 SettingsPanel = NewMock()
 SettingsPanel.ExitWithCommit = function(self) self._shown = false end
+screenshotResult = "SCREENSHOT_SUCCEEDED"
+screenshots = 0
+function Screenshot() screenshots = screenshots + 1 Fire(screenshotResult) end
 local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
@@ -612,6 +615,61 @@ check(meaning:find("haven't posted"), "no record: told how to start")
 ns:RunCommand("rep", "Grix Tallowbane")
 ns:RunCommand("purge", "")
 check(R:GetTally("Kaelen Duskbrand").claims == 0, "purge clears the cast")
+-- Kill proof: a kill that claims a bounty gets a stamped screenshot and a proof record on its claim
+local function OwnClaimOn(guid)
+	for claim in ns.Store:Iterator("claim") do
+		if claim.data.victim == guid and claim.origin == ns.Store:GetOrigin() and not ns.Store:IsTest(claim) then return claim end
+	end
+end
+enemyUnits.nameplate40 = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 19 }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate40")
+local proofBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 7000, level = 19, zone = "Durotar" }, clock - 60)
+local shotsBefore = screenshots
+Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+RunTimers()
+local proofClaim = OwnClaimOn("Player-9-ENEMY")
+check(proofClaim, "the kill claimed the bounty")
+check(screenshots == shotsBefore + 1, "one screenshot for the kill")
+local proof = ns.Proof:Get(proofClaim.id)
+check(proof and proof.data.deathId == proofClaim.data.deathId, "a proof record on the claim")
+local title, line1, line2 = ns.Proof:BuildStamp({ claims = { proofClaim }, victimName = "Stabby Mcstab", zone = "Durotar", key = proofClaim.data.deathId })
+check(title == "WANTED: KILL PROOF" and line1:find("killed Stabby Mcstab in Durotar", 1, true) and line2:find("70s from Maribel Stonehollow", 1, true) and line2:find(proofClaim.data.deathId, 1, true), "the stamp names the kill, the bounty and the kill id: "..line1.." / "..line2)
+-- A proof only counts from the hunter's own client
+local otherBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 100, level = 19, zone = "Durotar" }, clock)
+local otherClaim = ns.Store:InsertTest("claim", "Vorn Ashgrip", { bounty = otherBounty.id, victim = "Player-9-ENEMY", zone = "Durotar", killT = clock }, clock)
+ns.Store:InsertTest("proof", "Someone Else", { claim = otherClaim.id }, clock)
+check(ns.Proof:Get(otherClaim.id) == nil, "a proof from someone other than the hunter doesn't count")
+-- A failed screenshot writes no proof; switched off, no screenshot at all
+screenshotResult = "SCREENSHOT_FAILED"
+local proofsBefore = 0
+for _ in ns.Store:Iterator("proof") do proofsBefore = proofsBefore + 1 end
+ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 5000, level = 19, zone = "Durotar" }, clock - 30)
+clock = clock + 30
+Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+RunTimers()
+local proofsAfter = 0
+for _ in ns.Store:Iterator("proof") do proofsAfter = proofsAfter + 1 end
+check(proofsAfter == proofsBefore, "a failed screenshot writes no proof")
+screenshotResult = "SCREENSHOT_SUCCEEDED"
+ns.db.settings.proofShots = false
+shotsBefore = screenshots
+ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-ENEMY", targetName = "Stabby Mcstab", amount = 4000, level = 19, zone = "Durotar" }, clock - 10)
+clock = clock + 30
+Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+RunTimers()
+check(screenshots == shotsBefore, "no screenshot when switched off")
+ns.db.settings.proofShots = true
+enemyUnits.nameplate40 = nil
+-- The rep test data gives Kaelen's claim a proof, shown in its tooltip
+ns:RunCommand("simulate", "rep")
+local kaelenProof = false
+for _, item in ipairs(ns.Model:GetMyBounties()) do
+	if item.hunter == "Kaelen Duskbrand" and item.claim and ns.Proof:Get(item.claim.id) then kaelenProof = true end
+	ns.Rows:ShowBountyTooltip(NewMock(), item)
+end
+check(kaelenProof, "Kaelen's test claim has a proof")
+ns.UI:Show("settings")
+ns:RunCommand("purge", "")
 -- The game's Options > AddOns entry: registered, and its buttons close Options and open Wanted
 check(optionsCategory and optionsCategory.registered and optionsCategory.name == "Wanted: Dead or... Dead", "Options > AddOns entry registered")
 SettingsPanel._shown = true

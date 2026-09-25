@@ -89,7 +89,9 @@ function Debug:SimulateReputation()
 	Bounty(DEADBEAT, targets[4], 90 * 100, now - 3600)
 	-- Two of yours: Ace's witnessed kill to confirm and pay, Shady's unseen one to dispute
 	local mine1 = Bounty(me, targets[1], 50 * 100, now - day)
-	Claim(ACE, mine1, targets[1], now - 1200, true)
+	local aceClaim = Claim(ACE, mine1, targets[1], now - 1200, true)
+	-- Kaelen's client saved a proof screenshot of that kill
+	Store:InsertTest("proof", ACE, { claim = aceClaim.id, deathId = aceClaim.data.deathId, at = date("%H:%M:%S") }, now - 1190)
 	local mine2 = Bounty(me, targets[2], 50 * 100, now - day)
 	Claim(SHADY, mine2, targets[2], now - 900, false)
 	Wanted:Print("Simulated reputations: %s (reliable hunter), %s (disputed claims), %s (pays), %s (2 unpaid). See the Board, Your bounties > Your live bounties, Leaderboards, and /wanted rep <name>. /wanted purge removes it all.", ACE, SHADY, HONEST, DEADBEAT)

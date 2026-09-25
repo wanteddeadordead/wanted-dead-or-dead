@@ -99,6 +99,7 @@ function Sync:OnEnable()
 	Store:OnRecord("confirm", private.OnOwnRecord)
 	Store:OnRecord("withdraw", private.OnOwnRecord)
 	Store:OnRecord("hunt", private.OnOwnRecord)
+	Store:OnRecord("proof", private.OnOwnRecord)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
 end

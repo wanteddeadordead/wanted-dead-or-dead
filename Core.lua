@@ -27,6 +27,7 @@ local DEFAULTS = {
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)
+		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		nearby = { -- what the Nearby window shows
 			layout = "auto", -- "auto" (compact above 8 enemies), "normal" or "compact"
 			icon = true,

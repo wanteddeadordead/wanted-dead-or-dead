@@ -20,6 +20,9 @@ happened.
   the death **witnesses** it. The earliest kill wins.
 - The poster confirms or disputes, then pays by mail in one click. Both sides' clients record the
   payment, so paid and unpaid are facts, not claims.
+- **Kill proof:** when your kill claims a bounty, a stamp with who, where, when and the kill id goes on
+  screen and the game saves a screenshot. Posters see you have proof; if a kill is disputed, post it in
+  [#pvp-salt on the Forever PvP Discord](https://discord.com/invite/wow-forever-pvp).
 
 **Reputation from the record**
 - Hunters get a level and a reliability rating from witnessed and confirmed kills.

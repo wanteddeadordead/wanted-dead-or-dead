@@ -193,6 +193,13 @@ function private.BuildSharing(panel, width)
 	end)
 	private.minimap:SetPoint("TOPLEFT", 16, -62)
 	private.Toggle(display, function() return Wanted.db.settings end, "showTools", "Show the Tools page", "Network details, test data and the debug log. Handy when reporting a problem; off by default.", 16, -86)
+	local proof = private.Card(panel, -304, 120, "Kill proof", width)
+	private.Toggle(proof, function() return Wanted.db.settings end, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.", 16, -38)
+	local proofText = Theme:Text(proof, "small", format("If a kill is disputed, post the screenshot in %s on the Forever PvP Discord (click the link, Ctrl+C):", Wanted.Proof.DISCORD_CHANNEL), C.muted)
+	proofText:SetPoint("TOPLEFT", 16, -66)
+	local link = W:CopyBox(proof, 360, Wanted.Proof.DISCORD_URL)
+	link:SetPoint("TOPLEFT", 16, -84)
+
 	local iconLabel = Theme:Text(display, "small", "Class icons")
 	iconLabel:SetPoint("TOPLEFT", 360, -20)
 	local previous = nil

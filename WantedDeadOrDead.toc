@@ -22,6 +22,7 @@ Recorder.lua
 Sync.lua
 Bounties.lua
 Payments.lua
+Proof.lua
 Reputation.lua
 Enemies.lua
 Hotspots.lua

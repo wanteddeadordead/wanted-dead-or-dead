@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Kill proof: a stamped screenshot when your kill claims a bounty, shown on the claim, with the Forever PvP
+  Discord (#pvp-salt) for disputes. On by default, in Settings > Sharing and display.
 - Your record (Your bounties > Your record, /wanted record): your trust as a poster and as a hunter, what it
   means, and how to improve it, with a key to every trust level.
 - Trust levels in bounty tooltips and /wanted rep: Trusted, Reliable, Unproven or New poster, Doubtful, Untrustworthy.

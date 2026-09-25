@@ -188,6 +188,9 @@ function Rows:ShowBountyTooltip(row, info)
 		local witnesses = Bounties:GetWitnesses(info.claim)
 		GameTooltip:AddLine(#witnesses > 0 and ("Seen by "..table.concat(witnesses, ", ")) or "Nobody else saw the kill", C.muted[1], C.muted[2], C.muted[3], true)
 		Reputation:AddTrustLines("Hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
+		if Wanted.Proof:Get(info.claim.id) then
+			GameTooltip:AddLine(format("%s's client saved a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL), C.green[1], C.green[2], C.green[3], true)
+		end
 	end
 	GameTooltip:Show()
 end
@@ -270,7 +273,8 @@ function Rows:DoAction(action, info)
 	elseif action == "dispute" then
 		W:Dialog({
 			title = "Dispute the claim",
-			text = format("%s's claim on %s goes on their record as disputed, and your bounty opens again. Only dispute a claim you believe is false.", info.hunter, name),
+			text = format("%s's claim on %s goes on their record as disputed, and your bounty opens again. Only dispute a claim you believe is false.", info.hunter, name)
+				..(Wanted.Proof:Get(info.claim.id) and format("\n\n%s saved a screenshot of this kill. Check %s on the Forever PvP Discord first.", info.hunter, Wanted.Proof.DISCORD_CHANNEL) or ""),
 			confirmLabel = "Dispute",
 			confirmStyle = "danger",
 			onConfirm = function()

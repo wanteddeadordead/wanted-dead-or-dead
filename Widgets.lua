@@ -110,6 +110,27 @@ end
 -- Input
 -- ============================================================================
 
+---A box holding text to copy (a link): click it and it selects all, typing puts the text back.
+function W:CopyBox(parent, width, text)
+	local box = CreateFrame("EditBox", nil, parent)
+	box:SetSize(width, 26)
+	box:SetAutoFocus(false)
+	box:SetFontObject(Theme.Fonts.small)
+	box:SetTextInsets(9, 9, 0, 0)
+	Theme:Skin(box, C.input, C.border)
+	box:SetText(text)
+	box:SetCursorPosition(0)
+	box:SetScript("OnEscapePressed", box.ClearFocus)
+	box:SetScript("OnTextChanged", function(self, userInput)
+		if userInput then
+			self:SetText(text)
+			self:HighlightText()
+		end
+	end)
+	box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+	return box
+end
+
 function W:Input(parent, width, placeholder, onChange)
 	local box = CreateFrame("EditBox", nil, parent)
 	box:SetSize(width, 26)
@@ -526,11 +547,12 @@ function W:Dialog(options)
 		frame.input.placeholder:SetText(options.input.placeholder or "")
 		frame.input:SetValue(options.input.value or "")
 		frame.input:Show()
-		frame:SetHeight(190)
 	else
 		frame.input:Hide()
-		frame:SetHeight(150)
 	end
+	-- Tall enough for the whole message: title and top margin, the text, the input if any, the buttons
+	local messageHeight = ceil(frame.message:GetStringHeight() or 0)
+	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + (options.input and 52 or 12) + 60))
 	dialog:Show()
 	if options.input then
 		frame.input:SetFocus()

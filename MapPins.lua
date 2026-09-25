@@ -72,7 +72,8 @@ function PinMixin:OnMouseEnter()
 	if not group then
 		return
 	end
-	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	-- Open away from the map's right edge, where the filter menu and other controls sit
+	GameTooltip:SetOwner(self, group.x > 50 and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
 	local now = GetServerTime()
 	if #group.members == 1 then
 		local d, sighting = group.members[1].info, group.members[1].sighting

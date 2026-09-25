@@ -178,6 +178,10 @@ end
 
 local HUD_FLASH_SECONDS = 3 -- how long it stays when "keep it up" is off
 local HUD_LINES = 5
+local HUD_LINE_HEIGHT = 20
+local HUD_TITLE_HEIGHT = 38 -- the title and the space around it, with no names under it
+local HUD_FADE_HEIGHT = 20 -- the dark backing fades out below the last name instead of ending on a line
+local HUD_BACKING = { 0.07, 0.01, 0.01, 0.75 }
 
 function private.GetHud()
 	if private.hud then
@@ -199,16 +203,23 @@ function private.GetHud()
 	hud.glow:SetPoint("BOTTOMRIGHT", 10, -6)
 	-- Near black so the red title reads over any sky (a red wash vanished over the Barrens at dusk), with red
 	-- edges to keep it looking like a warning
-	hud.glow:SetColorTexture(0.07, 0.01, 0.01, 0.75)
+	hud.glow:SetColorTexture(unpack(HUD_BACKING))
+	-- The backing grows with the names (hud height, see private.SetHudLines) and fades out below them, so a
+	-- crowd targeting you never spills out of a box
+	hud.fade = hud:CreateTexture(nil, "BACKGROUND")
+	hud.fade:SetPoint("TOPLEFT", hud.glow, "BOTTOMLEFT")
+	hud.fade:SetPoint("TOPRIGHT", hud.glow, "BOTTOMRIGHT")
+	hud.fade:SetHeight(HUD_FADE_HEIGHT)
+	hud.fade:SetColorTexture(1, 1, 1, 1)
+	local r, g, b, a = unpack(HUD_BACKING)
+	hud.fade:SetGradient("VERTICAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))
 	hud.edges = {}
-	for _, side in ipairs({ "TOP", "BOTTOM" }) do
-		local edge = hud:CreateTexture(nil, "BORDER")
-		edge:SetHeight(2)
-		edge:SetPoint(side.."LEFT", hud.glow, side.."LEFT")
-		edge:SetPoint(side.."RIGHT", hud.glow, side.."RIGHT")
-		edge:SetColorTexture(0.9, 0.15, 0.12, 0.9)
-		tinsert(hud.edges, edge)
-	end
+	local edge = hud:CreateTexture(nil, "BORDER")
+	edge:SetHeight(2)
+	edge:SetPoint("TOPLEFT", hud.glow, "TOPLEFT")
+	edge:SetPoint("TOPRIGHT", hud.glow, "TOPRIGHT")
+	edge:SetColorTexture(0.9, 0.15, 0.12, 0.9)
+	tinsert(hud.edges, edge)
 	hud.title = hud:CreateFontString(nil, "OVERLAY")
 	hud.title:SetFontObject(Theme:MakeFont("WantedFontHudTitle", 26, nil, "OUTLINE"))
 	hud.title:SetPoint("TOP", 0, 0)
@@ -218,8 +229,8 @@ function private.GetHud()
 	hud.lines = {}
 	for i = 1, HUD_LINES do
 		local line = CreateFrame("Frame", nil, hud)
-		line:SetSize(420, 20)
-		line:SetPoint("TOP", hud.title, "BOTTOM", 0, -6 - (i - 1) * 20)
+		line:SetSize(420, HUD_LINE_HEIGHT)
+		line:SetPoint("TOP", hud.title, "BOTTOM", 0, -6 - (i - 1) * HUD_LINE_HEIGHT)
 		line.icon = line:CreateTexture(nil, "ARTWORK")
 		line.icon:SetSize(16, 16)
 		line.text = line:CreateFontString(nil, "OVERLAY")
@@ -258,6 +269,11 @@ function private.GetHud()
 	end)
 	private.hud = hud
 	return hud
+end
+
+---Sizes the warning's backing to the title and this many lines of names.
+function private.SetHudLines(hud, numLines)
+	hud:SetHeight(HUD_TITLE_HEIGHT + (numLines > 0 and (6 + numLines * HUD_LINE_HEIGHT) or 0))
 end
 
 function private.Describe(d)
@@ -313,6 +329,8 @@ function Alerts:UpdateTargetedHud()
 			line:Hide()
 		end
 	end
+	-- The names shown, plus the "and N more" line
+	private.SetHudLines(hud, shown < 0 and 0 or min(#targeters, HUD_LINES))
 	hud.hideAt = not settings.targetHold and (GetTime() + HUD_FLASH_SECONDS) or nil
 	hud:Show()
 end
@@ -345,6 +363,7 @@ function Alerts:SetHudMoving(moving)
 		for i = 3, HUD_LINES do
 			hud.lines[i]:Hide()
 		end
+		private.SetHudLines(hud, 2)
 		hud.hideAt = nil
 		hud:Show()
 	else

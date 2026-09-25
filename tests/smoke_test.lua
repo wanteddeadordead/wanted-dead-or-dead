@@ -69,7 +69,8 @@ function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(sel
 function Methods:RegisterEvent(e) registry[e] = registry[e] or {} table.insert(registry[e], self) end
 function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
-function CreateFrame(kind) return NewMock(kind) end
+function CreateFrame(kind, name) local f = NewMock(kind) if name then _G[name] = f end return f end
+function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
 UIParent, Minimap, GameTooltip, DEFAULT_CHAT_FRAME, MailFrame = NewMock(), NewMock(), NewMock(), NewMock(), NewMock()
 MailFrame._shown = false
@@ -405,6 +406,15 @@ STAB.targetsMe = false
 Fire("UNIT_TARGET", "nameplate1")
 check(#ns.Enemies:GetTargeters() == 0, "targeting cleared when they switch")
 STAB.targetsMe = true
+Fire("UNIT_TARGET", "nameplate1")
+local hud = WantedTargetedHud
+check(hud:IsShown() and hud:GetHeight() == 64, "the warning fits the title and one name, got "..tostring(hud:GetHeight()))
+enemyUnits.nameplate9 = { guid = "Player-9-SECOND", name = "Second Hunter", class = "HUNTER", level = 22, targetsMe = true }
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate9")
+Fire("UNIT_TARGET", "nameplate9")
+check(#ns.Enemies:GetTargeters() == 2 and hud:GetHeight() == 84, "the warning grows a line for the second name, got "..tostring(hud:GetHeight()))
+enemyUnits.nameplate9 = nil
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate9")
 -- The client's death event for a watched enemy is a witnessed death
 local deathsBefore = 0
 for _ in ns.Store:Iterator("death") do deathsBefore = deathsBefore + 1 end

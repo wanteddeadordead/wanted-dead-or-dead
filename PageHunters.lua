@@ -163,14 +163,17 @@ UI:RegisterPage("hunters", {
 				return
 			end
 			GameTooltip:SetText(item.origin, 1, 1, 1)
-			GameTooltip:AddLine(Reputation:GetLine(item.origin) or "No record", C.muted[1], C.muted[2], C.muted[3], true)
 			local t = item.tally
+			-- Stars and the trust word first, as on bounty tooltips, then the numbers behind them
 			if private.view == "hunters" then
+				Reputation:AddTrustLines("Hunter trust", Reputation:GetHunterTrust(t))
 				GameTooltip:AddLine(" ")
 				GameTooltip:AddDoubleLine("Witnessed kills", t.witnessed, 1, 1, 1, 1, 1, 1)
 				GameTooltip:AddDoubleLine("Confirmed by poster", t.confirmed, 1, 1, 1, 1, 1, 1)
 				GameTooltip:AddDoubleLine("Unverified", t.lone, 1, 1, 1, 1, 1, 1)
 				GameTooltip:AddDoubleLine("Disputed", t.disputed, 1, 1, 1, t.disputed > 0 and 1 or 1, t.disputed > 0 and 0.4 or 1, t.disputed > 0 and 0.4 or 1)
+			else
+				Reputation:AddTrustLines("Poster trust", Reputation:GetPosterTrust(t))
 			end
 			GameTooltip:Show()
 		end

@@ -393,6 +393,22 @@ ns.Enemies:SetReason("Player-9-ENEMY", "camps the road")
 check(ns.Enemies:Describe("Player-9-ENEMY").reason == "camps the road", "KoS reason")
 Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 1784)
 check(ns.Enemies:Describe("Player-9-ENEMY").stealthed, "stealth seen")
+-- Vanish: the rogue is invisible by the time the cast arrives, so the nameplate no longer resolves; the
+-- alarm still goes off for whoever that nameplate was, even just after the nameplate was removed
+local stealthEvents = {}
+ns.Enemies:OnChange(function(event, entry) if event == "stealth" then stealthEvents[#stealthEvents + 1] = entry end end)
+local stabUnit = enemyUnits.nameplate1
+enemyUnits.nameplate1 = nil
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 1856)
+check(#stealthEvents == 1 and stealthEvents[1].guid == "Player-9-ENEMY" and stealthEvents[1].stealthKind == "Vanish", "a Vanish from a nameplate that no longer resolves still raises the alarm")
+Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 1857)
+check(#stealthEvents == 2, "and just after its nameplate was removed")
+clock = clock + 5
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 26889)
+check(#stealthEvents == 2, "but not long after, when the token may be someone else")
+enemyUnits.nameplate1 = stabUnit
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 -- We kill them: the client's kill event records a kill and a win
 Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
 check(ns.Enemies:GetStats("Player-9-ENEMY").wins == 1, "win counted from the kill event")

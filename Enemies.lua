@@ -16,6 +16,7 @@ local private = {
 	plates = {}, -- nameplate unit -> true
 	targetingMe = {}, -- guid -> time they last had us targeted
 	recentCasts = {}, -- guid..spell -> time
+	tokens = {}, -- unit token -> { guid, t } the enemy last seen on it, and when (or when its nameplate went)
 	lastShared = {}, -- guid -> time we last shared a sighting of them
 	targeters = {}, -- guid -> true for enemies targeting us now
 	lastRecapId = nil,
@@ -23,6 +24,9 @@ local private = {
 	playerFaction = nil,
 }
 local SCAN_SECONDS = 1
+-- A cast that makes the caster invisible (Vanish, Stealth) arrives when their unit no longer resolves; it's
+-- put down to whoever was on that token this recently
+local TOKEN_GRACE_SECONDS = 2
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -120,6 +124,9 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.Scan(arg1)
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
 		private.plates[arg1] = nil
+		if private.tokens[arg1] then
+			private.tokens[arg1].t = GetTime()
+		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		private.Scan("target")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
@@ -246,6 +253,7 @@ function private.Scan(unit)
 		return nil
 	end
 	local now = GetTime()
+	private.tokens[unit] = { guid = guid, t = now }
 	local entry = private.nearby[guid]
 	local isNew = not entry
 	if isNew then
@@ -308,13 +316,36 @@ function private.Scan(unit)
 	return entry
 end
 
+---"Vanish", "Stealth"... for a stealth-type spell, or nil.
+function private.StealthKind(spellID)
+	local kind = STEALTH_SPELLS[spellID]
+	if not kind and C_Spell and C_Spell.GetSpellName then
+		local spellName = private.Readable(C_Spell.GetSpellName(spellID))
+		kind = spellName and STEALTH_NAMES[spellName] and spellName or nil
+	end
+	return kind
+end
+
+---The nearby enemy last seen on a token that no longer resolves, if that was only a moment ago.
+function private.LastOnToken(unit)
+	local known = private.tokens[unit]
+	if not known or GetTime() - known.t > TOKEN_GRACE_SECONDS then
+		return nil
+	end
+	return private.nearby[known.guid]
+end
+
 function private.OnCast(unit, spellID)
 	if type(unit) ~= "string" or not (unit == "target" or unit == "focus" or unit == "mouseover" or strfind(unit, "^nameplate%d+$")) then
 		return
 	end
-	local entry = private.Scan(unit)
 	spellID = private.Readable(spellID)
+	local entry = private.Scan(unit) or private.LastOnToken(unit)
 	if not entry or type(spellID) ~= "number" then
+		local kind = type(spellID) == "number" and private.StealthKind(spellID)
+		if kind then
+			Wanted:Log("Enemies: %s cast on %s, but nobody known was on it", kind, unit)
+		end
 		return
 	end
 	entry.lastActive = GetTime()
@@ -325,11 +356,7 @@ function private.OnCast(unit, spellID)
 		return
 	end
 	private.recentCasts[key] = now
-	local kind = STEALTH_SPELLS[spellID]
-	if not kind and C_Spell and C_Spell.GetSpellName then
-		local spellName = private.Readable(C_Spell.GetSpellName(spellID))
-		kind = spellName and STEALTH_NAMES[spellName] and spellName or nil
-	end
+	local kind = private.StealthKind(spellID)
 	if kind then
 		entry.stealthed = now
 		entry.stealthKind = kind

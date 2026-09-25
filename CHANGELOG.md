@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The stealth alarm goes off when an enemy vanishes or stealths in front of you. Their nameplate is gone by the
+  time the game reports the cast, so the alarm used to miss them.
+
 ## [0.1.0-beta.3] - 2026-09-25
 
 - Your wanted poster (in the main menu, or /wanted poster): your character on a painted

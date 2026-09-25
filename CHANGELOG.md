@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-09-25
+
 - The stealth alarm works again for the enemy you have targeted. The game no longer tells addons about Stealth
   or Vanish at all, so Wanted spots the moment instead: your target disappears and is dropped while within 28
   yards and alive. (Turning the camera keeps your target; walking out of view happens much further away.)

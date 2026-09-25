@@ -710,6 +710,8 @@ for _, item in ipairs(ns.Model:GetMyBounties()) do
 	ns.Rows:ShowBountyTooltip(NewMock(), item)
 end
 check(kaelenProof, "Kaelen's test claim has a proof")
+ns.Store:InsertTest("kill", "Kaelen Duskbrand", { victim = "Player-TEST-00000777", victimName = "Only Test", victimGuild = "Test Only Guild", deathId = "testonly", zone = "The Barrens" }, clock)
+for _, guild in ipairs(ns.Model:GetGuildBoard()) do check(guild.name ~= "Test Only Guild", "test data stays off the guild board") end
 check(#ns.Tracks:Get("Player-TEST-00000101") >= 10 and ns.Tracks:Summarize(ns.Tracks:Get("Player-TEST-00000101")).days >= 5, "the rep test data gives its targets a history")
 ns.UI:Show("settings")
 ns:RunCommand("purge", "")

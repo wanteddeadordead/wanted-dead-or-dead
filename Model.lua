@@ -621,8 +621,9 @@ function Model:GetGuildBoard(since)
 		return guild
 	end
 	local countedDeaths = {}
+	-- Test data stays off the guild board, like everywhere counts are public-facing
 	for kill in Store:Iterator("kill") do
-		if kill.t >= since then
+		if kill.t >= since and not Store:IsTest(kill) then
 			local killer = Get(kill.data.killerGuild)
 			if killer then
 				killer.kills = killer.kills + 1
@@ -637,7 +638,7 @@ function Model:GetGuildBoard(since)
 		end
 	end
 	for death in Store:Iterator("death") do
-		if death.t >= since then
+		if death.t >= since and not Store:IsTest(death) then
 			local key = death.data.deathId or death.id
 			local victim = Get(death.data.victimGuild)
 			if victim and not countedDeaths[key] then
@@ -655,8 +656,8 @@ function Model:GetGuildBoard(since)
 			end
 		end
 	end
-	for _, player in pairs(Wanted.db.players) do
-		if player.guild then
+	for guid, player in pairs(Wanted.db.players) do
+		if type(player.guild) == "string" and strsub(guid, 1, 12) ~= "Player-TEST-" then
 			local guild = Get(player.guild)
 			guild.seen = guild.seen + 1
 			guild.faction = guild.faction or player.faction

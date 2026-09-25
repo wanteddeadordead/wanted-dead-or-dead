@@ -58,8 +58,9 @@ function private.BuildAlerts(panel, width)
 	private.Toggle(card, Detect, "sound", "Alert sounds", "Play a beep when an enemy appears (three for Kill on Sight and bounty targets).", 16, -62)
 	private.Toggle(card, Detect, "stealth", "Stealth alarm", "Warn when a nearby enemy uses Stealth, Vanish, Prowl, Shadowmeld or Invisibility.", 16, -86)
 	private.Toggle(card, Detect, "autoShow", "Open the Nearby window when an enemy appears", "Otherwise open it with right-click on the minimap button, the Enemies page or /wanted nearby.", 16, -110)
+	private.Toggle(card, Detect, "risingAlerts", "Warn when a zone fills up with enemies fast", "A warning like RISING FAST: The Barrens when many more enemies show up there than 5 minutes before. From your sightings and other Wanted users'.", 16, -134)
 	local alertsLabel = Theme:Text(card, "small", "Alert for")
-	alertsLabel:SetPoint("TOPLEFT", 16, -150)
+	alertsLabel:SetPoint("TOPLEFT", 16, -170)
 	private.alerts = W:Segmented(card, {
 		{ key = "all", label = "Every enemy" },
 		{ key = "important", label = "KoS and bounties" },
@@ -67,7 +68,7 @@ function private.BuildAlerts(panel, width)
 	}, function(key)
 		Detect().alerts = key
 	end, 130)
-	private.alerts:SetPoint("TOPLEFT", 16, -168)
+	private.alerts:SetPoint("TOPLEFT", 16, -188)
 	-- Lost contact: still shown as in sight for a while (they're likely still around), then shaded, then gone
 	local inSightLabel = Theme:Text(card, "small", "Out of view, still show as in sight for")
 	inSightLabel:SetPoint("TOPLEFT", 440, -150)
@@ -181,7 +182,7 @@ function private.BuildSharing(panel, width)
 	local card = private.Card(panel, 0, 130, "Sharing", width)
 	private.Toggle(card, Detect, "share", "Share the enemies I see", "Other players running Wanted on your faction see where you spotted enemies (on their map and in their alerts).", 16, -38)
 	private.Toggle(card, Detect, "sharedAlerts", "Alert me when others see a KoS or bounty target", "Shows where another Wanted user spotted someone on your Kill on Sight list or with a bounty.", 16, -62)
-	local note = Theme:Text(card, "tiny", "Wanted never posts in General, Trade or any public channel. Only your own Tell party / raid / guild clicks send chat.")
+	local note = Theme:Text(card, "tiny", "Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild).")
 	note:SetPoint("TOPLEFT", 16, -94)
 
 	local display = private.Card(panel, -142, 150, "Display", width)

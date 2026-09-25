@@ -109,6 +109,7 @@ function private.Refresh()
 		return
 	end
 	private.mapToggle:SetChecked(Wanted.MapPins:IsShown())
+	private.risingToggle:SetChecked(Wanted.db.settings.detect.risingAlerts)
 	local groups = Hotspots:Get()
 	local busy = 0
 	for _, group in ipairs(groups) do
@@ -132,6 +133,12 @@ UI:RegisterPage("hotspots", {
 		end)
 		private.mapToggle:SetPoint("TOPRIGHT", 0, 0)
 		W:AttachTooltip(private.mapToggle, "Enemies on the world map", "Dots where enemies were seen in the last 30 minutes. Also in the map's own filter menu.")
+		private.risingToggle = W:Toggle(container, "Rising-zone alerts", function(checked)
+			Wanted.db.settings.detect.risingAlerts = checked
+			UI:Refresh()
+		end)
+		private.risingToggle:SetPoint("RIGHT", private.mapToggle, "LEFT", -16, 0)
+		W:AttachTooltip(private.risingToggle, "Rising-zone alerts", "A warning like RISING FAST: The Barrens when many more enemies show up in a zone than 5 minutes before.")
 		local note = Theme:Text(container, "tiny", "Now = last 15 minutes. Counts only enemies a Wanted user has seen.", C.faint)
 		note:SetPoint("TOPLEFT", 0, -18)
 

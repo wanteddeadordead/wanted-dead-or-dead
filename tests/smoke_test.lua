@@ -553,6 +553,56 @@ ns.Report:Show()
 ns.db.welcomed = nil
 ns.UI:Show("board")
 RunTimers()
+-- Call for help: finds Local Defense by its zone channel id, lists who's around (whoever is on you first),
+-- stays within a chat line, and waits a few seconds between calls to the same channel
+enemyUnits.nameplate1.targetsMe = true
+for _, f in ipairs(tickers) do f() end
+local localDefense = nil
+C_ChatInfo.GetChannelInfoFromIdentifier = function(id) if id == localDefense then return { name = "LocalDefense - Durotar", zoneChannelID = 22, localID = 4 } end end
+check(ns.EnemyMenu:GetLocalDefenseChannel() == nil, "no Local Defense channel here")
+check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "no call without Local Defense")
+localDefense = "4"
+check(ns.EnemyMenu:GetLocalDefenseChannel() == 4, "Local Defense found as channel 4")
+local help = ns.EnemyMenu:BuildHelpText()
+check(help:find("^Need help at Durotar 45,25 %- %d+ enem") and help:find("Stabby Mcstab %d+ Rogue %(on me%)") and help:find("%+34 more$") and #help <= 255 and not help:find("|", 1, true), "help text: "..help)
+check(help:find("Stabby Mcstab", 1, true) < (help:find("Invader", 1, true) or 1e9), "whoever is on you comes first")
+chatSent = {}
+check(ns.EnemyMenu:CallForHelp("CHANNEL") and chatSent[1] and chatSent[1]:find("^CHANNEL: Need help"), "help sent to Local Defense")
+check(not ns.EnemyMenu:CallForHelp("CHANNEL"), "a second call right away waits")
+check(ns.EnemyMenu:CallForHelp("GUILD"), "the guild is a separate channel")
+ns.EnemyMenu:ShowHelpMenu()
+ns.EnemyMenu:Show(ns.Enemies:Describe("Player-9-ENEMY"))
+enemyUnits.nameplate1.targetsMe = nil
+-- A zone filling up fast gets one RISING FAST warning, not one per check
+local warnings = {}
+local realWarn = ns.Alerts.Warn
+ns.Alerts.Warn = function(self, title, ...) warnings[#warnings + 1] = title return realWarn(self, title, ...) end
+local surgeClock = clock
+clock = clock + 11 * 60
+for i = 1, 6 do
+	local guid = "Player-9-SURGE"..i
+	ns.Store:UpdatePlayer(guid, { name = "Surger"..i, class = "WARRIOR", level = 25, faction = "Alliance", zone = "The Barrens", mapId = 10, x = 50, y = 50 })
+	ns.Store:AddSighting(guid, "The Barrens", 50, 50, 10)
+end
+local surging = ns.Hotspots:GetSurging()
+check(#surging == 1 and surging[1].zone == "The Barrens" and surging[1].recent == 6, "the Barrens is rising fast, got "..tostring(surging[1] and surging[1].zone))
+ns.Hotspots:CheckSurges()
+ns.Hotspots:CheckSurges()
+check(#warnings == 1 and warnings[1] == "RISING FAST: The Barrens", "one rising warning, got "..#warnings)
+ns.db.settings.detect.risingAlerts = false
+warnings = {}
+clock = clock + 16 * 60
+for i = 7, 12 do
+	ns.Store:UpdatePlayer("Player-9-SURGE"..i, { name = "Surger"..i, class = "MAGE", level = 25, faction = "Alliance", zone = "The Barrens", mapId = 10 })
+	ns.Store:AddSighting("Player-9-SURGE"..i, "The Barrens", 50, 50, 10)
+end
+ns.Hotspots:CheckSurges()
+check(#warnings == 0, "no rising warning when switched off")
+ns.db.settings.detect.risingAlerts = true
+ns.Alerts.Warn = realWarn
+ns.UI:Show("hotspots")
+ns.UI:Show("settings")
+clock = surgeClock
 -- Leaving: out of view the enemy still shows as in sight for a minute, then shaded for 30s, then leaves
 local function Tick() for _, f in ipairs(tickers) do f() end end
 Tick() -- a scan while their nameplate is still up

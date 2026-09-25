@@ -6,11 +6,18 @@
 local _, Wanted = ...
 local Hotspots = Wanted:NewModule("Hotspots")
 local Store = Wanted.Store
-local private = {}
+local private = { surgeAlerted = {} } -- surgeAlerted: group key -> when we last warned about it
 local RECENT = 15 * 60 -- "now" means seen in the last 15 minutes
 local HOUR = 3600
 local GUILD_MIN = 3 -- a guild is named once this many of its players are in the zone
 local TREND_MIN = 2 -- the count has to move by at least this much to count as rising or falling
+-- Rising fast: at least this many enemies seen there in the last 5 minutes, at least this many more than in
+-- the 5 minutes before, and at least twice as many. One alert per zone per quarter hour.
+local SURGE_WINDOW = 5 * 60
+local SURGE_MIN = 5
+local SURGE_JUMP = 4
+local SURGE_COOLDOWN = 15 * 60
+local SURGE_CHECK_SECONDS = 30
 
 
 
@@ -61,7 +68,7 @@ function private.Readable(value)
 end
 
 ---Adds the enemies seen in the last hour to their zones.
-function private.AddPlayers(groups, byName, now)
+function private.AddPlayers(groups, byName, now, recent)
 	local myFaction = UnitFactionGroup("player")
 	for guid, player in pairs(Wanted.db.players) do
 		local lastSeen = player.lastSeen
@@ -69,7 +76,7 @@ function private.AddPlayers(groups, byName, now)
 				and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") and (player.mapId or player.zone) then
 			local group = private.GetGroup(groups, byName, player.mapId, player.zone)
 			group.hour = group.hour + 1
-			if now - lastSeen <= RECENT then
+			if now - lastSeen <= recent then
 				group.recent = group.recent + 1
 			end
 			local level = private.Readable(player.level)
@@ -93,8 +100,8 @@ end
 
 ---Counts the enemies seen 15 to 30 minutes ago per zone, for the trend. Returns false when the sighting
 ---ring doesn't reach back that far (a busy half hour fills it), so no trend is shown.
-function private.AddEarlier(groups, byName, now)
-	local from, to = now - 2 * RECENT, now - RECENT
+function private.AddEarlier(groups, byName, now, recent)
+	local from, to = now - 2 * recent, now - recent
 	local seen = {}
 	local count, oldest = 0, now
 	for sighting in Store:SightingIterator() do
@@ -139,12 +146,15 @@ end
 -- ============================================================================
 
 ---Zones with enemy activity in the last hour, busiest first.
----@return table[] { zone, mapId, recent, hour, minLevel, maxLevel, skull, guild, guildCount, deaths, trend, lastSeen, enemies }
-function Hotspots:Get()
+---@param recentSeconds number? what counts as "now" (default 15 minutes); the trend compares it with the same
+---length of time before it
+---@return table[] { zone, mapId, recent, earlier, hour, minLevel, maxLevel, skull, guild, guildCount, deaths, trend, lastSeen, enemies }
+function Hotspots:Get(recentSeconds)
 	local now = GetServerTime()
+	local recent = recentSeconds or RECENT
 	local groups, byName = {}, {}
-	private.AddPlayers(groups, byName, now)
-	local trendKnown = private.AddEarlier(groups, byName, now)
+	private.AddPlayers(groups, byName, now, recent)
+	local trendKnown = private.AddEarlier(groups, byName, now, recent)
 	private.AddDeaths(groups, byName, now)
 	local list = {}
 	for _, group in pairs(groups) do
@@ -154,6 +164,7 @@ function Hotspots:Get()
 					group.guild, group.guildCount = guild, count
 				end
 			end
+			group.trendKnown = trendKnown
 			if trendKnown then
 				local change = group.recent - group.earlier
 				group.trend = change >= TREND_MIN and "up" or (change <= -TREND_MIN and "down") or "steady"
@@ -173,6 +184,42 @@ function Hotspots:Get()
 		return a.zone < b.zone
 	end)
 	return list
+end
+
+---Zones filling up fast: many more enemies in the last 5 minutes than in the 5 before.
+---@return table[]
+function Hotspots:GetSurging()
+	local surging = {}
+	for _, group in ipairs(Hotspots:Get(SURGE_WINDOW)) do
+		if group.trendKnown and group.recent >= SURGE_MIN and group.recent - group.earlier >= SURGE_JUMP and group.recent >= 2 * group.earlier then
+			tinsert(surging, group)
+		end
+	end
+	return surging
+end
+
+---Warns about zones filling up fast, when that alert is on. Each zone at most once a quarter hour.
+function Hotspots:CheckSurges()
+	local detect = Wanted.db and Wanted.db.settings.detect
+	if not detect or not detect.enabled or not detect.risingAlerts then
+		return
+	end
+	local now = GetServerTime()
+	for _, group in ipairs(Hotspots:GetSurging()) do
+		local last = private.surgeAlerted[group.key]
+		if not last or now - last >= SURGE_COOLDOWN then
+			private.surgeAlerted[group.key] = now
+			Wanted.Alerts:Warn("RISING FAST: "..group.zone, format("%d enemies in the last 5 minutes, up from %d", group.recent, group.earlier), Wanted.Theme.C.amber)
+			Wanted.Alerts:Sound("enemy")
+			Wanted:Log("Hotspots: %s rising, %d from %d", group.zone, group.recent, group.earlier)
+			-- One warning at a time; another rising zone gets its turn on the next check
+			return
+		end
+	end
+end
+
+function Hotspots:OnEnable()
+	C_Timer.NewTicker(SURGE_CHECK_SECONDS, function() Hotspots:CheckSurges() end)
 end
 
 ---The zones with enemies seen in the last 15 minutes, busiest first.

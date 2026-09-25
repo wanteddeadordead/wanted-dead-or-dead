@@ -1,5 +1,6 @@
 -- Wanted: the menu for an enemy player, shared by the Nearby window and the Enemies page: Kill on Sight
--- with a reason, Ignore, a bounty, and telling your party, raid or guild (never public channels).
+-- with a reason, Ignore, a bounty, and telling your party, raid, guild or Local Defense. Also the call for
+-- help. Chat is only ever sent when the player clicks one of these; never General or Trade.
 
 local _, Wanted = ...
 local EnemyMenu = {}
@@ -9,7 +10,42 @@ local W = Wanted.Widgets
 local C = Theme.C
 local Enemies = Wanted.Enemies
 
-local function Announce(channel, d)
+-- Local Defense is zone channel 22 in every language; its English name is the fallback
+local LOCAL_DEFENSE_ZONE_CHANNEL = 22
+local HELP_COOLDOWN = 15 -- seconds between calls for help to the same channel
+local MAX_CHAT_LENGTH = 255
+local lastHelp = {}
+
+local function Readable(value)
+	if issecretvalue and issecretvalue(value) then
+		return nil
+	end
+	return value
+end
+
+---The number of the Local Defense channel you're in, or nil (not in one here, e.g. in a city or instance).
+---@return number?
+function EnemyMenu:GetLocalDefenseChannel()
+	for i = 1, MAX_WOW_CHAT_CHANNELS or 20 do
+		local info = C_ChatInfo.GetChannelInfoFromIdentifier and C_ChatInfo.GetChannelInfoFromIdentifier(tostring(i))
+		if info and (Readable(info.zoneChannelID) == LOCAL_DEFENSE_ZONE_CHANNEL or strfind(Readable(info.name) or "", "^LocalDefense")) then
+			return i
+		end
+		local _, name = GetChannelName(i)
+		name = Readable(name)
+		if type(name) == "string" and strfind(name, "^LocalDefense") then
+			return i
+		end
+	end
+	return nil
+end
+
+---Sends plain text to a chat type ("RAID", "PARTY", "GUILD" or "CHANNEL" with its number).
+local function Send(text, chatType, channelNumber)
+	C_ChatInfo.SendChatMessage(strsub(text, 1, MAX_CHAT_LENGTH), chatType, nil, channelNumber and tostring(channelNumber) or nil)
+end
+
+local function Announce(channel, d, channelNumber)
 	-- Plain text only: a chat message with colour codes or links is dropped
 	local parts = { "Enemy: "..d.name }
 	if d.level then
@@ -34,7 +70,90 @@ local function Announce(channel, d)
 	if d.bounty > 0 then
 		tinsert(parts, "- "..Wanted.Bounties:FormatMoney(d.bounty).." bounty")
 	end
-	C_ChatInfo.SendChatMessage(table.concat(parts, " "), channel)
+	Send(table.concat(parts, " "), channel, channelNumber)
+end
+
+---"Need help at The Barrens 62,38 - 3 enemies: Stabby 22 Rogue (on me), Sam 24 Mage, Bob 20 Warrior" in
+---plain text (colour codes or links get a chat message dropped), those attacking you first.
+---@return string
+function EnemyMenu:BuildHelpText()
+	local zone, x, y = Wanted.Recorder:GetPosition()
+	local where = zone or "?"
+	if x then
+		where = format("%s %.0f,%.0f", where, x, y)
+	end
+	local nearby = {}
+	for _, d in ipairs(Enemies:GetNearby()) do
+		tinsert(nearby, d)
+	end
+	-- Whoever is on you first, then the list's own order (active, in sight, gone)
+	for i, d in ipairs(nearby) do
+		d.helpOrder = (d.targetingMe and 0 or 1000) + i
+	end
+	sort(nearby, function(a, b) return a.helpOrder < b.helpOrder end)
+	if #nearby == 0 then
+		return "Need help at "..where.."!"
+	end
+	local text = format("Need help at %s - %d enem%s:", where, #nearby, #nearby == 1 and "y" or "ies")
+	for i, d in ipairs(nearby) do
+		local part = " "..d.name
+		if d.level then
+			part = part.." "..d.level
+		end
+		if d.class then
+			part = part.." "..Theme:ClassLabel(d.class)
+		end
+		if d.targetingMe then
+			part = part.." (on me)"
+		end
+		part = part..(i < #nearby and "," or "")
+		local more = format(" +%d more", #nearby - i)
+		if #text + #part + #more > MAX_CHAT_LENGTH then
+			return text..format(" +%d more", #nearby - i + 1)
+		end
+		text = text..part
+	end
+	return text
+end
+
+---Sends the call for help, at most once per channel every few seconds.
+---@param chatType string "CHANNEL" (Local Defense), "RAID", "PARTY" or "GUILD"
+---@return boolean sent
+function EnemyMenu:CallForHelp(chatType)
+	local channelNumber
+	if chatType == "CHANNEL" then
+		channelNumber = EnemyMenu:GetLocalDefenseChannel()
+		if not channelNumber then
+			Wanted:Print("You're not in a Local Defense channel here.")
+			return false
+		end
+	end
+	local key = chatType..(channelNumber or "")
+	if lastHelp[key] and GetTime() - lastHelp[key] < HELP_COOLDOWN then
+		Wanted:Print("Help was just sent there. Try again in a few seconds.")
+		return false
+	end
+	lastHelp[key] = GetTime()
+	Send(EnemyMenu:BuildHelpText(), chatType, channelNumber)
+	return true
+end
+
+---The call-for-help menu: Local Defense, your raid or party, your guild.
+function EnemyMenu:ShowHelpMenu()
+	local items = {
+		{ text = "Call for help", header = true },
+	}
+	local localDefense = EnemyMenu:GetLocalDefenseChannel()
+	tinsert(items, { text = localDefense and format("Local Defense (/%d)", localDefense) or "Local Defense (not here)", color = C.red, disabled = not localDefense, onClick = function() EnemyMenu:CallForHelp("CHANNEL") end })
+	if IsInRaid and IsInRaid() then
+		tinsert(items, { text = "Your raid", onClick = function() EnemyMenu:CallForHelp("RAID") end })
+	elseif IsInGroup and IsInGroup() then
+		tinsert(items, { text = "Your party", onClick = function() EnemyMenu:CallForHelp("PARTY") end })
+	end
+	if IsInGuild and IsInGuild() then
+		tinsert(items, { text = "Your guild", onClick = function() EnemyMenu:CallForHelp("GUILD") end })
+	end
+	W:Menu(items)
 end
 
 function EnemyMenu:SetReason(d)
@@ -77,8 +196,12 @@ function EnemyMenu:Show(d)
 	local canParty = IsInGroup and IsInGroup()
 	local canRaid = IsInRaid and IsInRaid()
 	local canGuild = IsInGuild and IsInGuild()
-	if canParty or canGuild then
+	local localDefense = EnemyMenu:GetLocalDefenseChannel()
+	if canParty or canGuild or localDefense then
 		tinsert(items, "-")
+		if localDefense then
+			tinsert(items, { text = "Tell Local Defense", onClick = function() Announce("CHANNEL", d, localDefense) end })
+		end
 		if canRaid then
 			tinsert(items, { text = "Tell your raid", onClick = function() Announce("RAID", d) end })
 		elseif canParty then

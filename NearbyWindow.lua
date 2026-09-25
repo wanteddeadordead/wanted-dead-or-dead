@@ -28,6 +28,7 @@ local NORMAL_ROWS, COMPACT_ROWS = 10, 16
 local MAX_ROWS = COMPACT_ROWS
 local COMPACT_ABOVE = 8 -- more enemies than this switches to single-line rows
 local FOOTER_GAP = 8 -- space above the footer text (a divider sits in it) and below it
+local HELP_HEIGHT = 30 -- the Call for help bar under the Nearby list
 local VIEWS = {
 	{ key = "nearby", label = "Nearby" },
 	{ key = "hour", label = "Last hour" },
@@ -213,6 +214,11 @@ function private.Create()
 	private.footer:SetWordWrap(true)
 	private.footer:SetJustifyV("BOTTOM")
 	private.footer:SetSpacing(2)
+	-- Call for help: always there on the Nearby tab (the window can't change size in combat, when it's needed)
+	private.help = W:Button(frame, "Call for help", "danger", WIDTH - 12, 24, function()
+		Wanted.EnemyMenu:ShowHelpMenu()
+	end)
+	W:AttachTooltip(private.help, "Call for help", "Posts where you are and who's around to Local Defense, your party or raid, or your guild. Plain text, only when you click.")
 	private.footerLine = Theme:Line(frame)
 	private.footerLine:SetPoint("LEFT", 1, 0)
 	private.footerLine:SetPoint("RIGHT", -1, 0)
@@ -441,6 +447,13 @@ function Nearby:Refresh()
 	private.footer:SetText(overflow and private.FooterText(items, capacity) or "")
 	private.footerLine:SetShown(overflow)
 	local footerHeight = overflow and (ceil(private.footer:GetStringHeight()) + FOOTER_GAP * 2) or 8
+	local showHelp = view == "nearby"
+	private.help:SetShown(showHelp)
+	if showHelp then
+		private.help:ClearAllPoints()
+		private.help:SetPoint("BOTTOM", 0, footerHeight)
+		footerHeight = footerHeight + HELP_HEIGHT
+	end
 	private.frame:SetHeight(HEADER + numRows * rowHeight + footerHeight)
 	for i, row in ipairs(private.rows) do
 		if row.layoutKey ~= (compact and "c" or "n")..(private.Show().icon and "i" or "") then

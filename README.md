@@ -57,8 +57,8 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
 - **Trust.** A claim needs the killer's own client; a second client that saw the death makes it witnessed.
   The game stamps who sent each message, so nobody can speak for someone else. Reports weigh by the
   reporter's own record.
-- **No public chat.** The addon never posts in General, Trade or any public channel. The only chat it sends
-  is when you press "Tell your party / raid / guild" yourself.
+- **Chat only when you click.** The addon never posts in General or Trade. The only chat it sends is when
+  you press "Call for help" or "Tell ..." yourself: to Local Defense, your party or raid, or your guild.
 
 ## Good to know
 

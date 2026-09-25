@@ -533,6 +533,8 @@ function W:Dialog(options)
 	local messageHeight = ceil(frame.message:GetStringHeight() or 0)
 	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + (options.input and 52 or 12) + 60))
 	dialog:Show()
+	-- In front of anything else full screen (the wanted poster)
+	dialog:Raise()
 	if options.input then
 		frame.input:SetFocus()
 	end

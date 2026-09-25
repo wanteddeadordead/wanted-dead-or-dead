@@ -1160,6 +1160,15 @@ posterButtons["Take screenshot"]:GetScript("OnClick")(posterButtons["Take screen
 check(not posterFrame.buttons:IsShown(), "the buttons hide for the shot")
 RunTimers()
 check(screenshots == shotsBefore + 1 and posterFrame.buttons:IsShown(), "the screenshot is taken and the buttons come back")
+-- Set amount: any gold, just for fun, marked "(allegedly)"; Real amount puts the true total back
+local amountButton = posterButtons["Set amount"]
+amountButton:GetScript("OnClick")(amountButton)
+check(lastDialog and lastDialog.validate("lots") and lastDialog.validate("0") and lastDialog.validate("2000000"), "the amount must be real gold")
+ConfirmDialog("1,250g")
+check(posterFrame.reward:GetText() == ns.Bounties:FormatMoney(12500000) and posterFrame.rewardNote:GetText() == "(allegedly)", "a made-up reward, allegedly: "..tostring(posterFrame.reward:GetText()))
+check(amountButton:GetText() == "Real amount", "the button offers the real amount back")
+amountButton:GetScript("OnClick")(amountButton)
+check(posterFrame.reward:GetText() == ns.Bounties:FormatMoney(45000) and amountButton:GetText() == "Set amount", "Real amount puts the true total back")
 posterButtons["Close"]:GetScript("OnClick")(posterButtons["Close"])
 check(not ns.Poster:IsShown(), "Close hides the poster")
 -- Fresh start: every shared record gone, the record chain starts again, the rest stays

@@ -4,7 +4,7 @@
 
 - Your wanted poster (/wanted poster, or Your bounties > Your wanted poster): your character on a painted
   poster with the price on your head, every bounty the other faction has posted on you, paid or not. Take
-  screenshot saves it for sharing.
+  screenshot saves it for sharing; Set amount shows any reward you like, allegedly.
 - Bounty notices across factions: Battle.net friends on the other faction who also run Wanted pass on the
   bounties each side posts on the other, as hidden game data, never chat. You get an alert when a price is
   put on your head. /wanted bridge shows who is carrying them; Settings > Sharing turns it off.

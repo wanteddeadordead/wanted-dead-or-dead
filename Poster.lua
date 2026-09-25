@@ -11,6 +11,7 @@ local W = Wanted.Widgets
 local private = {
 	frame = nil,
 	shooting = false,
+	customAmount = nil, -- copper; a made-up reward to show instead, just for fun (never saved or shared)
 }
 local TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\poster"
 -- The painting fills the top of a 512x1024 texture; its own shape, and where its empty spaces are, as
@@ -22,6 +23,7 @@ local NAME_BAND = { 0.17, 0.645, 0.83, 0.705 }
 local REWARD_BAND = { 0.17, 0.755, 0.83, 0.82 }
 local INK = { 0.17, 0.1, 0.06 }
 local SEPIA = { 1, 0.86, 0.66 } -- multiplied over the portrait so the live model looks printed
+local MAX_CUSTOM_GOLD = 1000000
 
 
 
@@ -137,14 +139,19 @@ function private.GetFrame()
 	frame.credit = Theme:Text(frame, "small", "Wanted: Dead or... Dead  -  a World PvP addon for WoW Forever", { 0.85, 0.78, 0.66 })
 	frame.credit:SetPoint("TOP", painting, "BOTTOM", 0, -10)
 	local buttons = CreateFrame("Frame", nil, frame)
-	buttons:SetSize(300, 30)
+	buttons:SetSize(420, 30)
 	buttons:SetPoint("TOP", frame.credit, "BOTTOM", 0, -12)
 	frame.buttons = buttons
 	local shoot = W:Button(buttons, "Take screenshot", "primary", 150, 28, function()
 		private.TakeScreenshot()
 	end)
 	shoot:SetPoint("LEFT")
-	local close = W:Button(buttons, "Close", "secondary", 130, 28, function()
+	frame.amountButton = W:Button(buttons, "Set amount", "secondary", 130, 28, function()
+		private.ToggleCustomAmount()
+	end)
+	frame.amountButton:SetPoint("LEFT", shoot, "RIGHT", 10, 0)
+	W:AttachTooltip(frame.amountButton, "Set amount", "Just for fun: show any reward you like on your poster. Nothing is saved or shared.")
+	local close = W:Button(buttons, "Close", "secondary", 110, 28, function()
 		frame:Hide()
 	end)
 	close:SetPoint("RIGHT")
@@ -170,14 +177,53 @@ function private.Fill(frame)
 		tinsert(who, "<"..guild..">")
 	end
 	frame.who:SetText(table.concat(who, "  "))
+	frame.amountButton:SetText(private.customAmount and "Real amount" or "Set amount")
 	local total, count, posters = Wanted.Bridge:GetPriceOnMe()
-	if total > 0 then
+	if private.customAmount then
+		frame.reward:SetText(Wanted.Bounties:FormatMoney(private.customAmount))
+		frame.rewardNote:SetText("(allegedly)")
+	elseif total > 0 then
 		frame.reward:SetText(Wanted.Bounties:FormatMoney(total))
 		frame.rewardNote:SetText(format("%d bount%s from %d player%s", count, count == 1 and "y" or "ies", posters, posters == 1 and "" or "s"))
 	else
 		frame.reward:SetText("No price on your head yet")
 		frame.rewardNote:SetText("")
 	end
+end
+
+
+
+---Gold typed by the player ("5000", "1,250", "75g"), in copper, or nil.
+function private.ParseGold(text)
+	local gold = tonumber((gsub(gsub(text or "", "[,%s]", ""), "[gG]$", "")))
+	if not gold or gold <= 0 or gold > MAX_CUSTOM_GOLD then
+		return nil
+	end
+	return floor(gold * 10000 + 0.5)
+end
+
+---Asks for a made-up reward, or goes back to the real one.
+function private.ToggleCustomAmount()
+	if private.customAmount then
+		private.customAmount = nil
+		private.Fill(private.frame)
+		return
+	end
+	W:Dialog({
+		title = "Set the amount",
+		text = "Just for fun: the reward to show on your poster, in gold. It isn't saved or shared, and Real amount puts the true one back.",
+		input = { placeholder = "Gold, e.g. 5000" },
+		confirmLabel = "Show it",
+		validate = function(value)
+			if not private.ParseGold(value) then
+				return format("Enter an amount of gold from 1 to %s.", BreakUpLargeNumbers and BreakUpLargeNumbers(MAX_CUSTOM_GOLD) or MAX_CUSTOM_GOLD)
+			end
+		end,
+		onConfirm = function(value)
+			private.customAmount = private.ParseGold(value)
+			private.Fill(private.frame)
+		end,
+	})
 end
 
 

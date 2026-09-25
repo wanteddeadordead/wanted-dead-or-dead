@@ -391,7 +391,10 @@ STAB.targetsMe = true
 local deathsBefore = 0
 for _ in ns.Store:Iterator("death") do deathsBefore = deathsBefore + 1 end
 clock = clock + 60
+STAB.dead = true
 Fire("UNIT_DIED", "Player-9-ENEMY")
+RunTimers()
+STAB.dead = nil
 local deathsAfter = 0
 for _ in ns.Store:Iterator("death") do deathsAfter = deathsAfter + 1 end
 check(deathsAfter == deathsBefore + 1, "UNIT_DIED records a witnessed death")
@@ -579,9 +582,16 @@ check(CountDeaths() == deathsNow, "a corpse at first sight records no death")
 enemyUnits.nameplate31 = { guid = "Player-9-DIESNOW", name = "About Todie", class = "MAGE", level = 20 }
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate31")
 Fire("UNIT_HEALTH", "nameplate31")
+-- Feign Death: down, then up again before the death is confirmed
 enemyUnits.nameplate31.dead = true
 Fire("UNIT_HEALTH", "nameplate31")
-check(CountDeaths() == deathsNow + 1, "seen alive, then dead: one death")
+enemyUnits.nameplate31.dead = nil
+RunTimers()
+check(CountDeaths() == deathsNow, "Feign Death isn't a death")
+enemyUnits.nameplate31.dead = true
+Fire("UNIT_HEALTH", "nameplate31")
+RunTimers()
+check(CountDeaths() == deathsNow + 1, "seen alive, then dead and still dead: one death")
 Fire("UNIT_HEALTH", "nameplate31")
 check(CountDeaths() == deathsNow + 1, "the corpse doesn't die twice")
 enemyUnits.nameplate30, enemyUnits.nameplate31 = nil, nil

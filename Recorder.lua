@@ -13,6 +13,7 @@ local private = {
 	lastSighting = {}, -- guid -> time
 	recentDeaths = {}, -- guid -> time the death was recorded
 	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
+	confirming = {}, -- guid -> true while a death waits to be confirmed
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	playerGUID = nil,
 	playerFaction = nil,
@@ -21,6 +22,9 @@ local private = {
 local SIGHTING_INTERVAL = 30
 -- One death per victim within this window, however many units show it
 local DEATH_DEDUPE_SECONDS = 15
+-- A death is confirmed this long after it's seen: a hunter's Feign Death looks exactly like dying, but they're
+-- up again by then. Nobody comes back from a real death that fast (a ghost that released drops out of view).
+local DEATH_CONFIRM_SECONDS = 4
 -- The server's honor message arrives within this long of the death
 local HONOR_MATCH_WINDOW = 10
 local MAX_LOG_LINES = 20
@@ -188,7 +192,37 @@ function private.CheckDeath(unit)
 		return
 	end
 	private.seenAlive[guid] = nil
-	private.RecordDeath(guid, GetUnitName(unit, true))
+	private.ConfirmDeath(guid, GetUnitName(unit, true))
+end
+
+---Whether a player is in view and alive right now.
+function private.IsAliveNow(guid)
+	for unit, trackedGuid in pairs(private.tracked) do
+		if trackedGuid == guid and UnitGUID(unit) == guid then
+			local dead = UnitIsDeadOrGhost(unit)
+			if dead == false then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+---Records a death once it has lasted a few seconds, so Feign Death doesn't count.
+function private.ConfirmDeath(guid, name)
+	if private.confirming[guid] then
+		return
+	end
+	private.confirming[guid] = true
+	C_Timer.After(DEATH_CONFIRM_SECONDS, function()
+		private.confirming[guid] = nil
+		if private.IsAliveNow(guid) then
+			Wanted:Log("Recorder: %s got up again (Feign Death), not a death", tostring(name))
+			private.seenAlive[guid] = true
+			return
+		end
+		private.RecordDeath(guid, name)
+	end)
 end
 
 ---Remembers that a watched enemy was alive when seen.
@@ -223,7 +257,7 @@ function private.OnUnitDied(guid)
 		end
 		player = { name = name, class = class }
 	end
-	private.RecordDeath(guid, player.name)
+	private.ConfirmDeath(guid, player.name)
 end
 
 function private.RecordDeath(guid, name)

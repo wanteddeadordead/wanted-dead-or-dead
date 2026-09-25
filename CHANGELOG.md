@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- New logo and icon: a bounty notice pinned by a jewelled dagger (addon list, minimap button, options).
+
 ## [0.1.0-beta.2] - 2026-09-25
 
 - Quiet mode (Settings > Alerts > Only when I can be attacked): alerts, the TARGETED warning and the Nearby

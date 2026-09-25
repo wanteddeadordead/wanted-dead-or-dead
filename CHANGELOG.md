@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-25
+
 - A realm link ends as soon as the other player logs off, instead of whispering to them for a while (and
   their "No player named ... is currently playing" is hidden). A quiet link now times out after 3 minutes.
+
 ## [1.0.0] - 2026-09-25
 
 The first stable release, for WoW Forever (client 1.60.x). Everything from the betas, plus:

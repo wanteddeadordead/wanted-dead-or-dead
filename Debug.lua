@@ -41,6 +41,24 @@ function Debug:SimulateReputation()
 		Store:UpdatePlayer(guid, { name = def[1], class = def[2], level = def[3], faction = "Alliance", guild = "Crimson Vanguard", zone = zone, mapId = mapId, x = x, y = y })
 		targets[i] = { guid = guid, name = def[1], level = def[3] }
 	end
+	-- Ten days of made-up whereabouts for each target, mostly evenings, across a few zones
+	local zones = { { zone, mapId, x or 50, y or 50 }, { "Ashenvale", 1440, 70, 60 }, { "Stonetalon Mountains", 1442, 60, 55 } }
+	local spotters = { nil, "Tobin Greaves", "Maribel Stonehollow" }
+	for i, target in ipairs(targets) do
+		local list = {}
+		for d = 10, 0, -1 do
+			for n = 1, 2 + (i + d) % 3 do
+				local hour = 19 + (n + i + d) % 5
+				local t = now - d * day - (now % day) + hour * 3600 + n * 900
+				if t < now then
+					local z = zones[(n + d + i) % #zones + 1]
+					tinsert(list, { t = t, zone = z[1], mapId = z[2], x = z[3] + n, y = z[4] - n, by = spotters[(n + d) % #spotters + 1] })
+				end
+			end
+		end
+		sort(list, function(a, b) return a.t < b.t end)
+		Wanted.db.tracks[target.guid] = list
+	end
 	local function Bounty(poster, target, amount, t)
 		return Store:InsertTest("bounty", poster, { target = target.guid, targetName = target.name, amount = amount, level = target.level, zone = zone }, t)
 	end

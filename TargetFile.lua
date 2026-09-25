@@ -259,7 +259,12 @@ function TargetFile:ShowPlayer(guid, name)
 	frame.bounty:SetText(text)
 	frame.post:SetText(#bounties > 0 and "Add a bounty" or "Post a bounty")
 	frame.post:Show()
-	private.FillSummary(frame, Tracks:Get(guid), Tracks:GetDeaths(guid), Wanted.Enemies:GetStats(guid))
+	local entries = Tracks:Get(guid)
+	if #entries == 0 and player.lastSeen then
+		-- No history kept yet: at least where the records last put them
+		entries = { { t = player.lastSeen, zone = player.zone, mapId = player.mapId, x = player.x, y = player.y, by = player.seenBy } }
+	end
+	private.FillSummary(frame, entries, Tracks:GetDeaths(guid), Wanted.Enemies:GetStats(guid))
 	frame:Show()
 	frame:Raise()
 end

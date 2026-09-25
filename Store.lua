@@ -255,6 +255,11 @@ function Store:PurgeTest()
 			db.sightings[i] = nil
 		end
 	end
+	for guid in pairs(db.tracks or {}) do
+		if strsub(guid, 1, 12) == "Player-TEST-" then
+			db.tracks[guid] = nil
+		end
+	end
 	return removed
 end
 
@@ -366,11 +371,14 @@ function Store:SightingIterator()
 	local db = Wanted.db
 	local i = 0
 	return function()
-		i = i + 1
-		if i > MAX_SIGHTINGS then
-			return nil
+		-- Skips gaps (a purge of test sightings leaves some) rather than stopping at them
+		while i < MAX_SIGHTINGS do
+			i = i + 1
+			local sighting = db.sightings[(db.sightingsPos - i) % MAX_SIGHTINGS + 1]
+			if sighting then
+				return sighting
+			end
 		end
-		local index = (db.sightingsPos - i) % MAX_SIGHTINGS + 1
-		return db.sightings[index]
+		return nil
 	end
 end

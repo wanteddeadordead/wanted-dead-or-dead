@@ -694,8 +694,10 @@ for _, item in ipairs(ns.Model:GetMyBounties()) do
 	ns.Rows:ShowBountyTooltip(NewMock(), item)
 end
 check(kaelenProof, "Kaelen's test claim has a proof")
+check(#ns.Tracks:Get("Player-TEST-00000101") >= 10 and ns.Tracks:Summarize(ns.Tracks:Get("Player-TEST-00000101")).days >= 5, "the rep test data gives its targets a history")
 ns.UI:Show("settings")
 ns:RunCommand("purge", "")
+check(ns.db.tracks["Player-TEST-00000101"] == nil, "purge clears test histories")
 -- Your hunts: a bounty you hunt shows there with its time left, and can be renewed or stopped
 local huntBounty = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { target = "Player-9-OTHER", targetName = "Sneaky Pete", amount = 6000, level = 20, zone = "The Barrens" }, clock - 60)
 check(#ns.Model:GetMyHunts() == 0 or not ns.Model:GetBountyInfo(huntBounty).iHunt, "not hunting it yet")

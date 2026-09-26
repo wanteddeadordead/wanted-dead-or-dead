@@ -16,6 +16,9 @@ Wanted.BETA = false
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
 Wanted.DB_VERSION = 1
+-- Which game world the saved data belongs to. The first time a release for the live game loads beta data,
+-- it keeps the settings and drops the rest (docs/DATA.md). The launch release sets this to "live".
+Wanted.WORLD = "beta"
 
 local DEFAULTS = {
 	version = Wanted.DB_VERSION,
@@ -163,11 +166,29 @@ function Wanted:LoadSavedData()
 			WantedDB.version = step
 		end
 		WantedDB.version = Wanted.DB_VERSION
+		private.EnterWorld(WantedDB)
 	end
 	CopyDefaults(db, DEFAULTS)
 	Wanted.db = db
 	private.FixSettings(db)
 	private.CheckRequiredUpdate(db)
+end
+
+-- What survives the move from the beta to the live game: the player's settings, not the beta's characters
+local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, devLog = true }
+
+---Drops the beta's data the first time a release for the live game loads it, keeping the settings (decided
+---with Chris 2026-09-26 for the launch reset). Data saved in the live world is never touched.
+function private.EnterWorld(db)
+	local saved = db.world or "beta"
+	if saved == "beta" and Wanted.WORLD ~= "beta" then
+		for key in pairs(db) do
+			if not KEPT_FOR_NEW_WORLD[key] then
+				db[key] = nil
+			end
+		end
+	end
+	db.world = Wanted.WORLD
 end
 
 ---Whether this session is running without saving because the saved data came from a newer version.

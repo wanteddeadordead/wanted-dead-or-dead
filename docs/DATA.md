@@ -19,7 +19,14 @@ Rules for a change:
 2. **Renaming, moving, removing or changing the meaning** of saved data: bump `DB_VERSION`, add
    `MIGRATIONS[n] = function(db) ... end` that turns layout n-1 into n without losing anything it can keep,
    and add a smoke test that loads a table in the old layout and checks the result.
-3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration.
+3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration. The one exception is
+   the move from the beta to the live game, below.
+
+`WantedDB.world` (from 1.1.0) says which game world the data belongs to: `"beta"` (also assumed when it's
+missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for. The first time a release for
+the live game loads beta data, it keeps `settings` (and `welcomed`) and drops everything else: records,
+bounties, players, Kill on Sight, Ignore, chains, sightings and the rest belong to beta characters that no
+longer exist. The website and network are reset at the same time. Live data is never dropped this way.
 
 `bounty` records (from 0.1.0-beta.8) can also carry the poster's notes on the target: `class`, `race`,
 `faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target

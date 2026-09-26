@@ -14,12 +14,12 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
    - Summary (short line): "[Beta] World PvP bounties, enemy awareness and reputation for WoW Forever,
      shared player to player."
    - Description: the short beta line, then the Features and How it works sections of `README.md`.
-   - Issues URL: <https://github.com/dazedpro/wanted-dead-or-dead/issues> (so CurseForge's "Issues" link
+   - Issues URL: <https://github.com/wanteddeadordead/wanted-dead-or-dead/issues> (so CurseForge's "Issues" link
      goes to the bug report form).
    - Primary category: PvP. Secondary: Combat, Chat & Communication.
    - License: MIT.
    - Logo: `docs/media/logo.png` (400 x 400).
-   - Source: <https://github.com/dazedpro/wanted-dead-or-dead>, issues on the same repository.
+   - Source: <https://github.com/wanteddeadordead/wanted-dead-or-dead>, issues on the same repository.
    CurseForge reviews new projects before they go public (usually within a few days).
 2. Put the project ID into `WantedDeadOrDead.toc` as `## X-Curse-Project-ID: <id>` and commit it.
 3. Create an API token at <https://authors.curseforge.com/account/api-tokens>, then add it to this

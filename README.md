@@ -1,7 +1,7 @@
 # Wanted: Dead or... Dead
 
 > Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type `/wanted bug`)
-> and [open a report](https://github.com/dazedpro/wanted-dead-or-dead/issues/new/choose).
+> and [open a report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose).
 
 World PvP bounties, enemy awareness and reputation for **WoW Forever**, shared player to player.
 

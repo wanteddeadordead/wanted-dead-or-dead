@@ -1515,4 +1515,36 @@ ns:RunCommand("freshstart", "")
 ns.Poster:Show()
 check(WantedPosterFrame.reward:GetText() == "No price on your head yet", "with no bounties the poster says so")
 ns.Poster:Hide()
+-- /wanted link: a link record with the code and our GUID, for the desktop app to tie this character to its key
+local function LinkRecords() local out = {} for r in ns.Store:Iterator("link") do out[#out + 1] = r end return out end
+ns:RunCommand("link", "ab12cd34")
+local links = LinkRecords()
+check(#links == 1 and links[1].data.code == "AB12CD34" and links[1].data.guid == "Player-1-ME", "link makes a record with the code and our GUID")
+ns:RunCommand("link", "x!")
+ns:RunCommand("link", "")
+check(#LinkRecords() == 1, "a malformed code makes no record")
+-- Records straight from their origin are marked live; relayed ones aren't, whatever flags they arrive with
+local function Rec(origin, seq, extra)
+	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock, data = { bounty = "b"..seq } }
+	for k, v in pairs(extra or {}) do r[k] = v end
+	return r
+end
+ns.Store:Merge(Rec("Live Origin", 1), "Live Origin")
+check(ns.db.records["Live Origin:1"].live == true, "a record from its origin is live")
+ns.Store:MergeRelayed(Rec("Relay Origin", 1, { live = true, tampered = true, brokenChain = true }))
+local relayed = ns.db.records["Relay Origin:1"]
+check(relayed and not relayed.live, "a relayed record is not live, even if it says so")
+check(not relayed.brokenChain, "flags a sender set are not kept")
+ns.Store:Merge(Rec("Relay Origin", 1), "Relay Origin")
+check(ns.db.records["Relay Origin:1"].live == true, "a relayed record later heard from its origin becomes live")
+ns.Store:MergeRelayed(Rec("Relay Origin", 1))
+check(ns.db.records["Relay Origin:1"].live == true, "and stays live")
+-- /wanted status says where saved data came from when the desktop app had to restore it
+WantedRestoreFilled = { WantedDB = true }
+local before = #printed
+ns:RunCommand("status", "")
+local saysRestored = false
+for i = before + 1, #printed do if printed[i]:find("restored by the desktop app", 1, true) then saysRestored = true end end
+check(saysRestored, "status names the desktop app's restore")
+WantedRestoreFilled = nil
 print("wanted smoke: all checks pass")

@@ -58,6 +58,14 @@ Released builds never write it (it lives in `Debug.lua`, which packages leave ou
   readers take the highest amount per `bounty`. `WantedDB.seenNotices` (bounty id -> amount) remembers which
   bounties on this player have been announced.
 
+`link` records (from 1.1.0) tie a character to a Wanted desktop app key: `code` (the code the app showed) and
+`guid` (the character's own). The network confirms the link when another player's app uploads the record
+marked `live`.
+
+A received record's `live` flag (from 1.1.0) is local, like `tampered` and `brokenChain`: set when the record
+came straight from its origin (the game stamped the sender), never taken from what a sender says. Clients drop
+all three flags from incoming records and work them out themselves.
+
 ## Fresh start (development builds)
 
 `/wanted freshstart` deletes every shared record on the client and starts its record chain again. Only

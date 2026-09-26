@@ -229,6 +229,51 @@ function Recorder:GetKnownGuild(guid)
 	return player and player.guild or nil
 end
 
+---A value the client let us read, or nil for a hidden (secret) one.
+function private.Readable(value)
+	if value == nil or (issecretvalue and issecretvalue(value)) then
+		return nil
+	end
+	return value
+end
+
+---Adds what the client knows of a player to a record's data, under "victim" or "killer": class and race
+---(the client's file names, e.g. ROGUE and Scourge), the level last seen and faction. Unknown ones are left out.
+---@param data table
+---@param prefix string
+---@param guid string?
+---@return table data
+function private.AddTraits(data, prefix, guid)
+	local player = guid and Store:GetPlayer(guid)
+	local class, race
+	if guid and strfind(guid, "^Player%-") then
+		local _, classFile, _, raceFile = GetPlayerInfoByGUID(guid)
+		class, race = private.Readable(classFile), private.Readable(raceFile)
+	end
+	local level = player and player.level
+	data[prefix.."Class"] = class or (player and player.class) or nil
+	data[prefix.."Race"] = race
+	data[prefix.."Level"] = type(level) == "number" and level > 0 and level or nil
+	data[prefix.."Faction"] = player and player.faction or nil
+	if prefix == "victim" and not data.victimFaction and private.playerFaction then
+		-- Only enemies are recorded as victims
+		data.victimFaction = private.playerFaction == "Horde" and "Alliance" or "Horde"
+	end
+	return data
+end
+
+---Adds our own class, race, level and faction to a record's data as the killer.
+---@param data table
+---@return table data
+function private.AddOwnTraits(data)
+	local level = private.Readable(UnitLevel("player"))
+	data.killerClass = private.Readable((select(2, UnitClass("player"))))
+	data.killerRace = private.Readable((select(2, UnitRace("player"))))
+	data.killerLevel = type(level) == "number" and level > 0 and level or nil
+	data.killerFaction = private.playerFaction
+	return data
+end
+
 function private.InOpenWorld()
 	return not IsInInstance()
 end
@@ -382,7 +427,7 @@ function private.RecordDeath(guid, name)
 	local deathId = Store:Hash(strjoin("|", guid, zone, floor(t / 10)))
 	Wanted:Log("Recorder: death of %s in %s", tostring(name), zone)
 	Store:UpdatePlayer(guid, { name = name })
-	Store:NewRecord("death", {
+	Store:NewRecord("death", private.AddTraits({
 		deathId = deathId,
 		victim = guid,
 		victimName = name,
@@ -390,7 +435,7 @@ function private.RecordDeath(guid, name)
 		zone = zone,
 		x = x,
 		y = y,
-	})
+	}, "victim", guid))
 	return deathId
 end
 
@@ -428,7 +473,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 	if attackerGUID == private.playerGUID or attackerGUID == UnitGUID("pet") then
 		Wanted:Log("Recorder: party kill by you of %s in %s", name, zone)
 		private.recentOwnKill[targetGUID] = GetTime()
-		Store:NewRecord("kill", {
+		Store:NewRecord("kill", private.AddOwnTraits(private.AddTraits({
 			killer = private.playerGUID,
 			killerName = Store:GetOrigin(),
 			killerGuild = Recorder:GetUnitGuild("player"),
@@ -439,7 +484,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			zone = zone,
 			x = x,
 			y = y,
-		})
+		}, "victim", targetGUID)))
 		if Wanted.Enemies then
 			Wanted.Enemies:NoteWin(targetGUID)
 		end
@@ -450,7 +495,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 		end
 		Wanted:Log("Recorder: party kill by %s of %s in %s", tostring(killerName), name, zone)
 		private.recentDeaths[targetGUID] = GetTime()
-		Store:NewRecord("death", {
+		local data = private.AddTraits(private.AddTraits({
 			deathId = deathId,
 			victim = targetGUID,
 			victimName = victim and victim.name or name,
@@ -460,7 +505,10 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			zone = zone,
 			x = x,
 			y = y,
-		})
+		}, "victim", targetGUID), "killer", attackerGUID)
+		-- A party member is on our side
+		data.killerFaction = data.killerFaction or private.playerFaction
+		Store:NewRecord("death", data)
 	end
 end
 
@@ -512,7 +560,7 @@ function private.HandleHonorGain(text)
 	if guid then
 		Store:UpdatePlayer(guid, { name = victimName })
 	end
-	Store:NewRecord("kill", {
+	Store:NewRecord("kill", private.AddOwnTraits(private.AddTraits({
 		killer = private.playerGUID,
 		killerName = Store:GetOrigin(),
 		killerGuild = Recorder:GetUnitGuild("player"),
@@ -524,7 +572,7 @@ function private.HandleHonorGain(text)
 		x = x,
 		y = y,
 		honor = true,
-	})
+	}, "victim", guid)))
 end
 
 

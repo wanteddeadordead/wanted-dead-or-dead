@@ -130,9 +130,9 @@ enemyUnits = {}
 local function enemy(unit) return enemyUnits[unit] end
 function GetUnitName(unit) local e = enemy(unit) return e and e.name end
 function UnitIsEnemy(_, unit) return enemy(unit) ~= nil end
-function UnitClass(unit) local e = enemy(unit) return e and "Rogue", e and e.class end
+function UnitClass(unit) if unit == "player" then return "Warrior", "WARRIOR" end local e = enemy(unit) return e and "Rogue", e and e.class end
 function UnitLevel(unit) local e = enemy(unit) return e and e.level or 10 end
-function UnitRace(unit) local e = enemy(unit) return e and "Human", e and (e.raceFile or "Human") end
+function UnitRace(unit) if unit == "player" then return "Orc", "Orc" end local e = enemy(unit) return e and "Human", e and (e.raceFile or "Human") end
 function UnitHealth(unit) return enemy(unit) and 50 or 100 end
 function UnitHealthMax() return 100 end
 function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and e.targetsMe and b == "player") and true or false end
@@ -501,10 +501,21 @@ check(ns.Enemies:GetStats("Player-9-ENEMY").wins == 1, "win counted from the kil
 local killRecorded = false
 for record in ns.Store:Iterator("kill") do if record.data.victim == "Player-9-ENEMY" then killRecorded = true end end
 check(killRecorded, "kill record from the kill event")
+local ownKill
+for record in ns.Store:Iterator("kill") do if record.data.victim == "Player-9-ENEMY" then ownKill = record.data end end
+check(ownKill.victimClass == "ROGUE" and ownKill.victimRace == "Human" and ownKill.victimLevel == 19 and ownKill.victimFaction == "Alliance",
+	"the kill names the victim's class, race, level and faction")
+check(ownKill.killerClass == "WARRIOR" and ownKill.killerRace == "Orc" and ownKill.killerLevel == 10 and ownKill.killerFaction == "Horde",
+	"the kill names our own class, race, level and faction")
 Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Stabby Mcstab dies, honorable kill Rank: Private")
 local kills = 0
 for record in ns.Store:Iterator("kill") do if record.data.victim == "Player-9-ENEMY" then kills = kills + 1 end end
 check(kills == 1, "honor message doesn't duplicate the kill")
+Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Never Seen dies, honorable kill Rank: Private")
+local unseen
+for record in ns.Store:Iterator("kill") do if record.data.victimName == "Never Seen" then unseen = record.data end end
+check(unseen and unseen.victimFaction == "Alliance" and unseen.victimClass == nil and unseen.killerClass == "WARRIOR",
+	"an honor kill of someone never seen still names their faction and ours, and guesses nothing else")
 -- They kill us: the one enemy targeting us gets the loss
 ns.Enemies:SetIgnored("Player-9-ENEMY", "Stabby Mcstab", false)
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
@@ -543,11 +554,18 @@ STAB.dead = nil
 local deathsAfter = 0
 for _ in ns.Store:Iterator("death") do deathsAfter = deathsAfter + 1 end
 check(deathsAfter == deathsBefore + 1, "UNIT_DIED records a witnessed death")
+local seenDeath
+for record in ns.Store:Iterator("death") do seenDeath = record.data end
+check(seenDeath.victimClass == "ROGUE" and seenDeath.victimLevel == 19 and seenDeath.victimFaction == "Alliance" and seenDeath.killerClass == nil,
+	"a witnessed death names the victim's class, level and faction")
 -- A party member's kill is a witnessed death naming the killer
 Fire("PARTY_KILL", "Player-2-FRIEND", "Player-9-ENEMY")
 local witnessed = false
-for record in ns.Store:Iterator("death") do if record.data.killer == "Player-2-FRIEND" then witnessed = true end end
+local partyDeath
+for record in ns.Store:Iterator("death") do if record.data.killer == "Player-2-FRIEND" then witnessed, partyDeath = true, record.data end end
 check(witnessed, "party kill recorded as a witnessed death")
+check(partyDeath.victimClass == "ROGUE" and partyDeath.killerFaction == "Horde" and partyDeath.killerClass == nil,
+	"a party member's kill names the victim and our faction for the killer, no guessed class")
 -- A sighting shared by another user
 ns.Enemies:OnSharedSighting({ g = "Player-9-OTHER", n = "Sneaky Pete", c = "MAGE", l = 20, z = "The Barrens", m = 10, x = 50, y = 40 }, "Some Friend")
 check(ns.Store:GetPlayer("Player-9-OTHER").name == "Sneaky Pete", "shared sighting stored")

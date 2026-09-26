@@ -65,7 +65,8 @@ marked `live`.
 `kill` and `death` records (from 1.1.0) can also carry what the recording client knew of each side:
 `victimClass`, `victimRace`, `victimLevel`, `victimFaction`, and the same four for `killer`. Class and race are
 the client's file names (`ROGUE`, `Scourge`), level is the last one seen, faction is `Horde` or `Alliance`. Any
-of them can be missing, and records from before 1.1.0 have none.
+of them can be missing, and records from before 1.1.0 have none. The recording player's own `kill` records
+also carry `killerGroup`: how many were in their group, 1 when alone (a raid counts everyone in it).
 
 A received record's `live` flag (from 1.1.0) is local, like `tampered` and `brokenChain`: set when the record
 came straight from its origin (the game stamped the sender), never taken from what a sender says. Clients drop

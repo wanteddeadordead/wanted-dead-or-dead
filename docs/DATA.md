@@ -62,6 +62,11 @@ Released builds never write it (it lives in `Debug.lua`, which packages leave ou
 `guid` (the character's own). The network confirms the link when another player's app uploads the record
 marked `live`.
 
+`kill` and `death` records (from 1.1.0) can also carry what the recording client knew of each side:
+`victimClass`, `victimRace`, `victimLevel`, `victimFaction`, and the same four for `killer`. Class and race are
+the client's file names (`ROGUE`, `Scourge`), level is the last one seen, faction is `Horde` or `Alliance`. Any
+of them can be missing, and records from before 1.1.0 have none.
+
 A received record's `live` flag (from 1.1.0) is local, like `tampered` and `brokenChain`: set when the record
 came straight from its origin (the game stamped the sender), never taken from what a sender says. Clients drop
 all three flags from incoming records and work them out themselves.

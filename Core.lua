@@ -167,6 +167,7 @@ function Wanted:LoadSavedData()
 		end
 		WantedDB.version = Wanted.DB_VERSION
 		private.EnterWorld(WantedDB)
+		WantedDB.accountMark = WantedDB.accountMark or private.NewAccountMark()
 	end
 	CopyDefaults(db, DEFAULTS)
 	Wanted.db = db
@@ -175,7 +176,20 @@ function Wanted:LoadSavedData()
 end
 
 -- What survives the move from the beta to the live game: the player's settings, not the beta's characters
-local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, devLog = true }
+local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, accountMark = true, devLog = true }
+
+local MARK_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+---A random id for this WoW account's saved data. The desktop app finds it in the saved file and leaves the
+---account's link code under it (the !!WantedLink addon), so every character links itself (Store:AutoLink).
+function private.NewAccountMark()
+	local out = {}
+	for i = 1, 16 do
+		local n = math.random(#MARK_CHARS)
+		out[i] = strsub(MARK_CHARS, n, n)
+	end
+	return table.concat(out)
+end
 
 ---Drops the beta's data the first time a release for the live game loads it, keeping the settings (decided
 ---with Chris 2026-09-26 for the launch reset). Data saved in the live world is never touched.

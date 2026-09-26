@@ -262,7 +262,7 @@ function private.AddTraits(data, prefix, guid)
 	return data
 end
 
----Adds our own class, race, level and faction to a record's data as the killer.
+---Adds our own class, race, level, faction and group size to a record's data as the killer.
 ---@param data table
 ---@return table data
 function private.AddOwnTraits(data)
@@ -271,6 +271,9 @@ function private.AddOwnTraits(data)
 	data.killerRace = private.Readable((select(2, UnitRace("player"))))
 	data.killerLevel = type(level) == "number" and level > 0 and level or nil
 	data.killerFaction = private.playerFaction
+	-- How many were in our group (1 alone), for solo and group kills. A raid counts everyone in it.
+	local group = GetNumGroupMembers and private.Readable(GetNumGroupMembers())
+	data.killerGroup = max(type(group) == "number" and group or 0, 1)
 	return data
 end
 

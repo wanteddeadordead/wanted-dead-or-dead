@@ -116,6 +116,8 @@ function GetZoneText() return "Durotar" end
 local subZone = ""
 function GetSubZoneText() return subZone end
 function IsInInstance() return false end
+groupSize = 0
+function GetNumGroupMembers() return groupSize end
 function GetChannelName() return 6 end
 local joinedWith = {}
 function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
@@ -507,15 +509,19 @@ check(ownKill.victimClass == "ROGUE" and ownKill.victimRace == "Human" and ownKi
 	"the kill names the victim's class, race, level and faction")
 check(ownKill.killerClass == "WARRIOR" and ownKill.killerRace == "Orc" and ownKill.killerLevel == 10 and ownKill.killerFaction == "Horde",
 	"the kill names our own class, race, level and faction")
+check(ownKill.killerGroup == 1, "a kill made alone has a group of 1")
 Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Stabby Mcstab dies, honorable kill Rank: Private")
 local kills = 0
 for record in ns.Store:Iterator("kill") do if record.data.victim == "Player-9-ENEMY" then kills = kills + 1 end end
 check(kills == 1, "honor message doesn't duplicate the kill")
+groupSize = 3
 Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Never Seen dies, honorable kill Rank: Private")
 local unseen
 for record in ns.Store:Iterator("kill") do if record.data.victimName == "Never Seen" then unseen = record.data end end
 check(unseen and unseen.victimFaction == "Alliance" and unseen.victimClass == nil and unseen.killerClass == "WARRIOR",
 	"an honor kill of someone never seen still names their faction and ours, and guesses nothing else")
+check(unseen.killerGroup == 3, "a kill in a party of three has a group of 3")
+groupSize = 0
 -- They kill us: the one enemy targeting us gets the loss
 ns.Enemies:SetIgnored("Player-9-ENEMY", "Stabby Mcstab", false)
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
@@ -566,6 +572,7 @@ for record in ns.Store:Iterator("death") do if record.data.killer == "Player-2-F
 check(witnessed, "party kill recorded as a witnessed death")
 check(partyDeath.victimClass == "ROGUE" and partyDeath.killerFaction == "Horde" and partyDeath.killerClass == nil,
 	"a party member's kill names the victim and our faction for the killer, no guessed class")
+check(partyDeath.killerGroup == nil, "only our own kills carry a group size")
 -- A sighting shared by another user
 ns.Enemies:OnSharedSighting({ g = "Player-9-OTHER", n = "Sneaky Pete", c = "MAGE", l = 20, z = "The Barrens", m = 10, x = 50, y = 40 }, "Some Friend")
 check(ns.Store:GetPlayer("Player-9-OTHER").name == "Sneaky Pete", "shared sighting stored")

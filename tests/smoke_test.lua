@@ -755,6 +755,25 @@ check(WantedDB.marker and ns.db ~= WantedDB and ns:GetNewerSavedLayout() == 99, 
 WantedDB = { records = {} }
 ns:LoadSavedData()
 check(WantedDB.version == ns.DB_VERSION and ns.db == WantedDB, "a table without a layout number loads as layout 1")
+do
+-- The launch: beta data keeps only its settings when the live world starts
+check(ns.WORLD == "beta", "this release is for the beta")
+WantedDB = { version = 1, settings = { minBounty = 500 }, welcomed = true, records = { ["A:1"] = {} }, kos = { g = {} },
+	ignore = { g = {} }, players = { g = {} }, chains = { A = {} }, tracks = { g = {} }, enemyStats = { g = {} } }
+ns:LoadSavedData()
+check(WantedDB.world == "beta" and next(WantedDB.records) and next(WantedDB.kos), "the beta keeps its data")
+ns.WORLD = "live"
+ns:LoadSavedData()
+check(WantedDB.world == "live" and WantedDB.settings.minBounty == 500 and WantedDB.welcomed, "the live world keeps settings")
+local function empty(t) return t == nil or next(t) == nil end
+check(empty(WantedDB.records) and empty(WantedDB.kos) and empty(WantedDB.ignore) and empty(WantedDB.players)
+	and empty(WantedDB.chains) and empty(WantedDB.tracks) and empty(WantedDB.enemyStats), "and drops the beta's data")
+WantedDB.records = WantedDB.records or {}
+WantedDB.records["B:1"] = {}
+ns:LoadSavedData()
+check(WantedDB.records["B:1"], "live data is never dropped again")
+end
+ns.WORLD = "beta"
 WantedDB = realDB
 ns:LoadSavedData()
 check(ns.db == realDB, "back on the real data")

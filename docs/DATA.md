@@ -22,6 +22,11 @@ Rules for a change:
 3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration. The one exception is
    the move from the beta to the live game, below.
 
+`WantedDB.accountMark` (from 1.1.0) is a random id made once per WoW account's saved data and kept forever
+(the launch reset keeps it too). The desktop app reads it from the saved file and writes the account's link
+code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At login `Store:AutoLink` makes a
+`link` record with that code for the character if it hasn't already, so characters link themselves.
+
 `WantedDB.world` (from 1.1.0) says which game world the data belongs to: `"beta"` (also assumed when it's
 missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for. The first time a release for
 the live game loads beta data, it keeps `settings` (and `welcomed`) and drops everything else: records,

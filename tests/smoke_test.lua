@@ -758,13 +758,14 @@ check(WantedDB.version == ns.DB_VERSION and ns.db == WantedDB, "a table without 
 do
 -- The launch: beta data keeps only its settings when the live world starts
 check(ns.WORLD == "beta", "this release is for the beta")
-WantedDB = { version = 1, settings = { minBounty = 500 }, welcomed = true, records = { ["A:1"] = {} }, kos = { g = {} },
+WantedDB = { version = 1, settings = { minBounty = 500 }, welcomed = true, accountMark = "Mark123456789012", records = { ["A:1"] = {} }, kos = { g = {} },
 	ignore = { g = {} }, players = { g = {} }, chains = { A = {} }, tracks = { g = {} }, enemyStats = { g = {} } }
 ns:LoadSavedData()
 check(WantedDB.world == "beta" and next(WantedDB.records) and next(WantedDB.kos), "the beta keeps its data")
 ns.WORLD = "live"
 ns:LoadSavedData()
-check(WantedDB.world == "live" and WantedDB.settings.minBounty == 500 and WantedDB.welcomed, "the live world keeps settings")
+check(WantedDB.world == "live" and WantedDB.settings.minBounty == 500 and WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012",
+	"the live world keeps settings and the account mark")
 local function empty(t) return t == nil or next(t) == nil end
 check(empty(WantedDB.records) and empty(WantedDB.kos) and empty(WantedDB.ignore) and empty(WantedDB.players)
 	and empty(WantedDB.chains) and empty(WantedDB.tracks) and empty(WantedDB.enemyStats), "and drops the beta's data")
@@ -1567,6 +1568,26 @@ check(#links == 1 and links[1].data.code == "AB12CD34" and links[1].data.guid ==
 ns:RunCommand("link", "x!")
 ns:RunCommand("link", "")
 check(#LinkRecords() == 1, "a malformed code makes no record")
+-- The desktop app's account code links this character by itself, once per code
+;(function()
+	local mark = ns.db.accountMark
+	check(type(mark) == "string" and #mark == 16 and mark:match("^%w+$"), "the saved data has an account mark")
+	WantedAppLinks = { someOtherAccount1 = "OTHR2345" }
+	ns.Store:AutoLink()
+	check(#LinkRecords() == 1, "another account's code isn't used")
+	WantedAppLinks = { [mark] = "ACCT2345" }
+	ns.Store:AutoLink()
+	local links = LinkRecords()
+	local auto
+	for _, r in ipairs(links) do if r.data.code == "ACCT2345" then auto = r end end
+	check(#links == 2 and auto and auto.data.guid == "Player-1-ME", "the account code makes a link record")
+	ns.Store:AutoLink()
+	check(#LinkRecords() == 2, "and only once")
+	WantedAppLinks = { [mark] = "bad code!" }
+	ns.Store:AutoLink()
+	check(#LinkRecords() == 2, "a malformed code is ignored")
+	WantedAppLinks = nil
+end)()
 -- Records straight from their origin are marked live; relayed ones aren't, whatever flags they arrive with
 local function Rec(origin, seq, extra)
 	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock, data = { bounty = "b"..seq } }

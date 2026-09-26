@@ -34,6 +34,7 @@ function Store:OnEnable()
 	Wanted:Log("Store: origin %s", private.origin)
 	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or { seq = 0, lastHash = "0" }
 	private.ownChain = Wanted.db.chains[private.origin]
+	Store:AutoLink()
 end
 
 function Store:Status()
@@ -443,3 +444,21 @@ Wanted:RegisterCommand("link", "Links this character to the Wanted desktop app: 
 	Store:NewRecord("link", { code = code, guid = UnitGUID("player") })
 	Wanted:Print("Link code %s sent. The desktop app shows this character as linked once another Wanted player's app has seen it.", code)
 end)
+
+---Links this character to the desktop app without /wanted link: the app leaves this WoW account's code in the
+---!!WantedLink addon, under the account mark in our saved data. Once per character per code; a new code (the
+---app renews it every few weeks) links again.
+function Store:AutoLink()
+	local code = type(WantedAppLinks) == "table" and WantedAppLinks[Wanted.db.accountMark]
+	if type(code) ~= "string" or #code < LINK_CODE_MIN or #code > LINK_CODE_MAX or not strmatch(code, "^%w+$") then
+		return
+	end
+	code = strupper(code)
+	for record in Store:Iterator("link") do
+		if record.origin == private.origin and record.data.code == code then
+			return
+		end
+	end
+	Store:NewRecord("link", { code = code, guid = UnitGUID("player") })
+	Wanted:Log("Store: linked this character to the desktop app")
+end

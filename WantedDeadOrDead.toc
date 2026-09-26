@@ -8,7 +8,7 @@
 ## Author: dazedpro
 ## Version: @project-version@
 ## SavedVariables: WantedDB
-## X-Website: https://github.com/dazedpro/wanted-dead-or-dead
+## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
 ## X-License: MIT
 ## X-Curse-Project-ID: 1710798
 ## Category: PvP

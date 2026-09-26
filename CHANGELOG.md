@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- `/wanted link <code>` ties a character to the Wanted desktop app (coming soon), which keeps your saved
+  data between sessions and puts your records on the website. The addon works the same without it.
+- `/wanted status` says whether the game or the desktop app loaded your saved data.
+- Records passed on by another player no longer keep that player's flags (altered, broken chain); each client
+  checks every record itself.
+
 ## [1.0.1] - 2026-09-25
 
 - A realm link ends as soon as the other player logs off, instead of whispering to them for a while (and

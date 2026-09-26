@@ -159,7 +159,7 @@ function Store:Merge(record, sender)
 		-- go through MergeRelayed instead
 		return false
 	end
-	return private.Insert(record)
+	return private.Insert(record, true)
 end
 
 ---Merges a record relayed by a peer answering a gap request (origin may differ from sender).
@@ -169,14 +169,26 @@ function Store:MergeRelayed(record)
 	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
 		return false
 	end
-	return private.Insert(record)
+	return private.Insert(record, false)
 end
 
-function private.Insert(record)
+---Stores a received record. live: it came straight from its origin (the game stamped the sender), which the
+---desktop app reports so the network can accept this client as a witness to it. Local flags arriving with a
+---record are the sender's, not ours, and are dropped: a relayed record can't claim to be live.
+function private.Insert(record, live)
 	local db = Wanted.db
-	if db.records[record.id] or strsub(record.id, 1, 5) == "TEST:" or record.test then
+	record.live, record.tampered, record.brokenChain = nil, nil, nil
+	local existing = db.records[record.id]
+	if existing then
+		if live and existing.hash == record.hash and not existing.test then
+			existing.live = true
+		end
 		return false
 	end
+	if strsub(record.id, 1, 5) == "TEST:" or record.test then
+		return false
+	end
+	record.live = live or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
@@ -411,3 +423,23 @@ function Store:SightingIterator()
 		return nil
 	end
 end
+
+
+
+-- ============================================================================
+-- Desktop app link
+-- ============================================================================
+
+-- Codes the desktop app shows: letters and digits
+local LINK_CODE_MIN, LINK_CODE_MAX = 6, 12
+
+Wanted:RegisterCommand("link", "Links this character to the Wanted desktop app: /wanted link <code the app shows>.", function(args)
+	local code = strupper(strtrim(args or ""))
+	if #code < LINK_CODE_MIN or #code > LINK_CODE_MAX or not strmatch(code, "^%w+$") then
+		Wanted:Print("Type the code the desktop app shows: /wanted link <code>.")
+		return
+	end
+	-- Shared like any record: another player's desktop app seeing it straight from us confirms the link
+	Store:NewRecord("link", { code = code, guid = UnitGUID("player") })
+	Wanted:Print("Link code %s sent. The desktop app shows this character as linked once another Wanted player's app has seen it.", code)
+end)

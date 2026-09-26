@@ -409,7 +409,7 @@ function private.CheckRequiredUpdate(db)
 end
 
 -- Commands that change shared records; paused while an update is required
-local SHARED_COMMANDS = { post = true, raise = true, pass = true, confirm = true, dispute = true, pay = true }
+local SHARED_COMMANDS = { post = true, raise = true, pass = true, confirm = true, dispute = true, pay = true, link = true }
 
 ---Registers a /wanted subcommand.
 ---@param name string
@@ -470,6 +470,9 @@ Wanted:RegisterCommand("status", "Shows the version and what is stored.", functi
 	local db = Wanted.db
 	local settings = db.settings
 	Wanted:Print("v%s, data layout %d, faction %s.", Wanted.VERSION, db.version, UnitFactionGroup("player") or "?")
+	-- The desktop app's restore sets WantedRestoreFilled when the game didn't load the saved data itself
+	local restored = type(WantedRestoreFilled) == "table" and WantedRestoreFilled.WantedDB
+	Wanted:Print("Saved data: %s.", restored and "restored by the desktop app (the game didn't load it)" or "loaded by the game")
 	Wanted:Print("Board filter: minimum %s, zone %s. Announce new bounties: %s.", settings.minBounty > 0 and GetCoinTextureString(settings.minBounty) or "none", settings.zoneFilter or "all", settings.announce and "yes" or "no")
 	for _, module in ipairs(private.modules) do
 		if module.Status then

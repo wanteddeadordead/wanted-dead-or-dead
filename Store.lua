@@ -191,6 +191,7 @@ function Store:NewRecord(kind, data)
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
 	Wanted.db.records[record.id] = record
+	private.AddToIndex(record)
 	private.Notify(record, true)
 	return record
 end
@@ -267,6 +268,7 @@ function private.Insert(record, live)
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record
+	private.AddToIndex(record)
 	private.Notify(record, false)
 	return true
 end
@@ -322,6 +324,7 @@ function Store:InsertTest(kind, origin, data, t)
 	}
 	record.hash = Store:Hash(Canonical(record))
 	Wanted.db.records[record.id] = record
+	private.AddToIndex(record)
 	private.Notify(record, false)
 	return record
 end
@@ -388,18 +391,64 @@ function Store:Get(id)
 	return Wanted.db.records[id]
 end
 
----Iterates the records of one kind, unordered.
+-- Record ids by kind, so walking the handful of raises or payments doesn't mean walking every record (the
+-- bounty code does that many times over). Built on first use and kept as records arrive; built again whenever
+-- the records table is replaced (a fresh start, the launch reset). A record removed some other way (pruning)
+-- is dropped from it when a walk finds it gone.
+function private.Index()
+	local records = Wanted.db.records
+	if private.indexFor ~= records then
+		private.byKind, private.indexFor = {}, records
+		for id, record in pairs(records) do
+			local ids = private.byKind[record.kind]
+			if not ids then
+				ids = {}
+				private.byKind[record.kind] = ids
+			end
+			ids[id] = true
+		end
+	end
+	return private.byKind
+end
+
+function private.AddToIndex(record)
+	-- Not built yet: the first walk builds it with this record in
+	if private.indexFor ~= Wanted.db.records then
+		return
+	end
+	local ids = private.byKind[record.kind]
+	if not ids then
+		ids = {}
+		private.byKind[record.kind] = ids
+	end
+	ids[record.id] = true
+end
+
+---Iterates the records of one kind, unordered. It walks the ids as they were when it started, so records
+---added meanwhile are left for the next walk.
 ---@param kind string
 ---@return fun(): table?
 function Store:Iterator(kind)
 	local records = Wanted.db.records
-	local id = nil
+	local ids = private.Index()[kind]
+	local list = {}
+	for id in pairs(ids or {}) do
+		list[#list + 1] = id
+	end
+	local i = 0
 	return function()
-		local record
-		repeat
-			id, record = next(records, id)
-		until not id or record.kind == kind
-		return record
+		while true do
+			i = i + 1
+			local id = list[i]
+			if not id then
+				return nil
+			end
+			local record = records[id]
+			if record and record.kind == kind then
+				return record
+			end
+			ids[id] = nil
+		end
 	end
 end
 

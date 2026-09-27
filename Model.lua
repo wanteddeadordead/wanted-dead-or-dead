@@ -505,8 +505,14 @@ end
 ---How many things wait on the player (sidebar badge).
 ---@return number
 function Model:GetActionCount()
-	local summary = Model:GetMySummary()
-	return summary.decide + summary.oweCount
+	-- From your own bounties only: the rest of the summary (hunts above all) costs far more and isn't needed
+	local count = 0
+	for _, info in ipairs(Model:GetMyBounties()) do
+		if info.state == STATE.OWED or info.state == STATE.CLAIMED or info.state == STATE.UNVERIFIED then
+			count = count + 1
+		end
+	end
+	return count
 end
 
 

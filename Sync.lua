@@ -1174,9 +1174,21 @@ end
 
 ---Every new record, whoever made it: forwarded to the realm links (not back to the one it came from), and one
 ---that came over a link is shared once on this realm's channel. Records are only new once, so nothing loops.
+---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For
+---the desktop app's catch-up, which every player with the app takes in for themselves.
+---@param func function
+function Sync:WithoutForwarding(func)
+	private.quiet = true
+	local ok, err = pcall(func)
+	private.quiet = false
+	if not ok then
+		error(err, 0)
+	end
+end
+
 function private.OnAnyRecord(record)
 	-- Sightings are announced like records but aren't (no id, never forwarded)
-	if type(record.id) ~= "string" or Store:IsTest(record) then
+	if private.quiet or type(record.id) ~= "string" or Store:IsTest(record) then
 		return
 	end
 	local source = private.currentSource

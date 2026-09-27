@@ -35,6 +35,14 @@ code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At lo
 The same file also holds `WantedAppInfo = { running, latest }` (from 1.1.3): the app's version and the newest
 one out. When the app is behind, the addon says so in chat once a login.
 
+`WantedDB.faction` (from 1.2.7) is the account's side ("Horde" or "Alliance"), saved at login for the desktop app.
+`WantedDB.catchupT` (from 1.2.7) is the server time of the last catch-up taken in. The app sends the server the
+account's chains and side, and writes the answer into `!!WantedLink/Catchup.lua` as
+`WantedAppCatchup[mark] = { t, records = { ... }, notices = { ... } }`: this side's records past the chains held,
+and the other side's bounties on this side in the Bridge's notice form. At login `Catchup:Import` takes in an
+entry newer than `catchupT` in the background (as gap fills, never live, not forwarded to realm links), then the
+notices through the Bridge. No layout change: both fields are new and optional.
+
 `WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
 either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
 full names on the deaths it reads from the combat log, which names players by first name only. At load, names

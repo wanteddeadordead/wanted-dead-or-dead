@@ -30,6 +30,7 @@ Tracks.lua
 Hotspots.lua
 LiveLog.lua
 Bridge.lua
+Catchup.lua
 #@debug@
 # Test data and database-wiping commands: development builds only, left out of packaged releases
 Debug.lua

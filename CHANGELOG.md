@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fixed heavy lag in big fights (a raid on Undercity froze the game). The Nearby window redrew itself and the
+  alerts looked up every enemy each time any enemy changed target, hundreds of times a second in a raid. The
+  window now redraws at most four times a second, and alerts only look at the events that can raise one.
+
 ## [1.1.1] - 2026-09-26
 
 Sharing keeps up in big fights now, and links confirm in play.

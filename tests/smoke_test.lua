@@ -1832,6 +1832,18 @@ end)()
 	check(not ns:CheckAppVersion() or not Said("evil"), "text another addon put there isn't shown as is")
 	WantedAppInfo = nil
 	check(not ns:CheckAppVersion(), "without the app, nothing")
+	-- The Website & app page: addresses to copy, including this character's own page
+	WantedAppInfo = { running = "0.1.1", latest = "0.1.2" }
+	ns.UI:Show("web")
+	local found = {}
+	for _, f in ipairs(Mock.created) do
+		local text = rawget(f, "_text")
+		if type(text) == "string" and text:find("^https://wanteddeadordead%.com") then found[text] = true end
+	end
+	check(found["https://wanteddeadordead.com"] and found["https://wanteddeadordead.com/app"], "the page has the site and the app to copy")
+	local mine = "https://wanteddeadordead.com/player/"..(ns.Store:GetOrigin():gsub("[^%w]", function(ch) return string.format("%%%02X", ch:byte()) end))
+	check(found[mine], "and this character's own page, got none of "..mine)
+	WantedAppInfo = nil
 end)()
 ;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them

@@ -2077,6 +2077,33 @@ end)()
 	WantedAppInfo = { running = "0.2.0", latest = "0.2.0" }
 	ns:PromptForApp()
 	check(lastDialog == nil, "with the app set up, no popup")
+	-- Set up, but it hasn't run for hours: the popup asks whether it's running, and the light says so
+	WantedAppInfo = { running = "0.2.1", latest = "0.2.1", seen = clock - 5 * 3600, apps = 12 }
+	ns:PromptForApp()
+	check(lastDialog and lastDialog.title == "Is the Wanted app running?" and lastDialog.text:find("Start menu", 1, true),
+		"an app that hasn't run for hours: the popup asks if it's running")
+	lastDialog = nil
+	ns.UI:Show("board")
+	ns.UI:Refresh()
+	local function AppLight()
+		for _, f in ipairs(Mock.created) do
+			local text = rawget(f, "text")
+			if rawget(f, "dot") and type(text) == "table" and tostring(text._text):find("^App") then return text._text end
+		end
+	end
+	check(AppLight() == "App not running", "and the light says it isn't running, got "..tostring(AppLight()))
+	-- Running (seen within the half hour it writes): no popup; a development build counts the apps running
+	WantedAppInfo.seen = clock - 600
+	ns:PromptForApp()
+	check(lastDialog == nil, "a running app: no popup")
+	local dev = ns.DEV
+	ns.DEV = true
+	ns.UI:Refresh()
+	check(AppLight() == "App (12 running)", "a development build counts the apps running, got "..tostring(AppLight()))
+	ns.DEV = false
+	ns.UI:Refresh()
+	check(AppLight() == "App", "a release doesn't, got "..tostring(AppLight()))
+	ns.DEV = dev
 	WantedAppInfo = nil
 	ns.Widgets.IsDialogShown = shown
 	ns.UI:Show("web")

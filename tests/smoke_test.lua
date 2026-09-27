@@ -1668,6 +1668,27 @@ for i = before + 1, #printed do if printed[i]:find("restored by the desktop app"
 check(saysRestored, "status names the desktop app's restore")
 WantedRestoreFilled = nil
 ;(function()
+	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them
+	local function Linked(origin, seq, prev)
+		local r = Rec(origin, seq)
+		r.prev = prev
+		r.hash = ns.Store:Hash("gap"..origin..seq)
+		return r
+	end
+	local r1 = Linked("Gap Origin", 1, "0")
+	local r2 = Linked("Gap Origin", 2, r1.hash)
+	local r3 = Linked("Gap Origin", 3, r2.hash)
+	ns.Store:MergeRelayed(r2)
+	ns.Store:MergeRelayed(r3)
+	check(ns.Store:GetChainSeq("Gap Origin") == 0, "records past a gap wait for it")
+	ns.Store:MergeRelayed(r1)
+	check(ns.Store:GetChainSeq("Gap Origin") == 3, "filling the gap takes in the records already held, got "..ns.Store:GetChainSeq("Gap Origin"))
+	-- Saved data from before this fix: a chain stuck behind records it holds is moved on at login
+	ns.db.chains["Gap Origin"] = { seq = 1, lastHash = r1.hash }
+	ns.Store:RepairChains()
+	check(ns.Store:GetChainSeq("Gap Origin") == 3, "a stuck chain is repaired at login")
+end)()
+;(function()
 	-- Channel parts go out at the game's pace: a burst, then one every few seconds, never refused
 	clock = clock + 60
 	addonSent = {}

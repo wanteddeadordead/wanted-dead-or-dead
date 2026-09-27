@@ -392,13 +392,14 @@ function Store:Get(id)
 end
 
 -- Record ids by kind, so walking the handful of raises or payments doesn't mean walking every record (the
--- bounty code does that many times over). Built on first use and kept as records arrive; built again whenever
--- the records table is replaced (a fresh start, the launch reset). A record removed some other way (pruning)
--- is dropped from it when a walk finds it gone.
+-- bounty code does that many times over), and each origin's newest record time, so the sync can tell which
+-- chains are active. Built on first use and kept as records arrive; built again whenever the records table is
+-- replaced (a fresh start, the launch reset). A record removed some other way (pruning) is dropped from it when
+-- a walk finds it gone.
 function private.Index()
 	local records = Wanted.db.records
 	if private.indexFor ~= records then
-		private.byKind, private.indexFor = {}, records
+		private.byKind, private.lastActive, private.indexFor = {}, {}, records
 		for id, record in pairs(records) do
 			local ids = private.byKind[record.kind]
 			if not ids then
@@ -406,9 +407,17 @@ function private.Index()
 				private.byKind[record.kind] = ids
 			end
 			ids[id] = true
+			private.NoteActive(record)
 		end
 	end
 	return private.byKind
+end
+
+function private.NoteActive(record)
+	local origin, t = record.origin, record.t
+	if type(origin) == "string" and type(t) == "number" and t > (private.lastActive[origin] or 0) then
+		private.lastActive[origin] = t
+	end
 end
 
 function private.AddToIndex(record)
@@ -422,6 +431,7 @@ function private.AddToIndex(record)
 		private.byKind[record.kind] = ids
 	end
 	ids[record.id] = true
+	private.NoteActive(record)
 end
 
 ---Iterates the records of one kind, unordered. It walks the ids as they were when it started, so records
@@ -467,6 +477,14 @@ function private.Notify(record, isOwn)
 	for _, func in ipairs(private.listeners["*"] or {}) do
 		func(record, isOwn)
 	end
+end
+
+---When the newest record held from an origin was made (0 if none).
+---@param origin string
+---@return number
+function Store:GetLastActive(origin)
+	private.Index()
+	return private.lastActive[origin] or 0
 end
 
 ---The highest seq held for an origin (for gap requests).

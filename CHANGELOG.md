@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Sync keeps working as the network grows: the hello a client sends when it logs in now lists only the players
+  active in the last week (at most 150), not everyone it has ever heard from. Past about 1,000 players the old
+  hello no longer fit the game's send limit, and new logins would have stopped syncing.
 - Fixed the Nearby window listing an enemy several times when they turned up during a fight: each refresh in
   combat wrote them into another empty row.
 - A copy of Wanted downloaded straight from GitHub no longer acts as a development build (debug log and test

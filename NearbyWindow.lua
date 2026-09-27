@@ -231,11 +231,19 @@ function Nearby:SetShown(shown)
 		return
 	end
 	local opening = shown and not private.frame:IsShown()
+	local start = opening and Wanted.DEV and debugprofilestop()
 	private.frame:SetShown(shown)
 	-- Only when it opens: an open window is redrawn by the queued refresh (every new enemy in a raid asks to
 	-- show it, and a redraw each was most of a 134ms second)
 	if opening then
+		local shownAt = start and debugprofilestop()
 		Nearby:Refresh()
+		-- Development builds say where a slow opening went (the first enemy after a quiet spell opens it)
+		local ms = start and debugprofilestop() - start
+		if ms and ms > 10 and private.split then
+			Wanted:Log("!! Nearby opened in %.0fms: show %.0fms, list %.0fms, %d rows %.0fms (%d laid out again)", ms,
+				shownAt - start, private.split.list, private.split.rows, private.split.draw, private.split.relaid or 0)
+		end
 	end
 end
 
@@ -682,9 +690,11 @@ function Nearby:Refresh()
 	private.empty:ClearAllPoints()
 	private.empty:SetPoint("TOP", 0, -private.Header() - 14)
 	private.frame:SetHeight(private.Header() + numRows * rowHeight + footerHeight)
+	local relaid = 0
 	for i, row in ipairs(private.rows) do
 		if row.layoutKey ~= private.LayoutKey(compact) then
 			private.LayoutRow(row, i, compact)
+			relaid = relaid + 1
 		end
 		local info = items[i + private.offset]
 		row.textGuid = false
@@ -697,13 +707,13 @@ function Nearby:Refresh()
 		private.Draw(row, info)
 		row:SetShown(i <= numRows)
 	end
-	private.NoteSplit(t0, t1, numRows)
+	private.NoteSplit(t0, t1, numRows, relaid)
 end
 
 ---Development builds: how a refresh's time split between working out the list and drawing the rows.
-function private.NoteSplit(t0, t1, rows)
+function private.NoteSplit(t0, t1, rows, relaid)
 	if t0 then
-		private.split = { list = t1 - t0, draw = debugprofilestop() - t1, rows = rows }
+		private.split = { list = t1 - t0, draw = debugprofilestop() - t1, rows = rows, relaid = relaid }
 	end
 end
 

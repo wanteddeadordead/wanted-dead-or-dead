@@ -1885,6 +1885,17 @@ end)()
 	ns.UI:Refresh()
 	check(Lights():find("App", 1, true) and not Lights():find("Get the app", 1, true), "with the app, the light says so: "..Lights())
 	WantedAppInfo = nil
+	-- Development builds show how many other players are on WantedNet; releases never do
+	local getInfo, dev = ns.Sync.GetInfo, ns.DEV
+	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 3 } end
+	ns.DEV = false
+	ns.UI:Refresh()
+	check(not Lights():find("(3)", 1, true), "a release shows no player count: "..Lights())
+	ns.DEV = true
+	ns.UI:Refresh()
+	check(Lights():find("WantedNet (3)", 1, true), "a development build shows the player count: "..Lights())
+	ns.Sync.GetInfo, ns.DEV = getInfo, dev
+	ns.UI:Refresh()
 end)()
 ;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them

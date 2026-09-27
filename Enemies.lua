@@ -680,6 +680,18 @@ end
 
 ---The Nearby list: Kill on Sight and bounty targets first, then whoever is acting, then newest first.
 ---@return table[]
+---When an enemy player was last in view (GetTime()), or nil if none is on the Nearby list.
+---@return number?
+function Enemies:LastEnemySeen()
+	local last = nil
+	for _, entry in pairs(private.nearby) do
+		if not last or entry.lastSeen > last then
+			last = entry.lastSeen
+		end
+	end
+	return last
+end
+
 function Enemies:GetNearby()
 	local list = {}
 	for guid in pairs(private.nearby) do

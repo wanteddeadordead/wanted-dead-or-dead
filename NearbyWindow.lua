@@ -501,6 +501,8 @@ function private.CreateRow(parent, index)
 	-- Shift-click and Ctrl-click are list actions, not targeting
 	row:SetAttribute("shift-type1", "")
 	row:SetAttribute("ctrl-type1", "")
+	-- The player the row targets, and one written in during combat as text only (false when none)
+	row.guid, row.textGuid = false, false
 	row.bg = Theme:Fill(row, index % 2 == 0 and C.rowAlt or C.transparent)
 	-- A faint wash of the player's class colour
 	row.tint = row:CreateTexture(nil, "BACKGROUND", nil, 1)
@@ -629,18 +631,21 @@ function Nearby:Refresh()
 		end
 		local placed = {}
 		for _, row in ipairs(private.rows) do
-			if row.guid and byGuid[row.guid] then
-				private.Draw(row, byGuid[row.guid])
-				placed[row.guid] = true
-			elseif row.guid then
+			local guid = row.guid or row.textGuid
+			if guid and byGuid[guid] then
+				private.Draw(row, byGuid[guid])
+				placed[guid] = true
+			elseif guid then
+				-- A text row whose player left is free for the next one
+				row.textGuid = false
 				private.Draw(row, nil)
 			end
 		end
 		for _, info in ipairs(items) do
 			if not placed[info.guid] then
 				for _, row in ipairs(private.rows) do
-					if not row.guid and not row.textOnly then
-						row.textOnly = true
+					if not row.guid and not row.textGuid then
+						row.textGuid = info.guid
 						private.Draw(row, info)
 						break
 					end
@@ -682,8 +687,8 @@ function Nearby:Refresh()
 			private.LayoutRow(row, i, compact)
 		end
 		local info = items[i + private.offset]
-		row.textOnly = nil
-		row.guid = info and info.guid or nil
+		row.textGuid = false
+		row.guid = info and info.guid or false
 		local macro = info and private.TargetMacro(info.name) or ""
 		if row:GetAttribute("macrotext1") ~= macro then
 			row:SetAttribute("macrotext1", macro)

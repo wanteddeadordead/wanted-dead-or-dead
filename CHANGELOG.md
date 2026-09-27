@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Fixed the Nearby window listing an enemy several times when they turned up during a fight: each refresh in
+  combat wrote them into another empty row.
+
 ## [1.2.5] - 2026-09-27
 
 No more blocked actions in fights.

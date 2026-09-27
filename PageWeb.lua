@@ -42,7 +42,7 @@ end
 function private.BuildApp(container, width)
 	local card = W:Card(container)
 	card:SetPoint("TOPLEFT", 0, -208)
-	card:SetSize(width, 196)
+	card:SetSize(width, 226)
 	local label = W:SectionLabel(card, "The desktop app")
 	label:SetPoint("TOPLEFT", 16, -14)
 	local about = Theme:Text(card, "body", "Puts your records on the website's leaderboards, lets your records confirm other players' kills, links your characters by itself, and keeps every addon's saved data safe between sessions. Windows. The addon works the same without it.")
@@ -53,6 +53,12 @@ function private.BuildApp(container, width)
 	private.appStatus = Theme:Text(card, "small", "")
 	private.appStatus:SetPoint("TOPLEFT", 16, -96)
 	AddLink(card, -124, "Download it", SITE.."/app", width)
+	private.liveLog = W:Toggle(card, "Live battle reports", function(checked)
+		Wanted.db.settings.liveLog = checked
+		Wanted.LiveLog:Update()
+	end)
+	private.liveLog:SetPoint("TOPLEFT", 16, -184)
+	W:AttachTooltip(private.liveLog, "Live battle reports", "Keeps the game's combat log on in the open world and has the game write it out every few seconds during a fight, so the app can post deaths to the website as they happen. Turn it off here rather than with /combatlog. The log files stay in your Logs folder; the app can clean them up.")
 end
 
 ---What the app last told the addon (through !!WantedLink): set up and current, behind, or not set up.
@@ -77,6 +83,7 @@ function private.Refresh()
 	local text, color = private.AppState()
 	private.appStatus:SetText(text)
 	private.appStatus:SetTextColor(color[1], color[2], color[3])
+	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
 	-- The name the network knows us by (first and last name on WoW Forever), as the site's pages use
 	local url = SITE.."/player/"..private.Escape(Wanted.Store:GetOrigin() or "")
 	private.playerBox:SetText(url)

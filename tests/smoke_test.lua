@@ -126,6 +126,15 @@ function GetZoneText() return "Durotar" end
 local subZone = ""
 function GetSubZoneText() return subZone end
 function IsInInstance() return false end
+-- The game's combat log switch; switching it off counts as writing out what the game held
+combatLogging, combatLogWrites = false, 0
+function LoggingCombat(on)
+	if on ~= nil then
+		if combatLogging and not on then combatLogWrites = combatLogWrites + 1 end
+		combatLogging = on and true or false
+	end
+	return combatLogging
+end
 groupSize = 0
 function GetNumGroupMembers() return groupSize end
 hkCount = 0
@@ -1985,5 +1994,49 @@ end)()
 	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("F", { v = ns.VERSION, r = { fill } }), "CHANNEL", "Fill Origin", nil, nil, nil, "WantedNetHorde")
 	local got = ns.db.records["Fill Origin:1"]
 	check(got and got.live == true, "a gap fill from the record's own origin counts as heard live")
+end)()
+;(function()
+	-- Live battle reports: combat logging is on in the open world, and written out every few seconds while
+	-- there's fighting, so the desktop app sees deaths as they happen
+	local LiveLog = ns.LiveLog
+	check(combatLogging and ns.db.settings.liveLog == true, "combat logging is on by default")
+	combatLogWrites = 0
+	clock = clock + 120
+	LiveLog:Tick()
+	check(combatLogWrites == 0, "nothing going on: the log is left alone")
+	ns.Store:NewRecord("pass", { bounty = "livelog" })
+	LiveLog:Tick()
+	check(combatLogWrites == 1 and combatLogging, "a new record: the log is written out and logging stays on")
+	clock = clock + 20
+	LiveLog:Tick()
+	check(combatLogWrites == 2, "and again a few seconds later, while the fight may still be going")
+	clock = clock + 60
+	LiveLog:Tick()
+	check(combatLogWrites == 2, "a quiet minute later it stops")
+	-- The setting
+	ns.db.settings.liveLog = false
+	LiveLog:Update()
+	check(not combatLogging, "turning live reports off turns off the logging Wanted turned on")
+	ns.db.settings.liveLog = true
+	LiveLog:Update()
+	check(combatLogging, "and back on")
+	-- Instances aren't world PvP: logging Wanted turned on goes off inside, and back on outside
+	local outside = IsInInstance
+	IsInInstance = function() return true end
+	LiveLog:Update()
+	check(not combatLogging, "logging goes off in an instance")
+	IsInInstance = outside
+	LiveLog:Update()
+	check(combatLogging, "and back on outside")
+	-- Logging the player turned on themselves (for Warcraft Logs, say) is theirs: Wanted never turns it off
+	LoggingCombat(false)
+	ns.db.liveLogOn = nil
+	LoggingCombat(true)
+	LiveLog:Update()
+	ns.db.settings.liveLog = false
+	LiveLog:Update()
+	check(combatLogging, "the player's own logging stays on")
+	ns.db.settings.liveLog = true
+	LiveLog:Update()
 end)()
 print("wanted smoke: all checks pass")

@@ -35,6 +35,11 @@ code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At lo
 The same file also holds `WantedAppInfo = { running, latest }` (from 1.1.3): the app's version and the newest
 one out. When the app is behind, the addon says so in chat once a login.
 
+`WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
+battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
+so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.
+Both are new keys with defaults, so no migration.
+
 `WantedDB.world` (from 1.1.0) says which game world the data belongs to: `"beta"` (also assumed when it's
 missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for. The first time a release for
 the live game loads beta data, it keeps `settings` (and `welcomed`) and drops everything else: records,

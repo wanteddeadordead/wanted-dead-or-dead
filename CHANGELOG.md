@@ -6,9 +6,6 @@
   and WantedNet, the in-game channel. It no longer counts other players.
 - When a newer Wanted is out, the addon says your version is outdated and gives the CurseForge link, at each
   login until you update, not only the first time it notices.
-- Live battle reports: Wanted keeps the game's combat log on in the open world and has the game write it out
-  every few seconds during a fight, so the desktop app can post deaths to the website as they happen instead
-  of after a /reload. On by default; the switch is on the Website & app page. Logging you turned on yourself
 - Live battle reports: Wanted keeps the game's combat log on in the open world, so the desktop app can post
   deaths to the website within about five minutes (the game writes the log that often) instead of after a
   /reload. On by default; the switch is on the Website & app page. Logging you turned on yourself

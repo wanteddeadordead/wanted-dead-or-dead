@@ -1008,19 +1008,31 @@ function private.SendFill(origin, fromSeq, target)
 		end
 	end
 	sort(records, function(a, b) return a.seq < b.seq end)
-	local numSent = 0
-	for i = 1, #records, FILL_BATCH do
-		local batch = {}
-		for j = i, min(i + FILL_BATCH - 1, #records) do
-			tinsert(batch, records[j])
-		end
-		if not private.Send(TAG_FILL, { r = batch }, nil, target) then
-			return
-		end
-		numSent = numSent + #batch
-		if numSent >= MAX_FILL_PER_REQUEST then
-			return
-		end
+	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST)
+end
+
+---Sends records as fills, FILL_BATCH to a message, one message per piece of background work: packing a long
+---catch-up in one go stalled the game for a frame. Stops at the first message a limit turns away (the next
+---resync asks again), or after max records.
+---@param records table[]
+---@param target string? a realm link to whisper, or nil for the channel
+---@param max number?
+function private.SendInBatches(records, target, max)
+	local state = { stopped = false }
+	local count = min(#records, max or #records)
+	for i = 1, count, FILL_BATCH do
+		Wanted:QueueWork(function()
+			if state.stopped then
+				return
+			end
+			local batch = {}
+			for j = i, min(i + FILL_BATCH - 1, count) do
+				tinsert(batch, records[j])
+			end
+			if not private.Send(TAG_FILL, { r = batch }, nil, target) then
+				state.stopped = true
+			end
+		end)
 	end
 end
 
@@ -1168,18 +1180,6 @@ function private.OnAnyRecord(record)
 	end
 end
 
-local function SendInBatches(records, target)
-	for i = 1, #records, FILL_BATCH do
-		local batch = {}
-		for j = i, min(i + FILL_BATCH - 1, #records) do
-			tinsert(batch, records[j])
-		end
-		if not private.Send(TAG_FILL, { r = batch }, nil, target) then
-			return
-		end
-	end
-end
-
 function private.FlushForward()
 	private.forwardDue = false
 	if Wanted:InCombat() then
@@ -1188,12 +1188,12 @@ function private.FlushForward()
 	end
 	for name, queue in pairs(private.forwardQueue) do
 		private.forwardQueue[name] = nil
-		SendInBatches(queue, name)
+		private.SendInBatches(queue, name)
 	end
 	local reshare = private.reshareQueue
 	private.reshareQueue = {}
 	if #reshare > 0 then
-		SendInBatches(reshare, nil)
+		private.SendInBatches(reshare, nil)
 	end
 end
 

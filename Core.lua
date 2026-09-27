@@ -626,12 +626,14 @@ function Wanted:QueuedWork()
 	return private.workTail - private.workHead + 1
 end
 
-private.workFrame:SetScript("OnUpdate", function(self)
+---Runs queued work for up to ms milliseconds (none during a fight). The work frame calls it every frame.
+---@param ms number
+function Wanted:DoQueuedWork(ms)
 	if private.inCombat then
 		return
 	end
 	local start = debugprofilestop()
-	while private.workHead <= private.workTail and debugprofilestop() - start < WORK_MS_PER_FRAME do
+	while private.workHead <= private.workTail and debugprofilestop() - start < ms do
 		local func = private.work[private.workHead]
 		private.work[private.workHead] = nil
 		private.workHead = private.workHead + 1
@@ -639,8 +641,12 @@ private.workFrame:SetScript("OnUpdate", function(self)
 	end
 	if private.workHead > private.workTail then
 		private.work, private.workHead, private.workTail = {}, 1, 0
-		self:Hide()
+		private.workFrame:Hide()
 	end
+end
+
+private.workFrame:SetScript("OnUpdate", function()
+	Wanted:DoQueuedWork(WORK_MS_PER_FRAME)
 end)
 
 function private.OnCombatChanged(inCombat)

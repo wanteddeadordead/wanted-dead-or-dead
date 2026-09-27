@@ -92,11 +92,19 @@ C_Timer = {
 	NewTicker = function(_, f) tickers[#tickers + 1] = f return NewMock() end,
 	NewTimer = function() return NewMock() end,
 }
+-- Frames passing: the addon's background work runs until it's done (as it would over the next frames)
+function RunFrames()
+	if WantedTestNS and WantedTestNS.DoQueuedWork then
+		WantedTestNS:DoQueuedWork(1e9)
+	end
+end
+
 local function RunTimers()
 	for _ = 1, 5 do
 		local batch = timers
 		timers = {}
 		for _, f in ipairs(batch) do f() end
+		RunFrames()
 		if #timers == 0 then return end
 	end
 end
@@ -264,6 +272,7 @@ SlashCmdList = {}
 
 -- Load the addon in .toc order
 local ns = {}
+WantedTestNS = ns
 for line in io.lines(ADDON.."WantedDeadOrDead.toc") do
 	line = line:gsub("\r", "")
 	if line ~= "" and not line:match("^#") and not line:match("%.xml$") then
@@ -1472,8 +1481,10 @@ local forwarded = Sent("WHISPER", "Far Friend")
 check(#forwarded == 1 and forwarded[1].tag == "F" and forwarded[1].tbl.r[1].id == mine.id, "a new record here is forwarded to the realm link")
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { [ns.Store:GetOrigin()] = 1 } }), "WHISPER", "Far Friend")
+check(#Sent("WHISPER", "Far Friend") == 0, "a catch-up goes out a batch a frame, not all at once")
+RunFrames()
 local fills = Sent("WHISPER", "Far Friend")
-check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them straight back")
+check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them back over the next frames")
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", t = clock, data = {} } } }), "WHISPER", "Stranger")
 check(ns.Store:Get("Stranger:1") == nil, "records whispered by someone who isn't a link are ignored")
@@ -1489,6 +1500,7 @@ clock = clock + 400
 ns.Sync:Greet("Quick Asker", "Fourth Realm")
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { [ns.Store:GetOrigin()] = 1 } }), "WHISPER", "Quick Asker")
+RunFrames()
 check(ns.Sync:GetLinks()["Quick Asker"] and #Sent("WHISPER", "Quick Asker") >= 1, "a request from someone we just greeted is answered before their hello arrives")
 -- A link who logs off: the game's "No player named ... is currently playing" for them ends the link at once
 -- (nothing more is sent to them) and the message is hidden
@@ -1797,7 +1809,8 @@ end)()
 	RunTimers()
 	local ours = Died("Player-1-SKYHORDE")
 	check(ours and ours.data.victimFaction == "Horde", "a Skyborne not named like the Alliance's is ours")
-	check(Died("Player-9-SKYALLY") == nil, "an Alliance Skyborne we never had a unit for isn't taken for ours")
+	local theirs = Died("Player-9-SKYALLY")
+	check(theirs and theirs.data.victimFaction == "Alliance", "an Alliance Skyborne we never had a unit for is recorded as theirs")
 	enemyUnits.nameplate42 = nil
 	enemyUnits.nameplate40, enemyUnits.nameplate41 = nil, nil
 end)()

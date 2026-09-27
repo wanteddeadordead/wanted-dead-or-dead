@@ -242,7 +242,8 @@ C_BattleNet = {
 	SendGameData = function(id, prefix, data) bnSent[#bnSent + 1] = { id = id, prefix = prefix, data = data } end,
 }
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text, chatType, target)
-	if throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
+	if throttleSkip and throttleSkip > 0 then throttleSkip = throttleSkip - 1
+	elseif throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target } return 0
 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
@@ -824,14 +825,14 @@ check(ns.Sync:GetInfo().stats.skipped == skippedBefore + 1, "an enemy someone ju
 -- A first-version single sighting is still understood
 Fire("CHAT_MSG_ADDON", "WNTD", Message("E", { g = "Player-9-OLDCLIENT", n = "Old Client", z = "Durotar", m = 1, x = 40, y = 40 }), "CHANNEL", "Older Player", nil, nil, nil, "WantedNetHorde")
 check(ns.Store:GetPlayer("Player-9-OLDCLIENT") ~= nil, "a single sighting from an older client is stored")
--- The game throttles a message: it is sent again a few seconds later
+-- The game throttles a message: it waits, and is sent again a few seconds later
 addonSent = {}
 throttleNext = 1
 local throttledBefore = ns.Sync:GetInfo().stats.throttled
 SlashCmdList.WANTED("synctest")
 check(ns.Sync:GetInfo().stats.throttled == throttledBefore + 1 and #addonSent == 0, "throttled message counted, nothing sent")
 RunTimers()
-check(#addonSent == 1 and addonSent[1].text:find("^H:"), "throttled message sent again")
+check(#addonSent == 0, "a refused part waits for the game's allowance to come back (sent again: see the send queue tests)")
 -- A corpse we come across is not a new death; someone we saw alive who then dies is
 local function CountDeaths() local n = 0 for _ in ns.Store:Iterator("death") do n = n + 1 end return n end
 local deathsNow = CountDeaths()
@@ -1666,6 +1667,37 @@ local saysRestored = false
 for i = before + 1, #printed do if printed[i]:find("restored by the desktop app", 1, true) then saysRestored = true end end
 check(saysRestored, "status names the desktop app's restore")
 WantedRestoreFilled = nil
+;(function()
+	-- Channel parts go out at the game's pace: a burst, then one every few seconds, never refused
+	clock = clock + 60
+	addonSent = {}
+	for _ = 1, 12 do SlashCmdList.WANTED("synctest") end
+	check(#addonSent == 8, "a burst of 8 parts goes at once, got "..#addonSent)
+	-- A new record jumps the queue ahead of the waiting hellos
+	ns.Store:NewRecord("pass", { bounty = "queue-jump" })
+	RunTimers()
+	clock = clock + 3
+	RunTimers()
+	check(#addonSent == 9 and addonSent[9].text:find("^R:"), "our new record goes before the waiting hellos")
+	clock = clock + 20
+	RunTimers()
+	check(#addonSent == 13, "the rest follow as the allowance comes back, got "..#addonSent)
+	-- A part the game refuses is sent again on its own, not the whole message from the start
+	clock = clock + 60
+	addonSent = {}
+	for i = 1, 6 do ns.Store:NewRecord("pass", { bounty = "big-"..i..string.rep("x", 200) }) end
+	throttleSkip, throttleNext = 1, 1
+	RunTimers()
+	clock = clock + 5
+	RunTimers()
+	local parts = {}
+	for _, m in ipairs(addonSent) do
+		local n, total = m.text:match("^R:%w+:(%d+)/(%d+):")
+		if n then parts[#parts + 1] = n.."/"..total end
+	end
+	check(#parts >= 2 and parts[1] == "1/"..parts[1]:match("/(%d+)") and parts[2] == "2/"..parts[1]:match("/(%d+)"), "after a refusal the next part is the refused one, got "..table.concat(parts, " "))
+	throttleSkip, throttleNext = nil, nil
+end)()
 ;(function()
 	-- Our own new records go out in batches, a few seconds' worth to one message, and every kind goes out
 	local function LiveMessages()

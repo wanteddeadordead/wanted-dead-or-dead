@@ -2394,4 +2394,50 @@ end)()
 	check(userNotice(nil, "CHAT_MSG_CHANNEL_NOTICE_USER", "OWNER_CHANGED", "Melyn Perdition", nil, "6. wantednethorde", "", "", 0, 6, "wantednethorde") == true, "an owner change on it is hidden, whatever the case")
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
+;(function()
+	-- Pruning: kills, deaths and assists older than 30 days go at load; bounties, claims and a claimed kill stay
+	local db = ns.db
+	local old, fresh = clock - 31 * 86400, clock - 29 * 86400
+	local function Put(kind, id, t, data)
+		db.records[id] = { kind = kind, id = id, origin = "Pruner", seq = 1, prev = "0", t = t, data = data or {}, hash = "x" }
+	end
+	Put("kill", "Pruner:k-old", old) Put("death", "Pruner:d-old", old) Put("assist", "Pruner:a-old", old)
+	Put("kill", "Pruner:k-fresh", fresh) Put("death", "Pruner:d-fresh", fresh)
+	Put("bounty", "Pruner:b-old", old, { amount = 1, target = "Player-9-T" })
+	Put("kill", "Pruner:k-claimed", old) Put("claim", "Pruner:c-old", old, { bounty = "Pruner:b-old", kill = "Pruner:k-claimed" })
+	local pruned = ns.Store:Prune(clock)
+	check(pruned >= 3, "the old kill, death and assist are pruned (with any older test records), got "..pruned)
+	check(not db.records["Pruner:k-old"] and not db.records["Pruner:d-old"] and not db.records["Pruner:a-old"], "the old ones are gone")
+	check(db.records["Pruner:k-fresh"] and db.records["Pruner:d-fresh"], "29-day-old ones stay")
+	check(db.records["Pruner:b-old"] and db.records["Pruner:c-old"] and db.records["Pruner:k-claimed"], "an old bounty, its claim and the claimed kill stay")
+	local walked = 0
+	for _ in ns.Store:Iterator("kill") do walked = walked + 1 end
+	check(walked >= 2 and ns.Store:Prune(clock) == 0, "the index is rebuilt and a second prune finds nothing")
+	for _, id in ipairs({ "Pruner:k-fresh", "Pruner:d-fresh", "Pruner:b-old", "Pruner:c-old", "Pruner:k-claimed" }) do db.records[id] = nil end
+end)()
+;(function()
+	-- A fill answering for records pruned here says where our copy starts, and a receiver moves its chain on
+	local function Rec(seq, prev, hash)
+		return { kind = "death", id = "Old Timer:"..seq, origin = "Old Timer", seq = seq, prev = prev, t = clock - 60, data = { victim = "Player-9-V" }, hash = hash }
+	end
+	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { p = { ["Old Timer"] = 50 }, r = { Rec(50, "abc", "h50"), Rec(51, "h50", "h51") } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	check(ns.Store:GetChainSeq("Old Timer") == 51, "the chain moved on past the pruned start, got "..ns.Store:GetChainSeq("Old Timer"))
+	check(ns.Store:Get("Old Timer:50") and not ns.Store:Get("Old Timer:50").brokenChain, "the first record after the skip isn't flagged")
+	-- Sending: someone asks for Old Timer from 1; we answer with what we hold and where it starts
+	ClearSent()
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { ["Old Timer"] = 1 } }), "CHANNEL", "New Asker", nil, nil, nil, "WantedNetHorde")
+	clock = clock + 11 -- past the "someone answered first" window our own receipt above would trip
+	RunTimers()
+	RunFrames()
+	local fills = {}
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "F" then fills[#fills + 1] = m end end
+	check(#fills >= 1 and fills[1].tbl.p and fills[1].tbl.p["Old Timer"] == 50 and #fills[1].tbl.r == 2, "the fill says our copy starts at 50 and carries what we hold")
+	-- A marker never moves our own chain
+	local mine = ns.Store:GetChainSeq(ns.Store:GetOrigin())
+	ns.Store:SkipTo(ns.Store:GetOrigin(), mine + 100, nil)
+	check(ns.Store:GetChainSeq(ns.Store:GetOrigin()) == mine, "our own chain is never skipped")
+end)()
 print("wanted smoke: all checks pass")

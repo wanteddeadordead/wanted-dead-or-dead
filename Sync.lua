@@ -945,6 +945,21 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 		if type(tbl.r) ~= "table" then
 			return
 		end
+		-- The sender's copy of a chain starts later than we asked: the earlier records were pruned. Move on to
+		-- where it starts, continuing from the first record's predecessor when it's in this message.
+		if tag == TAG_FILL and type(tbl.p) == "table" then
+			for origin, seq in pairs(tbl.p) do
+				if type(origin) == "string" and type(seq) == "number" then
+					local prev
+					for _, record in ipairs(tbl.r) do
+						if type(record) == "table" and record.origin == origin and record.seq == seq then
+							prev = record.prev
+						end
+					end
+					Store:SkipTo(origin, seq, prev)
+				end
+			end
+		end
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
 			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
@@ -1045,13 +1060,20 @@ end
 ---too, which the first list here left out.
 function private.SendFill(origin, fromSeq, target)
 	local records = {}
+	local lowest = Store:GetChainSeq(origin) + 1
 	for _, record in pairs(Wanted.db.records) do
-		if record.origin == origin and type(record.seq) == "number" and record.seq >= fromSeq and not Store:IsTest(record) then
-			tinsert(records, record)
+		if record.origin == origin and type(record.seq) == "number" and not Store:IsTest(record) then
+			lowest = min(lowest, record.seq)
+			if record.seq >= fromSeq then
+				tinsert(records, record)
+			end
 		end
 	end
 	sort(records, function(a, b) return a.seq < b.seq end)
-	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST)
+	-- Older records than they asked for were pruned here (Store:Prune): the answer says where our copy of the
+	-- chain starts, so they stop asking for what nobody has any more
+	local extra = lowest > fromSeq and { p = { [origin] = lowest } } or nil
+	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extra)
 end
 
 ---Sends records as fills, FILL_BATCH to a message, one message per piece of background work: packing a long
@@ -1060,9 +1082,20 @@ end
 ---@param records table[]
 ---@param target string? a realm link to whisper, or nil for the channel
 ---@param max number?
-function private.SendInBatches(records, target, max)
+---@param extra table? fields for the first message (sent on its own when there are no records)
+function private.SendInBatches(records, target, max, extra)
 	local state = { stopped = false }
 	local count = min(#records, max or #records)
+	if count == 0 and extra then
+		Wanted:QueueWork(function()
+			local tbl = { r = {} }
+			for k, v in pairs(extra) do
+				tbl[k] = v
+			end
+			private.Send(TAG_FILL, tbl, nil, target)
+		end)
+		return
+	end
 	for i = 1, count, FILL_BATCH do
 		Wanted:QueueWork(function()
 			if state.stopped then
@@ -1072,7 +1105,13 @@ function private.SendInBatches(records, target, max)
 			for j = i, min(i + FILL_BATCH - 1, count) do
 				tinsert(batch, records[j])
 			end
-			if not private.Send(TAG_FILL, { r = batch }, nil, target) then
+			local tbl = { r = batch }
+			if i == 1 and extra then
+				for k, v in pairs(extra) do
+					tbl[k] = v
+				end
+			end
+			if not private.Send(TAG_FILL, tbl, nil, target) then
 				state.stopped = true
 			end
 		end)

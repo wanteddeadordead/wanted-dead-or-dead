@@ -43,6 +43,14 @@ and the other side's bounties on this side in the Bridge's notice form. At login
 entry newer than `catchupT` in the background (as gap fills, never live, not forwarded to realm links), then the
 notices through the Bridge. No layout change: both fields are new and optional.
 
+Pruning (from 1.2.9): at load, `Store:Prune` drops `kill`, `death` and `assist` records older than 30 days
+(`Store.KEEP_SECONDS`), except a kill some `claim` names in `data.kill`. Every other kind is kept. The website
+keeps the full archive (the app uploads records as they appear; one pruned before the app ever ran is lost to
+it). A fill (`F`) answering a request for records the sender pruned carries `p = { [origin] = firstSeqHeld }`;
+the receiver's chain for that origin moves on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that
+record's `prev`, or from an unknown predecessor (`lastHash = "?"`, which the chain check accepts once), so it
+stops asking for records nobody holds. Older clients ignore `p` and keep asking, as before.
+
 `WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
 either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
 full names on the deaths it reads from the combat log, which names players by first name only. At load, names

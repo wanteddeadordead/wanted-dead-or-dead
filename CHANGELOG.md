@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The sync channel no longer shows up in a chat window: joining it by hand (the /join tip) listed it there, and
+  the game then showed its every join, leave and owner change in your chat. Wanted takes it back out and hides
+  those notices.
 ## [1.2.7] - 2026-09-27
 
 Log in already caught up.

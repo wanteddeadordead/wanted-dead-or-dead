@@ -158,6 +158,26 @@ function Sync:OnEnable()
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
 	if addFilter then
 		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
+		-- The channel's joins, leaves and owner changes are nobody's business: it only carries addon data
+		addFilter("CHAT_MSG_CHANNEL_NOTICE", private.HideChannelNotice)
+		addFilter("CHAT_MSG_CHANNEL_NOTICE_USER", private.HideChannelNotice)
+	end
+end
+
+---Hides the game's notices about the sync channel (arg9 is the channel's base name).
+function private.HideChannelNotice(_, _, _, _, _, _, _, _, _, _, baseName)
+	return type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName)
+end
+
+---Takes the sync channel out of every chat window. The game lists a channel in the window it was joined from
+---by hand (the /join tip), and then shows its every join, leave and owner change there; the addon's own join
+---names no window. Membership is untouched: only what the windows show.
+function private.HideFromChatWindows()
+	for i = 1, NUM_CHAT_WINDOWS or 10 do
+		local frame = _G["ChatFrame"..i]
+		if frame and frame.RemoveChannel then
+			frame:RemoveChannel(private.channelName)
+		end
 	end
 end
 
@@ -272,6 +292,7 @@ function private.TryJoin()
 		return
 	end
 	private.channelId = id
+	private.HideFromChatWindows()
 	if private.joinAttempts > 0 then
 		-- Freshly joined: the server needs a moment before it accepts messages on it (result 7, invalid channel)
 		Wanted:Log("Sync: in channel #%d after joining, HELLO in %ds", id, JOIN_SETTLE_SECONDS)

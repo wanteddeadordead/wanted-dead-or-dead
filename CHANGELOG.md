@@ -10,6 +10,8 @@
   deaths to the website within about five minutes (the game writes the log that often) instead of after a
   /reload. On by default; the switch is on the Website & app page. Logging you turned on yourself
   is never turned off, and it's off in instances.
+- Your nemesis, across the top of the Enemies page: who has killed you most, who you've killed most, and who
+  you've fought most, from your own wins and losses. Click one for the enemy's menu.
 
 ## [1.1.3] - 2026-09-27
 

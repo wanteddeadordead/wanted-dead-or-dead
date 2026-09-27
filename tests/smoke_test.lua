@@ -2024,5 +2024,24 @@ end)()
 	check(combatLogging, "the player's own logging stays on")
 	ns.db.settings.liveLog = true
 	LiveLog:Update()
+	-- Your nemesis: who killed you most, who you killed most, who you've fought most
+	local Enemies = ns.Enemies
+	local saved = ns.db.enemyStats
+	ns.db.enemyStats = {}
+	check(Enemies:GetNemeses().killedYou == nil, "no fights, no nemesis")
+	local function Foe(guid, name, wins, losses)
+		ns.Store:UpdatePlayer(guid, { name = name, faction = "Alliance", class = "ROGUE" })
+		ns.db.enemyStats[guid] = { wins = wins, losses = losses, detections = 1 }
+	end
+	Foe("Player-9-NEM1", "Stabby Nemesis", 1, 6) -- killed you most
+	Foe("Player-9-NEM2", "Easy Mark", 7, 0) -- you killed most
+	Foe("Player-9-NEM3", "Old Rival", 5, 4) -- 9 fights: fought most
+	local n = Enemies:GetNemeses()
+	check(n.killedYou and n.killedYou.name == "Stabby Nemesis" and n.killedYou.losses == 6, "who killed you most")
+	check(n.youKilled and n.youKilled.name == "Easy Mark" and n.youKilled.wins == 7, "who you killed most")
+	check(n.fought and n.fought.name == "Old Rival", "who you fought most")
+	ns.UI:Show("enemies")
+	ns.UI:Refresh()
+	ns.db.enemyStats = saved
 end)()
 print("wanted smoke: all checks pass")

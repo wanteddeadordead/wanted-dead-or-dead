@@ -31,6 +31,8 @@ local DEATH_DEDUPE_SECONDS = 15
 -- A death on our own side counts only with an enemy player in view this recently: dying to a mob while
 -- questing isn't world PvP
 local PVP_CONTEXT_SECONDS = 20
+-- Our own death record names the killer the death recap gave within this long (it's read 0.5 to 2 seconds after)
+local OWN_KILLER_SECONDS = 15
 -- Each side's races (the client's race file names), for players of ours we only know by GUID. Skyborne is on
 -- both sides under different names ("High Order Skyborne" is the Alliance's), learned as units are seen
 -- (private.skyborne), so it isn't listed here.
@@ -496,7 +498,9 @@ function private.RecordDeath(guid, name)
 		return
 	end
 	local friend = private.friendly[guid]
-	if friend then
+	-- Our own death: the death recap may name the player who killed us
+	local killer = guid == private.playerGUID and Wanted.Enemies and Wanted.Enemies:GetLastKiller(OWN_KILLER_SECONDS)
+	if friend and not killer then
 		local lastEnemy = Wanted.Enemies and Wanted.Enemies:LastEnemySeen()
 		if not lastEnemy or GetTime() - lastEnemy > PVP_CONTEXT_SECONDS then
 			Wanted:Log("Recorder: %s died with no enemy player around; not world PvP", tostring(name))
@@ -517,7 +521,7 @@ function private.RecordDeath(guid, name)
 		-- The saved players are enemies (the Nearby window, the map and hotspots read them)
 		Store:UpdatePlayer(guid, { name = name })
 	end
-	Store:NewRecord("death", private.AddTraits({
+	local data = private.AddTraits({
 		deathId = deathId,
 		victim = guid,
 		victimName = name,
@@ -525,7 +529,19 @@ function private.RecordDeath(guid, name)
 		zone = zone,
 		x = x,
 		y = y,
-	}, "victim", guid))
+	}, "victim", guid)
+	if killer then
+		-- Named by the one who died: the network counts it as a witnessed kill for them
+		local player = Store:GetPlayer(killer) or {}
+		local _, _, _, _, _, killerName = GetPlayerInfoByGUID(killer)
+		data.killer = killer
+		data.killerName = private.Readable(killerName) or player.name
+		data.killerGuild = player.guild or nil
+		private.AddTraits(data, "killer", killer)
+		data.killerFaction = data.killerFaction or (private.playerFaction == "Horde" and "Alliance" or "Horde")
+		Wanted:Log("Recorder: our death, killed by %s", tostring(data.killerName))
+	end
+	Store:NewRecord("death", data)
 	return deathId
 end
 

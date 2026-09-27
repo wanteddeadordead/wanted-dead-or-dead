@@ -158,6 +158,7 @@ function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
 function GetPlayerInfoByGUID(guid)
 	if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end
 	if guid == "Player-1-TAUREN" then return "Druid", "DRUID", "Tauren", "Tauren", 2, "Hoof Hearted" end
+	if guid == "Player-1-ME" then return "Warrior", "WARRIOR", "Orc", "Orc", 2, "Test Player" end
 	if guid == "Player-1-SKYHORDE" then return "Hunter", "HUNTER", "Horde Skyborne", "Skyborne", 2, "Sky Ours" end
 	if guid == "Player-9-SKYALLY" then return "Hunter", "HUNTER", "High Order Skyborne", "Skyborne", 2, "Sky Theirs" end
 	return nil
@@ -1844,6 +1845,26 @@ end)()
 	local mine = "https://wanteddeadordead.com/player/"..(ns.Store:GetOrigin():gsub("[^%w]", function(ch) return string.format("%%%02X", ch:byte()) end))
 	check(found[mine], "and this character's own page, got none of "..mine)
 	WantedAppInfo = nil
+end)()
+;(function()
+	-- Our own death names who killed us, from the death recap: a witnessed kill for them on the network
+	clock = clock + 120
+	RunTimers()
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:4242|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-9-ENEMY" } } end,
+	}
+	enemyUnits.nameplate43 = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate43")
+	Fire("PLAYER_DEAD")
+	Fire("UNIT_DIED", "Player-1-ME")
+	RunTimers()
+	local mine
+	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-ME" and r.t >= clock - 10 then mine = r end end
+	check(mine and mine.data.killer == "Player-9-ENEMY" and mine.data.killerName == "Stabby Mcstab", "our death names the killer the recap gave")
+	check(mine.data.killerFaction == "Alliance" and mine.data.victimFaction == "Horde", "with each side")
+	C_DeathRecap = nil
+	enemyUnits.nameplate43 = nil
 end)()
 ;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them

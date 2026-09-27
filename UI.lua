@@ -157,28 +157,33 @@ function private.Create()
 	bug:SetPoint("RIGHT", close, "LEFT", -6, 0)
 	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy (versions, settings, errors, recent log) and shows where to send it.")
 
-	-- Connection indicator
-	local connection = CreateFrame("Button", nil, titleBar)
-	connection:SetSize(210, 30)
-	connection:SetPoint("RIGHT", bug, "LEFT", -10, 0)
-	connection.dot = connection:CreateTexture(nil, "ARTWORK")
-	connection.dot:SetSize(8, 8)
-	connection.text = Theme:Text(connection, "small", "")
-	connection.text:SetPoint("RIGHT", 0, 0)
-	connection.text:SetJustifyH("RIGHT")
-	connection.dot:SetPoint("RIGHT", connection.text, "LEFT", -8, 0)
-	connection:SetScript("OnClick", function()
+	-- Two status lights: the desktop app, and the in-game WantedNet channel. No player count: an empty count
+	-- early on only tells people nobody uses Wanted.
+	local function Indicator(width, onClick)
+		local light = CreateFrame("Button", nil, titleBar)
+		light:SetSize(width, 30)
+		light.dot = light:CreateTexture(nil, "ARTWORK")
+		light.dot:SetSize(8, 8)
+		light.text = Theme:Text(light, "small", "")
+		light.text:SetPoint("RIGHT", 0, 0)
+		light.text:SetJustifyH("RIGHT")
+		light.dot:SetPoint("RIGHT", light.text, "LEFT", -8, 0)
+		light:SetScript("OnClick", onClick)
+		light:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+			GameTooltip:SetText(self.tooltipTitle or "", 1, 1, 1)
+			GameTooltip:AddLine(self.tooltipText or "", C.muted[1], C.muted[2], C.muted[3], true)
+			GameTooltip:Show()
+		end)
+		light:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		return light
+	end
+	private.netStatus = Indicator(150, function()
 		UI:Show(Wanted.db.settings.showTools and "tools" or "settings")
 	end)
-	W:AttachTooltip(connection, "Network", "Other players running Wanted share bounties, kills and payments with you.")
-	connection:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-		GameTooltip:SetText(self.tooltipTitle, 1, 1, 1)
-		GameTooltip:AddLine(self.tooltipText, C.muted[1], C.muted[2], C.muted[3], true)
-		GameTooltip:Show()
-	end)
-	connection:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	private.connection = connection
+	private.netStatus:SetPoint("RIGHT", bug, "LEFT", -10, 0)
+	private.appStatus = Indicator(110, function() UI:Show("web") end)
+	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 
 	-- Sidebar
 	local sidebar = CreateFrame("Frame", nil, frame)
@@ -388,24 +393,36 @@ function UI:Refresh()
 end
 
 function private.UpdateConnection()
-	if not private.connection then
+	if not private.netStatus then
 		return
 	end
-	local info = Wanted.Sync and Wanted.Sync:GetInfo()
-	local color, text
-	if Wanted:GetRequiredUpdate() then
-		color, text = C.red, "Update required: "..Wanted:GetRequiredUpdate()
-	elseif not info or not info.channelId then
-		color, text = C.red, "Offline"
-	elseif info.paused then
-		color, text = C.amber, "Paused (flood protection)"
-	elseif info.peers == 0 then
-		color, text = C.amber, "Online, no other players yet"
-	else
-		color, text = C.green, format("Online, %d player%s", info.peers, info.peers == 1 and "" or "s")
+	local function Set(light, color, text, title, tip)
+		light.dot:SetColorTexture(color[1], color[2], color[3], 1)
+		light.text:SetText(text)
+		light.tooltipTitle, light.tooltipText = title, tip
 	end
-	private.connection.dot:SetColorTexture(color[1], color[2], color[3], 1)
-	private.connection.text:SetText(text)
+	local info = Wanted.Sync and Wanted.Sync:GetInfo()
+	if Wanted:GetRequiredUpdate() then
+		Set(private.netStatus, C.red, "Update required", "Update required",
+			"Wanted "..Wanted:GetRequiredUpdate().." is out. Update from CurseForge, then /reload.")
+	elseif not info or not info.channelId then
+		Set(private.netStatus, C.red, "WantedNet", "Not connected to WantedNet",
+			"Joining the in-game channel Wanted shares bounties, kills and sightings on. It connects a little after login.")
+	elseif info.paused then
+		Set(private.netStatus, C.amber, "WantedNet paused", "WantedNet paused",
+			"Too much traffic for a moment: sharing resumes shortly.")
+	else
+		Set(private.netStatus, C.green, "WantedNet", "Connected to WantedNet",
+			"Sharing bounties, kills and sightings with other Wanted players in game, in "..info.channelName..".")
+	end
+	local app = Wanted:AppVersion()
+	if app then
+		Set(private.appStatus, C.green, "App", "The Wanted app is set up",
+			"Version "..app..". It puts your records on wanteddeadordead.com and keeps your addon data safe.")
+	else
+		Set(private.appStatus, C.red, "Get the app", "No Wanted app on this computer",
+			"The desktop app puts your kills on wanteddeadordead.com and confirms other players' kills. Click for the link.")
+	end
 end
 
 ---Shows the result of an action under the page, fading after a while.

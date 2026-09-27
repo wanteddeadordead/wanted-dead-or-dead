@@ -75,10 +75,8 @@ function private.Refresh()
 		color, title = C.red, "Offline: not in "..(info.channelName or "the channel").." yet"
 	elseif info.paused then
 		color, title = C.amber, "Paused: too much traffic, resuming shortly"
-	elseif info.peers == 0 then
-		color, title = C.amber, format("Online in %s, no other players seen yet", info.channelName)
 	else
-		color, title = C.green, format("Online in %s with %d other player%s", info.channelName, info.peers, info.peers == 1 and "" or "s")
+		color, title = C.green, format("Connected to WantedNet (%s)", info.channelName)
 	end
 	private.dot:SetColorTexture(color[1], color[2], color[3], 1)
 	private.netTitle:SetText(title)

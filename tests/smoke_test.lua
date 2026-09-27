@@ -1867,6 +1867,26 @@ end)()
 	enemyUnits.nameplate43 = nil
 end)()
 ;(function()
+	-- The title bar has two lights and no player count: the app (or a way to get it) and WantedNet
+	local function Lights()
+		local out = {}
+		for _, f in ipairs(Mock.created) do
+			local text = rawget(f, "text")
+			if rawget(f, "dot") and type(text) == "table" then out[#out + 1] = text._text end
+		end
+		return table.concat(out, "|")
+	end
+	WantedAppInfo = nil
+	ns.UI:Show("board")
+	ns.UI:Refresh()
+	check(Lights():find("Get the app", 1, true), "without the app, a light offers it: "..Lights())
+	check(not Lights():find("player", 1, true), "no player count: "..Lights())
+	WantedAppInfo = { running = "0.1.3", latest = "0.1.3" }
+	ns.UI:Refresh()
+	check(Lights():find("App", 1, true) and not Lights():find("Get the app", 1, true), "with the app, the light says so: "..Lights())
+	WantedAppInfo = nil
+end)()
+;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them
 	local function Linked(origin, seq, prev)
 		local r = Rec(origin, seq)

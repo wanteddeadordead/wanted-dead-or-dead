@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-09-27
+
+Harder to fake a bounty claim.
+
 - Before you confirm a bounty claim, Wanted warns you when nobody else recorded the death, or when its only
   witnesses are new to the network or only ever back up that hunter. The confirm dialog also gives the address
   of the death's page on the website, with every record of it from both factions, including who the victim's

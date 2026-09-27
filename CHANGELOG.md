@@ -4,6 +4,9 @@
 
 - The Nearby window closes in dungeons and raids, where there's no world PvP, and opens again when you leave if
   it was open. Battlegrounds and arenas keep it.
+- The main window refreshes several times faster with a lot of saved data. The menu's badges (actions waiting,
+  hunts, busy hotspots) scanned every record on every refresh; now at most one is worked out again per refresh,
+  and each at most every 5 seconds. Opening the window also refreshed it twice.
 - Fixed a Lua error in dungeons ("attempt to compare a secret string value") from the Nearby window's health
   bars: the game keeps unit ids secret there.
 

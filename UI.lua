@@ -107,7 +107,7 @@ function private.Create()
 	frame:Hide()
 	tinsert(UISpecialFrames, "WantedFrame")
 	frame:SetScript("OnShow", function()
-		UI:Refresh()
+		UI:Refresh(true)
 		-- Keep "4m ago" style times and the connection state current while the window is open
 		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", function() UI:Refresh() end))
 	end)
@@ -335,8 +335,12 @@ function UI:Show(key)
 	for _, def in ipairs(private.pages) do
 		def.container:SetShown(def.key == private.current)
 	end
+	-- Opening it refreshes it (OnShow); an open window is refreshed here, with every badge worked out afresh
+	local wasShown = private.frame:IsShown()
 	private.frame:Show()
-	UI:Refresh()
+	if wasShown then
+		UI:Refresh(true)
+	end
 	if Wanted.Report then
 		Wanted.Report:MaybeWelcome()
 	end
@@ -371,10 +375,31 @@ function UI:IsShown(key)
 	return private.frame and private.frame:IsShown() and (not key or private.current == key)
 end
 
-function UI:Refresh()
+-- The menu's badges scan every record, and the window refreshes often in a busy fight, so a badge is worked out
+-- again at most this often, and only one per refresh, except when the window opens or changes page
+local BADGE_SECONDS = 5
+
+---A page's badge, from the last time it was worked out unless that's stale and this refresh hasn't worked one
+---out yet (or all is set).
+function private.Badge(page, all)
+	private.badges = private.badges or {}
+	private.badgeAt = private.badgeAt or {}
+	local at = private.badgeAt[page.key]
+	if all or not at or (not private.badgeDone and GetTime() - at >= BADGE_SECONDS) then
+		private.badges[page.key] = page.badge()
+		private.badgeAt[page.key] = GetTime()
+		private.badgeDone = not all
+	end
+	return private.badges[page.key]
+end
+
+---Redraws the window. allBadges: work every menu badge out afresh (opening the window, changing page).
+---@param allBadges boolean?
+function UI:Refresh(allBadges)
 	if not private.frame then
 		return
 	end
+	private.badgeDone = false
 	private.LayoutNav()
 	local def = private.pageByKey[private.current]
 	if def.hidden and def.hidden() then
@@ -393,7 +418,7 @@ function UI:Refresh()
 		nav.bar:SetShown(selected)
 		nav.bg:SetColorTexture(1, 1, 1, selected and 0.06 or 0)
 		nav.label:SetTextColor(unpack(selected and C.white or C.muted))
-		local badge = page.badge and page.badge()
+		local badge = page.badge and private.Badge(page, allBadges)
 		if badge and badge > 0 then
 			nav.badge:Set(tostring(badge), C.accent)
 		else

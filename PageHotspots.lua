@@ -104,6 +104,19 @@ function private.ShowTooltip(row, group)
 	GameTooltip:Show()
 end
 
+---The zones with enemies seen in the last 15 minutes.
+---@param groups table from Hotspots:Get()
+---@return number
+function private.CountBusy(groups)
+	local busy = 0
+	for _, group in ipairs(groups) do
+		if group.recent > 0 then
+			busy = busy + 1
+		end
+	end
+	return busy
+end
+
 function private.Refresh()
 	if not private.list then
 		return
@@ -111,12 +124,7 @@ function private.Refresh()
 	private.mapToggle:SetChecked(Wanted.MapPins:IsShown())
 	private.risingToggle:SetChecked(Wanted.db.settings.detect.risingAlerts)
 	local groups = Hotspots:Get()
-	local busy = 0
-	for _, group in ipairs(groups) do
-		if group.recent > 0 then
-			busy = busy + 1
-		end
-	end
+	local busy = private.CountBusy(groups)
 	private.count:SetText(format("%d zone%s with enemies in the last 15 minutes", busy, busy == 1 and "" or "s"))
 	private.list:SetItems(groups, "No enemies seen in the last hour.", "Zones fill in as you and other Wanted users spot enemy players.")
 end
@@ -125,6 +133,10 @@ UI:RegisterPage("hotspots", {
 	title = "Hotspots",
 	subtitle = "Where enemy players are right now, from what you and other Wanted users have seen. Busiest first.",
 	order = 3.5,
+	badge = function()
+		local busy = private.CountBusy(Hotspots:Get())
+		return busy > 0 and busy or nil
+	end,
 	build = function(container, width, height)
 		private.count = Theme:Text(container, "small", "")
 		private.count:SetPoint("TOPLEFT", 0, -2)

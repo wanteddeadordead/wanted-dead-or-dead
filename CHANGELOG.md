@@ -4,6 +4,8 @@
 
 - Fixed the Nearby window listing an enemy several times when they turned up during a fight: each refresh in
   combat wrote them into another empty row.
+- A copy of Wanted downloaded straight from GitHub no longer acts as a development build (debug log and test
+  commands). Only builds marked "-dev" do.
 
 ## [1.2.5] - 2026-09-27
 

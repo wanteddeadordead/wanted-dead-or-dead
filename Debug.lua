@@ -48,12 +48,10 @@ end
 
 function Wanted:Timed(label, func)
 	local isEvents = strfind(label, "events$") ~= nil
-	return function(...)
-		local start = debugprofilestop()
-		func(...)
+	-- Notes the time a call took and passes its results through
+	local function Done(start, event, ...)
 		local ms = debugprofilestop() - start
 		-- An event handler is timed per event, so the log names the one that was slow
-		local event = isEvents and select(2, ...)
 		local label = type(event) == "string" and label.." "..event or label
 		local now = floor(GetTime())
 		if now ~= second then
@@ -71,6 +69,10 @@ function Wanted:Timed(label, func)
 		if ms > SLOW_MS then
 			Wanted:Log("!! Slow: %s took %.0fms", label, ms)
 		end
+		return ...
+	end
+	return function(...)
+		return Done(debugprofilestop(), isEvents and select(2, ...), func(...))
 	end
 end
 

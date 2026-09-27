@@ -7,6 +7,8 @@
 - The main window refreshes several times faster with a lot of saved data. The menu's badges (actions waiting,
   hunts, busy hotspots) scanned every record on every refresh; now at most one is worked out again per refresh,
   and each at most every 5 seconds. Opening the window also refreshed it twice.
+- The minimap button's count of actions waiting on you is only worked out again when a bounty record arrives,
+  not on every death and sighting in a busy fight.
 - Fixed a Lua error in dungeons ("attempt to compare a secret string value") from the Nearby window's health
   bars: the game keeps unit ids secret there.
 

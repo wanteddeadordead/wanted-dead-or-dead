@@ -11,11 +11,10 @@ local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
 local EDGE_OFFSET = 10
 
 function Minimap_:OnEnable()
-	Wanted.Store:OnRecord("*", function(record)
-		if record.kind ~= "sighting" then
-			private.actionCount = nil
-		end
-	end)
+	-- Only bounty records change what's waiting on you: a busy fight's deaths and sightings don't
+	for _, kind in ipairs({ "bounty", "claim", "confirm", "payment", "withdraw", "raise", "pass", "hunt" }) do
+		Wanted.Store:OnRecord(kind, function() private.actionCount = nil end)
+	end
 	local button = CreateFrame("Button", "WantedMinimapButton", Minimap)
 	button:SetSize(31, 31)
 	button:SetFrameStrata("MEDIUM")

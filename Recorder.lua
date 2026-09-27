@@ -425,7 +425,11 @@ end
 ---The client's death event for any unit near us: an enemy player dying is a witnessed death, and so is one of
 ---our own side (RecordDeath keeps those to world PvP).
 function private.OnUnitDied(guid)
-	if not guid or (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" or not strfind(guid, "^Player%-") then
+	if issecretvalue and issecretvalue(guid) then
+		Wanted:Log("Recorder: UNIT_DIED with a hidden GUID")
+		return
+	end
+	if not guid or type(guid) ~= "string" or not strfind(guid, "^Player%-") then
 		return
 	end
 	local player = Store:GetPlayer(guid)
@@ -440,6 +444,7 @@ function private.OnUnitDied(guid)
 	-- Unknown so far: ask the client
 	local _, _, raceName, race, _, name = GetPlayerInfoByGUID(guid)
 	if not name or (issecretvalue and issecretvalue(name)) then
+		Wanted:Log("Recorder: UNIT_DIED for a player the client won't name")
 		return
 	end
 	for _, trackedGuid in pairs(private.tracked) do
@@ -452,9 +457,12 @@ function private.OnUnitDied(guid)
 	local ours = OUR_RACES[private.playerFaction]
 	if guid == private.playerGUID or (ours and race and ours[race]) or (race == "Skyborne" and private.IsOurSkyborne(raceName)) then
 		-- One of our side we never had a unit for (friendly nameplates are usually off)
+		Wanted:Log("Recorder: UNIT_DIED for %s (%s), one of ours", name, tostring(raceName))
 		private.friendly[guid] = { name = name }
 		private.ConfirmDeath(guid, name)
+		return
 	end
+	Wanted:Log("Recorder: UNIT_DIED for %s (%s, %s), side unknown; not recorded", name, tostring(raceName), tostring(race))
 end
 
 ---Whether a Skyborne player of this name is on our side: their name is the one seen on our side, or it isn't

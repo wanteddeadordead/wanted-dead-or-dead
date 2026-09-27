@@ -13,6 +13,13 @@ local private = {
 }
 local MAX_SIGHTINGS = 500
 Store.MAX_SIGHTINGS = MAX_SIGHTINGS
+-- Kills, deaths and assists are kept this long (decided 2026-09-27); the website keeps the archive. Every other
+-- kind (bounties and what happens to them, links, notices) is kept, and so is a kill a claim rests on.
+local KEEP_SECONDS = 30 * 24 * 60 * 60
+Store.KEEP_SECONDS = KEEP_SECONDS
+local PRUNED_KINDS = { kill = true, death = true, assist = true }
+-- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
+local UNKNOWN_HASH = "?"
 
 
 
@@ -29,6 +36,57 @@ function Store:OnLoad()
 	db.sightingsPos = db.sightingsPos or 0
 	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)
 	private.PruneNames(db.names)
+	Store:Prune(GetServerTime())
+end
+
+---Drops kills, deaths and assists older than KEEP_SECONDS, except a kill some claim rests on. Returns how many.
+---Saved data grew without bound (2.9 MB after a week for one player) and every record was walked on load
+---and on every sync; the website holds everything ever uploaded.
+---@param now number
+---@return number pruned
+function Store:Prune(now)
+	local records = Wanted.db.records
+	local cutoff = now - KEEP_SECONDS
+	local claimed = {}
+	for _, record in pairs(records) do
+		if record.kind == "claim" and type(record.data) == "table" and type(record.data.kill) == "string" then
+			claimed[record.data.kill] = true
+		end
+	end
+	local pruned = 0
+	for id, record in pairs(records) do
+		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff and not claimed[id] then
+			records[id] = nil
+			pruned = pruned + 1
+		end
+	end
+	if pruned > 0 then
+		private.indexFor = nil -- built again on the next walk
+		Wanted:Log("Store: pruned %d records older than %d days", pruned, KEEP_SECONDS / 86400)
+	end
+	return pruned
+end
+
+---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
+---moves on to there, so this client stops asking for records nobody has, and continues from prev (the first
+---record's predecessor) or from an unknown one.
+---@param origin string
+---@param seq number
+---@param prev string?
+function Store:SkipTo(origin, seq, prev)
+	local db = Wanted.db
+	local chain = db.chains[origin]
+	if not chain then
+		chain = { seq = 0, lastHash = "0" }
+		db.chains[origin] = chain
+	end
+	if origin == private.origin or type(seq) ~= "number" or seq - 1 <= chain.seq then
+		return
+	end
+	Wanted:Log("Store: %s's records before %d are gone from the network; the chain continues from there", origin, seq)
+	chain.seq = seq - 1
+	chain.lastHash = type(prev) == "string" and prev or UNKNOWN_HASH
+	private.CatchUpChain(origin, chain)
 end
 
 
@@ -254,7 +312,7 @@ function private.Insert(record, live)
 		db.chains[record.origin] = chain
 	end
 	if record.seq == chain.seq + 1 then
-		if record.prev ~= chain.lastHash then
+		if record.prev ~= chain.lastHash and chain.lastHash ~= UNKNOWN_HASH then
 			record.brokenChain = true
 			Wanted:Log("!! Store: record %s doesn't follow %s's previous record (broken chain)", tostring(record.id), tostring(record.origin))
 		end

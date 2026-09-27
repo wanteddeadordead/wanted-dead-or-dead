@@ -733,6 +733,9 @@ check(ns:IsNewerVersion("0.1.0-beta.1", "0.1.0-alpha.3"), "beta is newer than al
 check(ns:IsNewerVersion("1.0.0", "0.9.9"), "major wins")
 check(not ns:IsNewerVersion("0.1.0-beta.1-dev", "0.1.0-beta.1"), "a dev build is not newer")
 check(not ns:IsNewerVersion("@project-version@", "0.1.0"), "an unpackaged version is ignored")
+-- Only the "-dev" builds deploy.sh stamps are development builds: a copy straight from GitHub has no test data
+-- commands or debug log either
+check(ns:IsDevVersion("1.2.6-dev") and not ns:IsDevVersion("@project-version@") and not ns:IsDevVersion("1.2.6"), "only -dev versions are development builds")
 ns:NoteVersion("0.0.9")
 check(ns.newerVersion == nil, "an older peer is not news")
 -- A real hello, sent as version 0.3.0, comes back from another player

@@ -6,9 +6,13 @@ _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
 Wanted.FOLDER = ADDON_NAME
--- A development build: deployed with a "-dev" version, or run from a checkout the packager hasn't stamped.
--- Only these have the test data commands (/wanted simulate, /wanted purge); released versions don't.
-Wanted.DEV = strfind(Wanted.VERSION, "%-dev") ~= nil or strfind(Wanted.VERSION, "^@") ~= nil
+---Whether a version is a development build: deployed with a "-dev" version (scripts/deploy.sh). A copy
+---straight from GitHub, which the packager hasn't stamped, is not one.
+function Wanted:IsDevVersion(version)
+	return strfind(tostring(version), "%-dev") ~= nil
+end
+-- Only development builds have the test data commands (/wanted simulate, /wanted purge); released versions don't.
+Wanted.DEV = Wanted:IsDevVersion(Wanted.VERSION)
 -- The newest release another player's client has reported, when it is newer than this one
 Wanted.newerVersion = nil
 -- Beta: a label in the window, a one-time welcome, and bug reports

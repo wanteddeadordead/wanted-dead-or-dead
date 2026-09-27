@@ -147,7 +147,11 @@ function CheckInteractDistance(unit, index) local e = enemyUnits[unit] return e 
 playerOnTaxi = false
 function UnitOnTaxi(unit) return unit == "player" and playerOnTaxi end
 function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
-function GetPlayerInfoByGUID(guid) if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end return nil end
+function GetPlayerInfoByGUID(guid)
+	if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end
+	if guid == "Player-1-TAUREN" then return "Druid", "DRUID", "Tauren", "Tauren", 2, "Hoof Hearted" end
+	return nil
+end
 inCombat = false
 function InCombatLockdown() return inCombat end
 pvpFlag, pvpTimer = false, nil
@@ -1773,6 +1777,12 @@ end)()
 	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-FRIEND" then death = r end end
 	check(death.data.victimFaction == "Horde" and death.data.victimLevel == 30, "our side's death names our faction and their level")
 	check(ns.Store:GetPlayer("Player-1-FRIEND") == nil, "a friend never joins the enemy list")
+	-- One of ours we never had a unit for: the game's death event and their race are enough
+	Fire("UNIT_DIED", "Player-1-TAUREN")
+	RunTimers()
+	local tauren
+	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-TAUREN" then tauren = r end end
+	check(tauren and tauren.data.victimFaction == "Horde" and tauren.data.victimName == "Hoof Hearted", "a Tauren dying nearby in a fight is recorded as ours")
 	enemyUnits.nameplate40, enemyUnits.nameplate41 = nil, nil
 end)()
 ;(function()

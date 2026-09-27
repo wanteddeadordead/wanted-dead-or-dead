@@ -47,10 +47,14 @@ local function FlushSecond()
 end
 
 function Wanted:Timed(label, func)
+	local isEvents = strfind(label, "events$") ~= nil
 	return function(...)
 		local start = debugprofilestop()
 		func(...)
 		local ms = debugprofilestop() - start
+		-- An event handler is timed per event, so the log names the one that was slow
+		local event = isEvents and select(2, ...)
+		local label = type(event) == "string" and label.." "..event or label
 		local now = floor(GetTime())
 		if now ~= second then
 			FlushSecond()

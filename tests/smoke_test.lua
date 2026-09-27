@@ -2194,4 +2194,33 @@ end)()
 	check(ns.db.names["Player-4613-OLDNAME"] == nil, "a name not seen for a month is dropped")
 	check(count == ns.Store.NAME_BOOK_MAX and ns.db.names["Player-4613-FRIEND01"] ~= nil, "the book keeps the newest up to its cap, got "..count)
 end)()
+;(function()
+	-- Walking one kind of record uses an index by kind; it stays right when records are pruned, when the whole
+	-- table is replaced, and when a record arrives during a walk
+	local Store = ns.Store
+	local function Count(kind)
+		local n = 0
+		for _ in Store:Iterator(kind) do n = n + 1 end
+		return n
+	end
+	Store:InsertTest("raise", "Index Seed", { bounty = "b-seed", amount = 1 }) -- at least one to walk
+	local before = Count("raise")
+	Store:InsertTest("raise", "Index Test", { bounty = "b-index", amount = 1 })
+	check(Count("raise") == before + 1, "a new record is found by kind")
+	for id, r in pairs(ns.db.records) do
+		if r.kind == "raise" and r.origin == "Index Test" then ns.db.records[id] = nil end
+	end
+	check(Count("raise") == before, "a pruned record is gone from the walk")
+	local walked = 0
+	for _ in Store:Iterator("raise") do
+		walked = walked + 1
+		Store:InsertTest("raise", "Index Test", { bounty = "b-index", amount = 2 })
+	end
+	check(walked == before and Count("raise") == before * 2, "records added during a walk wait for the next one")
+	local saved = ns.db.records
+	ns.db.records = {}
+	check(Count("raise") == 0, "a replaced records table is indexed afresh")
+	ns.db.records = saved
+	check(Count("raise") == before * 2, "and back again")
+end)()
 print("wanted smoke: all checks pass")

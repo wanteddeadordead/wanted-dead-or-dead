@@ -78,14 +78,17 @@ function Nearby:OnEnable()
 	if not InCombatLockdown() then
 		private.Create()
 	end
-	-- Development builds time the two halves of a refresh apart: building the list, and drawing each row
-	private.GetItems = Wanted:Timed("Nearby list", private.GetItems)
-	private.Draw = Wanted:Timed("Nearby row", private.Draw)
 	Enemies:OnChange(Wanted:Timed("Nearby enemy change", private.OnEnemyEvent))
 	C_Timer.NewTicker(1, Wanted:Timed("Nearby tick", function()
 		if private.frame and private.frame:IsShown() then
+			local start = Wanted.DEV and debugprofilestop()
 			Nearby:Refresh()
 			private.CheckAutoHide()
+			-- Development builds say where a slow tick went: working out the list, or drawing the rows
+			local ms = start and debugprofilestop() - start
+			if ms and ms > 10 and private.split then
+				Wanted:Log("!! Nearby tick %.0fms: list %.0fms, %d rows %.0fms", ms, private.split.list, private.split.rows, private.split.draw)
+			end
 		end
 		private.MaybeQuietTip()
 		-- The emote tip waits its turn behind the quiet mode one
@@ -598,7 +601,9 @@ function Nearby:Refresh()
 		return
 	end
 	local view = private.Settings().tab or "nearby"
+	local t0 = Wanted.DEV and debugprofilestop()
 	local items = private.GetItems(view)
+	local t1 = t0 and debugprofilestop()
 	local inCombat = InCombatLockdown()
 	local label = VIEWS[1].label
 	for _, v in ipairs(VIEWS) do
@@ -640,6 +645,7 @@ function Nearby:Refresh()
 				end
 			end
 		end
+		private.NoteSplit(t0, t1, #items)
 		return
 	end
 
@@ -683,6 +689,14 @@ function Nearby:Refresh()
 		row.clickable = info ~= nil
 		private.Draw(row, info)
 		row:SetShown(i <= numRows)
+	end
+	private.NoteSplit(t0, t1, numRows)
+end
+
+---Development builds: how a refresh's time split between working out the list and drawing the rows.
+function private.NoteSplit(t0, t1, rows)
+	if t0 then
+		private.split = { list = t1 - t0, draw = debugprofilestop() - t1, rows = rows }
 	end
 end
 

@@ -184,7 +184,7 @@ function private.Create()
 		UI:Show(Wanted.db.settings.showTools and "tools" or "settings")
 	end)
 	private.netStatus:SetPoint("RIGHT", bug, "LEFT", -10, 0)
-	private.appStatus = Indicator(110, function() UI:Show("web") end)
+	private.appStatus = Indicator(140, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 
 	-- Under heavy development through the WoW Forever beta: say so on every page
@@ -432,9 +432,14 @@ function private.UpdateConnection()
 		Set(private.netStatus, C.green, Wanted.DEV and format("WantedNet (%d)", info.peers or 0) or "WantedNet", "Connected to WantedNet",
 			"Sharing bounties, kills and sightings with other Wanted players in game, in "..info.channelName..".")
 	end
-	local app = Wanted:AppVersion()
-	if app then
-		Set(private.appStatus, C.green, "App", "The Wanted app is set up",
+	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
+	if app and notRunning then
+		Set(private.appStatus, C.amber, "App not running", "The Wanted app isn't running",
+			"It last ran "..Theme:Ago(notRunning).." ago. Start it from the Start menu (Wanted Dead or Dead) so your kills reach the website.")
+	elseif app then
+		-- Development builds also count the apps running across the network
+		local apps = Wanted.DEV and Wanted:AppsRunning()
+		Set(private.appStatus, C.green, apps and format("App (%d running)", apps) or "App", "The Wanted app is set up",
 			"Version "..app..". It puts your records on wanteddeadordead.com and keeps your addon data safe.")
 	else
 		Set(private.appStatus, C.red, "Get the app", "No Wanted app on this computer",

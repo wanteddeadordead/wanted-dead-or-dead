@@ -118,6 +118,8 @@ function GetSubZoneText() return subZone end
 function IsInInstance() return false end
 groupSize = 0
 function GetNumGroupMembers() return groupSize end
+hkCount = 0
+function GetPVPSessionStats() return hkCount, 0 end
 function GetChannelName() return 6 end
 local joinedWith = {}
 function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
@@ -1568,6 +1570,39 @@ check(#links == 1 and links[1].data.code == "AB12CD34" and links[1].data.guid ==
 ns:RunCommand("link", "x!")
 ns:RunCommand("link", "")
 check(#LinkRecords() == 1, "a malformed code makes no record")
+-- Honorable kill credit without the killing blow is an assist on the death just seen; our own kill is not
+;(function()
+	local function Assists() local out = {} for r in ns.Store:Iterator("assist") do out[#out + 1] = r end return out end
+	local me = ns.Store:GetOrigin()
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk1", victim = "Player-9-HKV", victimName = "Hk Victim", victimGuild = "Silver Accord",
+		victimClass = "MAGE", victimRace = "Gnome", victimLevel = 20, victimFaction = "Alliance", zone = "Undercity", x = 0.4, y = 0.6 })
+	Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "You have been awarded 1 Honor.")
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	local a = Assists()
+	check(#a == 1 and a[1].origin == me and a[1].data.victim == "Player-9-HKV" and a[1].data.deathId == "hk1", "HK credit after a death we saw is an assist on it")
+	check(a[1].data.victimClass == "MAGE" and a[1].data.victimLevel == 20 and a[1].data.killerClass == "WARRIOR" and a[1].data.killerGroup == 1
+		and a[1].data.zone == "Undercity", "the assist carries the victim's details and ours")
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 1, "one death gives one assist, however many HKs arrive")
+	-- Our own killing blow also raises the HK count; that's the kill, not an assist
+	clock = clock + 120
+	Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 1, "an HK from our own kill is not an assist")
+	-- Long after any death: nothing to credit
+	clock = clock + 120
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 1, "an HK with no death seen records nothing")
+end)()
 -- The desktop app's account code links this character by itself, once per code
 ;(function()
 	local mark = ns.db.accountMark

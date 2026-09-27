@@ -2175,4 +2175,23 @@ end)()
 	Nearby:Refresh()
 	UnitGUID = unitGUID
 end)()
+;(function()
+	-- The name book: every player seen, both sides, by GUID with their full name, for the app (the combat log
+	-- only has first names)
+	enemyUnits.target = { guid = "Player-4613-FRIEND01", name = "Tusk Ironhide", faction = "Horde" }
+	Fire("PLAYER_TARGET_CHANGED")
+	enemyUnits.target = nil
+	local entry = ns.db.names["Player-4613-FRIEND01"]
+	check(entry and entry.n == "Tusk Ironhide" and entry.t == clock, "a friendly player seen goes in the name book")
+	-- Old names go at load; the book never grows past its cap
+	ns.db.names["Player-4613-OLDNAME"] = { n = "Long Gone", t = clock - 31 * 86400 }
+	for i = 1, ns.Store.NAME_BOOK_MAX + 10 do
+		ns.db.names["Player-4613-FILL"..i] = { n = "Fill "..i, t = clock - i }
+	end
+	ns.Store:OnLoad()
+	local count = 0
+	for _ in pairs(ns.db.names) do count = count + 1 end
+	check(ns.db.names["Player-4613-OLDNAME"] == nil, "a name not seen for a month is dropped")
+	check(count == ns.Store.NAME_BOOK_MAX and ns.db.names["Player-4613-FRIEND01"] ~= nil, "the book keeps the newest up to its cap, got "..count)
+end)()
 print("wanted smoke: all checks pass")

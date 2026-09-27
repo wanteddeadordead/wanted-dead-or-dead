@@ -320,6 +320,7 @@ function private.Track(unit)
 	if not guid or (issecretvalue and issecretvalue(guid)) then
 		return
 	end
+	Store:NoteName(guid, GetUnitName(unit, true))
 	local faction = UnitFactionGroup(unit)
 	local raceName, raceFile = UnitRace(unit)
 	if raceFile == "Skyborne" and type(raceName) == "string" and type(faction) == "string" then

@@ -27,6 +27,55 @@ function Store:OnLoad()
 	db.players = db.players or {} -- guid -> { name, class, level, faction, lastSeen, zone, x, y }
 	db.sightings = db.sightings or {} -- ring of { guid, zone, x, y, t }
 	db.sightingsPos = db.sightingsPos or 0
+	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)
+	private.PruneNames(db.names)
+end
+
+
+
+-- ============================================================================
+-- The name book
+-- ============================================================================
+
+-- Every player the addon sees, on either side, by GUID with their full name, kept for the desktop app: the game's
+-- combat log names players by first name only, and the app puts full names on the deaths it reads there.
+Store.NAME_BOOK_MAX = 5000
+local NAME_BOOK_DAYS = 30
+-- A name already in the book is only stamped again this often
+local NAME_RESTAMP_SECONDS = 3600
+
+---Drops names not seen for a month, then the oldest until the book fits its cap.
+function private.PruneNames(names)
+	local now, cutoff = GetServerTime(), GetServerTime() - NAME_BOOK_DAYS * 86400
+	local kept = {}
+	for guid, entry in pairs(names) do
+		if type(entry) ~= "table" or type(entry.t) ~= "number" or entry.t < cutoff or entry.t > now + 86400 then
+			names[guid] = nil
+		else
+			tinsert(kept, guid)
+		end
+	end
+	if #kept > Store.NAME_BOOK_MAX then
+		sort(kept, function(a, b) return names[a].t > names[b].t end)
+		for i = Store.NAME_BOOK_MAX + 1, #kept do
+			names[kept[i]] = nil
+		end
+	end
+end
+
+---Notes a player's full name in the name book.
+---@param guid string
+---@param name string?
+function Store:NoteName(guid, name)
+	if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then
+		return
+	end
+	local entry = Wanted.db.names[guid]
+	local now = GetServerTime()
+	if entry and entry.n == name and now - entry.t < NAME_RESTAMP_SECONDS then
+		return
+	end
+	Wanted.db.names[guid] = { n = name, t = now }
 end
 
 function Store:OnEnable()

@@ -250,6 +250,14 @@ addonSent = {}
 -- Chat filters (the realm links hide "No player named ..." for someone just greeted)
 local chatFilters = {}
 ChatFrameUtil = { AddMessageEventFilter = function(event, func) chatFilters[event] = func end }
+-- Chat windows: the game lists a channel in a window when it was joined by hand there, and shows its notices
+NUM_CHAT_WINDOWS = 2
+removedChannels = {}
+for i = 1, NUM_CHAT_WINDOWS do
+	local frame = NewMock("ChatFrame")
+	frame.RemoveChannel = function(_, name) removedChannels[#removedChannels + 1] = i..":"..name end
+	_G["ChatFrame"..i] = frame
+end
 ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
 -- Battle.net friends (Bridge): who each is in game, as C_BattleNet reports them
 local bnFriends = {
@@ -2371,5 +2379,19 @@ end)()
 	ns.Catchup:Import()
 	RunFrames()
 	check(ns.Store:Get("Catch Origin:6"), "a newer one is taken in")
+end)()
+;(function()
+	-- The sync channel only carries addon data, so it has no place in a chat window: the game listed it in one
+	-- when a player joined it by hand (the /join tip), and then showed every join, leave and owner change
+	removedChannels = {}
+	Fire("PLAYER_ENTERING_WORLD")
+	RunTimers()
+	check(#removedChannels == NUM_CHAT_WINDOWS and removedChannels[1] == "1:WantedNetHorde", "joining takes the channel out of every chat window, got "..table.concat(removedChannels, " "))
+	local notice = chatFilters.CHAT_MSG_CHANNEL_NOTICE
+	local userNotice = chatFilters.CHAT_MSG_CHANNEL_NOTICE_USER
+	check(notice and userNotice, "channel notices are filtered")
+	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde") == true, "a notice for the sync channel is hidden")
+	check(userNotice(nil, "CHAT_MSG_CHANNEL_NOTICE_USER", "OWNER_CHANGED", "Melyn Perdition", nil, "6. wantednethorde", "", "", 0, 6, "wantednethorde") == true, "an owner change on it is hidden, whatever the case")
+	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
 print("wanted smoke: all checks pass")

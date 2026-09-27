@@ -1996,23 +1996,9 @@ end)()
 	check(got and got.live == true, "a gap fill from the record's own origin counts as heard live")
 end)()
 ;(function()
-	-- Live battle reports: combat logging is on in the open world, and written out every few seconds while
-	-- there's fighting, so the desktop app sees deaths as they happen
+	-- Live battle reports: combat logging is on in the open world, for the desktop app to read
 	local LiveLog = ns.LiveLog
 	check(combatLogging and ns.db.settings.liveLog == true, "combat logging is on by default")
-	combatLogWrites = 0
-	clock = clock + 120
-	LiveLog:Tick()
-	check(combatLogWrites == 0, "nothing going on: the log is left alone")
-	ns.Store:NewRecord("pass", { bounty = "livelog" })
-	LiveLog:Tick()
-	check(combatLogWrites == 1 and combatLogging, "a new record: the log is written out and logging stays on")
-	clock = clock + 20
-	LiveLog:Tick()
-	check(combatLogWrites == 2, "and again a few seconds later, while the fight may still be going")
-	clock = clock + 60
-	LiveLog:Tick()
-	check(combatLogWrites == 2, "a quiet minute later it stops")
 	-- The setting
 	ns.db.settings.liveLog = false
 	LiveLog:Update()

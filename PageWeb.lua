@@ -58,7 +58,7 @@ function private.BuildApp(container, width)
 		Wanted.LiveLog:Update()
 	end)
 	private.liveLog:SetPoint("TOPLEFT", 16, -184)
-	W:AttachTooltip(private.liveLog, "Live battle reports", "Keeps the game's combat log on in the open world and has the game write it out every few seconds during a fight, so the app can post deaths to the website as they happen. Turn it off here rather than with /combatlog. The log files stay in your Logs folder; the app can clean them up.")
+	W:AttachTooltip(private.liveLog, "Live battle reports", "Keeps the game's combat log on in the open world, so the app can post deaths to the website within about five minutes, without a /reload. Turn it off here rather than with /combatlog. The log files stay in your Logs folder; the app can clean them up.")
 end
 
 ---What the app last told the addon (through !!WantedLink): set up and current, behind, or not set up.

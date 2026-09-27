@@ -9,6 +9,9 @@
   shared, but everything else (sending your records, catch-ups, taking in other players' records) waits until
   a few seconds after combat ends, then catches up a few milliseconds a frame.
 - Looking up who has a bounty on them no longer reads through every saved record each time.
+- Deaths on your own side are recorded too, yours included, when an enemy player was in view: dying to a mob
+  isn't world PvP. Your record of a death confirms the enemy's kill, the same way theirs confirms yours, so
+  both sides' kills can be confirmed.
 
 ## [1.1.1] - 2026-09-26
 

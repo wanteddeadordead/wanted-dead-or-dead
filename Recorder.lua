@@ -9,7 +9,8 @@ local Recorder = Wanted:NewModule("Recorder")
 local Store = Wanted.Store
 local private = {
 	frame = CreateFrame("Frame"),
-	tracked = {}, -- unit token -> guid of an enemy player being watched
+	tracked = {}, -- unit token -> guid of a player being watched (enemies, and our own side for their deaths)
+	friendly = {}, -- guid -> { name, level, guild } for players of our own faction being watched
 	lastSighting = {}, -- guid -> time
 	recentDeaths = {}, -- guid -> time the death was recorded
 	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
@@ -26,6 +27,9 @@ local private = {
 local SIGHTING_INTERVAL = 30
 -- One death per victim within this window, however many units show it
 local DEATH_DEDUPE_SECONDS = 15
+-- A death on our own side counts only with an enemy player in view this recently: dying to a mob while
+-- questing isn't world PvP
+local PVP_CONTEXT_SECONDS = 20
 -- A death is confirmed this long after it's seen: a hunter's Feign Death looks exactly like dying, but they're
 -- up again by then. Nobody comes back from a real death that fast (a ghost that released drops out of view).
 local DEATH_CONFIRM_SECONDS = 4
@@ -258,14 +262,15 @@ function private.AddTraits(data, prefix, guid)
 		local _, classFile, _, raceFile = GetPlayerInfoByGUID(guid)
 		class, race = private.Readable(classFile), private.Readable(raceFile)
 	end
-	local level = player and player.level
+	local friend = guid and private.friendly[guid]
+	local level = player and player.level or friend and friend.level
 	data[prefix.."Class"] = class or (player and player.class) or nil
 	data[prefix.."Race"] = race
 	data[prefix.."Level"] = type(level) == "number" and level > 0 and level or nil
 	data[prefix.."Faction"] = player and player.faction or nil
 	if prefix == "victim" and not data.victimFaction and private.playerFaction then
-		-- Only enemies are recorded as victims
-		data.victimFaction = private.playerFaction == "Horde" and "Alliance" or "Horde"
+		-- A victim we watched as one of our own side is ours; any other is the enemy's
+		data.victimFaction = friend and private.playerFaction or (private.playerFaction == "Horde" and "Alliance" or "Horde")
 	end
 	return data
 end
@@ -307,7 +312,12 @@ function private.Track(unit)
 	end
 	local faction = UnitFactionGroup(unit)
 	if faction == private.playerFaction then
-		private.tracked[unit] = nil
+		-- Our own side: watched for deaths only, never sighted or listed as an enemy
+		private.tracked[unit] = guid
+		local level = private.Readable(UnitLevel(unit))
+		private.friendly[guid] = { name = GetUnitName(unit, true), level = type(level) == "number" and level > 0 and level or nil,
+			guild = Recorder:GetUnitGuild(unit) }
+		private.NoteAlive(unit, guid)
 		return
 	end
 	private.tracked[unit] = guid
@@ -336,6 +346,10 @@ end
 
 ---An enemy player we are watching may have died.
 function private.CheckDeath(unit)
+	if (unit == "player" or strfind(unit, "^party%d") or strfind(unit, "^raid%d")) and private.tracked[unit] ~= UnitGUID(unit) then
+		-- Ourselves and our group, never shown on nameplates: watched from their first health change
+		private.Track(unit)
+	end
 	local guid = private.tracked[unit]
 	if not guid or UnitGUID(unit) ~= guid then
 		return
@@ -427,6 +441,14 @@ function private.RecordDeath(guid, name)
 	if not private.InOpenWorld() then
 		return
 	end
+	local friend = private.friendly[guid]
+	if friend then
+		local lastEnemy = Wanted.Enemies and Wanted.Enemies:LastEnemySeen()
+		if not lastEnemy or GetTime() - lastEnemy > PVP_CONTEXT_SECONDS then
+			Wanted:Log("Recorder: %s died with no enemy player around; not world PvP", tostring(name))
+			return
+		end
+	end
 	local now = GetTime()
 	if private.recentDeaths[guid] and now - private.recentDeaths[guid] < DEATH_DEDUPE_SECONDS then
 		return
@@ -437,12 +459,15 @@ function private.RecordDeath(guid, name)
 	-- Content-addressed id shared by every witness of the same death
 	local deathId = Store:Hash(strjoin("|", guid, zone, floor(t / 10)))
 	Wanted:Log("Recorder: death of %s in %s", tostring(name), zone)
-	Store:UpdatePlayer(guid, { name = name })
+	if not friend then
+		-- The saved players are enemies (the Nearby window, the map and hotspots read them)
+		Store:UpdatePlayer(guid, { name = name })
+	end
 	Store:NewRecord("death", private.AddTraits({
 		deathId = deathId,
 		victim = guid,
 		victimName = name,
-		victimGuild = Recorder:GetKnownGuild(guid),
+		victimGuild = friend and friend.guild or Recorder:GetKnownGuild(guid),
 		zone = zone,
 		x = x,
 		y = y,
@@ -545,7 +570,7 @@ function private.HandleHonorGain(text)
 	local guid = nil
 	local now = GetServerTime()
 	for record in Store:Iterator("death") do
-		if now - record.t <= HONOR_MATCH_WINDOW and record.data.victimName == victimName then
+		if now - record.t <= HONOR_MATCH_WINDOW and record.data.victimName == victimName and record.data.victimFaction ~= private.playerFaction then
 			guid = record.data.victim
 			break
 		end
@@ -637,7 +662,7 @@ function private.CreditHK()
 	for record in Store:Iterator("death") do
 		local data = record.data
 		if record.origin == me and serverNow - record.t <= HONOR_MATCH_WINDOW + ASSIST_DELAY and data.deathId
-			and not private.assisted[data.deathId] and (not death or record.t > death.t) then
+			and data.victimFaction ~= private.playerFaction and not private.assisted[data.deathId] and (not death or record.t > death.t) then
 			death = record
 		end
 	end

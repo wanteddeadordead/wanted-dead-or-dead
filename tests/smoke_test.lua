@@ -107,7 +107,7 @@ function GetServerTime() return clock end
 function GetTime() return clock end
 function debugprofilestop() return os.clock() * 1000 end
 function UnitName(unit) if unit == "player" then return "Test", "Player" end return nil end
-function UnitFactionGroup(unit) if unit and enemyUnits[unit] then return "Alliance" end return "Horde" end
+function UnitFactionGroup(unit) if unit and enemyUnits[unit] then return enemyUnits[unit].faction or "Alliance" end return "Horde" end
 function UnitGUID(unit) if unit == "player" then return "Player-1-ME" end local e = enemyUnits[unit] return e and e.guid end
 function UnitExists(unit) return enemyUnits[unit] ~= nil end
 function UnitIsPlayer(unit) return enemyUnits[unit] ~= nil end
@@ -135,7 +135,7 @@ function GetCursorPosition() return 0, 0 end
 enemyUnits = {}
 local function enemy(unit) return enemyUnits[unit] end
 function GetUnitName(unit) local e = enemy(unit) return e and e.name end
-function UnitIsEnemy(_, unit) return enemy(unit) ~= nil end
+function UnitIsEnemy(_, unit) local e = enemy(unit) return e ~= nil and (e.faction or "Alliance") ~= "Horde" end
 function UnitClass(unit) if unit == "player" then return "Warrior", "WARRIOR" end local e = enemy(unit) return e and "Rogue", e and e.class end
 function UnitLevel(unit) local e = enemy(unit) return e and e.level or 10 end
 function UnitRace(unit) if unit == "player" then return "Orc", "Orc" end local e = enemy(unit) return e and "Human", e and (e.raceFile or "Human") end
@@ -1742,6 +1742,38 @@ end)()
 	check(Sent("R") >= 1, "our record goes once the fight is over")
 	RunFrames()
 	check(ns.db.records["Fight Origin:1"] ~= nil and ns.db.records["Fight Origin:1"].live == true, "the waiting record is taken in after the fight, still as heard live")
+end)()
+;(function()
+	-- Our own side's deaths are recorded too, but only with an enemy player in view: that's world PvP. They
+	-- never join the enemy list.
+	local function FriendDeaths()
+		local n = 0
+		for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-FRIEND" then n = n + 1 end end
+		return n
+	end
+	clock = clock + 300
+	RunTimers()
+	enemyUnits.nameplate40 = { guid = "Player-1-FRIEND", name = "Horde Friend", class = "WARRIOR", level = 30, faction = "Horde" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate40")
+	Fire("UNIT_HEALTH", "nameplate40")
+	enemyUnits.nameplate40.dead = true
+	Fire("UNIT_HEALTH", "nameplate40")
+	RunTimers()
+	check(FriendDeaths() == 0, "a friend dying with no enemy around isn't recorded")
+	enemyUnits.nameplate40.dead = nil
+	clock = clock + 60
+	Fire("UNIT_HEALTH", "nameplate40")
+	enemyUnits.nameplate41 = { guid = "Player-9-ATTACKER", name = "Alliance Attacker", class = "ROGUE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate41")
+	enemyUnits.nameplate40.dead = true
+	Fire("UNIT_HEALTH", "nameplate40")
+	RunTimers()
+	check(FriendDeaths() == 1, "a friend dying with an enemy in view is recorded, got "..FriendDeaths())
+	local death
+	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-FRIEND" then death = r end end
+	check(death.data.victimFaction == "Horde" and death.data.victimLevel == 30, "our side's death names our faction and their level")
+	check(ns.Store:GetPlayer("Player-1-FRIEND") == nil, "a friend never joins the enemy list")
+	enemyUnits.nameplate40, enemyUnits.nameplate41 = nil, nil
 end)()
 ;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them

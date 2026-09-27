@@ -205,8 +205,11 @@ function Nearby:SetShown(shown)
 		private.pendingShow = shown
 		return
 	end
+	local opening = shown and not private.frame:IsShown()
 	private.frame:SetShown(shown)
-	if shown then
+	-- Only when it opens: an open window is redrawn by the queued refresh (every new enemy in a raid asks to
+	-- show it, and a redraw each was most of a 134ms second)
+	if opening then
 		Nearby:Refresh()
 	end
 end

@@ -1704,6 +1704,46 @@ WantedRestoreFilled = nil
 	for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
 end)()
 ;(function()
+	-- In a fight the addon only records: our records, catch-ups and incoming records wait until it's over.
+	-- Sightings still go both ways.
+	local function RunFrames()
+		for _ = 1, 50 do
+			for _, f in ipairs(Mock.created) do
+				if f._shown and f._scripts.OnUpdate then f._scripts.OnUpdate(f, 0.1) end
+			end
+		end
+	end
+	local function Sent(tag)
+		local n = 0
+		for _, m in ipairs(addonSent) do if m.text:find("^"..tag..":") then n = n + 1 end end
+		return n
+	end
+	clock = clock + 120
+	RunTimers()
+	RunFrames()
+	addonSent = {}
+	Fire("PLAYER_REGEN_DISABLED")
+	check(ns:InCombat(), "a fight starts")
+	ns.Store:NewRecord("pass", { bounty = "in-a-fight" })
+	ns.Sync:QueueSighting({ g = "Player-9-FIGHT", n = "Fight Sighting" }, true)
+	RunTimers()
+	clock = clock + 30
+	RunTimers()
+	check(Sent("R") == 0, "our new record waits out the fight")
+	check(Sent("S") >= 1, "sightings still go out in a fight")
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("R", { v = ns.VERSION, r = { Rec("Fight Origin", 1) } }), "CHANNEL", "Fight Origin", nil, nil, nil, "WantedNetHorde")
+	RunFrames()
+	check(ns.db.records["Fight Origin:1"] == nil, "a record heard in a fight waits, unopened")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(not ns:InCombat(), "the fight is over a few seconds after combat ends")
+	clock = clock + 5
+	RunTimers()
+	check(Sent("R") >= 1, "our record goes once the fight is over")
+	RunFrames()
+	check(ns.db.records["Fight Origin:1"] ~= nil and ns.db.records["Fight Origin:1"].live == true, "the waiting record is taken in after the fight, still as heard live")
+end)()
+;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them
 	local function Linked(origin, seq, prev)
 		local r = Rec(origin, seq)

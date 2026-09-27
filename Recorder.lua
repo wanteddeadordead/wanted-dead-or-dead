@@ -30,6 +30,12 @@ local DEATH_DEDUPE_SECONDS = 15
 -- A death on our own side counts only with an enemy player in view this recently: dying to a mob while
 -- questing isn't world PvP
 local PVP_CONTEXT_SECONDS = 20
+-- Each side's races (the client's race file names), for players of ours we only know by GUID. Skyborne can be
+-- either side, so a Skyborne player counts as ours only when a unit showed their faction.
+local OUR_RACES = {
+	Horde = { Orc = true, Troll = true, Tauren = true, Scourge = true },
+	Alliance = { Human = true, Dwarf = true, NightElf = true, Gnome = true },
+}
 -- A death is confirmed this long after it's seen: a hunter's Feign Death looks exactly like dying, but they're
 -- up again by then. Nobody comes back from a real death that fast (a ghost that released drops out of view).
 local DEATH_CONFIRM_SECONDS = 4
@@ -410,31 +416,39 @@ function private.NoteAlive(unit, guid)
 	end
 end
 
----The client's death event for any unit near us; an enemy player dying is a witnessed death.
+---The client's death event for any unit near us: an enemy player dying is a witnessed death, and so is one of
+---our own side (RecordDeath keeps those to world PvP).
 function private.OnUnitDied(guid)
 	if not guid or (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" or not strfind(guid, "^Player%-") then
 		return
 	end
 	local player = Store:GetPlayer(guid)
-	local enemy = player and player.faction and player.faction ~= private.playerFaction
-	if not enemy then
-		-- Unknown so far: ask the client, and only count other-faction players
-		local _, class, _, _, _, name = GetPlayerInfoByGUID(guid)
-		if not name or (issecretvalue and issecretvalue(name)) then
-			return
-		end
-		for unit, trackedGuid in pairs(private.tracked) do
-			if trackedGuid == guid then
-				enemy = true
-				break
-			end
-		end
-		if not enemy then
-			return
-		end
-		player = { name = name, class = class }
+	if player and player.faction and player.faction ~= private.playerFaction then
+		private.ConfirmDeath(guid, player.name)
+		return
 	end
-	private.ConfirmDeath(guid, player.name)
+	if private.friendly[guid] then
+		private.ConfirmDeath(guid, private.friendly[guid].name)
+		return
+	end
+	-- Unknown so far: ask the client
+	local _, _, _, race, _, name = GetPlayerInfoByGUID(guid)
+	if not name or (issecretvalue and issecretvalue(name)) then
+		return
+	end
+	for _, trackedGuid in pairs(private.tracked) do
+		if trackedGuid == guid then
+			-- A watched enemy not saved yet
+			private.ConfirmDeath(guid, name)
+			return
+		end
+	end
+	local ours = OUR_RACES[private.playerFaction]
+	if guid == private.playerGUID or (ours and race and ours[race]) then
+		-- One of our side we never had a unit for (friendly nameplates are usually off)
+		private.friendly[guid] = { name = name }
+		private.ConfirmDeath(guid, name)
+	end
 end
 
 function private.RecordDeath(guid, name)

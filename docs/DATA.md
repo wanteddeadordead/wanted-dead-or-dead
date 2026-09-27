@@ -86,6 +86,11 @@ the client's file names (`ROGUE`, `Scourge`), level is the last one seen, factio
 of them can be missing, and records from before 1.1.0 have none. The recording player's own `kill` records
 also carry `killerGroup`: how many were in their group, 1 when alone (a raid counts everyone in it).
 
+`death` records name an enemy player, or (from 1.1.2) a player of the recording client's own faction,
+themselves included, who died with an enemy player in view in the last 20 seconds. `victimFaction` tells them
+apart. Either way another player's app recording the death confirms the killer's `kill` record, so both sides
+confirm each other's kills.
+
 A received record's `live` flag (from 1.1.0) is local, like `tampered` and `brokenChain`: set when the record
 came straight from its origin (the game stamped the sender), never taken from what a sender says. Clients drop
 all three flags from incoming records and work them out themselves.

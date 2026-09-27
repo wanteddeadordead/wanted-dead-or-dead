@@ -22,6 +22,12 @@ Rules for a change:
 3. Never delete the player's records, Kill on Sight, Ignore or settings in a migration. The one exception is
    the move from the beta to the live game, below.
 
+`assist` records (from 1.1.0): honorable-kill credit without the killing blow. WoW Forever raises the HK count
+("You have been awarded N Honor.") without naming the victim, so the addon ties each new HK that isn't its own
+kill to the newest enemy death it recorded in the last few seconds that has no assist yet. Same fields as a
+`kill` record: `killer*` is the assisting player (with `killerGroup`), `victim*` and `deathId` come from that
+death record. No death seen, no record.
+
 `WantedDB.accountMark` (from 1.1.0) is a random id made once per WoW account's saved data and kept forever
 (the launch reset keeps it too). The desktop app reads it from the saved file and writes the account's link
 code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At login `Store:AutoLink` makes a

@@ -6,6 +6,8 @@
   data between sessions and puts your records on the website. The addon works the same without it.
 - Kill and death records now note each side's class, race, level and faction, and your kills note how many
   were in your group, for the website's breakdowns by class and level and its solo boards.
+- Honorable kills you helped with but didn't land are recorded as assists (WoW Forever doesn't name the
+  victim, so the addon matches the HK to the enemy death it just saw).
 - With the desktop app, every character links itself at login; `/wanted link` is only needed if that
   doesn't happen.
 - `/wanted status` says whether the game or the desktop app loaded your saved data.

@@ -136,7 +136,14 @@ local function Describe(d)
 	return table.concat(parts, " ")
 end
 
+-- The enemy events that can raise an alert; the rest ("update" several times a second per enemy in a raid) return
+-- before any work
+local ALERT_EVENTS = { new = true, stealth = true, shared = true, killedby = true }
+
 function private.OnEnemyEvent(event, entry)
+	if not ALERT_EVENTS[event] then
+		return
+	end
 	local settings = private.Settings()
 	if not Wanted.Enemies:ShouldAlert() or settings.alerts == "none" or not entry or not entry.guid then
 		return

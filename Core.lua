@@ -412,6 +412,24 @@ function private.IsPlausibleUpdate(version)
 	return theirs ~= nil and ours ~= nil and theirs[1] <= ours[1] + 1
 end
 
+---The Wanted desktop app writes its own version and the newest one out into !!WantedLink (WantedAppInfo).
+---When it's behind, says so once a login: most players are in game, not looking at the tray. The versions
+---are rebuilt from what they parse to, so nothing another addon put there is shown as is.
+---@return boolean told
+function Wanted:CheckAppVersion()
+	local info = WantedAppInfo
+	if type(info) ~= "table" then
+		return false
+	end
+	local running, latest = Wanted:ParseVersion(info.running), Wanted:ParseVersion(info.latest)
+	if not running or not latest or not Wanted:IsNewerVersion(info.latest, info.running) then
+		return false
+	end
+	Wanted:Print("The Wanted app %s is out (you have %s). Get it from the app's tray menu or wanteddeadordead.com/app.",
+		private.VersionText(latest), private.VersionText(running))
+	return true
+end
+
 ---Another player's client reported its version. A newer, plausible one means this client must update.
 ---@param version any
 function Wanted:NoteVersion(version)
@@ -691,6 +709,7 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 			Wanted:Print("Your saved data is from a newer version of Wanted. Update the addon to use it; until then nothing you do this session is saved, and your data is left as it is.")
 		end
 		private.CallModules("OnEnable")
+		Wanted:CheckAppVersion()
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then

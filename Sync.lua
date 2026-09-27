@@ -86,11 +86,11 @@ local SIGHTING_QUEUE_SECONDS = 15
 local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
 -- A cap on what any one sender may push at us, and a pause when our own queue overflows two minutes running
--- Sightings have their own, smaller budget and never trigger the pause, so a big fight can't hold up bounties,
--- kills and claims. A new enemy waits up to 8s to share a message with others seen around the same time;
+-- Sightings have their own budget and never trigger the pause, so a big fight can't hold up bounties, kills and
+-- claims (10 parts a minute: a raid on Undercity hit 6 over and over while the game still had room). A new enemy waits up to 8s to share a message with others seen around the same time;
 -- Kill on Sight, bounty and stealthed enemies go within 2s. An enemy someone shared in the last minute isn't
 -- sent again: everyone nearby sees the same raid, and one report of it is enough.
-local MAX_SIGHTING_MESSAGES_PER_MINUTE = 6
+local MAX_SIGHTING_MESSAGES_PER_MINUTE = 10
 local SIGHTING_BATCH_SECONDS = 8
 local SIGHTING_URGENT_SECONDS = 2
 local MAX_SIGHTINGS_PER_BATCH = 15
@@ -651,8 +651,9 @@ function private.SendHello()
 end
 
 -- Our new records go out together: a busy fight makes one every few seconds, and one message each hit the send
--- limit. Waiting a few seconds turns them into a handful of messages.
-local LIVE_BATCH_SECONDS = 3
+-- limit. One death record alone is just over one part, so waiting 8 seconds (as sightings do) roughly halves
+-- the parts a fight costs.
+local LIVE_BATCH_SECONDS = 8
 local LIVE_BATCH_MAX = 10
 
 function private.OnOwnRecord(record, isOwn)

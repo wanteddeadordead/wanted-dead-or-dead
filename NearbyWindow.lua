@@ -145,13 +145,24 @@ function private.MaybeQuietTip()
 	})
 end
 
+-- Enemy changes redraw the window at most this often: in a raid they arrive hundreds of times a second, and a
+-- redraw for each one froze the game
+local REFRESH_DELAY = 0.25
+
 function private.OnEnemyEvent(event, entry)
 	if event == "new" then
 		private.AutoShow()
 	end
-	if private.frame and private.frame:IsShown() then
-		Nearby:Refresh()
+	if private.refreshQueued or not private.frame or not private.frame:IsShown() then
+		return
 	end
+	private.refreshQueued = true
+	C_Timer.After(REFRESH_DELAY, function()
+		private.refreshQueued = false
+		if private.frame and private.frame:IsShown() then
+			Nearby:Refresh()
+		end
+	end)
 end
 
 ---Called when the player's flag or zone may have changed.

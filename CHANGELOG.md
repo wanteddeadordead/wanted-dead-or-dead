@@ -8,6 +8,8 @@
 - A Website & app page: what the site and the desktop app are for, whether the app is set up on this computer
   and up to date, and the addresses to copy (the site, the app download, and your own player page).
 - When a new version of the Wanted desktop app is out, the addon says so in chat at login (the app tells it).
+- A crowd of enemies coming into view no longer redraws the Nearby window once for each of them, and the
+  minimap button no longer recounts your bounties every 10 seconds.
 - Catch-ups for other players go out a batch at a time instead of all at once, which caused a brief hitch every
   minute or so with a player on another realm.
 - Reading a zone's map for named areas on a zone change happens in a quiet moment.

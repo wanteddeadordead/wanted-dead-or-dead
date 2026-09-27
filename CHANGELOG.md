@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Your new records now go out together a few seconds after they're made, instead of one message each. A busy
+  fight used to hit the send limit and hold records back until the next resync.
+- Links and assists are now shared the moment they're made, like kills. Before, they waited for a resync, and
+  a link only confirms when another player receives it straight from you.
+- A catch-up copy sent by the record's own author now counts as received straight from them.
+- The Hotspots menu item shows how many zones have enemies right now, like the Enemies count.
+
 ## [1.1.0] - 2026-09-26
 
 The Wanted desktop app is out: <https://wanteddeadordead.com/app>. It keeps every addon's saved data safe

@@ -11,6 +11,7 @@ local private = {
 	frame = CreateFrame("Frame"),
 	tracked = {}, -- unit token -> guid of a player being watched (enemies, and our own side for their deaths)
 	friendly = {}, -- guid -> { name, level, guild } for players of our own faction being watched
+	skyborne = {}, -- the game's name for each side's Skyborne -> that side, learned from units seen
 	lastSighting = {}, -- guid -> time
 	recentDeaths = {}, -- guid -> time the death was recorded
 	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
@@ -30,8 +31,9 @@ local DEATH_DEDUPE_SECONDS = 15
 -- A death on our own side counts only with an enemy player in view this recently: dying to a mob while
 -- questing isn't world PvP
 local PVP_CONTEXT_SECONDS = 20
--- Each side's races (the client's race file names), for players of ours we only know by GUID. Skyborne can be
--- either side, so a Skyborne player counts as ours only when a unit showed their faction.
+-- Each side's races (the client's race file names), for players of ours we only know by GUID. Skyborne is on
+-- both sides under different names ("High Order Skyborne" is the Alliance's), learned as units are seen
+-- (private.skyborne), so it isn't listed here.
 local OUR_RACES = {
 	Horde = { Orc = true, Troll = true, Tauren = true, Scourge = true },
 	Alliance = { Human = true, Dwarf = true, NightElf = true, Gnome = true },
@@ -317,6 +319,10 @@ function private.Track(unit)
 		return
 	end
 	local faction = UnitFactionGroup(unit)
+	local raceName, raceFile = UnitRace(unit)
+	if raceFile == "Skyborne" and type(raceName) == "string" and type(faction) == "string" then
+		private.skyborne[raceName] = faction
+	end
 	if faction == private.playerFaction then
 		-- Our own side: watched for deaths only, never sighted or listed as an enemy
 		private.tracked[unit] = guid
@@ -432,7 +438,7 @@ function private.OnUnitDied(guid)
 		return
 	end
 	-- Unknown so far: ask the client
-	local _, _, _, race, _, name = GetPlayerInfoByGUID(guid)
+	local _, _, raceName, race, _, name = GetPlayerInfoByGUID(guid)
 	if not name or (issecretvalue and issecretvalue(name)) then
 		return
 	end
@@ -444,11 +450,31 @@ function private.OnUnitDied(guid)
 		end
 	end
 	local ours = OUR_RACES[private.playerFaction]
-	if guid == private.playerGUID or (ours and race and ours[race]) then
+	if guid == private.playerGUID or (ours and race and ours[race]) or (race == "Skyborne" and private.IsOurSkyborne(raceName)) then
 		-- One of our side we never had a unit for (friendly nameplates are usually off)
 		private.friendly[guid] = { name = name }
 		private.ConfirmDeath(guid, name)
 	end
+end
+
+---Whether a Skyborne player of this name is on our side: their name is the one seen on our side, or it isn't
+---the one seen on the enemy's. Unknown until a Skyborne of either side has been seen.
+---@param raceName string?
+---@return boolean
+function private.IsOurSkyborne(raceName)
+	if type(raceName) ~= "string" then
+		return false
+	end
+	local side = private.skyborne[raceName]
+	if side then
+		return side == private.playerFaction
+	end
+	for _, seenSide in pairs(private.skyborne) do
+		if seenSide ~= private.playerFaction then
+			return true
+		end
+	end
+	return false
 end
 
 function private.RecordDeath(guid, name)

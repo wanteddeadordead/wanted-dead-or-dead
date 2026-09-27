@@ -633,6 +633,17 @@ check(ns.Hotspots:FormatLevels(barrens) == "31-32 + ??", "level range with a sku
 check(#ns.Hotspots:GetTop(3) == 2, "two zones busy now")
 check(ns.Hotspots:OpenMap(durotar) and mapOpened == 1, "clicking a hotspot opens its map")
 ns.UI:Show("hotspots")
+;(function()
+	local function NavBadge(title)
+		for _, f in ipairs(Mock.created) do
+			local label = rawget(f, "label")
+			if type(label) == "table" and label._text == title and rawget(f, "badge") then
+				return f.badge._shown and f.badge.text._text or nil
+			end
+		end
+	end
+	check(NavBadge("Hotspots") == "2", "the Hotspots menu item counts the busy zones, got "..tostring(NavBadge("Hotspots")))
+end)()
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 -- The world map: markers come through the map's own pin system, in their own layer under group members
 check(insertedLevel == "PIN_FRAME_LEVEL_WANTED_ENEMY below PIN_FRAME_LEVEL_GROUP_MEMBER", "own map layer, got "..tostring(insertedLevel))

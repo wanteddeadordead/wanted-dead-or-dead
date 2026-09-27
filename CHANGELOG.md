@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- A note across the top of the window: Wanted is under heavy development through the WoW Forever beta, so
+  expect frequent updates, and possible issues while we work through the game's changes.
+
 - The top of the window shows two lights: the Wanted app (or "Get the app", which opens the Website & app page)
   and WantedNet, the in-game channel. It no longer counts other players.
 - When a newer Wanted is out, the addon says your version is outdated and gives the CurseForge link, at each

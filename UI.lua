@@ -14,7 +14,9 @@ local private = {
 	refreshQueued = false,
 	toastTimer = nil,
 }
-local WIDTH, HEIGHT = 960, 640
+-- The development note under the title bar adds its height to the window, so pages keep their size
+local NOTE_HEIGHT = 24
+local WIDTH, HEIGHT = 960, 640 + NOTE_HEIGHT
 local TITLE_HEIGHT = 48
 local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22
@@ -41,7 +43,7 @@ end
 ---@return number width
 ---@return number height
 function UI:GetPageSize()
-	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - CONTENT_PAD - HEADER_HEIGHT - FOOTER_HEIGHT
+	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD - HEADER_HEIGHT - FOOTER_HEIGHT
 end
 
 
@@ -185,9 +187,22 @@ function private.Create()
 	private.appStatus = Indicator(110, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 
+	-- Under heavy development through the WoW Forever beta: say so on every page
+	local note = CreateFrame("Frame", nil, frame)
+	note:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT")
+	note:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT")
+	note:SetHeight(NOTE_HEIGHT)
+	Theme:Fill(note, { C.amber[1] * 0.22, C.amber[2] * 0.22, C.amber[3] * 0.22, 1 })
+	local noteText = Theme:Text(note, "small", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", C.amber)
+	noteText:SetPoint("LEFT", 14, 0)
+	noteText:SetPoint("RIGHT", -14, 0)
+	noteText:SetJustifyH("LEFT")
+	noteText:SetWordWrap(false)
+	note.text = noteText
+
 	-- Sidebar
 	local sidebar = CreateFrame("Frame", nil, frame)
-	sidebar:SetPoint("TOPLEFT", 1, -TITLE_HEIGHT - 1)
+	sidebar:SetPoint("TOPLEFT", 1, -TITLE_HEIGHT - NOTE_HEIGHT - 1)
 	sidebar:SetPoint("BOTTOMLEFT", 1, 1)
 	sidebar:SetWidth(SIDEBAR_WIDTH)
 	Theme:Fill(sidebar, C.sidebar)
@@ -252,7 +267,7 @@ function private.Create()
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)
-	content:SetPoint("TOPLEFT", SIDEBAR_WIDTH + 1 + CONTENT_PAD, -TITLE_HEIGHT - CONTENT_PAD)
+	content:SetPoint("TOPLEFT", SIDEBAR_WIDTH + 1 + CONTENT_PAD, -TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD)
 	content:SetPoint("BOTTOMRIGHT", -CONTENT_PAD, 1)
 	private.title = Theme:Text(content, "title", "")
 	private.title:SetPoint("TOPLEFT", 0, 0)

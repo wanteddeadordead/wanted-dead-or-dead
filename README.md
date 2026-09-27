@@ -1,5 +1,8 @@
 # Wanted: Dead or... Dead
 
+> **Under heavy development through the WoW Forever beta.** Expect frequent updates, and possible issues
+> while we work through the game's changes.
+
 > Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type `/wanted bug`)
 > and [open a report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose).
 

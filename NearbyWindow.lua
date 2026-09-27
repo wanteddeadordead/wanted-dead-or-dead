@@ -78,6 +78,9 @@ function Nearby:OnEnable()
 	if not InCombatLockdown() then
 		private.Create()
 	end
+	-- Development builds time the two halves of a refresh apart: building the list, and drawing each row
+	private.GetItems = Wanted:Timed("Nearby list", private.GetItems)
+	private.Draw = Wanted:Timed("Nearby row", private.Draw)
 	Enemies:OnChange(Wanted:Timed("Nearby enemy change", private.OnEnemyEvent))
 	C_Timer.NewTicker(1, Wanted:Timed("Nearby tick", function()
 		if private.frame and private.frame:IsShown() then

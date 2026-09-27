@@ -105,6 +105,7 @@ end
 clock = 1790270000
 function GetServerTime() return clock end
 function GetTime() return clock end
+function debugprofilestop() return os.clock() * 1000 end
 function UnitName(unit) if unit == "player" then return "Test", "Player" end return nil end
 function UnitFactionGroup(unit) if unit and enemyUnits[unit] then return "Alliance" end return "Horde" end
 function UnitGUID(unit) if unit == "player" then return "Player-1-ME" end local e = enemyUnits[unit] return e and e.guid end

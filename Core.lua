@@ -289,6 +289,14 @@ function Wanted:GetProblems()
 	return private.problems
 end
 
+---Wraps an event handler or timer so development builds can time it (Debug.lua); released builds get it as is.
+---@param label string
+---@param func function
+---@return function
+function Wanted:Timed(label, func)
+	return func
+end
+
 ---Appends a line to the debug log, and to the client's log file on disk when the client offers it.
 function Wanted:Log(fmt, ...)
 	local msg = select("#", ...) > 0 and format(fmt, ...) or fmt

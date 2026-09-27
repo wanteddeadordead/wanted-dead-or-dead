@@ -67,10 +67,10 @@ function private.QueueRefresh()
 		return
 	end
 	private.refreshQueued = true
-	C_Timer.After(0.15, function()
+	C_Timer.After(0.15, Wanted:Timed("Window refresh", function()
 		private.refreshQueued = false
 		UI:Refresh()
-	end)
+	end))
 end
 
 ---The window frame (created on first use).
@@ -107,7 +107,7 @@ function private.Create()
 	frame:SetScript("OnShow", function()
 		UI:Refresh()
 		-- Keep "4m ago" style times and the connection state current while the window is open
-		private.ticker = C_Timer.NewTicker(15, function() UI:Refresh() end)
+		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", function() UI:Refresh() end))
 	end)
 	frame:SetScript("OnHide", function()
 		if private.ticker then

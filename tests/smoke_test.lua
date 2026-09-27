@@ -2044,4 +2044,14 @@ end)()
 	ns.UI:Refresh()
 	ns.db.enemyStats = saved
 end)()
+;(function()
+	-- The window says Wanted is under heavy development through the Forever beta
+	ns.UI:Show("board")
+	local found = false
+	for _, f in ipairs(Mock.created) do
+		local text = rawget(f, "text")
+		if type(text) == "table" and tostring(text._text):find("heavy development through the WoW Forever beta", 1, true) then found = true end
+	end
+	check(found, "the window shows the development note")
+end)()
 print("wanted smoke: all checks pass")

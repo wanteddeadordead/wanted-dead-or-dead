@@ -5,6 +5,10 @@
 - Fixed heavy lag in big fights (a raid on Undercity froze the game). The Nearby window redrew itself and the
   alerts looked up every enemy each time any enemy changed target, hundreds of times a second in a raid. The
   window now redraws at most four times a second, and alerts only look at the events that can raise one.
+- In a fight the addon only records. Your kills, deaths and sightings are still noted, and sightings are still
+  shared, but everything else (sending your records, catch-ups, taking in other players' records) waits until
+  a few seconds after combat ends, then catches up a few milliseconds a frame.
+- Looking up who has a bounty on them no longer reads through every saved record each time.
 
 ## [1.1.1] - 2026-09-26
 

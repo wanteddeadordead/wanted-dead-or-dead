@@ -7,6 +7,11 @@
 - Links and assists are now shared the moment they're made, like kills. Before, they waited for a resync, and
   a link only confirms when another player receives it straight from you.
 - A catch-up copy sent by the record's own author now counts as received straight from them.
+- Sync messages wait in a queue and go out at the game's own pace (a burst, then one part every few seconds),
+  so the game no longer refuses them in busy moments. Your new records go first and catch-ups go last. A part
+  the game does refuse is sent again by itself, not the whole message from the start.
+- Records that arrived ahead of a missing one now join their chain once it turns up. Before, the addon kept
+  asking other players for records it already had, every minute. Saved chains stuck this way are fixed at login.
 - The Hotspots menu item shows how many zones have enemies right now, like the Enemies count.
 
 ## [1.1.0] - 2026-09-26

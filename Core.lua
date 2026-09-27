@@ -299,13 +299,14 @@ function Wanted:Timed(label, func)
 	return func
 end
 
----Appends a line to the debug log, and to the client's log file on disk when the client offers it.
+---Appends a line to the debug log, and in development builds to the client's log file on disk (Logs\General.log):
+---every player's copy writing its chatter to disk would be wasted work.
 function Wanted:Log(fmt, ...)
 	local msg = select("#", ...) > 0 and format(fmt, ...) or fmt
 	local line = date("%H:%M:%S").." "..msg
 	private.logPos = private.logPos % MAX_LOG + 1
 	private.log[private.logPos] = line
-	if C_Log and C_Log.LogMessage then
+	if Wanted.DEV and C_Log and C_Log.LogMessage then
 		C_Log.LogMessage("WANTED "..line)
 	end
 end

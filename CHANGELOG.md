@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-27
+
+Reminders when the desktop app isn't set up, or isn't running.
+
 - Without the Wanted desktop app set up on this computer, a popup at login or /reload offers it, with the address
   to copy. "Don't remind me" stops it; the Website & app page can turn it back on.
 - When the app is set up but hasn't run for a few hours, the popup asks whether it's running, and the app light

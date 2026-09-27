@@ -17,6 +17,8 @@ local LibSerialize = LibStub("LibSerialize")
 local LibDeflate = LibStub("LibDeflate")
 local private = {
 	frame = CreateFrame("Frame"),
+	liveQueue = {},
+	liveFlushPending = false,
 	channelName = nil,
 	channelId = nil,
 	joinAttempts = 0,
@@ -121,20 +123,8 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("CHANNEL_PASSWORD_REQUEST")
 	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
 	private.frame:SetScript("OnEvent", private.OnEvent)
-	Store:OnRecord("kill", private.OnOwnRecord)
-	Store:OnRecord("death", private.OnOwnRecord)
-	Store:OnRecord("bounty", private.OnOwnRecord)
-	Store:OnRecord("claim", private.OnOwnRecord)
-	Store:OnRecord("payment", private.OnOwnRecord)
-	Store:OnRecord("mark", private.OnOwnRecord)
-	Store:OnRecord("raise", private.OnOwnRecord)
-	Store:OnRecord("notice", private.OnOwnRecord)
-	Store:OnRecord("pass", private.OnOwnRecord)
-	Store:OnRecord("confirm", private.OnOwnRecord)
-	Store:OnRecord("withdraw", private.OnOwnRecord)
-	Store:OnRecord("hunt", private.OnOwnRecord)
-	Store:OnRecord("proof", private.OnOwnRecord)
-	Store:OnRecord("spotted", private.OnOwnRecord)
+	-- Every kind of our own record is shared (a fixed list once left out links and assists)
+	Store:OnRecord("*", private.OnOwnRecord)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
 	-- Realm links
@@ -538,9 +528,31 @@ function private.SendHello()
 	private.Send(TAG_HELLO, { c = private.GetHaveTable(), v = Wanted.VERSION })
 end
 
+-- Our new records go out together: a busy fight makes one every few seconds, and one message each hit the send
+-- limit. Waiting a few seconds turns them into a handful of messages.
+local LIVE_BATCH_SECONDS = 3
+local LIVE_BATCH_MAX = 10
+
 function private.OnOwnRecord(record, isOwn)
-	if isOwn and not Store:IsTest(record) then
-		private.Send(TAG_LIVE, { r = { record } })
+	-- Sightings are announced to listeners too, but are not records and are shared by their own messages
+	if not isOwn or not record.id or Store:IsTest(record) then
+		return
+	end
+	tinsert(private.liveQueue, record)
+	if not private.liveFlushPending then
+		private.liveFlushPending = true
+		C_Timer.After(LIVE_BATCH_SECONDS, private.FlushLive)
+	end
+end
+
+---Sends the queued new records, up to LIVE_BATCH_MAX to a message. Any the send limit refuses still reach
+---other players at the next resync.
+function private.FlushLive()
+	private.liveFlushPending = false
+	local queue = private.liveQueue
+	private.liveQueue = {}
+	for first = 1, #queue, LIVE_BATCH_MAX do
+		private.Send(TAG_LIVE, { r = { unpack(queue, first, min(first + LIVE_BATCH_MAX - 1, #queue)) } })
 	end
 end
 
@@ -720,7 +732,9 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 		end
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
-			if tag == TAG_LIVE then
+			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
+			-- stamps the sender)
+			if tag == TAG_LIVE or (type(record) == "table" and record.origin == sender) then
 				isNew, why = Store:Merge(record, sender)
 			else
 				isNew, why = Store:MergeRelayed(record)
@@ -932,7 +946,12 @@ function private.HandleLinkMessage(tag, tbl, sender)
 	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then
 		private.currentSource = sender
 		for _, record in ipairs(tbl.r) do
-			local isNew, why = Store:MergeRelayed(record)
+			local isNew, why
+			if type(record) == "table" and record.origin == sender then
+				isNew, why = Store:Merge(record, sender)
+			else
+				isNew, why = Store:MergeRelayed(record)
+			end
 			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
 				private.stats.merged = private.stats.merged + 1

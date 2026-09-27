@@ -31,6 +31,7 @@ local Methods = {}
 local function NewMock(kind)
 	return setmetatable({ _scripts = {}, _shown = true, _text = "", _enabled = true, _w = 100, _h = 20, _kind = kind }, Mock)
 end
+Mock.created = {} -- every frame made, so tests can find one by its fields
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -69,7 +70,7 @@ function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(sel
 function Methods:RegisterEvent(e) registry[e] = registry[e] or {} table.insert(registry[e], self) end
 function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
-function CreateFrame(kind, name) local f = NewMock(kind) if name then _G[name] = f end return f end
+function CreateFrame(kind, name) local f = NewMock(kind) if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
 UIParent, Minimap, GameTooltip, DEFAULT_CHAT_FRAME, MailFrame = NewMock(), NewMock(), NewMock(), NewMock(), NewMock()
@@ -1654,4 +1655,31 @@ local saysRestored = false
 for i = before + 1, #printed do if printed[i]:find("restored by the desktop app", 1, true) then saysRestored = true end end
 check(saysRestored, "status names the desktop app's restore")
 WantedRestoreFilled = nil
+;(function()
+	-- Our own new records go out in batches, a few seconds' worth to one message, and every kind goes out
+	local function LiveMessages()
+		local ids = {}
+		for _, m in ipairs(addonSent) do
+			local id = m.text:match("^R:(%w+):")
+			if id then ids[id] = true end
+		end
+		local n = 0
+		for _ in pairs(ids) do n = n + 1 end
+		return n
+	end
+	clock = clock + 120
+	addonSent = {}
+	ns.Store:NewRecord("pass", { bounty = "batch1" })
+	ns.Store:NewRecord("pass", { bounty = "batch2" })
+	ns.Store:NewRecord("link", { code = "BATCH234", guid = "Player-1-ME" })
+	ns.Store:NewRecord("assist", { victim = "Player-9-X", deathId = "d-batch", zone = "Durotar" })
+	check(LiveMessages() == 0, "new records wait a moment to go out together")
+	RunTimers()
+	check(LiveMessages() == 1, "four new records, links and assists included, go out as one message, got "..LiveMessages())
+	-- A record its own origin sends to fill a gap was still heard straight from it
+	local fill = Rec("Fill Origin", 1)
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("F", { v = ns.VERSION, r = { fill } }), "CHANNEL", "Fill Origin", nil, nil, nil, "WantedNetHorde")
+	local got = ns.db.records["Fill Origin:1"]
+	check(got and got.live == true, "a gap fill from the record's own origin counts as heard live")
+end)()
 print("wanted smoke: all checks pass")

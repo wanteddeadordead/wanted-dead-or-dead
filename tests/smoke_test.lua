@@ -2244,4 +2244,35 @@ end)()
 	InCombatLockdown = lockdown
 	check(calls == 0, "no health bar is shown or hidden in combat, got "..calls)
 end)()
+;(function()
+	-- An enemy who turns up in combat fills one empty row, as text, and keeps it through every refresh: they
+	-- used to go into another empty row each refresh, so one player filled the list three times
+	local function Rows(name)
+		local n = 0
+		for _, f in ipairs(Mock.created) do
+			local label = rawget(f, "name")
+			if rawget(f, "_kind") == "Button" and type(label) == "table" and f:IsShown() and tostring(label._text):find(name, 1, true) then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	ns.Enemies:ClearNearby()
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	local lockdown = InCombatLockdown
+	InCombatLockdown = function() return true end
+	enemyUnits.nameplate1 = { guid = "Player-9-PENN", name = "Penn Dragon", class = "DRUID", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+	for _ = 1, 3 do
+		ns.NearbyWindow:Refresh()
+	end
+	check(Rows("Penn Dragon") == 1, "an enemy found in combat is on one row, got "..Rows("Penn Dragon"))
+	enemyUnits.nameplate1 = nil
+	ns.Enemies:ClearNearby()
+	ns.NearbyWindow:Refresh()
+	check(Rows("Penn Dragon") == 0, "and off it when they leave the list in combat")
+	InCombatLockdown = lockdown
+	ns.NearbyWindow:Refresh()
+end)()
 print("wanted smoke: all checks pass")

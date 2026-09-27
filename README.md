@@ -76,6 +76,10 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
   client does allow: nameplates, your target, focus and mouseover, the moment your target vanishes close by
   (for stealth), the client's kill and death events, and the death recap. Someone who never appears on your screen can't be
   seen by any addon.
+- **Live battle reports.** The addon keeps the game's combat log on in the open world. The optional desktop
+  app reads it (an addon can't), picks out the player-versus-player deaths and their killers, and posts them to
+  wanteddeadordead.com within a few minutes, without a /reload. The combat log names players by first name only,
+  so the addon keeps a name book of the full names it sees, and the app uses it.
 - **Sharing.** Copies of the addon on the same faction talk through a hidden custom chat channel using
   addon messages, which only the addon sees. Each copy keeps the full record and fills in what it missed
   from whoever is online. Every record carries a hash of the sender's previous one, so a rewritten history

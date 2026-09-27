@@ -532,7 +532,9 @@ function private.CreateRow(parent, index)
 	row.health.bg = row.health:CreateTexture(nil, "BACKGROUND")
 	row.health.bg:SetAllPoints()
 	row.health.bg:SetColorTexture(0, 0, 0, 0.5)
-	row.health:Hide()
+	-- Shown once, here, and faded in and out from then on: inside a secure button, the game blocks Show and Hide
+	-- on it in combat
+	row.health:SetAlpha(0)
 	row:SetScript("OnEnter", function(self)
 		self.hover:Show()
 		if self.info then
@@ -731,9 +733,17 @@ end
 ---Fades a row's contents: full strength for someone in sight, shaded once they're gone. The row itself is
 ---a secure button, so the fade goes on its regions rather than the row.
 function private.SetFade(row, alpha)
-	for _, region in ipairs({ row.name, row.right, row.sub, row.bar, row.tint, row.health, row.icon }) do
+	for _, region in ipairs({ row.name, row.right, row.sub, row.bar, row.tint, row.icon }) do
 		region:SetAlpha(alpha)
 	end
+	row.fade = alpha
+	private.ShowHealth(row, row.healthShown)
+end
+
+---Shows or hides a row's health bar by its alpha, never Show or Hide (blocked in combat inside a secure button).
+function private.ShowHealth(row, shown)
+	row.healthShown = shown
+	row.health:SetAlpha(shown and (row.fade or 1) or 0)
 end
 
 ---"11-26 of 38. Wheel to scroll." plus the classes, so a big group is visible even when not all listed.
@@ -777,7 +787,7 @@ function private.Draw(row, info)
 		row.sub:SetText("")
 		row.bar:SetColorTexture(0, 0, 0, 0)
 		row.tint:SetColorTexture(0, 0, 0, 0)
-		row.health:Hide()
+		private.ShowHealth(row, false)
 		row.icon:Hide()
 		private.SetFade(row, 1)
 		return
@@ -863,9 +873,9 @@ function private.Draw(row, info)
 	if show.health and info.nearby and info.inSight and unit and Readable(UnitGUID(unit)) == info.guid then
 		row.health:SetMinMaxValues(0, UnitHealthMax(unit))
 		row.health:SetValue(UnitHealth(unit))
-		row.health:Show()
+		private.ShowHealth(row, true)
 	else
-		row.health:Hide()
+		private.ShowHealth(row, false)
 	end
 end
 

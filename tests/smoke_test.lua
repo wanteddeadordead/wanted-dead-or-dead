@@ -2278,4 +2278,42 @@ end)()
 	InCombatLockdown = lockdown
 	ns.NearbyWindow:Refresh()
 end)()
+;(function()
+	-- A hello lists only chains active in the last week, newest first, at most 150: listing every origin ever
+	-- seen outgrew the send queue at about 1,000 origins, and then no hello went out at all
+	local db = ns.db
+	local savedRecords, savedChains = db.records, db.chains
+	local records, chains = {}, {}
+	for id, r in pairs(savedRecords) do records[id] = r end
+	for origin, c in pairs(savedChains) do chains[origin] = c end
+	local function Add(origin, t)
+		records[origin..":1"] = { kind = "death", id = origin..":1", origin = origin, seq = 1, prev = "0", t = t, data = {}, hash = "x" }
+		chains[origin] = { seq = 1, lastHash = "x" }
+	end
+	for i = 1, 2000 do
+		Add(format("Active %04d Player", i), clock - i)
+	end
+	for i = 1, 50 do
+		Add(format("Quiet %02d Player", i), clock - 30 * 86400)
+	end
+	db.records, db.chains = records, chains -- a new table: the index is built again over it
+	addonSent = {}
+	clock = clock + 61
+	-- Entering the world (the dungeon tests left it) rejoins the channel, which says hello
+	Fire("PLAYER_ENTERING_WORLD")
+	RunTimers()
+	local chunks, total = {}, nil
+	for _, m in ipairs(addonSent) do
+		local part, of, chunk = m.text:match("^H:%w+:(%d+)/(%d+):(.*)$")
+		if part then chunks[tonumber(part)], total = chunk, tonumber(of) end
+	end
+	check(total and total <= 8 and #chunks == total, "a network of 2,050 players sends a hello of 8 parts or fewer, got "..tostring(total))
+	local hello = total and ns.Sync:Decode(table.concat(chunks)) or { c = {} }
+	local n = 0
+	for _ in pairs(hello.c) do n = n + 1 end
+	check(n == 150, "the hello lists 150 chains, got "..n)
+	check(hello.c["Active 0001 Player"] and not hello.c["Active 0200 Player"], "the most recently active first")
+	check(not hello.c["Quiet 01 Player"], "a chain quiet for a month is left out")
+	db.records, db.chains = savedRecords, savedChains
+end)()
 print("wanted smoke: all checks pass")

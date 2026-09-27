@@ -2,14 +2,17 @@
 
 ## [Unreleased]
 
-- `/wanted link <code>` ties a character to the Wanted desktop app (coming soon), which keeps your saved
-  data between sessions and puts your records on the website. The addon works the same without it.
+## [1.1.0] - 2026-09-26
+
+The Wanted desktop app is out: <https://wanteddeadordead.com/app>. It keeps every addon's saved data safe
+between sessions and puts your records on the website's world PvP leaderboards. The addon works exactly the
+same without it.
+
+- With the app, every character links itself at login. `/wanted link <code>` is still there if one doesn't.
 - Kill and death records now note each side's class, race, level and faction, and your kills note how many
-  were in your group, for the website's breakdowns by class and level and its solo boards.
-- Honorable kills you helped with but didn't land are recorded as assists (WoW Forever doesn't name the
-  victim, so the addon matches the HK to the enemy death it just saw).
-- With the desktop app, every character links itself at login; `/wanted link` is only needed if that
-  doesn't happen.
+  were in your group, for the website's breakdowns by class, race and level and its solo boards.
+- Honorable kills you helped with but didn't land are recorded as assists. WoW Forever doesn't name the
+  victim, so the addon matches the HK to the enemy death it just saw.
 - `/wanted status` says whether the game or the desktop app loaded your saved data.
 - Records passed on by another player no longer keep that player's flags (altered, broken chain); each client
   checks every record itself.

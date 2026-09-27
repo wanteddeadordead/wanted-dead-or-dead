@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-26
+
+Sharing keeps up in big fights now, and links confirm in play.
+
 - Your new records now go out together up to 8 seconds after they're made, instead of one message each. A busy
   fight used to hit the send limit and hold records back until the next resync.
 - Links and assists are now shared as they happen, like kills. Before, they waited for a resync, and

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-09-27
+
+Dungeons and speed.
+
 - The Nearby window closes in dungeons and raids, where there's no world PvP, and opens again when you leave if
   it was open. Battlegrounds and arenas keep it.
 - The main window refreshes several times faster with a lot of saved data. The menu's badges (actions waiting,

@@ -58,6 +58,10 @@ function private.BuildApp(container, width)
 		Wanted.LiveLog:Update()
 	end)
 	private.liveLog:SetPoint("TOPLEFT", 16, -184)
+	private.appPrompt = W:Toggle(card, "Remind me at login when the app isn't set up", function(checked)
+		Wanted.db.settings.appPrompt = checked
+	end)
+	private.appPrompt:SetPoint("LEFT", private.liveLog, "RIGHT", 40, 0)
 	W:AttachTooltip(private.liveLog, "Live battle reports", "Keeps the game's combat log on in the open world, so the app can post deaths to the website within about five minutes, without a /reload. Turn it off here rather than with /combatlog. The log files stay in your Logs folder; the app can clean them up.")
 end
 
@@ -84,6 +88,7 @@ function private.Refresh()
 	private.appStatus:SetText(text)
 	private.appStatus:SetTextColor(color[1], color[2], color[3])
 	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
+	private.appPrompt:SetChecked(Wanted.db.settings.appPrompt)
 	-- The name the network knows us by (first and last name on WoW Forever), as the site's pages use
 	local url = SITE.."/player/"..private.Escape(Wanted.Store:GetOrigin() or "")
 	private.playerBox:SetText(url)
@@ -93,6 +98,27 @@ function private.Refresh()
 			self:HighlightText()
 		end
 	end)
+end
+
+---At login or /reload, when the desktop app isn't set up on this computer: a popup offering it, with the address
+---to copy (as TSM does for its app). "Don't remind me" turns it off; the Website & app page turns it back on.
+function Wanted:PromptForApp()
+	if Wanted:AppVersion() or not Wanted.db.settings.appPrompt or Wanted:InCombat() or W:IsDialogShown() then
+		return
+	end
+	W:Dialog({
+		title = "Get the Wanted app",
+		text = "The Wanted desktop app isn't set up on this computer. It puts your kills on the website's leaderboards, lets your records confirm other players' kills, and keeps Wanted's saved data safe. For Windows.\n\nClick the address, press Ctrl+C, and paste it into your browser:",
+		input = { value = SITE.."/app" },
+		confirmLabel = "Close",
+		cancelLabel = "Don't remind me",
+		onConfirm = function() end,
+		onCancel = function()
+			Wanted.db.settings.appPrompt = false
+			Wanted:Print("No more app reminders. The Website & app page (/wanted web) has the link, and can turn them back on.")
+			UI:Refresh()
+		end,
+	})
 end
 
 UI:RegisterPage("web", {

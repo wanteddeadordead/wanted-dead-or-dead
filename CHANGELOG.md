@@ -13,6 +13,8 @@
 - Records that arrived ahead of a missing one now join their chain once it turns up. Before, the addon kept
   asking other players for records it already had, every minute. Saved chains stuck this way are fixed at login.
 - More enemy sightings are shared in big fights (the limit was hit over and over during a raid on Undercity).
+- Only a released version tells other players to update. A development build no longer tells anyone to update,
+  pauses anyone's sharing, or ignores records from older versions.
 - The Hotspots menu item shows how many zones have enemies right now, like the Enemies count.
 
 ## [1.1.0] - 2026-09-26

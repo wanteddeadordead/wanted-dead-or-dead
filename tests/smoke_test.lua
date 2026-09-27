@@ -1815,6 +1815,25 @@ end)()
 	enemyUnits.nameplate40, enemyUnits.nameplate41 = nil, nil
 end)()
 ;(function()
+	-- The app's versions arrive through !!WantedLink: an app behind the newest is mentioned at login
+	local function Said(text)
+		for i = #printed, math.max(1, #printed - 3), -1 do
+			if printed[i]:find(text, 1, true) then return true end
+		end
+		return false
+	end
+	WantedAppInfo = { running = "0.1.1", latest = "0.1.2" }
+	check(ns:CheckAppVersion() and Said("The Wanted app 0.1.2 is out (you have 0.1.1)"), "an app behind the newest is mentioned")
+	WantedAppInfo = { running = "0.1.2", latest = "0.1.2" }
+	check(not ns:CheckAppVersion(), "a current app isn't")
+	WantedAppInfo = { running = "dev", latest = "0.1.2" }
+	check(not ns:CheckAppVersion(), "nor is a development build")
+	WantedAppInfo = { running = "0.1.1", latest = "0.2.0|cffff0000evil" }
+	check(not ns:CheckAppVersion() or not Said("evil"), "text another addon put there isn't shown as is")
+	WantedAppInfo = nil
+	check(not ns:CheckAppVersion(), "without the app, nothing")
+end)()
+;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them
 	local function Linked(origin, seq, prev)
 		local r = Rec(origin, seq)

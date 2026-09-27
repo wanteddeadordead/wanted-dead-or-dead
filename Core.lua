@@ -358,6 +358,14 @@ function Wanted:ParseVersion(version)
 	return { tonumber(major), tonumber(minor), tonumber(patch), stage, pre }
 end
 
+---Whether a version is a release (tagged and published) rather than a development build ("-dev"). Only
+---releases tell anyone to update: a build on a developer's PC is not out.
+---@param version any
+---@return boolean
+function Wanted:IsRelease(version)
+	return Wanted:ParseVersion(version) ~= nil and not strfind(version, "%-dev")
+end
+
 ---Whether version a is newer than version b. False when either can't be read.
 function Wanted:IsNewerVersion(a, b)
 	local pa, pb = Wanted:ParseVersion(a), Wanted:ParseVersion(b)
@@ -399,7 +407,7 @@ end
 ---Another player's client reported its version. A newer, plausible one means this client must update.
 ---@param version any
 function Wanted:NoteVersion(version)
-	if not Wanted:IsNewerVersion(version, Wanted.VERSION) or not Wanted.db then
+	if not Wanted:IsRelease(version) or not Wanted:IsNewerVersion(version, Wanted.VERSION) or not Wanted.db then
 		return
 	end
 	if not private.IsPlausibleUpdate(version) then

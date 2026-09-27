@@ -762,6 +762,18 @@ check(#addonSent == 1 and addonSent[1].text:find("^U:"), "the older player is to
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")
 check(ns:GetRequiredUpdate() == "0.2.0", "an update notice locks this client")
 ns.db.requiredVersion, ns.newerVersion = nil, nil
+-- Only released versions count: a development build never locks anyone, tells anyone to update, or turns away
+-- an older player's news
+ns:NoteVersion("0.9.0-dev")
+check(ns:GetRequiredUpdate() == nil and ns.newerVersion == nil, "a newer development build is not an update")
+Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.9.0-dev" }), "WHISPER", "Dev Timer")
+check(ns:GetRequiredUpdate() == nil, "an update notice naming a development build is ignored")
+ns.VERSION = "0.1.0-dev"
+addonSent = {}
+Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Player-9-DEVNEWS", n = "Dev News", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Older Timer", nil, nil, nil, "WantedNetHorde")
+check(#addonSent == 0, "a development build tells nobody to update")
+check(ns.Store:GetPlayer("Player-9-DEVNEWS") ~= nil, "a development build takes in an older player's news")
+ns.VERSION = "0.1.0"
 -- Saved data from a newer layout is left alone; older tables load and upgrade
 local realDB = WantedDB
 WantedDB = { version = 99, marker = true }

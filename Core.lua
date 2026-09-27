@@ -37,6 +37,7 @@ local DEFAULTS = {
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
+		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		bridge = true, -- carry bounty notices to and from Battle.net friends on the other faction (Bridge)
 		nearby = { -- what the Nearby window shows
 			layout = "auto", -- "auto" (compact above 8 enemies), "normal" or "compact"

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- When a new version of the Wanted desktop app is out, the addon says so in chat at login (the app tells it).
+- Catch-ups for other players go out a batch at a time instead of all at once, which caused a brief hitch every
+  minute or so with a player on another realm.
+- Reading a zone's map for named areas on a zone change happens in a quiet moment.
+- Enemy players who die near you are recorded even if the addon never had them on a nameplate or target: the
+  game's death event and their race say which side they're on.
+
 ## [1.1.2] - 2026-09-26
 
 No more lag in big fights, and both sides' deaths count.

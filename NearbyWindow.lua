@@ -78,8 +78,8 @@ function Nearby:OnEnable()
 	if not InCombatLockdown() then
 		private.Create()
 	end
-	Enemies:OnChange(private.OnEnemyEvent)
-	C_Timer.NewTicker(1, function()
+	Enemies:OnChange(Wanted:Timed("Nearby enemy change", private.OnEnemyEvent))
+	C_Timer.NewTicker(1, Wanted:Timed("Nearby tick", function()
 		if private.frame and private.frame:IsShown() then
 			Nearby:Refresh()
 			private.CheckAutoHide()
@@ -90,18 +90,18 @@ function Nearby:OnEnable()
 			and (private.Settings().tab or "nearby") == "nearby" then
 			Wanted.Emotes:MaybeTip()
 		end
-	end)
+	end))
 	-- Stepping out of a sanctuary or getting flagged with enemies already around opens the window then
 	private.flagFrame = CreateFrame("Frame")
 	for _, event in ipairs({ "PLAYER_FLAGS_CHANGED", "UNIT_FACTION", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
 		private.flagFrame:RegisterEvent(event)
 	end
-	private.flagFrame:SetScript("OnEvent", function(_, event, unit)
+	private.flagFrame:SetScript("OnEvent", Wanted:Timed("Nearby flag events", function(_, event, unit)
 		if event == "UNIT_FACTION" and unit ~= "player" then
 			return
 		end
 		private.OnExposureChanged()
-	end)
+	end))
 end
 
 ---Opens the window on the Nearby tab when enemies turn up (settings: autoShow), but only while they could

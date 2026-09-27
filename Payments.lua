@@ -25,7 +25,7 @@ local UNPAID_AFTER_SECONDS = 48 * 60 * 60
 function Payments:OnEnable()
 	private.frame:RegisterEvent("MAIL_SEND_SUCCESS")
 	private.frame:RegisterEvent("MAIL_INBOX_UPDATE")
-	private.frame:SetScript("OnEvent", private.OnEvent)
+	private.frame:SetScript("OnEvent", Wanted:Timed("Payments events", private.OnEvent))
 	-- If another addon replaced the SendMail global with a wrapper that calls the original, this hook lands on
 	-- the wrapper and still runs for every send
 	hooksecurefunc("SendMail", private.OnSendMail)

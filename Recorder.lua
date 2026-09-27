@@ -53,7 +53,7 @@ function Recorder:OnEnable()
 		Wanted:Log("Recorder: registering %s", event)
 		private.frame:RegisterEvent(event)
 	end
-	private.frame:SetScript("OnEvent", private.OnEvent)
+	private.frame:SetScript("OnEvent", Wanted:Timed("Recorder events", private.OnEvent))
 end
 
 function Recorder:Status()

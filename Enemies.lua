@@ -82,8 +82,8 @@ function Enemies:OnEnable()
 	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_FOCUS_CHANGED", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_STOP", "PLAYER_DEAD", "UNIT_TARGET" }) do
 		private.frame:RegisterEvent(event)
 	end
-	private.frame:SetScript("OnEvent", private.OnEvent)
-	C_Timer.NewTicker(SCAN_SECONDS, private.Tick)
+	private.frame:SetScript("OnEvent", Wanted:Timed("Enemies events", private.OnEvent))
+	C_Timer.NewTicker(SCAN_SECONDS, Wanted:Timed("Enemies scan", private.Tick))
 end
 
 function Enemies:Status()

@@ -4,6 +4,8 @@
 
 - The top of the window shows two lights: the Wanted app (or "Get the app", which opens the Website & app page)
   and WantedNet, the in-game channel. It no longer counts other players.
+- When a newer Wanted is out, the addon says your version is outdated and gives the CurseForge link, at each
+  login until you update, not only the first time it notices.
 
 ## [1.1.3] - 2026-09-27
 

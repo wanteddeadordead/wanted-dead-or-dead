@@ -742,6 +742,16 @@ WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
 -- The newest version wins: that newer peer locked the shared side until this client updates
 check(ns:GetRequiredUpdate() == "0.4.0", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
+;(function()
+	local function Told(from)
+		for i = from + 1, #printed do
+			if printed[i]:find("outdated", 1, true) and printed[i]:find("https://www.curseforge.com/wow/addons/wanted-dead-or-dead", 1, true) then return true end
+		end
+	end
+	check(Told(0), "the update notice says the version is outdated and where to download")
+	local before = #printed
+	check(ns:RemindUpdate() and Told(before), "each login repeats the update notice while this client is behind")
+end)()
 addonSent = {}
 clock = clock + 61
 ns:RunCommand("post", "1g Stabby Mcstab")

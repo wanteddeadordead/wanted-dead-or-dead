@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- A name book: Wanted remembers the full names of the players it sees, on both sides, so the desktop app can
+  put "First Last" on the deaths it reads from the combat log (which only has first names).
+
 ## [1.2.3] - 2026-09-27
 
 Dungeons and speed.

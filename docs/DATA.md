@@ -35,6 +35,12 @@ code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At lo
 The same file also holds `WantedAppInfo = { running, latest }` (from 1.1.3): the app's version and the newest
 one out. When the app is behind, the addon says so in chat once a login.
 
+`WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
+either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
+full names on the deaths it reads from the combat log, which names players by first name only. At load, names
+not seen for 30 days are dropped, then the oldest until it holds 5000. A new key with a default: no migration.
+The launch reset drops it with the other beta data.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

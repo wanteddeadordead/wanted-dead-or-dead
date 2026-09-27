@@ -272,11 +272,14 @@ function Rows:DoAction(action, info)
 		Bounties:Pass(info.bounty)
 		Done(format("Passed on the bounty on %s. Tick Show passed to see it again.", info.targetName), C.muted)
 	elseif action == "confirm" then
-		local witnesses = #Bounties:GetWitnesses(info.claim)
+		local warnings = Bounties:GetClaimWarnings(info.claim)
+		local caution = #warnings > 0 and ("\n\n"..Theme:Colorize("Before you pay: "..table.concat(warnings, " "), C.amber)) or ""
 		W:Dialog({
 			title = "Confirm the kill",
-			text = format("You agree %s killed %s, and you owe them %s.%s%s", info.hunter, name, Theme:Money(info.amount), witnesses == 0 and "\n\nNobody else saw this kill." or "",
+			text = format("You agree %s killed %s, and you owe them %s.%s%s\n\nEvery record of this death, from both factions, including who the victim's own record says killed them (click the address, Ctrl+C, paste into a browser):",
+				info.hunter, name, Theme:Money(info.amount), caution,
 				Wanted.Proof:Get(info.claim.id) and format("\n\n%s has a screenshot of the kill.", info.hunter) or ""),
+			input = { value = Bounties:DeathPageURL(info.claim) },
 			confirmLabel = "Confirm",
 			confirmStyle = "success",
 			onConfirm = function()

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Before you confirm a bounty claim, Wanted warns you when nobody else recorded the death, or when its only
+  witnesses are new to the network or only ever back up that hunter. The confirm dialog also gives the address
+  of the death's page on the website, with every record of it from both factions, including who the victim's
+  own record says killed them.
+
 ## [1.2.1] - 2026-09-27
 
 Reminders when the desktop app isn't set up, or isn't running.

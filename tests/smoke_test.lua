@@ -331,6 +331,8 @@ ns.Rows:DoAction("pass", board[2])
 check(#ns.Model:GetBoard({ minAmount = 0 }) == 1, "passed bounty hidden")
 check(#ns.Model:GetBoard({ minAmount = 0, showPassed = true }) == 2, "show passed brings it back")
 ns.Rows:DoAction("confirm", board[1])
+check(lastDialog and lastDialog.input and lastDialog.input.value:find("^https://wanteddeadordead.com/death/") and lastDialog.text:find("Before you pay", 1, true),
+	"confirming a claim nobody witnessed warns first and gives the death's page")
 ConfirmDialog()
 local info = ns.Model:GetBountyInfo(board[1].bounty)
 check(info.state == "owed" and info.actions[1] == "pay", "confirmed bounty is owed with pay, got "..info.state)
@@ -2107,5 +2109,48 @@ end)()
 	WantedAppInfo = nil
 	ns.Widgets.IsDialogShown = shown
 	ns.UI:Show("web")
+end)()
+;(function()
+	-- Before a poster pays, the addon warns about weak claims and links the death's page on the website
+	local B = ns.Bounties
+	local victim = "Player-9-WEAKCLAIM"
+	local function Claim(hunter, t)
+		return ns.Store:InsertTest("claim", hunter, { bounty = "b-weak", victim = victim, victimName = "Weak Victim", zone = "Silverpine Forest", killT = t }, t)
+	end
+	local function Death(witness, t)
+		ns.Store:InsertTest("death", witness, { victim = victim, victimName = "Weak Victim", zone = "Silverpine Forest" }, t)
+	end
+	local function Has(list, text)
+		for _, w in ipairs(list) do if w:find(text, 1, true) then return true end end
+		return false
+	end
+	local t0 = clock - 7200
+	-- Nobody else recorded it
+	local lonely = Claim("Sly Hunter", t0)
+	check(Has(B:GetClaimWarnings(lonely), "Nobody else recorded this death"), "a claim nobody witnessed is flagged")
+	check(B:DeathPageURL(lonely) == "https://wanteddeadordead.com/death/"..victim.."/"..t0, "and links the death's page, got "..tostring(B:DeathPageURL(lonely)))
+	-- Its only witness is brand new to the network
+	local t1 = t0 + 300
+	local fresh = Claim("Sly Hunter", t1)
+	Death("Brand New Alt", t1 + 1)
+	check(Has(B:GetClaimWarnings(fresh), "new to the network"), "a witness nobody has seen before is flagged")
+	-- A witness who has only ever backed up this one hunter
+	for i = 1, 3 do
+		local t = t0 + 600 * (i + 1)
+		Claim("Sly Hunter", t)
+		Death("Loyal Friend", t + 2)
+	end
+	local lastT = t0 + 600 * 4
+	local loyal
+	for c in ns.Store:Iterator("claim") do
+		if c.origin == "Sly Hunter" and c.data.killT == lastT then loyal = c end
+	end
+	check(Has(B:GetClaimWarnings(loyal), "only ever backs up Sly Hunter"), "a witness who only backs one hunter is flagged")
+	-- An established witness who backs up others too: no warnings
+	ns.Store:Merge({ kind = "death", id = "Old Hand:1", origin = "Old Hand", seq = 1, prev = "0", t = clock - 30 * 86400,
+		data = { victim = "Player-9-SOMEONE", zone = "Durotar" } }, "Old Hand")
+	local fair = Claim("Honest Hunter", t0 + 5000)
+	Death("Old Hand", t0 + 5001)
+	check(#B:GetClaimWarnings(fair) == 0, "a claim an established player witnessed has no warnings, got "..table.concat(B:GetClaimWarnings(fair), " / "))
 end)()
 print("wanted smoke: all checks pass")

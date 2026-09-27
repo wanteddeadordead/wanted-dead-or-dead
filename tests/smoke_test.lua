@@ -2054,4 +2054,31 @@ end)()
 	end
 	check(found, "the window shows the development note")
 end)()
+;(function()
+	-- At login, without the app, a popup offers it (like TSM's); "Don't remind me" stops it for good
+	WantedAppInfo = nil
+	ns.db.settings.appPrompt = true
+	lastDialog = nil
+	-- An earlier test left a dialog open; the popup never goes over another one
+	local shown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return true end
+	ns:PromptForApp()
+	check(lastDialog == nil, "the popup waits while another dialog is open")
+	ns.Widgets.IsDialogShown = function() return false end
+	ns:PromptForApp()
+	check(lastDialog and lastDialog.title == "Get the Wanted app" and lastDialog.input and lastDialog.input.value == "https://wanteddeadordead.com/app",
+		"without the app, a popup offers it with the address to copy")
+	lastDialog.onCancel()
+	lastDialog = nil
+	check(ns.db.settings.appPrompt == false, "Don't remind me turns it off")
+	ns:PromptForApp()
+	check(lastDialog == nil, "and it doesn't come back")
+	ns.db.settings.appPrompt = true
+	WantedAppInfo = { running = "0.2.0", latest = "0.2.0" }
+	ns:PromptForApp()
+	check(lastDialog == nil, "with the app set up, no popup")
+	WantedAppInfo = nil
+	ns.Widgets.IsDialogShown = shown
+	ns.UI:Show("web")
+end)()
 print("wanted smoke: all checks pass")

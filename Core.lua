@@ -38,6 +38,7 @@ local DEFAULTS = {
 		showTools = false, -- the Tools page (network details, test data, debug log)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
+		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
 		bridge = true, -- carry bounty notices to and from Battle.net friends on the other faction (Bridge)
 		nearby = { -- what the Nearby window shows
 			layout = "auto", -- "auto" (compact above 8 enemies), "normal" or "compact"
@@ -742,6 +743,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		private.CallModules("OnEnable")
 		Wanted:RemindUpdate()
 		Wanted:CheckAppVersion()
+		-- A moment after the loading screen, so it isn't lost behind it
+		C_Timer.After(6, function() Wanted:PromptForApp() end)
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then

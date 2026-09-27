@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Without the Wanted desktop app set up on this computer, a popup at login or /reload offers it, with the address
+  to copy. "Don't remind me" stops it; the Website & app page can turn it back on.
+
 ## [1.2.0] - 2026-09-27
 
 Battle reports fill in during the fight, your nemesis on the Enemies page, and clearer signs of what's running.

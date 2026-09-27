@@ -82,6 +82,8 @@ private.tokens = CHANNEL_BURST
 local MAX_QUEUED_PARTS = 48
 local MAX_QUEUED_FILL_PARTS = 16
 local SIGHTING_QUEUE_SECONDS = 15
+-- Messages received in a fight wait, unopened, until it's over; past this many the rest are left to the resync
+local MAX_DEFERRED_MESSAGES = 300
 -- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
 local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
@@ -141,6 +143,12 @@ function Sync:OnEnable()
 	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
+	-- What a fight held back goes once it's over
+	Wanted:OnCombatEnd(function()
+		private.FlushLive()
+		private.FlushForward()
+		private.Drain()
+	end)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
 	-- Realm links
@@ -452,6 +460,22 @@ function private.Enqueue(item)
 	private.Drain()
 end
 
+---Where the next message to send is in the queue: the first one, except that in a fight only sightings (and
+---messages already part sent) go. Nil when everything left is held.
+---@return number?
+function private.NextToSend()
+	local outbox = private.outbox
+	if not Wanted:InCombat() then
+		return outbox[1] and 1 or nil
+	end
+	for i, item in ipairs(outbox) do
+		if item.tag == TAG_SIGHTINGS or item.next > 1 then
+			return i
+		end
+	end
+	return nil
+end
+
 ---Sends queued channel parts while the pace allows, then waits for the next one.
 function private.Drain()
 	private.drainScheduled = false
@@ -461,7 +485,12 @@ function private.Drain()
 	local outbox = private.outbox
 	local wait = nil
 	while outbox[1] and not wait do
-		local item = outbox[1]
+		local at = private.NextToSend()
+		if not at then
+			-- Only held messages left: they go when the fight is over (OnCombatEnd)
+			return
+		end
+		local item = outbox[at]
 		if not private.channelId then
 			-- Left the channel: the queue is stale, and the hello after rejoining starts a resync
 			private.stats.dropped = private.stats.dropped + #outbox
@@ -469,7 +498,7 @@ function private.Drain()
 			private.outboxParts = 0
 			return
 		elseif item.tag == TAG_SIGHTINGS and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
-			tremove(outbox, 1)
+			tremove(outbox, at)
 			private.outboxParts = private.outboxParts - #item.parts
 			private.stats.dropped = private.stats.dropped + 1
 		elseif private.tokens < 1 then
@@ -489,7 +518,7 @@ function private.Drain()
 				item.refusals = item.refusals + 1
 				Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, item.tag)
 				if item.refusals > MAX_RETRIES then
-					tremove(outbox, 1)
+					tremove(outbox, at)
 					private.outboxParts = private.outboxParts - (total - part + 1)
 					private.stats.dropped = private.stats.dropped + 1
 				end
@@ -501,7 +530,7 @@ function private.Drain()
 				private.outboxParts = private.outboxParts - 1
 				item.next = part + 1
 				if item.next > total then
-					tremove(outbox, 1)
+					tremove(outbox, at)
 				end
 			end
 		end
@@ -672,6 +701,10 @@ end
 ---other players at the next resync.
 function private.FlushLive()
 	private.liveFlushPending = false
+	if Wanted:InCombat() then
+		-- Kept until the fight is over (OnCombatEnd)
+		return
+	end
 	local queue = private.liveQueue
 	private.liveQueue = {}
 	for first = 1, #queue, LIVE_BATCH_MAX do
@@ -779,6 +812,21 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		private.partial[key] = nil
 		payload = table.concat(partial.parts, "", 1, total)
 	end
+	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES then
+			-- The next resync asks again for anything this leaves out
+			private.stats.dropped = private.stats.dropped + 1
+			return
+		end
+		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink) end)
+		return
+	end
+	private.Process(tag, payload, sender, viaLink)
+end
+
+---Decodes and handles one whole message.
+function private.Process(tag, payload, sender, viaLink)
 	local tbl = Decode(payload)
 	if type(tbl) ~= "table" then
 		private.stats.invalid = private.stats.invalid + 1
@@ -1134,6 +1182,10 @@ end
 
 function private.FlushForward()
 	private.forwardDue = false
+	if Wanted:InCombat() then
+		-- Kept until the fight is over (OnCombatEnd)
+		return
+	end
 	for name, queue in pairs(private.forwardQueue) do
 		private.forwardQueue[name] = nil
 		SendInBatches(queue, name)
@@ -1148,6 +1200,10 @@ end
 ---Once a minute: each live link hears what we hold (a catch-up the budget cut short carries on), and links
 ---nobody has heard from in a while are dropped.
 function private.LinkTick()
+	-- A resync can wait a minute; a fight can't
+	if Wanted:InCombat() then
+		return
+	end
 	local now = GetTime()
 	for name, link in pairs(private.links) do
 		if now - (link.heard or 0) >= LINK_TIMEOUT then

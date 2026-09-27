@@ -585,8 +585,90 @@ function private.BlockContext()
 	return ok and text or table.concat(parts, ", ")
 end
 
+-- ============================================================================
+-- Fights and background work
+-- ============================================================================
+
+-- In a fight the addon keeps recording and does nothing else it can put off: sync work waits until combat has
+-- been over a few seconds, then runs a few milliseconds a frame so it never stalls the game.
+local COMBAT_SETTLE_SECONDS = 3
+local WORK_MS_PER_FRAME = 3
+private.inCombat = false
+private.combatGen = 0
+private.combatEndListeners = {}
+private.work, private.workHead, private.workTail = {}, 1, 0
+private.workFrame = CreateFrame("Frame")
+private.workFrame:Hide()
+
+---Whether the player is in a fight (and for a few seconds after), when only recording should happen.
+---@return boolean
+function Wanted:InCombat()
+	return private.inCombat
+end
+
+---Registers a function called once each fight is over.
+---@param func function
+function Wanted:OnCombatEnd(func)
+	tinsert(private.combatEndListeners, func)
+end
+
+---Queues work to run between frames, a little at a time, and never during a fight.
+---@param func function
+function Wanted:QueueWork(func)
+	private.workTail = private.workTail + 1
+	private.work[private.workTail] = func
+	private.workFrame:Show()
+end
+
+---How many pieces of queued work are waiting.
+---@return number
+function Wanted:QueuedWork()
+	return private.workTail - private.workHead + 1
+end
+
+private.workFrame:SetScript("OnUpdate", function(self)
+	if private.inCombat then
+		return
+	end
+	local start = debugprofilestop()
+	while private.workHead <= private.workTail and debugprofilestop() - start < WORK_MS_PER_FRAME do
+		local func = private.work[private.workHead]
+		private.work[private.workHead] = nil
+		private.workHead = private.workHead + 1
+		func()
+	end
+	if private.workHead > private.workTail then
+		private.work, private.workHead, private.workTail = {}, 1, 0
+		self:Hide()
+	end
+end)
+
+function private.OnCombatChanged(inCombat)
+	private.combatGen = private.combatGen + 1
+	if inCombat then
+		if not private.inCombat then
+			Wanted:Log("Combat: recording only until the fight is over")
+		end
+		private.inCombat = true
+		return
+	end
+	local gen = private.combatGen
+	C_Timer.After(COMBAT_SETTLE_SECONDS, function()
+		if gen ~= private.combatGen or not private.inCombat then
+			return
+		end
+		private.inCombat = false
+		Wanted:Log("Combat: over, %d pieces of work to catch up on", Wanted:QueuedWork())
+		for _, func in ipairs(private.combatEndListeners) do
+			func()
+		end
+	end)
+end
+
 private.frame:RegisterEvent("ADDON_LOADED")
 private.frame:RegisterEvent("PLAYER_LOGIN")
+private.frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+private.frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 -- These name the function the client refused, which the popup on this client does not
 private.frame:RegisterEvent("ADDON_ACTION_BLOCKED")
 private.frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -603,6 +685,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 			Wanted:Print("Your saved data is from a newer version of Wanted. Update the addon to use it; until then nothing you do this session is saved, and your data is left as it is.")
 		end
 		private.CallModules("OnEnable")
+	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		if arg1 == ADDON_NAME then
 			Wanted:NoteProblem(event..": "..tostring(arg2).." ("..private.BlockContext()..")")

@@ -24,7 +24,11 @@ local private = {
 	joinAttempts = 0,
 	msgCounter = 0,
 	partial = {}, -- sender..msgId -> { parts = {}, total, t }
-	sentTimes = {}, -- outbound message times in the last minute
+	outbox = {}, -- channel messages waiting to go: { tag, parts, next, priority, queued, refusals }
+	outboxParts = 0, -- parts still to send in outbox
+	tokens = 0, -- channel parts we may send now (refilled with time; starts full, below)
+	tokensAt = 0,
+	drainScheduled = false,
 	inbound = {}, -- sender -> { count, minute }
 	ceilingHitMinute = nil,
 	pausedUntil = 0,
@@ -67,9 +71,21 @@ local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 -- Sent privately (addon whisper) to a player on an older version: update
 local TAG_UPDATE = "U"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
--- Limits, the same shape as AskPrice's: a hard ceiling on everything sent, a cap on what any one sender may
--- push at us, and a pause when the ceiling is hit two minutes running
-local MAX_SENT_PER_MINUTE = 20
+-- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
+-- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
+-- wait in a queue and go out a little under that pace, so the game never has to refuse them.
+local CHANNEL_BURST = 8
+local CHANNEL_PART_SECONDS = 2.5
+private.tokens = CHANNEL_BURST
+-- The queue holds about two minutes of sending. Gap fills only take what room is left below their share: the
+-- next resync asks for anything they leave out. A sighting still waiting after 15 seconds is old news.
+local MAX_QUEUED_PARTS = 48
+local MAX_QUEUED_FILL_PARTS = 16
+local SIGHTING_QUEUE_SECONDS = 15
+-- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
+local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
+local DEFAULT_SEND_PRIORITY = 3
+-- A cap on what any one sender may push at us, and a pause when our own queue overflows two minutes running
 -- Sightings have their own, smaller budget and never trigger the pause, so a big fight can't hold up bounties,
 -- kills and claims. A new enemy waits up to 8s to share a message with others seen around the same time;
 -- Kill on Sight, bounty and stealthed enemies go within 2s. An enemy someone shared in the last minute isn't
@@ -80,7 +96,7 @@ local SIGHTING_URGENT_SECONDS = 2
 local MAX_SIGHTINGS_PER_BATCH = 15
 local SIGHTING_FRESH_SECONDS = 60
 -- The game's own addon message limits (SendAddonMessage results AddonMessageThrottle and ChannelThrottle).
--- Records caught by them are sent again a few seconds later; sightings are let go.
+-- A refused channel part waits and is sent again by itself; a refused whisper is sent again whole.
 local RESULT_THROTTLED = { [3] = true, [8] = true }
 local RETRY_SECONDS = 5
 local MAX_RETRIES = 3
@@ -317,77 +333,183 @@ function private.Send(tag, tbl, attempt, target)
 	end
 	-- Every message says which version sent it: the newest version wins (Core)
 	tbl.v = Wanted.VERSION
-	if not isSighting and now < private.pausedUntil then
+	if not target and not isSighting and now < private.pausedUntil then
 		private.stats.dropped = private.stats.dropped + 1
 		return false
 	end
 	local payload = Encode(tbl)
 	local total = ceil(#payload / CHUNK_LEN)
-	local times = target and private.linkTimes or (isSighting and private.sightingTimes or private.sentTimes)
-	PruneTimes(times, now)
 	Wanted:Log("Sync: send %s%s, %d bytes in %d part(s)", tag, target and (" to "..target) or "", #payload, total)
-	if target and #times + total > MAX_LINK_PARTS_PER_MINUTE then
-		Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
-		private.stats.dropped = private.stats.dropped + 1
-		return false
-	elseif target then
-		-- Within the link budget; the channel's limits and pause don't apply to whispers
-	elseif isSighting and #times + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
-		Wanted:Log("Sync: sighting budget reached, dropping a batch")
-		private.stats.dropped = private.stats.dropped + 1
-		return false
-	elseif not isSighting and #times + total > MAX_SENT_PER_MINUTE then
-		Wanted:Log("!! Sync: send limit reached, dropping %s", tag)
-		local minute = floor(now / 60)
-		if private.ceilingHitMinute and minute == private.ceilingHitMinute + 1 then
-			private.pausedUntil = now + PAUSE_SECONDS
-			Wanted:Log("!! Sync: send limit two minutes running, paused for %d minutes", PAUSE_SECONDS / 60)
-			Wanted:Print("Sync hit its send limit two minutes running, so it is paused for %d minutes.", PAUSE_SECONDS / 60)
+	if target then
+		PruneTimes(private.linkTimes, now)
+		if #private.linkTimes + total > MAX_LINK_PARTS_PER_MINUTE then
+			Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
+			private.stats.dropped = private.stats.dropped + 1
+			return false
 		end
-		private.ceilingHitMinute = minute
-		private.stats.dropped = private.stats.dropped + 1
+	elseif isSighting then
+		PruneTimes(private.sightingTimes, now)
+		if #private.sightingTimes + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
+			Wanted:Log("Sync: sighting budget reached, dropping a batch")
+			private.stats.dropped = private.stats.dropped + 1
+			return false
+		end
+	elseif not private.MakeRoom(tag, total, now) then
 		return false
 	end
 	private.msgCounter = (private.msgCounter % 46655) + 1
 	local msgId = private.ToBase36(private.msgCounter)
+	local parts = {}
+	for part = 1, total do
+		local chunk = strsub(payload, (part - 1) * CHUNK_LEN + 1, part * CHUNK_LEN)
+		parts[part] = tag..":"..msgId..":"..part.."/"..total..":"..chunk
+		assert(#parts[part] <= MAX_MESSAGE_LEN)
+	end
 	if not target then
 		-- Channel messages come back to us; whispers don't
 		private.ownMessages[tag..":"..msgId] = now
+		if isSighting then
+			for _ = 1, total do
+				tinsert(private.sightingTimes, now)
+			end
+		end
+		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
+		return true
 	end
 	for part = 1, total do
-		local chunk = strsub(payload, (part - 1) * CHUNK_LEN + 1, part * CHUNK_LEN)
-		local text = tag..":"..msgId..":"..part.."/"..total..":"..chunk
-		assert(#text <= MAX_MESSAGE_LEN)
-		local result
-		if target then
-			result = C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", target)
-		else
-			result = C_ChatInfo.SendAddonMessage(PREFIX, text, "CHANNEL", tostring(private.channelId))
-		end
-		Wanted:Log("Sync: SendAddonMessage part %d/%d -> %s", part, total, tostring(result))
-		if not target and result == RESULT_INVALID_CHANNEL then
-			-- Not really in the channel (yet): look it up again shortly and say hello then
-			private.channelId = nil
-			private.joinAttempts = 0
-			C_Timer.After(JOIN_SETTLE_SECONDS, private.TryJoin)
-			private.stats.dropped = private.stats.dropped + 1
-			return false
-		elseif RESULT_THROTTLED[result] then
-			-- The game is holding addon messages back. Receivers drop the unfinished message after a while.
+		local result = C_ChatInfo.SendAddonMessage(PREFIX, parts[part], "WHISPER", target)
+		Wanted:Log("Sync: SendAddonMessage part %d/%d to %s -> %s", part, total, target, tostring(result))
+		if RESULT_THROTTLED[result] then
 			private.stats.throttled = private.stats.throttled + 1
-			Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, tag)
-			if not isSighting then
-				private.QueueRetry(tag, tbl, attempt, target)
-			end
+			Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s to %s", tostring(result), part, total, tag, target)
+			private.QueueRetry(tag, tbl, attempt, target)
 			return false
 		end
-		tinsert(times, now)
+		tinsert(private.linkTimes, now)
 		private.stats.sent = private.stats.sent + 1
 	end
-	if target and private.links[target] then
+	if private.links[target] then
 		private.links[target].sent = private.links[target].sent + 1
 	end
 	return true
+end
+
+---Makes room in the channel queue for a message, dropping queued gap fills that haven't started if a more
+---important message needs their place. Returns whether it fits.
+---@param tag string
+---@param total number its parts
+---@param now number
+---@return boolean
+function private.MakeRoom(tag, total, now)
+	if tag == TAG_FILL then
+		if private.outboxParts + total > MAX_QUEUED_FILL_PARTS then
+			Wanted:Log("Sync: send queue busy, leaving the rest of a fill for the next resync")
+			private.stats.skipped = private.stats.skipped + 1
+			return false
+		end
+		return true
+	end
+	local outbox = private.outbox
+	for i = #outbox, 1, -1 do
+		if private.outboxParts + total <= MAX_QUEUED_PARTS then
+			break
+		end
+		if outbox[i].tag == TAG_FILL and outbox[i].next == 1 then
+			private.outboxParts = private.outboxParts - #outbox[i].parts
+			tremove(outbox, i)
+			private.stats.skipped = private.stats.skipped + 1
+		end
+	end
+	if private.outboxParts + total <= MAX_QUEUED_PARTS then
+		return true
+	end
+	Wanted:Log("!! Sync: send queue full, dropping %s", tag)
+	local minute = floor(now / 60)
+	if private.ceilingHitMinute and minute == private.ceilingHitMinute + 1 then
+		private.pausedUntil = now + PAUSE_SECONDS
+		Wanted:Log("!! Sync: send queue full two minutes running, paused for %d minutes", PAUSE_SECONDS / 60)
+		Wanted:Print("Sync had more to send than the game allows two minutes running, so it is paused for %d minutes.", PAUSE_SECONDS / 60)
+	end
+	private.ceilingHitMinute = minute
+	private.stats.dropped = private.stats.dropped + 1
+	return false
+end
+
+---Queues a channel message behind everything as important or more, then sends what the pace allows.
+---@param item table
+function private.Enqueue(item)
+	local outbox = private.outbox
+	local at = #outbox + 1
+	for i = #outbox, 1, -1 do
+		-- A message already partly sent keeps its place, so its parts arrive close together
+		if outbox[i].priority <= item.priority or outbox[i].next > 1 then
+			break
+		end
+		at = i
+	end
+	tinsert(outbox, at, item)
+	private.outboxParts = private.outboxParts + #item.parts
+	private.Drain()
+end
+
+---Sends queued channel parts while the pace allows, then waits for the next one.
+function private.Drain()
+	private.drainScheduled = false
+	local now = GetTime()
+	private.tokens = min(CHANNEL_BURST, private.tokens + max(0, now - private.tokensAt) / CHANNEL_PART_SECONDS)
+	private.tokensAt = now
+	local outbox = private.outbox
+	local wait = nil
+	while outbox[1] and not wait do
+		local item = outbox[1]
+		if not private.channelId then
+			-- Left the channel: the queue is stale, and the hello after rejoining starts a resync
+			private.stats.dropped = private.stats.dropped + #outbox
+			wipe(outbox)
+			private.outboxParts = 0
+			return
+		elseif item.tag == TAG_SIGHTINGS and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
+			tremove(outbox, 1)
+			private.outboxParts = private.outboxParts - #item.parts
+			private.stats.dropped = private.stats.dropped + 1
+		elseif private.tokens < 1 then
+			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
+		else
+			local part, total = item.next, #item.parts
+			local result = C_ChatInfo.SendAddonMessage(PREFIX, item.parts[part], "CHANNEL", tostring(private.channelId))
+			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s -> %s", part, total, item.tag, tostring(result))
+			if result == RESULT_INVALID_CHANNEL then
+				-- Not really in the channel (yet): look it up again shortly and say hello then
+				private.channelId = nil
+				private.joinAttempts = 0
+				C_Timer.After(JOIN_SETTLE_SECONDS, private.TryJoin)
+			elseif RESULT_THROTTLED[result] then
+				-- Something else used up the game's allowance (another addon, or chat): wait, then send this part again
+				private.stats.throttled = private.stats.throttled + 1
+				item.refusals = item.refusals + 1
+				Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s", tostring(result), part, total, item.tag)
+				if item.refusals > MAX_RETRIES then
+					tremove(outbox, 1)
+					private.outboxParts = private.outboxParts - (total - part + 1)
+					private.stats.dropped = private.stats.dropped + 1
+				end
+				private.tokens = 0
+				wait = RETRY_SECONDS
+			else
+				private.tokens = private.tokens - 1
+				private.stats.sent = private.stats.sent + 1
+				private.outboxParts = private.outboxParts - 1
+				item.next = part + 1
+				if item.next > total then
+					tremove(outbox, 1)
+				end
+			end
+		end
+	end
+	if outbox[1] and not private.drainScheduled then
+		private.drainScheduled = true
+		C_Timer.After(wait or CHANNEL_PART_SECONDS, private.Drain)
+	end
 end
 
 ---Sends a throttled message again in a few seconds, up to a few times.

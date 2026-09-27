@@ -1,6 +1,7 @@
 -- Wanted: every enemy player the addon knows, with how often you've met, who won, their guild and where
 -- they were last seen. Sort by any column, search by name or guild, and filter to Kill on Sight or
--- Ignored. Click a row for the enemy menu.
+-- Ignored. Click a row for the enemy menu. Across the top: your nemesis (who killed you most), who you
+-- killed most, and who you've fought most.
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -11,6 +12,13 @@ local Enemies = Wanted.Enemies
 local EnemyMenu = Wanted.EnemyMenu
 local private = { filter = nil, sort = "lastSeen", descending = true }
 local ROW_HEIGHT = 36
+-- The nemesis tiles take the top of the page; everything else sits below them
+local TOP = 78
+local NEMESES = {
+	{ key = "killedYou", label = "Killed you most", color = C.red, note = function(d) return d.losses == 1 and "once" or format("%d times", d.losses) end },
+	{ key = "youKilled", label = "You killed most", color = C.green, note = function(d) return d.wins == 1 and "once" or format("%d times", d.wins) end },
+	{ key = "fought", label = "Fought most", color = C.gold, note = function(d) return format("%d won, %d lost", d.wins, d.losses) end },
+}
 local COLUMNS = {
 	{ key = "name", label = "Name", x = 42 },
 	{ key = "level", label = "Lvl", x = 250 },
@@ -78,10 +86,21 @@ function private.UpdateRow(row, d)
 	row.last:SetText(d.lastSeen and ((d.zone or "?")..", "..Theme:Ago(GetServerTime() - d.lastSeen)) or "")
 end
 
+function private.RefreshNemeses()
+	local found = Enemies:GetNemeses()
+	for _, n in ipairs(NEMESES) do
+		local tile, d = private.nemesis[n.key], found[n.key]
+		tile.enemy = d
+		tile.value:SetText(d and Theme:ClassName(d.name, d.class) or Theme:Colorize("Nobody yet", C.faint))
+		tile.note:SetText(d and n.note(d) or "")
+	end
+end
+
 function private.Refresh()
 	if not private.list then
 		return
 	end
+	private.RefreshNemeses()
 	local items = Enemies:GetAll(private.filter)
 	local search = strlower(strtrim(private.search:GetText() or ""))
 	if search ~= "" then
@@ -131,6 +150,44 @@ UI:RegisterPage("enemies", {
 		return nearby > 0 and nearby or nil
 	end,
 	build = function(container, width, height)
+		private.nemesis = {}
+		local tileWidth = floor((width - 24) / 3)
+		local previous
+		for _, n in ipairs(NEMESES) do
+			local tile = W:StatTile(container, n.label, n.color)
+			tile:SetWidth(tileWidth)
+			if previous then
+				tile:SetPoint("LEFT", previous, "RIGHT", 12, 0)
+			else
+				tile:SetPoint("TOPLEFT")
+			end
+			tile.value:SetWidth(tileWidth - 32)
+			tile.value:SetJustifyH("LEFT")
+			tile.value:SetWordWrap(false)
+			tile.note:ClearAllPoints()
+			tile.note:SetPoint("TOPRIGHT", -12, -12)
+			tile:EnableMouse(true)
+			tile:SetScript("OnMouseUp", function(self)
+				if self.enemy then
+					EnemyMenu:Show(self.enemy)
+				end
+			end)
+			tile:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+				if self.enemy then
+					GameTooltip:SetText(Theme:ClassName(self.enemy.name, self.enemy.class))
+					EnemyMenu:AddTooltip(self.enemy)
+				else
+					GameTooltip:SetText(n.label)
+					GameTooltip:AddLine("From your own wins and losses against enemy players.", 1, 1, 1, true)
+				end
+				GameTooltip:Show()
+			end)
+			tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
+			private.nemesis[n.key] = tile
+			previous = tile
+		end
+
 		local filter = W:Segmented(container, {
 			{ key = "all", label = "All enemies" },
 			{ key = "kos", label = "Kill on Sight" },
@@ -139,19 +196,19 @@ UI:RegisterPage("enemies", {
 			private.filter = key ~= "all" and key or nil
 			private.Refresh()
 		end, 108)
-		filter:SetPoint("TOPLEFT")
+		filter:SetPoint("TOPLEFT", 0, -TOP)
 		filter:Select("all", true)
 		private.search = W:Input(container, 170, "Search name or guild", function() private.Refresh() end)
 		private.search:SetPoint("LEFT", filter, "RIGHT", 12, 0)
 		local nearby = W:Button(container, "Nearby window", "secondary", 130, 26, function() Wanted.NearbyWindow:Toggle() end)
-		nearby:SetPoint("TOPRIGHT")
+		nearby:SetPoint("TOPRIGHT", 0, -TOP)
 		W:AttachTooltip(nearby, "Nearby window", "The small list of enemies around you. Also right-click the minimap button, or /wanted nearby.")
 		private.count = Theme:Text(container, "small", "")
 		private.count:SetPoint("RIGHT", nearby, "LEFT", -12, 0)
 
 		local headerBar = CreateFrame("Frame", nil, container)
-		headerBar:SetPoint("TOPLEFT", 0, -40)
-		headerBar:SetPoint("TOPRIGHT", 0, -40)
+		headerBar:SetPoint("TOPLEFT", 0, -TOP - 40)
+		headerBar:SetPoint("TOPRIGHT", 0, -TOP - 40)
 		headerBar:SetHeight(24)
 		local line = Theme:Line(headerBar)
 		line:SetPoint("BOTTOMLEFT")
@@ -179,7 +236,7 @@ UI:RegisterPage("enemies", {
 			tinsert(private.headers, header)
 		end
 
-		local listTop = 68
+		local listTop = TOP + 68
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
 		list:SetPoint("TOPLEFT", 0, -listTop)
 		list:SetPoint("TOPRIGHT", 0, -listTop)

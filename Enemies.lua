@@ -822,6 +822,27 @@ function Enemies:GetAll(filter)
 end
 
 
+---Your nemesis and rivals, from your wins and losses: who killed you most, who you killed most, and who you've
+---fought most (both added up). Ties go to the one seen last. Each is an enemy as Describe gives it, or nil.
+---@return table { killedYou, youKilled, fought }
+function Enemies:GetNemeses()
+	local best = {}
+	local function Consider(key, d, n)
+		local cur = best[key]
+		if n > 0 and (not cur or n > cur.n or (n == cur.n and (d.lastSeen or 0) > (cur.d.lastSeen or 0))) then
+			best[key] = { d = d, n = n }
+		end
+	end
+	for guid, stats in pairs(Wanted.db.enemyStats) do
+		if strfind(guid, "^Player%-") then
+			local d = Enemies:Describe(guid)
+			Consider("killedYou", d, stats.losses or 0)
+			Consider("youKilled", d, stats.wins or 0)
+			Consider("fought", d, (stats.wins or 0) + (stats.losses or 0))
+		end
+	end
+	return { killedYou = best.killedYou and best.killedYou.d, youKilled = best.youKilled and best.youKilled.d, fought = best.fought and best.fought.d }
+end
 
 -- ============================================================================
 -- Sharing

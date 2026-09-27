@@ -583,6 +583,77 @@ function Bounties:GetWitnesses(claim)
 	return witnesses
 end
 
+-- A witness whose records started less than this long before the kill is new to the network
+local NEW_WITNESS_SECONDS = 24 * 60 * 60
+-- A witness who has backed up at least this many claims, all by one hunter, only ever backs up that hunter
+local LOYAL_WITNESS_CLAIMS = 3
+
+---Whether a witness is new: their first record came less than a day before the kill, or we hold so few of
+---their records that we can't tell they've been around.
+function private.IsNewWitness(origin, killT)
+	local first = Store:Get(origin..":1")
+	if first then
+		return killT - first.t < NEW_WITNESS_SECONDS
+	end
+	return Store:GetChainSeq(origin) < 10
+end
+
+---The hunter a witness only ever backs up, when every claim they've witnessed (at least a few) is one hunter's.
+function private.OnlyBacks(origin)
+	local hunter, count = nil, 0
+	for claim in Store:Iterator("claim") do
+		for _, w in ipairs(Bounties:GetWitnesses(claim)) do
+			if w == origin then
+				if hunter and claim.origin ~= hunter then
+					return nil
+				end
+				hunter, count = claim.origin, count + 1
+				break
+			end
+		end
+	end
+	return count >= LOYAL_WITNESS_CLAIMS and hunter or nil
+end
+
+---What should give a poster pause before paying a claim: nobody else recorded the death, or its only witnesses
+---are new to the network or only ever back up this hunter. A modified addon can fake a kill; these are the
+---signs of it. Empty when the claim looks sound.
+---@param claim table
+---@return string[] warnings
+function Bounties:GetClaimWarnings(claim)
+	local warnings = {}
+	local witnesses = Bounties:GetWitnesses(claim)
+	if #witnesses == 0 then
+		tinsert(warnings, "Nobody else recorded this death: only the hunter's own addon says it happened.")
+		return warnings
+	end
+	local killT = claim.data.killT or claim.t
+	local sound = false
+	for _, w in ipairs(witnesses) do
+		local loyal = private.OnlyBacks(w)
+		if loyal then
+			tinsert(warnings, format("%s only ever backs up %s's claims.", w, loyal))
+		elseif private.IsNewWitness(w, killT) then
+			tinsert(warnings, format("%s is new to the network: their first record came less than a day before the kill.", w))
+		else
+			sound = true
+		end
+	end
+	-- One sound witness is enough to trust the death happened
+	if sound then
+		return {}
+	end
+	return warnings
+end
+
+---The death's page on the website, with every record of it from both factions: who the victim's own record
+---says killed them, what other players' apps saw, and how well the kill is backed.
+---@param claim table
+---@return string url
+function Bounties:DeathPageURL(claim)
+	return format("https://wanteddeadordead.com/death/%s/%d", claim.data.victim or "", claim.data.killT or claim.t)
+end
+
 ---The claim that gets the bounty: the earliest kill among claims that aren't disputed. Every hunter can
 ---chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
 ---@param bounty table

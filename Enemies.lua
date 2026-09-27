@@ -543,6 +543,10 @@ function private.ResolveDeath(suspects, attempt)
 		killer, how = suspects[1], "targeting"
 	end
 	Wanted:Log("Enemies: death, killer %s (%s)", tostring(killer), how)
+	if killer and how == "recap" then
+		-- The death recap named them: our own death record names them too (Recorder)
+		private.lastKiller = { guid = killer, t = GetTime() }
+	end
 	if killer then
 		local stats = Enemies:GetStats(killer, true)
 		stats.losses = (stats.losses or 0) + 1
@@ -680,6 +684,18 @@ end
 
 ---The Nearby list: Kill on Sight and bounty targets first, then whoever is acting, then newest first.
 ---@return table[]
+---Who the death recap says killed us, if we died in the last maxAge seconds: a GUID, or nil. Only the recap
+---counts; the enemy who had us targeted is only a likely killer.
+---@param maxAge number
+---@return string?
+function Enemies:GetLastKiller(maxAge)
+	local k = private.lastKiller
+	if k and GetTime() - k.t <= maxAge then
+		return k.guid
+	end
+	return nil
+end
+
 ---When an enemy player was last in view (GetTime()), or nil if none is on the Nearby list.
 ---@return number?
 function Enemies:LastEnemySeen()

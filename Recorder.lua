@@ -15,6 +15,9 @@ local private = {
 	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
 	confirming = {}, -- guid -> true while a death waits to be confirmed
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
+	ownKillTimes = {}, -- GetTime() of each own kill not yet matched to an HK credit
+	assisted = {}, -- deathId -> true once an assist was recorded for it
+	hkCount = nil, -- honorable kills this session, as last read
 	playerGUID = nil,
 	playerFaction = nil,
 	places = nil, -- the named-area grid of one map, see private.ScanPlaces
@@ -28,6 +31,8 @@ local DEATH_DEDUPE_SECONDS = 15
 local DEATH_CONFIRM_SECONDS = 4
 -- The server's honor message arrives within this long of the death
 local HONOR_MATCH_WINDOW = 10
+-- The HK count can rise before the death it's for is recorded; the assist waits this long
+local ASSIST_DELAY = 2
 local MAX_LOG_LINES = 20
 local UNITS = { "target", "mouseover" }
 -- The zone map is read in a grid this many cells across for its named areas
@@ -43,7 +48,8 @@ local DIRECTIONS = { "east", "northeast", "north", "northwest", "west", "southwe
 function Recorder:OnEnable()
 	private.playerGUID = UnitGUID("player")
 	private.playerFaction = UnitFactionGroup("player")
-	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED", "ZONE_CHANGED_NEW_AREA" }) do
+	private.hkCount = private.SessionHKs()
+	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED", "ZONE_CHANGED_NEW_AREA", "PLAYER_PVP_KILLS_CHANGED" }) do
 		Wanted:Log("Recorder: registering %s", event)
 		private.frame:RegisterEvent(event)
 	end
@@ -78,6 +84,8 @@ function private.OnEvent(_, event, arg1, arg2)
 		private.HandlePartyKill(arg1, arg2)
 	elseif event == "UNIT_DIED" then
 		private.OnUnitDied(arg1)
+	elseif event == "PLAYER_PVP_KILLS_CHANGED" then
+		private.OnHKsChanged()
 	elseif event == "ZONE_CHANGED_NEW_AREA" then
 		-- Read the new zone's areas now rather than when help is called
 		private.places = nil
@@ -476,6 +484,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 	if attackerGUID == private.playerGUID or attackerGUID == UnitGUID("pet") then
 		Wanted:Log("Recorder: party kill by you of %s in %s", name, zone)
 		private.recentOwnKill[targetGUID] = GetTime()
+		tinsert(private.ownKillTimes, GetTime())
 		Store:NewRecord("kill", private.AddOwnTraits(private.AddTraits({
 			killer = private.playerGUID,
 			killerName = Store:GetOrigin(),
@@ -519,6 +528,10 @@ function private.HandleHonorGain(text)
 	if issecretvalue and issecretvalue(text) then
 		return
 	end
+	-- WoW Forever's line for HK credit names no victim; PLAYER_PVP_KILLS_CHANGED handles those (assists)
+	if strmatch(text, "^You have been awarded") then
+		return
+	end
 	-- "<name> dies, honorable kill Rank: ..." (the victim's name comes first)
 	local victimName = strmatch(text, "^(.-) dies")
 	if not victimName then
@@ -554,6 +567,7 @@ function private.HandleHonorGain(text)
 	end
 	local zone, x, y = Recorder:GetPosition()
 	Wanted:Log("Recorder: honor kill of %s (%s) in %s", victimName, tostring(guid), zone)
+	tinsert(private.ownKillTimes, GetTime())
 	if guid then
 		private.recentOwnKill[guid] = GetTime()
 		if Wanted.Enemies then
@@ -576,6 +590,80 @@ function private.HandleHonorGain(text)
 		y = y,
 		honor = true,
 	}, "victim", guid)))
+end
+
+
+
+-- ============================================================================
+-- Assists: HK credit without the killing blow
+-- ============================================================================
+
+---Honorable kills this session, or nil where the client doesn't say.
+function private.SessionHKs()
+	if not GetPVPSessionStats then
+		return nil
+	end
+	local hks = private.Readable(GetPVPSessionStats())
+	return type(hks) == "number" and hks or nil
+end
+
+---The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw.
+function private.OnHKsChanged()
+	local now = private.SessionHKs()
+	if not now or not private.hkCount then
+		private.hkCount = now
+		return
+	end
+	local added = now - private.hkCount
+	private.hkCount = now
+	for _ = 1, added do
+		C_Timer.After(ASSIST_DELAY, private.CreditHK)
+	end
+end
+
+---Matches one HK credit: to our own recent kill if there is one, otherwise to the newest enemy death we saw in
+---the last few seconds that has no assist yet. WoW Forever doesn't say whose death it was.
+function private.CreditHK()
+	local now = GetTime()
+	while private.ownKillTimes[1] and now - private.ownKillTimes[1] > HONOR_MATCH_WINDOW + ASSIST_DELAY do
+		tremove(private.ownKillTimes, 1)
+	end
+	if private.ownKillTimes[1] then
+		tremove(private.ownKillTimes, 1)
+		return
+	end
+	local me, serverNow = Store:GetOrigin(), GetServerTime()
+	local death
+	for record in Store:Iterator("death") do
+		local data = record.data
+		if record.origin == me and serverNow - record.t <= HONOR_MATCH_WINDOW + ASSIST_DELAY and data.deathId
+			and not private.assisted[data.deathId] and (not death or record.t > death.t) then
+			death = record
+		end
+	end
+	if not death then
+		Wanted:Log("Recorder: HK credit with no enemy death seen to match")
+		return
+	end
+	local data = death.data
+	private.assisted[data.deathId] = true
+	Wanted:Log("Recorder: assist on %s in %s", tostring(data.victimName), tostring(data.zone))
+	Store:NewRecord("assist", private.AddOwnTraits({
+		killer = private.playerGUID,
+		killerName = me,
+		killerGuild = Recorder:GetUnitGuild("player"),
+		victim = data.victim,
+		victimName = data.victimName,
+		victimGuild = data.victimGuild,
+		victimClass = data.victimClass,
+		victimRace = data.victimRace,
+		victimLevel = data.victimLevel,
+		victimFaction = data.victimFaction,
+		deathId = data.deathId,
+		zone = data.zone,
+		x = data.x,
+		y = data.y,
+	}))
 end
 
 

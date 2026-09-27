@@ -151,14 +151,15 @@ end
 ---@param record table
 ---@param sender string The server-stamped sender of the message carrying it
 ---@return boolean isNew
+---@return string? why when not new: "already held", "malformed", "not sent by its origin" or "test data"
 function Store:Merge(record, sender)
 	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
-		return false
+		return false, "malformed"
 	end
 	if record.origin ~= sender then
 		-- Only the origin may introduce its own records live; gap fills carry records from other origins and
 		-- go through MergeRelayed instead
-		return false
+		return false, "not sent by its origin"
 	end
 	return private.Insert(record, true)
 end
@@ -166,9 +167,10 @@ end
 ---Merges a record relayed by a peer answering a gap request (origin may differ from sender).
 ---@param record table
 ---@return boolean isNew
+---@return string? why when not new, as for Merge
 function Store:MergeRelayed(record)
 	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
-		return false
+		return false, "malformed"
 	end
 	return private.Insert(record, false)
 end
@@ -184,10 +186,10 @@ function private.Insert(record, live)
 		if live and existing.hash == record.hash and not existing.test then
 			existing.live = true
 		end
-		return false
+		return false, "already held"
 	end
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
-		return false
+		return false, "test data"
 	end
 	record.live = live or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then

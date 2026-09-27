@@ -412,7 +412,9 @@ function private.UpdateConnection()
 		Set(private.netStatus, C.amber, "WantedNet paused", "WantedNet paused",
 			"Too much traffic for a moment: sharing resumes shortly.")
 	else
-		Set(private.netStatus, C.green, "WantedNet", "Connected to WantedNet",
+		-- Development builds also count the other players on it; releases don't, so a quiet channel
+		-- doesn't look like nobody uses Wanted
+		Set(private.netStatus, C.green, Wanted.DEV and format("WantedNet (%d)", info.peers or 0) or "WantedNet", "Connected to WantedNet",
 			"Sharing bounties, kills and sightings with other Wanted players in game, in "..info.channelName..".")
 	end
 	local app = Wanted:AppVersion()

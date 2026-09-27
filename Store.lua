@@ -34,6 +34,7 @@ function Store:OnEnable()
 	Wanted:Log("Store: origin %s", private.origin)
 	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or { seq = 0, lastHash = "0" }
 	private.ownChain = Wanted.db.chains[private.origin]
+	Store:RepairChains()
 	Store:AutoLink()
 end
 
@@ -209,6 +210,7 @@ function private.Insert(record, live)
 		end
 		chain.seq = record.seq
 		chain.lastHash = record.hash
+		private.CatchUpChain(record.origin, chain)
 	elseif record.seq <= chain.seq then
 		-- Older than what we hold for this origin, and not stored: a rewritten history
 		record.brokenChain = true
@@ -218,6 +220,36 @@ function private.Insert(record, live)
 	db.records[record.id] = record
 	private.Notify(record, false)
 	return true
+end
+
+---Moves a chain on over records already held past its end (they arrived ahead of a gap). Without this the
+---chain stays at the gap and the sync asks for those records again at every resync.
+---@param origin string
+---@param chain table
+function private.CatchUpChain(origin, chain)
+	local records = Wanted.db.records
+	local nextRecord = records[origin..":"..(chain.seq + 1)]
+	while nextRecord and nextRecord.origin == origin and nextRecord.seq == chain.seq + 1 do
+		if nextRecord.prev ~= chain.lastHash then
+			nextRecord.brokenChain = true
+			Wanted:Log("!! Store: record %s doesn't follow %s's previous record (broken chain)", tostring(nextRecord.id), origin)
+		end
+		chain.seq = nextRecord.seq
+		chain.lastHash = nextRecord.hash
+		nextRecord = records[origin..":"..(chain.seq + 1)]
+	end
+end
+
+---Moves every chain on over records it already holds: saved data from before 1.1.1 can have chains stuck at
+---a gap that has since been filled.
+function Store:RepairChains()
+	for origin, chain in pairs(Wanted.db.chains) do
+		local before = chain.seq
+		private.CatchUpChain(origin, chain)
+		if chain.seq ~= before then
+			Wanted:Log("Store: %s's chain moved on from %d to %d over records already held", origin, before, chain.seq)
+		end
+	end
 end
 
 ---Inserts a test record: it looks like any other but its id starts with "TEST:", it belongs to no chain, the

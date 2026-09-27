@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-09-27
+
+Sync ready for a much bigger network, and no more repeated names in the Nearby window.
+
 - Sync keeps working as the network grows: the hello a client sends when it logs in now lists only the players
   active in the last week (at most 150), not everyone it has ever heard from. Past about 1,000 players the old
   hello no longer fit the game's send limit, and new logins would have stopped syncing.

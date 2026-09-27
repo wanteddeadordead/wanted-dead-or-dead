@@ -462,10 +462,29 @@ function Wanted:NoteVersion(version)
 	Wanted.db.requiredVersion = { version = text, seen = GetServerTime() }
 	Wanted:Log("!! Version: %s is newer than ours; shared features wait for the update", text)
 	Wanted.newerVersion = text
-	Wanted:Print("Wanted %s is out and other players are on it (you have %s). Bounties, claims and sharing are paused until you update from CurseForge. The Nearby window, alerts, hotspots and the map keep working.", text, tostring(Wanted.VERSION))
+	private.TellUpdate()
 	if Wanted.UI and Wanted.UI.Refresh then
 		Wanted.UI:Refresh()
 	end
+end
+
+local DOWNLOAD_URL = "https://www.curseforge.com/wow/addons/wanted-dead-or-dead"
+
+---Says this client is behind and where to get the new one: when a newer release is first seen, and at each
+---login until it's updated.
+function private.TellUpdate()
+	Wanted:Print("Your version is outdated. Wanted %s is out; download it from %s. Bounties, claims and sharing are paused until you update. The Nearby window, alerts, hotspots and the map keep working.",
+		Wanted:GetRequiredUpdate(), DOWNLOAD_URL)
+end
+
+---At login: repeats the update notice while this client is behind.
+---@return boolean told
+function Wanted:RemindUpdate()
+	if not Wanted:GetRequiredUpdate() then
+		return false
+	end
+	private.TellUpdate()
+	return true
 end
 
 ---The version this client has to update to before its shared side works again, or nil.
@@ -720,6 +739,7 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 			Wanted:Print("Your saved data is from a newer version of Wanted. Update the addon to use it; until then nothing you do this session is saved, and your data is left as it is.")
 		end
 		private.CallModules("OnEnable")
+		Wanted:RemindUpdate()
 		Wanted:CheckAppVersion()
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")

@@ -99,9 +99,9 @@ function private.OnEvent(_, event, arg1, arg2)
 	elseif event == "PLAYER_PVP_KILLS_CHANGED" then
 		private.OnHKsChanged()
 	elseif event == "ZONE_CHANGED_NEW_AREA" then
-		-- Read the new zone's areas now rather than when help is called
+		-- Read the new zone's areas soon, in the background, rather than when help is called
 		private.places = nil
-		private.GetPlaces()
+		Wanted:QueueWork(private.GetPlaces)
 	end
 end
 
@@ -455,6 +455,12 @@ function private.OnUnitDied(guid)
 		end
 	end
 	local ours = OUR_RACES[private.playerFaction]
+	local theirs = OUR_RACES[private.playerFaction == "Horde" and "Alliance" or "Horde"]
+	if (theirs and race and theirs[race]) or (race == "Skyborne" and private.skyborne[raceName] and private.skyborne[raceName] ~= private.playerFaction) then
+		-- An enemy we never had a unit for: their race says which side
+		private.ConfirmDeath(guid, name)
+		return
+	end
 	if guid == private.playerGUID or (ours and race and ours[race]) or (race == "Skyborne" and private.IsOurSkyborne(raceName)) then
 		-- One of our side we never had a unit for (friendly nameplates are usually off)
 		Wanted:Log("Recorder: UNIT_DIED for %s (%s), one of ours", name, tostring(raceName))

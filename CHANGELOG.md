@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
-- When you die, your death record names who killed you (from the game's death recap), so their kill counts on
-  the website even if they don't run Wanted. The game doesn't let addons see who killed anyone else.
+## [1.1.3] - 2026-09-27
 
+Who killed you now counts, and the addon tells you about the website and the app.
+
+- When you die, your death record names who killed you (from the game's death recap), so their kill counts on
+  the website even if they don't run Wanted. Kills by players in your group, which the addon already recorded,
+  count for them on the website too. The game doesn't let addons see who killed anyone else.
 - A Website & app page: what the site and the desktop app are for, whether the app is set up on this computer
   and up to date, and the addresses to copy (the site, the app download, and your own player page).
 - When a new version of the Wanted desktop app is out, the addon says so in chat at login (the app tells it).

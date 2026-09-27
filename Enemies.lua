@@ -826,22 +826,26 @@ end
 ---fought most (both added up). Ties go to the one seen last. Each is an enemy as Describe gives it, or nil.
 ---@return table { killedYou, youKilled, fought }
 function Enemies:GetNemeses()
+	-- From the plain counts first: describing an enemy looks up their bounties, so only the three picked are
 	local best = {}
-	local function Consider(key, d, n)
+	local function Consider(key, guid, stats, n)
 		local cur = best[key]
-		if n > 0 and (not cur or n > cur.n or (n == cur.n and (d.lastSeen or 0) > (cur.d.lastSeen or 0))) then
-			best[key] = { d = d, n = n }
+		if n > 0 and (not cur or n > cur.n or (n == cur.n and (stats.last or 0) > (cur.last or 0))) then
+			best[key] = { guid = guid, n = n, last = stats.last }
 		end
 	end
 	for guid, stats in pairs(Wanted.db.enemyStats) do
 		if strfind(guid, "^Player%-") then
-			local d = Enemies:Describe(guid)
-			Consider("killedYou", d, stats.losses or 0)
-			Consider("youKilled", d, stats.wins or 0)
-			Consider("fought", d, (stats.wins or 0) + (stats.losses or 0))
+			local wins, losses = stats.wins or 0, stats.losses or 0
+			Consider("killedYou", guid, stats, losses)
+			Consider("youKilled", guid, stats, wins)
+			Consider("fought", guid, stats, wins + losses)
 		end
 	end
-	return { killedYou = best.killedYou and best.killedYou.d, youKilled = best.youKilled and best.youKilled.d, fought = best.fought and best.fought.d }
+	local function Describe(key)
+		return best[key] and Enemies:Describe(best[key].guid) or nil
+	end
+	return { killedYou = Describe("killedYou"), youKilled = Describe("youKilled"), fought = Describe("fought") }
 end
 
 -- ============================================================================

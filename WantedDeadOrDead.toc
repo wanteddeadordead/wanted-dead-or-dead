@@ -51,6 +51,7 @@ PageHunters.lua
 PageActivity.lua
 PageEnemies.lua
 PageHotspots.lua
+PageWeb.lua
 PageSettings.lua
 PageTools.lua
 Report.lua

@@ -2223,4 +2223,25 @@ end)()
 	ns.db.records = saved
 	check(Count("raise") == before * 2, "and back again")
 end)()
+;(function()
+	-- In combat the game blocks Show and Hide on frames inside the Nearby rows' secure buttons (UNKNOWN()
+	-- blocked): the health bars are shown once and faded in and out instead
+	local calls = 0
+	local watched = {}
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "_kind") == "StatusBar" then
+			watched[#watched + 1] = f
+			local show, hide = f.Show, f.Hide
+			f.Show = function(self, ...) if InCombatLockdown() then calls = calls + 1 end return show(self, ...) end
+			f.Hide = function(self, ...) if InCombatLockdown() then calls = calls + 1 end return hide(self, ...) end
+		end
+	end
+	check(#watched > 0, "the Nearby rows have health bars to watch")
+	local lockdown = InCombatLockdown
+	InCombatLockdown = function() return true end
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	InCombatLockdown = lockdown
+	check(calls == 0, "no health bar is shown or hidden in combat, got "..calls)
+end)()
 print("wanted smoke: all checks pass")

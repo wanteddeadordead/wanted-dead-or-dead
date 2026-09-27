@@ -26,12 +26,11 @@ local WITNESS_WINDOW = 30
 -- ============================================================================
 
 function Bounties:OnEnable()
-	-- Any record can open, settle or withdraw a bounty (claims count witnesses and deaths)
-	Store:OnRecord("*", function(record)
-		if record.kind ~= "sighting" then
-			private.openCache = nil
-		end
-	end)
+	-- Whether a bounty is open depends on bounty records only: its raises (expiry), claims confirmed by the
+	-- poster, payments, withdrawals and hunts. Deaths and kills in a busy fight don't change it.
+	for _, kind in ipairs({ "bounty", "raise", "claim", "confirm", "payment", "withdraw", "hunt" }) do
+		Store:OnRecord(kind, function() private.openCache = nil end)
+	end
 	Store:OnRecord("kill", private.OnKill)
 	Store:OnRecord("bounty", private.LearnTarget)
 end

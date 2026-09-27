@@ -93,6 +93,10 @@ themselves included, who died with an enemy player in view in the last 20 second
 apart. Either way another player's app recording the death confirms the killer's `kill` record, so both sides
 confirm each other's kills.
 
+A `death` record of the recording player's own death (from 1.1.3) also names who killed them when the game's
+death recap says: `killer` (GUID), `killerName`, `killerGuild` and the killer's traits. The network counts it as
+a witnessed kill for that player, who may not run Wanted at all.
+
 A received record's `live` flag (from 1.1.0) is local, like `tampered` and `brokenChain`: set when the record
 came straight from its origin (the game stamped the sender), never taken from what a sender says. Clients drop
 all three flags from incoming records and work them out themselves.

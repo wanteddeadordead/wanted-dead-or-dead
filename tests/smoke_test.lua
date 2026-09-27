@@ -1681,6 +1681,29 @@ for i = before + 1, #printed do if printed[i]:find("restored by the desktop app"
 check(saysRestored, "status names the desktop app's restore")
 WantedRestoreFilled = nil
 ;(function()
+	-- The raid keeps changing targets: the window redraws once for the lot, and no alert looks anyone up
+	local CLASSES = { "WARRIOR", "PRIEST", "MAGE", "ROGUE", "PALADIN" }
+	for i = 1, 40 do
+		enemyUnits["nameplate"..(i + 1)] = { guid = format("Player-9-LAG%02d", i), name = "Lagger Number"..i, class = CLASSES[i % 5 + 1], level = 20 }
+		Fire("NAME_PLATE_UNIT_ADDED", "nameplate"..(i + 1))
+	end
+	ns.NearbyWindow:SetShown(true)
+	RunTimers()
+	local refreshes, describes = 0, 0
+	local realRefresh, realDescribe = ns.NearbyWindow.Refresh, ns.Enemies.Describe
+	ns.NearbyWindow.Refresh = function(...) refreshes = refreshes + 1 return realRefresh(...) end
+	ns.Enemies.Describe = function(...) describes = describes + 1 return realDescribe(...) end
+	for _ = 1, 5 do
+		for i = 1, 40 do Fire("UNIT_TARGET", "nameplate"..(i + 1)) end
+	end
+	local describesDuring = describes
+	RunTimers()
+	ns.NearbyWindow.Refresh, ns.Enemies.Describe = realRefresh, realDescribe
+	check(refreshes == 1, "200 target changes redraw the Nearby window once, got "..refreshes)
+	check(describesDuring == 0, "target changes don't make the alerts look enemies up, got "..describesDuring)
+	for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
+end)()
+;(function()
 	-- Records that arrive ahead of a gap join the chain once the gap fills, so we stop asking for them
 	local function Linked(origin, seq, prev)
 		local r = Rec(origin, seq)

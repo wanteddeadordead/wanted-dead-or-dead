@@ -26,6 +26,12 @@ local WITNESS_WINDOW = 30
 -- ============================================================================
 
 function Bounties:OnEnable()
+	-- Any record can open, settle or withdraw a bounty (claims count witnesses and deaths)
+	Store:OnRecord("*", function(record)
+		if record.kind ~= "sighting" then
+			private.openCache = nil
+		end
+	end)
 	Store:OnRecord("kill", private.OnKill)
 	Store:OnRecord("bounty", private.LearnTarget)
 end
@@ -328,13 +334,43 @@ end
 ---@param guid string
 ---@return table[]
 function Bounties:GetOpenForTarget(guid)
-	local result = {}
-	for bounty in Bounties:OpenIterator() do
-		if bounty.data.target == guid then
-			tinsert(result, bounty)
-		end
+	return private.CopyList(private.OpenCache().byTarget[guid])
+end
+
+-- Which bounties are open, by target and by guild. Working that out walks every record several times over, and
+-- the Nearby window asks for each enemy it lists, so it's kept until any record arrives or a minute passes (or
+-- the next bounty expires, if sooner).
+local OPEN_CACHE_SECONDS = 60
+
+function private.OpenCache()
+	local now = GetServerTime()
+	local cache = private.openCache
+	if cache and now < cache.validUntil then
+		return cache
 	end
-	return result
+	cache = { byTarget = {}, byGuild = {}, validUntil = now + OPEN_CACHE_SECONDS }
+	for bounty in Bounties:OpenIterator() do
+		local target, guild = bounty.data.target, bounty.data.guild
+		if target then
+			cache.byTarget[target] = cache.byTarget[target] or {}
+			tinsert(cache.byTarget[target], bounty)
+		end
+		if guild then
+			cache.byGuild[guild] = cache.byGuild[guild] or {}
+			tinsert(cache.byGuild[guild], bounty)
+		end
+		cache.validUntil = min(cache.validUntil, Bounties:GetExpiry(bounty))
+	end
+	private.openCache = cache
+	return cache
+end
+
+function private.CopyList(list)
+	local copy = {}
+	for i, item in ipairs(list or {}) do
+		copy[i] = item
+	end
+	return copy
 end
 
 ---This client's own open bounty on a target, if any.
@@ -353,16 +389,10 @@ end
 ---@param guild string
 ---@return table[]
 function Bounties:GetOpenForGuild(guild)
-	local result = {}
 	if not guild then
-		return result
+		return {}
 	end
-	for bounty in Bounties:OpenIterator() do
-		if bounty.data.guild == guild then
-			tinsert(result, bounty)
-		end
-	end
-	return result
+	return private.CopyList(private.OpenCache().byGuild[guild])
 end
 
 ---This client's own open bounty on a guild, if any.

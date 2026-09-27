@@ -138,7 +138,7 @@ function GetUnitName(unit) local e = enemy(unit) return e and e.name end
 function UnitIsEnemy(_, unit) local e = enemy(unit) return e ~= nil and (e.faction or "Alliance") ~= "Horde" end
 function UnitClass(unit) if unit == "player" then return "Warrior", "WARRIOR" end local e = enemy(unit) return e and "Rogue", e and e.class end
 function UnitLevel(unit) local e = enemy(unit) return e and e.level or 10 end
-function UnitRace(unit) if unit == "player" then return "Orc", "Orc" end local e = enemy(unit) return e and "Human", e and (e.raceFile or "Human") end
+function UnitRace(unit) if unit == "player" then return "Orc", "Orc" end local e = enemy(unit) return e and (e.raceName or "Human"), e and (e.raceFile or "Human") end
 function UnitHealth(unit) return enemy(unit) and 50 or 100 end
 function UnitHealthMax() return 100 end
 function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and e.targetsMe and b == "player") and true or false end
@@ -150,6 +150,8 @@ function GetGuildInfo(unit) local e = enemy(unit) return e and e.guild end
 function GetPlayerInfoByGUID(guid)
 	if guid == "Player-9-ENEMY" then return "Rogue", "ROGUE", "Human", "Human", 2, "Stabby Mcstab" end
 	if guid == "Player-1-TAUREN" then return "Druid", "DRUID", "Tauren", "Tauren", 2, "Hoof Hearted" end
+	if guid == "Player-1-SKYHORDE" then return "Hunter", "HUNTER", "Horde Skyborne", "Skyborne", 2, "Sky Ours" end
+	if guid == "Player-9-SKYALLY" then return "Hunter", "HUNTER", "High Order Skyborne", "Skyborne", 2, "Sky Theirs" end
 	return nil
 end
 inCombat = false
@@ -1783,6 +1785,20 @@ end)()
 	local tauren
 	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-TAUREN" then tauren = r end end
 	check(tauren and tauren.data.victimFaction == "Horde" and tauren.data.victimName == "Hoof Hearted", "a Tauren dying nearby in a fight is recorded as ours")
+	-- Skyborne are on both sides under different names: once an Alliance one has been seen, a Skyborne by
+	-- another name is ours, and one by the Alliance's name isn't
+	local function Died(guid)
+		for r in ns.Store:Iterator("death") do if r.data.victim == guid then return r end end
+	end
+	enemyUnits.nameplate42 = { guid = "Player-9-SKYSEEN", name = "Sky Seen", class = "HUNTER", level = 30, raceName = "High Order Skyborne", raceFile = "Skyborne" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate42")
+	Fire("UNIT_DIED", "Player-1-SKYHORDE")
+	Fire("UNIT_DIED", "Player-9-SKYALLY")
+	RunTimers()
+	local ours = Died("Player-1-SKYHORDE")
+	check(ours and ours.data.victimFaction == "Horde", "a Skyborne not named like the Alliance's is ours")
+	check(Died("Player-9-SKYALLY") == nil, "an Alliance Skyborne we never had a unit for isn't taken for ours")
+	enemyUnits.nameplate42 = nil
 	enemyUnits.nameplate40, enemyUnits.nameplate41 = nil, nil
 end)()
 ;(function()

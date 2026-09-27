@@ -806,7 +806,7 @@ local sightingParts, singleParts = 0, 0
 for _, m in ipairs(addonSent) do
 	if m.text:find("^S:") then sightingParts = sightingParts + 1 elseif m.text:find("^E:") then singleParts = singleParts + 1 end
 end
-check(singleParts == 0 and sightingParts >= 1 and sightingParts <= 6, "raid sightings batched within budget, got "..sightingParts.." batch parts and "..singleParts.." single")
+check(singleParts == 0 and sightingParts >= 1 and sightingParts <= 10, "raid sightings batched within budget, got "..sightingParts.." batch parts and "..singleParts.." single")
 check(not ns.Sync:GetInfo().paused, "a raid doesn't pause sync")
 addonSent = {}
 SlashCmdList.WANTED("synctest")

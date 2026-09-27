@@ -20,6 +20,57 @@ if not Wanted.DEV then
 end
 
 -- ============================================================================
+-- Timing (development builds only)
+-- ============================================================================
+
+-- Every wrapped handler and timer is timed. One call over SLOW_MS, or a second in which they add up to over
+-- BUSY_MS, is logged with the worst offenders, so a slow moment in a big fight names its cause.
+local SLOW_MS = 12
+local BUSY_MS = 50
+local second, secondTotal, secondByLabel = 0, 0, {}
+
+local function FlushSecond()
+	if secondTotal > BUSY_MS then
+		local labels = {}
+		for label, stat in pairs(secondByLabel) do
+			tinsert(labels, { label = label, ms = stat.ms, calls = stat.calls })
+		end
+		sort(labels, function(a, b) return a.ms > b.ms end)
+		local parts = {}
+		for i = 1, min(#labels, 4) do
+			tinsert(parts, format("%s %.0fms/%d", labels[i].label, labels[i].ms, labels[i].calls))
+		end
+		Wanted:Log("!! Busy second: %.0fms: %s", secondTotal, table.concat(parts, ", "))
+	end
+	secondTotal = 0
+	wipe(secondByLabel)
+end
+
+function Wanted:Timed(label, func)
+	return function(...)
+		local start = debugprofilestop()
+		func(...)
+		local ms = debugprofilestop() - start
+		local now = floor(GetTime())
+		if now ~= second then
+			FlushSecond()
+			second = now
+		end
+		secondTotal = secondTotal + ms
+		local stat = secondByLabel[label]
+		if not stat then
+			stat = { ms = 0, calls = 0 }
+			secondByLabel[label] = stat
+		end
+		stat.ms = stat.ms + ms
+		stat.calls = stat.calls + 1
+		if ms > SLOW_MS then
+			Wanted:Log("!! Slow: %s took %.0fms", label, ms)
+		end
+	end
+end
+
+-- ============================================================================
 -- Network log (development builds only)
 -- ============================================================================
 

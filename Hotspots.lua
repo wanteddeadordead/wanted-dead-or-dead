@@ -219,7 +219,7 @@ function Hotspots:CheckSurges()
 end
 
 function Hotspots:OnEnable()
-	C_Timer.NewTicker(SURGE_CHECK_SECONDS, function() Hotspots:CheckSurges() end)
+	C_Timer.NewTicker(SURGE_CHECK_SECONDS, Wanted:Timed("Hotspots surges", function() Hotspots:CheckSurges() end))
 end
 
 ---The zones with enemies seen in the last 15 minutes, busiest first.

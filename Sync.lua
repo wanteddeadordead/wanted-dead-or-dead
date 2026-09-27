@@ -138,7 +138,7 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 	private.frame:RegisterEvent("CHANNEL_PASSWORD_REQUEST")
 	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
-	private.frame:SetScript("OnEvent", private.OnEvent)
+	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
 	-- Channels are joined a little after login, so wait before trying

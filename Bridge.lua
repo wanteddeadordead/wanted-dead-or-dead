@@ -49,7 +49,7 @@ function Bridge:OnEnable()
 	for _, event in ipairs({ "BN_CHAT_MSG_ADDON", "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_INFO_CHANGED" }) do
 		private.frame:RegisterEvent(event)
 	end
-	private.frame:SetScript("OnEvent", private.OnEvent)
+	private.frame:SetScript("OnEvent", Wanted:Timed("Bridge events", private.OnEvent))
 	Store:OnRecord("bounty", private.OnBounty)
 	Store:OnRecord("raise", private.OnRaise)
 	Store:OnRecord("notice", private.OnNotice)

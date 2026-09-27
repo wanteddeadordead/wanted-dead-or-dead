@@ -55,7 +55,7 @@ function Minimap_:OnEnable()
 	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	private.button = button
 	Minimap_:Update()
-	C_Timer.NewTicker(10, function() Minimap_:Update() end)
+	C_Timer.NewTicker(10, Wanted:Timed("Minimap update", function() Minimap_:Update() end))
 end
 
 ---The tooltip for the minimap button and the entry in the game's addon menu.

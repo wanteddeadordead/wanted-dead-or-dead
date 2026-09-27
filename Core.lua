@@ -412,6 +412,17 @@ function private.IsPlausibleUpdate(version)
 	return theirs ~= nil and ours ~= nil and theirs[1] <= ours[1] + 1
 end
 
+---The desktop app's version, if it's set up on this computer: it writes it into !!WantedLink (WantedAppInfo)
+---as it runs. Nil without the app.
+---@return string?
+function Wanted:AppVersion()
+	local info = WantedAppInfo
+	if type(info) == "table" and Wanted:ParseVersion(info.running) then
+		return info.running
+	end
+	return nil
+end
+
 ---The Wanted desktop app writes its own version and the newest one out into !!WantedLink (WantedAppInfo).
 ---When it's behind, says so once a login: most players are in game, not looking at the tray. The versions
 ---are rebuilt from what they parse to, so nothing another addon put there is shown as is.

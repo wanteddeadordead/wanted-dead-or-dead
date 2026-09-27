@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The top of the window shows two lights: the Wanted app (or "Get the app", which opens the Website & app page)
+  and WantedNet, the in-game channel. It no longer counts other players.
+
 ## [1.1.3] - 2026-09-27
 
 Who killed you now counts, and the addon tells you about the website and the app.

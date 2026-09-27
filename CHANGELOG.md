@@ -2,11 +2,14 @@
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-09-27
+
+Full names on live battle reports, and a lot faster with a lot of saved data.
+
 - Much faster with a lot of saved data: walking one kind of record (raises, claims, payments) no longer walks
   every record, and the open-bounty list and the minimap count are only worked out again when a bounty record
   arrives. With 2,300 records, the Board page's refresh went from about 4 ms to under 0.1 ms in testing.
 - Released builds no longer write the addon's debug log to the game's Logs\General.log file.
-
 - A name book: Wanted remembers the full names of the players it sees, on both sides, so the desktop app can
   put "First Last" on the deaths it reads from the combat log (which only has first names).
 

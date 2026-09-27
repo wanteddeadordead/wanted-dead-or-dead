@@ -719,13 +719,13 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 			return
 		end
 		for _, record in ipairs(tbl.r) do
-			local isNew
+			local isNew, why
 			if tag == TAG_LIVE then
-				isNew = Store:Merge(record, sender)
+				isNew, why = Store:Merge(record, sender)
 			else
-				isNew = Store:MergeRelayed(record)
+				isNew, why = Store:MergeRelayed(record)
 			end
-			Wanted:Log("Sync: %s record %s from %s: %s", tag == TAG_LIVE and "live" or "fill", tostring(record.id), sender, isNew and "new" or "known or rejected")
+			Wanted:Log("Sync: %s record %s from %s: %s", tag == TAG_LIVE and "live" or "fill", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
 				private.stats.merged = private.stats.merged + 1
 				if type(record.origin) == "string" and type(record.seq) == "number" then
@@ -932,8 +932,8 @@ function private.HandleLinkMessage(tag, tbl, sender)
 	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then
 		private.currentSource = sender
 		for _, record in ipairs(tbl.r) do
-			local isNew = Store:MergeRelayed(record)
-			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or "known or rejected")
+			local isNew, why = Store:MergeRelayed(record)
+			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
 				private.stats.merged = private.stats.merged + 1
 			end

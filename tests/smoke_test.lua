@@ -1637,8 +1637,15 @@ check(relayed and not relayed.live, "a relayed record is not live, even if it sa
 check(not relayed.brokenChain, "flags a sender set are not kept")
 ns.Store:Merge(Rec("Relay Origin", 1), "Relay Origin")
 check(ns.db.records["Relay Origin:1"].live == true, "a relayed record later heard from its origin becomes live")
-ns.Store:MergeRelayed(Rec("Relay Origin", 1))
-check(ns.db.records["Relay Origin:1"].live == true, "and stays live")
+;(function()
+	local isNew, why = ns.Store:MergeRelayed(Rec("Relay Origin", 1))
+	check(ns.db.records["Relay Origin:1"].live == true, "and stays live")
+	check(isNew == false and why == "already held", "a record we hold is reported as already held, got "..tostring(why))
+	isNew, why = ns.Store:Merge(Rec("Someone Else", 1), "Relay Origin")
+	check(isNew == false and why == "not sent by its origin", "a live record from someone else is refused, got "..tostring(why))
+	isNew, why = ns.Store:MergeRelayed({ id = "x" })
+	check(isNew == false and why == "malformed", "a malformed record is refused, got "..tostring(why))
+end)()
 -- /wanted status says where saved data came from when the desktop app had to restore it
 WantedRestoreFilled = { WantedDB = true }
 local before = #printed

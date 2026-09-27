@@ -11,6 +11,11 @@ local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
 local EDGE_OFFSET = 10
 
 function Minimap_:OnEnable()
+	Wanted.Store:OnRecord("*", function(record)
+		if record.kind ~= "sighting" then
+			private.actionCount = nil
+		end
+	end)
 	local button = CreateFrame("Button", "WantedMinimapButton", Minimap)
 	button:SetSize(31, 31)
 	button:SetFrameStrata("MEDIUM")
@@ -139,7 +144,12 @@ function Minimap_:Update()
 	local radius = (Minimap:GetWidth() / 2) + EDGE_OFFSET
 	button:ClearAllPoints()
 	button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
-	local count = Wanted.Model:GetActionCount()
+	-- Counting walks every bounty and claim, so it's only done again once a record has arrived, or a minute on
+	-- (bounties expire with time)
+	if not private.actionCount or GetTime() - private.actionCountAt > 60 then
+		private.actionCount, private.actionCountAt = Wanted.Model:GetActionCount(), GetTime()
+	end
+	local count = private.actionCount
 	button.badge:SetText(count > 0 and tostring(count) or "")
 	button:Show()
 end

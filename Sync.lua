@@ -664,13 +664,35 @@ function private.ToBase36(n)
 	return str
 end
 
----What this client holds: the highest seq per origin, most recently active origins first, bounded.
+-- A hello lists only the chains active lately: listing every origin ever seen grew with the network, and past
+-- about 1,000 origins it no longer fit the send queue, so no hello went out at all. A quiet chain is listed again
+-- once its origin makes a new record.
+local HAVE_ACTIVE_SECONDS = 7 * 24 * 60 * 60
+local MAX_HAVE_ORIGINS = 150
+
+---What this client holds: the highest seq per origin, for our own chain and the most recently active others.
 function private.GetHaveTable()
-	local chains = {}
+	local own = Store:GetOrigin()
+	local cutoff = GetServerTime() - HAVE_ACTIVE_SECONDS
+	local active = {}
 	for origin, chain in pairs(Wanted.db.chains) do
-		if chain.seq > 0 then
-			chains[origin] = chain.seq
+		if chain.seq > 0 and (origin == own or Store:GetLastActive(origin) >= cutoff) then
+			tinsert(active, origin)
 		end
+	end
+	sort(active, function(a, b)
+		if (a == own) ~= (b == own) then
+			return a == own
+		end
+		local ta, tb = Store:GetLastActive(a), Store:GetLastActive(b)
+		if ta ~= tb then
+			return ta > tb
+		end
+		return a < b
+	end)
+	local chains = {}
+	for i = 1, min(#active, MAX_HAVE_ORIGINS) do
+		chains[active[i]] = Wanted.db.chains[active[i]].seq
 	end
 	return chains
 end

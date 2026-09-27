@@ -324,6 +324,13 @@ function private.Receive(notice)
 	})
 end
 
+---A bounty notice from elsewhere than a Battle.net friend (the desktop app's catch-up): checked and stored the
+---same way.
+---@param notice table { b, g, n, a, p, t }
+function Bridge:ReceiveNotice(notice)
+	private.Receive(notice)
+end
+
 ---A notice about this player, from this client or synced: one alert for everything new arriving together.
 function private.OnNotice(record)
 	local data = record.data

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- With the Wanted desktop app, you log in already caught up: the app fetches everything your side recorded while
+  you were away from wanteddeadordead.com, and Wanted takes it in in the background after the loading screen
+  (never during a fight). The other side's bounties on your side's players come with it. Needs the app update
+  and one full game restart.
 ## [1.2.6] - 2026-09-27
 
 Sync ready for a much bigger network, and no more repeated names in the Nearby window.

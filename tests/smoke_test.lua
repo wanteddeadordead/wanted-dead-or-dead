@@ -2316,4 +2316,60 @@ end)()
 	check(not hello.c["Quiet 01 Player"], "a chain quiet for a month is left out")
 	db.records, db.chains = savedRecords, savedChains
 end)()
+;(function()
+	-- The desktop app's catch-up (!!WantedLink/Catchup.lua): what this account's saved data lacked, from the server.
+	-- Taken in at login in the background, never in a fight, as gap fills are, and not passed on to realm links
+	local db = ns.db
+	check(db.faction == "Horde", "the account's side is saved for the app, got "..tostring(db.faction))
+	-- A realm link that would otherwise get every new record forwarded
+	ClearSent()
+	clock = clock + 700
+	ns.Sync:Greet("Catch Linker", "Fifth Realm")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Fifth Realm", a = 1 }), "WHISPER", "Catch Linker")
+	check(ns.Sync:GetLinks()["Catch Linker"], "a realm link to watch")
+	RunTimers()
+	ClearSent()
+	local function Rec(seq, extra)
+		local r = { kind = "pass", id = "Catch Origin:"..seq, origin = "Catch Origin", seq = seq, prev = "0", t = clock - 3600, data = { bounty = "c"..seq }, hash = "x" }
+		for k, v in pairs(extra or {}) do r[k] = v end
+		return r
+	end
+	local on = { b = "Ally Poster:9", g = "Player-1-ME", n = "Test Player", a = 7500, p = "0badf00d", t = clock - 600 }
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {
+		Rec(1), Rec(2, { live = true }), Rec(3, { data = "not a table" }), Rec(4, { id = "Someone Else:4" }), Rec(5, { data = { nested = {} } }),
+	}, notices = { on, { b = "bad" } } }, ["otherAccountMark"] = { t = clock, records = { Rec(9) } } }
+	Fire("PLAYER_REGEN_DISABLED")
+	ns.Catchup:Import()
+	RunFrames()
+	check(ns.Store:Get("Catch Origin:1") == nil, "nothing is taken in during a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	RunFrames()
+	check(ns.Store:Get("Catch Origin:1") and ns.Store:Get("Catch Origin:2"), "after the fight the records are taken in")
+	check(not ns.Store:Get("Catch Origin:2").live, "a caught-up record is never live, whatever it says")
+	check(not ns.Store:Get("Catch Origin:3") and not ns.Store:Get("Someone Else:4") and not ns.Store:Get("Catch Origin:5"),
+		"malformed records are skipped: data not a table, an id that isn't origin:seq, a nested table")
+	check(not ns.Store:Get("Catch Origin:9"), "another account's catch-up is left alone")
+	check(ns.Store:GetChainSeq("Catch Origin") == 2, "the chain moves on over them")
+	check(WantedAppCatchup == nil, "the file's table is let go once read")
+	local notice
+	for n in ns.Store:Iterator("notice") do if n.data.bounty == "Ally Poster:9" then notice = n end end
+	check(notice and notice.data.amount == 7500 and notice.data.target == "Player-1-ME", "the other side's bounty on us arrives as a notice")
+	check(db.catchupT == clock, "the catch-up's time is kept")
+	RunTimers()
+	local forwarded = 0
+	for _, m in ipairs(Sent("WHISPER", "Catch Linker")) do
+		for _, r in ipairs(m.tbl.r or {}) do if r.origin == "Catch Origin" then forwarded = forwarded + 1 end end
+	end
+	check(forwarded == 0, "caught-up records aren't forwarded to realm links, got "..forwarded)
+	-- The same catch-up again (a /reload before the app wrote a new one) is skipped
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = { Rec(6) } } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(not ns.Store:Get("Catch Origin:6"), "a catch-up already taken in is skipped")
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1, records = { Rec(6) } } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(ns.Store:Get("Catch Origin:6"), "a newer one is taken in")
+end)()
 print("wanted smoke: all checks pass")

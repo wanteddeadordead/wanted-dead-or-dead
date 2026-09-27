@@ -108,7 +108,7 @@ end
 ---attack you (Enemies:ShouldAlert).
 function private.AutoShow()
 	local settings = private.Settings()
-	if not settings.autoShow or not Enemies:ShouldAlert() then
+	if not settings.autoShow or private.inPvE or not Enemies:ShouldAlert() then
 		return
 	end
 	if settings.tab ~= "nearby" then
@@ -166,7 +166,26 @@ function private.OnEnemyEvent(event, entry)
 end
 
 ---Called when the player's flag or zone may have changed.
+---Closes the window in a dungeon or raid, where there's no world PvP, and opens it again on the way out if it
+---was open going in. Battlegrounds and arenas keep it.
+function private.CheckInstance()
+	local inInstance, kind = IsInInstance()
+	local pve = inInstance and kind ~= "pvp" and kind ~= "arena"
+	if pve and not private.inPvE then
+		private.inPvE = true
+		private.reopenAfterInstance = Nearby:IsShown() or private.pendingShow == true
+		Nearby:SetShown(false)
+	elseif not pve and private.inPvE then
+		private.inPvE = nil
+		if private.reopenAfterInstance then
+			Nearby:SetShown(true)
+		end
+		private.reopenAfterInstance = nil
+	end
+end
+
 function private.OnExposureChanged()
+	private.CheckInstance()
 	local exposed = Enemies:ShouldAlert()
 	if exposed and not private.wasExposed and #Enemies:GetNearby() > 0 then
 		private.AutoShow()
@@ -823,7 +842,8 @@ function private.Draw(row, info)
 	private.SetFade(row, (show.fade and info.nearby and not info.inSight and not info.active) and 0.4 or 1)
 	-- Only while the unit token still points at this player
 	local unit = info.unit
-	if show.health and info.nearby and info.inSight and unit and UnitGUID(unit) == info.guid then
+	-- In instances the game keeps GUIDs secret, and comparing one is an error: Readable makes it nil
+	if show.health and info.nearby and info.inSight and unit and Readable(UnitGUID(unit)) == info.guid then
 		row.health:SetMinMaxValues(0, UnitHealthMax(unit))
 		row.health:SetValue(UnitHealth(unit))
 		row.health:Show()

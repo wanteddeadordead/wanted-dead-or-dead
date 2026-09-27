@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- The Nearby window closes in dungeons and raids, where there's no world PvP, and opens again when you leave if
+  it was open. Battlegrounds and arenas keep it.
+- Fixed a Lua error in dungeons ("attempt to compare a secret string value") from the Nearby window's health
+  bars: the game keeps unit ids secret there.
+
 ## [1.2.2] - 2026-09-27
 
 Harder to fake a bounty claim.

@@ -2153,4 +2153,26 @@ end)()
 	Death("Old Hand", t0 + 5001)
 	check(#B:GetClaimWarnings(fair) == 0, "a claim an established player witnessed has no warnings, got "..table.concat(B:GetClaimWarnings(fair), " / "))
 end)()
+;(function()
+	-- In a dungeon or raid the Nearby window closes, and comes back outside if it was open; battlegrounds keep it
+	local Nearby, outside = ns.NearbyWindow, IsInInstance
+	Nearby:SetShown(true)
+	IsInInstance = function() return true, "party" end
+	Fire("PLAYER_ENTERING_WORLD")
+	check(not Nearby:IsShown(), "entering a dungeon closes the Nearby window")
+	IsInInstance = outside
+	Fire("PLAYER_ENTERING_WORLD")
+	check(Nearby:IsShown(), "leaving it opens the window again")
+	IsInInstance = function() return true, "pvp" end
+	Fire("PLAYER_ENTERING_WORLD")
+	check(Nearby:IsShown(), "a battleground keeps it open")
+	IsInInstance = outside
+	Fire("PLAYER_ENTERING_WORLD")
+	-- A GUID the game keeps secret (in an instance) is never compared: the health bar just doesn't show
+	local secret = SECRET_SPELL
+	local unitGUID = UnitGUID
+	UnitGUID = function(unit) if unit ~= "player" then return secret end return unitGUID(unit) end
+	Nearby:Refresh()
+	UnitGUID = unitGUID
+end)()
 print("wanted smoke: all checks pass")

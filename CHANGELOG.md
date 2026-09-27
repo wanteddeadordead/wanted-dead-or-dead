@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-09-27
+
+No more blocked actions in fights.
+
 - Fixed "Interface action failed because of an AddOn" in fights with the Nearby window open: showing an
   enemy's health bar is blocked in combat on this client, so the bars now fade in and out instead.
 

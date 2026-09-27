@@ -916,6 +916,11 @@ end
 ---A peer asked for records. Answer after a random delay unless someone else already filled that range (over a
 ---realm link nobody else can: answer that player straight away).
 function private.HandleNeed(need, sender, viaLink)
+	local asked = {}
+	for origin, fromSeq in pairs(need) do
+		tinsert(asked, tostring(origin).." from "..tostring(fromSeq))
+	end
+	Wanted:Log("Sync: %s asks for %s", sender, table.concat(asked, ", "))
 	if viaLink then
 		for origin, fromSeq in pairs(need) do
 			if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then

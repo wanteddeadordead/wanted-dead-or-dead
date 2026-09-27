@@ -9,6 +9,9 @@
 - Live battle reports: Wanted keeps the game's combat log on in the open world and has the game write it out
   every few seconds during a fight, so the desktop app can post deaths to the website as they happen instead
   of after a /reload. On by default; the switch is on the Website & app page. Logging you turned on yourself
+- Live battle reports: Wanted keeps the game's combat log on in the open world, so the desktop app can post
+  deaths to the website within about five minutes (the game writes the log that often) instead of after a
+  /reload. On by default; the switch is on the Website & app page. Logging you turned on yourself
   is never turned off, and it's off in instances.
 
 ## [1.1.3] - 2026-09-27

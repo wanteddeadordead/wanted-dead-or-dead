@@ -103,7 +103,27 @@ end
 ---At login or /reload, when the desktop app isn't set up on this computer: a popup offering it, with the address
 ---to copy (as TSM does for its app). "Don't remind me" turns it off; the Website & app page turns it back on.
 function Wanted:PromptForApp()
-	if Wanted:AppVersion() or not Wanted.db.settings.appPrompt or Wanted:InCombat() or W:IsDialogShown() then
+	if not Wanted.db.settings.appPrompt or Wanted:InCombat() or W:IsDialogShown() then
+		return
+	end
+	local stopReminding = function()
+		Wanted.db.settings.appPrompt = false
+		Wanted:Print("No more app reminders. The Website & app page (/wanted web) has the link, and can turn them back on.")
+		UI:Refresh()
+	end
+	if Wanted:AppVersion() then
+		-- Set up: remind only when it hasn't run for a while
+		local ago = Wanted:AppNotRunningFor()
+		if ago then
+			W:Dialog({
+				title = "Is the Wanted app running?",
+				text = format("The Wanted app last ran on this computer %s ago, so your kills aren't reaching the website. Start it from the Start menu: Wanted Dead or Dead.", Theme:Ago(ago)),
+				confirmLabel = "Close",
+				cancelLabel = "Don't remind me",
+				onConfirm = function() end,
+				onCancel = stopReminding,
+			})
+		end
 		return
 	end
 	W:Dialog({
@@ -113,11 +133,7 @@ function Wanted:PromptForApp()
 		confirmLabel = "Close",
 		cancelLabel = "Don't remind me",
 		onConfirm = function() end,
-		onCancel = function()
-			Wanted.db.settings.appPrompt = false
-			Wanted:Print("No more app reminders. The Website & app page (/wanted web) has the link, and can turn them back on.")
-			UI:Refresh()
-		end,
+		onCancel = stopReminding,
 	})
 end
 

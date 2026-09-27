@@ -425,6 +425,30 @@ function Wanted:AppVersion()
 	return nil
 end
 
+-- The app says when it last ran, to the half hour (from 0.2.1). Longer ago than this, it isn't running.
+local APP_STALE_SECONDS = 3 * 60 * 60
+
+---How long ago the app last ran, when it's been long enough that it isn't running now; nil when it's running,
+---not set up, or too old to say (before 0.2.1).
+---@return number? seconds
+function Wanted:AppNotRunningFor()
+	local info = WantedAppInfo
+	local seen = type(info) == "table" and Wanted:AppVersion() and tonumber(info.seen)
+	if not seen then
+		return nil
+	end
+	local ago = GetServerTime() - seen
+	return ago > APP_STALE_SECONDS and ago or nil
+end
+
+---How many apps the network has running, for development builds to show; nil when the app hasn't said.
+---@return number?
+function Wanted:AppsRunning()
+	local info = WantedAppInfo
+	local n = type(info) == "table" and tonumber(info.apps)
+	return n and n > 0 and floor(n) or nil
+end
+
 ---The Wanted desktop app writes its own version and the newest one out into !!WantedLink (WantedAppInfo).
 ---When it's behind, says so once a login: most players are in game, not looking at the tray. The versions
 ---are rebuilt from what they parse to, so nothing another addon put there is shown as is.

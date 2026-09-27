@@ -4,6 +4,8 @@
 
 - Without the Wanted desktop app set up on this computer, a popup at login or /reload offers it, with the address
   to copy. "Don't remind me" stops it; the Website & app page can turn it back on.
+- When the app is set up but hasn't run for a few hours, the popup asks whether it's running, and the app light
+  turns amber: "App not running". (Needs app 0.2.1, which says when it last ran.)
 
 ## [1.2.0] - 2026-09-27
 

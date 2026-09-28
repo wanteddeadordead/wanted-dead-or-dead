@@ -54,6 +54,8 @@ local private = {
 	reshareQueue = {}, -- records from a link to share on this realm's channel
 	forwardDue = false,
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
+	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
+	lockoutTicker = nil, -- tries the channel again while locked out
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
@@ -125,6 +127,26 @@ local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
 local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone just greeted is hidden this long
+-- Locked out of the channel (an owner banned us or changed its password): sync goes on by whisper links to the
+-- players last heard on it, and joining is tried again now and then (a re-passworded channel is gone once its
+-- last member leaves, and the next joiner makes it afresh with the addon's password)
+local MAX_RECENT_PEERS = 20
+local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
+local LOCKOUT_RETRY_SECONDS = 5 * 60
+-- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
+local HOSTILE_NOTICES = {
+	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
+	PLAYER_BANNED = "%s was banned from the sync channel by %s.",
+	PASSWORD_CHANGED = "%s changed the sync channel's password.",
+	MODERATION_ON = "%s turned moderation on in the sync channel: only its moderators can send.",
+	SET_MODERATOR = "%s was made a moderator of the sync channel by %s.",
+}
+-- The same, when it was done to this player
+local HOSTILE_NOTICES_SELF = {
+	PLAYER_KICKED = "You were kicked from the sync channel by %s.",
+	PLAYER_BANNED = "You were banned from the sync channel by %s.",
+	SET_MODERATOR = "You were made a moderator of the sync channel by %s.",
+}
 
 
 
@@ -140,6 +162,8 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 	private.frame:RegisterEvent("CHANNEL_PASSWORD_REQUEST")
 	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
+	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE_USER")
 	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
@@ -241,6 +265,100 @@ function private.OnEvent(_, event, ...)
 		private.OnPasswordRequest(...)
 	elseif event == "CHAT_MSG_SYSTEM" then
 		private.OnSystemMessage(...)
+	elseif event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
+		private.OnChannelNotice(event, ...)
+	end
+end
+
+---The game's notices about the sync channel (hidden from chat since 1.2.8, so this is where they're seen).
+---Whoever has been in a custom channel longest becomes its owner when the owner leaves, and an owner can kick,
+---ban, re-password or moderate it; the game names who did what, so it's said in chat and logged. A kick is
+---undone by rejoining; a ban or a changed password locks this client out, and sync goes on by whisper.
+function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, baseName)
+	if type(baseName) ~= "string" or not private.channelName or strlower(baseName) ~= strlower(private.channelName) then
+		return
+	end
+	Wanted:Log("Sync: channel notice %s%s%s", tostring(kind), player and player ~= "" and (" "..player) or "", actor and actor ~= "" and (" by "..actor) or "")
+	local us = Store:GetOrigin()
+	if event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
+		local text = HOSTILE_NOTICES[kind]
+		if text and actor and actor ~= "" then
+			if player == us and HOSTILE_NOTICES_SELF[kind] then
+				Wanted:Print(HOSTILE_NOTICES_SELF[kind], actor)
+			else
+				Wanted:Print(text, tostring(player), actor)
+			end
+		elseif text then
+			Wanted:Print(text, tostring(player))
+		end
+		if kind == "PLAYER_KICKED" and player == us then
+			private.Rejoin("kicked")
+		elseif kind == "PLAYER_BANNED" and player == us then
+			private.LockOut("banned")
+		end
+		return
+	end
+	if kind == "YOU_LEFT" and private.channelId then
+		-- Left without leaving: kicked, or the channel was closed under us
+		private.Rejoin("out of the channel")
+	elseif kind == "BANNED" then
+		private.LockOut("banned")
+	elseif kind == "WRONG_PASSWORD" then
+		private.LockOut("its password was changed")
+	end
+end
+
+---Joins again shortly.
+function private.Rejoin(why)
+	Wanted:Log("!! Sync: %s; rejoining the channel in %ds", why, JOIN_RETRY_SECONDS)
+	private.channelId = nil
+	private.joinAttempts = 0
+	C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
+end
+
+---Can't get into the channel: say so once, whisper the players last heard on it, and try the channel again later.
+function private.LockOut(why)
+	if private.lockedOut then
+		return
+	end
+	private.lockedOut = why
+	private.channelId = nil
+	Wanted:Log("!! Sync: locked out of the channel (%s)", why)
+	Wanted:Print("Wanted can't get into its sync channel (%s). It keeps syncing by whisper with players seen there, and tries the channel again every %d minutes.", why, LOCKOUT_RETRY_SECONDS / 60)
+	private.GreetRecentPeers()
+	if not private.lockoutTicker then
+		private.lockoutTicker = C_Timer.NewTicker(LOCKOUT_RETRY_SECONDS, function()
+			if private.lockedOut then
+				private.joinAttempts = 0
+				private.TryJoin()
+			end
+		end)
+	end
+end
+
+---Whispers a hello to the players last heard on the channel, as realm links, while locked out.
+function private.GreetRecentPeers()
+	local cutoff = GetServerTime() - RECENT_PEER_SECONDS
+	for name, seen in pairs(Wanted.db.recentPeers) do
+		if type(seen) == "number" and seen >= cutoff then
+			Sync:Greet(name, nil)
+		end
+	end
+end
+
+---Remembers a player heard on the channel, keeping the most recent few.
+function private.NoteRecentPeer(name)
+	local recent = Wanted.db.recentPeers
+	recent[name] = GetServerTime()
+	local names = {}
+	for other in pairs(recent) do
+		tinsert(names, other)
+	end
+	if #names > MAX_RECENT_PEERS + 10 then
+		sort(names, function(a, b) return recent[a] > recent[b] end)
+		for i = MAX_RECENT_PEERS + 1, #names do
+			recent[names[i]] = nil
+		end
 	end
 end
 
@@ -276,6 +394,7 @@ function private.TryJoin()
 	if not id or id == 0 then
 		if private.joinAttempts >= MAX_JOIN_ATTEMPTS then
 			Wanted:Log("Sync: giving up joining after %d attempts", private.joinAttempts)
+			private.LockOut("no answer from the game")
 			return
 		end
 		private.joinAttempts = private.joinAttempts + 1
@@ -292,6 +411,14 @@ function private.TryJoin()
 		return
 	end
 	private.channelId = id
+	if private.lockedOut then
+		Wanted:Log("Sync: back in the channel after being locked out (%s)", private.lockedOut)
+		private.lockedOut = nil
+		if private.lockoutTicker then
+			private.lockoutTicker:Cancel()
+			private.lockoutTicker = nil
+		end
+	end
 	private.HideFromChatWindows()
 	if private.joinAttempts > 0 then
 		-- Freshly joined: the server needs a moment before it accepts messages on it (result 7, invalid channel)
@@ -812,6 +939,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	end
 	if not viaLink then
 		private.peers[sender] = now
+		private.NoteRecentPeer(sender)
 	end
 	-- Per-sender inbound cap
 	local minute = floor(now / 60)
@@ -1141,7 +1269,7 @@ end
 ---@param name string the player's name as a whisper takes it
 ---@param realm string? where they are, if known
 function Sync:Greet(name, realm)
-	if type(name) ~= "string" or name == "" or name == Store:GetOrigin() or (realm and Sync:IsOwnRealm(realm)) then
+	if type(name) ~= "string" or name == "" or name == Store:GetOrigin() or (realm and Sync:IsOwnRealm(realm) and not private.lockedOut) then
 		return
 	end
 	local now = GetTime()
@@ -1156,7 +1284,8 @@ function Sync:Greet(name, realm)
 end
 
 function private.SendLinkHello(name, isAnswer)
-	private.Send(TAG_HELLO, { c = private.GetHaveTable(), r = GetRealmName(), a = isAnswer or nil }, nil, name)
+	-- x: locked out of the channel, so a player on this very realm should link by whisper too
+	private.Send(TAG_HELLO, { c = private.GetHaveTable(), r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil }, nil, name)
 end
 
 function private.AddLink(name, realm)
@@ -1188,7 +1317,8 @@ end
 function private.HandleLinkMessage(tag, tbl, sender)
 	local link = private.links[sender]
 	if tag == TAG_HELLO then
-		if type(tbl.r) ~= "string" or Sync:IsOwnRealm(tbl.r) or type(tbl.c) ~= "table" then
+		-- Our own realm's players are covered by the channel, unless they say they're locked out of it (x)
+		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r) and not tbl.x) or type(tbl.c) ~= "table" then
 			Wanted:Log("!! Sync: %s greeted us by whisper from our own realm or without one; ignored", tostring(sender))
 			return
 		end

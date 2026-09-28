@@ -2440,4 +2440,58 @@ end)()
 	ns.Store:SkipTo(ns.Store:GetOrigin(), mine + 100, nil)
 	check(ns.Store:GetChainSeq(ns.Store:GetOrigin()) == mine, "our own chain is never skipped")
 end)()
+;(function()
+	-- Channel owners: what they do is said and logged; a kick is undone; a ban or new password falls back to whisper
+	local function Notice(kind, player, actor)
+		Fire("CHAT_MSG_CHANNEL_NOTICE_USER", kind, player, "", "6. WantedNetHorde", actor or "", "", 0, 6, "WantedNetHorde")
+	end
+	local function Said(text)
+		for i = #printed, math.max(1, #printed - 3), -1 do if printed[i]:find(text, 1, true) then return true end end
+		return false
+	end
+	Notice("PLAYER_KICKED", "Some Victim", "Bad Owner")
+	check(Said("Some Victim was kicked from the sync channel by Bad Owner"), "a kick names the victim and the owner")
+	Notice("MODERATION_ON", "Bad Owner")
+	check(Said("Bad Owner turned moderation on"), "moderation names who turned it on")
+	Notice("OWNER_CHANGED", "Quiet Owner")
+	check(not Said("Quiet Owner"), "an owner change is logged, not said")
+	Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "PLAYER_KICKED", "Nobody", "", "1. General", "Someone", "", 1, 1, "General")
+	check(not Said("Nobody was kicked"), "other channels' notices are ignored")
+	-- Kicked ourselves: out, then back in ten seconds later
+	Notice("PLAYER_KICKED", ns.Store:GetOrigin(), "Bad Owner")
+	check(Said("You were kicked from the sync channel by Bad Owner"), "a kick of ourselves is said in the second person")
+	check(ns.Sync:GetInfo().channelId == nil, "after a kick we're out of the channel")
+	RunTimers()
+	check(ns.Sync:GetInfo().channelId == 6, "and back in after the retry")
+	-- Banned: locked out; the players last heard on the channel are whispered a hello saying so
+	check(ns.db.recentPeers["Some Peer"] and ns.db.recentPeers["New Asker"], "players heard on the channel are remembered")
+	ClearSent()
+	clock = clock + 700 -- past the greeting spacing
+	Fire("CHAT_MSG_CHANNEL_NOTICE", "BANNED", "", "", "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde")
+	check(Said("can't get into its sync channel (banned)"), "a ban is said")
+	local hello = Sent("WHISPER", "Some Peer")
+	check(#hello == 1 and hello[1].tag == "H" and hello[1].tbl.x == 1 and hello[1].tbl.r == "Realm", "a remembered channel peer is greeted by whisper, saying we're locked out")
+	check(ns.Sync:GetInfo().channelId == nil, "locked out: not in the channel")
+	-- A same-realm player who says they're locked out is accepted as a link; one who doesn't isn't (as before)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm", x = 1 }), "WHISPER", "Locked Friend")
+	check(ns.Sync:GetLinks()["Locked Friend"] ~= nil, "a locked-out player on our realm links by whisper")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm" }), "WHISPER", "Still Same Realmer")
+	check(ns.Sync:GetLinks()["Still Same Realmer"] == nil, "a same-realm hello without the flag is still refused")
+	-- The channel is tried again every few minutes: while it still refuses us the lockout holds, and once it
+	-- answers the lockout is over
+	local before = #tickers
+	local function Retry() for i = before, #tickers do tickers[i]() end end
+	local gcn = GetChannelName
+	GetChannelName = function() return 0 end
+	Retry()
+	check(ns.Sync:GetInfo().channelId == nil, "still locked out while the channel refuses us")
+	GetChannelName = gcn
+	Retry()
+	check(ns.Sync:GetInfo().channelId == 6, "back in the channel on a later retry")
+	Fire("CHAT_MSG_CHANNEL_NOTICE", "BANNED", "", "", "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde")
+	check(Said("can't get into its sync channel (banned)"), "a second lockout is said again (the first ended)")
+	Retry()
+	check(ns.Sync:GetInfo().channelId == 6, "and ends the same way")
+	RunTimers()
+end)()
 print("wanted smoke: all checks pass")

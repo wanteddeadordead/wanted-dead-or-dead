@@ -56,6 +56,7 @@ local private = {
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
 	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
 	rejoinFailing = false, -- the game asked for the password: its own rejoin without one is about to fail
+	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
 }
 local PREFIX = "WNTD"
@@ -167,6 +168,7 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
 	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
 	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE_USER")
+	private.frame:RegisterEvent("CHANNEL_COUNT_UPDATE")
 	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
@@ -228,6 +230,7 @@ function Sync:GetInfo()
 		channelName = private.channelName,
 		channelId = private.channelId,
 		peers = numPeers,
+		members = Sync:GetMembers(),
 		paused = now < private.pausedUntil,
 		stats = private.stats,
 	}
@@ -253,7 +256,8 @@ function Sync:Status()
 			numLinks = numLinks + 1
 		end
 	end
-	return format("Sync: channel %s (%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
+	local members = Sync:GetMembers()
+	return format("Sync: channel %s (%s%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", members and format(", %d in it", members) or "", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
 end
 
 function private.OnEvent(_, event, ...)
@@ -270,6 +274,36 @@ function private.OnEvent(_, event, ...)
 		private.OnSystemMessage(...)
 	elseif event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
 		private.OnChannelNotice(event, ...)
+	elseif event == "CHANNEL_COUNT_UPDATE" then
+		private.ReadMembers()
+	end
+end
+
+---How many are in the sync channel, from the game's channel list (the count the chat channels window shows).
+---Every one of them runs Wanted: nothing else joins the channel. Nil when the game doesn't say.
+---@return number?
+function Sync:GetMembers()
+	private.ReadMembers()
+	return private.members
+end
+
+---Reads the channel's member count from the game's channel list and remembers it for the app, which sends it to
+---wanteddeadordead.com with its next catch-up (the file is written at logout or /reload).
+function private.ReadMembers()
+	if not private.channelName or not GetNumDisplayChannels or not GetChannelDisplayInfo then
+		return
+	end
+	local mine = strlower(private.channelName)
+	for i = 1, GetNumDisplayChannels() do
+		local name, header, _, _, count = GetChannelDisplayInfo(i)
+		if not header and type(name) == "string" and strlower(name) == mine then
+			if type(count) == "number" and count > 0 and count ~= private.members then
+				Wanted:Log("Sync: %d in %s", count, private.channelName)
+				private.members = count
+				Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = count, t = GetServerTime() }
+			end
+			return
+		end
 	end
 end
 

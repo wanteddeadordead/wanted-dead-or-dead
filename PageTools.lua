@@ -77,7 +77,9 @@ function private.Refresh()
 		color, title = C.amber, "Paused: too much traffic, resuming shortly"
 	else
 		color, title = C.green, format("Connected to WantedNet (%s)", info.channelName)
-		if Wanted.DEV then
+		if info.members then
+			title = format("%s, %d in the channel", title, info.members)
+		elseif Wanted.DEV then
 			title = format("%s with %d other player%s", title, info.peers, info.peers == 1 and "" or "s")
 		end
 	end

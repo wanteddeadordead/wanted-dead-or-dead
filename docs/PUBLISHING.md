@@ -39,7 +39,7 @@ data or the network protocol for older versions.
 
 1. `lua tests/smoke_test.lua` passes.
 2. In `CHANGELOG.md`, move the `[Unreleased]` notes under a new `## [x.y.z] - YYYY-MM-DD` heading.
-3. Commit, then `git tag vx.y.z && git push --follow-tags`.
+3. Commit, then `git tag vx.y.z && git push origin main vx.y.z` (a plain tag is not pushed by `--follow-tags`).
 4. Use `-beta.1` or `-alpha.1` tag suffixes for test builds; the packager marks them on CurseForge.
 
 ## Installing from a local checkout

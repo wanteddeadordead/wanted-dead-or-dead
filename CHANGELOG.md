@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Whoever has been in the sync channel longest becomes its owner, and an owner can kick, ban or lock it. Wanted
+  now says in chat who did what, rejoins after a kick, and when it's locked out keeps syncing by whisper with
+  the players it last heard there while it tries the channel again every five minutes.
 ## [1.2.9] - 2026-09-27
 
 Saved data stays a month deep.

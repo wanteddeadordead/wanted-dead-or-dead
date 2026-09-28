@@ -51,6 +51,12 @@ the receiver's chain for that origin moves on to `firstSeqHeld - 1` (`Store:Skip
 record's `prev`, or from an unknown predecessor (`lastHash = "?"`, which the chain check accepts once), so it
 stops asking for records nobody holds. Older clients ignore `p` and keep asking, as before.
 
+`WantedDB.recentPeers` (from 1.2.10) is `name -> seen` for the last 20 players heard on the sync channel. A client
+locked out of the channel (banned, password changed, or no answer after 12 join attempts) whispers them a hello
+with `x = 1`, and a peer accepts a same-realm whispered hello only when it carries `x`; sync then runs over
+whisper links until the channel can be joined again (tried every 5 minutes). Older clients ignore `x` and refuse
+same-realm whispers as before.
+
 `WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
 either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
 full names on the deaths it reads from the combat log, which names players by first name only. At load, names

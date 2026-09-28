@@ -55,6 +55,7 @@ local private = {
 	forwardDue = false,
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
 	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
+	rejoinFailing = false, -- the game asked for the password: its own rejoin without one is about to fail
 	lockoutTicker = nil, -- tries the channel again while locked out
 }
 local PREFIX = "WNTD"
@@ -309,7 +310,15 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 	elseif kind == "BANNED" then
 		private.LockOut("banned")
 	elseif kind == "WRONG_PASSWORD" then
-		private.LockOut("its password was changed")
+		if private.rejoinFailing then
+			-- The game rejoined the channel at login without its password and asked for one: this is that
+			-- attempt failing, and the join with the password is on its way
+			private.rejoinFailing = false
+			Wanted:Log("Sync: the game's rejoin without the password failed; ours follows")
+			C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
+		else
+			private.LockOut("its password was changed")
+		end
 	end
 end
 
@@ -375,6 +384,7 @@ function private.OnPasswordRequest(channel)
 		return
 	end
 	Wanted:Log("Sync: the game asked for the %s password; joining with it", channel)
+	private.rejoinFailing = true
 	JoinPermanentChannel(private.channelName, CHANNEL_PASSWORD)
 	C_Timer.After(0, function()
 		if StaticPopup_Hide then
@@ -1311,8 +1321,12 @@ function private.AddLink(name, realm)
 		Wanted:Log("Sync: realm link with %s on %s", name, tostring(realm))
 	end
 	link.realm, link.heard = realm, now
-	-- Remember them for next time: the most recent few, for a week
+	-- Remember them for next time: the most recent few, for a week. Not a player on this very realm (the
+	-- channel covers them) or one whose realm isn't known: greeting those at every login goes unanswered
 	local far = Wanted.db.farPeers
+	if type(realm) ~= "string" or realm == "?" or Sync:IsOwnRealm(realm) then
+		return link
+	end
 	far[name] = { realm = realm, seen = GetServerTime() }
 	local names = {}
 	for other in pairs(far) do
@@ -1331,8 +1345,11 @@ end
 function private.HandleLinkMessage(tag, tbl, sender)
 	local link = private.links[sender]
 	if tag == TAG_HELLO then
-		-- Our own realm's players are covered by the channel, unless they say they're locked out of it (x)
-		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r) and not tbl.x) or type(tbl.c) ~= "table" then
+		-- Our own realm's players are covered by the channel, unless they say they're locked out of it (x) or
+		-- this answers a greeting we sent them (while locked out ourselves)
+		local greeted = private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS
+		local wanted = tbl.x or (tbl.a and greeted)
+		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r) and not wanted) or type(tbl.c) ~= "table" then
 			Wanted:Log("!! Sync: %s greeted us by whisper from our own realm or without one; ignored", tostring(sender))
 			return
 		end
@@ -1464,7 +1481,9 @@ end
 function private.GreetRemembered()
 	local cutoff = GetServerTime() - REMEMBER_LINK_SECONDS
 	for name, info in pairs(Wanted.db.farPeers) do
-		if type(info) == "table" and (info.seen or 0) >= cutoff then
+		if type(info) ~= "table" or info.realm == "?" or Sync:IsOwnRealm(info.realm) then
+			Wanted.db.farPeers[name] = nil -- remembered by earlier versions; nobody to greet there
+		elseif (info.seen or 0) >= cutoff then
 			Sync:Greet(name, info.realm)
 		end
 	end

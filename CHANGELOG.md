@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Logging in no longer says Wanted can't get into its sync channel: the game rejoins the channel without its
+  password and asks for one, and that failed attempt was taken for a changed password.
+- A player who answers a whispered greeting from this realm is heard, and a player on this realm is no longer
+  remembered as a far one and greeted by whisper at every login.
+
 ## [1.2.14] - 2026-09-28
 
 The right poster.

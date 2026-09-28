@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Honorable kills without the killing blow are credited as assists again when the addon sees the death a few
+  seconds after the game gives the credit, which it often does: it now waits up to ten seconds for the death.
+
 - The name book keeps each player's guild and when it was seen, so wanteddeadordead.com credits combat-log
   kills to the right guild and follows a player who changes or leaves one.
 

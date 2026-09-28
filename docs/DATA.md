@@ -76,6 +76,9 @@ after two such readings 30 seconds apart.
 was on screen as fractions of the screen from its top left. The app finds the PNG in the game's Screenshots folder,
 cuts the model out and uploads it to wanteddeadordead.com. No migration: the field is filled in at load.
 
+`WantedDB.syncChannel` (from 1.2.18) is `{ e, n, p, t }`: the channel everyone moved to after the first was taken
+over (epoch, name, password, when). Absent until then; the addon uses WantedNet<Side> with the built-in password.
+
 `WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
 
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live

@@ -2,25 +2,24 @@
 
 ## [Unreleased]
 
+## [1.2.18] - 2026-09-28
+
+A channel nobody can keep.
+
 - When someone takes over Wanted's sync channel (moderation on, a ban, a changed password), Wanted moves to a new
   channel with a random name and password and tells the players it knows. They follow once two of them say so,
   or at once through the Wanted app. Players who were away find the new channel at their next login.
 - Upload your wanted poster: the poster's button photographs your character, and the Wanted app puts it on
   wanteddeadordead.com, on your poster, your page and your share picture. Take screenshot is gone: the site's
   poster is the one to share now.
-
 - Opening the world map during a fight no longer shows "The client blocked Frame:SetPassThroughButtons()": the
   game's map code called a protected function on Wanted's enemy markers.
-
 - Honorable kills without the killing blow are credited as assists again when the addon sees the death a few
   seconds after the game gives the credit, which it often does: it now waits up to ten seconds for the death.
-
 - The name book keeps each player's guild and when it was seen, so wanteddeadordead.com credits combat-log
   kills to the right guild and follows a player who changes or leaves one.
-
 - Players the desktop app saw only in the combat log, which gives first names, are looked up in the game at
   login and /reload, so their full name, class and sex reach wanteddeadordead.com.
-
 - A real change of the sync channel's password is noticed after a login where the game didn't need one:
   the allowance for the game's own failed rejoin now lasts a few seconds instead of until the next notice.
 - Asking the game for the channel's member count starts one chain of retries at a time, not one per trigger.

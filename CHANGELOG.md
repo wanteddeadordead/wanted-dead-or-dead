@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The Tools page and /wanted sync say how many players are in the sync channel, from the game's channel list:
+  every one of them runs Wanted. The app passes the count to wanteddeadordead.com.
+
 - Logging in no longer says Wanted can't get into its sync channel: the game rejoins the channel without its
   password and asks for one, and that failed attempt was taken for a changed password.
 - A player who answers a whispered greeting from this realm is heard, and a player on this realm is no longer

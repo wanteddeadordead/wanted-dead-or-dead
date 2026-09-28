@@ -140,6 +140,9 @@ function GetNumGroupMembers() return groupSize end
 hkCount = 0
 function GetPVPSessionStats() return hkCount, 0 end
 function GetChannelName() return 6 end
+channelMembers = 0 -- global: the main chunk is at its limit of locals
+function GetNumDisplayChannels() return 2 end
+function GetChannelDisplayInfo(i) if i == 1 then return "General", false, false, 1, 999, true, "CHANNEL_CATEGORY_WORLD" end return "WantedNetHorde", false, false, 6, channelMembers, true, "CHANNEL_CATEGORY_CUSTOM" end
 local joinedWith = {}
 function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
 local hiddenPopups = {}
@@ -1528,6 +1531,11 @@ check(not ns.db.farPeers["Near Friend"], "but a player on our realm isn't rememb
 ns.db.farPeers["Old Link"] = { realm = "?", seen = clock }
 RunTimers()
 check(ns.Sync:GetInfo().channelId == 6, "the channel is joined again")
+check(ns.Sync:GetInfo().members == nil and not ns.db.channel, "no member count until the game's channel list gives one")
+channelMembers = 37
+Fire("CHANNEL_COUNT_UPDATE", 2, 37)
+check(ns.Sync:GetInfo().members == 37 and ns.db.channel and ns.db.channel.members == 37 and ns.db.channel.name == netName and ns.db.channel.realm == "Realm", "the channel's size is read from the game's list and saved for the app")
+check(ns.Sync:Status():find(", 37 in it", 1, true), "/wanted sync says how many are in the channel")
 end
 ClearSent()
 local mine = ns.Store:NewRecord("pass", { bounty = "near-1" })

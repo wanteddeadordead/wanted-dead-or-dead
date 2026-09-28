@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.16] - 2026-09-28
+
+The count that answers.
+
 - The channel's member count is asked for as /chatlist does, the only request the game answers from an addon,
   with the list's chat line hidden; asked again when the game's channel list isn't built yet, as right after a
   login or /reload, and once the list arrives.

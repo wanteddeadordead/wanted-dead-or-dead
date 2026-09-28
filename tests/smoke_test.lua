@@ -2846,4 +2846,29 @@ end)()
 	check(read, "the who probe reads the chat answer")
 	RunTimers()
 end)()
+-- The channel's number is asked for before every message: the game renumbers channels, and a kept number once
+-- pointed at General
+;(function()
+	local realName = GetChannelName
+	local netName = ns.Sync:GetInfo().channelName
+	local function Channel(n) return function(name) if name == netName then return n, netName end return 0 end end
+	local function SendTo()
+		ClearSent()
+		ns.Store:NewRecord("death", { deathId = "number"..clock, victim = "Player-9-NUMBER", victimName = "Number Test", victimFaction = "Alliance", zone = "Durotar" })
+		clock = clock + 120
+		RunTimers()
+		local targets = {}
+		for _, m in ipairs(addonSent) do if m.chatType == "CHANNEL" then targets[m.target] = true end end
+		return targets
+	end
+	GetChannelName = Channel(7)
+	local to = SendTo()
+	check(to["7"] and not to["6"] and ns.Sync:GetInfo().channelId == 7, "after the game renumbers the channel, messages go to its new number")
+	GetChannelName = Channel(0)
+	to = SendTo()
+	check(next(to) == nil and ns.Sync:GetInfo().channelId == nil, "with the channel at no number, nothing is sent and it rejoins")
+	GetChannelName = realName
+	RunTimers()
+	check(ns.Sync:GetInfo().channelId == 6, "and it's back once the game has it again")
+end)()
 print("wanted smoke: all checks pass")

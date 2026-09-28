@@ -338,6 +338,23 @@ function Sync:GetMembers()
 	return private.members
 end
 
+---The sync channel's number right now, or nil when the game has it at none. The game's answer names the channel
+---too; a number whose channel isn't ours is never used.
+---@return number?
+function private.CurrentChannelId()
+	if not private.channelName then
+		return nil
+	end
+	local id, name = GetChannelName(private.channelName)
+	if type(id) ~= "number" or id <= 0 then
+		return nil
+	end
+	if type(name) == "string" and name ~= "" and strlower(name) ~= strlower(private.channelName) then
+		return nil
+	end
+	return id
+end
+
 ---The sync channel's index in the game's channel list, if it's there.
 ---@return number?
 function private.DisplayIndex()
@@ -848,9 +865,25 @@ function private.Drain()
 		elseif private.tokens < 1 then
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
 		else
+			-- The channel's number, asked again every time: the game renumbers channels as they're left and joined
+			-- (zone changes, loading screens, a rejoin), and a number kept from the join once pointed at General
+			local id = private.CurrentChannelId()
+			if not id then
+				Wanted:Log("!! Sync: %s has no channel number now; not sending, rejoining", tostring(private.channelName))
+				private.channelId = nil
+				private.joinAttempts = 0
+				private.stats.dropped = private.stats.dropped + #outbox
+				wipe(outbox)
+				private.outboxParts = 0
+				C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
+				return
+			elseif id ~= private.channelId then
+				Wanted:Log("!! Sync: %s moved from #%s to #%d", private.channelName, tostring(private.channelId), id)
+				private.channelId = id
+			end
 			local part, total = item.next, #item.parts
 			private.lastChannelSend = GetTime()
-			local result = C_ChatInfo.SendAddonMessage(PREFIX, item.parts[part], "CHANNEL", tostring(private.channelId))
+			local result = C_ChatInfo.SendAddonMessage(PREFIX, item.parts[part], "CHANNEL", tostring(id))
 			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s -> %s", part, total, item.tag, tostring(result))
 			if result == RESULT_INVALID_CHANNEL then
 				-- Not really in the channel (yet): look it up again shortly and say hello then

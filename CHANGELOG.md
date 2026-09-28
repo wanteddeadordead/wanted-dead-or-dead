@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Wanted's hidden sync messages could go to General instead of its own channel ("NOT_ALLOWED_IN_CHANNEL"): the
+  game renumbers channels as they're left and joined, and Wanted kept the number it got when it joined. It now
+  asks for its channel's number before every message, and never sends to a channel that isn't its own.
+
 - /wanted who (development builds) tries a /who search and prints what the game returns: to chat (read back from
   the chat line), to the Who window (ui), or a second later from a timer (later).
 

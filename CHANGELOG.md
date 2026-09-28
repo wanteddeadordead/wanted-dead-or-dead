@@ -2,12 +2,6 @@
 
 ## [Unreleased]
 
-- No more "The number of messages that can be sent to this channel is limited" or "That operation is not
-  permitted in this channel" in General: the game shows those for Wanted's own background messages, and Wanted
-  now hides them and waits longer before trying again.
-- While someone has moderation on in the sync channel, Wanted stops sending there (every message would be
-  refused) and syncs by whisper until it's off.
-
 - Upload your wanted poster: the poster's button photographs your character, and the Wanted app puts it on
   wanteddeadordead.com, on your poster, your page and your share picture. Take screenshot is gone: the site's
   poster is the one to share now.
@@ -27,6 +21,16 @@
 - A real change of the sync channel's password is noticed after a login where the game didn't need one:
   the allowance for the game's own failed rejoin now lasts a few seconds instead of until the next notice.
 - Asking the game for the channel's member count starts one chain of retries at a time, not one per trigger.
+
+## [1.2.17] - 2026-09-28
+
+No more error lines in General.
+
+- No more "The number of messages that can be sent to this channel is limited" or "That operation is not
+  permitted in this channel" in General: the game shows those for Wanted's own background messages, and Wanted
+  now hides them and waits longer before trying again.
+- While someone has moderation on in the sync channel, Wanted stops sending there (every message would be
+  refused) and syncs by whisper until it's off.
 
 ## [1.2.16] - 2026-09-28
 

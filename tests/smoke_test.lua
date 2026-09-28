@@ -141,9 +141,10 @@ hkCount = 0
 function GetPVPSessionStats() return hkCount, 0 end
 function GetChannelName() return 6 end
 channelMembers = 0 -- global: the main chunk is at its limit of locals
-function GetNumDisplayChannels() return 2 end
-selectedDisplayChannel = nil
-function SetSelectedDisplayChannel(i) selectedDisplayChannel = i end
+displayChannels = 2 -- global, see channelMembers
+function GetNumDisplayChannels() return displayChannels end
+selectedDisplayChannel = nil -- the channel whose member list was last asked for
+function ListChannelByName(name) selectedDisplayChannel = name end
 function GetChannelDisplayInfo(i) if i == 1 then return "General", false, false, 1, 999, true, "CHANNEL_CATEGORY_WORLD" end return "WantedNetHorde", false, false, 6, channelMembers, true, "CHANNEL_CATEGORY_CUSTOM" end
 local joinedWith = {}
 function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
@@ -1534,11 +1535,26 @@ ns.db.farPeers["Old Link"] = { realm = "?", seen = clock }
 RunTimers()
 check(ns.Sync:GetInfo().channelId == 6, "the channel is joined again")
 check(ns.Sync:GetInfo().members == nil and not ns.db.channel, "no member count until the game's channel list gives one")
-check(selectedDisplayChannel == 2, "after joining, the channel is selected in the channel list so the game sends its count")
+check(selectedDisplayChannel == netName, "after joining, the channel's member list is asked for so the game sends its count")
+-- Right after a reload the game's list is empty: the request waits for it
+selectedDisplayChannel = nil
+displayChannels = 0
+Fire("CHANNEL_UI_UPDATE")
+RunTimers()
+check(selectedDisplayChannel == nil, "an empty channel list is not asked from")
+displayChannels = 2
+Fire("CHANNEL_UI_UPDATE")
+RunTimers()
+check(selectedDisplayChannel == netName, "once the game builds its list, the member list is asked for")
 channelMembers = 37
 Fire("CHANNEL_COUNT_UPDATE", 2, 37)
 check(ns.Sync:GetInfo().members == 37 and ns.db.channel and ns.db.channel.members == 37 and ns.db.channel.name == netName and ns.db.channel.realm == "Realm", "the channel's size is read from the game's list and saved for the app")
 check(ns.Sync:Status():find(", 37 in it", 1, true), "/wanted sync says how many are in the channel")
+-- The list itself: counted when it comes, and kept out of the chat windows
+Fire("CHAT_MSG_CHANNEL_LIST", "Khal Drogash, *Torso Muncher, Bikuti Fowlfisher", "", "", "6. "..netName, "", "", 0, 6, netName)
+check(ns.Sync:GetInfo().members == 3, "the member list is counted")
+check(chatFilters.CHAT_MSG_CHANNEL_LIST(nil, "CHAT_MSG_CHANNEL_LIST", "Khal Drogash", "", "", "6. "..netName, "", "", 0, 6, netName) == true
+	and not chatFilters.CHAT_MSG_CHANNEL_LIST(nil, "CHAT_MSG_CHANNEL_LIST", "Someone", "", "", "1. General", "", "", 0, 1, "General"), "our channel's member list is hidden from chat, other channels' lists aren't")
 end
 ClearSent()
 local mine = ns.Store:NewRecord("pass", { bounty = "near-1" })

@@ -138,6 +138,7 @@ local MAX_RECENT_PEERS = 20
 local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
 local LOCKOUT_RETRY_SECONDS = 5 * 60
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
+local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -170,6 +171,8 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
 	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE_USER")
 	private.frame:RegisterEvent("CHANNEL_COUNT_UPDATE")
+	private.frame:RegisterEvent("CHANNEL_UI_UPDATE")
+	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_LIST")
 	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
@@ -191,6 +194,8 @@ function Sync:OnEnable()
 		-- The channel's joins, leaves and owner changes are nobody's business: it only carries addon data
 		addFilter("CHAT_MSG_CHANNEL_NOTICE", private.HideChannelNotice)
 		addFilter("CHAT_MSG_CHANNEL_NOTICE_USER", private.HideChannelNotice)
+		-- The member list the addon asks for (RequestMembers) is for counting, not reading
+		addFilter("CHAT_MSG_CHANNEL_LIST", private.HideChannelNotice)
 	end
 end
 
@@ -277,14 +282,20 @@ function private.OnEvent(_, event, ...)
 		private.OnChannelNotice(event, ...)
 	elseif event == "CHANNEL_COUNT_UPDATE" then
 		private.ReadMembers(...)
+	elseif event == "CHAT_MSG_CHANNEL_LIST" then
+		private.OnChannelList(...)
+	elseif event == "CHANNEL_UI_UPDATE" then
+		-- The game (re)built its channel list: ask once it settles, if the count isn't known yet
+		if private.channelId and not private.members then
+			C_Timer.After(2, private.RequestMembers)
+		end
 	end
 end
 
----How many are in the sync channel, from the game's channel list (the count the chat channels window shows).
----Every one of them runs Wanted: nothing else joins the channel. Nil when the game doesn't say.
+---How many are in the sync channel, as the game last answered (RequestMembers). Every one of them runs Wanted:
+---nothing else joins the channel. Nil until the game has answered.
 ---@return number?
 function Sync:GetMembers()
-	private.ReadMembers()
 	return private.members
 end
 
@@ -304,13 +315,47 @@ function private.DisplayIndex()
 	return nil
 end
 
----Asks the game for the channel's member count. The count in the channel list stays empty until the channel is
----selected in the (hidden) chat channels window, which makes the game send CHANNEL_COUNT_UPDATE (Chris's client,
----2026-09-28). Asked after joining and every few minutes.
-function private.RequestMembers()
+---Asks the game for the channel's member list (as /chatlist does). The count in the game's channel list stays
+---empty until then; the answer brings CHANNEL_COUNT_UPDATE and CHAT_MSG_CHANNEL_LIST (Chris's client,
+---2026-09-28: selecting the channel in the hidden channels window, SetSelectedDisplayChannel, brought nothing
+---from a timer). The list's chat line is hidden. Asked after joining and every few minutes; the game's channel
+---list can still be empty right after a login or reload, so a miss is tried again a few times.
+---@param attempt number?
+function private.RequestMembers(attempt)
+	attempt = attempt or 1
 	local index = private.DisplayIndex()
-	if index and SetSelectedDisplayChannel then
-		SetSelectedDisplayChannel(index)
+	if not index then
+		Wanted:Log("Sync: %s isn't in the game's channel list yet (%s channels; attempt %d)", tostring(private.channelName),
+			GetNumDisplayChannels and tostring(GetNumDisplayChannels()) or "no", attempt)
+		if attempt < MEMBERS_ATTEMPTS then
+			C_Timer.After(MEMBERS_RETRY_SECONDS, function() private.RequestMembers(attempt + 1) end)
+		end
+		return
+	end
+	if not ListChannelByName then
+		Wanted:Log("!! Sync: no ListChannelByName; can't ask for the member count")
+		return
+	end
+	Wanted:Log("Sync: asking for the member list of %s (channel list entry %d)", private.channelName, index)
+	ListChannelByName(private.channelName)
+end
+
+---The game's answer to a member list request: the names, comma-separated. Counted when no count update came
+---(arg9 is the channel's base name).
+function private.OnChannelList(text, _, _, _, _, _, _, _, baseName)
+	if type(baseName) ~= "string" or not private.channelName or strlower(baseName) ~= strlower(private.channelName) or type(text) ~= "string" then
+		return
+	end
+	local n = 0
+	for name in string.gmatch(text, "[^,]+") do
+		if string.match(name, "%S") then
+			n = n + 1
+		end
+	end
+	if n > 0 and n ~= private.members then
+		Wanted:Log("Sync: %d in %s (from its member list)", n, private.channelName)
+		private.members = n
+		Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = n, t = GetServerTime() }
 	end
 end
 
@@ -498,9 +543,9 @@ function private.TryJoin()
 	end
 	private.HideFromChatWindows()
 	if not private.membersTicker then
-		private.membersTicker = C_Timer.NewTicker(MEMBERS_INTERVAL, private.RequestMembers)
+	private.membersTicker = C_Timer.NewTicker(MEMBERS_INTERVAL, function() private.RequestMembers() end)
 	end
-	C_Timer.After(JOIN_SETTLE_SECONDS, private.RequestMembers)
+	C_Timer.After(JOIN_SETTLE_SECONDS, function() private.RequestMembers() end)
 	if private.joinAttempts > 0 then
 		-- Freshly joined: the server needs a moment before it accepts messages on it (result 7, invalid channel)
 		Wanted:Log("Sync: in channel #%d after joining, HELLO in %ds", id, JOIN_SETTLE_SECONDS)

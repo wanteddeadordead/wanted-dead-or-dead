@@ -352,3 +352,58 @@ Wanted:RegisterCommand("purge", "Removes all test data.", function()
 	local removed = Store:PurgeTest()
 	Wanted:Print("Removed %d test records.", removed)
 end)
+
+Wanted:RegisterCommand("channels", "Development builds: probe how the game reports the sync channel's members: /wanted channels", function()
+	local Sync = Wanted.Sync
+	local info = Sync:GetInfo()
+	local mine = strlower(info.channelName or "")
+	Wanted:Print("Channels probe: %s (#%s); GetNumDisplayChannels=%s", tostring(info.channelName), tostring(info.channelId),
+		GetNumDisplayChannels and tostring(GetNumDisplayChannels()) or "no function")
+	local ours
+	if GetNumDisplayChannels and GetChannelDisplayInfo then
+		for i = 1, GetNumDisplayChannels() do
+			local name, header, collapsed, number, count, active, category, channelType = GetChannelDisplayInfo(i)
+			Wanted:Print("  %d: %s header=%s number=%s count=%s active=%s category=%s type=%s", i, tostring(name), tostring(header),
+				tostring(number), tostring(count), tostring(active), tostring(category), tostring(channelType))
+			if not header and type(name) == "string" and strlower(name) == mine then
+				ours = i
+			end
+		end
+	end
+	local probe = CreateFrame("Frame")
+	for _, ev in ipairs({ "CHANNEL_COUNT_UPDATE", "CHANNEL_ROSTER_UPDATE", "CHANNEL_UI_UPDATE", "CHAT_MSG_CHANNEL_LIST" }) do
+		probe:RegisterEvent(ev)
+	end
+	probe:SetScript("OnEvent", function(_, event, ...)
+		local args = { ... }
+		local parts = {}
+		for i = 1, select("#", ...) do
+			local v = args[i]
+			parts[i] = type(v) == "string" and ("'"..strsub(v, 1, 120).."'"..(#v > 120 and ("...("..#v..")") or "")) or tostring(v)
+		end
+		Wanted:Print("  event %s: %s", event, table.concat(parts, ", "))
+		if event == "CHANNEL_ROSTER_UPDATE" and C_ChatInfo and C_ChatInfo.GetChannelRosterInfo then
+			local n = 0
+			local index = ...
+			while n < 500 do
+				local name = C_ChatInfo.GetChannelRosterInfo(index, n + 1)
+				if not name then break end
+				n = n + 1
+			end
+			Wanted:Print("  roster of display channel %s: %d names", tostring(index), n)
+		end
+	end)
+	C_Timer.After(15, function() probe:UnregisterAllEvents() Wanted:Print("Channels probe: done listening.") end)
+	if ours and SetSelectedDisplayChannel then
+		Wanted:Print("  calling SetSelectedDisplayChannel(%d)", ours)
+		SetSelectedDisplayChannel(ours)
+	else
+		Wanted:Print("  our channel is not in the display list (or no SetSelectedDisplayChannel)")
+	end
+	if ListChannelByName then
+		Wanted:Print("  calling ListChannelByName(%s)", info.channelName)
+		ListChannelByName(info.channelName)
+	else
+		Wanted:Print("  no ListChannelByName")
+	end
+end)

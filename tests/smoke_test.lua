@@ -1550,6 +1550,25 @@ channelMembers = 37
 Fire("CHANNEL_COUNT_UPDATE", 2, 37)
 check(ns.Sync:GetInfo().members == 37 and ns.db.channel and ns.db.channel.members == 37 and ns.db.channel.name == netName and ns.db.channel.realm == "Realm", "the channel's size is read from the game's list and saved for the app")
 check(ns.Sync:Status():find(", 37 in it", 1, true), "/wanted sync says how many are in the channel")
+-- The game's notices for our own refused sends show under a public channel's name: hidden right after a send,
+-- never otherwise, and a join or zone change never
+ClearSent()
+ns.Sync:QueueSighting({ g = "Player-9-NOTICE", n = "Notice Test" }, true)
+RunTimers()
+local noticeFilter = chatFilters.CHAT_MSG_CHANNEL_NOTICE
+check(noticeFilter(nil, "CHAT_MSG_CHANNEL_NOTICE", "THROTTLED", "", "", "1. General - Undercity", "", "", 0, 1, "General") == true, "a throttle notice right after our send is hidden")
+check(noticeFilter(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_CHANGED", "", "", "1. General - Undercity", "", "", 0, 1, "General") == false, "a zone change notice is never hidden")
+clock = clock + 10
+check(noticeFilter(nil, "CHAT_MSG_CHANNEL_NOTICE", "THROTTLED", "", "", "1. General - Undercity", "", "", 0, 1, "General") == false, "long after our send, the player's own notices show")
+-- Moderation on in the sync channel: nobody but moderators can send, so we stop and whisper until it's off
+Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Bad Owner", "", "6. "..netName, "", "", 0, 6, netName)
+check(ns.Sync:GetInfo().channelId == nil, "moderation on: out of the channel for sending")
+tickers[#tickers]()
+RunTimers()
+check(ns.Sync:GetInfo().channelId == nil, "and it stays out while moderation is on")
+Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_OFF", "Bad Owner", "", "6. "..netName, "", "", 0, 6, netName)
+RunTimers()
+check(ns.Sync:GetInfo().channelId == 6, "moderation off: back in the channel")
 -- The list itself: counted when it comes, and kept out of the chat windows
 Fire("CHAT_MSG_CHANNEL_LIST", "Khal Drogash, *Torso Muncher, Bikuti Fowlfisher", "", "", "6. "..netName, "", "", 0, 6, netName)
 check(ns.Sync:GetInfo().members == 3, "the member list is counted")
@@ -2502,6 +2521,8 @@ end)()
 	check(Said("Some Victim was kicked from the sync channel by Bad Owner"), "a kick names the victim and the owner")
 	Notice("MODERATION_ON", "Bad Owner")
 	check(Said("Bad Owner turned moderation on"), "moderation names who turned it on")
+	Notice("MODERATION_OFF", "Bad Owner")
+	RunTimers()
 	-- The game doesn't always name who did it (Chris's client, 2026-09-28: a Lua error on every such notice)
 	Notice("SET_MODERATOR", "Melyn Perdition")
 	check(Said("Melyn Perdition was made a moderator of the sync channel by someone"), "a notice without an actor still reads")

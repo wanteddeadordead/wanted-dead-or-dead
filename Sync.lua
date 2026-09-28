@@ -56,6 +56,8 @@ local private = {
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
 	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
 	rejoinFailing = false, -- the game asked for the password: its own rejoin without one is about to fail
+	lastChannelSend = -math.huge, -- GetTime() of our last addon message on the channel
+	moderated = false, -- moderation is on in the channel: only its moderators can send, so we don't
 	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
 }
@@ -107,6 +109,12 @@ local SIGHTING_FRESH_SECONDS = 60
 -- A refused channel part waits and is sent again by itself; a refused whisper is sent again whole.
 local RESULT_THROTTLED = { [3] = true, [8] = true }
 local RETRY_SECONDS = 5
+-- The game answers a refused channel send with a chat notice, shown in a public channel's name (Chris's client,
+-- 2026-09-28: "[1. General] The number of messages that can be sent to this channel is limited" and "That
+-- operation is not permitted in this channel"). Notices this soon after our own send are ours and hidden; joins,
+-- leaves and zone changes never are.
+local OWN_NOTICE_SECONDS = 2
+local NEVER_HIDDEN_NOTICES = { YOU_JOINED = true, YOU_LEFT = true, YOU_CHANGED = true, SUSPENDED = true }
 local MAX_RETRIES = 3
 local MAX_RETRY_QUEUE = 30
 local MAX_INBOUND_PER_SENDER_PER_MINUTE = 60
@@ -199,9 +207,20 @@ function Sync:OnEnable()
 	end
 end
 
----Hides the game's notices about the sync channel (arg9 is the channel's base name).
-function private.HideChannelNotice(_, _, _, _, _, _, _, _, _, _, baseName)
-	return type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName)
+---Hides the game's notices about the sync channel (arg9 is the channel's base name), and the ones it gives, under
+---a public channel's name, for our own sends it refused a moment ago.
+function private.HideChannelNotice(_, event, kind, _, _, channelString, _, _, _, channelNumber, baseName)
+	if type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName) then
+		return true
+	end
+	if event == "CHAT_MSG_CHANNEL_NOTICE" and type(kind) == "string" and not NEVER_HIDDEN_NOTICES[kind]
+		and GetTime() - private.lastChannelSend < OWN_NOTICE_SECONDS then
+		-- What the game said and where it put it: our sends go to our channel, yet it names a public one
+		Wanted:Log("Sync: hid the game's notice %s, shown in %q (#%s, %s), %.1fs after our send to #%s", kind, tostring(channelString),
+			tostring(channelNumber), tostring(baseName), GetTime() - private.lastChannelSend, tostring(private.channelId))
+		return true
+	end
+	return false
 end
 
 ---Takes the sync channel out of every chat window. The game lists a channel in the window it was joined from
@@ -408,6 +427,16 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			private.Rejoin("kicked")
 		elseif kind == "PLAYER_BANNED" and isUs then
 			private.LockOut("banned")
+		elseif kind == "MODERATION_ON" then
+			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off
+			private.moderated = true
+			private.LockOut("moderation is on")
+		elseif kind == "MODERATION_OFF" and private.moderated then
+			private.moderated = false
+			if private.lockedOut then
+				private.joinAttempts = 0
+				private.TryJoin()
+			end
 		end
 		return
 	end
@@ -530,6 +559,11 @@ function private.TryJoin()
 			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s %s", private.channelName, CHANNEL_PASSWORD)
 		end
 		C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
+		return
+	end
+	if private.moderated then
+		-- Still in it, but it's moderated: stay on whispers until moderation goes off
+		Wanted:Log("Sync: the channel is still moderated; syncing by whisper")
 		return
 	end
 	private.channelId = id
@@ -779,6 +813,7 @@ function private.Drain()
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
 		else
 			local part, total = item.next, #item.parts
+			private.lastChannelSend = GetTime()
 			local result = C_ChatInfo.SendAddonMessage(PREFIX, item.parts[part], "CHANNEL", tostring(private.channelId))
 			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s -> %s", part, total, item.tag, tostring(result))
 			if result == RESULT_INVALID_CHANNEL then
@@ -797,7 +832,8 @@ function private.Drain()
 					private.stats.dropped = private.stats.dropped + 1
 				end
 				private.tokens = 0
-				wait = RETRY_SECONDS
+				-- Longer each time: every refusal also puts a notice on the screen (hidden, but still)
+				wait = RETRY_SECONDS * 2 ^ (item.refusals - 1)
 			else
 				private.tokens = private.tokens - 1
 				private.stats.sent = private.stats.sent + 1

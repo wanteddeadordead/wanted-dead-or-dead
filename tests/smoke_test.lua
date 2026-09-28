@@ -1740,12 +1740,27 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
 	check(#Assists() == 1, "an HK from our own kill is not an assist")
-	-- Long after any death: nothing to credit
+	-- The death seen a few seconds after the credit (the usual order in game): still an assist on it
 	clock = clock + 120
 	hkCount = hkCount + 1
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers() -- the first tries find nothing yet
+	check(#Assists() == 1, "no assist before the death is seen")
+	clock = clock + 3
+	ns.Store:NewRecord("death", { deathId = "hk-late", victim = "Player-9-LATE", victimName = "Late Seen", victimFaction = "Alliance", zone = "Undercity" })
 	RunTimers()
-	check(#Assists() == 1, "an HK with no death seen records nothing")
+	local late = Assists()
+	check(#late == 2 and (late[1].data.deathId == "hk-late" or late[2].data.deathId == "hk-late"), "a death seen after the HK credit still gets the assist")
+	-- Long after any death: nothing to credit, and it stops trying
+	clock = clock + 120
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	for _ = 1, 3 do RunTimers() end
+	check(#Assists() == 2, "an HK with no death seen records nothing")
+	clock = clock + 60
+	ns.Store:NewRecord("death", { deathId = "hk-much-later", victim = "Player-9-LATER", victimName = "Much Later", victimFaction = "Alliance", zone = "Undercity" })
+	RunTimers()
+	check(#Assists() == 2, "a death long after gives up waiting HKs nothing")
 end)()
 -- The desktop app's account code links this character by itself, once per code
 ;(function()

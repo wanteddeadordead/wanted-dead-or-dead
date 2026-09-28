@@ -336,6 +336,7 @@ function private.Track(unit)
 		return
 	end
 	Store:NoteName(guid, GetUnitName(unit, true))
+	Store:NoteGuild(guid, Recorder:GetUnitGuild(unit))
 	local faction = UnitFactionGroup(unit)
 	local raceName, raceFile = UnitRace(unit)
 	if raceFile == "Skyborne" and type(raceName) == "string" and type(faction) == "string" then

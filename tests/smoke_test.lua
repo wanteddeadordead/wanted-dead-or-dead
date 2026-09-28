@@ -2454,6 +2454,22 @@ end)()
 	check(db.names["Player-7-00AB12"] == nil, "one the game doesn't know is left out")
 	ns.Store:NoteName("Player-9-ENEMY", "Stabby Mcstab")
 	check(db.names["Player-9-ENEMY"].class == "ROGUE", "a later sighting without a class keeps the one known")
+	-- Guilds, with when they were seen; a change is kept, leaving needs two readings apart
+	local book = db.names["Player-9-ENEMY"]
+	ns.Store:NoteGuild("Player-9-ENEMY", "Night Watch")
+	check(book.g == "Night Watch" and book.gt == clock, "a guild is noted with its time")
+	clock = clock + 5
+	ns.Store:NoteGuild("Player-9-ENEMY", "Dawn Blades")
+	check(book.g == "Dawn Blades" and book.gt == clock, "a new guild replaces the old at once")
+	ns.Store:NoteGuild("Player-9-ENEMY", nil)
+	check(book.g == "Dawn Blades", "one reading of no guild doesn't drop a known one (the game may not have loaded it)")
+	clock = clock + 40
+	ns.Store:NoteGuild("Player-9-ENEMY", nil)
+	check(book.g == "" and book.gt == clock, "a second reading of no guild, later, records that they left")
+	ns.Store:NoteName("Player-9-ENEMY", "Stabby Mcstab", "ROGUE")
+	check(book.g == "" and db.names["Player-9-ENEMY"] == book, "noting the name again keeps the guild")
+	ns.Store:NoteGuild("Player-404-NOBODY", "Ghosts")
+	check(db.names["Player-404-NOBODY"] == nil, "no guild is noted for a player not in the book")
 end)()
 ;(function()
 	-- The sync channel only carries addon data, so it has no place in a chat window: the game listed it in one

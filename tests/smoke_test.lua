@@ -220,7 +220,7 @@ local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
 -- The world map's pin system, enough to drive a data provider
 function CreateFromMixins(...) local t = {} for _, m in ipairs({ ... }) do for k, v in pairs(m) do t[k] = v end end return t end
-MapCanvasPinMixin = { SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end }
+MapCanvasPinMixin = { CheckMouseButtonPassthrough = function(self) self:SetPassThroughButtons() end, SetPassThroughButtons = function() error("protected: SetPassThroughButtons") end, SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end }
 MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, GetMap = function(self) return self.owningMap end }
 local insertedLevel
 WorldMapFrame = NewMock()
@@ -236,6 +236,8 @@ WorldMapFrame.AcquirePin = function(self, template, ...)
 	pin.SetSize = function() end
 	pin:OnLoad()
 	pin:OnAcquired(...)
+	-- As the game's map does for every pin it hands out; the real SetPassThroughButtons is protected
+	pin:CheckMouseButtonPassthrough("LeftButton", "RightButton")
 	table.insert(self.pins, pin)
 	return pin
 end

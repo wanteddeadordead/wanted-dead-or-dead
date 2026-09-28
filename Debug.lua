@@ -490,3 +490,75 @@ Wanted:RegisterCommand("channelowner", "Development builds: who owns and moderat
 		C_Timer.After(3, function() Roster("after") end)
 	end)
 end)
+
+-- /wanted who <name>: whether an addon may run a /who search from a slash command and read the results (full names
+-- and guilds). SendWho is restricted, so the game may block it; the blocked and forbidden events say so.
+Wanted:RegisterCommand("who", "Development builds: tries a /who search for a name and prints what the game returns: /wanted who <name>", function(args)
+	local name = strtrim(args or "")
+	if name == "" then
+		Wanted:Print("Usage: /wanted who <name>")
+		return
+	end
+	local list = C_FriendList
+	if type(list) ~= "table" then
+		Wanted:Print("Who probe: C_FriendList missing")
+		return
+	end
+	-- A secret value can't be printed or compared, so it's named instead
+	local function Show(value)
+		if issecretvalue and issecretvalue(value) then
+			return "(secret)"
+		end
+		return tostring(value)
+	end
+	local function Results()
+		if not list.GetNumWhoResults then
+			Wanted:Print("  GetNumWhoResults missing")
+			return
+		end
+		local ok, count = pcall(list.GetNumWhoResults)
+		Wanted:Print("  results: %s", ok and Show(count) or ("error "..tostring(count)))
+		if not ok or type(count) ~= "number" or (issecretvalue and issecretvalue(count)) then
+			return
+		end
+		if not list.GetWhoInfo then
+			Wanted:Print("  GetWhoInfo missing")
+			return
+		end
+		for i = 1, min(count, 5) do
+			local got, info = pcall(list.GetWhoInfo, i)
+			if not got then
+				Wanted:Print("  %d: error %s", i, tostring(info))
+			elseif type(info) ~= "table" then
+				Wanted:Print("  %d: %s", i, Show(info))
+			else
+				Wanted:Print("  %d: %s <%s> level %s %s in %s (%s, gender %s)", i, Show(info.fullName), Show(info.fullGuildName), Show(info.level),
+					Show(info.classStr), Show(info.area), Show(info.filename), Show(info.gender))
+			end
+		end
+	end
+	local probe = CreateFrame("Frame")
+	for _, event in ipairs({ "WHO_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+		probe:RegisterEvent(event)
+	end
+	probe:SetScript("OnEvent", function(_, event, a1, a2, a3)
+		Wanted:Print("  event %s: %s %s %s", event, Show(a1), Show(a2), Show(a3))
+		if event == "WHO_LIST_UPDATE" then
+			Results()
+		end
+	end)
+	C_Timer.After(10, function() probe:UnregisterAllEvents() Wanted:Print("Who probe: done.") end)
+	if list.SetWhoToUi then
+		local ok, err = pcall(list.SetWhoToUi, false)
+		Wanted:Print("  SetWhoToUi(false): %s", ok and "no error" or tostring(err))
+	else
+		Wanted:Print("  SetWhoToUi missing")
+	end
+	if not list.SendWho then
+		Wanted:Print("  SendWho missing")
+		return
+	end
+	local query = 'n-"'..name..'"'
+	local ok, err = pcall(list.SendWho, query)
+	Wanted:Print("  SendWho(%s): %s", query, ok and "no error" or tostring(err))
+end)

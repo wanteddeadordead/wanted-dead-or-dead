@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- /wanted who (development builds) tries a /who search and prints what the game returns.
+
 ## [1.2.18] - 2026-09-28
 
 A channel nobody can keep.

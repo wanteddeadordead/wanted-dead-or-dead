@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-09-28
+
+How many are on the net.
+
 - The Tools page and /wanted sync say how many players are in the sync channel, from the game's channel list:
   every one of them runs Wanted. The app passes the count to wanteddeadordead.com.
 - /wanted channels (development builds) shows how the game reports the channel's members.

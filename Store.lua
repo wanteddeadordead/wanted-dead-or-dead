@@ -138,7 +138,41 @@ function Store:NoteName(guid, name, class, sex)
 	if entry and entry.n == name and entry.class == class and entry.sex == sex and now - entry.t < NAME_RESTAMP_SECONDS then
 		return
 	end
-	Wanted.db.names[guid] = { n = name, t = now, class = class, sex = sex }
+	-- Updated in place: the entry also holds the guild (NoteGuild)
+	entry = entry or {}
+	entry.n, entry.t, entry.class, entry.sex = name, now, class, sex
+	Wanted.db.names[guid] = entry
+end
+
+-- Two "no guild" readings this far apart are needed before a known guild is dropped: the game gives no guild for
+-- a player whose guild it hasn't loaded yet
+local GUILD_LEFT_SECONDS = 30
+
+---Notes a player's guild in the name book, with when it was seen (g, gt; g = "" when seen in none), so a change
+---of guild is kept from the moment it's seen. The player's name must be in the book already (NoteName).
+---@param guid string
+---@param guild string? nil or "" when the game gives none
+function Store:NoteGuild(guid, guild)
+	local entry = Wanted.db.names[guid]
+	if not entry or (issecretvalue and guild and issecretvalue(guild)) then
+		return
+	end
+	guild = type(guild) == "string" and guild or ""
+	local now = GetServerTime()
+	if guild == "" and entry.g and entry.g ~= "" then
+		-- In a guild before: only once "none" holds for a while
+		if not entry.ng then
+			entry.ng = now
+			return
+		elseif now - entry.ng < GUILD_LEFT_SECONDS then
+			return
+		end
+	end
+	entry.ng = nil
+	if entry.g == guild and entry.gt and now - entry.gt < NAME_RESTAMP_SECONDS then
+		return
+	end
+	entry.g, entry.gt = guild, now
 end
 
 function Store:OnEnable()

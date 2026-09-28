@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The name book keeps each player's guild and when it was seen, so wanteddeadordead.com credits combat-log
+  kills to the right guild and follows a player who changes or leaves one.
+
 - Players the desktop app saw only in the combat log, which gives first names, are looked up in the game at
   login and /reload, so their full name, class and sex reach wanteddeadordead.com.
 

@@ -150,7 +150,8 @@ local joinedWith = {}
 function JoinPermanentChannel(name, password) joinedWith[#joinedWith + 1] = { name = name, password = password } end
 local hiddenPopups = {}
 function StaticPopup_Hide(which, data) hiddenPopups[#hiddenPopups + 1] = { which = which, data = data } end
-function LeaveChannelByName() end
+leftChannels = {}
+function LeaveChannelByName(name) leftChannels[#leftChannels + 1] = name end
 function hooksecurefunc() end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
@@ -311,6 +312,9 @@ for line in io.lines(ADDON.."WantedDeadOrDead.toc") do
 	end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
+-- Channel moves on a takeover are tested at the end: until then, the tests that moderate or ban stay put
+WantedDB.settings = WantedDB.settings or {}
+WantedDB.settings.channelMoves = false
 Fire("PLAYER_LOGIN")
 RunTimers()
 
@@ -2760,5 +2764,60 @@ end)()
 	for k in ns.Store:Iterator("kill") do if k.data.killerSex then found = k end end
 	for d in ns.Store:Iterator("death") do if d.data.victimSex then found = found or d end end
 	check(found ~= nil, "a record made this session carries a sex")
+end)()
+-- Moving channels: a takeover makes the client pick a new channel and tell the players it knows; a move from
+-- other players is followed once two of them say so; the app's word is enough; the old channel is left
+;(function()
+	ns.db.settings.channelMoves = true
+	local info = ns.Sync:GetInfo()
+	local oldName = info.channelName
+	-- The game knows only the channels actually joined
+	local inChannel = { [oldName] = true }
+	local realJoin, realName = JoinPermanentChannel, GetChannelName
+	JoinPermanentChannel = function(name, password) inChannel[name] = true realJoin(name, password) end
+	GetChannelName = function(name) return inChannel[name] and 6 or 0 end
+	ns.db.recentPeers["Peer One"], ns.db.recentPeers["Peer Two"], ns.db.recentPeers["Peer Three"] = clock, clock, clock
+	ClearSent()
+	for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+	Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Hijacker", "", "6. "..oldName, "", "", 0, 6, oldName)
+	RunTimers()
+	local moved = ns.db.syncChannel
+	check(moved and moved.e == 1 and moved.n:match("^WantedNetHorde%l+$") and #moved.p >= 6, "a takeover moves to a new, random channel")
+	check(leftChannels[#leftChannels] == oldName, "the old channel is left")
+	local joined = joinedWith[#joinedWith]
+	check(joined and joined.name == moved.n and joined.password == moved.p, "the new channel is joined with its password")
+	check(ns.Sync:GetInfo().channelName == moved.n and ns.Sync:GetInfo().channelId == 6, "and synced on")
+	local told = Sent("WHISPER", "Peer One")
+	local move
+	for _, m in ipairs(told) do if m.tag == "M" then move = m end end
+	check(move and move.tbl.e == 1 and move.tbl.n == moved.n and move.tbl.p == moved.p, "the players we know are told where")
+	-- A second takeover of the same channel doesn't move again
+	Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Hijacker", "", "6. "..moved.n, "", "", 0, 6, moved.n)
+	check(ns.db.syncChannel.e == 2, "a takeover of the new channel moves on again")
+	local current = ns.db.syncChannel
+	-- A move from players: a stranger doesn't count, one known player isn't enough, two are
+	local function Move(from, e, n, pw, q)
+		Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode({ e = e, n = n, p = pw, q = q }), "WHISPER", from)
+	end
+	clock = clock + 3600 -- long after we saw anything ourselves
+	Move("Stranger Danger", 3, "WantedNetHordestrange", "abcdef123")
+	Move("Peer One", 3, "WantedNetHordeabcdefg", "pass12345")
+	check(ns.db.syncChannel.e == 2, "one player's word isn't enough")
+	Move("Peer Two", 3, "WantedNetHordeabcdefg", "pass12345")
+	check(ns.db.syncChannel.e == 3 and ns.db.syncChannel.n == "WantedNetHordeabcdefg", "two players' word is")
+	-- Not our side, a bad name, or older: ignored
+	Move("Peer One", 9, "WantedNetAlliancezzz", "pass12345")
+	Move("Peer Two", 9, "WantedNetAlliancezzz", "pass12345")
+	check(ns.db.syncChannel.e == 3, "a move to the other side's channel is ignored")
+	-- Someone behind asks: they're told where we are
+	ClearSent()
+	Move("Peer Three", 1, nil, nil, 1)
+	local answer = Sent("WHISPER", "Peer Three")
+	check(#answer == 1 and answer[1].tag == "M" and answer[1].tbl.e == 3 and answer[1].tbl.n == "WantedNetHordeabcdefg", "a player on an older channel is told the current one")
+	-- The app's word (from wanteddeadordead.com) is enough on its own
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 5000, records = {}, channel = { e = 4, n = "WantedNetHordefromapp", p = "apppass99" } } }
+	ns.Catchup:Import()
+	check(ns.db.syncChannel.e == 4 and ns.db.syncChannel.n == "WantedNetHordefromapp", "the app's channel is followed")
+	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
 print("wanted smoke: all checks pass")

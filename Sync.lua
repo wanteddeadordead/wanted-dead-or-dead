@@ -66,6 +66,13 @@ local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
 -- The password only keeps stray chat out of the channel; the addon is public, so it is not a secret
 local CHANNEL_PASSWORD = "wnt1"
+-- Moving channels. A move is followed when this client saw the takeover itself (in the last few minutes), when
+-- MOVE_QUORUM different players it knows sent the same move, or when the Wanted app passed it on from the server.
+local MOVE_TRUST_SECONDS = 10 * 60
+local MOVE_QUORUM = 2
+local MOVE_ASK_PEERS = 5 -- players asked for the current channel at login
+local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
+local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
 local MAX_MESSAGE_LEN = 255
 local CHUNK_LEN = 240
@@ -79,6 +86,9 @@ local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 local TAG_UPDATE = "U"
 -- Sent privately to a posse's caller: I'm joining (Posse)
 local TAG_POSSE_JOIN = "J"
+-- A move to a new sync channel after the old one was taken over, or (q) a player asking for the current one:
+-- { e = epoch, n = name, p = password, q = 1 when asking }. Whispers only, never on a channel.
+local TAG_MOVE = "M"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
@@ -171,7 +181,13 @@ local HOSTILE_NOTICES_SELF = {
 -- ============================================================================
 
 function Sync:OnEnable()
-	private.channelName = CHANNEL_BASE..(UnitFactionGroup("player") or "")
+	private.faction = UnitFactionGroup("player") or ""
+	private.channelName, private.password, private.epoch = CHANNEL_BASE..private.faction, CHANNEL_PASSWORD, 0
+	-- The channel everyone moved to, if the first was ever taken over
+	local pointer = Wanted.db.syncChannel
+	if type(pointer) == "table" and private.ValidPointer(pointer) then
+		private.channelName, private.password, private.epoch = pointer.n, pointer.p, pointer.e
+	end
 	local result = C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
 	private.frame:RegisterEvent("CHAT_MSG_ADDON")
@@ -198,6 +214,8 @@ function Sync:OnEnable()
 	Store:OnRecord("*", private.OnAnyRecord)
 	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
 	C_Timer.After(15, private.GreetRemembered)
+	-- Did everyone move while we were away? Ask the players last heard
+	C_Timer.After(25, private.AskPointer)
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
 	if addFilter then
 		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
@@ -436,10 +454,15 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			private.Rejoin("kicked")
 		elseif kind == "PLAYER_BANNED" and isUs then
 			private.LockOut("banned")
+			private.TakenOver("we were banned")
 		elseif kind == "MODERATION_ON" then
-			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off
+			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off, and
+			-- move everyone to a new channel
 			private.moderated = true
 			private.LockOut("moderation is on")
+			if not isUs then
+				private.TakenOver("moderation was turned on")
+			end
 		elseif kind == "MODERATION_OFF" and private.moderated then
 			private.moderated = false
 			if private.lockedOut then
@@ -463,6 +486,7 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
 		else
 			private.LockOut("its password was changed")
+			private.TakenOver("its password was changed")
 		end
 	end
 end
@@ -533,7 +557,7 @@ function private.OnPasswordRequest(channel)
 	-- real password change later is still a lockout
 	private.rejoinFailing = true
 	C_Timer.After(REJOIN_FAIL_SECONDS, function() private.rejoinFailing = false end)
-	JoinPermanentChannel(private.channelName, CHANNEL_PASSWORD)
+	JoinPermanentChannel(private.channelName, private.password)
 	C_Timer.After(0, function()
 		if StaticPopup_Hide then
 			StaticPopup_Hide("CHAT_CHANNEL_PASSWORD", channel)
@@ -566,9 +590,9 @@ function private.TryJoin()
 			-- Joined without a chat frame id, so it is not shown in any tab; it only ever carries addon data, which
 			-- never displays anyway. Permanent channels are remembered by the server, so if this client blocks the
 			-- call, joining once by hand (/join <name> <password>) is enough for good.
-			JoinPermanentChannel(private.channelName, CHANNEL_PASSWORD)
+			JoinPermanentChannel(private.channelName, private.password)
 		elseif private.joinAttempts == 3 then
-			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s %s", private.channelName, CHANNEL_PASSWORD)
+			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s %s", private.channelName, private.password)
 		end
 		C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
 		return
@@ -1073,6 +1097,15 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		if type(tbl) == "table" then
 			Wanted:Log("Sync: %s says we must update to %s", tostring(sender), tostring(tbl.v))
 			Wanted:NoteVersion(tbl.v)
+		end
+		return
+	end
+	-- A channel move, or a question about the current channel
+	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_MOVE..":" then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" then
+			private.OnMove(tbl, sender)
 		end
 		return
 	end
@@ -1726,3 +1759,173 @@ Wanted:RegisterCommand("reconnect", "Looks for the sync channel again.", functio
 	C_Timer.After(1, private.TryJoin)
 	Wanted:Print("Looking for %s...", private.channelName or "?")
 end)
+
+
+
+-- ============================================================================
+-- Moving channels
+-- ============================================================================
+-- The sync channel is an ordinary custom channel: whoever owns it can moderate, ban or re-password it, and its
+-- name is in this public code. When that happens, the client that sees it picks a new channel with a random name
+-- and password and whispers it to the players it knows; they follow (see MOVE_QUORUM) and pass it on. The Wanted
+-- app also carries the current channel from wanteddeadordead.com (Catchup). WantedDB.syncChannel keeps it.
+
+---Whether a channel pointer is one this client could use: a later epoch, a name on this side, a password.
+function private.ValidPointer(p)
+	return type(p.e) == "number" and p.e >= 1 and p.e == floor(p.e) and p.e < 100000
+		and type(p.n) == "string" and #p.n <= CHANNEL_NAME_MAX and strfind(p.n, "^"..CHANNEL_BASE..private.faction.."%l+$") ~= nil
+		and type(p.p) == "string" and strfind(p.p, "^%w+$") ~= nil and #p.p >= 6 and #p.p <= 16
+end
+
+local function RandomWord(length, letters)
+	local out = {}
+	for i = 1, length do
+		local at = math.random(1, #letters)
+		out[i] = strsub(letters, at, at)
+	end
+	return table.concat(out)
+end
+
+---The current channel was taken over: pick the next one (once per channel) and move there.
+function private.TakenOver(why)
+	private.takenOverAt = GetTime()
+	if Wanted.db.settings.channelMoves == false then
+		return
+	end
+	if private.proposedFrom == private.epoch then
+		return
+	end
+	private.proposedFrom = private.epoch
+	local pointer = { e = private.epoch + 1, n = CHANNEL_BASE..private.faction..RandomWord(6, "abcdefghijklmnopqrstuvwxyz"),
+		p = RandomWord(10, "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789") }
+	Wanted:Log("!! Sync: the channel was taken over (%s); moving to %s (%d)", why, pointer.n, pointer.e)
+	private.Adopt(pointer, why)
+end
+
+---Whether a pointer is newer than ours: a later epoch, or at the same epoch the lower name (two players who saw
+---the same takeover pick different names; everyone settles on the same one).
+function private.IsNewer(p)
+	return p.e > private.epoch or (p.e == private.epoch and p.n < private.channelName)
+end
+
+---Moves to a channel: leaves the old one, joins the new, tells the players we know.
+function private.Adopt(pointer, why)
+	if not private.ValidPointer(pointer) or not private.IsNewer(pointer) then
+		return false
+	end
+	local old = private.channelName
+	private.channelName, private.password, private.epoch = pointer.n, pointer.p, pointer.e
+	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, p = pointer.p, t = GetServerTime() }
+	Wanted:Print("Wanted's sync channel was taken over (%s), so everyone is moving to a new one.", why)
+	Wanted:Log("Sync: moving from %s to %s (%d)", old, pointer.n, pointer.e)
+	if LeaveChannelByName and old ~= pointer.n then
+		LeaveChannelByName(old)
+	end
+	private.channelId, private.lockedOut, private.moderated, private.members = nil, nil, false, nil
+	if private.lockoutTicker then
+		private.lockoutTicker:Cancel()
+		private.lockoutTicker = nil
+	end
+	private.joinAttempts = 0
+	C_Timer.After(2, private.TryJoin)
+	private.SpreadMove()
+	return true
+end
+
+---The players this client knows: realm links and those heard on the channel in the last week.
+function private.KnownPeers()
+	local out, cutoff = {}, GetServerTime() - RECENT_PEER_SECONDS
+	for name, seen in pairs(Wanted.db.recentPeers) do
+		if type(seen) == "number" and seen >= cutoff then
+			out[name] = seen
+		end
+	end
+	for name in pairs(private.links) do
+		out[name] = out[name] or GetServerTime()
+	end
+	return out
+end
+
+local function SendMove(target, question)
+	private.msgCounter = (private.msgCounter % 46655) + 1
+	local tbl = { e = private.epoch, n = private.channelName, p = private.password, q = question and 1 or nil }
+	if private.epoch == 0 then
+		tbl.n, tbl.p = nil, nil -- the first channel: everyone knows it
+	end
+	C_ChatInfo.SendAddonMessage(PREFIX, TAG_MOVE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode(tbl), "WHISPER", target)
+end
+
+---Tells every player we know where we are now.
+function private.SpreadMove()
+	for name in pairs(private.KnownPeers()) do
+		if name ~= Store:GetOrigin() then
+			SendMove(name)
+		end
+	end
+end
+
+---At login: asks the few players heard most recently which channel they're on.
+function private.AskPointer()
+	local peers = {}
+	for name, seen in pairs(private.KnownPeers()) do
+		if name ~= Store:GetOrigin() then
+			tinsert(peers, { name = name, seen = seen })
+		end
+	end
+	sort(peers, function(a, b) return a.seen > b.seen end)
+	for i = 1, min(#peers, MOVE_ASK_PEERS) do
+		SendMove(peers[i].name, true)
+	end
+end
+
+---A move (or a question) from another player.
+function private.OnMove(tbl, sender)
+	if type(sender) ~= "string" or sender == Store:GetOrigin() then
+		return
+	end
+	private.moveReplies = private.moveReplies or {}
+	-- They're behind us: tell them where we are (at most once a minute each)
+	if type(tbl.e) == "number" and tbl.e < private.epoch then
+		local now = GetTime()
+		if not private.moveReplies[sender] or now - private.moveReplies[sender] >= MOVE_REPLY_SECONDS then
+			private.moveReplies[sender] = now
+			SendMove(sender)
+		end
+		return
+	end
+	if tbl.q or not private.ValidPointer(tbl) or not private.IsNewer(tbl) then
+		return
+	end
+	-- Only players we know count, and one player alone isn't enough unless we saw the takeover ourselves
+	if not private.KnownPeers()[sender] then
+		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
+		return
+	end
+	local key = tbl.e.."|"..tbl.n.."|"..tbl.p
+	private.moveVotes = private.moveVotes or {}
+	local votes = private.moveVotes[key] or {}
+	private.moveVotes[key] = votes
+	votes[sender] = true
+	local count = 0
+	for _ in pairs(votes) do
+		count = count + 1
+	end
+	local sawIt = private.takenOverAt and GetTime() - private.takenOverAt < MOVE_TRUST_SECONDS
+	Wanted:Log("Sync: %s says the channel moved to %s (%d); %d player(s) so far%s", sender, tbl.n, tbl.e, count, sawIt and ", and we saw the takeover" or "")
+	if sawIt or count >= MOVE_QUORUM then
+		private.Adopt(tbl, sawIt and "we saw it too" or "players we know moved")
+	end
+end
+
+---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): trusted like our own eyes.
+---@param pointer table { e, n, p }
+function Sync:AdoptFromApp(pointer)
+	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so") then
+		Wanted:Log("Sync: moved to the app's channel %s (%d)", pointer.n, pointer.e)
+	end
+end
+
+---The current channel, for the app to report (WantedDB.syncChannel holds the same once moved).
+function Sync:GetPointer()
+	return { e = private.epoch, n = private.channelName }
+end

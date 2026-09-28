@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- When someone takes over Wanted's sync channel (moderation on, a ban, a changed password), Wanted moves to a new
+  channel with a random name and password and tells the players it knows. They follow once two of them say so,
+  or at once through the Wanted app. Players who were away find the new channel at their next login.
 - Upload your wanted poster: the poster's button photographs your character, and the Wanted app puts it on
   wanteddeadordead.com, on your poster, your page and your share picture. Take screenshot is gone: the site's
   poster is the one to share now.

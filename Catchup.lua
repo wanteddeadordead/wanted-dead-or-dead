@@ -76,6 +76,10 @@ function Catchup:Import()
 	end
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
 	private.LookUpUnnamed(entry.unnamed)
+	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over
+	if type(entry.channel) == "table" then
+		Sync:AdoptFromApp(entry.channel)
+	end
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

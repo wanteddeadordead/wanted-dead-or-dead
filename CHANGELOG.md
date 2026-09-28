@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-09-27
+
+Saved data stays a month deep.
+
 - Saved data stays a sensible size: kills, deaths and assists older than 30 days are dropped when Wanted loads
   (bounties and everything about them are kept, and so is any kill a claim rests on). wanteddeadordead.com keeps
   the full history. Catch-ups over the channel know where a pruned history starts, so nobody keeps asking for
   records that are gone.
+
 ## [1.2.8] - 2026-09-27
 
 A quieter chat window.

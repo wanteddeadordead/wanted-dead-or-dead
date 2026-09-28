@@ -281,21 +281,24 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 		return
 	end
 	Wanted:Log("Sync: channel notice %s%s%s", tostring(kind), player and player ~= "" and (" "..player) or "", actor and actor ~= "" and (" by "..actor) or "")
+	-- The game names players by first name in these notices ("Khal", not "Khal Drogash")
 	local us = Store:GetOrigin()
+	local isUs = player == us or player == strmatch(us, "^(%S+)")
 	if event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
 		local text = HOSTILE_NOTICES[kind]
-		if text and actor and actor ~= "" then
-			if player == us and HOSTILE_NOTICES_SELF[kind] then
-				Wanted:Print(HOSTILE_NOTICES_SELF[kind], actor)
+		if text then
+			-- The game doesn't always name who did it; the texts take two names, so both are always given
+			-- (string.format takes extra arguments in its stride, never missing ones)
+			local who = (type(actor) == "string" and actor ~= "") and actor or "someone"
+			if isUs and HOSTILE_NOTICES_SELF[kind] then
+				Wanted:Print(HOSTILE_NOTICES_SELF[kind], who)
 			else
-				Wanted:Print(text, tostring(player), actor)
+				Wanted:Print(text, tostring(player), who)
 			end
-		elseif text then
-			Wanted:Print(text, tostring(player))
 		end
-		if kind == "PLAYER_KICKED" and player == us then
+		if kind == "PLAYER_KICKED" and isUs then
 			private.Rejoin("kicked")
-		elseif kind == "PLAYER_BANNED" and player == us then
+		elseif kind == "PLAYER_BANNED" and isUs then
 			private.LockOut("banned")
 		end
 		return

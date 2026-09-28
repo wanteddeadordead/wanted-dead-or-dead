@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Records now say whether a player is male or female, so wanteddeadordead.com can paint the right poster.
 ## [1.2.13] - 2026-09-28
 
 A fix.

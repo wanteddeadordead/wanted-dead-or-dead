@@ -30,7 +30,26 @@ local DECAY_DAYS = 90
 -- Lifecycle
 -- ============================================================================
 
+-- Outlaws: players Wanted by their kills alone, the website's rule over the kills this client holds (30 days).
+-- Four kills within twenty minutes, each backed by someone else's record, makes a player Wanted; the rank is
+-- their kills in the last seven days, and it lapses a week after the last one. Camping one player counts once.
+-- Every client holds the same records, so everyone agrees without a message. Decided 2026-09-27.
+local OUTLAW_BURST, OUTLAW_WINDOW_SECONDS = 4, 20 * 60
+local OUTLAW_KEEP_SECONDS = 7 * 86400
+local OUTLAW_CAMP_SECONDS = 300
+local OUTLAW_CACHE_SECONDS = 30
+Reputation.OUTLAW_RANKS = {
+	{ name = "Wanted", kills = 4 },
+	{ name = "Notorious", kills = 10 },
+	{ name = "Menace", kills = 25 },
+	{ name = "Public Enemy", kills = 50 },
+	{ name = "Dead or... Dead", kills = 100 },
+}
+
 function Reputation:OnEnable()
+	-- A new kill or death can make or break an outlaw
+	Store:OnRecord("kill", function() private.outlaws = nil end)
+	Store:OnRecord("death", function() private.outlaws = nil end)
 	if TooltipDataProcessor and Enum and Enum.TooltipDataType then
 		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, private.OnTooltipUnit)
 	end
@@ -473,3 +492,111 @@ Wanted:RegisterCommand("filter", "Board filters: /wanted filter min <amount> | z
 	end
 	Wanted:Print("Board shows bounties of %s and up%s.", settings.minBounty > 0 and Bounties:FormatMoney(settings.minBounty) or "any amount", settings.zoneFilter and (" in "..settings.zoneFilter) or "")
 end)
+
+
+
+-- ============================================================================
+-- Outlaws
+-- ============================================================================
+
+---Every outlaw right now, by GUID: { name, rank, kills (this week), since, lastKill }. Cached for a short while.
+---@return table<string, table>
+function Reputation:GetOutlaws()
+	local now = GetServerTime()
+	if private.outlaws and now - (private.outlawsAt or 0) < OUTLAW_CACHE_SECONDS then
+		return private.outlaws
+	end
+	-- Who else recorded each death, so a kill record can be checked against another origin's record of it
+	local deathOrigins = {}
+	for death in Store:Iterator("death") do
+		local id = death.data.deathId
+		if type(id) == "string" then
+			local set = deathOrigins[id] or {}
+			set[death.origin] = true
+			deathOrigins[id] = set
+		end
+	end
+	local killers = {} -- guid -> { name, entries = { { t, victim, key } } }
+	local function Note(guid, name, victim, key, t)
+		if type(guid) ~= "string" or guid == "" or type(t) ~= "number" then
+			return
+		end
+		local k = killers[guid]
+		if not k then
+			k = { name = name, entries = {}, keys = {} }
+			killers[guid] = k
+		end
+		k.name = k.name or name
+		if k.keys[key] then
+			return
+		end
+		k.keys[key] = true
+		tinsert(k.entries, { t = t, victim = victim })
+	end
+	-- A kill record another origin's death record backs
+	for kill in Store:Iterator("kill") do
+		local d = kill.data
+		local backed = false
+		for origin in pairs(deathOrigins[d.deathId] or {}) do
+			if origin ~= kill.origin then
+				backed = true
+			end
+		end
+		if backed then
+			Note(d.killer, d.killerName, d.victim, d.deathId or kill.id, kill.t)
+		end
+	end
+	-- A death record that names its killer: the victim's own recap, or a party kill (witnessed by its nature)
+	for death in Store:Iterator("death") do
+		local d = death.data
+		if type(d.killer) == "string" and d.killer ~= "" then
+			Note(d.killer, d.killerName, d.victim, d.deathId or death.id, death.t)
+		end
+	end
+	local outlaws = {}
+	for guid, k in pairs(killers) do
+		sort(k.entries, function(a, b) return a.t < b.t end)
+		local times, lastByVictim = {}, {}
+		for _, e in ipairs(k.entries) do
+			local last = e.victim and lastByVictim[e.victim]
+			if not (last and e.t - last < OUTLAW_CAMP_SECONDS) then
+				tinsert(times, e.t)
+			end
+			if e.victim then
+				lastByVictim[e.victim] = e.t
+			end
+		end
+		local since
+		for i = OUTLAW_BURST, #times do
+			if times[i] - times[i - OUTLAW_BURST + 1] <= OUTLAW_WINDOW_SECONDS then
+				since = times[i]
+				break
+			end
+		end
+		local last = times[#times]
+		if since and last and now - last <= OUTLAW_KEEP_SECONDS then
+			local recent = 0
+			for _, t in ipairs(times) do
+				if now - t <= OUTLAW_KEEP_SECONDS then
+					recent = recent + 1
+				end
+			end
+			local rank = Reputation.OUTLAW_RANKS[1].name
+			for _, r in ipairs(Reputation.OUTLAW_RANKS) do
+				if recent >= r.kills then
+					rank = r.name
+				end
+			end
+			outlaws[guid] = { name = k.name, rank = rank, kills = recent, since = since, lastKill = last }
+		end
+	end
+	private.outlaws, private.outlawsAt = outlaws, now
+	return outlaws
+end
+
+---A player's outlaw status, or nil.
+---@param guid string
+---@return table?
+function Reputation:GetOutlaw(guid)
+	return Reputation:GetOutlaws()[guid]
+end

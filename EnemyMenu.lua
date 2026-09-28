@@ -92,9 +92,9 @@ function EnemyMenu:BuildHelpText()
 	for _, d in ipairs(Enemies:GetNearby()) do
 		tinsert(nearby, d)
 	end
-	-- Whoever is on you first, then the list's own order (active, in sight, gone)
+	-- Whoever is on you first, then outlaws, then the list's own order (active, in sight, gone)
 	for i, d in ipairs(nearby) do
-		d.helpOrder = (d.targetingMe and 0 or 1000) + i
+		d.helpOrder = (d.targetingMe and 0 or 1000) + (d.outlaw and 0 or 500) + i
 	end
 	sort(nearby, function(a, b) return a.helpOrder < b.helpOrder end)
 	if #nearby == 0 then
@@ -108,6 +108,9 @@ function EnemyMenu:BuildHelpText()
 		end
 		if d.class then
 			part = part.." "..Theme:ClassLabel(d.class)
+		end
+		if d.outlaw then
+			part = part.." OUTLAW"
 		end
 		if d.targetingMe then
 			part = part.." (on me)"

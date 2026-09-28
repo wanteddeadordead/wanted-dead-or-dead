@@ -265,17 +265,31 @@ end
 ---@param prefix string
 ---@param guid string?
 ---@return table data
+---The game's number for a player's sex as a word: 2 is male, 3 female, anything else unknown.
+---@param n any
+---@return string?
+function private.SexName(n)
+	n = private.Readable(n)
+	if n == 2 then
+		return "male"
+	elseif n == 3 then
+		return "female"
+	end
+	return nil
+end
+
 function private.AddTraits(data, prefix, guid)
 	local player = guid and Store:GetPlayer(guid)
-	local class, race
+	local class, race, sex
 	if guid and strfind(guid, "^Player%-") then
-		local _, classFile, _, raceFile = GetPlayerInfoByGUID(guid)
-		class, race = private.Readable(classFile), private.Readable(raceFile)
+		local _, classFile, _, raceFile, sexNumber = GetPlayerInfoByGUID(guid)
+		class, race, sex = private.Readable(classFile), private.Readable(raceFile), private.SexName(sexNumber)
 	end
 	local friend = guid and private.friendly[guid]
 	local level = player and player.level or friend and friend.level
 	data[prefix.."Class"] = class or (player and player.class) or nil
 	data[prefix.."Race"] = race
+	data[prefix.."Sex"] = sex or (player and player.sex) or nil
 	data[prefix.."Level"] = type(level) == "number" and level > 0 and level or nil
 	data[prefix.."Faction"] = player and player.faction or nil
 	if prefix == "victim" and not data.victimFaction and private.playerFaction then
@@ -292,6 +306,7 @@ function private.AddOwnTraits(data)
 	local level = private.Readable(UnitLevel("player"))
 	data.killerClass = private.Readable((select(2, UnitClass("player"))))
 	data.killerRace = private.Readable((select(2, UnitRace("player"))))
+	data.killerSex = private.SexName(UnitSex("player"))
 	data.killerLevel = type(level) == "number" and level > 0 and level or nil
 	data.killerFaction = private.playerFaction
 	-- How many were in our group (1 alone), for solo and group kills. A raid counts everyone in it.
@@ -351,6 +366,7 @@ function private.Track(unit)
 		faction = faction,
 		guild = Recorder:GetUnitGuild(unit) or false, -- false = seen without a guild
 		race = UnitRace(unit),
+		sex = private.SexName(UnitSex(unit)),
 		zone = zone,
 		mapId = mapId,
 		x = x,

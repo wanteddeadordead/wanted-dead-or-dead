@@ -57,6 +57,10 @@ with `x = 1`, and a peer accepts a same-realm whispered hello only when it carri
 whisper links until the channel can be joined again (tried every 5 minutes). Older clients ignore `x` and refuse
 same-realm whispers as before.
 
+Sex (from 1.2.14): kill, death and assist records carry `victimSex` and `killerSex` ("male" or "female", from
+`GetPlayerInfoByGUID` and `UnitSex`), and enemy entries in `players` carry `sex`. Optional fields; the site uses
+them for the posters' art.
+
 `WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
 either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
 full names on the deaths it reads from the combat log, which names players by first name only. At load, names

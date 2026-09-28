@@ -156,6 +156,7 @@ function UnitIsEnemy(_, unit) local e = enemy(unit) return e ~= nil and (e.facti
 function UnitClass(unit) if unit == "player" then return "Warrior", "WARRIOR" end local e = enemy(unit) return e and "Rogue", e and e.class end
 function UnitLevel(unit) local e = enemy(unit) return e and e.level or 10 end
 function UnitRace(unit) if unit == "player" then return "Orc", "Orc" end local e = enemy(unit) return e and (e.raceName or "Human"), e and (e.raceFile or "Human") end
+function UnitSex(unit) if unit == "player" then return 2 end local e = enemy(unit) return e and (e.sex or 3) or 1 end
 function UnitHealth(unit) return enemy(unit) and 50 or 100 end
 function UnitHealthMax() return 100 end
 function UnitIsUnit(a, b) local e = enemy((a:gsub("target$", ""))) return (e and e.targetsMe and b == "player") and true or false end
@@ -2593,5 +2594,18 @@ end)()
 	ns.Enemies:ClearNearby()
 	ns.Widgets.IsDialogShown = realIsDialogShown
 	lastDialog = nil
+end)()
+;(function()
+	-- Sex, from the game's numbers (2 male, 3 female): on enemies seen and on the records they end up in
+	enemyUnits.nameplate1 = { guid = "Player-9-SHE", name = "Sheila Sharp", class = "ROGUE", level = 30, sex = 3 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+	check(ns.Store:GetPlayer("Player-9-SHE").sex == "female", "an enemy seen is recorded as female")
+	enemyUnits.nameplate1 = nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+	ns.Enemies:ClearNearby()
+	local found
+	for k in ns.Store:Iterator("kill") do if k.data.killerSex then found = k end end
+	for d in ns.Store:Iterator("death") do if d.data.victimSex then found = found or d end end
+	check(found ~= nil, "a record made this session carries a sex")
 end)()
 print("wanted smoke: all checks pass")

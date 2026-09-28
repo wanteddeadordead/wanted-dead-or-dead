@@ -2820,4 +2820,21 @@ end)()
 	check(ns.db.syncChannel.e == 4 and ns.db.syncChannel.n == "WantedNetHordefromapp", "the app's channel is followed")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
+-- /wanted who: a /who search, its results printed with full names and guilds
+;(function()
+	C_FriendList = {
+		SetWhoToUi = function() end,
+		SendWho = function() Fire("WHO_LIST_UPDATE") end,
+		GetNumWhoResults = function() return 1 end,
+		GetWhoInfo = function() return { fullName = "Stabby Mcstab", fullGuildName = "Night Watch", level = 20, classStr = "Rogue", area = "Durotar", filename = "ROGUE", gender = 2 } end,
+	}
+	local before = #printed
+	ns:RunCommand("who", "Stabby")
+	local found = false
+	for i = before + 1, #printed do
+		if printed[i]:find("Stabby Mcstab", 1, true) and printed[i]:find("Night Watch", 1, true) then found = true end
+	end
+	check(found, "/wanted who prints the full name and guild the game returns")
+	C_FriendList = nil
+end)()
 print("wanted smoke: all checks pass")

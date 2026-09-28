@@ -252,6 +252,9 @@ SettingsPanel.ExitWithCommit = function(self) self._shown = false end
 screenshotResult = "SCREENSHOT_SUCCEEDED"
 screenshots = 0
 function Screenshot() screenshots = screenshots + 1 Fire(screenshotResult) end
+cvars = {}
+function GetCVar(name) return cvars[name] end
+function SetCVar(name, value) cvars[name] = value end
 local menus = {}
 Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
 local chatSent = {}
@@ -1390,10 +1393,32 @@ local posterFrame = WantedPosterFrame
 check(ns.Poster:IsShown() and posterFrame.reward:GetText() == "4 GOLD 50 SILVER", "the poster shows the price on our head, poster style: "..tostring(posterFrame.reward:GetText()))
 check(posterFrame.name:GetText() == "TEST PLAYER" and posterFrame.rewardNote:GetText() == "2 bounties from 2 players", "name and how many bounties: "..tostring(posterFrame.rewardNote:GetText()))
 local shotsBefore = screenshots
-posterButtons["Take screenshot"]:GetScript("OnClick")(posterButtons["Take screenshot"])
-check(not posterFrame.buttons:IsShown(), "the buttons hide for the shot")
+do
+local upload = posterButtons["Upload your wanted poster"]
+-- Without the app there's nothing to upload it: say so, take nothing
+local savedAppInfo = WantedAppInfo
+WantedAppInfo = nil
+upload:GetScript("OnClick")(upload)
+check(screenshots == shotsBefore and posterFrame.buttons:IsShown(), "no app: no picture")
+WantedAppInfo = { running = "0.2.13", latest = "0.2.13" }
+-- The studio: the model alone on a plain backdrop, where the screen says it is
+UIParent._w, UIParent._h = 1600, 900
+local model = posterFrame.studioModel
+model.GetLeft, model.GetRight = function() return 400 end, function() return 1200 end
+model.GetTop, model.GetBottom = function() return 750 end, function() return 150 end
+cvars.screenshotFormat = "jpeg"
+upload:GetScript("OnClick")(upload)
+check(not posterFrame.buttons:IsShown() and not posterFrame.painting:IsShown() and posterFrame.studio:IsShown(), "the studio shows alone for the picture")
 RunTimers()
-check(screenshots == shotsBefore + 1 and posterFrame.buttons:IsShown(), "the screenshot is taken and the buttons come back")
+check(screenshots == shotsBefore + 1 and posterFrame.buttons:IsShown() and posterFrame.painting:IsShown() and not posterFrame.studio:IsShown(), "the picture is taken and the poster comes back")
+check(cvars.screenshotFormat == "jpeg", "the player's screenshot format is put back")
+local shot = ns.db.posterShots[#ns.db.posterShots]
+check(shot and shot.who == ns.Store:GetOrigin() and shot.t == clock and math.abs(shot.l - 0.25) < 1e-9 and math.abs(shot.r - 0.75) < 1e-9
+	and math.abs(shot.top - 1/6) < 1e-9 and math.abs(shot.b - 5/6) < 1e-9, "the shot is saved for the app with where the model was")
+for _ = 1, 6 do upload:GetScript("OnClick")(upload) RunTimers() end
+check(#ns.db.posterShots == 5, "only the newest few shots are kept")
+WantedAppInfo = savedAppInfo
+end
 -- Set amount: any gold, just for fun, marked "(allegedly)"; Real amount puts the true total back
 local amountButton = posterButtons["Set amount"]
 amountButton:GetScript("OnClick")(amountButton)

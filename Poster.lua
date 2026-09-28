@@ -1,8 +1,10 @@
 -- Wanted: your wanted poster. A painted poster over a dark screen with your own character in the portrait
 -- (a live model of you, tinted like an old print), your name, and the price on your head: every bounty the
--- other side has posted on you, paid or not, as it reached this side (see Bridge). Take screenshot hides the
--- buttons and has the game save the picture in its Screenshots folder, ready to share. An addon can't save
--- a picture any other way.
+-- other side has posted on you, paid or not, as it reached this side (see Bridge).
+-- Upload your wanted poster shows your model alone on a plain backdrop and has the game take a screenshot (an
+-- addon can't save a picture any other way), noting where the model was on screen (WantedDB.posterShots). The
+-- desktop app cuts the model out of that screenshot and uploads it to wanteddeadordead.com, which draws the
+-- poster around it: the poster there can change without anyone uploading again.
 
 local _, Wanted = ...
 local Poster = Wanted:NewModule("Poster")
@@ -11,6 +13,8 @@ local W = Wanted.Widgets
 local private = {
 	frame = nil,
 	shooting = false,
+	shot = nil, -- the poster shot being taken: { l, top, r, b } where the model is, as fractions of the screen
+	format = nil, -- the screenshot format to put back afterwards
 	customAmount = nil, -- copper; a made-up reward to show instead, just for fun (never saved or shared)
 }
 local TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\poster"
@@ -26,6 +30,8 @@ local REWARD_BAND = { 0.17, 0.755, 0.83, 0.82 }
 local INK = { 0.17, 0.1, 0.06 }
 local SEPIA = { 1, 0.86, 0.66 } -- multiplied over the portrait so the live model looks printed
 local MAX_CUSTOM_GOLD = 1000000
+local STUDIO_BACKDROP = { 0.11, 0.09, 0.07 } -- plain and dark behind the model, like the poster's paper in shadow
+local MAX_POSTER_SHOTS = 5 -- the newest kept for the app
 
 
 
@@ -188,13 +194,14 @@ function private.GetFrame()
 	frame.credit = Theme:Text(frame, "small", "Wanted: Dead or... Dead  -  a World PvP addon for WoW Forever", { 0.85, 0.78, 0.66 })
 	frame.credit:SetPoint("TOP", painting, "BOTTOM", 0, -10)
 	local buttons = CreateFrame("Frame", nil, frame)
-	buttons:SetSize(420, 30)
+	buttons:SetSize(470, 30)
 	buttons:SetPoint("TOP", frame.credit, "BOTTOM", 0, -12)
 	frame.buttons = buttons
-	local shoot = W:Button(buttons, "Take screenshot", "primary", 150, 28, function()
+	local shoot = W:Button(buttons, "Upload your wanted poster", "primary", 200, 28, function()
 		private.TakeScreenshot()
 	end)
 	shoot:SetPoint("LEFT")
+	W:AttachTooltip(shoot, "Upload your wanted poster", "Photographs your character for your poster on wanteddeadordead.com. The Wanted app uploads it after your next /reload or logout.")
 	frame.amountButton = W:Button(buttons, "Set amount", "secondary", 130, 28, function()
 		private.ToggleCustomAmount()
 	end)
@@ -204,6 +211,19 @@ function private.GetFrame()
 		frame:Hide()
 	end)
 	close:SetPoint("RIGHT")
+
+	-- The studio: the model alone, 4:3 like the poster's window, on a plain backdrop, for the upload
+	local studio = CreateFrame("Frame", nil, frame)
+	local studioHeight = UIParent:GetHeight() * 0.6
+	studio:SetSize(studioHeight * 4 / 3, studioHeight)
+	studio:SetPoint("CENTER")
+	studio:Hide()
+	local studioBackdrop = studio:CreateTexture(nil, "BACKGROUND")
+	studioBackdrop:SetAllPoints()
+	studioBackdrop:SetColorTexture(STUDIO_BACKDROP[1], STUDIO_BACKDROP[2], STUDIO_BACKDROP[3], 1)
+	frame.studio = studio
+	frame.studioModel = CreateFrame("PlayerModel", nil, studio)
+	frame.studioModel:SetAllPoints()
 	private.frame = frame
 	return frame
 end
@@ -285,18 +305,62 @@ function private.TakeScreenshot()
 	if private.shooting or not Screenshot then
 		return
 	end
+	if not Wanted:AppVersion() then
+		Wanted:Print("Uploading your poster needs the Wanted app on this computer: it puts the picture on wanteddeadordead.com. Get it at wanteddeadordead.com/app.")
+		return
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		Wanted:Print("Not during a fight: try again when it's over.")
+		return
+	end
 	private.shooting = true
-	private.frame.buttons:Hide()
-	-- Let the frame redraw without the buttons first
-	C_Timer.After(0.1, function()
+	local frame = private.frame
+	frame.buttons:Hide()
+	frame.credit:Hide()
+	frame.painting:Hide()
+	frame.studioModel:SetUnit("player")
+	frame.studioModel:SetPortraitZoom(0.65)
+	frame.studioModel:SetCamDistanceScale(1)
+	frame.studioModel:SetRotation(0)
+	frame.studio:Show()
+	-- PNG, whatever the player's setting: the app reads it, and it keeps the model sharp
+	if GetCVar and SetCVar then
+		private.format = GetCVar("screenshotFormat")
+		if private.format ~= "png" then
+			SetCVar("screenshotFormat", "png")
+		end
+	end
+	-- Let the model load and the frame redraw first
+	C_Timer.After(0.5, function()
+		if not private.shooting then
+			return
+		end
+		private.shot = private.ModelRect(frame.studioModel)
 		Screenshot()
 	end)
 	-- Back to normal even if the game never answers
-	C_Timer.After(3, function()
+	C_Timer.After(4, function()
 		if private.shooting then
 			private.OnScreenshot(false)
 		end
 	end)
+end
+
+---Where a frame is on screen, as fractions of the screen from its top left, or nil if the game won't say.
+function private.ModelRect(region)
+	local scale, screenScale = region:GetEffectiveScale(), UIParent:GetEffectiveScale()
+	local left, right, top, bottom = region:GetLeft(), region:GetRight(), region:GetTop(), region:GetBottom()
+	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+	for _, v in ipairs({ scale, screenScale, left, right, top, bottom, width, height }) do
+		if type(v) ~= "number" then
+			return nil
+		end
+	end
+	local sw, sh = width * screenScale, height * screenScale
+	if sw <= 0 or sh <= 0 then
+		return nil
+	end
+	return { l = left * scale / sw, r = right * scale / sw, top = 1 - top * scale / sh, b = 1 - bottom * scale / sh }
 end
 
 function private.OnScreenshot(succeeded)
@@ -304,14 +368,29 @@ function private.OnScreenshot(succeeded)
 		return
 	end
 	private.shooting = false
-	if private.frame then
-		private.frame.buttons:Show()
+	if private.format and private.format ~= "png" and SetCVar then
+		SetCVar("screenshotFormat", private.format)
 	end
-	if succeeded then
-		Wanted:Print("Your wanted poster is saved in your Screenshots folder (World of Warcraft\\_classic_beta_\\Screenshots). Share it anywhere.")
-	else
-		Wanted:Print("The game couldn't save the screenshot. Try again, or use your own screenshot key.")
+	private.format = nil
+	local frame = private.frame
+	if frame then
+		frame.studio:Hide()
+		frame.painting:Show()
+		frame.credit:Show()
+		frame.buttons:Show()
 	end
+	local shot = private.shot
+	private.shot = nil
+	if not succeeded or not shot then
+		Wanted:Print("The game couldn't take the picture. Try again in a moment.")
+		return
+	end
+	local shots = Wanted.db.posterShots
+	tinsert(shots, { t = GetServerTime(), who = Wanted.Store:GetOrigin(), l = shot.l, top = shot.top, r = shot.r, b = shot.b })
+	while #shots > MAX_POSTER_SHOTS do
+		tremove(shots, 1)
+	end
+	Wanted:Print("Got it. Your poster goes up on wanteddeadordead.com after your next /reload or logout, once the Wanted app has sent it.")
 end
 
 Wanted:RegisterCommand("poster", "Your wanted poster, with the price on your head, to screenshot and share: /wanted poster", function()

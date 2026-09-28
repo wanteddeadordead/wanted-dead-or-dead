@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Upload your wanted poster: the poster's button photographs your character, and the Wanted app puts it on
+  wanteddeadordead.com, on your poster, your page and your share picture. Take screenshot is gone: the site's
+  poster is the one to share now.
+
 - Opening the world map during a fight no longer shows "The client blocked Frame:SetPassThroughButtons()": the
   game's map code called a protected function on Wanted's enemy markers.
 

@@ -165,14 +165,14 @@ local HOSTILE_NOTICES = {
 	PLAYER_BANNED = "%s was banned from the sync channel by %s.",
 	PASSWORD_CHANGED = "%s changed the sync channel's password.",
 	MODERATION_ON = "%s turned moderation on in the sync channel: only its moderators can send.",
-	SET_MODERATOR = "%s was made a moderator of the sync channel by %s.",
 }
 -- The same, when it was done to this player
 local HOSTILE_NOTICES_SELF = {
 	PLAYER_KICKED = "You were kicked from the sync channel by %s.",
 	PLAYER_BANNED = "You were banned from the sync channel by %s.",
-	SET_MODERATOR = "You were made a moderator of the sync channel by %s.",
 }
+-- Moderator and owner changes aren't said, only logged: the channel passes to whoever has been in it longest, so
+-- they happen all the time, and they harm nobody until someone turns moderation on (which is said)
 
 
 

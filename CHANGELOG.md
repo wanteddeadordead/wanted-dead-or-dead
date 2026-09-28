@@ -2,12 +2,17 @@
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-09-28
+
+Form a posse.
+
 - Posses: "Form a posse" on an outlaw or a bountied player (their menu in the Nearby window) sends where they
   are to your faction's Wanted players. Everyone in that zone is asked to join; whoever joins whispers you and
   is invited to your group. The call carries the target's position every half minute while you can see them,
   for ten minutes.
 - Kill and death records now carry the zone's map id, so wanteddeadordead.com names the zone the same whatever
   language your client runs in.
+
 ## [1.2.11] - 2026-09-28
 
 Outlaws.

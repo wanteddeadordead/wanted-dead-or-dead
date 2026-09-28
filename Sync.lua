@@ -56,6 +56,7 @@ local private = {
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
 	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
 	rejoinFailing = false, -- the game asked for the password: its own rejoin without one is about to fail
+	membersRetrying = false, -- a member request is waiting for the game's channel list; others don't start one
 	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
 }
@@ -139,6 +140,7 @@ local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
 local LOCKOUT_RETRY_SECONDS = 5 * 60
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
+local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed rejoin is expected
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -287,7 +289,7 @@ function private.OnEvent(_, event, ...)
 	elseif event == "CHANNEL_UI_UPDATE" then
 		-- The game (re)built its channel list: ask once it settles, if the count isn't known yet
 		if private.channelId and not private.members then
-			C_Timer.After(2, private.RequestMembers)
+			C_Timer.After(2, function() private.RequestMembers() end)
 		end
 	end
 end
@@ -320,18 +322,25 @@ end
 ---2026-09-28: selecting the channel in the hidden channels window, SetSelectedDisplayChannel, brought nothing
 ---from a timer). The list's chat line is hidden. Asked after joining and every few minutes; the game's channel
 ---list can still be empty right after a login or reload, so a miss is tried again a few times.
----@param attempt number?
+---Only one chain of retries runs at a time: the join, the ticker and a rebuilt list each ask, and a chain
+---already waiting covers them.
+---@param attempt number? set by a retry
 function private.RequestMembers(attempt)
+	if not attempt and private.membersRetrying then
+		return
+	end
 	attempt = attempt or 1
 	local index = private.DisplayIndex()
 	if not index then
 		Wanted:Log("Sync: %s isn't in the game's channel list yet (%s channels; attempt %d)", tostring(private.channelName),
 			GetNumDisplayChannels and tostring(GetNumDisplayChannels()) or "no", attempt)
-		if attempt < MEMBERS_ATTEMPTS then
+		private.membersRetrying = attempt < MEMBERS_ATTEMPTS
+		if private.membersRetrying then
 			C_Timer.After(MEMBERS_RETRY_SECONDS, function() private.RequestMembers(attempt + 1) end)
 		end
 		return
 	end
+	private.membersRetrying = false
 	if not ListChannelByName then
 		Wanted:Log("!! Sync: no ListChannelByName; can't ask for the member count")
 		return
@@ -491,7 +500,10 @@ function private.OnPasswordRequest(channel)
 		return
 	end
 	Wanted:Log("Sync: the game asked for the %s password; joining with it", channel)
+	-- The game's own attempt fails with a wrong-password notice in a moment. Expected only for a short while, so a
+	-- real password change later is still a lockout
 	private.rejoinFailing = true
+	C_Timer.After(REJOIN_FAIL_SECONDS, function() private.rejoinFailing = false end)
 	JoinPermanentChannel(private.channelName, CHANNEL_PASSWORD)
 	C_Timer.After(0, function()
 		if StaticPopup_Hide then
@@ -543,7 +555,7 @@ function private.TryJoin()
 	end
 	private.HideFromChatWindows()
 	if not private.membersTicker then
-	private.membersTicker = C_Timer.NewTicker(MEMBERS_INTERVAL, function() private.RequestMembers() end)
+		private.membersTicker = C_Timer.NewTicker(MEMBERS_INTERVAL, function() private.RequestMembers() end)
 	end
 	C_Timer.After(JOIN_SETTLE_SECONDS, function() private.RequestMembers() end)
 	if private.joinAttempts > 0 then

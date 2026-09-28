@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A real change of the sync channel's password is noticed after a login where the game didn't need one:
+  the allowance for the game's own failed rejoin now lasts a few seconds instead of until the next notice.
+- Asking the game for the channel's member count starts one chain of retries at a time, not one per trigger.
+
 ## [1.2.16] - 2026-09-28
 
 The count that answers.

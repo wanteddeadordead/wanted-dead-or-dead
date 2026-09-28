@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Players the desktop app saw only in the combat log, which gives first names, are looked up in the game at
+  login and /reload, so their full name, class and sex reach wanteddeadordead.com.
+
 - A real change of the sync channel's password is noticed after a login where the game didn't need one:
   the allowance for the game's own failed rejoin now lasts a few seconds instead of until the next notice.
 - Asking the game for the channel's member count starts one chain of retries at a time, not one per trigger.

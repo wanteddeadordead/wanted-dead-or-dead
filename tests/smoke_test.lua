@@ -2446,6 +2446,14 @@ end)()
 	ns.Catchup:Import()
 	RunFrames()
 	check(ns.Store:Get("Catch Origin:6"), "a newer one is taken in")
+	-- Players the app's combat log named by first name only are looked up, even in a catch-up already taken in
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1, records = {}, unnamed = { "Player-9-ENEMY", "Player-7-00AB12", "not a guid", 42 } } }
+	ns.Catchup:Import()
+	local stabby = db.names["Player-9-ENEMY"]
+	check(stabby and stabby.n == "Stabby Mcstab" and stabby.class == "ROGUE" and stabby.sex == "male", "a player the game knows goes in the name book with class and sex")
+	check(db.names["Player-7-00AB12"] == nil, "one the game doesn't know is left out")
+	ns.Store:NoteName("Player-9-ENEMY", "Stabby Mcstab")
+	check(db.names["Player-9-ENEMY"].class == "ROGUE", "a later sighting without a class keeps the one known")
 end)()
 ;(function()
 	-- The sync channel only carries addon data, so it has no place in a chat window: the game listed it in one

@@ -493,10 +493,18 @@ end)
 
 -- /wanted who <name>: whether an addon may run a /who search from a slash command and read the results (full names
 -- and guilds). SendWho is restricted, so the game may block it; the blocked and forbidden events say so.
-Wanted:RegisterCommand("who", "Development builds: tries a /who search for a name and prints what the game returns: /wanted who <name>", function(args)
+Wanted:RegisterCommand("who", "Development builds: tries a /who search for a name and prints what the game returns: /wanted who [ui|later] <name>", function(args)
+	-- ui: results to the Who window (does the game then tell the addon?); later: sent a second after the command,
+	-- with no key press behind it (can it run in the background?)
+	local mode, rest = strmatch(strtrim(args or ""), "^(%a+)%s+(.+)$")
 	local name = strtrim(args or "")
+	if mode == "ui" or mode == "later" then
+		name = strtrim(rest)
+	else
+		mode = nil
+	end
 	if name == "" then
-		Wanted:Print("Usage: /wanted who <name>")
+		Wanted:Print("Usage: /wanted who [ui|later] <name>")
 		return
 	end
 	local list = C_FriendList
@@ -538,10 +546,25 @@ Wanted:RegisterCommand("who", "Development builds: tries a /who search for a nam
 		end
 	end
 	local probe = CreateFrame("Frame")
-	for _, event in ipairs({ "WHO_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+	for _, event in ipairs({ "WHO_LIST_UPDATE", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN", "CHAT_MSG_SYSTEM" }) do
 		probe:RegisterEvent(event)
 	end
 	probe:SetScript("OnEvent", function(_, event, a1, a2, a3)
+		if event == "CHAT_MSG_SYSTEM" then
+			-- The answer as a chat line: shown raw (|| for the link codes), then read with the game's own format
+			if type(a1) == "string" and not (issecretvalue and issecretvalue(a1)) and (strfind(a1, "Level", 1, true) or strfind(a1, "total", 1, true)) then
+				Wanted:Print("  chat line: %s", (gsub(a1, "|", "||")))
+				local plain = gsub(gsub(gsub(gsub(a1, "|c%x%x%x%x%x%x%x%x", ""), "|r", ""), "|Hplayer:[^|]*|h", ""), "|h", "")
+				local who, level, race, class, guild, zone = strmatch(plain, "^%[(.-)%]: Level (%d+) (.-) (%a+) <(.-)> %- (.+)$")
+				if not who then
+					who, level, race, class, zone = strmatch(plain, "^%[(.-)%]: Level (%d+) (.-) (%a+) %- (.+)$")
+				end
+				if who then
+					Wanted:Print("  read from chat: %s, level %s %s %s, guild %s, in %s", who, level, race, class, tostring(guild or "none"), zone)
+				end
+			end
+			return
+		end
 		Wanted:Print("  event %s: %s %s %s", event, Show(a1), Show(a2), Show(a3))
 		if event == "WHO_LIST_UPDATE" then
 			Results()
@@ -549,8 +572,8 @@ Wanted:RegisterCommand("who", "Development builds: tries a /who search for a nam
 	end)
 	C_Timer.After(10, function() probe:UnregisterAllEvents() Wanted:Print("Who probe: done.") end)
 	if list.SetWhoToUi then
-		local ok, err = pcall(list.SetWhoToUi, false)
-		Wanted:Print("  SetWhoToUi(false): %s", ok and "no error" or tostring(err))
+		local ok, err = pcall(list.SetWhoToUi, mode == "ui")
+		Wanted:Print("  SetWhoToUi(%s): %s", tostring(mode == "ui"), ok and "no error" or tostring(err))
 	else
 		Wanted:Print("  SetWhoToUi missing")
 	end
@@ -559,6 +582,13 @@ Wanted:RegisterCommand("who", "Development builds: tries a /who search for a nam
 		return
 	end
 	local query = 'n-"'..name..'"'
-	local ok, err = pcall(list.SendWho, query)
-	Wanted:Print("  SendWho(%s): %s", query, ok and "no error" or tostring(err))
+	local function Send()
+		local ok, err = pcall(list.SendWho, query)
+		Wanted:Print("  SendWho(%s)%s: %s", query, mode == "later" and " a second later, from a timer" or "", ok and "no error" or tostring(err))
+	end
+	if mode == "later" then
+		C_Timer.After(1, Send)
+	else
+		Send()
+	end
 end)

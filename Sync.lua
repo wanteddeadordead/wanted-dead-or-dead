@@ -137,6 +137,7 @@ local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone jus
 local MAX_RECENT_PEERS = 20
 local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
 local LOCKOUT_RETRY_SECONDS = 5 * 60
+local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -275,7 +276,7 @@ function private.OnEvent(_, event, ...)
 	elseif event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
 		private.OnChannelNotice(event, ...)
 	elseif event == "CHANNEL_COUNT_UPDATE" then
-		private.ReadMembers()
+		private.ReadMembers(...)
 	end
 end
 
@@ -287,23 +288,50 @@ function Sync:GetMembers()
 	return private.members
 end
 
----Reads the channel's member count from the game's channel list and remembers it for the app, which sends it to
----wanteddeadordead.com with its next catch-up (the file is written at logout or /reload).
-function private.ReadMembers()
+---The sync channel's index in the game's channel list, if it's there.
+---@return number?
+function private.DisplayIndex()
 	if not private.channelName or not GetNumDisplayChannels or not GetChannelDisplayInfo then
-		return
+		return nil
 	end
 	local mine = strlower(private.channelName)
 	for i = 1, GetNumDisplayChannels() do
-		local name, header, _, _, count = GetChannelDisplayInfo(i)
+		local name, header = GetChannelDisplayInfo(i)
 		if not header and type(name) == "string" and strlower(name) == mine then
-			if type(count) == "number" and count > 0 and count ~= private.members then
-				Wanted:Log("Sync: %d in %s", count, private.channelName)
-				private.members = count
-				Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = count, t = GetServerTime() }
-			end
-			return
+			return i
 		end
+	end
+	return nil
+end
+
+---Asks the game for the channel's member count. The count in the channel list stays empty until the channel is
+---selected in the (hidden) chat channels window, which makes the game send CHANNEL_COUNT_UPDATE (Chris's client,
+---2026-09-28). Asked after joining and every few minutes.
+function private.RequestMembers()
+	local index = private.DisplayIndex()
+	if index and SetSelectedDisplayChannel then
+		SetSelectedDisplayChannel(index)
+	end
+end
+
+---Reads the channel's member count from the game's channel list (or a CHANNEL_COUNT_UPDATE payload) and
+---remembers it for the app, which sends it to wanteddeadordead.com with its next catch-up (the file is written
+---at logout or /reload).
+---@param updatedIndex number? the display index a count update names
+---@param updatedCount number? the count it carries
+function private.ReadMembers(updatedIndex, updatedCount)
+	local index = private.DisplayIndex()
+	if not index then
+		return
+	end
+	local count = select(5, GetChannelDisplayInfo(index))
+	if updatedIndex == index and type(updatedCount) == "number" then
+		count = updatedCount
+	end
+	if type(count) == "number" and count > 0 and count ~= private.members then
+		Wanted:Log("Sync: %d in %s", count, private.channelName)
+		private.members = count
+		Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = count, t = GetServerTime() }
 	end
 end
 
@@ -469,6 +497,10 @@ function private.TryJoin()
 		end
 	end
 	private.HideFromChatWindows()
+	if not private.membersTicker then
+		private.membersTicker = C_Timer.NewTicker(MEMBERS_INTERVAL, private.RequestMembers)
+	end
+	C_Timer.After(JOIN_SETTLE_SECONDS, private.RequestMembers)
 	if private.joinAttempts > 0 then
 		-- Freshly joined: the server needs a moment before it accepts messages on it (result 7, invalid channel)
 		Wanted:Log("Sync: in channel #%d after joining, HELLO in %ds", id, JOIN_SETTLE_SECONDS)

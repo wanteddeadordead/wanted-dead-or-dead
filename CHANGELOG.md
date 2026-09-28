@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- /wanted who (development builds) tries a /who search and prints what the game returns.
+- /wanted who (development builds) tries a /who search and prints what the game returns: to chat (read back from
+  the chat line), to the Who window (ui), or a second later from a timer (later).
 
 ## [1.2.18] - 2026-09-28
 

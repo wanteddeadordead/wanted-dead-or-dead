@@ -2837,4 +2837,13 @@ end)()
 	check(found, "/wanted who prints the full name and guild the game returns")
 	C_FriendList = nil
 end)()
+-- /wanted who reads the game's chat answer: name, level, race, class, guild and zone
+;(function()
+	ns:RunCommand("who", "Hexgatha Soulwither")
+	Fire("CHAT_MSG_SYSTEM", "|Hplayer:Hexgatha Soulwither|h[Hexgatha Soulwither]|h: Level 20 Orc Warlock <who pulled> - Tarren Mill")
+	local read
+	for i = #printed, math.max(1, #printed - 5), -1 do if printed[i]:find("read from chat: Hexgatha Soulwither, level 20 Orc Warlock, guild who pulled, in Tarren Mill", 1, true) then read = true end end
+	check(read, "the who probe reads the chat answer")
+	RunTimers()
+end)()
 print("wanted smoke: all checks pass")

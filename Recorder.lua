@@ -47,6 +47,9 @@ local DEATH_CONFIRM_SECONDS = 4
 local HONOR_MATCH_WINDOW = 10
 -- The HK count can rise before the death it's for is recorded; the assist waits this long
 local ASSIST_DELAY = 2
+-- The addon sees a death on its next nameplate check, a few seconds after the game credits the HK (Chris's client,
+-- 2026-09-28: every HK came 1 to 4 s before the death was seen): an unmatched HK is tried again this often, this many times
+local ASSIST_RETRY_SECONDS, ASSIST_RETRIES = 1, 8
 local MAX_LOG_LINES = 20
 local UNITS = { "target", "mouseover" }
 -- The zone map is read in a grid this many cells across for its named areas
@@ -733,33 +736,43 @@ function private.OnHKsChanged()
 	end
 	local added = now - private.hkCount
 	private.hkCount = now
+	local at = GetServerTime()
 	for _ = 1, added do
-		C_Timer.After(ASSIST_DELAY, private.CreditHK)
+		C_Timer.After(ASSIST_DELAY, function() private.CreditHK(at, 0) end)
 	end
 end
 
----Matches one HK credit: to our own recent kill if there is one, otherwise to the newest enemy death we saw in
----the last few seconds that has no assist yet. WoW Forever doesn't say whose death it was.
-function private.CreditHK()
+---Matches one HK credit: to our own recent kill if there is one, otherwise to the newest enemy death we saw
+---around it that has no assist yet. WoW Forever doesn't say whose death it was. The death is often seen a few
+---seconds after the credit, so a miss is tried again for a while.
+---@param at number server time the credit arrived
+---@param tries number retries so far
+function private.CreditHK(at, tries)
+	at, tries = at or GetServerTime(), tries or 0
 	local now = GetTime()
-	while private.ownKillTimes[1] and now - private.ownKillTimes[1] > HONOR_MATCH_WINDOW + ASSIST_DELAY do
+	while private.ownKillTimes[1] and now - private.ownKillTimes[1] > HONOR_MATCH_WINDOW + ASSIST_DELAY + ASSIST_RETRIES * ASSIST_RETRY_SECONDS do
 		tremove(private.ownKillTimes, 1)
 	end
 	if private.ownKillTimes[1] then
 		tremove(private.ownKillTimes, 1)
 		return
 	end
-	local me, serverNow = Store:GetOrigin(), GetServerTime()
+	local me = Store:GetOrigin()
 	local death
 	for record in Store:Iterator("death") do
 		local data = record.data
-		if record.origin == me and serverNow - record.t <= HONOR_MATCH_WINDOW + ASSIST_DELAY and data.deathId
+		-- A death from shortly before the credit, or seen since
+		if record.origin == me and record.t >= at - HONOR_MATCH_WINDOW and data.deathId
 			and data.victimFaction ~= private.playerFaction and not private.assisted[data.deathId] and (not death or record.t > death.t) then
 			death = record
 		end
 	end
 	if not death then
-		Wanted:Log("Recorder: HK credit with no enemy death seen to match")
+		if tries < ASSIST_RETRIES then
+			C_Timer.After(ASSIST_RETRY_SECONDS, function() private.CreditHK(at, tries + 1) end)
+		else
+			Wanted:Log("Recorder: HK credit with no enemy death seen to match")
+		end
 		return
 	end
 	local data = death.data

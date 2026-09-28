@@ -30,6 +30,17 @@ local TOOLTIP_NAMES = 12
 WantedDeadOrDeadEnemyPinMixin = CreateFromMixins(MapCanvasPinMixin)
 local PinMixin = WantedDeadOrDeadEnemyPinMixin
 
+---The map calls this each time it reuses a pin, and Blizzard's version calls SetPassThroughButtons, which is
+---protected: during combat the game blocks it and blames the addon (a tester's report, 2026-09-28). The markers
+---take no clicks at all (mouse motion only, for the tooltip), so every click already reaches the map: nothing to set.
+function PinMixin:CheckMouseButtonPassthrough()
+end
+
+---Nothing on these pins needs pass-through buttons either (see above); a no-op keeps any other caller from
+---touching the protected function.
+function PinMixin:SetPassThroughButtons()
+end
+
 function PinMixin:OnLoad()
 	-- The same size on screen at any zoom
 	self:SetScalingLimits(1, 1, 1)

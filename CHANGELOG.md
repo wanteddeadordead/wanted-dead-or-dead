@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Opening the world map during a fight no longer shows "The client blocked Frame:SetPassThroughButtons()": the
+  game's map code called a protected function on Wanted's enemy markers.
+
 - Honorable kills without the killing blow are credited as assists again when the addon sees the death a few
   seconds after the game gives the credit, which it often does: it now waits up to ten seconds for the death.
 

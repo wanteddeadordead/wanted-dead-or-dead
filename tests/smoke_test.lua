@@ -1508,6 +1508,27 @@ RunTimers()
 local reshared = Sent("CHANNEL")
 check(#reshared >= 1 and reshared[1].tag == "F" and #reshared[1].tbl.r == 2, "and shared once on our realm's channel")
 check(#Sent("WHISPER", "Far Friend") == 0, "never sent back to the link they came from")
+
+-- Login: the game rejoins the channel without its password and asks for one; its failure isn't a lockout
+do
+local netName = ns.Sync:GetInfo().channelName
+ClearSent()
+Fire("CHANNEL_PASSWORD_REQUEST", netName)
+Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", netName)
+check(ns.Sync:GetInfo().channelId == 6, "the game's own rejoin failing after a password request isn't a lockout")
+-- A second wrong password is a real one: locked out, and a player on our realm answering our whisper is heard
+Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", netName)
+check(not ns.Sync:GetInfo().channelId, "a wrong password with no request pending locks the client out")
+ClearSent()
+ns.Sync:Greet("Near Friend", nil) -- as the lockout does for the players last heard on the channel
+check(#Sent("WHISPER", "Near Friend") == 1, "locked out, a player on our realm is greeted by whisper")
+Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { ["Near Origin"] = 1 }, r = "Realm", a = 1 }), "WHISPER", "Near Friend")
+check(ns.Sync:GetLinks()["Near Friend"], "and their answer from our own realm makes the link")
+check(not ns.db.farPeers["Near Friend"], "but a player on our realm isn't remembered as a far one")
+ns.db.farPeers["Old Link"] = { realm = "?", seen = clock }
+RunTimers()
+check(ns.Sync:GetInfo().channelId == 6, "the channel is joined again")
+end
 ClearSent()
 local mine = ns.Store:NewRecord("pass", { bounty = "near-1" })
 RunTimers()

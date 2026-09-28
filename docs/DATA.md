@@ -67,6 +67,17 @@ full names on the deaths it reads from the combat log, which names players by fi
 not seen for 30 days are dropped, then the oldest until it holds 5000. A new key with a default: no migration.
 The launch reset drops it with the other beta data.
 
+`WantedDB.names` entries also carry `class` and `sex` (from the GUID lookup, 1.2.17) and the guild the player was
+last seen in with its time, `g` and `gt` (`g = ""` when seen in none). A known guild is only replaced by "none"
+after two such readings 30 seconds apart.
+
+`WantedDB.posterShots` (from 1.2.17) lists the newest five poster pictures for the desktop app to upload:
+`{ t, who, l, top, r, b }`, when the game took the screenshot (server time), whose model it is, and where the model
+was on screen as fractions of the screen from its top left. The app finds the PNG in the game's Screenshots folder,
+cuts the model out and uploads it to wanteddeadordead.com. No migration: the field is filled in at load.
+
+`WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- No more "The number of messages that can be sent to this channel is limited" or "That operation is not
+  permitted in this channel" in General: the game shows those for Wanted's own background messages, and Wanted
+  now hides them and waits longer before trying again.
+- While someone has moderation on in the sync channel, Wanted stops sending there (every message would be
+  refused) and syncs by whisper until it's off.
+
 - Upload your wanted poster: the poster's button photographs your character, and the Wanted app puts it on
   wanteddeadordead.com, on your poster, your page and your share picture. Take screenshot is gone: the site's
   poster is the one to share now.

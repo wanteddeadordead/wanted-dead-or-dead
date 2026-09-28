@@ -673,6 +673,8 @@ function Enemies:Describe(guid)
 		unit = entry and entry.unit,
 		kos = kos ~= nil,
 		reason = kos and kos.reason,
+		-- Wanted by their kills alone (Reputation), { rank, kills, ... } or nil
+		outlaw = Wanted.Reputation:GetOutlaw(guid),
 		ignored = Wanted.db.ignore[guid] ~= nil,
 		wins = stats.wins or 0,
 		losses = stats.losses or 0,

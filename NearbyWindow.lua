@@ -832,6 +832,9 @@ function private.Draw(row, info)
 	if show.bounty and info.bounty > 0 then
 		tinsert(rightParts, Theme:Colorize(Wanted.Bounties:FormatMoney(info.bounty), C.gold))
 	end
+	if info.outlaw then
+		tinsert(rightParts, Theme:Colorize(info.outlaw.rank, C.amber))
+	end
 	if row.compact and show.state and info.nearby and not info.inSight and not info.active then
 		tinsert(rightParts, Theme:Colorize(format("%ds", info.goneFor or 0), C.faint))
 	end
@@ -878,7 +881,7 @@ function private.Draw(row, info)
 	end
 	row.sub:SetText(table.concat(sub, "  "))
 	local stateColor = info.active and C.green or ((info.inSight or not info.nearby) and C.blue) or C.faint
-	local barColor = (show.kos and info.kos and C.red) or (show.bounty and info.bounty > 0 and C.gold) or stateColor
+	local barColor = (show.kos and info.kos and C.red) or (show.bounty and info.bounty > 0 and C.gold) or (info.outlaw and C.amber) or stateColor
 	row.bar:SetColorTexture(barColor[1], barColor[2], barColor[3], barColor[4] or 1)
 	-- Out of sight on the Nearby list: shaded until they're back or dropped
 	private.SetFade(row, (show.fade and info.nearby and not info.inSight and not info.active) and 0.4 or 1)

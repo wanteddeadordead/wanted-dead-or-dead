@@ -656,6 +656,7 @@ function Enemies:Describe(guid)
 		race = entry and entry.race or player.race,
 		guild = guild or nil,
 		zone = entry and entry.zone or player.zone,
+		mapId = entry and entry.mapId or player.mapId,
 		x = entry and entry.x or player.x,
 		y = entry and entry.y or player.y,
 		lastSeen = entry and (GetServerTime() - (GetTime() - entry.lastSeen)) or player.lastSeen or stats.last,
@@ -892,5 +893,7 @@ function Enemies:OnSharedSighting(data, sender)
 		seenBy = sender,
 	})
 	Store:AddSighting(data.g, data.z, data.x, data.y, data.m, sender)
-	Fire("shared", { guid = data.g, name = data.n, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s })
+	-- p: the sender is calling a posse against them (Posse); the caller is the sender, whom the game names
+	local posse = type(data.p) == "table" and { why = type(data.p.k) == "string" and data.p.k or "wanted" } or nil
+	Fire("shared", { guid = data.g, name = data.n, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s, posse = posse })
 end

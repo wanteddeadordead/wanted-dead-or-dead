@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-09-28
+
+A fix.
+
 - Fixed an error ("bad argument #3 to '?'") when the game announced a sync channel change without naming who
   made it.
+
 ## [1.2.12] - 2026-09-28
 
 Form a posse.

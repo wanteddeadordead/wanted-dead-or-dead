@@ -190,6 +190,9 @@ function EnemyMenu:Show(d)
 	else
 		tinsert(items, { text = "Kill on Sight", color = C.red, onClick = function() Enemies:SetKoS(d.guid, d.name, true) end })
 	end
+	if Wanted.Posse and Wanted.Posse:CanCall(d) then
+		tinsert(items, { text = "Form a posse", color = C.amber, onClick = function() Wanted.Posse:Call(d.guid) end })
+	end
 	if d.ignored then
 		tinsert(items, { text = "Stop ignoring", onClick = function() Enemies:SetIgnored(d.guid, d.name, false) end })
 	else

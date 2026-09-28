@@ -2537,4 +2537,55 @@ end)()
 	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
 	ns.Enemies:ClearNearby()
 end)()
+;(function()
+	-- Posses: a call against an outlaw goes out as an urgent sighting with the call attached; others in the zone
+	-- are asked to join; a joiner whispers the caller and is invited
+	invited = {}
+	C_PartyInfo = { InviteUnit = function(name) invited[#invited + 1] = name end }
+	local function Said(text)
+		for i = #printed, math.max(1, #printed - 3), -1 do if printed[i]:find(text, 1, true) then return true end end
+		return false
+	end
+	enemyUnits.nameplate1 = { guid = "Player-9-GANK", name = "Gank Lord", class = "ROGUE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+	enemyUnits.nameplate2 = { guid = "Player-9-PLAIN", name = "Plain Player", class = "MAGE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
+	check(not ns.Posse:Call("Player-9-PLAIN") and Said("is neither"), "no posse against a player who isn't an outlaw or bountied")
+	ClearSent()
+	clock = clock + 61
+	check(ns.Posse:Call("Player-9-GANK") and Said("Posse called against Gank Lord"), "a posse against an outlaw is called")
+	RunTimers()
+	local calls = {}
+	for _, m in ipairs(Sent("CHANNEL")) do
+		if m.tag == "S" then for _, sd in ipairs(m.tbl.s or {}) do if sd.p then calls[#calls + 1] = sd end end end
+	end
+	check(#calls == 1 and calls[1].g == "Player-9-GANK" and calls[1].p.c == ns.Store:GetOrigin() and calls[1].p.k == "Wanted", "the call is a sighting with the caller and why attached")
+	check(not ns.Posse:Call("Player-9-GANK") and Said("already out"), "one posse per target at a time")
+	-- Someone else's call reaches us: a dialog to join, in our zone only
+	local realIsDialogShown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return false end -- earlier tests left their dialogs up
+	lastDialog = nil
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { s = { { g = "Player-9-FAR", n = "Far Foe", z = "Elsewhere", x = 1, y = 2, p = { c = "Caller Guy", k = "Wanted" } } } }), "CHANNEL", "Caller Guy", nil, nil, nil, "WantedNetHorde")
+	check(lastDialog == nil, "a posse in another zone doesn't ask")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { s = { { g = "Player-9-NEAR", n = "Near Foe", z = GetZoneText(), x = 10, y = 20, p = { c = "Caller Guy", k = "Notorious" } } } }), "CHANNEL", "Caller Guy", nil, nil, nil, "WantedNetHorde")
+	check(lastDialog and lastDialog.title == "Posse: Near Foe" and lastDialog.text:find("Caller Guy is calling a posse against Near Foe (Notorious)", 1, true), "a posse in our zone asks us to join: "..tostring(lastDialog and lastDialog.text))
+	ClearSent()
+	chatSent = {}
+	lastDialog.onConfirm()
+	check(chatSent[#chatSent] and chatSent[#chatSent]:find("^WHISPER: Wanted: joining your posse against Near Foe"), "joining whispers the caller: "..tostring(chatSent[#chatSent]))
+	local joins = Sent("WHISPER", "Caller Guy")
+	check(#joins == 1 and joins[1].tag == "J" and joins[1].tbl.g == "Player-9-NEAR", "and tells their addon")
+	-- Someone joins ours: invited. A join for a posse we haven't called is ignored.
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("J", { g = "Player-9-GANK" }), "WHISPER", "Joiner Jane")
+	check(#invited == 1 and invited[1] == "Joiner Jane" and Said("Joiner Jane joins the posse against Gank Lord"), "a joiner is invited, got "..#invited)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("J", { g = "Player-9-NOPOSSE" }), "WHISPER", "Random Guy")
+	check(#invited == 1, "a join for no posse of ours invites nobody")
+	-- A death record carries the map id
+	enemyUnits.nameplate1, enemyUnits.nameplate2 = nil, nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
+	ns.Enemies:ClearNearby()
+	ns.Widgets.IsDialogShown = realIsDialogShown
+	lastDialog = nil
+end)()
 print("wanted smoke: all checks pass")

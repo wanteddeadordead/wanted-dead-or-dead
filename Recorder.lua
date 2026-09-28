@@ -135,7 +135,7 @@ end
 ---just "Durotar 47,40".
 ---@return string
 function Recorder:DescribePlace()
-	local zone, x, y = Recorder:GetPosition()
+	local zone, x, y, mapId = Recorder:GetPosition()
 	local coords = x and format(" %.0f,%.0f", x, y) or ""
 	local area = GetSubZoneText()
 	if area and area ~= "" and area ~= zone then
@@ -513,7 +513,7 @@ function private.RecordDeath(guid, name)
 		return
 	end
 	private.recentDeaths[guid] = now
-	local zone, x, y = Recorder:GetPosition()
+	local zone, x, y, mapId = Recorder:GetPosition()
 	local t = GetServerTime()
 	-- Content-addressed id shared by every witness of the same death
 	local deathId = Store:Hash(strjoin("|", guid, zone, floor(t / 10)))
@@ -528,6 +528,7 @@ function private.RecordDeath(guid, name)
 		victimName = name,
 		victimGuild = friend and friend.guild or Recorder:GetKnownGuild(guid),
 		zone = zone,
+		mapId = mapId, -- names the zone the same in every language (the site reads it)
 		x = x,
 		y = y,
 	}, "victim", guid)
@@ -574,7 +575,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 		return
 	end
 	Store:UpdatePlayer(targetGUID, { name = victim and victim.name or name, class = class, race = race })
-	local zone, x, y = Recorder:GetPosition()
+	local zone, x, y, mapId = Recorder:GetPosition()
 	local now = GetServerTime()
 	local deathId = Store:Hash(strjoin("|", targetGUID, zone, floor(now / 10)))
 	if attackerGUID == private.playerGUID or attackerGUID == UnitGUID("pet") then
@@ -590,6 +591,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			victimGuild = Recorder:GetKnownGuild(targetGUID),
 			deathId = deathId,
 			zone = zone,
+			mapId = mapId, -- names the zone the same in every language (the site reads it)
 			x = x,
 			y = y,
 		}, "victim", targetGUID)))
@@ -611,6 +613,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			killer = attackerGUID,
 			killerName = killerName,
 			zone = zone,
+			mapId = mapId, -- names the zone the same in every language (the site reads it)
 			x = x,
 			y = y,
 		}, "victim", targetGUID), "killer", attackerGUID)
@@ -661,7 +664,7 @@ function private.HandleHonorGain(text)
 		-- Already recorded from the kill event itself
 		return
 	end
-	local zone, x, y = Recorder:GetPosition()
+	local zone, x, y, mapId = Recorder:GetPosition()
 	Wanted:Log("Recorder: honor kill of %s (%s) in %s", victimName, tostring(guid), zone)
 	tinsert(private.ownKillTimes, GetTime())
 	if guid then
@@ -682,6 +685,7 @@ function private.HandleHonorGain(text)
 		victimGuild = Recorder:GetKnownGuild(guid),
 		deathId = Store:Hash(strjoin("|", guid or victimName, zone, floor(now / 10))),
 		zone = zone,
+		mapId = mapId, -- names the zone the same in every language (the site reads it)
 		x = x,
 		y = y,
 		honor = true,

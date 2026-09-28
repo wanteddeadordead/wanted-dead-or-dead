@@ -72,6 +72,8 @@ local TAG_HELLO, TAG_HAVE, TAG_NEED, TAG_LIVE, TAG_FILL = "H", "V", "N", "R", "F
 local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 -- Sent privately (addon whisper) to a player on an older version: update
 local TAG_UPDATE = "U"
+-- Sent privately to a posse's caller: I'm joining (Posse)
+local TAG_POSSE_JOIN = "J"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
@@ -902,6 +904,15 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
+	-- A join for a posse we called
+	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_POSSE_JOIN..":" then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" and Wanted.Posse then
+			Wanted.Posse:OnJoin(sender, tbl.g)
+		end
+		return
+	end
 	-- Whispers carry realm links (players on another realm name); anything else must be our channel
 	local viaLink = channel == "WHISPER"
 	if not viaLink then
@@ -1364,6 +1375,13 @@ end
 
 ---Every new record, whoever made it: forwarded to the realm links (not back to the one it came from), and one
 ---that came over a link is shared once on this realm's channel. Records are only new once, so nothing loops.
+---Tells a posse's caller we're joining (an addon whisper; they invite us).
+---@param caller string
+---@param guid string the target
+function Sync:SendPosseJoin(caller, guid)
+	return private.Send(TAG_POSSE_JOIN, { g = guid }, nil, caller)
+end
+
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For
 ---the desktop app's catch-up, which every player with the app takes in for themselves.
 ---@param func function

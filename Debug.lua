@@ -407,3 +407,72 @@ Wanted:RegisterCommand("channels", "Development builds: probe how the game repor
 		Wanted:Print("  no ListChannelByName")
 	end
 end)
+
+-- /wanted channelowner [unmod|unban <First Last>]: who owns and moderates the sync channel, which owner functions
+-- this client has, and (with a name) whether an addon may undo a moderator or a ban without a click.
+Wanted:RegisterCommand("channelowner", "Development builds: who owns and moderates the sync channel, and whether Wanted may undo a moderator or ban: /wanted channelowner [unmod|unban First Last]", function(args)
+	local info = Wanted.Sync:GetInfo()
+	local channel = info.channelName
+	local funcs = {}
+	for _, name in ipairs({ "ChannelModerate", "ChannelModerator", "ChannelUnmoderator", "ChannelBan", "ChannelUnban", "ChannelKick",
+		"SetChannelOwner", "SetChannelPassword", "ChannelToggleAnnouncements", "DisplayChannelOwner", "IsDisplayChannelOwner" }) do
+		tinsert(funcs, name..(type(_G[name]) == "function" and "" or " (missing)"))
+	end
+	Wanted:Print("Owner probe: %s (#%s). Functions: %s", tostring(channel), tostring(info.channelId), table.concat(funcs, ", "))
+	-- The member list: asking for it makes the game send the roster (see Sync.RequestMembers)
+	local index
+	for i = 1, (GetNumDisplayChannels and GetNumDisplayChannels() or 0) do
+		local name, header = GetChannelDisplayInfo(i)
+		if not header and type(name) == "string" and channel and strlower(name) == strlower(channel) then
+			index = i
+		end
+	end
+	if not index then
+		Wanted:Print("  the sync channel isn't in the game's channel list yet; try again in a moment")
+		return
+	end
+	local action, target = strmatch(args or "", "^(%a+)%s+(.+)$")
+	local watcher = CreateFrame("Frame")
+	watcher:RegisterEvent("ADDON_ACTION_BLOCKED")
+	watcher:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+	watcher:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE_USER")
+	watcher:SetScript("OnEvent", function(_, event, a1, a2, _, a4, a5)
+		Wanted:Print("  event %s: %s %s %s %s", event, tostring(a1), tostring(a2), tostring(a4), tostring(a5))
+	end)
+	C_Timer.After(8, function() watcher:UnregisterAllEvents() Wanted:Print("Owner probe: done.") end)
+	local function Roster(label)
+		local me = Wanted.Store:GetOrigin()
+		local total, owner, mods, mine = 0, nil, {}, nil
+		for n = 1, 500 do
+			local name, isOwner, isModerator = C_ChatInfo.GetChannelRosterInfo(index, n)
+			if not name then
+				break
+			end
+			total = total + 1
+			if isOwner then owner = name end
+			if isModerator then tinsert(mods, name) end
+			if name == me or name == strmatch(me, "^(%S+)") then
+				mine = (isOwner and "owner" or isModerator and "moderator" or "member")
+			end
+		end
+		Wanted:Print("  %s: %d listed; owner %s; moderators %s; you are %s", label, total, tostring(owner),
+			#mods > 0 and table.concat(mods, ", ") or "none", tostring(mine))
+	end
+	ListChannelByName(channel)
+	C_Timer.After(2, function()
+		Roster("before")
+		if not action then
+			return
+		end
+		local func = (action == "unmod" and ChannelUnmoderator) or (action == "unban" and ChannelUnban) or nil
+		if not func then
+			Wanted:Print("  unknown action %s: use unmod or unban", tostring(action))
+			return
+		end
+		local ok, err = pcall(func, channel, target)
+		Wanted:Print("  %s(%s, %s) called: %s", action == "unmod" and "ChannelUnmoderator" or "ChannelUnban", channel, target,
+			ok and "no error" or tostring(err))
+		C_Timer.After(1, function() ListChannelByName(channel) end)
+		C_Timer.After(3, function() Roster("after") end)
+	end)
+end)

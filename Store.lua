@@ -121,19 +121,24 @@ function private.PruneNames(names)
 	end
 end
 
----Notes a player's full name in the name book.
+---Notes a player's full name in the name book, with their class and sex when known (the app sends those to
+---wanteddeadordead.com too).
 ---@param guid string
 ---@param name string?
-function Store:NoteName(guid, name)
+---@param class string? the game's class file name, e.g. ROGUE
+---@param sex string? "male" or "female"
+function Store:NoteName(guid, name, class, sex)
 	if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then
 		return
 	end
 	local entry = Wanted.db.names[guid]
 	local now = GetServerTime()
-	if entry and entry.n == name and now - entry.t < NAME_RESTAMP_SECONDS then
+	class = type(class) == "string" and class ~= "" and not (issecretvalue and issecretvalue(class)) and class or (entry and entry.class)
+	sex = (sex == "male" or sex == "female") and sex or (entry and entry.sex)
+	if entry and entry.n == name and entry.class == class and entry.sex == sex and now - entry.t < NAME_RESTAMP_SECONDS then
 		return
 	end
-	Wanted.db.names[guid] = { n = name, t = now }
+	Wanted.db.names[guid] = { n = name, t = now, class = class, sex = sex }
 end
 
 function Store:OnEnable()

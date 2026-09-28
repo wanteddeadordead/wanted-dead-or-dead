@@ -37,6 +37,34 @@ function private.IsWellFormed(r)
 	return true
 end
 
+-- The most GUIDs looked up at once
+local MAX_UNNAMED = 300
+
+---The players the app's combat log named by first name only: the game's cache often knows them in full (and
+---their class and sex) for a while after they were near, so each is asked and the answers go in the name book,
+---which the app sends to wanteddeadordead.com.
+---@param unnamed table? a list of GUIDs
+function private.LookUpUnnamed(unnamed)
+	if type(unnamed) ~= "table" then
+		return
+	end
+	local asked, named = 0, 0
+	for i = 1, min(#unnamed, MAX_UNNAMED) do
+		local guid = unnamed[i]
+		if type(guid) == "string" and strfind(guid, "^Player%-%d+%-%w+$") then
+			asked = asked + 1
+			local _, classFile, _, _, sexNumber, name = GetPlayerInfoByGUID(guid)
+			if type(name) == "string" and not (issecretvalue and issecretvalue(name)) and strfind(name, "%S %S") then
+				Store:NoteName(guid, name, classFile, sexNumber == 2 and "male" or sexNumber == 3 and "female" or nil)
+				named = named + 1
+			end
+		end
+	end
+	if asked > 0 then
+		Wanted:Log("Catch-up: %d of %d players the combat log named by first name only are known to the game", named, asked)
+	end
+end
+
 ---Takes in this account's catch-up, if the app has written one newer than the last taken in.
 function Catchup:Import()
 	local all = WantedAppCatchup
@@ -46,6 +74,8 @@ function Catchup:Import()
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
 		return
 	end
+	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
+	private.LookUpUnnamed(entry.unnamed)
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

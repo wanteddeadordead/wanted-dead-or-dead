@@ -157,6 +157,9 @@ function private.OnEnemyEvent(event, entry)
 		elseif d.bounty > 0 then
 			Alerts:Warn("WANTED: "..d.name, Describe(d).."  -  "..Wanted.Bounties:FormatMoney(d.bounty).." bounty", C.gold)
 			Alerts:Sound("important")
+		elseif d.outlaw then
+			Alerts:Warn("OUTLAW: "..d.name, Describe(d)..format("  -  %s, %d kill%s this week", d.outlaw.rank, d.outlaw.kills, d.outlaw.kills == 1 and "" or "s"), C.amber)
+			Alerts:Sound("important")
 		elseif settings.alerts == "all" then
 			Alerts:Sound("enemy")
 		end
@@ -164,12 +167,13 @@ function private.OnEnemyEvent(event, entry)
 		Alerts:Warn(format("%s: %s", strupper(entry.stealthKind or "Stealth"), d.name), Describe(d).." is nearby and hidden", C.amber)
 		Alerts:Sound("stealth")
 	elseif event == "shared" and settings.sharedAlerts then
-		if d.kos or d.bounty > 0 then
+		if d.kos or d.bounty > 0 or d.outlaw then
 			local where = entry.zone or "?"
 			if entry.x then
 				where = format("%s (%.0f, %.0f)", where, entry.x, entry.y)
 			end
-			Alerts:Warn(format("%s seen by %s", d.name, entry.by), where..(d.bounty > 0 and ("  -  "..Wanted.Bounties:FormatMoney(d.bounty).." bounty") or "  -  Kill on Sight"), d.kos and C.red or C.gold)
+			local why = d.kos and "  -  Kill on Sight" or (d.bounty > 0 and ("  -  "..Wanted.Bounties:FormatMoney(d.bounty).." bounty")) or ("  -  Outlaw, "..d.outlaw.rank)
+			Alerts:Warn(format("%s seen by %s", d.name, entry.by), where..why, d.kos and C.red or (d.bounty > 0 and C.gold) or C.amber)
 			Alerts:Sound("important")
 		end
 	elseif event == "killedby" then

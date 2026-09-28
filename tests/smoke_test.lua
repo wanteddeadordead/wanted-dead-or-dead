@@ -2494,4 +2494,47 @@ end)()
 	check(ns.Sync:GetInfo().channelId == 6, "and ends the same way")
 	RunTimers()
 end)()
+;(function()
+	-- Outlaws: four kills within twenty minutes, each backed by another record, make a player Wanted in game
+	local now = clock
+	local function Kill(i, killerGuid, killerName, victim, t, backed)
+		local deathId = "od-"..killerGuid.."-"..i
+		ns.Store:InsertTest("kill", killerName, { killer = killerGuid, killerName = killerName, victim = victim, victimName = "Victim "..i, deathId = deathId, zone = "Durotar" }, t)
+		if backed then
+			ns.Store:InsertTest("death", "Some Witness", { victim = victim, victimName = "Victim "..i, deathId = deathId, zone = "Durotar" }, t + 1)
+		end
+	end
+	for i = 1, 4 do Kill(i, "Player-9-GANK", "Gank Lord", "Player-9-V"..i, now - 1200 + i * 200, true) end
+	local o = ns.Reputation:GetOutlaw("Player-9-GANK")
+	check(o and o.rank == "Wanted" and o.kills == 4, "four backed kills in twenty minutes: Wanted, got "..tostring(o and o.rank))
+	for i = 5, 8 do Kill(i, "Player-9-GANK", "Gank Lord", "Player-9-W"..i, now - 300 + i * 30, false) end
+	check(ns.Reputation:GetOutlaw("Player-9-GANK").kills == 4, "kills only the killer recorded don't count")
+	for i = 1, 4 do Kill(i, "Player-9-SLOW", "Slow Poke", "Player-9-S"..i, now - 3000 + i * 500, true) end
+	check(ns.Reputation:GetOutlaw("Player-9-SLOW") == nil, "four kills over twenty-five minutes: not an outlaw")
+	for i = 1, 5 do Kill(i, "Player-9-CAMP", "Camp Lord", "Player-9-SAME", now - 600 + i * 60, true) end
+	check(ns.Reputation:GetOutlaw("Player-9-CAMP") == nil, "camping one player counts as one kill")
+	-- The victim's own record naming the killer counts as a backed kill too
+	for i = 1, 4 do ns.Store:InsertTest("death", "Poor Victim "..i, { victim = "Player-9-PV"..i, victimName = "Poor Victim "..i, killer = "Player-9-RECAP", killerName = "Recap Killer", deathId = "rc"..i, zone = "Durotar" }, now - 900 + i * 100) end
+	check(ns.Reputation:GetOutlaw("Player-9-RECAP") ~= nil, "kills named by the victims' own records count")
+	-- Nearby, the alert and Call for help say so
+	local warnings = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(self, title, ...) warnings[#warnings + 1] = title return realWarn(self, title, ...) end
+	local exposedBefore = ns.db.settings.detect.onlyWhenExposed
+	ns.db.settings.detect.onlyWhenExposed = false
+	enemyUnits.nameplate1 = { guid = "Player-9-GANK", name = "Gank Lord", class = "ROGUE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+	local d = ns.Enemies:Describe("Player-9-GANK")
+	check(d.outlaw and d.outlaw.rank == "Wanted", "an outlaw's description carries the rank")
+	if ns.Enemies:ShouldAlert() then
+		check(warnings[#warnings] == "OUTLAW: Gank Lord", "a new outlaw nearby is announced, got "..tostring(warnings[#warnings]))
+	end
+	local text = ns.EnemyMenu:BuildHelpText()
+	check(text:find("Gank Lord", 1, true) and text:find("OUTLAW", 1, true), "Call for help names the outlaw: "..text)
+	ns.Alerts.Warn = realWarn
+	ns.db.settings.detect.onlyWhenExposed = exposedBefore
+	enemyUnits.nameplate1 = nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+	ns.Enemies:ClearNearby()
+end)()
 print("wanted smoke: all checks pass")

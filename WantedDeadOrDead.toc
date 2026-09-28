@@ -39,6 +39,7 @@ Theme.lua
 Widgets.lua
 Model.lua
 Alerts.lua
+Posse.lua
 UI.lua
 Rows.lua
 EnemyMenu.lua

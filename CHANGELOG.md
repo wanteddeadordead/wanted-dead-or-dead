@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-09-28
+
+Outlaws.
+
 - Outlaws: a player who makes four kills within twenty minutes, each backed by someone else's record, is Wanted
   with no gold behind it, and stays so until a week passes without a kill. Ranks by the week's kills: Wanted,
   Notorious, Menace, Public Enemy, Dead or... Dead. The Nearby window shows the rank, an OUTLAW alert warns
   when one turns up, and Call for help names them. The same rule runs on wanteddeadordead.com.
+
 ## [1.2.10] - 2026-09-27
 
 The sync channel looks after itself.

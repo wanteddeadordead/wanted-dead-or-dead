@@ -1522,9 +1522,12 @@ ClearSent()
 Fire("CHANNEL_PASSWORD_REQUEST", netName)
 Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", netName)
 check(ns.Sync:GetInfo().channelId == 6, "the game's own rejoin failing after a password request isn't a lockout")
--- A second wrong password is a real one: locked out, and a player on our realm answering our whisper is heard
+-- A login where the game asked but its failure never came: the allowance runs out, and a later wrong password
+-- is a real one (locked out; a player on our realm answering our whisper is heard)
+Fire("CHANNEL_PASSWORD_REQUEST", netName)
+RunTimers()
 Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", netName)
-check(not ns.Sync:GetInfo().channelId, "a wrong password with no request pending locks the client out")
+check(not ns.Sync:GetInfo().channelId, "a wrong password after the allowance has run out locks the client out")
 ClearSent()
 ns.Sync:Greet("Near Friend", nil) -- as the lockout does for the players last heard on the channel
 check(#Sent("WHISPER", "Near Friend") == 1, "locked out, a player on our realm is greeted by whisper")
@@ -1532,6 +1535,7 @@ Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { ["Near Origin"] = 1 }, r = "
 check(ns.Sync:GetLinks()["Near Friend"], "and their answer from our own realm makes the link")
 check(not ns.db.farPeers["Near Friend"], "but a player on our realm isn't remembered as a far one")
 ns.db.farPeers["Old Link"] = { realm = "?", seen = clock }
+tickers[#tickers]() -- the lockout's retry, every few minutes
 RunTimers()
 check(ns.Sync:GetInfo().channelId == 6, "the channel is joined again")
 check(ns.Sync:GetInfo().members == nil and not ns.db.channel, "no member count until the game's channel list gives one")
@@ -1542,6 +1546,20 @@ displayChannels = 0
 Fire("CHANNEL_UI_UPDATE")
 RunTimers()
 check(selectedDisplayChannel == nil, "an empty channel list is not asked from")
+-- More triggers while a retry is waiting don't start chains of their own
+local function FirstAttempts()
+	local n = 0
+	for _, line in ipairs(ns:GetLogLines(400)) do
+		if line:find("channel list yet (0 channels; attempt 1)", 1, true) then n = n + 1 end
+	end
+	return n
+end
+local chains = FirstAttempts()
+Fire("CHANNEL_UI_UPDATE")
+Fire("CHANNEL_UI_UPDATE")
+Fire("CHANNEL_UI_UPDATE")
+RunTimers()
+check(FirstAttempts() == chains + 1, "triggers while a member request is retrying start one chain, not one each")
 displayChannels = 2
 Fire("CHANNEL_UI_UPDATE")
 RunTimers()

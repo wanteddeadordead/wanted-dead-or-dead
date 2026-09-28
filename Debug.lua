@@ -440,23 +440,37 @@ Wanted:RegisterCommand("channelowner", "Development builds: who owns and moderat
 		Wanted:Print("  event %s: %s %s %s %s", event, tostring(a1), tostring(a2), tostring(a4), tostring(a5))
 	end)
 	C_Timer.After(8, function() watcher:UnregisterAllEvents() Wanted:Print("Owner probe: done.") end)
+	-- The member list the game sends back: names comma-separated, the owner marked * and moderators @
+	local lists = CreateFrame("Frame")
+	lists:RegisterEvent("CHAT_MSG_CHANNEL_LIST")
+	local lastList
+	lists:SetScript("OnEvent", function(_, _, text, _, _, _, _, _, _, _, baseName)
+		if type(baseName) == "string" and channel and strlower(baseName) == strlower(channel) then
+			lastList = text
+		end
+	end)
+	C_Timer.After(8, function() lists:UnregisterAllEvents() end)
 	local function Roster(label)
+		if type(lastList) ~= "string" then
+			Wanted:Print("  %s: the game sent no member list", label)
+			return
+		end
 		local me = Wanted.Store:GetOrigin()
-		local total, owner, mods, mine = 0, nil, {}, nil
-		for n = 1, 500 do
-			local name, isOwner, isModerator = C_ChatInfo.GetChannelRosterInfo(index, n)
-			if not name then
-				break
-			end
-			total = total + 1
-			if isOwner then owner = name end
-			if isModerator then tinsert(mods, name) end
-			if name == me or name == strmatch(me, "^(%S+)") then
-				mine = (isOwner and "owner" or isModerator and "moderator" or "member")
+		local total, owner, mods, mine = 0, nil, {}, "not listed"
+		for entry in string.gmatch(lastList, "[^,]+") do
+			entry = strtrim(entry)
+			local marks, name = strmatch(entry, "^([%*@]*)(.+)$")
+			if name and name ~= "" then
+				total = total + 1
+				if strfind(marks, "%*") then owner = name end
+				if strfind(marks, "@") then tinsert(mods, name) end
+				if name == me or name == strmatch(me, "^(%S+)") then
+					mine = strfind(marks, "%*") and "owner" or strfind(marks, "@") and "moderator" or "member"
+				end
 			end
 		end
-		Wanted:Print("  %s: %d listed; owner %s; moderators %s; you are %s", label, total, tostring(owner),
-			#mods > 0 and table.concat(mods, ", ") or "none", tostring(mine))
+		Wanted:Print("  %s: %d listed; owner %s; moderators %s; you are %s. Raw: %s", label, total, tostring(owner),
+			#mods > 0 and table.concat(mods, ", ") or "none", mine, strsub(lastList, 1, 200))
 	end
 	ListChannelByName(channel)
 	C_Timer.After(2, function()
@@ -472,7 +486,7 @@ Wanted:RegisterCommand("channelowner", "Development builds: who owns and moderat
 		local ok, err = pcall(func, channel, target)
 		Wanted:Print("  %s(%s, %s) called: %s", action == "unmod" and "ChannelUnmoderator" or "ChannelUnban", channel, target,
 			ok and "no error" or tostring(err))
-		C_Timer.After(1, function() ListChannelByName(channel) end)
+		C_Timer.After(1, function() lastList = nil ListChannelByName(channel) end)
 		C_Timer.After(3, function() Roster("after") end)
 	end)
 end)

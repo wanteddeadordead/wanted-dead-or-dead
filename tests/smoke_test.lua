@@ -2660,6 +2660,40 @@ end)()
 	db.chains.Pruner, db.chains["Alt Two"], db.characters["Player-1-ALT"] = nil, nil, nil
 end)()
 ;(function()
+	-- The app's catch-up can bring records already too old to keep: their chain moves on over them and they aren't
+	-- stored (only to be pruned at the next login), so the app doesn't send them again. What's kept is stored.
+	local db = ns.db
+	local old, fresh = clock - 4 * 86400, clock - 60
+	local function Rec(seq, t, kind, data)
+		return { kind = kind or "death", id = "Catchup Far:"..seq, origin = "Catchup Far", seq = seq, prev = "h"..(seq - 1),
+			hash = "h"..seq, t = t, data = data or { victim = "Player-9-FARV"..seq } }
+	end
+	local batch = { Rec(1, old), Rec(2, old), Rec(3, old, "death", { victim = UnitGUID("player") }), Rec(4, old),
+		Rec(5, fresh), Rec(6, old, "bounty", { target = "Player-9-FARB", targetName = "Far Bounty", amount = 1000 }),
+		Rec(7, old + 10, "death", { victim = "Player-9-CLAIMV" }) } -- witnesses a claim
+	local claim = ns.Store:InsertTest("claim", "Some Hunter", { bounty = "b-far", victim = "Player-9-CLAIMV", killT = old })
+	local savedT = db.catchupT
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1000000, records = batch } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(ns.Store:GetChainSeq("Catchup Far") == 7, "the chain moved on over the old records, got "..ns.Store:GetChainSeq("Catchup Far"))
+	for _, seq in ipairs({ 1, 2, 4 }) do check(not db.records["Catchup Far:"..seq], "an old death of others isn't stored: "..seq) end
+	for _, seq in ipairs({ 3, 5, 6, 7 }) do check(db.records["Catchup Far:"..seq], "own, fresh, bounty and claim witness records are stored: "..seq) end
+	check(ns.Store:GetFirstSeen("Catchup Far") == old, "the first record's time is kept with its chain")
+	-- The same batch again (the app asks from the chain, so it wouldn't send it; a peer's fill might): nothing new
+	local before = 0
+	for _ in pairs(db.records) do before = before + 1 end
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1000001, records = batch } }
+	ns.Catchup:Import()
+	RunFrames()
+	local after = 0
+	for _ in pairs(db.records) do after = after + 1 end
+	check(after == before and not db.records["Catchup Far:1"], "a second catch-up of the same records stores nothing")
+	for id, r in pairs(db.records) do if r.origin == "Catchup Far" then db.records[id] = nil end end
+	db.records[claim.id] = nil
+	db.chains["Catchup Far"], db.catchupT = nil, savedT
+end)()
+;(function()
 	-- A fill answering for records pruned here says where our copy starts, and a receiver moves its chain on
 	local function Rec(seq, prev, hash)
 		return { kind = "death", id = "Old Timer:"..seq, origin = "Old Timer", seq = seq, prev = prev, t = clock - 60, data = { victim = "Player-9-V" }, hash = hash }

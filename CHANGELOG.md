@@ -10,7 +10,8 @@
 - Saved data stays small: other players' kills, deaths and assists are kept 3 days (was 30 days), including the ones
   your own characters only saw; wanteddeadordead.com keeps them all. Your characters' own kills, deaths and assists
   stay, and so does everything bounties, claims and payments rest on. Players not seen for a month go too, unless you fought them, marked them or they have a bounty.
-- Pruned records are no longer asked for again or taken back in when another player sends them.
+- Pruned records are no longer asked for again or taken back in when another player sends them, and the app's
+  catch-up no longer brings in records only to have them pruned at the next login.
 
 ## [1.2.20] - 2026-09-28
 

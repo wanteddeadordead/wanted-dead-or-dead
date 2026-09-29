@@ -223,6 +223,24 @@ function private.IsOwnRelated(record)
 		or (record.kind ~= "death" and own.origins[record.origin]) or false
 end
 
+---Whether a record arriving now would be pruned at once: another player's kill, death or assist older than
+---KEEP_SECONDS that no claim needs.
+function private.IsPrunable(record)
+	if not PRUNED_KINDS[record.kind] or type(record.t) ~= "number" or record.t >= GetServerTime() - KEEP_SECONDS
+		or private.IsOwnRelated(record) then
+		return false
+	end
+	local data = type(record.data) == "table" and record.data or {}
+	for claim in Store:Iterator("claim") do
+		local c = claim.data
+		if c.kill == record.id or (record.kind == "death" and c.victim == data.victim and type(c.killT) == "number"
+			and abs(record.t - c.killT) <= Wanted.Bounties.WITNESS_WINDOW) then
+			return false
+		end
+	end
+	return true
+end
+
 ---Whether a death witnesses a claim's kill: the same victim within the witness window (Bounties:GetWitnesses).
 function private.Witnesses(record, claimTimes)
 	local times = record.kind == "death" and type(record.data) == "table" and claimTimes[record.data.victim]
@@ -587,11 +605,16 @@ function private.Insert(record, live)
 		chain.seq = record.seq
 		chain.lastHash = record.hash
 		private.CatchUpChain(record.origin, chain)
+		if private.IsPrunable(record) then
+			-- Already too old to keep (the app's catch-up, or a fill, of old records): the chain moves on over it, so
+			-- it's neither asked for nor sent again, but it isn't stored only to be pruned at the next login
+			return false, "pruned"
+		end
 	elseif record.seq <= chain.seq then
 		-- Older than what we hold for this origin, and not held. One pruned here (or skipped as pruned everywhere)
 		-- comes back whenever a peer fills someone else's gap on the channel: it isn't taken in again.
 		local old = type(record.t) == "number" and record.t < GetServerTime() - KEEP_SECONDS
-		if old and PRUNED_KINDS[record.kind] and not private.IsOwnRelated(record) then
+		if private.IsPrunable(record) then
 			return false, "pruned"
 		elseif old then
 			Wanted:Log("Store: record %s is from before %s's chain was pruned or skipped; kept", tostring(record.id), tostring(record.origin))

@@ -52,7 +52,11 @@ desktop app hasn't read the latest save (`catchupT` older than `savedAt`), every
 up to 30 days. It runs again every 24 hours of a session. A chain says how far this client has taken an origin's
 records, pruned or not, so a pruned record is never asked for again, and one a peer sends again (answering someone
 else's gap on the channel) is not taken back in. A pruned record held past a gap in its chain moves the chain past
-it (from 1.2.21): what the gap holds is older still. The website keeps the full archive (the app
+it (from 1.2.21): what the gap holds is older still. A record arriving already too old to keep (the app's catch-up or
+a fill of old records) that is next in its chain moves the chain on and isn't stored (from 1.2.21), so it isn't
+imported only to be pruned at the next login, and the app doesn't send it again. Chains also keep `first` (from
+1.2.21), the time of the origin's first record (seq 1), since that record may be pruned: a claim's witness counts as
+new to the network when their first record came less than a day before the kill. An optional new field: no migration. The website keeps the full archive (the app
 uploads records as they appear; one pruned before the app ever ran is lost to it). A fill (`F`) answering a request
 for records the sender pruned carries `p = { [origin] = firstSeqHeld }`; the receiver's chain for that origin moves
 on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`, or from an unknown predecessor

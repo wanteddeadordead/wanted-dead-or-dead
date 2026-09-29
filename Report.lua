@@ -151,7 +151,7 @@ function Report:MaybeWelcome()
 	db.welcomed = Wanted.VERSION
 	C_Timer.After(0.2, function()
 		W:Dialog({
-			title = "Welcome, hunter",
+			title = "Welcome, bounty hunter",
 			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) puts together the details and shows where to send them.",
 			confirmLabel = "Let's hunt",
 		})

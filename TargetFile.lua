@@ -218,9 +218,9 @@ function private.FillSummary(frame, entries, deaths, stats)
 	end
 	if #deaths > 0 then
 		local last = deaths[1]
-		tinsert(record, format("Died %d time%s in the records, last %s in %s%s.", #deaths, #deaths == 1 and "" or "s", private.Ago(last.t), last.zone or "?", last.killer and (", killed by "..last.killer) or ""))
+		tinsert(record, format("Died %d time%s in the last week's records (wanteddeadordead.com has all), last %s in %s%s.", #deaths, #deaths == 1 and "" or "s", private.Ago(last.t), last.zone or "?", last.killer and (", killed by "..last.killer) or ""))
 	else
-		tinsert(record, "No deaths in the records yet.")
+		tinsert(record, "No deaths in the last week's records.")
 	end
 	frame.record:SetText(table.concat(record, "\n"))
 	frame.listLabel:SetText(strupper(format("Every sighting (%d)", #entries)))

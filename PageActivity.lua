@@ -64,7 +64,7 @@ end
 
 UI:RegisterPage("activity", {
 	title = "Activity",
-	subtitle = "Kills, deaths and sightings the addon has witnessed. Click an enemy to put a bounty on them.",
+	subtitle = "Kills, deaths and sightings (others' kept a week; wanteddeadordead.com has all). Click an enemy to post a bounty.",
 	order = 5,
 	build = function(container, width, height)
 		local filter = W:Segmented(container, {

@@ -108,7 +108,7 @@ end
 
 UI:RegisterPage("hunters", {
 	title = "Leaderboards",
-	subtitle = "Ranked from what actually happened: witnessed kills, confirmed claims, bounties paid, and guild kills and deaths.",
+	subtitle = "Ranked from what happened: witnessed kills, confirmed claims, bounties paid, guild kills and deaths of the last week.",
 	order = 4,
 	build = function(container, width, height)
 		local view = W:Segmented(container, {

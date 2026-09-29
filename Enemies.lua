@@ -749,6 +749,16 @@ function Enemies:LastEnemySeen()
 	return last
 end
 
+---How many enemies are on the Nearby list: #GetNearby() without describing each of them.
+---@return number
+function Enemies:CountNearby()
+	local count = 0
+	for _ in pairs(private.nearby) do
+		count = count + 1
+	end
+	return count
+end
+
 function Enemies:GetNearby()
 	local list = {}
 	for guid in pairs(private.nearby) do

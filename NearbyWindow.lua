@@ -92,7 +92,7 @@ function Nearby:OnEnable()
 		end
 		private.MaybeQuietTip()
 		-- The emote tip waits its turn behind the quiet mode one
-		if private.frame and private.frame:IsShown() and not private.quietTipPending and #Enemies:GetNearby() == 0
+		if private.frame and private.frame:IsShown() and not private.quietTipPending and Enemies:CountNearby() == 0
 			and (private.Settings().tab or "nearby") == "nearby" then
 			Wanted.Emotes:MaybeTip()
 		end
@@ -131,7 +131,7 @@ end
 ---can't cover the screen in a fight), offers quiet mode, once.
 function private.MaybeQuietTip()
 	local settings = private.Settings()
-	if not private.quietTipPending or InCombatLockdown() or #Enemies:GetNearby() > 0 then
+	if not private.quietTipPending or InCombatLockdown() or Enemies:CountNearby() > 0 then
 		return
 	end
 	private.quietTipPending = nil
@@ -193,7 +193,7 @@ end
 function private.OnExposureChanged()
 	private.CheckInstance()
 	local exposed = Enemies:ShouldAlert()
-	if exposed and not private.wasExposed and #Enemies:GetNearby() > 0 then
+	if exposed and not private.wasExposed and Enemies:CountNearby() > 0 then
 		private.AutoShow()
 	end
 	private.wasExposed = exposed
@@ -207,7 +207,7 @@ end
 function private.CheckAutoHide()
 	local settings = private.Settings()
 	local after = settings.autoHide or 0
-	if after <= 0 or (settings.tab or "nearby") ~= "nearby" or #Enemies:GetNearby() > 0 then
+	if after <= 0 or (settings.tab or "nearby") ~= "nearby" or Enemies:CountNearby() > 0 then
 		private.emptySince = nil
 		return
 	end

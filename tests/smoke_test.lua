@@ -1400,6 +1400,7 @@ check(posterFrame.name:GetText() == "TEST PLAYER" and posterFrame.rewardNote:Get
 local shotsBefore = screenshots
 do
 local upload = posterButtons["Upload your wanted poster"]
+posterFrame.waitingToSend = false -- an earlier test took a picture
 -- Without the app there's nothing to upload it: say so, take nothing
 local savedAppInfo = WantedAppInfo
 WantedAppInfo = nil
@@ -1420,7 +1421,15 @@ check(cvars.screenshotFormat == "jpeg", "the player's screenshot format is put b
 local shot = ns.db.posterShots[#ns.db.posterShots]
 check(shot and shot.who == ns.Store:GetOrigin() and shot.t == clock and math.abs(shot.l - 0.25) < 1e-9 and math.abs(shot.r - 0.75) < 1e-9
 	and math.abs(shot.top - 1/6) < 1e-9 and math.abs(shot.b - 5/6) < 1e-9, "the shot is saved for the app with where the model was")
-for _ = 1, 6 do upload:GetScript("OnClick")(upload) RunTimers() end
+-- The same button now sends it: the app only sees the picture once the game saves, on a /reload
+check(upload:GetText() == "Send it now (/reload)", "after the picture the button offers the reload: "..tostring(upload:GetText()))
+local reloads = 0
+local realReload = ReloadUI
+ReloadUI = function() reloads = reloads + 1 end
+upload:GetScript("OnClick")(upload)
+check(reloads == 1 and screenshots == shotsBefore + 1, "clicking it reloads, and takes no second picture")
+ReloadUI = realReload
+for _ = 1, 6 do posterFrame.waitingToSend = false upload:GetScript("OnClick")(upload) RunTimers() end
 check(#ns.db.posterShots == 5, "only the newest few shots are kept")
 WantedAppInfo = savedAppInfo
 end

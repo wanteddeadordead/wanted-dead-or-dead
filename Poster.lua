@@ -197,9 +197,15 @@ function private.GetFrame()
 	buttons:SetSize(470, 30)
 	buttons:SetPoint("TOP", frame.credit, "BOTTOM", 0, -12)
 	frame.buttons = buttons
+	-- Once a picture is taken, the same button sends it: the app only sees it after the game saves (a /reload)
 	local shoot = W:Button(buttons, "Upload your wanted poster", "primary", 200, 28, function()
-		private.TakeScreenshot()
+		if frame.waitingToSend then
+			ReloadUI()
+		else
+			private.TakeScreenshot()
+		end
 	end)
+	frame.shoot = shoot
 	shoot:SetPoint("LEFT")
 	W:AttachTooltip(shoot, "Upload your wanted poster", "Photographs your character for your poster on wanteddeadordead.com. The Wanted app uploads it after your next /reload or logout.")
 	frame.amountButton = W:Button(buttons, "Set amount", "secondary", 130, 28, function()
@@ -390,7 +396,11 @@ function private.OnScreenshot(succeeded)
 	while #shots > MAX_POSTER_SHOTS do
 		tremove(shots, 1)
 	end
-	Wanted:Print("Got it. Your poster goes up on wanteddeadordead.com after your next /reload or logout, once the Wanted app has sent it.")
+	if frame then
+		frame.waitingToSend = true
+		frame.shoot:SetText("Send it now (/reload)")
+	end
+	Wanted:Print("Picture taken. Type /reload now to send it (or it goes when you log out). The Wanted app puts it on wanteddeadordead.com.")
 end
 
 Wanted:RegisterCommand("poster", "Your wanted poster, with the price on your head, to screenshot and share: /wanted poster", function()

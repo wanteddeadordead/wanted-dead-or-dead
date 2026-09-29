@@ -2562,11 +2562,11 @@ end)()
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
 ;(function()
-	-- Pruning: other players' kills, deaths and assists older than a week go at login. What's by or about this
-	-- account's characters stays, and so do bounties, claims, what a claim rests on, links, records past the end of
-	-- their chain and what the app may not have uploaded
+	-- Pruning: other players' kills, deaths and assists older than 3 days go at login, deaths this account's
+	-- characters only witnessed too. Their own kills, deaths and assists stay, and so do bounties, claims, what a
+	-- claim rests on, links and what the app may not have uploaded
 	local db = ns.db
-	local old, fresh = clock - 8 * 86400, clock - 6 * 86400
+	local old, fresh = clock - 4 * 86400, clock - 2 * 86400
 	local seq = 0
 	local function Put(kind, t, data, origin)
 		seq = seq + 1
@@ -2577,7 +2577,8 @@ end)()
 		return id
 	end
 	local gone = { Put("kill", old), Put("death", old, { victim = "Player-9-V" }), Put("assist", old),
-		Put("death", old - 200, { victim = "Player-9-T" }) } -- the claim's victim, but minutes from the kill
+		Put("death", old - 200, { victim = "Player-9-T" }), -- the claim's victim, but minutes from the kill
+		Put("death", old, { victim = "Player-9-V" }, ns.Store:GetOrigin()) } -- a death this character only witnessed
 	local bounty = Put("bounty", old, { amount = 1, target = "Player-9-T" })
 	local claimedKill = Put("kill", old, { victim = "Player-9-T" })
 	local kept = { Put("kill", fresh), Put("death", fresh), bounty, claimedKill,
@@ -2586,6 +2587,7 @@ end)()
 		Put("death", old, { victim = UnitGUID("player") }), -- this character's death
 		Put("death", old, { victim = "Player-9-V", killer = UnitGUID("player") }), -- a death this character caused
 		Put("kill", old, {}, ns.Store:GetOrigin()), -- this character's own
+		Put("death", old, { victim = UnitGUID("player") }, ns.Store:GetOrigin()), -- this character's own death, as it recorded it
 		Put("link", old, { code = "OLDCODE1", guid = "Player-9-L" }) }
 	-- Another character of this account, known by its link record with the account's app code
 	WantedAppLinks = { [db.accountMark] = "ACCT7777" }

@@ -44,8 +44,9 @@ entry newer than `catchupT` in the background (as gap fills, never live, not for
 notices through the Bridge. No layout change: both fields are new and optional.
 
 Pruning (from 1.2.9): at login, `Store:Prune` drops `kill`, `death` and `assist` records older than
-`Store.KEEP_SECONDS`: 30 days until 1.2.20, a week from 1.2.21. Every other kind is kept. So are, whatever their age
-(from 1.2.21): records made by one of the account's characters or naming one as `victim` or `killer`; a kill some
+`Store.KEEP_SECONDS`: 30 days until 1.2.20, 3 days from 1.2.21. Every other kind is kept. So are, whatever their age
+(from 1.2.21): records naming one of the account's characters as `victim` or `killer` (the assister, for an
+`assist`), and kills and assists one of them recorded; a death they only witnessed is pruned like anyone's; a kill some
 `claim` names in `data.kill`; a death of a claim's victim within the witness window of its `killT`; and, while the
 desktop app hasn't read the latest save (`catchupT` older than `savedAt`), everything since its last catch-up, for
 up to 30 days. It runs again every 24 hours of a session. A chain says how far this client has taken an origin's
@@ -62,8 +63,8 @@ end); a receiver whose chain has reached `held` moves on to `next - 1` the same 
 asking for interior holes, as before.
 
 `WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
-login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps what
-they made and what names them. `WantedDB.savedAt` (from 1.2.21) is the server time of the last logout or `/reload`,
+login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the
+kills, deaths and assists that name them. `WantedDB.savedAt` (from 1.2.21) is the server time of the last logout or `/reload`,
 when the game wrote the saved file. Both are new keys with defaults: no migration. The launch reset drops them.
 
 At the same pass, `players` entries not seen for 30 days are dropped, then the least recently seen past 5000,

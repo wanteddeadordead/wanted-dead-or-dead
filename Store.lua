@@ -13,10 +13,10 @@ local private = {
 }
 local MAX_SIGHTINGS = 500
 Store.MAX_SIGHTINGS = MAX_SIGHTINGS
--- Other players' kills, deaths and assists are kept this long (a week, decided 2026-09-29; 30 days before); the
+-- Other players' kills, deaths and assists are kept this long (3 days, decided 2026-09-29; 30 days before); the
 -- website keeps the archive. Every other kind (bounties and what happens to them, links, notices) is kept, and so
--- is anything by or about this account's characters and what a claim rests on (Store:Prune).
-local KEEP_SECONDS = 7 * 24 * 60 * 60
+-- are the kills, deaths and assists of this account's characters and what a claim rests on (Store:Prune).
+local KEEP_SECONDS = 3 * 24 * 60 * 60
 Store.KEEP_SECONDS = KEEP_SECONDS
 local PRUNED_KINDS = { kill = true, death = true, assist = true }
 -- While the desktop app hasn't read the latest save, records since its last catch-up may not be uploaded yet:
@@ -51,7 +51,8 @@ function Store:OnLoad()
 end
 
 ---Drops other players' kills, deaths and assists older than KEEP_SECONDS. Returns how many. Kept whatever their
----age: records by or about this account's characters, a kill a claim rests on and the deaths that witness it,
+---age: records where one of this account's characters is the killer, victim or assister (not every death their
+---client witnessed: those were most of the records), a kill a claim rests on and the deaths that witness it,
 ---and records the desktop app may not have uploaded yet. Saved data grew without bound (8 MB in four days for one
 ---player) and every record was walked on load and on every sync; the website holds everything ever uploaded.
 ---A chain says how far this client has taken an origin's records, pruned or not, so pruned records are never
@@ -110,7 +111,7 @@ function Store:Prune(now)
 	if pruned > 0 then
 		private.indexFor = nil -- built again on the next walk
 	end
-	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (yours, claims', or not yet uploaded); %d records held",
+	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (your characters', claims', or not yet uploaded); %d records held",
 		pruned, KEEP_SECONDS / 86400, kept, left)
 	private.PrunePlayers(now, targets)
 	return pruned
@@ -212,11 +213,13 @@ function private.BuildOwn()
 	return own
 end
 
----Whether a record was made by one of this account's characters or names one as its victim or killer.
+---Whether one of this account's characters is a record's killer, victim or assister. A death one of them only
+---witnessed isn't theirs; a kill or assist they recorded is (older ones may not name the killer).
 function private.IsOwnRelated(record)
 	local own = private.own or private.BuildOwn()
 	local data = record.data
-	return own.origins[record.origin] or (type(data) == "table" and (own.guids[data.victim] or own.guids[data.killer])) or false
+	return (type(data) == "table" and (own.guids[data.victim] or own.guids[data.killer]))
+		or (record.kind ~= "death" and own.origins[record.origin]) or false
 end
 
 ---Whether a death witnesses a claim's kill: the same victim within the witness window (Bounties:GetWitnesses).

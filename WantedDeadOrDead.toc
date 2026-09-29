@@ -4,7 +4,7 @@
 ## AddonCompartmentFunc: WantedDeadOrDead_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: WantedDeadOrDead_OnCompartmentEnter
 ## AddonCompartmentFuncOnLeave: WantedDeadOrDead_OnCompartmentLeave
-## Notes: World PvP bounties, enemy awareness and reputation, shared player to player.
+## Notes: The world PvP war on WoW Forever: bounties, enemy awareness and battle reports, shared player to player.
 ## Author: dazedpro
 ## Version: @project-version@
 ## SavedVariables: WantedDB

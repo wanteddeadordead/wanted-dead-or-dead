@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.20] - 2026-09-28
+
+The wax seal.
+
 - No more "You were made a moderator of the sync channel" in chat: the channel passes to whoever has been in it
   longest, so moderator and owner changes happen all the time. Kicks, bans, moderation and a changed password
   are still said.

@@ -718,10 +718,22 @@ function private.NoteSplit(t0, t1, rows, relaid)
 end
 
 ---Places the emote favourites and "..." in rows above Call for help (Nearby tab, emotes on), or hides them.
----Out of combat only. Returns the height they take.
+---Out of combat only. Returns the height they take. Only laid out again when something changed: doing it at every
+---refresh made new texts and tooltips for every emote, several times a second in a fight.
 function private.LayoutEmotes(show, bottom)
+	show = show and Wanted.Emotes:IsEnabled()
+	local changes, state = Wanted.Emotes:GetChanges()
+	local last = private.emoteLayout
+	if last and last.show == show and last.bottom == bottom and last.changes == changes and last.state == state then
+		return last.height
+	end
+	local height = private.PlaceEmotes(show, bottom)
+	private.emoteLayout = { show = show, bottom = bottom, changes = changes, state = state, height = height }
+	return height
+end
+
+function private.PlaceEmotes(show, bottom)
 	local Emotes = Wanted.Emotes
-	show = show and Emotes:IsEnabled()
 	local favourites = show and Emotes:GetFavourites() or {}
 	for i, button in ipairs(private.emoteButtons) do
 		Emotes:SetButtonEmote(button, favourites[i])

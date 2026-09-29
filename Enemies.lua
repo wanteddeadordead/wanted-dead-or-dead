@@ -75,6 +75,44 @@ function Enemies:OnLoad()
 	db.kos = db.kos or {}
 	db.ignore = db.ignore or {}
 	db.enemyStats = db.enemyStats or {}
+	private.PruneStats(db.enemyStats, db.kos)
+end
+
+-- Enemies only ever seen (no fight either way) are dropped from the statistics after this long unseen, then the
+-- least recently seen past STATS_MAX. Wins and losses (nemesis and rivals) and Kill on Sight are kept.
+Enemies.STATS_MAX = 5000
+local STATS_DAYS = 30
+
+function private.PruneStats(allStats, kos)
+	local cutoff = GetServerTime() - STATS_DAYS * 86400
+	local function SeenOnly(guid, stats)
+		return type(stats) ~= "table" or ((stats.wins or 0) == 0 and (stats.losses or 0) == 0 and not kos[guid])
+	end
+	local dropped, count = 0, 0
+	for guid, stats in pairs(allStats) do
+		if SeenOnly(guid, stats) and (type(stats) ~= "table" or (stats.last or 0) < cutoff) then
+			allStats[guid] = nil
+			dropped = dropped + 1
+		elseif SeenOnly(guid, stats) then
+			count = count + 1
+		end
+	end
+	if count > Enemies.STATS_MAX then
+		local list = {}
+		for guid, stats in pairs(allStats) do
+			if SeenOnly(guid, stats) then
+				tinsert(list, guid)
+			end
+		end
+		sort(list, function(a, b) return (allStats[a].last or 0) > (allStats[b].last or 0) end)
+		for i = Enemies.STATS_MAX + 1, #list do
+			allStats[list[i]] = nil
+			dropped = dropped + 1
+		end
+	end
+	if dropped > 0 then
+		Wanted:Log("Enemies: dropped %d enemies only ever seen, not for %d days or past the %d most recent", dropped, STATS_DAYS, Enemies.STATS_MAX)
+	end
 end
 
 function Enemies:OnEnable()

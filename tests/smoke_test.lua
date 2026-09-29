@@ -2562,25 +2562,136 @@ end)()
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
 ;(function()
-	-- Pruning: kills, deaths and assists older than 30 days go at load; bounties, claims and a claimed kill stay
+	-- Pruning: other players' kills, deaths and assists older than 3 days go at login, deaths this account's
+	-- characters only witnessed too. Their own kills, deaths and assists stay, and so do bounties, claims, what a
+	-- claim rests on, links and what the app may not have uploaded
 	local db = ns.db
-	local old, fresh = clock - 31 * 86400, clock - 29 * 86400
-	local function Put(kind, id, t, data)
-		db.records[id] = { kind = kind, id = id, origin = "Pruner", seq = 1, prev = "0", t = t, data = data or {}, hash = "x" }
+	local old, fresh = clock - 4 * 86400, clock - 2 * 86400
+	local seq = 0
+	local function Put(kind, t, data, origin)
+		seq = seq + 1
+		origin = origin or "Pruner"
+		local id = origin..":"..seq
+		db.records[id] = { kind = kind, id = id, origin = origin, seq = seq, prev = "0", t = t, data = data or {}, hash = "x" }
+		db.chains[origin] = { seq = 100, lastHash = "x" }
+		return id
 	end
-	Put("kill", "Pruner:k-old", old) Put("death", "Pruner:d-old", old) Put("assist", "Pruner:a-old", old)
-	Put("kill", "Pruner:k-fresh", fresh) Put("death", "Pruner:d-fresh", fresh)
-	Put("bounty", "Pruner:b-old", old, { amount = 1, target = "Player-9-T" })
-	Put("kill", "Pruner:k-claimed", old) Put("claim", "Pruner:c-old", old, { bounty = "Pruner:b-old", kill = "Pruner:k-claimed" })
+	local gone = { Put("kill", old), Put("death", old, { victim = "Player-9-V" }), Put("assist", old),
+		Put("death", old - 200, { victim = "Player-9-T" }), -- the claim's victim, but minutes from the kill
+		Put("death", old, { victim = "Player-9-V" }, ns.Store:GetOrigin()) } -- a death this character only witnessed
+	local bounty = Put("bounty", old, { amount = 1, target = "Player-9-T" })
+	local claimedKill = Put("kill", old, { victim = "Player-9-T" })
+	local kept = { Put("kill", fresh), Put("death", fresh), bounty, claimedKill,
+		Put("claim", old, { bounty = bounty, kill = claimedKill, victim = "Player-9-T", killT = old }),
+		Put("death", old + 20, { victim = "Player-9-T" }), -- witnesses the claim
+		Put("death", old, { victim = UnitGUID("player") }), -- this character's death
+		Put("death", old, { victim = "Player-9-V", killer = UnitGUID("player") }), -- a death this character caused
+		Put("kill", old, {}, ns.Store:GetOrigin()), -- this character's own
+		Put("death", old, { victim = UnitGUID("player") }, ns.Store:GetOrigin()), -- this character's own death, as it recorded it
+		Put("link", old, { code = "OLDCODE1", guid = "Player-9-L" }) }
+	-- Another character of this account, known by its link record with the account's app code
+	WantedAppLinks = { [db.accountMark] = "ACCT7777" }
+	Put("link", old, { code = "ACCT7777", guid = "Player-1-ALT" }, "Alt Two")
+	tinsert(kept, Put("kill", old, {}, "Alt Two"))
+	-- Past a gap nobody filled: pruned, and the chain moves past it so it isn't asked for again
+	seq = seq + 1 -- the gap
+	local ahead = Put("death", old)
+	db.chains.Pruner.seq = seq - 2
+	tinsert(gone, ahead)
 	local pruned = ns.Store:Prune(clock)
-	check(pruned >= 3, "the old kill, death and assist are pruned (with any older test records), got "..pruned)
-	check(not db.records["Pruner:k-old"] and not db.records["Pruner:d-old"] and not db.records["Pruner:a-old"], "the old ones are gone")
-	check(db.records["Pruner:k-fresh"] and db.records["Pruner:d-fresh"], "29-day-old ones stay")
-	check(db.records["Pruner:b-old"] and db.records["Pruner:c-old"] and db.records["Pruner:k-claimed"], "an old bounty, its claim and the claimed kill stay")
+	WantedAppLinks = nil
+	check(db.chains.Pruner.seq == seq, "the chain moved past the pruned record beyond the gap, got "..db.chains.Pruner.seq)
+	check(pruned >= #gone, "the old kills, deaths and assists are pruned (with any older test records), got "..pruned)
+	for _, id in ipairs(gone) do check(not db.records[id], id.." is pruned") end
+	for _, id in ipairs(kept) do check(db.records[id], id.." is kept") end
+	check(db.characters["Player-1-ALT"] and db.characters["Player-1-ALT"].n == "Alt Two", "a link with the account's app code names one of its characters")
+	check(db.characters[UnitGUID("player")], "this character is in the account's book")
 	local walked = 0
 	for _ in ns.Store:Iterator("kill") do walked = walked + 1 end
 	check(walked >= 2 and ns.Store:Prune(clock) == 0, "the index is rebuilt and a second prune finds nothing")
-	for _, id in ipairs({ "Pruner:k-fresh", "Pruner:d-fresh", "Pruner:b-old", "Pruner:c-old", "Pruner:k-claimed" }) do db.records[id] = nil end
+	-- The app hasn't read the last save: what came since its last catch-up stays until it has
+	local appOld, appOlder = Put("death", clock - 9 * 86400), Put("death", clock - 12 * 86400)
+	db.savedAt, db.catchupT = clock - 60, clock - 10 * 86400
+	ns.Store:Prune(clock)
+	check(db.records[appOld] and not db.records[appOlder], "records since the app's last catch-up wait for it; older ones go")
+	db.catchupT = clock - 30
+	ns.Store:Prune(clock)
+	check(not db.records[appOld], "once the app caught up after the last save they go")
+	db.savedAt, db.catchupT = nil, nil
+	-- Pruned records aren't asked for again: our chain still says how far we got
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { Pruner = db.chains.Pruner.seq }, v = ns.VERSION }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	RunTimers()
+	for _, m in ipairs(Sent("CHANNEL")) do
+		check(m.tag ~= "N", "a hello from a peer holding what we pruned asks for nothing")
+	end
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { Pruner = db.chains.Pruner.seq + 3 }, v = ns.VERSION }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	RunTimers()
+	local asked
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then asked = m.tbl.n.Pruner end end
+	check(asked == db.chains.Pruner.seq + 1, "only what's past our chain is asked for, got "..tostring(asked))
+	-- And one a peer sends again (answering someone else) isn't taken back in
+	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", t = old, data = { victim = "Player-9-V" } }
+	check(select(2, ns.Store:MergeRelayed(back)) == "pruned" and not db.records[gone[2]], "a pruned record sent again isn't stored")
+	-- Players not seen for a month go with it, unless a page still needs them; then the book keeps its cap
+	local savedPlayers, savedStats, savedKos = db.players, db.enemyStats, db.kos
+	local month = clock - 31 * 86400
+	db.players = { ["Player-9-GONE"] = { name = "Gone", lastSeen = month }, ["Player-9-T"] = { name = "Target", lastSeen = month },
+		["Player-9-KOS"] = { name = "Kos", lastSeen = month }, ["Player-9-FOE"] = { name = "Foe", lastSeen = month },
+		["Player-9-NOW"] = { name = "Now", lastSeen = clock } }
+	db.kos = { ["Player-9-KOS"] = { name = "Kos" } }
+	db.enemyStats = { ["Player-9-FOE"] = { wins = 1, losses = 0, detections = 3, last = month },
+		["Player-9-GONE"] = { wins = 0, losses = 0, detections = 1, last = month } }
+	ns.Store:Prune(clock)
+	check(db.players["Player-9-GONE"] == nil and db.players["Player-9-NOW"], "a player not seen for a month is dropped, a recent one kept")
+	check(db.players["Player-9-T"] and db.players["Player-9-KOS"] and db.players["Player-9-FOE"], "a bounty target, Kill on Sight and a fought enemy are kept")
+	for i = 1, ns.Store.PLAYERS_MAX + 10 do db.players["Player-9-FILL"..i] = { name = "Fill", lastSeen = clock - i } end
+	ns.Store:Prune(clock)
+	local numPlayers = 0
+	for _ in pairs(db.players) do numPlayers = numPlayers + 1 end
+	check(numPlayers == ns.Store.PLAYERS_MAX + 3 and db.players["Player-9-NOW"] and db.players["Player-9-FILL1"], "the most recent are kept up to the cap (plus the needed ones), got "..numPlayers)
+	ns.Enemies:OnLoad()
+	check(db.enemyStats["Player-9-GONE"] == nil and db.enemyStats["Player-9-FOE"], "an enemy only ever seen, not for a month, leaves the statistics; one fought stays")
+	db.players, db.enemyStats, db.kos = savedPlayers, savedStats, savedKos
+	-- Pages still show what's left
+	for _, key in ipairs({ "board", "mine", "hunters", "activity", "enemies", "tools" }) do ns.UI:Show(key) end
+	for id, r in pairs(db.records) do if r.origin == "Pruner" or r.origin == "Alt Two" then db.records[id] = nil end end
+	db.chains.Pruner, db.chains["Alt Two"], db.characters["Player-1-ALT"] = nil, nil, nil
+end)()
+;(function()
+	-- The app's catch-up can bring records already too old to keep: their chain moves on over them and they aren't
+	-- stored (only to be pruned at the next login), so the app doesn't send them again. What's kept is stored.
+	local db = ns.db
+	local old, fresh = clock - 4 * 86400, clock - 60
+	local function Rec(seq, t, kind, data)
+		return { kind = kind or "death", id = "Catchup Far:"..seq, origin = "Catchup Far", seq = seq, prev = "h"..(seq - 1),
+			hash = "h"..seq, t = t, data = data or { victim = "Player-9-FARV"..seq } }
+	end
+	local batch = { Rec(1, old), Rec(2, old), Rec(3, old, "death", { victim = UnitGUID("player") }), Rec(4, old),
+		Rec(5, fresh), Rec(6, old, "bounty", { target = "Player-9-FARB", targetName = "Far Bounty", amount = 1000 }),
+		Rec(7, old + 10, "death", { victim = "Player-9-CLAIMV" }) } -- witnesses a claim
+	local claim = ns.Store:InsertTest("claim", "Some Hunter", { bounty = "b-far", victim = "Player-9-CLAIMV", killT = old })
+	local savedT = db.catchupT
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1000000, records = batch } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(ns.Store:GetChainSeq("Catchup Far") == 7, "the chain moved on over the old records, got "..ns.Store:GetChainSeq("Catchup Far"))
+	for _, seq in ipairs({ 1, 2, 4 }) do check(not db.records["Catchup Far:"..seq], "an old death of others isn't stored: "..seq) end
+	for _, seq in ipairs({ 3, 5, 6, 7 }) do check(db.records["Catchup Far:"..seq], "own, fresh, bounty and claim witness records are stored: "..seq) end
+	check(ns.Store:GetFirstSeen("Catchup Far") == old, "the first record's time is kept with its chain")
+	-- The same batch again (the app asks from the chain, so it wouldn't send it; a peer's fill might): nothing new
+	local before = 0
+	for _ in pairs(db.records) do before = before + 1 end
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1000001, records = batch } }
+	ns.Catchup:Import()
+	RunFrames()
+	local after = 0
+	for _ in pairs(db.records) do after = after + 1 end
+	check(after == before and not db.records["Catchup Far:1"], "a second catch-up of the same records stores nothing")
+	for id, r in pairs(db.records) do if r.origin == "Catchup Far" then db.records[id] = nil end end
+	db.records[claim.id] = nil
+	db.chains["Catchup Far"], db.catchupT = nil, savedT
 end)()
 ;(function()
 	-- A fill answering for records pruned here says where our copy starts, and a receiver moves its chain on
@@ -2602,6 +2713,38 @@ end)()
 	local fills = {}
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "F" then fills[#fills + 1] = m end end
 	check(#fills >= 1 and fills[1].tbl.p and fills[1].tbl.p["Old Timer"] == 50 and #fills[1].tbl.r == 2, "the fill says our copy starts at 50 and carries what we hold")
+	-- Pruning leaves holes inside a chain too (kept records between pruned ones). Sending: each hole is described
+	local function Holey(origin, seq)
+		return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "h"..(seq - 1), t = clock - 60, data = { victim = "Player-9-V" }, hash = "h"..seq }
+	end
+	for _, s in ipairs({ 1, 2, 5, 6, 20 }) do ns.db.records["Holey:"..s] = Holey("Holey", s) end
+	ns.db.chains.Holey = { seq = 30, lastHash = "h30" }
+	ClearSent()
+	clock = clock + 11
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { Holey = 1 } }), "CHANNEL", "New Asker", nil, nil, nil, "WantedNetHorde")
+	RunTimers()
+	RunFrames()
+	local gaps
+	for _, m in ipairs(Sent("CHANNEL")) do
+		if m.tag == "F" and m.tbl.g then
+			gaps = {}
+			for i, s in ipairs(m.tbl.g.Holey) do gaps[i] = format("%d", s) end
+			gaps = table.concat(gaps, ",")
+		end
+	end
+	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
+	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
+	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
+	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
+	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
+	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
+	-- A hole past what we hold (an earlier message didn't arrive) isn't skipped
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { Holey("Holey2", 45) }, g = { Holey2 = { 40, 45 } } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	check(ns.Store:GetChainSeq("Holey2") == 30, "a hole starting past our chain is left for a later ask")
+	for id, r in pairs(ns.db.records) do if r.origin == "Holey" or r.origin == "Holey2" then ns.db.records[id] = nil end end
+	ns.db.chains.Holey, ns.db.chains.Holey2 = nil, nil
 	-- A marker never moves our own chain
 	local mine = ns.Store:GetChainSeq(ns.Store:GetOrigin())
 	ns.Store:SkipTo(ns.Store:GetOrigin(), mine + 100, nil)

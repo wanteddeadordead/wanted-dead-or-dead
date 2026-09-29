@@ -1355,6 +1355,9 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 				end
 			end
 		end
+		if tag == TAG_FILL then
+			private.SkipPruned(tbl)
+		end
 	end
 end
 
@@ -1449,9 +1452,58 @@ function private.SendFill(origin, fromSeq, target)
 	end
 	sort(records, function(a, b) return a.seq < b.seq end)
 	-- Older records than they asked for were pruned here (Store:Prune): the answer says where our copy of the
-	-- chain starts, so they stop asking for what nobody has any more
-	local extra = lowest > fromSeq and { p = { [origin] = lowest } } or nil
-	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extra)
+	-- chain starts, so they stop asking for what nobody has any more (1.2.9 to 1.2.20 read only this)
+	local extras = { [1] = lowest > fromSeq and { p = { [origin] = lowest } } or nil }
+	-- Pruning also leaves holes further on (what it keeps sits between what it drops): g lists each as the seq
+	-- held before it and the one after, in the message carrying the one after, the last message for one at the end
+	local chainSeq, last, count = Store:GetChainSeq(origin), fromSeq - 1, min(#records, MAX_FILL_PER_REQUEST)
+	local function AddGap(first, to)
+		local extra = extras[first] or {}
+		extras[first] = extra
+		extra.g = extra.g or { [origin] = {} }
+		tinsert(extra.g[origin], last)
+		tinsert(extra.g[origin], to)
+	end
+	for i = 1, count do
+		local seq = records[i].seq
+		-- Only below our chain's end is a missing record a pruned one; past it, one we never had
+		if seq > last + 1 and last < chainSeq then
+			AddGap(i - (i - 1) % FILL_BATCH, min(seq, chainSeq + 1))
+		end
+		last = seq
+	end
+	if count == #records and last < chainSeq then
+		AddGap(max(count - (count - 1) % FILL_BATCH, 1), chainSeq + 1)
+	end
+	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras)
+end
+
+---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what
+---comes before each: the records between were pruned everywhere it could ask, and would be asked for forever.
+---@param tbl table the fill
+function private.SkipPruned(tbl)
+	if type(tbl.g) ~= "table" then
+		return
+	end
+	for origin, gaps in pairs(tbl.g) do
+		if type(origin) == "string" and type(gaps) == "table" then
+			for i = 1, min(#gaps, 2 * MAX_FILL_PER_REQUEST) - 1, 2 do
+				local from, to = gaps[i], gaps[i + 1]
+				-- Whole numbers only (floor also gives Lua 5.4's integers, as the record ids need)
+				from = type(from) == "number" and from == floor(from) and floor(from) or nil
+				to = type(to) == "number" and to == floor(to) and floor(to) or nil
+				if from and to and Store:GetChainSeq(origin) >= from then
+					local prev
+					for _, record in ipairs(tbl.r) do
+						if type(record) == "table" and record.origin == origin and record.seq == to then
+							prev = record.prev
+						end
+					end
+					Store:SkipTo(origin, to, prev)
+				end
+			end
+		end
+	end
 end
 
 ---Sends records as fills, FILL_BATCH to a message, one message per piece of background work: packing a long
@@ -1460,14 +1512,15 @@ end
 ---@param records table[]
 ---@param target string? a realm link to whisper, or nil for the channel
 ---@param max number?
----@param extra table? fields for the first message (sent on its own when there are no records)
-function private.SendInBatches(records, target, max, extra)
+---@param extras table? fields for a message, by the index of its first record ([1] is sent on its own when there
+---are no records)
+function private.SendInBatches(records, target, max, extras)
 	local state = { stopped = false }
 	local count = min(#records, max or #records)
-	if count == 0 and extra then
+	if count == 0 and extras and extras[1] then
 		Wanted:QueueWork(function()
 			local tbl = { r = {} }
-			for k, v in pairs(extra) do
+			for k, v in pairs(extras[1]) do
 				tbl[k] = v
 			end
 			private.Send(TAG_FILL, tbl, nil, target)
@@ -1484,8 +1537,8 @@ function private.SendInBatches(records, target, max, extra)
 				tinsert(batch, records[j])
 			end
 			local tbl = { r = batch }
-			if i == 1 and extra then
-				for k, v in pairs(extra) do
+			if extras and extras[i] then
+				for k, v in pairs(extras[i]) do
 					tbl[k] = v
 				end
 			end
@@ -1614,6 +1667,9 @@ function private.HandleLinkMessage(tag, tbl, sender)
 			if isNew then
 				private.stats.merged = private.stats.merged + 1
 			end
+		end
+		if tag == TAG_FILL then
+			private.SkipPruned(tbl)
 		end
 		private.currentSource = nil
 	end

@@ -5,6 +5,8 @@
 - The addon's description now leads with the war: fronts, battles and victories on wanteddeadordead.com.
 - Deaths in a dungeon's mine or cave (the Deadmines' mine, the Wailing Caverns) are recorded to about 3 yards instead
   of 35: there the game gives only the continent's map, so the position keeps an extra decimal.
+- The app light no longer says "App not running" hours into a session while the app runs: the game reads the
+  app's file only at login or /reload, and the addon now judges it against that moment.
 
 ## [1.2.20] - 2026-09-28
 

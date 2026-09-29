@@ -2655,6 +2655,38 @@ end)()
 	local fills = {}
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "F" then fills[#fills + 1] = m end end
 	check(#fills >= 1 and fills[1].tbl.p and fills[1].tbl.p["Old Timer"] == 50 and #fills[1].tbl.r == 2, "the fill says our copy starts at 50 and carries what we hold")
+	-- Pruning leaves holes inside a chain too (kept records between pruned ones). Sending: each hole is described
+	local function Holey(origin, seq)
+		return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "h"..(seq - 1), t = clock - 60, data = { victim = "Player-9-V" }, hash = "h"..seq }
+	end
+	for _, s in ipairs({ 1, 2, 5, 6, 20 }) do ns.db.records["Holey:"..s] = Holey("Holey", s) end
+	ns.db.chains.Holey = { seq = 30, lastHash = "h30" }
+	ClearSent()
+	clock = clock + 11
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { Holey = 1 } }), "CHANNEL", "New Asker", nil, nil, nil, "WantedNetHorde")
+	RunTimers()
+	RunFrames()
+	local gaps
+	for _, m in ipairs(Sent("CHANNEL")) do
+		if m.tag == "F" and m.tbl.g then
+			gaps = {}
+			for i, s in ipairs(m.tbl.g.Holey) do gaps[i] = format("%d", s) end
+			gaps = table.concat(gaps, ",")
+		end
+	end
+	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
+	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
+	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
+	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
+	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
+	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
+	-- A hole past what we hold (an earlier message didn't arrive) isn't skipped
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { Holey("Holey2", 45) }, g = { Holey2 = { 40, 45 } } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	check(ns.Store:GetChainSeq("Holey2") == 30, "a hole starting past our chain is left for a later ask")
+	for id, r in pairs(ns.db.records) do if r.origin == "Holey" or r.origin == "Holey2" then ns.db.records[id] = nil end end
+	ns.db.chains.Holey, ns.db.chains.Holey2 = nil, nil
 	-- A marker never moves our own chain
 	local mine = ns.Store:GetChainSeq(ns.Store:GetOrigin())
 	ns.Store:SkipTo(ns.Store:GetOrigin(), mine + 100, nil)

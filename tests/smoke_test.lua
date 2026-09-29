@@ -823,6 +823,7 @@ local function OldMessage(tag, tbl) return tag..":zo"..tag..":1/1:"..LibDeflate0
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Player-9-OLDNEWS", n = "Old News", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Old Timer", nil, nil, nil, "WantedNetHorde")
 check(ns.Store:GetPlayer("Player-9-OLDNEWS") == nil, "an older version's news isn't taken in")
 check(#addonSent == 1 and addonSent[1].text:find("^U:"), "the older player is told to update")
+check(ns.db.addonVersions["Old Timer"] and ns.db.addonVersions["Old Timer"].v == "0.0.5", "the version book notes the older player's version")
 -- And an update notice whispered to us locks us
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")
 check(ns:GetRequiredUpdate() == "0.2.0", "an update notice locks this client")
@@ -2872,5 +2873,27 @@ end)()
 	GetChannelName = realName
 	RunTimers()
 	check(ns.Sync:GetInfo().channelId == 6, "and it's back once the game has it again")
+end)()
+;(function()
+	-- The version book: each player's Wanted version from their messages, for the app to pass on
+	local book = ns.db.addonVersions
+	check(book[UnitName("player")] and book[UnitName("player")].v == ns.VERSION, "the version book has this player's own version")
+	ns.Store:NoteAddonVersion("Realm Walker-SomeRealm", "1.2.20")
+	check(book["Realm Walker"] and book["Realm Walker"].v == "1.2.20", "a realm on the sender's name is dropped")
+	for _, junk in ipairs({ { "Junk One", "not a version" }, { "Junk Two", 12 }, { "Junk Three", string.rep("1", 30) } }) do
+		ns.Store:NoteAddonVersion(junk[1], junk[2])
+		check(book[junk[1]] == nil, "a bad version isn't noted: "..tostring(junk[2]))
+	end
+	-- Old entries go at load; the book never grows past its cap
+	local now = GetServerTime()
+	book["Long Gone"] = { v = "1.0.0", t = now - 15 * 86400 }
+	for i = 1, ns.Store.VERSION_BOOK_MAX + 10 do
+		book["Fill "..i] = { v = "1.2.0", t = now - i }
+	end
+	ns.Store:OnLoad()
+	local count = 0
+	for _ in pairs(book) do count = count + 1 end
+	check(book["Long Gone"] == nil, "a version not seen for two weeks is dropped")
+	check(count == ns.Store.VERSION_BOOK_MAX, "the version book keeps the newest up to its cap, got "..count)
 end)()
 print("wanted smoke: all checks pass")

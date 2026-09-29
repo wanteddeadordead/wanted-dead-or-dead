@@ -36,6 +36,9 @@ function Store:OnLoad()
 	db.sightingsPos = db.sightingsPos or 0
 	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)
 	private.PruneNames(db.names)
+	db.addonVersions = db.addonVersions or {} -- "Name" -> { v = "1.2.19", t } the Wanted version each player's messages carried
+	Store:NoteAddonVersion(UnitName("player"), Wanted.VERSION)
+	private.PruneVersions(db.addonVersions)
 	Store:Prune(GetServerTime())
 end
 
@@ -127,6 +130,48 @@ end
 ---@param name string?
 ---@param class string? the game's class file name, e.g. ROGUE
 ---@param sex string? "male" or "female"
+-- The version book: which Wanted version each player's sync messages said they run, for the app to pass to the
+-- website (how far an update has spread). Kept for VERSION_BOOK_DAYS, at most VERSION_BOOK_MAX players.
+Store.VERSION_BOOK_MAX = 500
+local VERSION_BOOK_DAYS = 14
+
+---Notes the version a player's message carried. The name loses any realm, as the name book's names do.
+---@param name string?
+---@param version any
+function Store:NoteAddonVersion(name, version)
+	if type(name) ~= "string" or type(version) ~= "string" or #version > 24 or not strfind(version, "^%d+%.%d+%.%d+[%w%.%-]*$") then
+		return
+	end
+	name = strmatch(name, "^([^%-]+)") or name
+	if name == "" or #name > 48 then
+		return
+	end
+	local book = Wanted.db.addonVersions
+	local entry = book[name]
+	if entry and entry.v == version and GetServerTime() - entry.t < 600 then
+		return
+	end
+	book[name] = { v = version, t = GetServerTime() }
+end
+
+function private.PruneVersions(book)
+	local now, cutoff = GetServerTime(), GetServerTime() - VERSION_BOOK_DAYS * 86400
+	local kept = {}
+	for name, entry in pairs(book) do
+		if type(entry) ~= "table" or type(entry.v) ~= "string" or type(entry.t) ~= "number" or entry.t < cutoff or entry.t > now + 86400 then
+			book[name] = nil
+		else
+			tinsert(kept, name)
+		end
+	end
+	if #kept > Store.VERSION_BOOK_MAX then
+		sort(kept, function(a, b) return book[a].t > book[b].t end)
+		for i = Store.VERSION_BOOK_MAX + 1, #kept do
+			book[kept[i]] = nil
+		end
+	end
+end
+
 function Store:NoteName(guid, name, class, sex)
 	if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then
 		return

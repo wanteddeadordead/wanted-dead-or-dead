@@ -306,7 +306,12 @@ function private.Scan(unit)
 		return nil
 	end
 	local now = GetTime()
-	private.tokens[unit] = { guid = guid, t = now }
+	local token = private.tokens[unit]
+	if token then
+		token.guid, token.t = guid, now
+	else
+		private.tokens[unit] = { guid = guid, t = now }
+	end
 	local entry = private.nearby[guid]
 	local isNew = not entry
 	if isNew then

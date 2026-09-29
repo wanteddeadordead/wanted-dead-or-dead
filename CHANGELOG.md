@@ -20,6 +20,10 @@
   stay, and so does everything bounties, claims and payments rest on. Players not seen for a month go too, unless you fought them, marked them or they have a bounty.
 - Pruned records are no longer asked for again or taken back in when another player sends them, and the app's
   catch-up no longer brings in records only to have them pruned at the next login.
+- Kill streak and multi-kill callouts: kills within 30 seconds of each other are a Double kill, Triple kill, Quad
+  kill, then Rampage; kills without dying are a Killing spree at 3, Unstoppable at 5, Legendary at 8 and every 5
+  from 10. Big text in the middle of the screen with a sound, both on by default (Settings, Kill streaks). A line
+  to your party or guild is there to turn on; it's off by default and never goes to public chat.
 
 ## [1.2.20] - 2026-09-28
 

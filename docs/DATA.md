@@ -46,12 +46,12 @@ notices through the Bridge. No layout change: both fields are new and optional.
 Pruning (from 1.2.9): at login, `Store:Prune` drops `kill`, `death` and `assist` records older than
 `Store.KEEP_SECONDS`: 30 days until 1.2.20, a week from 1.2.21. Every other kind is kept. So are, whatever their age
 (from 1.2.21): records made by one of the account's characters or naming one as `victim` or `killer`; a kill some
-`claim` names in `data.kill`; a death of a claim's victim within the witness window of its `killT`; a record past
-the end of its origin's chain (held ahead of a gap: dropping it would have it asked for again); and, while the
+`claim` names in `data.kill`; a death of a claim's victim within the witness window of its `killT`; and, while the
 desktop app hasn't read the latest save (`catchupT` older than `savedAt`), everything since its last catch-up, for
-up to 30 days. It runs again every 24 hours of a session. Chains are never changed by pruning: a chain says how far
-this client has taken an origin's records, so a pruned record is never asked for again, and one a peer sends again
-(answering someone else's gap on the channel) is not taken back in. The website keeps the full archive (the app
+up to 30 days. It runs again every 24 hours of a session. A chain says how far this client has taken an origin's
+records, pruned or not, so a pruned record is never asked for again, and one a peer sends again (answering someone
+else's gap on the channel) is not taken back in. A pruned record held past a gap in its chain moves the chain past
+it (from 1.2.21): what the gap holds is older still. The website keeps the full archive (the app
 uploads records as they appear; one pruned before the app ever ran is lost to it). A fill (`F`) answering a request
 for records the sender pruned carries `p = { [origin] = firstSeqHeld }`; the receiver's chain for that origin moves
 on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`, or from an unknown predecessor

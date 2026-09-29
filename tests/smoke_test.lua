@@ -2591,12 +2591,14 @@ end)()
 	WantedAppLinks = { [db.accountMark] = "ACCT7777" }
 	Put("link", old, { code = "ACCT7777", guid = "Player-1-ALT" }, "Alt Two")
 	tinsert(kept, Put("kill", old, {}, "Alt Two"))
-	-- Ahead of its chain (a gap before it): pruning it would have it asked for again
+	-- Past a gap nobody filled: pruned, and the chain moves past it so it isn't asked for again
+	seq = seq + 1 -- the gap
 	local ahead = Put("death", old)
-	db.chains.Pruner.seq = seq - 1
-	tinsert(kept, ahead)
+	db.chains.Pruner.seq = seq - 2
+	tinsert(gone, ahead)
 	local pruned = ns.Store:Prune(clock)
 	WantedAppLinks = nil
+	check(db.chains.Pruner.seq == seq, "the chain moved past the pruned record beyond the gap, got "..db.chains.Pruner.seq)
 	check(pruned >= #gone, "the old kills, deaths and assists are pruned (with any older test records), got "..pruned)
 	for _, id in ipairs(gone) do check(not db.records[id], id.." is pruned") end
 	for _, id in ipairs(kept) do check(db.records[id], id.." is kept") end

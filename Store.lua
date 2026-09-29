@@ -52,11 +52,10 @@ end
 
 ---Drops other players' kills, deaths and assists older than KEEP_SECONDS. Returns how many. Kept whatever their
 ---age: records by or about this account's characters, a kill a claim rests on and the deaths that witness it,
----records past the end of their origin's chain (dropping those would have them asked for again), and records
----the desktop app may not have uploaded yet. Saved data grew without bound (8 MB in four days for one player)
----and every record was walked on load and on every sync; the website holds everything ever uploaded.
----Chains are left alone: a chain says how far this client has taken an origin's records, pruned or not, so
----pruned records are never asked for again.
+---and records the desktop app may not have uploaded yet. Saved data grew without bound (8 MB in four days for one
+---player) and every record was walked on load and on every sync; the website holds everything ever uploaded.
+---A chain says how far this client has taken an origin's records, pruned or not, so pruned records are never
+---asked for again. It only moves forward, past a pruned record held beyond a gap.
 ---@param now number
 ---@return number pruned
 function Store:Prune(now)
@@ -84,14 +83,18 @@ function Store:Prune(now)
 	end
 	private.BuildOwn()
 	local pruned, kept, left = 0, 0, 0
+	local pastGap = {} -- origin -> the newest old record held past a gap in its chain
 	for id, record in pairs(records) do
 		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff then
 			local chain = chains[record.origin]
-			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes)
-				or (chain and type(record.seq) == "number" and record.seq > chain.seq) then
+			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes) then
 				kept = kept + 1
 				left = left + 1
 			else
+				if chain and type(record.seq) == "number" and record.seq > chain.seq
+					and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
+					pastGap[record.origin] = record
+				end
 				records[id] = nil
 				pruned = pruned + 1
 			end
@@ -99,10 +102,15 @@ function Store:Prune(now)
 			left = left + 1
 		end
 	end
+	-- A gap still open behind a record this old won't be filled with anything worth keeping (what's in it is older
+	-- still): the chain moves past the pruned record, so it isn't asked for again
+	for origin, record in pairs(pastGap) do
+		Store:SkipTo(origin, record.seq + 1, record.hash)
+	end
 	if pruned > 0 then
 		private.indexFor = nil -- built again on the next walk
 	end
-	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (yours, claims', not yet in their chain or not yet uploaded); %d records held",
+	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (yours, claims', or not yet uploaded); %d records held",
 		pruned, KEEP_SECONDS / 86400, kept, left)
 	private.PrunePlayers(now, targets)
 	return pruned

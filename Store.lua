@@ -65,10 +65,12 @@ function Store:Prune(now)
 	-- What old records may still be needed for: claims (their kill, and deaths within the witness window), and
 	-- which characters are this account's (every link record with the app's code for this account)
 	local code = private.AppLinkCode()
-	local claimed, claimTimes = {}, {}
+	local claimed, claimTimes, targets = {}, {}, {}
 	for _, record in pairs(records) do
 		local data = record.data
-		if record.kind == "claim" and type(data) == "table" then
+		if record.kind == "bounty" and type(data) == "table" and type(data.target) == "string" then
+			targets[data.target] = true
+		elseif record.kind == "claim" and type(data) == "table" then
 			if type(data.kill) == "string" then
 				claimed[data.kill] = true
 			end
@@ -102,7 +104,56 @@ function Store:Prune(now)
 	end
 	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (yours, claims', not yet in their chain or not yet uploaded); %d records held",
 		pruned, KEEP_SECONDS / 86400, kept, left)
+	private.PrunePlayers(now, targets)
 	return pruned
+end
+
+-- Players the addon knows (enemies seen, bounty targets) are kept while seen lately, then at most PLAYERS_MAX, the
+-- most recently seen first. It grew by about 900 a day for one player.
+Store.PLAYERS_MAX = 5000
+local PLAYERS_DAYS = 30
+
+---Drops players not seen for PLAYERS_DAYS, then the least recently seen past PLAYERS_MAX. Never one a page still
+---needs: on Kill on Sight or Ignore, with a history (tracks), fought (wins or losses: nemesis and rivals), a bounty
+---target, or one of this account's characters.
+---@param now number
+---@param targets table guid -> true for every bounty's target
+function private.PrunePlayers(now, targets)
+	local db = Wanted.db
+	local players, kos, ignore, tracks, stats = db.players, db.kos or {}, db.ignore or {}, db.tracks or {}, db.enemyStats or {}
+	local cutoff = now - PLAYERS_DAYS * 86400
+	local function Needed(guid)
+		local fought = stats[guid]
+		return targets[guid] or kos[guid] or ignore[guid] or tracks[guid] or db.characters[guid]
+			or (type(fought) == "table" and ((fought.wins or 0) > 0 or (fought.losses or 0) > 0))
+	end
+	local dropped, count = 0, 0
+	for guid, player in pairs(players) do
+		if Needed(guid) then
+			-- kept, outside the cap
+		elseif type(player) ~= "table" or (player.lastSeen or 0) < cutoff then
+			players[guid] = nil
+			dropped = dropped + 1
+		else
+			count = count + 1
+		end
+	end
+	if count > Store.PLAYERS_MAX then
+		local list = {}
+		for guid, player in pairs(players) do
+			if not Needed(guid) then
+				tinsert(list, guid)
+			end
+		end
+		sort(list, function(a, b) return (players[a].lastSeen or 0) > (players[b].lastSeen or 0) end)
+		for i = Store.PLAYERS_MAX + 1, #list do
+			players[list[i]] = nil
+			dropped = dropped + 1
+		end
+	end
+	if dropped > 0 then
+		Wanted:Log("Store: dropped %d players not seen for %d days or past the %d most recent", dropped, PLAYERS_DAYS, Store.PLAYERS_MAX)
+	end
 end
 
 ---Records older than this may be pruned: KEEP_SECONDS ago, or earlier when the desktop app is set up but hasn't

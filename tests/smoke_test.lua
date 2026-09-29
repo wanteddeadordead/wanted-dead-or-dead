@@ -2630,6 +2630,26 @@ end)()
 	-- And one a peer sends again (answering someone else) isn't taken back in
 	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", t = old, data = { victim = "Player-9-V" } }
 	check(select(2, ns.Store:MergeRelayed(back)) == "pruned" and not db.records[gone[2]], "a pruned record sent again isn't stored")
+	-- Players not seen for a month go with it, unless a page still needs them; then the book keeps its cap
+	local savedPlayers, savedStats, savedKos = db.players, db.enemyStats, db.kos
+	local month = clock - 31 * 86400
+	db.players = { ["Player-9-GONE"] = { name = "Gone", lastSeen = month }, ["Player-9-T"] = { name = "Target", lastSeen = month },
+		["Player-9-KOS"] = { name = "Kos", lastSeen = month }, ["Player-9-FOE"] = { name = "Foe", lastSeen = month },
+		["Player-9-NOW"] = { name = "Now", lastSeen = clock } }
+	db.kos = { ["Player-9-KOS"] = { name = "Kos" } }
+	db.enemyStats = { ["Player-9-FOE"] = { wins = 1, losses = 0, detections = 3, last = month },
+		["Player-9-GONE"] = { wins = 0, losses = 0, detections = 1, last = month } }
+	ns.Store:Prune(clock)
+	check(db.players["Player-9-GONE"] == nil and db.players["Player-9-NOW"], "a player not seen for a month is dropped, a recent one kept")
+	check(db.players["Player-9-T"] and db.players["Player-9-KOS"] and db.players["Player-9-FOE"], "a bounty target, Kill on Sight and a fought enemy are kept")
+	for i = 1, ns.Store.PLAYERS_MAX + 10 do db.players["Player-9-FILL"..i] = { name = "Fill", lastSeen = clock - i } end
+	ns.Store:Prune(clock)
+	local numPlayers = 0
+	for _ in pairs(db.players) do numPlayers = numPlayers + 1 end
+	check(numPlayers == ns.Store.PLAYERS_MAX + 3 and db.players["Player-9-NOW"] and db.players["Player-9-FILL1"], "the most recent are kept up to the cap (plus the needed ones), got "..numPlayers)
+	ns.Enemies:OnLoad()
+	check(db.enemyStats["Player-9-GONE"] == nil and db.enemyStats["Player-9-FOE"], "an enemy only ever seen, not for a month, leaves the statistics; one fought stays")
+	db.players, db.enemyStats, db.kos = savedPlayers, savedStats, savedKos
 	-- Pages still show what's left
 	for _, key in ipairs({ "board", "mine", "hunters", "activity", "enemies", "tools" }) do ns.UI:Show(key) end
 	for id, r in pairs(db.records) do if r.origin == "Pruner" or r.origin == "Alt Two" then db.records[id] = nil end end

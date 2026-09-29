@@ -68,6 +68,7 @@ function Store:Prune(now)
 	local claimed, claimTimes, targets = {}, {}, {}
 	for _, record in pairs(records) do
 		local data = record.data
+		private.NoteFirst(chains[record.origin], record)
 		if record.kind == "bounty" and type(data) == "table" and type(data.target) == "string" then
 			targets[data.target] = true
 		elseif record.kind == "claim" and type(data) == "table" then
@@ -513,6 +514,7 @@ function Store:NewRecord(kind, data)
 	}
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
+	private.NoteFirst(chain, record)
 	Wanted.db.records[record.id] = record
 	private.AddToIndex(record)
 	private.Notify(record, true)
@@ -576,6 +578,7 @@ function private.Insert(record, live)
 		chain = { seq = 0, lastHash = "0" }
 		db.chains[record.origin] = chain
 	end
+	private.NoteFirst(chain, record)
 	if record.seq == chain.seq + 1 then
 		if record.prev ~= chain.lastHash and chain.lastHash ~= UNKNOWN_HASH then
 			record.brokenChain = true
@@ -817,6 +820,22 @@ end
 function Store:GetLastActive(origin)
 	private.Index()
 	return private.lastActive[origin] or 0
+end
+
+---Keeps the time of an origin's first record (seq 1) with its chain (first): the record itself may be pruned, and
+---how long someone has been around is still asked (Bounties, a claim's witnesses).
+function private.NoteFirst(chain, record)
+	if chain and record.seq == 1 and type(record.t) == "number" then
+		chain.first = record.t
+	end
+end
+
+---When an origin's first record (seq 1) was made, or nil if it was never seen.
+---@param origin string
+---@return number?
+function Store:GetFirstSeen(origin)
+	local chain = Wanted.db.chains[origin]
+	return chain and chain.first
 end
 
 ---The highest seq held for an origin (for gap requests).

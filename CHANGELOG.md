@@ -7,6 +7,10 @@
   of 35: there the game gives only the continent's map, so the position keeps an extra decimal.
 - The app light no longer says "App not running" hours into a session while the app runs: the game reads the
   app's file only at login or /reload, and the addon now judges it against that moment.
+- Saved data stays small: other players' kills, deaths and assists are kept a week (was 30 days); wanteddeadordead.com
+  keeps them all. Everything by or about your own characters stays, and so does everything bounties, claims and
+  payments rest on. Players not seen for a month go too, unless you fought them, marked them or they have a bounty.
+- Pruned records are no longer asked for again or taken back in when another player sends them.
 
 ## [1.2.20] - 2026-09-28
 

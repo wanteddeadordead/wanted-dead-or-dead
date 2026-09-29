@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Wanted notes your character's guild rank, and which of your guild's members hold an officer rank (officers only),
+  for guild mode on wanteddeadordead.com's Discord bot: only a guild's officer can connect its Discord server, so an
+  enemy can't make one that watches your members. The website uses it for that check alone and never shows it. It's
+  a new file: quit and restart the game after updating, a /reload isn't enough.
 - Wanted makes about a quarter of the garbage it did in a busy fight (measured: 16 MB a minute down to 4.5 MB with
   fifteen enemies around), so the game pauses less often to clean up: the Nearby window no longer describes every
   enemy from scratch several times a second, outlaws are worked out without a table per death, and walking the

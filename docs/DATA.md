@@ -71,6 +71,11 @@ The launch reset drops it with the other beta data.
 last seen in with its time, `g` and `gt` (`g = ""` when seen in none). A known guild is only replaced by "none"
 after two such readings 30 seconds apart.
 
+`WantedDB.addonVersions` (from 1.2.20) is the version book: `"Name" -> { v = "1.2.19", t }`, the Wanted version the
+player's last sync message carried and when, with any realm removed from the name. It includes this player's own
+version. The desktop app passes it to the website, which counts how many players run each version. At load,
+entries older than 14 days are dropped, then the oldest until it holds 500. A new key with a default: no migration.
+
 `WantedDB.posterShots` (from 1.2.17) lists the newest five poster pictures for the desktop app to upload:
 `{ t, who, l, top, r, b }`, when the game took the screenshot (server time), whose model it is, and where the model
 was on screen as fractions of the screen from its top left. The app finds the PNG in the game's Screenshots folder,

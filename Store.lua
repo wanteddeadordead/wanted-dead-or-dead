@@ -13,11 +13,19 @@ local private = {
 }
 local MAX_SIGHTINGS = 500
 Store.MAX_SIGHTINGS = MAX_SIGHTINGS
--- Kills, deaths and assists are kept this long (decided 2026-09-27); the website keeps the archive. Every other
--- kind (bounties and what happens to them, links, notices) is kept, and so is a kill a claim rests on.
-local KEEP_SECONDS = 30 * 24 * 60 * 60
+-- Other players' kills, deaths and assists are kept this long (a week, decided 2026-09-29; 30 days before); the
+-- website keeps the archive. Every other kind (bounties and what happens to them, links, notices) is kept, and so
+-- is anything by or about this account's characters and what a claim rests on (Store:Prune).
+local KEEP_SECONDS = 7 * 24 * 60 * 60
 Store.KEEP_SECONDS = KEEP_SECONDS
 local PRUNED_KINDS = { kill = true, death = true, assist = true }
+-- While the desktop app hasn't read the latest save, records since its last catch-up may not be uploaded yet:
+-- they're kept, unless it hasn't caught up for this long (it's no longer used)
+local APP_WAIT_SECONDS = 30 * 24 * 60 * 60
+-- The app stamps its catch-up with the PC's clock, not the server's
+local APP_CLOCK_MARGIN = 60 * 60
+-- Pruning runs again this often in a long session
+local PRUNE_EVERY_SECONDS = 24 * 60 * 60
 -- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
 local UNKNOWN_HASH = "?"
 
@@ -39,35 +47,131 @@ function Store:OnLoad()
 	db.addonVersions = db.addonVersions or {} -- "Name" -> { v = "1.2.19", t } the Wanted version each player's messages carried
 	Store:NoteAddonVersion(UnitName("player"), Wanted.VERSION)
 	private.PruneVersions(db.addonVersions)
-	Store:Prune(GetServerTime())
+	db.characters = db.characters or {} -- guid -> { n = origin, t } this account's characters
 end
 
----Drops kills, deaths and assists older than KEEP_SECONDS, except a kill some claim rests on. Returns how many.
----Saved data grew without bound (2.9 MB after a week for one player) and every record was walked on load
----and on every sync; the website holds everything ever uploaded.
+---Drops other players' kills, deaths and assists older than KEEP_SECONDS. Returns how many. Kept whatever their
+---age: records by or about this account's characters, a kill a claim rests on and the deaths that witness it,
+---records past the end of their origin's chain (dropping those would have them asked for again), and records
+---the desktop app may not have uploaded yet. Saved data grew without bound (8 MB in four days for one player)
+---and every record was walked on load and on every sync; the website holds everything ever uploaded.
+---Chains are left alone: a chain says how far this client has taken an origin's records, pruned or not, so
+---pruned records are never asked for again.
 ---@param now number
 ---@return number pruned
 function Store:Prune(now)
-	local records = Wanted.db.records
-	local cutoff = now - KEEP_SECONDS
-	local claimed = {}
+	local records, chains = Wanted.db.records, Wanted.db.chains
+	local cutoff = private.PruneCutoff(now)
+	-- What old records may still be needed for: claims (their kill, and deaths within the witness window), and
+	-- which characters are this account's (every link record with the app's code for this account)
+	local code = private.AppLinkCode()
+	local claimed, claimTimes = {}, {}
 	for _, record in pairs(records) do
-		if record.kind == "claim" and type(record.data) == "table" and type(record.data.kill) == "string" then
-			claimed[record.data.kill] = true
+		local data = record.data
+		if record.kind == "claim" and type(data) == "table" then
+			if type(data.kill) == "string" then
+				claimed[data.kill] = true
+			end
+			if type(data.victim) == "string" and type(data.killT) == "number" then
+				claimTimes[data.victim] = claimTimes[data.victim] or {}
+				tinsert(claimTimes[data.victim], data.killT)
+			end
+		elseif record.kind == "link" and code and type(data) == "table" and data.code == code then
+			Store:NoteCharacter(data.guid, record.origin, record.t)
 		end
 	end
-	local pruned = 0
+	private.BuildOwn()
+	local pruned, kept, left = 0, 0, 0
 	for id, record in pairs(records) do
-		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff and not claimed[id] then
-			records[id] = nil
-			pruned = pruned + 1
+		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff then
+			local chain = chains[record.origin]
+			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes)
+				or (chain and type(record.seq) == "number" and record.seq > chain.seq) then
+				kept = kept + 1
+				left = left + 1
+			else
+				records[id] = nil
+				pruned = pruned + 1
+			end
+		else
+			left = left + 1
 		end
 	end
 	if pruned > 0 then
 		private.indexFor = nil -- built again on the next walk
-		Wanted:Log("Store: pruned %d records older than %d days", pruned, KEEP_SECONDS / 86400)
 	end
+	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (yours, claims', not yet in their chain or not yet uploaded); %d records held",
+		pruned, KEEP_SECONDS / 86400, kept, left)
 	return pruned
+end
+
+---Records older than this may be pruned: KEEP_SECONDS ago, or earlier when the desktop app is set up but hasn't
+---read the latest save (the time of its last catch-up is when it last uploaded).
+function private.PruneCutoff(now)
+	local db = Wanted.db
+	local cutoff = now - KEEP_SECONDS
+	local entry = type(WantedAppCatchup) == "table" and WantedAppCatchup[db.accountMark]
+	local appT = max(db.catchupT or 0, type(entry) == "table" and type(entry.t) == "number" and entry.t or 0)
+	if appT > 0 and appT < (db.savedAt or 0) and now - appT < APP_WAIT_SECONDS then
+		cutoff = min(cutoff, appT - APP_CLOCK_MARGIN)
+	end
+	return cutoff
+end
+
+---The link code the desktop app gave this WoW account, if it's set up.
+function private.AppLinkCode()
+	local code = type(WantedAppLinks) == "table" and WantedAppLinks[Wanted.db.accountMark]
+	return type(code) == "string" and strupper(code) or nil
+end
+
+---Notes one of this account's characters: its GUID and its name as an origin.
+---@param guid string?
+---@param origin string?
+---@param t number? when it was last known to be ours
+function Store:NoteCharacter(guid, origin, t)
+	if type(guid) ~= "string" or type(origin) ~= "string" or (issecretvalue and issecretvalue(guid)) then
+		return
+	end
+	local entry = Wanted.db.characters[guid]
+	t = t or GetServerTime()
+	if not entry or entry.n ~= origin or (entry.t or 0) < t then
+		Wanted.db.characters[guid] = { n = origin, t = max(t, entry and entry.t or 0) }
+		private.own = nil
+	end
+end
+
+---This account's characters as sets of origins and GUIDs.
+function private.BuildOwn()
+	local own = { origins = {}, guids = {} }
+	for guid, entry in pairs(Wanted.db.characters) do
+		own.guids[guid] = true
+		if type(entry) == "table" and type(entry.n) == "string" then
+			own.origins[entry.n] = true
+		end
+	end
+	private.own = own
+	return own
+end
+
+---Whether a record was made by one of this account's characters or names one as its victim or killer.
+function private.IsOwnRelated(record)
+	local own = private.own or private.BuildOwn()
+	local data = record.data
+	return own.origins[record.origin] or (type(data) == "table" and (own.guids[data.victim] or own.guids[data.killer])) or false
+end
+
+---Whether a death witnesses a claim's kill: the same victim within the witness window (Bounties:GetWitnesses).
+function private.Witnesses(record, claimTimes)
+	local times = record.kind == "death" and type(record.data) == "table" and claimTimes[record.data.victim]
+	if not times then
+		return false
+	end
+	for _, killT in ipairs(times) do
+		if abs(record.t - killT) <= Wanted.Bounties.WITNESS_WINDOW then
+			return true
+		end
+	end
+	return false
 end
 
 ---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
@@ -87,6 +191,10 @@ function Store:SkipTo(origin, seq, prev)
 		return
 	end
 	Wanted:Log("Store: %s's records before %d are gone from the network; the chain continues from there", origin, seq)
+	local held = Wanted.db.records[origin..":"..seq]
+	if type(prev) ~= "string" and held then
+		prev = held.prev
+	end
 	chain.seq = seq - 1
 	chain.lastHash = type(prev) == "string" and prev or UNKNOWN_HASH
 	private.CatchUpChain(origin, chain)
@@ -225,8 +333,19 @@ function Store:OnEnable()
 	Wanted:Log("Store: origin %s", private.origin)
 	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or { seq = 0, lastHash = "0" }
 	private.ownChain = Wanted.db.chains[private.origin]
+	Store:NoteCharacter(UnitGUID("player"), private.origin)
+	Store:Prune(GetServerTime())
 	Store:RepairChains()
 	Store:AutoLink()
+	-- When this client last saved: the desktop app has uploaded everything held if it caught up after that
+	private.frame = CreateFrame("Frame")
+	private.frame:RegisterEvent("PLAYER_LOGOUT")
+	private.frame:SetScript("OnEvent", function()
+		Wanted.db.savedAt = GetServerTime()
+	end)
+	C_Timer.NewTicker(PRUNE_EVERY_SECONDS, function()
+		Wanted:QueueWork(function() Store:Prune(GetServerTime()) end)
+	end)
 end
 
 function Store:Status()
@@ -344,7 +463,7 @@ end
 ---@param record table
 ---@param sender string The server-stamped sender of the message carrying it
 ---@return boolean isNew
----@return string? why when not new: "already held", "malformed", "not sent by its origin" or "test data"
+---@return string? why when not new: "already held", "malformed", "not sent by its origin", "test data" or "pruned"
 function Store:Merge(record, sender)
 	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
 		return false, "malformed"
@@ -404,9 +523,18 @@ function private.Insert(record, live)
 		chain.lastHash = record.hash
 		private.CatchUpChain(record.origin, chain)
 	elseif record.seq <= chain.seq then
-		-- Older than what we hold for this origin, and not stored: a rewritten history
-		record.brokenChain = true
-		Wanted:Log("!! Store: record %s is older than %s's chain (rewritten history)", tostring(record.id), tostring(record.origin))
+		-- Older than what we hold for this origin, and not held. One pruned here (or skipped as pruned everywhere)
+		-- comes back whenever a peer fills someone else's gap on the channel: it isn't taken in again.
+		local old = type(record.t) == "number" and record.t < GetServerTime() - KEEP_SECONDS
+		if old and PRUNED_KINDS[record.kind] and not private.IsOwnRelated(record) then
+			return false, "pruned"
+		elseif old then
+			Wanted:Log("Store: record %s is from before %s's chain was pruned or skipped; kept", tostring(record.id), tostring(record.origin))
+		else
+			-- A recent one: a rewritten history
+			record.brokenChain = true
+			Wanted:Log("!! Store: record %s is older than %s's chain (rewritten history)", tostring(record.id), tostring(record.origin))
+		end
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record

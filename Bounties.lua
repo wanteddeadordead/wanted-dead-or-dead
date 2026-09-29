@@ -18,6 +18,7 @@ local HUNT_SECONDS = 24 * 60 * 60
 Bounties.HUNT_SECONDS = HUNT_SECONDS
 -- A death record from another client counts as a witness within this many seconds of the kill
 local WITNESS_WINDOW = 30
+Bounties.WITNESS_WINDOW = WITNESS_WINDOW
 
 
 

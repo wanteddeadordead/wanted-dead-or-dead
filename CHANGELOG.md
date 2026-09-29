@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The addon's description now leads with the war: fronts, battles and victories on wanteddeadordead.com.
+
 ## [1.2.20] - 2026-09-28
 
 The wax seal.

@@ -6,14 +6,35 @@
 > Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type `/wanted bug`)
 > and [open a report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose).
 
-World PvP bounties, enemy awareness and reputation for **WoW Forever**, shared player to player.
+**The world PvP war on WoW Forever, as it's fought.** Which side holds each zone this week, the battles
+going on right now, who won the last one, and the price on every ganker's head. Counted from deaths other
+players saw.
 
-Put a price on a ganker's head. Hunt the people with gold on theirs. See who's around, who's targeting
-you, and who pays their debts. There's no server, no bank and no middleman: every copy of the addon
-shares what it sees with the others on your faction, and everything is judged from what actually
-happened.
+Every copy of the addon records the world PvP it sees and shares it with the others on your faction. The
+free desktop app sends it to [wanteddeadordead.com](https://wanteddeadordead.com), where the whole server's
+fighting becomes a war you can follow. In game, the addon runs the bounty board and keeps you aware of who
+is around and who is on you.
 
-## Features
+## The war, on wanteddeadordead.com
+
+- **Battle reports** for every fight: who died, who killed, the top killers, healers and damage, the
+  guilds, the biggest moments, and a written report of how it went. Every name links to that player's or
+  guild's page.
+- **The front line.** In contested zones like Hillsbrad, the site tracks where the fighting is between the
+  two bases every five minutes and draws it as a tug of war.
+- **Rounds and victories.** Hold the enemy at their doorstep for 20 minutes and your side wins a round; the
+  side with more rounds wins the battle. Fights are sized as skirmishes, battles and major battles.
+- **Front-page news.** The week's major battle leads the home page, with the latest victories under it and a
+  live ticker of the fighting going on now.
+- **The war this week.** Which side holds each zone, with heat maps of where players die.
+- **Leaderboards** for killing blows, streaks and multi-kills, healers, damage, guilds and Notoriety, a
+  season rank from Greenhorn to Legend.
+- **Only what someone else saw counts.** A kill ranks once another player's records back it up, so nobody
+  can pad their numbers from one computer.
+
+The addon works on its own. The app is optional: it puts your fights on the site and fills in the war.
+
+## In game
 
 **Bounty board**
 - Post a bounty on an enemy player, or on **every member of a guild**. One per target; posting again adds

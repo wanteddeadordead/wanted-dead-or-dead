@@ -436,17 +436,21 @@ end
 -- The app says when it last ran, to the half hour (from 0.2.1). Longer ago than this, it isn't running.
 local APP_STALE_SECONDS = 3 * 60 * 60
 
----How long ago the app last ran, when it's been long enough that it isn't running now; nil when it's running,
----not set up, or too old to say (before 0.2.1).
+-- When the game read !!WantedLink: at login or /reload only, like every addon file. It loads before this addon
+-- ("!!" sorts first), so this is the moment its "seen" was current.
+local APP_INFO_READ_AT = GetServerTime()
+
+---How long ago the app last ran, when it had already stopped by the time the game read its file; nil when it
+---was running then, isn't set up, or is too old to say (before 0.2.1). The file is read only at login or /reload,
+---so hours into a session its time is old even while the app runs: it's judged against the moment it was read.
 ---@return number? seconds
 function Wanted:AppNotRunningFor()
 	local info = WantedAppInfo
 	local seen = type(info) == "table" and Wanted:AppVersion() and tonumber(info.seen)
-	if not seen then
+	if not seen or APP_INFO_READ_AT - seen <= APP_STALE_SECONDS then
 		return nil
 	end
-	local ago = GetServerTime() - seen
-	return ago > APP_STALE_SECONDS and ago or nil
+	return GetServerTime() - seen
 end
 
 ---How many apps the network has running, for development builds to show; nil when the app hasn't said.

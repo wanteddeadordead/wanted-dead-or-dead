@@ -2232,8 +2232,9 @@ end)()
 	WantedAppInfo = { running = "0.2.0", latest = "0.2.0" }
 	ns:PromptForApp()
 	check(lastDialog == nil, "with the app set up, no popup")
-	-- Set up, but it hasn't run for hours: the popup asks whether it's running, and the light says so
-	WantedAppInfo = { running = "0.2.1", latest = "0.2.1", seen = clock - 5 * 3600, apps = 12 }
+	-- Set up, but it hadn't run for hours when the game read its file: the popup asks whether it's running, and
+	-- the light says so (1790270000 is the clock when the addon loaded)
+	WantedAppInfo = { running = "0.2.1", latest = "0.2.1", seen = 1790270000 - 5 * 3600, apps = 12 }
 	ns:PromptForApp()
 	check(lastDialog and lastDialog.title == "Is the Wanted app running?" and lastDialog.text:find("Start menu", 1, true),
 		"an app that hasn't run for hours: the popup asks if it's running")
@@ -2920,4 +2921,16 @@ print("wanted smoke: all checks pass")
 	_, x, y = ns.Recorder:GetPosition()
 	check(x == 41.1 and y == 79.3, "on a zone's map it keeps a tenth: "..tostring(x)..", "..tostring(y))
 	C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition, C_Map.GetMapInfo = realBest, realPos, realInfo
+end)()
+;(function()
+	-- The game reads !!WantedLink only at login or /reload, so whether the app is running is judged at that moment:
+	-- hours into a session, a running app mustn't look stopped
+	local savedInfo, savedClock = WantedAppInfo, clock
+	local loadedAt = 1790270000 -- the clock when the addon loaded
+	WantedAppInfo = { running = "0.2.20", latest = "0.2.20", seen = loadedAt - 1800 }
+	clock = loadedAt + 6 * 3600
+	check(ns:AppNotRunningFor() == nil, "six hours after login, an app that had run half an hour before login still counts as running")
+	WantedAppInfo.seen = loadedAt - 4 * 3600
+	check(ns:AppNotRunningFor() == clock - WantedAppInfo.seen, "an app that last ran four hours before login isn't running")
+	WantedAppInfo, clock = savedInfo, savedClock
 end)()

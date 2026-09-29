@@ -104,7 +104,15 @@ function Emotes:CycleState(key)
 		nextState = "list"
 	end
 	private.Settings().state[key] = nextState
+	private.changes = (private.changes or 0) + 1
 	return nextState
+end
+
+---Changes whenever an emote moves between favourite, list and hidden, so the buttons are only laid out again then.
+---@return number changes
+---@return table state the saved states (a new table after settings are reset)
+function Emotes:GetChanges()
+	return private.changes or 0, private.Settings().state
 end
 
 function Emotes:IsEnabled()

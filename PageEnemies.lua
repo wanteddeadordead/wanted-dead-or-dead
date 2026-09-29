@@ -146,7 +146,7 @@ UI:RegisterPage("enemies", {
 	subtitle = "Every enemy you've met: how often, who won, their guild, and where they were last. Click one for options.",
 	order = 3,
 	badge = function()
-		local nearby = #Enemies:GetNearby()
+		local nearby = Enemies:CountNearby()
 		return nearby > 0 and nearby or nil
 	end,
 	build = function(container, width, height)

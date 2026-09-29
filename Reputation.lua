@@ -10,6 +10,7 @@ local Payments = Wanted.Payments
 local private = {
 	frame = CreateFrame("Frame"),
 	whispered = {}, -- sender -> true once told about this session
+	deathOrigins = {}, -- deathId -> who recorded it (GetOutlaws), kept between rebuilds
 }
 -- Rank points per event; a level is every RANK_POINTS_PER_LEVEL points
 local WEIGHTS = {
@@ -506,14 +507,20 @@ function Reputation:GetOutlaws()
 	if private.outlaws and now - (private.outlawsAt or 0) < OUTLAW_CACHE_SECONDS then
 		return private.outlaws
 	end
-	-- Who else recorded each death, so a kill record can be checked against another origin's record of it
-	local deathOrigins = {}
+	-- Who recorded each death, so a kill record can be checked against another origin's record of it: the one
+	-- origin, or true once two have (a set per death was thousands of tables at every rebuild). One table, emptied
+	-- each time: a new one grew to thousands of entries at every rebuild, and a rebuild follows every new death.
+	local deathOrigins = private.deathOrigins
+	wipe(deathOrigins)
 	for death in Store:Iterator("death") do
 		local id = death.data.deathId
 		if type(id) == "string" then
-			local set = deathOrigins[id] or {}
-			set[death.origin] = true
-			deathOrigins[id] = set
+			local seen = deathOrigins[id]
+			if seen == nil then
+				deathOrigins[id] = death.origin
+			elseif seen ~= death.origin then
+				deathOrigins[id] = true
+			end
 		end
 	end
 	local killers = {} -- guid -> { name, entries = { { t, victim, key } } }
@@ -536,13 +543,8 @@ function Reputation:GetOutlaws()
 	-- A kill record another origin's death record backs
 	for kill in Store:Iterator("kill") do
 		local d = kill.data
-		local backed = false
-		for origin in pairs(deathOrigins[d.deathId] or {}) do
-			if origin ~= kill.origin then
-				backed = true
-			end
-		end
-		if backed then
+		local seen = deathOrigins[d.deathId]
+		if seen == true or (seen ~= nil and seen ~= kill.origin) then
 			Note(d.killer, d.killerName, d.victim, d.deathId or kill.id, kill.t)
 		end
 	end

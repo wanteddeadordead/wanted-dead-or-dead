@@ -752,23 +752,32 @@ end
 -- Record ids by kind, so walking the handful of raises or payments doesn't mean walking every record (the
 -- bounty code does that many times over), and each origin's newest record time, so the sync can tell which
 -- chains are active. Built on first use and kept as records arrive; built again whenever the records table is
--- replaced (a fresh start, the launch reset). A record removed some other way (pruning) is dropped from it when
--- a walk finds it gone.
+-- replaced (a fresh start, the launch reset) or pruned. Each kind's ids are a list that only grows, so a walk
+-- reads it in place (copying it for every walk made most of the addon's garbage); a record removed some other way
+-- is skipped by walks until then.
 function private.Index()
 	local records = Wanted.db.records
 	if private.indexFor ~= records then
-		private.byKind, private.lastActive, private.indexFor = {}, {}, records
-		for id, record in pairs(records) do
-			local ids = private.byKind[record.kind]
-			if not ids then
-				ids = {}
-				private.byKind[record.kind] = ids
-			end
-			ids[id] = true
+		private.byKind, private.indexed, private.lastActive, private.indexFor = {}, {}, {}, records
+		for _, record in pairs(records) do
+			private.AddId(record)
 			private.NoteActive(record)
 		end
 	end
 	return private.byKind
+end
+
+function private.AddId(record)
+	if private.indexed[record.id] then
+		return
+	end
+	private.indexed[record.id] = true
+	local ids = private.byKind[record.kind]
+	if not ids then
+		ids = {}
+		private.byKind[record.kind] = ids
+	end
+	ids[#ids + 1] = record.id
 end
 
 function private.NoteActive(record)
@@ -783,12 +792,7 @@ function private.AddToIndex(record)
 	if private.indexFor ~= Wanted.db.records then
 		return
 	end
-	local ids = private.byKind[record.kind]
-	if not ids then
-		ids = {}
-		private.byKind[record.kind] = ids
-	end
-	ids[record.id] = true
+	private.AddId(record)
 	private.NoteActive(record)
 end
 
@@ -798,25 +802,18 @@ end
 ---@return fun(): table?
 function Store:Iterator(kind)
 	local records = Wanted.db.records
-	local ids = private.Index()[kind]
-	local list = {}
-	for id in pairs(ids or {}) do
-		list[#list + 1] = id
-	end
+	local list = private.Index()[kind]
+	local n = list and #list or 0
 	local i = 0
 	return function()
-		while true do
+		while i < n do
 			i = i + 1
-			local id = list[i]
-			if not id then
-				return nil
-			end
-			local record = records[id]
+			local record = records[list[i]]
 			if record and record.kind == kind then
 				return record
 			end
-			ids[id] = nil
 		end
+		return nil
 	end
 end
 

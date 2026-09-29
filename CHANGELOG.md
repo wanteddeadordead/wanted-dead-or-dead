@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Wanted makes about a quarter of the garbage it did in a busy fight (measured: 16 MB a minute down to 4.5 MB with
+  fifteen enemies around), so the game pauses less often to clean up: the Nearby window no longer describes every
+  enemy from scratch several times a second, outlaws are worked out without a table per death, and walking the
+  records no longer copies them.
 - The addon's description now leads with the war: fronts, battles and victories on wanteddeadordead.com.
 - Deaths in a dungeon's mine or cave (the Deadmines' mine, the Wailing Caverns) are recorded to about 3 yards instead
   of 35: there the game gives only the continent's map, so the position keeps an extra decimal.

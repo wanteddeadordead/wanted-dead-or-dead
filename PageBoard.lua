@@ -181,7 +181,7 @@ function private.Post()
 			private.targetBox:SetValue("")
 			private.amountBox:SetValue("")
 			private.OnFormChanged()
-			UI:Toast(format("Posted %s on %s. Hunters running Wanted will see it.", Bounties:FormatMoney(amount), guild and ("<"..guild..">") or name), C.green)
+			UI:Toast(format("Posted %s on %s. Bounty hunters running Wanted will see it.", Bounties:FormatMoney(amount), guild and ("<"..guild..">") or name), C.green)
 			UI:Refresh()
 		end,
 	})

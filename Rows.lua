@@ -20,9 +20,9 @@ local ACTION_BUTTONS = {
 	stophunt = { label = "Stop", style = "ghost", tip = "Stop hunting. The poster can withdraw the bounty again once nobody is hunting it." },
 	renew = { label = "Renew", style = "secondary", tip = "Start your 24 hours again, keeping the bounty locked while you hunt." },
 	pass = { label = "Pass", style = "ghost", tip = "Hide this bounty from your board, e.g. because it pays too little." },
-	confirm = { label = "Confirm", style = "success", tip = "Agree the kill happened. You then owe the hunter the bounty." },
-	dispute = { label = "Dispute", style = "danger", tip = "Say the claim is false. It goes on the hunter's record and the bounty opens again." },
-	pay = { label = "Pay", style = "primary", tip = "Fill in a mail to the hunter at a mailbox. You check it and press Send." },
+	confirm = { label = "Confirm", style = "success", tip = "Agree the kill happened. You then owe the bounty hunter the bounty." },
+	dispute = { label = "Dispute", style = "danger", tip = "Say the claim is false. It goes on the bounty hunter's record and the bounty opens again." },
+	pay = { label = "Pay", style = "primary", tip = "Fill in a mail to the bounty hunter at a mailbox. You check it and press Send." },
 }
 local ROW_HEIGHT = 50
 Rows.HEIGHT = ROW_HEIGHT
@@ -135,7 +135,7 @@ function Rows:UpdateClaim(row, item)
 		Unverified = "Nobody else saw it. Waiting for the poster.",
 		Disputed = "The poster says it didn't happen.",
 		Overdue = "Confirmed over 2 days ago and still unpaid.",
-		Beaten = "Another hunter got the kill first.",
+		Beaten = "Another bounty hunter got the kill first.",
 	}
 	row.seen:SetText(hints[item.label] or "")
 	for _, button in ipairs(row.buttons) do
@@ -193,7 +193,7 @@ function Rows:ShowBountyTooltip(row, info)
 		GameTooltip:AddDoubleLine("Claimed by", info.hunter, 1, 1, 1, C.text[1], C.text[2], C.text[3])
 		local witnesses = Bounties:GetWitnesses(info.claim)
 		GameTooltip:AddLine(#witnesses > 0 and ("Seen by "..table.concat(witnesses, ", ")) or "Nobody else saw the kill", C.muted[1], C.muted[2], C.muted[3], true)
-		Reputation:AddTrustLines("Hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
+		Reputation:AddTrustLines("Bounty hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
 		if Wanted.Proof:Get(info.claim.id) then
 			GameTooltip:AddLine(format("%s's client saved a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL), C.green[1], C.green[2], C.green[3], true)
 		end

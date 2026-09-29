@@ -3081,3 +3081,88 @@ end)()
 	check(ns:AppNotRunningFor() == clock - WantedAppInfo.seen, "an app that last ran four hours before login isn't running")
 	WantedAppInfo, clock = savedInfo, savedClock
 end)()
+;(function()
+	-- Guild ranks, for guild mode on Discord: the character's own rank, and the roster's officers only
+	local GuildRank = ns.GuildRank
+	local real = { GetGuildInfo = GetGuildInfo, IsInGuild = IsInGuild, IsGuildLeader = IsGuildLeader, C_GuildInfo = C_GuildInfo, C_Club = C_Club, clock = clock }
+	local me = UnitGUID("player")
+	local guild = { name = "Blood Oath", rankName = "Grunt", rankIndex = 4, leader = false, officer = false, inGuild = true }
+	local roster = {
+		{ guid = "Player-1-GM", order = 1 },
+		{ guid = me, order = 5 },
+		{ guid = "Player-1-OFFICER", order = 2 },
+		{ guid = "Player-1-MEMBER", order = 5 },
+		{ guid = "Player-1-RECRUIT", order = 7 },
+	}
+	GetGuildInfo = function(unit) if unit == "player" and guild.inGuild then return guild.name, guild.rankName, guild.rankIndex end end
+	IsInGuild = function() return guild.inGuild end
+	IsGuildLeader = function() return guild.leader end
+	C_GuildInfo = { IsGuildOfficer = function() return guild.officer end, GuildRoster = function() end }
+	C_Club = {
+		GetGuildClubId = function() return 77 end,
+		GetClubMembers = function() local ids = {} for i = 1, #roster do ids[i] = i end return ids end,
+		GetMemberInfo = function(_, id) local m = roster[id] return { guid = m.guid, guildRankOrder = m.order, name = "x" } end,
+	}
+	local ranks, officers = ns.db.guildRanks, ns.db.guildOfficers
+
+	-- A plain member: noted as no officer, and the roster keeps only the guild master
+	GuildRank:NoteOwn()
+	local own = ranks[me]
+	check(own and own.g == "Blood Oath" and own.rn == "Grunt" and own.ri == 4 and own.o == false, "a plain member's own rank is noted, not an officer")
+	GuildRank:ReadRoster()
+	local book = officers["Blood Oath"]
+	check(book and book.m["Player-1-GM"] == 0, "the guild master is kept")
+	check(book.m[me] == nil and book.m["Player-1-MEMBER"] == nil and book.m["Player-1-RECRUIT"] == nil and book.m["Player-1-OFFICER"] == nil,
+		"a plain member's roster keeps no plain members, nor ranks it can't tell are officers'")
+
+	-- Promoted: an officer, whose rank marks the officers
+	guild.rankName, guild.rankIndex, guild.officer = "Officer", 1, true
+	roster[2].order = 2
+	GuildRank:NoteOwn()
+	check(ranks[me].o == true and ranks[me].ri == 1, "a promotion is noted")
+	GuildRank:ReadRoster()
+	check(officers["Blood Oath"].m["Player-1-OFFICER"] == nil, "the roster isn't read again within ten minutes")
+	clock = clock + GuildRank.ROSTER_SECONDS
+	GuildRank:ReadRoster()
+	book = officers["Blood Oath"].m
+	check(book["Player-1-OFFICER"] == 1 and book[me] == 1 and book["Player-1-GM"] == 0, "an officer's roster keeps the officers at its rank")
+	check(book["Player-1-MEMBER"] == nil and book["Player-1-RECRUIT"] == nil, "plain members are never kept")
+
+	-- Unchanged: not noted again
+	local t = ranks[me].t
+	clock = clock + 60
+	GuildRank:NoteOwn()
+	check(ranks[me].t == t, "an unchanged rank isn't noted again")
+
+	-- A secret value: nothing noted
+	local realSecret = issecretvalue
+	issecretvalue = function(v) return v == "Officer" end
+	guild.rankIndex = 2
+	GuildRank:NoteOwn()
+	check(ranks[me].ri == 1, "a rank the game keeps secret isn't noted")
+	issecretvalue = function(v) return v == true end
+	GuildRank:NoteOwn()
+	check(ranks[me].ri == 1, "a secret officer flag isn't noted")
+	issecretvalue = realSecret
+
+	-- The guild not loaded yet at login: nothing noted; out of a guild: noted as none
+	guild.name = nil
+	GuildRank:NoteOwn()
+	check(ranks[me].g == "Blood Oath", "a guild the game hasn't loaded yet isn't taken for leaving it")
+	guild.inGuild = false
+	GuildRank:NoteOwn()
+	check(ranks[me].g == "" and ranks[me].o == false and ranks[me].ri == -1, "leaving the guild is noted as no guild")
+	clock = clock + GuildRank.ROSTER_SECONDS
+	officers["Blood Oath"].t = clock - 1
+	GuildRank:ReadRoster()
+	check(officers["Blood Oath"].t == clock - 1, "out of a guild, no roster is read")
+
+	-- Old officer books go
+	officers["Old Guild"] = { t = clock - GuildRank.KEEP_SECONDS - 1, m = { ["Player-1-X"] = 0 } }
+	GuildRank:OnLoad()
+	check(officers["Old Guild"] == nil and officers["Blood Oath"] ~= nil, "an officers book not read for a month goes")
+
+	GetGuildInfo, IsInGuild, IsGuildLeader, C_GuildInfo, C_Club, clock = real.GetGuildInfo, real.IsInGuild, real.IsGuildLeader, real.C_GuildInfo, real.C_Club, real.clock
+	ranks[me] = nil
+	officers["Blood Oath"] = nil
+end)()

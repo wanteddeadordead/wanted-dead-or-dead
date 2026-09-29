@@ -592,3 +592,56 @@ Wanted:RegisterCommand("who", "Development builds: tries a /who search for a nam
 		Send()
 	end
 end)
+
+Wanted:RegisterCommand("guildrank", "Development builds: prints what the game says about your guild rank and your guild's officers, and what Wanted kept: /wanted guildrank", function()
+	local function Show(value)
+		if issecretvalue and issecretvalue(value) then
+			return "(secret)"
+		end
+		return tostring(value)
+	end
+	local function Ask(name, f, ...)
+		if not f then
+			Wanted:Print("  %s: missing", name)
+			return
+		end
+		local results = { pcall(f, ...) }
+		if not results[1] then
+			Wanted:Print("  %s: error %s", name, tostring(results[2]))
+			return
+		end
+		local shown = {}
+		for i = 2, #results do
+			shown[#shown + 1] = Show(results[i])
+		end
+		Wanted:Print("  %s: %s", name, table.concat(shown, ", "))
+		return unpack(results, 2)
+	end
+	Wanted:Print("Guild rank probe:")
+	Ask("IsInGuild", IsInGuild)
+	Ask("GetGuildInfo(player)", GetGuildInfo, "player")
+	Ask("IsGuildLeader", IsGuildLeader)
+	Ask("C_GuildInfo.IsGuildOfficer", C_GuildInfo and C_GuildInfo.IsGuildOfficer)
+	local club = Ask("C_Club.GetGuildClubId", C_Club and C_Club.GetGuildClubId)
+	if club ~= nil and not (issecretvalue and issecretvalue(club)) and C_Club.GetClubMembers then
+		local ok, ids = pcall(C_Club.GetClubMembers, club)
+		Wanted:Print("  members: %s", ok and type(ids) == "table" and #ids or ("error "..tostring(ids)))
+		for i = 1, ok and type(ids) == "table" and min(#ids, 8) or 0 do
+			local got, info = pcall(C_Club.GetMemberInfo, club, ids[i])
+			if got and type(info) == "table" then
+				Wanted:Print("  %d: %s rank %s (%s) role %s %s", i, Show(info.name), Show(info.guildRankOrder), Show(info.guildRank), Show(info.role), Show(info.guid))
+			else
+				Wanted:Print("  %d: %s", i, tostring(info))
+			end
+		end
+	end
+	local own = Wanted.db.guildRanks[UnitGUID("player")]
+	Wanted:Print("  kept: %s", own and format("<%s> %s (%d) officer %s", own.g, own.rn, own.ri, tostring(own.o)) or "nothing yet")
+	for guild, entry in pairs(Wanted.db.guildOfficers) do
+		local n = 0
+		for _ in pairs(entry.m) do
+			n = n + 1
+		end
+		Wanted:Print("  officers kept for <%s>: %d", guild, n)
+	end
+end)

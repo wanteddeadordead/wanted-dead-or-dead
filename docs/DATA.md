@@ -139,6 +139,17 @@ network traffic can be read back after a session; `/wanted netlog` summarises it
 anomalies (altered records, broken chains, bad messages, limits hit, version locks, rejected notices).
 Released builds never write it (it lives in `Debug.lua`, which packages leave out).
 
+`WantedDB.guildRanks` and `WantedDB.guildOfficers` (from 1.2.21) are for guild mode on Discord, which wanteddeadordead.com
+turns on only for a guild's officer, proven from the game. `guildRanks[guid] = { g, rn, ri, o, t }` is each of this
+account's characters' own guild (`""` out of one), rank name, rank index (0 is the guild master, -1 out of a guild),
+whether the game counts it an officer (`IsGuildLeader()` or `C_GuildInfo.IsGuildOfficer()`) and when that was read; it's
+written at login and on the guild events when it changed, never from a value the game keeps secret, and never while the
+game hasn't loaded the guild yet. `guildOfficers[guild] = { t, m = { [guid] = rank index } }` is what that guild's roster
+(the game's guild club) said at most every 10 minutes: only the members at officer ranks, which are the guild master's
+and the character's own when it's an officer's. A plain member's rank is never kept. A book not read for 30 days goes.
+The desktop app sends both to the website, which uses them for the officer check only and never shows them. No layout
+change: both are new keys.
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

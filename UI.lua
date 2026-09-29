@@ -136,12 +136,13 @@ function private.Create()
 	local titleLine = Theme:Line(titleBar)
 	titleLine:SetPoint("BOTTOMLEFT")
 	titleLine:SetPoint("BOTTOMRIGHT")
+	-- The wax seal, as on the website
 	local mark = titleBar:CreateTexture(nil, "ARTWORK")
-	mark:SetSize(4, 22)
-	mark:SetPoint("LEFT", 18, 0)
-	mark:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	mark:SetSize(32, 32)
+	mark:SetPoint("LEFT", 12, 0)
+	mark:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
 	local brand = Theme:Text(titleBar, "brand", "WANTED: "..Theme:Colorize("DEAD OR...", C.muted).." "..Theme:Colorize("DEAD", C.accent))
-	brand:SetPoint("LEFT", mark, "RIGHT", 10, 1)
+	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
 	local anchor = brand
 	if Wanted.BETA then
 		local beta = W:Pill(titleBar)

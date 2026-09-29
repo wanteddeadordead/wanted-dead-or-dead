@@ -13,6 +13,8 @@ The wax seal.
 - The addon remembers which Wanted version each player's messages carried, so the website can count how many
   players run each version.
 - The main window's title bar carries the wax seal, the website's new logo.
+- After the poster picture is taken, its button becomes "Send it now (/reload)": the app can only send the picture
+  once the game saves, which a /reload does.
 
 ## [1.2.19] - 2026-09-28
 

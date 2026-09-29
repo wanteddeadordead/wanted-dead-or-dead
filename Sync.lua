@@ -1275,6 +1275,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 	-- The newest release wins: a newer one may lock this client (Core); an older one's news is ignored. A
 	-- development build is not a release, so it neither locks others nor turns them away.
 	Wanted:NoteVersion(tbl.v)
+	Store:NoteAddonVersion(sender, tbl.v)
 	if type(tbl.v) == "string" and Wanted:IsRelease(Wanted.VERSION) and Wanted:IsNewerVersion(Wanted.VERSION, tbl.v) then
 		private.TellOutdated(sender)
 		if tag ~= TAG_HELLO and tag ~= TAG_HAVE and tag ~= TAG_NEED then

@@ -18,6 +18,7 @@ local HUNT_SECONDS = 24 * 60 * 60
 Bounties.HUNT_SECONDS = HUNT_SECONDS
 -- A death record from another client counts as a witness within this many seconds of the kill
 local WITNESS_WINDOW = 30
+Bounties.WITNESS_WINDOW = WITNESS_WINDOW
 
 
 
@@ -588,11 +589,13 @@ local NEW_WITNESS_SECONDS = 24 * 60 * 60
 local LOYAL_WITNESS_CLAIMS = 3
 
 ---Whether a witness is new: their first record came less than a day before the kill, or we hold so few of
----their records that we can't tell they've been around.
+---their records that we can't tell they've been around. The first record's time is kept with their chain, as the
+---record itself may be pruned.
 function private.IsNewWitness(origin, killT)
 	local first = Store:Get(origin..":1")
-	if first then
-		return killT - first.t < NEW_WITNESS_SECONDS
+	local firstT = first and first.t or Store:GetFirstSeen(origin)
+	if firstT then
+		return killT - firstT < NEW_WITNESS_SECONDS
 	end
 	return Store:GetChainSeq(origin) < 10
 end

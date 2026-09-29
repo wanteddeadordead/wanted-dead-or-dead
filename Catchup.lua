@@ -86,7 +86,7 @@ function Catchup:Import()
 	end
 	local records = type(entry.records) == "table" and entry.records or {}
 	local notices = type(entry.notices) == "table" and entry.notices or {}
-	local counts = { new = 0, held = 0, skipped = 0 }
+	local counts = { new = 0, held = 0, skipped = 0, pruned = 0 }
 	for first = 1, #records, BATCH do
 		Wanted:QueueWork(function()
 			Sync:WithoutForwarding(function()
@@ -94,10 +94,16 @@ function Catchup:Import()
 					local record = records[i]
 					if not private.IsWellFormed(record) then
 						counts.skipped = counts.skipped + 1
-					elseif Store:MergeRelayed(record) then
-						counts.new = counts.new + 1
 					else
-						counts.held = counts.held + 1
+						local isNew, why = Store:MergeRelayed(record)
+						if isNew then
+							counts.new = counts.new + 1
+						elseif why == "pruned" then
+							-- Too old to keep: its chain moved on, so the app doesn't send it again
+							counts.pruned = counts.pruned + 1
+						else
+							counts.held = counts.held + 1
+						end
 					end
 				end
 			end)
@@ -109,7 +115,7 @@ function Catchup:Import()
 			Bridge:ReceiveNotice(notice)
 		end
 		Wanted.db.catchupT = entry.t
-		Wanted:Log("Catch-up: %d records new, %d already held, %d malformed; %d bounty notices", counts.new, counts.held,
-			counts.skipped, #notices)
+		Wanted:Log("Catch-up: %d records new, %d already held, %d too old to keep, %d malformed; %d bounty notices", counts.new,
+			counts.held, counts.pruned, counts.skipped, #notices)
 	end)
 end

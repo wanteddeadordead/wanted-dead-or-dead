@@ -43,13 +43,38 @@ and the other side's bounties on this side in the Bridge's notice form. At login
 entry newer than `catchupT` in the background (as gap fills, never live, not forwarded to realm links), then the
 notices through the Bridge. No layout change: both fields are new and optional.
 
-Pruning (from 1.2.9): at load, `Store:Prune` drops `kill`, `death` and `assist` records older than 30 days
-(`Store.KEEP_SECONDS`), except a kill some `claim` names in `data.kill`. Every other kind is kept. The website
-keeps the full archive (the app uploads records as they appear; one pruned before the app ever ran is lost to
-it). A fill (`F`) answering a request for records the sender pruned carries `p = { [origin] = firstSeqHeld }`;
-the receiver's chain for that origin moves on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that
-record's `prev`, or from an unknown predecessor (`lastHash = "?"`, which the chain check accepts once), so it
-stops asking for records nobody holds. Older clients ignore `p` and keep asking, as before.
+Pruning (from 1.2.9): at login, `Store:Prune` drops `kill`, `death` and `assist` records older than
+`Store.KEEP_SECONDS`: 30 days until 1.2.20, 3 days from 1.2.21. Every other kind is kept. So are, whatever their age
+(from 1.2.21): records naming one of the account's characters as `victim` or `killer` (the assister, for an
+`assist`), and kills and assists one of them recorded; a death they only witnessed is pruned like anyone's; a kill some
+`claim` names in `data.kill`; a death of a claim's victim within the witness window of its `killT`; and, while the
+desktop app hasn't read the latest save (`catchupT` older than `savedAt`), everything since its last catch-up, for
+up to 30 days. It runs again every 24 hours of a session. A chain says how far this client has taken an origin's
+records, pruned or not, so a pruned record is never asked for again, and one a peer sends again (answering someone
+else's gap on the channel) is not taken back in. A pruned record held past a gap in its chain moves the chain past
+it (from 1.2.21): what the gap holds is older still. A record arriving already too old to keep (the app's catch-up or
+a fill of old records) that is next in its chain moves the chain on and isn't stored (from 1.2.21), so it isn't
+imported only to be pruned at the next login, and the app doesn't send it again. Chains also keep `first` (from
+1.2.21), the time of the origin's first record (seq 1), since that record may be pruned: a claim's witness counts as
+new to the network when their first record came less than a day before the kill. An optional new field: no migration. The website keeps the full archive (the app
+uploads records as they appear; one pruned before the app ever ran is lost to it). A fill (`F`) answering a request
+for records the sender pruned carries `p = { [origin] = firstSeqHeld }`; the receiver's chain for that origin moves
+on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`, or from an unknown predecessor
+(`lastHash = "?"`, which the chain check accepts once), so it stops asking for records nobody holds. From 1.2.21 a
+fill also carries `g = { [origin] = { held1, next1, held2, next2, ... } }`, one pair per hole pruning left in the
+chain past the first record (the seq held before it and the one after it, or the sender's chain end + 1 for a pruned
+end); a receiver whose chain has reached `held` moves on to `next - 1` the same way. Older clients ignore `g` and keep
+asking for interior holes, as before.
+
+`WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
+login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the
+kills, deaths and assists that name them. `WantedDB.savedAt` (from 1.2.21) is the server time of the last logout or `/reload`,
+when the game wrote the saved file. Both are new keys with defaults: no migration. The launch reset drops them.
+
+At the same pass, `players` entries not seen for 30 days are dropped, then the least recently seen past 5000,
+except bounty targets, Kill on Sight, Ignore, players with a history in `tracks`, enemies fought (wins or losses in
+`enemyStats`) and the account's characters. At load, `enemyStats` entries with no wins or losses (only seen), not on
+Kill on Sight and not seen for 30 days are dropped, then the least recently seen past 5000 (from 1.2.21).
 
 `WantedDB.recentPeers` (from 1.2.10) is `name -> seen` for the last 20 players heard on the sync channel. A client
 locked out of the channel (banned, password changed, or no answer after 12 join attempts) whispers them a hello

@@ -165,7 +165,7 @@ function Reputation:GetLine(origin)
 		tinsert(parts, "as a poster: "..posterTrust..(posterStars and format(" (%s/5)", posterStars) or ""))
 	end
 	if hunterTrust then
-		tinsert(parts, "as a hunter: "..hunterTrust..(hunterStars and format(" (%s/5)", hunterStars) or ""))
+		tinsert(parts, "as a bounty hunter: "..hunterTrust..(hunterStars and format(" (%s/5)", hunterStars) or ""))
 	end
 	if tally.posted > 0 then
 		local poster = format("posted %d, paid %d", tally.posted, tally.paid)
@@ -175,7 +175,7 @@ function Reputation:GetLine(origin)
 		tinsert(parts, poster)
 	end
 	if tally.claims > 0 then
-		tinsert(parts, format("hunter level %d, %d kills, earned %s", Reputation:GetRank(tally), tally.kills, Bounties:FormatMoney(tally.earned)))
+		tinsert(parts, format("bounty hunter level %d, %d kills, earned %s", Reputation:GetRank(tally), tally.kills, Bounties:FormatMoney(tally.earned)))
 		if tally.disputed > 0 then
 			tinsert(parts, format("%d disputed", tally.disputed))
 		end
@@ -269,11 +269,11 @@ function Reputation:GetPosterTrust(tally)
 end
 
 local POSTER_MEANING = {
-	["Trusted"] = "Hunters can count on you: four or more claims paid, next to none left unpaid.",
+	["Trusted"] = "Bounty hunters can count on you: four or more claims paid, next to none left unpaid.",
 	["Reliable"] = "You've mostly paid the claims you owed.",
-	["New poster"] = "No claim on your bounties has come due yet, so hunters can't tell whether you pay.",
+	["New poster"] = "No claim on your bounties has come due yet, so bounty hunters can't tell whether you pay.",
 	["Doubtful"] = "You've left a fair share of the claims you owed unpaid.",
-	["Untrustworthy"] = "You've left as many claims unpaid as you've paid, or more. Hunters may pass on your bounties.",
+	["Untrustworthy"] = "You've left as many claims unpaid as you've paid, or more. Bounty hunters may pass on your bounties.",
 }
 local HUNTER_MEANING = {
 	["Trusted"] = "Your kills check out: four or more verified by a witness or the poster, next to none disputed.",
@@ -290,13 +290,13 @@ local HUNTER_MEANING = {
 function Reputation:GetPosterAdvice(tally)
 	local label = Reputation:GetPosterTrust(tally)
 	if not label then
-		return "You haven't posted a bounty yet.", "Post one from the Board. Paying the hunters who claim it builds your trust."
+		return "You haven't posted a bounty yet.", "Post one from the Board. Paying the bounty hunters who claim it builds your trust."
 	end
 	local advice
 	if tally.unpaid > 0 then
 		advice = format("Pay your %d unpaid claim%s: find %s under Your live bounties and press Pay at a mailbox. A late payment still counts as paid.", tally.unpaid, tally.unpaid == 1 and "" or "s", tally.unpaid == 1 and "it" or "them")
 	elseif label == "New poster" then
-		advice = "When a hunter claims one of your bounties, confirm a real kill and pay them by mail within 2 days."
+		advice = "When a bounty hunter claims one of your bounties, confirm a real kill and pay them by mail within 2 days."
 	elseif label == "Reliable" then
 		local more = max(1, TRUSTED_AT - tally.paid)
 		advice = format("Pay %d more claim%s, with none left unpaid, to become Trusted.", more, more == 1 and "" or "s")
@@ -440,7 +440,7 @@ Wanted:RegisterCommand("rep", "Shows a player's record: /wanted rep <First Last>
 	Wanted:Print("%s: %s", origin, Reputation:GetLine(origin) or "no record")
 end)
 
-Wanted:RegisterCommand("top", "Scoreboard: hunters by rank and earnings, posters by bounties paid.", function()
+Wanted:RegisterCommand("top", "Scoreboard: bounty hunters by rank and earnings, posters by bounties paid.", function()
 	local hunters, posters = {}, {}
 	for _, origin in ipairs(Reputation:GetOrigins()) do
 		local tally = Reputation:GetTally(origin)
@@ -453,7 +453,7 @@ Wanted:RegisterCommand("top", "Scoreboard: hunters by rank and earnings, posters
 	end
 	sort(hunters, function(a, b) return a.points > b.points end)
 	sort(posters, function(a, b) return a.gold > b.gold end)
-	Wanted:Print("Top hunters:")
+	Wanted:Print("Top bounty hunters:")
 	if #hunters == 0 then
 		Wanted:Print("  none yet")
 	end

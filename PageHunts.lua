@@ -40,7 +40,7 @@ end
 
 UI:RegisterPage("hunts", {
 	title = "Your hunts",
-	subtitle = "The bounties you're hunting, the claims your kills made, and your record as a hunter.",
+	subtitle = "The bounties you're hunting, the claims your kills made, and your record as a bounty hunter.",
 	order = 2.5,
 	badge = function()
 		local hunts = #Model:GetMyHunts()

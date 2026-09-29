@@ -623,7 +623,7 @@ function Bounties:GetClaimWarnings(claim)
 	local warnings = {}
 	local witnesses = Bounties:GetWitnesses(claim)
 	if #witnesses == 0 then
-		tinsert(warnings, "Nobody else recorded this death: only the hunter's own addon says it happened.")
+		tinsert(warnings, "Nobody else recorded this death: only the bounty hunter's own addon says it happened.")
 		return warnings
 	end
 	local killT = claim.data.killT or claim.t
@@ -812,7 +812,7 @@ Wanted:RegisterCommand("claims", "Lists claims on your bounties and claims you m
 		local bounty = Store:Get(claim.data.bounty)
 		if bounty and (bounty.origin == me or claim.origin == me) then
 			local level = Bounties:GetClaimLevel(claim)
-			local levelText = level == 0 and "disputed" or level == 1 and "hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
+			local levelText = level == 0 and "disputed" or level == 1 and "bounty hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
 			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
 			shown = shown + 1
 		end

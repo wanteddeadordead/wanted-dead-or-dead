@@ -18,7 +18,7 @@ happened.
 **Bounty board**
 - Post a bounty on an enemy player, or on **every member of a guild**. One per target; posting again adds
   to it.
-- Hunters mark a bounty they're chasing, for a day at a time (renew to keep going). While anyone is
+- Bounty hunters mark a bounty they're chasing, for a day at a time (renew to keep going). While anyone is
   hunting it, the poster can't pull it.
 - Sort the board by amount, newest, name, the zone a target was last seen in, or who was seen most recently.
 - **The file on every target:** click a bounty for where they were last seen, the zones they keep to, the
@@ -40,9 +40,9 @@ happened.
 - **Set amount** shows any reward you like, just for fun. The poster marks it "(allegedly)".
 
 **Reputation from the record**
-- Hunters get a level and a reliability rating from witnessed and confirmed kills.
+- Bounty hunters get a level and a reliability rating from witnessed and confirmed kills.
 - Posters are known by what they posted and paid. Unpaid bounties show on their record.
-- Leaderboards for hunters, posters and guilds (kills, deaths, bounty gold on them).
+- Leaderboards for bounty hunters, posters and guilds (kills, deaths, bounty gold on them).
 
 **Enemy awareness**
 - A small **Nearby** window: who's around, who's acting, who's out of sight, with class icons, guilds,
@@ -107,7 +107,7 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
 - Enemy health is drawn by the game, not read by the addon, so the bar shows length but not a colour change.
 - WoW Forever doesn't tell addons about Stealth or Vanish, so the stealth alarm spots the moment your target
   vanishes close by. It can't cover enemies you haven't targeted.
-- It gets better the more hunters run it: bounties, sightings and witnesses all come from other players.
+- It gets better the more bounty hunters run it: bounties, sightings and witnesses all come from other players.
   On your own it still detects, alerts and keeps your lists.
 
 ## Development

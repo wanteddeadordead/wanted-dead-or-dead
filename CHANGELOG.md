@@ -5,6 +5,7 @@
 - No more "You were made a moderator of the sync channel" in chat: the channel passes to whoever has been in it
   longest, so moderator and owner changes happen all the time. Kicks, bans, moderation and a changed password
   are still said.
+- "Hunter" is now "bounty hunter" everywhere a player reads it, so it can't be mistaken for the class.
 
 ## [1.2.19] - 2026-09-28
 

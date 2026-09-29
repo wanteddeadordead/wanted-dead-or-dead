@@ -99,7 +99,7 @@ function private.Refresh()
 		private.list:SetItems(Model:GetGuildBoard(since), "No guilds seen yet.", "Guilds come from the players you see and the kills and deaths recorded.")
 	elseif private.view == "hunters" then
 		private.SetColumns(HUNTER_COLUMNS)
-		private.list:SetItems(hunters, "No hunters yet.", "Claims on bounties put hunters here.")
+		private.list:SetItems(hunters, "No bounty hunters yet.", "Claims on bounties put bounty hunters here.")
 	else
 		private.SetColumns(POSTER_COLUMNS)
 		private.list:SetItems(posters, "No posters yet.", "Anyone who posts a bounty appears here.")
@@ -112,7 +112,7 @@ UI:RegisterPage("hunters", {
 	order = 4,
 	build = function(container, width, height)
 		local view = W:Segmented(container, {
-			{ key = "hunters", label = "Hunters" },
+			{ key = "hunters", label = "Bounty hunters" },
 			{ key = "posters", label = "Posters" },
 			{ key = "guilds", label = "Guilds" },
 		}, function(key)
@@ -166,7 +166,7 @@ UI:RegisterPage("hunters", {
 			local t = item.tally
 			-- Stars and the trust word first, as on bounty tooltips, then the numbers behind them
 			if private.view == "hunters" then
-				Reputation:AddTrustLines("Hunter trust", Reputation:GetHunterTrust(t))
+				Reputation:AddTrustLines("Bounty hunter trust", Reputation:GetHunterTrust(t))
 				GameTooltip:AddLine(" ")
 				GameTooltip:AddDoubleLine("Witnessed kills", t.witnessed, 1, 1, 1, 1, 1, 1)
 				GameTooltip:AddDoubleLine("Confirmed by poster", t.confirmed, 1, 1, 1, 1, 1, 1)

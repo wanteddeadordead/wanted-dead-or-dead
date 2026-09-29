@@ -116,6 +116,9 @@ end
 -- Where we are
 -- ============================================================================
 
+-- The continent map type (Enum.UIMapType.Continent)
+local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
+
 ---The zone name and map coordinates (0-100) of the player, or nil coordinates where the map gives none.
 ---@return string zone
 ---@return number? x
@@ -130,7 +133,11 @@ function Recorder:GetPosition()
 	if not pos then
 		return zone, nil, nil, mapId
 	end
-	return zone, floor(pos.x * 1000 + 0.5) / 10, floor(pos.y * 1000 + 0.5) / 10, mapId
+	-- Underground, where no zone map reaches (a dungeon's mine or cave), the game places the player on the
+	-- continent's map, where a tenth of a percent is about 35 yards: keep a hundredth there
+	local info = C_Map.GetMapInfo(mapId)
+	local steps = info and info.mapType == MAP_TYPE_CONTINENT and 10000 or 1000
+	return zone, floor(pos.x * steps + 0.5) / (steps / 100), floor(pos.y * steps + 0.5) / (steps / 100), mapId
 end
 
 ---Where the player is, for other players to find them: "in Ratchet, The Barrens 62,38" where the game names

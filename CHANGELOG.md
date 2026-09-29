@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - The addon's description now leads with the war: fronts, battles and victories on wanteddeadordead.com.
+- Deaths in a dungeon's mine or cave (the Deadmines' mine, the Wailing Caverns) are recorded to about 3 yards instead
+  of 35: there the game gives only the continent's map, so the position keeps an extra decimal.
 
 ## [1.2.20] - 2026-09-28
 

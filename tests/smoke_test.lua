@@ -3057,10 +3057,14 @@ print("wanted smoke: all checks pass")
 	C_Map.GetPlayerMapPosition = function() return { x = 0.41123, y = 0.79268 } end
 	C_Map.GetBestMapForUnit = function() return 1415 end
 	C_Map.GetMapInfo = function() return { name = "Eastern Kingdoms", mapType = 2 } end
+	clock = clock + 1 -- the position is read once a moment
 	local _, x, y, mapId = ns.Recorder:GetPosition()
 	check(x == 41.12 and y == 79.27 and mapId == 1415, "on a continent's map the position keeps a hundredth: "..tostring(x)..", "..tostring(y))
 	C_Map.GetBestMapForUnit = function() return 1436 end
 	C_Map.GetMapInfo = function() return { name = "Westfall", mapType = 3 } end
+	_, x = ns.Recorder:GetPosition()
+	check(x == 41.12, "within the same moment the position isn't read again")
+	clock = clock + 1
 	_, x, y = ns.Recorder:GetPosition()
 	check(x == 41.1 and y == 79.3, "on a zone's map it keeps a tenth: "..tostring(x)..", "..tostring(y))
 	C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition, C_Map.GetMapInfo = realBest, realPos, realInfo

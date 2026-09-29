@@ -119,11 +119,24 @@ end
 -- The continent map type (Enum.UIMapType.Continent)
 local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
 
----The zone name and map coordinates (0-100) of the player, or nil coordinates where the map gives none.
+-- The player's position as last read, and when (GetTime())
+private.position = {}
+
+---The zone name and map coordinates (0-100) of the player, or nil coordinates where the map gives none. Read once
+---a moment: every enemy scanned asks, and the game makes new tables for each answer.
 ---@return string zone
 ---@return number? x
 ---@return number? y
 function Recorder:GetPosition()
+	local position, now = private.position, GetTime()
+	if position.t ~= now then
+		position.zone, position.x, position.y, position.mapId = private.ReadPosition()
+		position.t = now
+	end
+	return position.zone, position.x, position.y, position.mapId
+end
+
+function private.ReadPosition()
 	local zone = GetZoneText() or "?"
 	local mapId = C_Map.GetBestMapForUnit("player")
 	if not mapId then

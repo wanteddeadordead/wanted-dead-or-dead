@@ -20,11 +20,13 @@ local private = {
 	removals = {}, -- times of recent nameplate removals (many at once is a loading screen, not stealth)
 	lastShared = {}, -- guid -> time we last shared a sighting of them
 	targeters = {}, -- guid -> true for enemies targeting us now
+	described = {}, -- guid -> the description GetNearby last gave, filled again in place
 	lastRecapId = nil,
 	listeners = {},
 	playerFaction = nil,
 }
 local SCAN_SECONDS = 1
+local EMPTY = {} -- read-only stand-in for a player or statistics not known yet
 -- A cast that makes the caster invisible (Vanish, Stealth) arrives when their unit no longer resolves; it's
 -- put down to whoever was on that token this recently
 local TOKEN_GRACE_SECONDS = 2
@@ -306,7 +308,12 @@ function private.Scan(unit)
 		return nil
 	end
 	local now = GetTime()
-	private.tokens[unit] = { guid = guid, t = now }
+	local token = private.tokens[unit]
+	if token then
+		token.guid, token.t = guid, now
+	else
+		private.tokens[unit] = { guid = guid, t = now }
+	end
 	local entry = private.nearby[guid]
 	local isNew = not entry
 	if isNew then
@@ -673,9 +680,15 @@ end
 
 ---@return table
 function Enemies:Describe(guid)
+	return private.Fill({}, guid)
+end
+
+---Fills a description of an enemy (Describe) into d, setting every field, so a table filled before holds nothing
+---stale.
+function private.Fill(d, guid)
 	local entry = private.nearby[guid]
-	local player = Store:GetPlayer(guid) or {}
-	local stats = Enemies:GetStats(guid) or {}
+	local player = Store:GetPlayer(guid) or EMPTY
+	local stats = Enemies:GetStats(guid) or EMPTY
 	local kos = Wanted.db.kos[guid]
 	local bounty = 0
 	for _, b in ipairs(Wanted.Bounties:GetOpenForTarget(guid)) do
@@ -685,42 +698,41 @@ function Enemies:Describe(guid)
 	for _, b in ipairs(Wanted.Bounties:GetOpenForGuild(guild)) do
 		bounty = bounty + Wanted.Bounties:GetAmount(b)
 	end
-	return {
-		guid = guid,
-		name = entry and entry.name or player.name or stats.name or (kos and kos.name) or "?",
-		class = entry and entry.class or player.class,
-		level = entry and entry.level or player.level,
-		skull = entry and entry.skull,
-		race = entry and entry.race or player.race,
-		guild = guild or nil,
-		zone = entry and entry.zone or player.zone,
-		mapId = entry and entry.mapId or player.mapId,
-		x = entry and entry.x or player.x,
-		y = entry and entry.y or player.y,
-		lastSeen = entry and (GetServerTime() - (GetTime() - entry.lastSeen)) or player.lastSeen or stats.last,
-		nearby = entry ~= nil,
-		-- Visible: on screen in the last scan. In sight (the setting): seen that recently, shown as nearby once
-		-- out of view. Active: casting or targeting us lately.
-		visible = entry and GetTime() - entry.lastSeen <= VISIBLE_SECONDS or false,
-		inSight = entry and GetTime() - entry.lastSeen < private.InSightSeconds() or false,
-		goneFor = entry and floor(GetTime() - entry.lastSeen) or nil,
-		active = entry and ((entry.lastActive and GetTime() - entry.lastActive < ACTIVE_SECONDS) or (entry.targetingMe and GetTime() - entry.targetingMe < ACTIVE_SECONDS)) or false,
-		stealthed = entry and entry.stealthed and GetTime() - entry.stealthed < 30,
-		stealthKind = entry and entry.stealthKind,
-		targetingMe = entry and entry.targetingMe and GetTime() - entry.targetingMe < 5,
-		-- The unit token that showed them last (for widgets that draw secret values such as health)
-		unit = entry and entry.unit,
-		kos = kos ~= nil,
-		reason = kos and kos.reason,
-		-- Wanted by their kills alone (Reputation), { rank, kills, ... } or nil
-		outlaw = Wanted.Reputation:GetOutlaw(guid),
-		ignored = Wanted.db.ignore[guid] ~= nil,
-		wins = stats.wins or 0,
-		losses = stats.losses or 0,
-		detections = stats.detections or 0,
-		bounty = bounty,
-		firstSeen = entry and entry.firstSeen,
-	}
+	d.guid = guid
+	d.name = entry and entry.name or player.name or stats.name or (kos and kos.name) or "?"
+	d.class = entry and entry.class or player.class
+	d.level = entry and entry.level or player.level
+	d.skull = entry and entry.skull
+	d.race = entry and entry.race or player.race
+	d.guild = guild or nil
+	d.zone = entry and entry.zone or player.zone
+	d.mapId = entry and entry.mapId or player.mapId
+	d.x = entry and entry.x or player.x
+	d.y = entry and entry.y or player.y
+	d.lastSeen = entry and (GetServerTime() - (GetTime() - entry.lastSeen)) or player.lastSeen or stats.last
+	d.nearby = entry ~= nil
+	-- Visible: on screen in the last scan. In sight (the setting): seen that recently, shown as nearby once
+	-- out of view. Active: casting or targeting us lately.
+	d.visible = entry and GetTime() - entry.lastSeen <= VISIBLE_SECONDS or false
+	d.inSight = entry and GetTime() - entry.lastSeen < private.InSightSeconds() or false
+	d.goneFor = entry and floor(GetTime() - entry.lastSeen) or nil
+	d.active = entry and ((entry.lastActive and GetTime() - entry.lastActive < ACTIVE_SECONDS) or (entry.targetingMe and GetTime() - entry.targetingMe < ACTIVE_SECONDS)) or false
+	d.stealthed = entry and entry.stealthed and GetTime() - entry.stealthed < 30
+	d.stealthKind = entry and entry.stealthKind
+	d.targetingMe = entry and entry.targetingMe and GetTime() - entry.targetingMe < 5
+	-- The unit token that showed them last (for widgets that draw secret values such as health)
+	d.unit = entry and entry.unit
+	d.kos = kos ~= nil
+	d.reason = kos and kos.reason
+	-- Wanted by their kills alone (Reputation), { rank, kills, ... } or nil
+	d.outlaw = Wanted.Reputation:GetOutlaw(guid)
+	d.ignored = Wanted.db.ignore[guid] ~= nil
+	d.wins = stats.wins or 0
+	d.losses = stats.losses or 0
+	d.detections = stats.detections or 0
+	d.bounty = bounty
+	d.firstSeen = entry and entry.firstSeen
+	return d
 end
 
 ---The Nearby list: Kill on Sight and bounty targets first, then whoever is acting, then newest first.
@@ -749,10 +761,29 @@ function Enemies:LastEnemySeen()
 	return last
 end
 
+---How many enemies are on the Nearby list: #GetNearby() without describing each of them.
+---@return number
+function Enemies:CountNearby()
+	local count = 0
+	for _ in pairs(private.nearby) do
+		count = count + 1
+	end
+	return count
+end
+
 function Enemies:GetNearby()
+	-- Asked for at every redraw of the Nearby window, several times a second in a fight: each enemy's description
+	-- is kept while they're on the list and filled again in place
+	local described = private.described
+	for guid in pairs(described) do
+		if not private.nearby[guid] then
+			described[guid] = nil
+		end
+	end
 	local list = {}
 	for guid in pairs(private.nearby) do
-		tinsert(list, Enemies:Describe(guid))
+		described[guid] = private.Fill(described[guid] or {}, guid)
+		tinsert(list, described[guid])
 	end
 	-- Kill on Sight and bounty targets first, then who's acting, then who's in sight, then who's gone; newest
 	-- detection first within each

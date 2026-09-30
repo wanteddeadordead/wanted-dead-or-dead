@@ -116,6 +116,10 @@ in the middle of the screen (default on), its sound (default on), and where a li
 `"none"` (the default), `"party"` or `"guild"`, never a public channel (`Streaks.lua`). The counts themselves are
 not saved. A new key with defaults: no migration.
 
+`WantedDB.settings.minimap` is the table LibDBIcon keeps for the minimap button (from 1.2.24): `hide`, and
+`minimapPos`, the button's angle in degrees, filled in at load from the older `angle` (which stays, for older
+versions). LibDBIcon may add `lock`. A new key filled in at load: no migration.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

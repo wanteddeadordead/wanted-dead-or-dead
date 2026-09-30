@@ -941,7 +941,8 @@ end
 ---@param data table
 ---@param sender string
 function Enemies:OnSharedSighting(data, sender)
-	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") or type(data.n) ~= "string" then
+	local name = Store:CleanName(data.n)
+	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") or not name then
 		return
 	end
 	local player = Store:GetPlayer(data.g)
@@ -949,7 +950,7 @@ function Enemies:OnSharedSighting(data, sender)
 		return
 	end
 	Store:UpdatePlayer(data.g, {
-		name = data.n,
+		name = name,
 		class = type(data.c) == "string" and data.c or nil,
 		level = type(data.l) == "number" and data.l or nil,
 		race = type(data.r) == "string" and data.r or nil,
@@ -964,5 +965,5 @@ function Enemies:OnSharedSighting(data, sender)
 	Store:AddSighting(data.g, data.z, data.x, data.y, data.m, sender)
 	-- p: the sender is calling a posse against them (Posse); the caller is the sender, whom the game names
 	local posse = type(data.p) == "table" and { why = type(data.p.k) == "string" and data.p.k or "wanted" } or nil
-	Fire("shared", { guid = data.g, name = data.n, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s, posse = posse })
+	Fire("shared", { guid = data.g, name = name, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s, posse = posse })
 end

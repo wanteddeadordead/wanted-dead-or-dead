@@ -579,8 +579,13 @@ function private.CreateRow(parent, index)
 end
 
 ---The macro that targets a player. Names on this client are "First Last"; the lines are tried in turn and
----each only runs while nothing is targeted yet.
+---each only runs while nothing is targeted yet. The name is cleaned here too, so a name saved before names were
+---cleaned on the way in can't add a line.
 function private.TargetMacro(name)
+	name = Wanted.Store:CleanName(name)
+	if not name then
+		return ""
+	end
 	local first = strmatch(name, "^(%S+)")
 	return table.concat({
 		"/cleartarget",

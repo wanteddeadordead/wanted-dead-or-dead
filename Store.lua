@@ -28,6 +28,7 @@ local APP_CLOCK_MARGIN = 60 * 60
 local PRUNE_EVERY_SECONDS = 24 * 60 * 60
 -- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
 local UNKNOWN_HASH = "?"
+local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
 
 
 
@@ -885,11 +886,26 @@ function Store:UpdatePlayer(guid, info, seen)
 		players[guid] = player
 	end
 	for key, value in pairs(info) do
+		if key == "name" then
+			value = Store:CleanName(value) or player.name
+		end
 		player[key] = value
 	end
 	if seen ~= false then
 		player.lastSeen = GetServerTime()
 	end
+end
+
+---A player name safe to show or to put in a macro: no control characters (a newline would start a new macro
+---line, which a click then runs) and no "|" (the client's escape sequences). Peers can send any string.
+---@param name any
+---@return string? name nil when nothing is left
+function Store:CleanName(name)
+	if type(name) ~= "string" then
+		return nil
+	end
+	name = strsub((gsub(name, "[%c|]", "")), 1, MAX_NAME_BYTES)
+	return name ~= "" and name or nil
 end
 
 ---Gets what is known about a player.

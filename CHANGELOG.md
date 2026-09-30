@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.2.23] - 2026-09-29
+
+- Wanted now notices when someone changes its sync channel's password and moves everyone to a new channel.
+  Before, it took its own turned-down password for the game's usual failed rejoin at login and kept trying the old
+  channel forever, so on a realm where the channel was taken over, nobody could sync. Three wrong passwords within
+  two minutes now count as a takeover.
+
 ## [1.2.22] - 2026-09-29
 
 A security fix: update now.

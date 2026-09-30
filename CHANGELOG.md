@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.2.24] - 2026-09-29
+
+- The minimap button now uses LibDBIcon, like most addons, so minimap button collectors and UI packs
+  (EllesmereUI's flyout, Button Collector and others) can gather, move and hide it. It keeps its place on the
+  minimap. New files: quit and restart the game after updating, a /reload isn't enough.
+
 ## [1.2.23] - 2026-09-29
 
 - Wanted now notices when someone changes its sync channel's password and moves everyone to a new channel.

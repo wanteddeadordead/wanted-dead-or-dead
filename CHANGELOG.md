@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Security: a player name shared by another player can no longer add a line to the Nearby window's click-to-target
+  macro. A modified copy of the addon could send a name with a line break and a /run command, which ran when you
+  clicked that enemy's row. Names from other players now lose control characters and "|" before they're saved, and
+  the macro cleans the name again, so a name saved by an older version can't do it either. Thanks to the reviewer who
+  reported it.
+- A crafted message whose parts don't fit its total is dropped instead of causing a Lua error.
+
 ## [1.2.21] - 2026-09-29
 
 Kill streaks, and a lighter addon.

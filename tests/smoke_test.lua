@@ -3005,6 +3005,27 @@ end)()
 	check(ns.db.syncChannel.e == 4 and ns.db.syncChannel.n == "WantedNetHordefromapp", "the app's channel is followed")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
+-- A re-passworded channel: the game asks for the password after each of our joins and turns ours down. One wrong
+-- password is the game's own rejoin at login; three in a row within two minutes are a takeover, and we move
+;(function()
+	local realJoin, realName = JoinPermanentChannel, GetChannelName
+	JoinPermanentChannel = function(name, password) realJoin(name, password) end
+	GetChannelName = function() return 0 end
+	local before = ns.db.syncChannel.e
+	local name = ns.Sync:GetInfo().channelName
+	local function Refused()
+		Fire("CHANNEL_PASSWORD_REQUEST", name)
+		Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", name)
+		clock = clock + 10
+	end
+	Refused()
+	check(ns.db.syncChannel.e == before, "one wrong password (the game's rejoin at login) doesn't move")
+	Refused()
+	check(ns.db.syncChannel.e == before, "nor do two")
+	Refused()
+	check(ns.db.syncChannel.e == before + 1 and ns.Sync:GetInfo().channelName ~= name, "three within two minutes are a takeover: we move")
+	JoinPermanentChannel, GetChannelName = realJoin, realName
+end)()
 -- /wanted who: a /who search, its results printed with full names and guilds
 ;(function()
 	C_FriendList = {

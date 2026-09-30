@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.25] - 2026-09-30
+
 - Bounties asked for from Discord: post a bounty from wanteddeadordead.com's Discord bot, and the next time you log in
   (or /reload) on that character with the Wanted app running, Wanted asks you once whether to post it. Post it posts
   it the usual way; Discard drops it. Never in a fight or an instance, and not while an update is required. Needs the

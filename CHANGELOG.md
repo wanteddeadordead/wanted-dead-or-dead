@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.22] - 2026-09-29
+
+A security fix: update now.
+
 - Security: a player name shared by another player can no longer add a line to the Nearby window's click-to-target
   macro. A modified copy of the addon could send a name with a line break and a /run command, which ran when you
   clicked that enemy's row. Names from other players now lose control characters and "|" before they're saved, and

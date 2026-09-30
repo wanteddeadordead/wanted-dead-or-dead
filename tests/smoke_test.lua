@@ -70,6 +70,8 @@ function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(sel
 function Methods:RegisterEvent(e) registry[e] = registry[e] or {} table.insert(registry[e], self) end
 function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
+function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[k] = v end
+function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name) local f = NewMock(kind) if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
@@ -633,6 +635,28 @@ check(partyDeath.killerGroup == nil, "only our own kills carry a group size")
 ns.Enemies:OnSharedSighting({ g = "Player-9-OTHER", n = "Sneaky Pete", c = "MAGE", l = 20, z = "The Barrens", m = 10, x = 50, y = 40 }, "Some Friend")
 check(ns.Store:GetPlayer("Player-9-OTHER").name == "Sneaky Pete", "shared sighting stored")
 check(#ns.Enemies:GetLastHour() >= 2, "last hour lists both")
+-- A peer's name with a newline must never become a second macro line on a Nearby row: a click would run it
+ns.Enemies:OnSharedSighting({ g = "Player-9-EVIL", n = "Evil Name\n/run Pwned=1\r/run Pwned=2|cff", c = "MAGE", l = 20, z = "The Barrens", m = 10, x = 50, y = 41 }, "Some Friend")
+check(ns.Store:GetPlayer("Player-9-EVIL").name == "Evil Name/run Pwned=1/run Pwned=2cff", "shared name loses control characters and |")
+ns.db.players["Player-9-OLDEVIL"] = { name = "Old Evil\n/run Pwned=3", faction = "Alliance", lastSeen = GetServerTime(), zone = "Ashenvale" }
+do
+ns.db.settings.detect.tab = "hour"
+ns.NearbyWindow:Refresh()
+local macros = 0
+for _, f in ipairs(Mock.created) do
+	local macro = f:GetAttribute("macrotext1")
+	if type(macro) == "string" and macro:find("^/cleartarget") then
+		macros = macros + 1
+		for line in macro:gmatch("[^\n]+") do
+			check(line:find("^/cleartarget$") or line:find("^/target"), "every Nearby macro line targets, got "..line)
+		end
+		check(not macro:find("\r"), "no carriage return in a Nearby macro")
+	end
+end
+check(macros >= 2, "Nearby rows carry target macros, got "..macros)
+end
+ns.db.players["Player-9-OLDEVIL"], ns.db.players["Player-9-EVIL"] = nil, nil
+ns.db.sightings[ns.db.sightingsPos], ns.db.sightingsPos = nil, ns.db.sightingsPos - 1
 -- Menus, lists, ignore, and every page again
 ns.EnemyMenu:Show(ns.Enemies:Describe("Player-9-ENEMY"))
 -- The reason dialog from the Nearby window with the main window closed
@@ -840,6 +864,11 @@ Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Playe
 check(#addonSent == 0, "a development build tells nobody to update")
 check(ns.Store:GetPlayer("Player-9-DEVNEWS") ~= nil, "a development build takes in an older player's news")
 ns.VERSION = "0.1.0"
+-- Crafted parts that don't fit their message's total are dropped, never a Lua error
+Fire("CHAT_MSG_ADDON", "WNTD", "S:zbad:1/2:abc", "CHANNEL", "Bad Framer", nil, nil, nil, "WantedNetHorde")
+Fire("CHAT_MSG_ADDON", "WNTD", "S:zbad:5/2:def", "CHANNEL", "Bad Framer", nil, nil, nil, "WantedNetHorde")
+Fire("CHAT_MSG_ADDON", "WNTD", "S:zbad:2/3:ghi", "CHANNEL", "Bad Framer", nil, nil, nil, "WantedNetHorde")
+Fire("CHAT_MSG_ADDON", "WNTD", "S:zzero:0/0:x", "CHANNEL", "Bad Framer", nil, nil, nil, "WantedNetHorde")
 -- Saved data from a newer layout is left alone; older tables load and upgrade
 local realDB = WantedDB
 WantedDB = { version = 99, marker = true }

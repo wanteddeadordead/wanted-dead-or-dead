@@ -159,6 +159,10 @@ local LOCKOUT_RETRY_SECONDS = 5 * 60
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
 local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed rejoin is expected
+-- The game's own rejoin fails once per login; this many wrong passwords this close together are ours being turned
+-- down: the channel's password was changed
+local WRONG_PASSWORDS_TAKEOVER = 3
+local WRONG_PASSWORDS_SECONDS = 120
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -495,7 +499,11 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 	elseif kind == "BANNED" then
 		private.LockOut("banned")
 	elseif kind == "WRONG_PASSWORD" then
-		if private.rejoinFailing then
+		if private.RepeatedWrongPassword() then
+			private.rejoinFailing, private.wrongPasswords = false, nil
+			private.LockOut("its password was changed")
+			private.TakenOver("its password was changed")
+		elseif private.rejoinFailing then
 			-- The game rejoined the channel at login without its password and asked for one: this is that
 			-- attempt failing, and the join with the password is on its way
 			private.rejoinFailing = false
@@ -506,6 +514,21 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			private.TakenOver("its password was changed")
 		end
 	end
+end
+
+---Notes a wrong-password notice; true once they come too often to be the game's rejoin at login.
+---@return boolean
+function private.RepeatedWrongPassword()
+	local now = GetTime()
+	local recent = {}
+	for _, t in ipairs(private.wrongPasswords or {}) do
+		if now - t < WRONG_PASSWORDS_SECONDS then
+			recent[#recent + 1] = t
+		end
+	end
+	recent[#recent + 1] = now
+	private.wrongPasswords = recent
+	return #recent >= WRONG_PASSWORDS_TAKEOVER
 end
 
 ---Joins again shortly.

@@ -1212,6 +1212,11 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		return
 	end
 	part, total = tonumber(part), tonumber(total)
+	if part < 1 or part > total then
+		private.stats.invalid = private.stats.invalid + 1
+		Wanted:Log("!! Sync: part %d/%d from %s doesn't fit its message", part, total, tostring(sender))
+		return
+	end
 	local payload = nil
 	if total == 1 then
 		payload = chunk
@@ -1221,6 +1226,11 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		if not partial or now - partial.t > PARTIAL_TIMEOUT then
 			partial = { parts = {}, total = total, t = now, count = 0 }
 			private.partial[key] = partial
+		elseif partial.total ~= total then
+			-- Parts of one message all carry its total; a mismatch is a crafted or garbled message
+			private.stats.invalid = private.stats.invalid + 1
+			private.partial[key] = nil
+			return
 		end
 		if not partial.parts[part] then
 			partial.parts[part] = chunk

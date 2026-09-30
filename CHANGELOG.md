@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.21] - 2026-09-29
+
+Kill streaks, and a lighter addon.
+
 - Wanted notes your character's guild rank, and which of your guild's members hold an officer rank (officers only),
   for guild mode on wanteddeadordead.com's Discord bot: only a guild's officer can connect its Discord server, so an
   enemy can't make one that watches your members. The website uses it for that check alone and never shows it. It's

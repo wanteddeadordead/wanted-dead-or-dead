@@ -72,7 +72,10 @@ function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
 function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[k] = v end
 function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
-function CreateFrame(kind, name) local f = NewMock(kind) if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
+function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
+function Methods:GetParent() return self._parent or NewMock() end
+function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
+function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self return t end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
 UIParent, Minimap, GameTooltip, DEFAULT_CHAT_FRAME, MailFrame = NewMock(), NewMock(), NewMock(), NewMock(), NewMock()
@@ -446,6 +449,23 @@ end
 ns.UI:Toggle()
 ns.UI:Toggle()
 ns.Minimap:Update()
+-- The minimap button is LibDBIcon's, so button collectors find it; the old angle carries over as its position
+do
+	local DBIcon = LibStub("LibDBIcon-1.0")
+	local listed = false
+	for _, name in ipairs(DBIcon:GetButtonList()) do listed = listed or name == "WantedDeadOrDead" end
+	check(listed, "the minimap button is registered with LibDBIcon")
+	check(ns.db.settings.minimap.minimapPos == ns.db.settings.minimap.angle, "the saved angle becomes LibDBIcon's position")
+	local button = DBIcon:GetMinimapButton("WantedDeadOrDead")
+	button:Hide() -- as a button collector does when it takes the button into its bar
+	ns.Minimap:Update()
+	check(not button:IsShown(), "an update doesn't show a button a collector has hidden")
+	ns.db.settings.minimap.hide = true
+	ns.Minimap:Update()
+	ns.db.settings.minimap.hide = false
+	ns.Minimap:Update()
+	check(button:IsShown(), "turning the button back on shows it")
+end
 ns:RunCommand("purge", "")
 check(#ns.Model:GetBoard({ minAmount = 0, showPassed = true }) == 2, "purge leaves the reposted bounty and the guild bounty")
 

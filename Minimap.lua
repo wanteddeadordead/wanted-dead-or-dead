@@ -6,58 +6,39 @@ Wanted.Minimap = Minimap_
 local private = {}
 -- The addon's own icon, from the folder it's installed in
 local ICON = "Interface\\AddOns\\"..ADDON_FOLDER.."\\Media\\icon"
-local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01"
--- How far outside the minimap's edge the button's centre sits
-local EDGE_OFFSET = 10
+-- The button is LibDBIcon's, so minimap button collectors and UI packs can gather, move and hide it
+local NAME = "WantedDeadOrDead"
+local LDB, DBIcon = LibStub("LibDataBroker-1.1"), LibStub("LibDBIcon-1.0")
 
 function Minimap_:OnEnable()
 	-- Only bounty records change what's waiting on you: a busy fight's deaths and sightings don't
 	for _, kind in ipairs({ "bounty", "claim", "confirm", "payment", "withdraw", "raise", "pass", "hunt" }) do
 		Wanted.Store:OnRecord(kind, function() private.actionCount = nil end)
 	end
-	local button = CreateFrame("Button", "WantedMinimapButton", Minimap)
-	button:SetSize(31, 31)
-	button:SetFrameStrata("MEDIUM")
-	button:SetFrameLevel(8)
-	button:RegisterForClicks("AnyUp")
-	button:RegisterForDrag("LeftButton")
-	local background = button:CreateTexture(nil, "BACKGROUND")
-	background:SetSize(20, 20)
-	background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-	background:SetPoint("TOPLEFT", 7, -5)
-	local icon = button:CreateTexture(nil, "ARTWORK")
-	icon:SetSize(17, 17)
-	if not icon:SetTexture(ICON) then
-		icon:SetTexture(FALLBACK_ICON)
-		icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	end
-	icon:SetPoint("TOPLEFT", 7, -6)
-	local border = button:CreateTexture(nil, "OVERLAY")
-	border:SetSize(53, 53)
-	border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-	border:SetPoint("TOPLEFT")
-	button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+	local settings = Wanted.db.settings.minimap
+	-- LibDBIcon keeps the position in minimapPos; older versions read angle, which is left for them
+	settings.minimapPos = settings.minimapPos or settings.angle
+	local launcher = LDB:NewDataObject(NAME, {
+		type = "launcher",
+		text = "Wanted",
+		icon = ICON,
+		OnClick = function(_, mouseButton)
+			if mouseButton == "RightButton" then
+				Wanted.NearbyWindow:Toggle()
+			else
+				Wanted.UI:Toggle()
+			end
+		end,
+		OnEnter = function(frame) private.ShowTooltip(frame) end,
+		OnLeave = function() GameTooltip:Hide() end,
+	})
+	DBIcon:Register(NAME, launcher, settings)
+	local button = DBIcon:GetMinimapButton(NAME)
 	button.badge = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	button.badge:SetPoint("BOTTOMRIGHT", -2, 2)
 	button.badge:SetTextColor(1, 0.3, 0.3)
-	button:SetScript("OnClick", function(_, mouseButton)
-		if mouseButton == "RightButton" then
-			Wanted.NearbyWindow:Toggle()
-		else
-			Wanted.UI:Toggle()
-		end
-	end)
-	button:SetScript("OnDragStart", function(self)
-		self:SetScript("OnUpdate", private.OnDragUpdate)
-	end)
-	button:SetScript("OnDragStop", function(self)
-		self:SetScript("OnUpdate", nil)
-	end)
-	button:SetScript("OnEnter", function(self)
-		private.ShowTooltip(self)
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	private.button = button
+	private.hidden = settings.hide
 	Minimap_:Update()
 	C_Timer.NewTicker(10, Wanted:Timed("Minimap update", function() Minimap_:Update() end))
 end
@@ -119,30 +100,21 @@ function WantedDeadOrDead_OnCompartmentLeave()
 	GameTooltip:Hide()
 end
 
-function private.OnDragUpdate()
-	local mx, my = Minimap:GetCenter()
-	local px, py = GetCursorPosition()
-	local scale = Minimap:GetEffectiveScale()
-	px, py = px / scale, py / scale
-	Wanted.db.settings.minimap.angle = math.deg(math.atan2(py - my, px - mx))
-	Minimap_:Update()
-end
-
 function Minimap_:Update()
 	local button = private.button
 	if not button then
 		return
 	end
-	local settings = Wanted.db.settings.minimap
-	if settings.hide then
-		button:Hide()
-		return
+	-- Shown or hidden only when the setting changes: a button collector may have hidden it in its own bar
+	local hide = Wanted.db.settings.minimap.hide
+	if hide ~= private.hidden then
+		private.hidden = hide
+		if hide then
+			DBIcon:Hide(NAME)
+		else
+			DBIcon:Show(NAME)
+		end
 	end
-	local angle = math.rad(settings.angle or 200)
-	-- Sit on the rim of whatever minimap this client has, rather than a distance tuned for another client
-	local radius = (Minimap:GetWidth() / 2) + EDGE_OFFSET
-	button:ClearAllPoints()
-	button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
 	-- Counting walks every bounty and claim, so it's only done again once a record has arrived, or a minute on
 	-- (bounties expire with time)
 	if not private.actionCount or GetTime() - private.actionCountAt > 60 then
@@ -150,5 +122,4 @@ function Minimap_:Update()
 	end
 	local count = private.actionCount
 	button.badge:SetText(count > 0 and tostring(count) or "")
-	button:Show()
 end

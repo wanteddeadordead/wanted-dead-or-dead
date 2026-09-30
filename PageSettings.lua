@@ -1,5 +1,5 @@
--- Wanted: settings, in four tabs: Alerts (detection and sounds), Nearby window (what each row shows),
--- Sharing and display (network, map, minimap, class icons), and Emotes (the emote buttons).
+-- Wanted: settings, in five tabs: Alerts (detection and sounds), Nearby window (what each row shows),
+-- Sharing and display (network, map, minimap, class icons), Kill streaks, and Emotes (the emote buttons).
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -16,6 +16,10 @@ end
 
 local function NearbyShow()
 	return Wanted.db.settings.nearby
+end
+
+local function StreakSettings()
+	return Wanted.db.settings.streaks
 end
 
 local function RefreshNearby()
@@ -255,6 +259,31 @@ end
 
 
 
+function private.BuildStreaks(panel, width)
+	local card = private.Card(panel, 0, 196, "Kill streaks", width)
+	private.Toggle(card, StreakSettings, "callout", "Show a callout for streaks and multi-kills", "Big text in the middle of the screen: Double kill and up for kills within 30 seconds of each other, Killing spree at 3 kills without dying, Unstoppable at 5, Legendary at 8.", 16, -38)
+	private.Toggle(card, StreakSettings, "sound", "Play a sound with it", "The Kill on Sight alert sound. Quiet when alert sounds are off (Alerts tab) or muted from the Nearby window.", 16, -62)
+	local hear = W:Button(card, "Show me", "chip", 80, 22, function()
+		Wanted.Streaks:Preview()
+	end)
+	hear:SetPoint("TOPLEFT", 440, -38)
+	W:AttachTooltip(hear, "Show me", "A sample callout and its sound.")
+	local announceLabel = Theme:Text(card, "small", "Announce streaks to")
+	announceLabel:SetPoint("TOPLEFT", 16, -98)
+	private.streakAnnounce = W:Segmented(card, {
+		{ key = "none", label = "Nobody" },
+		{ key = "party", label = "My party" },
+		{ key = "guild", label = "My guild" },
+	}, function(key)
+		StreakSettings().announce = key
+	end, 110)
+	private.streakAnnounce:SetPoint("TOPLEFT", 16, -116)
+	local hint = Theme:Text(card, "tiny", "A line like \"Wanted: <you> is on a killing spree (3 kills)\", at most one every 10 seconds, only while you're in a party or guild. Never in public chat.")
+	hint:SetPoint("TOPLEFT", 16, -154)
+end
+
+
+
 -- ============================================================================
 -- Page
 -- ============================================================================
@@ -329,6 +358,7 @@ function private.Refresh()
 	private.timeout:Select(tostring(detect.timeout or 30), true)
 	private.layout:Select(NearbyShow().layout or "auto", true)
 	private.opacity:Select(tostring(NearbyShow().opacity or 1), true)
+	private.streakAnnounce:Select(StreakSettings().announce or "none", true)
 	private.minimap:SetChecked(not Wanted.db.settings.minimap.hide)
 	for _, button in ipairs(private.iconButtons) do
 		for _, entry in ipairs(button.icons) do
@@ -350,14 +380,15 @@ UI:RegisterPage("settings", {
 			{ key = "alerts", label = "Alerts" },
 			{ key = "nearby", label = "Nearby window" },
 			{ key = "sharing", label = "Sharing and display" },
+			{ key = "streaks", label = "Kill streaks" },
 			{ key = "emotes", label = "Emotes" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
-		end, 150)
+		end, 140)
 		tabs:SetPoint("TOPLEFT")
 		tabs:Select("alerts", true)
-		for _, key in ipairs({ "alerts", "nearby", "sharing", "emotes" }) do
+		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "emotes" }) do
 			local panel = CreateFrame("Frame", nil, container)
 			panel:SetPoint("TOPLEFT", 0, -40)
 			panel:SetSize(width, height - 40)
@@ -368,6 +399,7 @@ UI:RegisterPage("settings", {
 		private.BuildTargeted(private.panels.alerts, width)
 		private.BuildNearby(private.panels.nearby, width)
 		private.BuildSharing(private.panels.sharing, width)
+		private.BuildStreaks(private.panels.streaks, width)
 		private.BuildEmotes(private.panels.emotes, width)
 	end,
 	refresh = private.Refresh,

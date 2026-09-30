@@ -111,6 +111,11 @@ over (epoch, name, password, when). Absent until then; the addon uses WantedNet<
 
 `WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
 
+`WantedDB.settings.streaks` (from 1.2.21) is `{ callout, sound, announce }`: the kill streak and multi-kill callout
+in the middle of the screen (default on), its sound (default on), and where a line about the streak goes:
+`"none"` (the default), `"party"` or `"guild"`, never a public channel (`Streaks.lua`). The counts themselves are
+not saved. A new key with defaults: no migration.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

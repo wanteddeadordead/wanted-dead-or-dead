@@ -66,7 +66,7 @@ function private.BuildPostCard(parent, width)
 	end
 	private.guildToggle = W:Toggle(card, "Their whole guild", private.OnFormChanged)
 	private.guildToggle:SetPoint("LEFT", previous, "RIGHT", 24, 0)
-	W:AttachTooltip(private.guildToggle, "Their whole guild", "Put the bounty on every member of the player's guild. The first kill of any member claims it.")
+	W:AttachTooltip(private.guildToggle, "Their whole guild", "Put the bounty on the player's guild: the first kill of any one member claims it, once.")
 	private.rate = Theme:Text(card, "tiny", "")
 	private.rate:SetPoint("TOPLEFT", 16, -100)
 	private.rate:SetPoint("RIGHT", card, "RIGHT", -16, 0)

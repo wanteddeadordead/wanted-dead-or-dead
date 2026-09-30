@@ -37,7 +37,7 @@ The addon works on its own. The app is optional: it puts your fights on the site
 ## In game
 
 **Bounty board**
-- Post a bounty on an enemy player, or on **every member of a guild**. One per target; posting again adds
+- Post a bounty on an enemy player, or on **a whole guild** (the first kill of any one member claims it). One per target; posting again adds
   to it.
 - Bounty hunters mark a bounty they're chasing, for a day at a time (renew to keep going). While anyone is
   hunting it, the poster can't pull it.

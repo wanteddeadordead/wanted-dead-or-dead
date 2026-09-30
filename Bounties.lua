@@ -408,7 +408,7 @@ function Bounties:GetMyOpenGuild(guild)
 	return nil
 end
 
----Posts a bounty on every member of a guild; the first kill of any member claims it.
+---Posts a bounty on a guild: the first kill of any one member claims it, once.
 ---@param guild string
 ---@param faction string? the guild's faction as seen
 ---@param amount number copper

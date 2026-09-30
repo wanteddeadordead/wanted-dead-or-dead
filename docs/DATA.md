@@ -159,6 +159,16 @@ and the character's own when it's an officer's. A plain member's rank is never k
 The desktop app sends both to the website, which uses them for the officer check only and never shows them. No layout
 change: both are new keys.
 
+`WantedDB.bountyRequests` and `WantedDB.requestAnswers` (from 1.2.25) carry bounties asked for from wanteddeadordead.com's
+Discord bot. The desktop app's catch-up hands them on; each is checked field by field before it's kept:
+`bountyRequests[id] = { id, character, target, guild, name, amount, t, expires }`, where `character` is the GUID of the
+character that asked for it, `target` the target's GUID (or `guild` for a guild bounty, with `name` `"<Guild>"`), `amount`
+copper from 10s to 100,000g, and `expires` the time it's dropped without asking. At most 20 are taken from one catch-up.
+Each is asked once, on its own character, out of a fight and out of instances, and never while an update is required.
+`requestAnswers[id] = { state, reason, t }` is what the player did: `"posted"` (the normal `Bounties:Post` or `PostGuild`
+made the record), `"discarded"`, or `"refused"` with the addon's reason. The app sends the answers to the website; they're
+kept a week, and a request that expired without an answer is dropped silently. No layout change: both are new keys.
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

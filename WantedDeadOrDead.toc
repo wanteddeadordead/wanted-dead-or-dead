@@ -40,6 +40,7 @@ Theme.lua
 Widgets.lua
 Model.lua
 Alerts.lua
+Streaks.lua
 Posse.lua
 UI.lua
 Rows.lua

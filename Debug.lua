@@ -645,3 +645,15 @@ Wanted:RegisterCommand("guildrank", "Development builds: prints what the game sa
 		Wanted:Print("  officers kept for <%s>: %d", guild, n)
 	end
 end)
+
+-- Three pretend kills two seconds apart, from timers (as a real kill comes, not from a click or a typed command), so
+-- the callouts, the sound and the party or guild line can be tried without a fight. Starts from a clean streak.
+Wanted:RegisterCommand("streaktest", "Development builds: three pretend kills 2 s apart to try the streak callouts and the party or guild line: /wanted streaktest", function()
+	Wanted.Streaks:OnDeath()
+	for i = 1, 3 do
+		C_Timer.After(2 * i, function()
+			Wanted.Streaks:OnKill("Streak Test "..i)
+		end)
+	end
+	Wanted:Print("Streak test: three pretend kills over the next 6 seconds. Nothing is recorded.")
+end)

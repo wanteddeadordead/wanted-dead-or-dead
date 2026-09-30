@@ -3049,6 +3049,105 @@ end)()
 	check(book["Long Gone"] == nil, "a version not seen for two weeks is dropped")
 	check(count == ns.Store.VERSION_BOOK_MAX, "the version book keeps the newest up to its cap, got "..count)
 end)()
+;(function()
+	-- Kill streaks: multi-kills within 30 s, streaks since our last death, callouts, and party or guild lines only
+	-- when asked for
+	local Streaks = ns.Streaks
+	local settings = ns.db.settings.streaks
+	check(settings.callout == true and settings.sound == true and settings.announce == "none", "streak callout and sound on, announcing off by default")
+	local played = 0
+	local realPlay = PlaySoundFile
+	PlaySoundFile = function() played = played + 1 return true end
+	-- The callout frame: the one frame whose title reads a callout (earlier tests' kills may have made it already)
+	local calloutFrame
+	local function Callout()
+		if not calloutFrame then
+			local names = {}
+			for n = 2, 5 do names[strupper(Streaks:MultiLabel(n))] = true end
+			for _, n in ipairs({ 3, 5, 8 }) do names[strupper(Streaks:StreakLabel(n))] = true end
+			for _, f in ipairs(Mock.created) do
+				local t = rawget(f, "title")
+				if t and rawget(f, "sub") and names[t._text] then calloutFrame = f end
+			end
+		end
+		if calloutFrame and calloutFrame._shown then
+			return calloutFrame.title._text, calloutFrame.sub._text
+		end
+	end
+	chatSent = {}
+	Streaks:OnDeath()
+	clock = clock + 100
+	Streaks:OnKill("Victim One")
+	local chain, streak = Streaks:GetCounts()
+	check(chain == 1 and streak == 1 and played == 0, "one kill is no callout")
+	Streaks:OnKill("Victim One")
+	check(select(2, Streaks:GetCounts()) == 1, "the same victim recorded twice counts once")
+	clock = clock + 30
+	Streaks:OnKill("Victim Two")
+	check(Callout() == "DOUBLE KILL" and played == 1, "a kill 30 s after the last is a double kill, with a sound")
+	clock = clock + 31
+	Streaks:OnKill("Victim Three")
+	chain, streak = Streaks:GetCounts()
+	check(chain == 1 and streak == 3, "31 s later the multi-kill starts again, the streak goes on")
+	local title, sub = Callout()
+	check(title == "KILLING SPREE" and sub == "3 kills without dying", "three kills without dying is a killing spree, got "..tostring(title))
+	check(#chatSent == 0, "nothing is announced by default")
+	-- Streak thresholds and multi-kill names
+	check(Streaks:StreakLabel(3) == "Killing spree" and Streaks:StreakLabel(4) == nil and Streaks:StreakLabel(5) == "Unstoppable"
+		and Streaks:StreakLabel(8) == "Legendary" and Streaks:StreakLabel(9) == nil and Streaks:StreakLabel(10) == "Legendary (10)"
+		and Streaks:StreakLabel(12) == nil and Streaks:StreakLabel(15) == "Legendary (15)", "streak callouts at 3, 5, 8, 10 and every 5 after")
+	check(Streaks:MultiLabel(1) == nil and Streaks:MultiLabel(2) == "Double kill" and Streaks:MultiLabel(3) == "Triple kill"
+		and Streaks:MultiLabel(4) == "Quad kill" and Streaks:MultiLabel(5) == "Rampage" and Streaks:MultiLabel(7) == "Rampage", "multi-kill names")
+	-- Our death resets the streak (the game's own death event)
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	chain, streak = Streaks:GetCounts()
+	check(chain == 0 and streak == 0, "dying resets the streak")
+	-- The kill records Recorder makes are what count; another player's kill record doesn't
+	clock = clock + 100
+	Fire("PARTY_KILL", "Player-1-ME", "Player-9-ENEMY")
+	check(select(2, Streaks:GetCounts()) == 1, "our own kill record counts")
+	-- Announcing: only to the chosen party or guild, throttled, never anywhere else
+	settings.announce = "party"
+	Streaks:OnDeath()
+	for i = 1, 3 do
+		clock = clock + 31
+		Streaks:OnKill("Party Victim "..i)
+	end
+	check(#chatSent == 1 and chatSent[1] == "PARTY: Wanted: Test is on a killing spree (3 kills)", "a streak goes to the party when asked, got "..tostring(chatSent[1]))
+	clock = clock + 5
+	Streaks:OnKill("Party Victim 4")
+	check(#chatSent == 1, "a second line within 10 s is held back")
+	clock = clock + 10
+	Streaks:OnKill("Party Victim 5")
+	check(#chatSent == 2 and chatSent[2] == "PARTY: Wanted: Test is unstoppable (5 kills)", "another line once 10 s have passed, got "..tostring(chatSent[2]))
+	for _, bad in ipairs({ "say", "yell", "channel", "SAY", "YELL", "CHANNEL", "raid" }) do
+		settings.announce = bad
+		clock = clock + 60
+		check(not Streaks:Announce("test") and #chatSent == 2, "never announced to "..bad)
+	end
+	local realInGroup = IsInGroup
+	IsInGroup = function() return false end
+	settings.announce = "party"
+	clock = clock + 60
+	check(not Streaks:Announce("test"), "no party line when not in a party")
+	IsInGroup = realInGroup
+	settings.announce = "guild"
+	check(Streaks:Announce("test") and chatSent[#chatSent] == "GUILD: test", "a guild line when asked for and in a guild")
+	-- Callout and sound can be turned off
+	settings.announce = "none"
+	settings.callout, settings.sound = false, false
+	Streaks:OnDeath()
+	calloutFrame:Hide()
+	played = 0
+	clock = clock + 100
+	Streaks:OnKill("Quiet One")
+	Streaks:OnKill("Quiet Two")
+	check(Callout() == nil and played == 0, "no callout or sound when both are off")
+	settings.callout, settings.sound = true, true
+	PlaySoundFile = realPlay
+	ns.UI:Show("settings")
+end)()
 print("wanted smoke: all checks pass")
 ;(function()
 	-- Underground, where no zone map reaches, the game places the player on the continent's map, where a tenth of

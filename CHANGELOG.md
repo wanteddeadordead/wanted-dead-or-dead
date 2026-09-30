@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Bounties asked for from Discord: post a bounty from wanteddeadordead.com's Discord bot, and the next time you log in
+  (or /reload) on that character with the Wanted app running, Wanted asks you once whether to post it. Post it posts
+  it the usual way; Discard drops it. Never in a fight or an instance, and not while an update is required. Needs the
+  Wanted app 0.2.22.
+
 ## [1.2.24] - 2026-09-29
 
 - The minimap button now uses LibDBIcon, like most addons, so minimap button collectors and UI packs

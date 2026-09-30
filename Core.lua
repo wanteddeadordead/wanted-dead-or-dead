@@ -93,6 +93,8 @@ local DEFAULTS = {
 	},
 	kos = {}, -- guid -> { name, reason, t }
 	seenNotices = {}, -- bounty id -> amount of the bounties on this player already announced (Bridge)
+	bountyRequests = {}, -- request id -> bounty asked for from Discord, waiting to be asked on its character (Catchup)
+	requestAnswers = {}, -- request id -> { state = "posted"|"discarded"|"refused", reason, t }, read by the app (Catchup)
 	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
 	recentPeers = {}, -- name -> seen: the last players heard on the sync channel, to whisper if locked out of it
 	channel = nil, -- { name, realm, members, t }: the sync channel's size as the game last said (read by the app)

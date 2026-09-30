@@ -3335,3 +3335,107 @@ end)()
 	ranks[me] = nil
 	officers["Blood Oath"] = nil
 end)()
+;(function()
+	-- Bounties asked for from Discord: the app hands on the requests for this account's characters in its catch-up;
+	-- each is asked once, on its own character, out of combat and instances, and the answer goes back through the app
+	local db = ns.db
+	local realShown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return false end
+	lastDialog = nil
+	ns.Store:UpdatePlayer("Player-2-SAME", { name = "Same Side", faction = "Horde" }, false)
+	local n = 0
+	local function Req(id, extra)
+		n = n + 1
+		local r = { id = id, character = "Player-1-ME", target = "Player-2-AAAA", targetName = "Grim Tooth", amount = 50000, t = clock - 100 + n, expires = clock + 3600 }
+		for k, v in pairs(extra or {}) do r[k] = v end
+		if r.target == false then r.target = nil end
+		return r
+	end
+	local function Offer(requests) WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, requests = requests } } ns.Catchup:Import() end
+	Offer({
+		Req("r1"),
+		Req("r2", { target = "Player-2-SAME", targetName = "Same Side" }),
+		Req("g1", { target = false, guild = "Dawnguard", targetName = "<Dawnguard>", amount = 20000 }),
+		Req("r10"),
+		Req("r3", { character = "Player-1-ALT" }),
+		Req("r4", { expires = clock - 1 }),
+		Req("bad id!"), Req("r6", { amount = 5 }), Req("r7", { amount = 1.5 }), Req("r8", { target = "nope" }), Req("r9", { targetName = 42 }),
+		Req("r5", { character = "not a guid" }), Req("r11", { amount = 2000000000 }), "not a table",
+	})
+	for _, id in ipairs({ "r1", "r2", "g1", "r10", "r3" }) do
+		check(db.bountyRequests[id], "request "..id.." is kept")
+	end
+	for _, id in ipairs({ "r4", "bad id!", "r6", "r7", "r8", "r9", "r5", "r11" }) do
+		check(db.bountyRequests[id] == nil, "request "..id.." is dropped")
+	end
+	check(db.bountyRequests.g1.target == nil and db.bountyRequests.g1.guild == "Dawnguard", "a guild request has a guild, not a target")
+
+	-- Asked a moment after login, oldest first: posted as the normal path posts it
+	RunTimers()
+	check(lastDialog and lastDialog.text:find("You asked from Discord to post 5g on Grim Tooth.", 1, true), "the first request is asked, got "..tostring(lastDialog and lastDialog.text))
+	ConfirmDialog()
+	local posted
+	for r in ns.Store:Iterator("bounty") do if r.data.target == "Player-2-AAAA" and r.data.amount == 50000 then posted = r end end
+	check(posted and posted.origin == ns.Store:GetOrigin(), "Post it makes the bounty record")
+	check(db.requestAnswers.r1 and db.requestAnswers.r1.state == "posted" and db.bountyRequests.r1 == nil, "and answers posted")
+	-- The addon refuses: its reason goes back
+	RunTimers()
+	check(lastDialog and lastDialog.text:find("Same Side", 1, true), "the next one is asked")
+	ConfirmDialog()
+	check(db.requestAnswers.r2.state == "refused" and db.requestAnswers.r2.reason == "bounties are for the other faction only", "a refusal keeps the addon's reason, got "..tostring(db.requestAnswers.r2.reason))
+	-- Discard
+	RunTimers()
+	check(lastDialog and lastDialog.text:find("<Dawnguard>", 1, true), "the guild request is asked")
+	local options = lastDialog
+	lastDialog = nil
+	options.onCancel()
+	check(db.requestAnswers.g1.state == "discarded" and db.bountyRequests.g1 == nil, "Discard answers discarded")
+	-- Already open on that target
+	RunTimers()
+	ConfirmDialog()
+	check(db.requestAnswers.r10.state == "refused" and db.requestAnswers.r10.reason:find("already have a bounty", 1, true), "a second bounty on the same target is refused")
+	-- Another character's request is never shown here
+	RunTimers()
+	check(lastDialog == nil, "another character's request isn't asked, got "..tostring(lastDialog and lastDialog.text))
+	check(db.bountyRequests.r3 and not db.requestAnswers.r3, "and it stays for that character")
+
+	-- Never asked twice: the same requests again change nothing
+	Offer({ Req("r1"), Req("r2"), Req("g1", { target = false, guild = "Dawnguard", targetName = "<Dawnguard>" }) })
+	RunTimers()
+	check(lastDialog == nil and db.bountyRequests.r1 == nil, "an answered request isn't asked again")
+
+	-- Not in a fight, an instance, or while the update lock holds: kept, unanswered, asked later
+	Fire("PLAYER_REGEN_DISABLED")
+	Offer({ Req("c1", { target = "Player-2-CCCC", targetName = "Cee Cee" }) })
+	RunTimers()
+	check(lastDialog == nil, "not asked in a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(lastDialog and lastDialog.text:find("Cee Cee", 1, true), "asked once the fight is over")
+	lastDialog.onCancel()
+	lastDialog = nil
+	local outside = IsInInstance
+	IsInInstance = function() return true, "party" end
+	Offer({ Req("i1", { target = "Player-2-DDDD", targetName = "Dee Dee" }) })
+	RunTimers()
+	check(lastDialog == nil, "not asked in an instance")
+	IsInInstance = outside
+	db.requiredVersion = { version = "9.9.9", t = clock }
+	Fire("PLAYER_ENTERING_WORLD")
+	RunTimers()
+	check(lastDialog == nil and db.bountyRequests.i1 and not db.requestAnswers.i1, "not asked while an update is required, and not answered")
+	db.requiredVersion = nil
+	Fire("PLAYER_ENTERING_WORLD")
+	RunTimers()
+	check(lastDialog and lastDialog.text:find("Dee Dee", 1, true), "asked once out of the instance and updated")
+	lastDialog.onCancel()
+	lastDialog = nil
+
+	-- Answers and leftover requests go after a week; an expired request goes without an answer
+	db.requestAnswers.old = { state = "posted", t = clock - 8 * 24 * 3600 }
+	db.bountyRequests.r3.expires = clock - 1
+	Offer({})
+	check(db.requestAnswers.old == nil and db.requestAnswers.r1, "week-old answers go, newer ones stay")
+	check(db.bountyRequests.r3 == nil and db.requestAnswers.r3 == nil, "an expired request is dropped silently")
+	ns.Widgets.IsDialogShown = realShown
+end)()

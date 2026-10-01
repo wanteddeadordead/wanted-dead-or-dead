@@ -126,7 +126,7 @@ wanteddeadordead.com, which picks a new channel for a side once two accounts rep
 and points everyone back once the main one is open. A new key with defaults; the migration starts it afresh.
 
 `WantedDB.homeCheck` is `{ wait, tried }` from 1.4.0: how long to wait between quiet tries of WantedNet<Side> while it
-turns us away or we're on the server's channel (5 minutes, doubled after each refusal up to an hour, back to 5
+turns us away or we're on the server's channel (5 minutes, doubled after each refusal up to 25 minutes, under the server's 30-minute window for reports, back to 5
 minutes once let in), and when it was last tried (server time). Up to 1.3.x it timed tries of the first channel
 after an addon-made move, with a `home` field; the layout 2 migration resets it. `settings.channelMoves` (the old
 moves' switch) is removed by the same migration.

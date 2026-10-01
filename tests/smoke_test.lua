@@ -3222,11 +3222,10 @@ end)()
 	Tick()
 	RunTimers()
 	check(MainTries() == 2 and ns.db.homeCheck.wait == 20 * 60, "and doubles again")
-	ns.db.homeCheck.wait = 60 * 60
-	clock = clock + 60 * 60
+	clock = clock + 20 * 60
 	Tick()
 	RunTimers()
-	check(MainTries() == 3 and ns.db.homeCheck.wait == 60 * 60, "never more than an hour")
+	check(MainTries() == 3 and ns.db.homeCheck.wait == 25 * 60 and ns.db.syncChannelState.at == clock, "never more than 25 minutes, so a report is never older than the server's 30")
 	-- Not in a fight or an instance
 	clock = clock + 60 * 60
 	local outside = IsInInstance

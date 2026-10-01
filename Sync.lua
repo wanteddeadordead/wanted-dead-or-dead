@@ -181,11 +181,11 @@ local INVITE_SOUND_FILE = 567451
 local INVITE_MUTE_SECONDS = 5
 local LOGIN_MUTE_SECONDS = 20
 -- While the main channel turns us away, or we're on the server's channel, the main one is tried again quietly
--- (CheckMain), out of fights and instances: after 5 minutes, then twice as long after each refusal, up to an hour.
+-- (CheckMain), out of fights and instances: after 5 minutes, then twice as long after each refusal, up to 25 minutes (the server counts a report for 30).
 -- Let in, the wait is back to 5 minutes.
 local MAIN_TICK_SECONDS = 60
 local MAIN_RETRY_SECONDS = 5 * 60
-local MAIN_MAX_WAIT_SECONDS = 60 * 60
+local MAIN_MAX_WAIT_SECONDS = 25 * 60
 local MAIN_ANSWER_SECONDS = 5 -- how long the game has to let us in
 local MAIN_SETTLE_SECONDS = 5 -- then how long we stay in before believing it (a moderated channel says so)
 local MAIN_QUIET_SECONDS = 30 -- the main channel's notices are hidden this long after a try

@@ -35,6 +35,8 @@ function Bounties:OnEnable()
 	end
 	Store:OnRecord("kill", private.OnKill)
 	Store:OnRecord("bounty", private.LearnTarget)
+	Store:OnRecord("bounty", private.OnBountyNews)
+	Store:OnRecord("raise", private.OnBountyNews)
 end
 
 ---What a bounty says about its target (the poster's notes when they posted it), for a client that doesn't know
@@ -275,12 +277,20 @@ end
 ---@param bounty table
 ---@return boolean
 function Bounties:IsWithdrawn(bounty)
+	return private.WithdrawnAt(bounty) ~= nil
+end
+
+---When a bounty's withdrawal that counted was made (the earliest, if several), or nil.
+---@param bounty table
+---@return number? serverTime
+function private.WithdrawnAt(bounty)
+	local at = nil
 	for withdraw in Store:Iterator("withdraw") do
-		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
-			return true
+		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
+			at = withdraw.t
 		end
 	end
-	return false
+	return at
 end
 
 ---Takes down one of our bounties. Only allowed while nobody has claimed it.
@@ -533,39 +543,151 @@ end
 
 ---A kill of ours matched against open bounties creates claims.
 function private.OnKill(kill, isOwn)
-	-- Claims are shared records: none while this client waits for an update
-	if not isOwn or Wanted:GetRequiredUpdate() then
+	private.IndexOwnKill(kill)
+	if not isOwn then
 		return
 	end
-	local victim = kill.data.victim
 	-- Bounties on this player, and on the guild they belong to
-	local matching = Bounties:GetOpenForTarget(victim)
+	local matching = Bounties:GetOpenForTarget(kill.data.victim)
 	for _, bounty in ipairs(Bounties:GetOpenForGuild(kill.data.victimGuild)) do
 		tinsert(matching, bounty)
 	end
 	for _, bounty in ipairs(matching) do
-		-- Your own bounty is not something you can collect on
-		local exists = bounty.origin == Store:GetOrigin()
-		for claim in Store:Iterator("claim") do
-			if claim.data.bounty == bounty.id and claim.origin == Store:GetOrigin() then
-				exists = true
-				break
-			end
-		end
-		if not exists then
-			Store:NewRecord("claim", {
-				bounty = bounty.id,
-				kill = kill.id,
-				deathId = kill.data.deathId,
-				victim = victim,
-				victimName = kill.data.victimName,
-				victimGuild = kill.data.victimGuild,
-				zone = kill.data.zone,
-				killT = kill.t,
-			})
-			Wanted:Print("You killed %s: claim filed for the %s bounty posted by %s.", kill.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty)), bounty.origin)
+		if private.FileClaim(bounty, kill) then
+			local text = format("killed %s, wanted for %s by %s. Claim filed.", kill.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty)), bounty.origin)
+			private.AnnounceClaim("Bounty collected: you "..text, "You "..text)
 		end
 	end
+end
+
+---Files this client's claim on a bounty for one of its kills, unless it can't: the bounty is ours, we already
+---claimed it, or this client waits for an update (claims are shared records). Returns the claim filed.
+---@param bounty table
+---@param kill table
+---@return table? claim
+function private.FileClaim(bounty, kill)
+	local me = Store:GetOrigin()
+	-- Your own bounty is not something you can collect on
+	if bounty.origin == me or Wanted:GetRequiredUpdate() then
+		return nil
+	end
+	for claim in Store:Iterator("claim") do
+		if claim.data.bounty == bounty.id and claim.origin == me then
+			return nil
+		end
+	end
+	return Store:NewRecord("claim", {
+		bounty = bounty.id,
+		kill = kill.id,
+		deathId = kill.data.deathId,
+		victim = kill.data.victim,
+		victimName = kill.data.victimName,
+		victimGuild = kill.data.victimGuild,
+		zone = kill.data.zone,
+		killT = kill.t,
+	})
+end
+
+---Says a claim was filed in chat and on screen: it's money owed, so it shows even with enemy alerts off (the
+---sound still follows mute).
+---@param chat string
+---@param banner string? the line under the banner's title, default the chat line
+function private.AnnounceClaim(chat, banner)
+	Wanted:Print(chat)
+	local Alerts = Wanted.Alerts
+	Alerts:Warn("BOUNTY COLLECTED", banner or chat, Wanted.Theme.C.gold)
+	Alerts:Sound("important")
+end
+
+
+
+-- ============================================================================
+-- Late claims: a bounty learned of after the kill
+-- ============================================================================
+
+-- A bounty can reach this client after its kill (the sync channel, a peer's resync, the desktop app's
+-- catch-up), and a raise it didn't know of can make a kill fall inside it. Each one is checked against this
+-- client's own kills once the records arriving with it are in (queued work runs after them), so a withdrawal or
+-- payment in the same batch counts.
+
+---This client's own kills by victim GUID and by victim guild: built on first use, kept as kills arrive, built
+---again when the records table is replaced (a fresh start).
+function private.OwnKills()
+	local records = Wanted.db.records
+	local index = private.ownKills
+	if not index or index.records ~= records then
+		index = { records = records, byVictim = {}, byGuild = {} }
+		private.ownKills = index
+		for kill in Store:Iterator("kill") do
+			private.IndexOwnKill(kill)
+		end
+	end
+	return index
+end
+
+function private.IndexOwnKill(kill)
+	local index = private.ownKills
+	if not index or index.records ~= Wanted.db.records or kill.origin ~= Store:GetOrigin() or Store:IsTest(kill) then
+		return
+	end
+	for key, list in pairs({ victim = index.byVictim, victimGuild = index.byGuild }) do
+		local value = kill.data[key]
+		if type(value) == "string" then
+			list[value] = list[value] or {}
+			tinsert(list[value], kill)
+		end
+	end
+end
+
+function private.OnBountyNews(record, isOwn)
+	local id = record.kind == "bounty" and record.id or record.data.bounty
+	if isOwn or type(id) ~= "string" then
+		return
+	end
+	private.lateQueue = private.lateQueue or {}
+	if not next(private.lateQueue) then
+		Wanted:QueueWork(private.ClaimLateQueued)
+	end
+	private.lateQueue[id] = true
+end
+
+function private.ClaimLateQueued()
+	local ids = private.lateQueue or {}
+	private.lateQueue = {}
+	for id in pairs(ids) do
+		local bounty = Store:Get(id)
+		if bounty and bounty.kind == "bounty" then
+			private.ClaimLate(bounty)
+		end
+	end
+end
+
+---Claims a bounty with this client's latest kill of its target (or a member of its guild) made while it was
+---open: at or after it was posted, before it expired or was withdrawn. Not one settled already.
+---@param bounty table
+---@return table? claim
+function private.ClaimLate(bounty)
+	if bounty.origin == Store:GetOrigin() or Store:IsTest(bounty) or Bounties:IsSettled(bounty) then
+		return nil
+	end
+	local index = private.OwnKills()
+	local d = bounty.data
+	local kills = (type(d.target) == "string" and index.byVictim[d.target]) or (type(d.guild) == "string" and index.byGuild[d.guild])
+	if not kills then
+		return nil
+	end
+	local ends = min(Bounties:GetExpiry(bounty), private.WithdrawnAt(bounty) or math.huge)
+	local latest = nil
+	for _, kill in ipairs(kills) do
+		if Store:Get(kill.id) == kill and kill.t >= bounty.t and kill.t < ends and (not latest or kill.t > latest.t) then
+			latest = kill
+		end
+	end
+	local claim = latest and private.FileClaim(bounty, latest)
+	if claim then
+		private.AnnounceClaim(format("You killed %s earlier, and there was a %s bounty on them. Claim filed.", latest.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty))))
+	end
+	return claim
 end
 
 ---Other clients that recorded the same death as a claim's kill (same victim, same place, within the window).

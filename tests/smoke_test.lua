@@ -3627,3 +3627,83 @@ end)()
 	check(#addonSent >= 1 and addonSent[1].text:find("^H:"), "a part refused in lockdown is sent again later, got "..#addonSent)
 end)()
 
+-- Auto-claims: a kill of a known bounty's target claims it on the spot, and a bounty learned of after the kill
+-- is claimed late; either way a banner, the important sound and a chat line say so
+;(function()
+	local me = ns.Store:GetOrigin()
+	local warns, sounds = {}, {}
+	local origWarn, origSound = ns.Alerts.Warn, ns.Alerts.Sound
+	ns.Alerts.Warn = function(self, title, sub, color) warns[#warns + 1] = title.." / "..tostring(sub) return origWarn(self, title, sub, color) end
+	ns.Alerts.Sound = function(self, kind) sounds[#sounds + 1] = kind return origSound(self, kind) end
+	local function Relay(origin, seq, kind, data, t)
+		ns.Store:MergeRelayed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = t, data = data })
+		return ns.Store:Get(origin..":"..seq)
+	end
+	local function Kill(guid, name, guild)
+		return ns.Store:NewRecord("kill", { killer = "Player-1-ME", killerName = me, victim = guid, victimName = name, victimGuild = guild, deathId = "late-"..guid..clock, zone = "Durotar", honor = true })
+	end
+	local function MyClaims(bounty)
+		local list = {}
+		for claim in ns.Store:Iterator("claim") do
+			if claim.data.bounty == bounty.id and claim.origin == me then list[#list + 1] = claim end
+		end
+		return list
+	end
+	local function Printed(text)
+		for i = #printed, math.max(1, #printed - 5), -1 do if printed[i]:find(text, 1, true) then return true end end
+	end
+	-- On the spot
+	local spot = Relay("Spot Poster", 1, "bounty", { target = "Player-9-SPOT", targetName = "Spot Target", amount = 5000 }, clock - 60)
+	RunTimers()
+	check(#MyClaims(spot) == 0 and #warns == 0, "a bounty with no kill of ours isn't claimed")
+	Kill("Player-9-SPOT", "Spot Target")
+	check(#MyClaims(spot) == 1, "a kill of a known bounty's target claims it")
+	check(warns[#warns] == "BOUNTY COLLECTED / You killed Spot Target, wanted for 50s by Spot Poster. Claim filed.", "the on-the-spot banner: "..tostring(warns[#warns]))
+	check(sounds[#sounds] == "important", "with the important sound")
+	check(Printed("Bounty collected: you killed Spot Target, wanted for 50s by Spot Poster. Claim filed."), "and a chat line")
+	RunTimers()
+	-- Late: the latest of two kills made while the bounty was open
+	local killT = clock
+	Kill("Player-9-LATE", "Late Target")
+	clock = clock + 20
+	local latest = Kill("Player-9-LATE", "Late Target")
+	clock = clock + 100
+	local late = Relay("Late Poster", 1, "bounty", { target = "Player-9-LATE", targetName = "Late Target", amount = 3000 }, killT - 50)
+	check(#MyClaims(late) == 0, "a late claim waits for the records arriving with the bounty")
+	local warnsBefore = #warns
+	RunTimers()
+	local claims = MyClaims(late)
+	check(#claims == 1 and claims[1].data.kill == latest.id and claims[1].data.killT == latest.t and claims[1].data.deathId == latest.data.deathId, "a bounty learned of after a kill is claimed with the latest kill")
+	check(warns[#warns] == "BOUNTY COLLECTED / You killed Late Target earlier, and there was a 30s bounty on them. Claim filed.", "the late banner: "..tostring(warns[#warns]))
+	check(Printed("You killed Late Target earlier, and there was a 30s bounty on them. Claim filed."), "and its chat line")
+	check(ns.Proof:Get(claims[1].id) == nil, "a late claim takes no screenshot")
+	-- A raise on it later doesn't claim it twice
+	warnsBefore = #warns
+	Relay("Late Poster", 2, "raise", { bounty = late.id, amount = 1000 }, clock)
+	RunTimers()
+	check(#MyClaims(late) == 1 and #warns == warnsBefore, "no second claim on the same bounty")
+	-- A kill before the bounty was posted, after it expired, or after it was withdrawn doesn't count
+	local early = Relay("Early Poster", 1, "bounty", { target = "Player-9-LATE", targetName = "Late Target", amount = 3000 }, clock - 10)
+	local expired = Relay("Old Poster", 1, "bounty", { target = "Player-9-LATE", targetName = "Late Target", amount = 3000 }, killT - 8 * 86400)
+	local withdrawn = Relay("Gone Poster", 1, "bounty", { target = "Player-9-LATE", targetName = "Late Target", amount = 3000 }, killT - 100)
+	Relay("Gone Poster", 2, "withdraw", { bounty = withdrawn.id }, killT - 50)
+	RunTimers()
+	check(#MyClaims(early) == 0, "a kill before the bounty was posted doesn't claim it")
+	check(#MyClaims(expired) == 0, "a kill after the bounty expired doesn't claim it")
+	check(#MyClaims(withdrawn) == 0, "a kill after the bounty was withdrawn doesn't claim it")
+	-- A raise this client hadn't heard of kept the expired one open at the kill
+	Relay("Old Poster", 2, "raise", { bounty = expired.id, amount = 1000 }, killT - 2 * 86400)
+	RunTimers()
+	check(#MyClaims(expired) == 1, "a raise that kept the bounty open at the kill claims it late")
+	-- Your own bounty is never claimed
+	local own = ns.Bounties:Post("Player-9-LATE", "Late Target", 2000)
+	RunTimers()
+	check(own and #MyClaims(own) == 0, "your own bounty is never claimed")
+	-- A guild bounty is claimed by a kill of a member
+	Kill("Player-9-GMEMBER", "Guild Member", "Late Guild")
+	clock = clock + 60
+	local guildLate = Relay("Guild Poster", 1, "bounty", { guild = "Late Guild", targetName = "<Late Guild>", amount = 4000 }, clock - 120)
+	RunTimers()
+	check(#MyClaims(guildLate) == 1, "a guild bounty learned of after a member's kill is claimed")
+	ns.Alerts.Warn, ns.Alerts.Sound = origWarn, origSound
+end)()

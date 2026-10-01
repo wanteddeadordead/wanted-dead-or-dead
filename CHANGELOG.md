@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Kills claim bounties you hadn't heard of yet: when a bounty reaches you after you killed its target (or a member of
+  its guild), from other players, a resync or the Wanted app's catch-up, Wanted files your claim for your latest kill
+  made while the bounty was open. A kill before it was posted, or after it expired or was withdrawn, doesn't count. No
+  screenshot is taken for these, as the kill is already over.
+- A claimed bounty is hard to miss: besides the chat line, a "BOUNTY COLLECTED" banner and the bounty alert sound say
+  who you killed and for how much. It shows even with enemy alerts off; the sound follows your mute and sound settings.
+
 ## [1.3.1] - 2026-10-01
 
 - Fewer "Interface action failed because of an AddOn" messages in fights with the Nearby window open, especially

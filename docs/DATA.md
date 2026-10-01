@@ -109,14 +109,17 @@ cuts the model out and uploads it to wanteddeadordead.com. No migration: the fie
 `WantedDB.syncChannel` is `{ e, n, t }` from 1.4.0 (layout 2): the channel wanteddeadordead.com last pointed
 everyone to (epoch, name, when we took it), from the Wanted app's catch-up (`channel = { e, n }`) or whispered by a
 player whose app brought it. No password: every sync channel is joined without one. It can name WantedNet<Side>
-itself, when the server points everyone back. Absent until a pointer comes; the addon then uses WantedNet<Side>.
+itself, when the server points everyone back. The app's pointer is followed when its epoch is newer, or the same with
+another name; a whispered one only when newer. The app's default, the main channel at epoch 0, and any pointer with a
+`p` (an app before 0.2.26) are ignored. Absent until a pointer comes; the addon then uses WantedNet<Side>.
 From 1.2.18 to 1.3.x it was `{ e, n, p, t }`, a channel the addons picked themselves after a takeover, with a
 password; the layout 2 migration drops it and keeps its name in `WantedDB.oldSyncChannel` (when it isn't
 WantedNet<Side>), which the addon leaves once at the next login and clears.
 
 `WantedDB.syncChannelState` (from 1.4.0) is `{ mainRefused, mainOpen, at, epoch }`: what WantedNet<Side> last did
 when this client joined or tried it: turned us away (a password, a ban, moderation, kicked twice within 10 minutes)
-or let us in, the server time of that, and the server pointer's epoch we were on (0 for none). The Wanted app
+or let us in, the last server time it was seen so (refreshed at every join and try; the server counts only recent
+reports), and the epoch of the server pointer we follow (0 for none). The Wanted app
 passes it to wanteddeadordead.com, which picks a new channel for a side once two accounts report it refused, and
 points everyone back once it's open. A new key with defaults; the migration starts it afresh.
 

@@ -3292,12 +3292,19 @@ end)()
 	Catchup({ e = 7, n = "WantedNetHordesrvone" })
 	Catchup({ e = 6, n = "WantedNetHordeolder" })
 	check(ns.db.syncChannel.e == 7 and #Sent("WHISPER") == 0, "the same or an older pointer again changes nothing and tells nobody")
+	Catchup({ e = 0, n = main })
+	Catchup({ e = 7, n = "WantedNetHordesrvone", p = "wnt1" })
+	check(ns.db.syncChannel.e == 7 and ns.db.syncChannel.n == "WantedNetHordesrvone", "the app's default main pointer at epoch 0, or one with a password, changes nothing")
+	Catchup({ e = 7, n = "WantedNetHordesrvfix" })
+	check(ns.db.syncChannel.e == 7 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvfix", "the app's pointer at the same epoch with another name is followed")
+	Catchup({ e = 7, n = "WantedNetHordesrvone" })
+	ClearSent()
 	-- The main channel lets us in again: noted for the app, but we stay
 	mainOpen = true
 	ns.db.homeCheck.tried = clock - ns.db.homeCheck.wait
 	Tick()
 	RunTimers()
-	check(state.mainOpen and not state.mainRefused and state.epoch == 7, "the main channel letting us in is noted, with the server's epoch")
+	check(state.mainOpen and not state.mainRefused and state.epoch == 7 and state.at == clock, "the main channel letting us in is noted, with the server's epoch and when")
 	check(ns.Sync:GetInfo().channelName == "WantedNetHordesrvone" and ns.Sync:GetInfo().channelId == 6, "but we stay on the server's channel")
 	check(leftChannels[#leftChannels] == main, "and leave the main one again")
 	-- The server points back to the main channel

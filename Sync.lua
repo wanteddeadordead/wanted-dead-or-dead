@@ -619,7 +619,8 @@ function private.Refused(why)
 end
 
 ---Notes what the main channel did, for the Wanted app to pass to wanteddeadordead.com (WantedDB.syncChannelState):
----turned us away (refused) or let us in (open), when, and on which of the server's pointers.
+---turned us away (refused) or let us in (open), when we last saw it (the server counts only recent reports), and the
+---epoch of the server's pointer we follow.
 ---@param open boolean
 ---@param why string?
 function private.MarkMain(open, why)
@@ -834,10 +835,7 @@ function private.TryJoin()
 	end
 	private.channelId = id
 	if private.channelName == private.MainName() then
-		local state = Wanted.db.syncChannelState
-		if state.mainRefused or not state.mainOpen then
-			private.MarkMain(true)
-		end
+		private.MarkMain(true)
 		Wanted.db.homeCheck.wait = MAIN_RETRY_SECONDS
 	end
 	if private.lockedOut then
@@ -2138,13 +2136,15 @@ function private.ValidPointer(p)
 end
 
 ---Moves to the server's channel (or back to the main one): leaves the old one, joins the new, and tells the players
----we know unless the pointer has already gone as far by whisper as it may.
+---we know unless the pointer has already gone as far by whisper as it may. Followed when its epoch is newer than ours;
+---from our own app, also at the same epoch with another name (the server's word).
 ---@param pointer table { e, n }
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
 function private.Adopt(pointer, why, hop)
-	if not private.ValidPointer(pointer) or pointer.e <= private.epoch then
+	if not private.ValidPointer(pointer) or pointer.e < private.epoch
+		or (pointer.e == private.epoch and (hop > 0 or pointer.n == private.channelName)) then
 		return false
 	end
 	local old = private.channelName

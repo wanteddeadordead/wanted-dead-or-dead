@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-01
+
 - Fewer "Interface action failed because of an AddOn" messages in fights with the Nearby window open, especially
   right after you kill your target: a row's health bar, class icon and mouse-over highlight no longer show or hide
   inside the row's click-to-target button in combat, which the game blocks. If it still happens, the problem

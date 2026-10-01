@@ -110,7 +110,7 @@ function Catchup:Import()
 					if not private.IsWellFormed(record) then
 						counts.skipped = counts.skipped + 1
 					else
-						local isNew, why = Store:MergeRelayed(record)
+						local isNew, why = Store:MergeRelayed(record, true)
 						if isNew then
 							counts.new = counts.new + 1
 						elseif why == "pruned" then

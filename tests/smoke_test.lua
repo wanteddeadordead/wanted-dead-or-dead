@@ -3219,6 +3219,69 @@ end)()
 	PlaySoundFile = realPlay
 	ns.UI:Show("settings")
 end)()
+;(function()
+	-- Each alert kind's sound: Wanted's beep by default, none, a game sound, or a SharedMedia sound when another
+	-- addon brought LibSharedMedia (and Wanted's beep again once that sound is gone)
+	local Alerts = ns.Alerts
+	local detect = ns.db.settings.detect
+	local files, kits = {}, {}
+	local realFile, realKit = PlaySoundFile, PlaySound
+	PlaySoundFile = function(path) files[#files + 1] = path return true end
+	PlaySound = function(kit) kits[#kits + 1] = kit end
+	local function Reset() files, kits = {}, {} end
+	for _, kind in ipairs({ "enemy", "important", "stealth", "targeted" }) do
+		check(detect.sounds[kind] == "wanted", kind.." plays Wanted's beep by default")
+	end
+	Alerts:PlayRaw("important")
+	check(#files == 1 and files[1]:find("important%.mp3$") and #kits == 0, "the default plays Wanted's own file")
+	Reset()
+	Alerts:SetSoundChoice("enemy", "none")
+	Alerts:PlayRaw("enemy")
+	clock = clock + 10
+	Alerts:Sound("enemy")
+	check(#files == 0 and #kits == 0, "a kind set to None plays nothing")
+	Alerts:Sound("stealth")
+	check(#files == 1 and files[1]:find("stealth%.mp3$"), "a silent kind doesn't hold back the next alert's sound")
+	Reset()
+	Alerts:SetSoundChoice("stealth", "kit:RAID_WARNING")
+	Alerts:PlayRaw("stealth")
+	check(#kits == 1 and kits[1] == SOUNDKIT.RAID_WARNING and #files == 0, "a game sound plays its sound kit")
+	local offered = {}
+	for _, entry in ipairs(Alerts:GetGameSounds()) do offered[entry[1]] = entry[2] end
+	check(offered["kit:RAID_WARNING"] == "Raid warning" and not offered["kit:READY_CHECK"], "only the game sounds this client has are offered")
+	check(Alerts:SoundLabel("kit:RAID_WARNING") == "Raid warning" and Alerts:SoundLabel("wanted") == "Wanted beep" and Alerts:SoundLabel("lsm:Gong") == "Gong", "choices have readable labels")
+	Reset()
+	Alerts:SetSoundChoice("targeted", "lsm:Gong")
+	check(#Alerts:GetSharedMediaSounds() == 0, "no SharedMedia sounds without the library")
+	Alerts:PlayRaw("targeted")
+	check(#files == 1 and files[1]:find("targeted%.mp3$"), "a SharedMedia choice falls back to Wanted's beep without the library")
+	Reset()
+	local media = LibStub:NewLibrary("LibSharedMedia-3.0", 1)
+	local registered = { None = "Interface\\Quiet.ogg", Gong = "Interface\\AddOns\\SharedMedia\\gong.ogg" }
+	function media:List() local names = {} for name in pairs(registered) do names[#names + 1] = name end table.sort(names) return names end
+	function media:Fetch(_, name) return registered[name] end
+	local shared = Alerts:GetSharedMediaSounds()
+	check(#shared == 1 and shared[1] == "Gong", "SharedMedia sounds are listed, without its own None")
+	Alerts:PlayRaw("targeted")
+	check(#files == 1 and files[1] == registered.Gong, "a SharedMedia choice plays its file")
+	Reset()
+	registered.Gong = nil
+	Alerts:PlayRaw("targeted")
+	check(#files == 1 and files[1]:find("targeted%.mp3$"), "a SharedMedia sound that's gone falls back to Wanted's beep")
+	Reset()
+	-- The master toggles still silence them
+	Alerts:SetSoundChoice("important", "kit:RAID_WARNING")
+	detect.sound = false
+	clock = clock + 10
+	Alerts:Sound("important")
+	check(#files == 0 and #kits == 0, "Alert sounds off still silences a chosen sound")
+	detect.sound = true
+	ns.UI:Show("settings")
+	for _, kind in ipairs({ "enemy", "important", "stealth", "targeted" }) do
+		detect.sounds[kind] = "wanted"
+	end
+	PlaySoundFile, PlaySound = realFile, realKit
+end)()
 print("wanted smoke: all checks pass")
 ;(function()
 	-- Underground, where no zone map reaches, the game places the player on the continent's map, where a tenth of

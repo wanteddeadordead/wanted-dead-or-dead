@@ -82,7 +82,8 @@ end
 ---Plays an alert sound unless muted or one just played.
 ---@param kind string "enemy" | "important" | "stealth"
 function Alerts:Sound(kind)
-	if Alerts:IsMuted() or GetTime() - private.lastSound < SOUND_GAP then
+	-- A kind set to None doesn't hold back the next alert's sound
+	if Alerts:IsMuted() or Alerts:GetSoundChoice(kind) == "none" or GetTime() - private.lastSound < SOUND_GAP then
 		return
 	end
 	private.lastSound = GetTime()
@@ -101,9 +102,100 @@ local SOUND_FILES = {
 }
 local FALLBACK_KITS = { enemy = "MAP_PING", important = "RAID_WARNING", stealth = "UI_RAID_BOSS_WHISPER_WARNING", targeted = "ALARM_CLOCK_WARNING_3" }
 
+-- The game's own sounds offered as alert sounds: { SOUNDKIT name, label }. Ones the client lacks aren't offered.
+local GAME_SOUNDS = {
+	{ "RAID_WARNING", "Raid warning" },
+	{ "READY_CHECK", "Ready check" },
+	{ "MAP_PING", "Map ping" },
+	{ "TELL_MESSAGE", "Whisper" },
+	{ "ALARM_CLOCK_WARNING_1", "Alarm clock 1" },
+	{ "ALARM_CLOCK_WARNING_2", "Alarm clock 2" },
+	{ "ALARM_CLOCK_WARNING_3", "Alarm clock 3" },
+	{ "RAID_BOSS_EMOTE_WARNING", "Boss emote" },
+	{ "PVP_THROUGH_QUEUE", "Queue ready" },
+	{ "UI_RAID_BOSS_WHISPER_WARNING", "Boss whisper" },
+}
+
+---Each alert kind's sound: "wanted" (the addon's own), "none", "kit:NAME" (a game sound) or "lsm:Name" (a
+---sound another addon registered with LibSharedMedia).
+---@param kind string "enemy" | "important" | "stealth" | "targeted"
+---@return string
+function Alerts:GetSoundChoice(kind)
+	return private.Settings().sounds[kind] or "wanted"
+end
+
+---@param kind string
+---@param choice string
+function Alerts:SetSoundChoice(kind, choice)
+	private.Settings().sounds[kind] = choice
+end
+
+---The game sounds this client has, as { choice, label }.
+function Alerts:GetGameSounds()
+	local list = {}
+	for _, entry in ipairs(GAME_SOUNDS) do
+		if SOUNDKIT and SOUNDKIT[entry[1]] then
+			tinsert(list, { "kit:"..entry[1], entry[2] })
+		end
+	end
+	return list
+end
+
+-- LibSharedMedia only when another addon loaded it; Wanted doesn't bring its own
+function private.SharedMedia()
+	return LibStub and LibStub("LibSharedMedia-3.0", true)
+end
+
+---The sound names other addons registered with LibSharedMedia, sorted (empty without it).
+function Alerts:GetSharedMediaSounds()
+	local media = private.SharedMedia()
+	local list = {}
+	for _, name in ipairs(media and media:List("sound") or {}) do
+		-- LibSharedMedia's own silent entry; ours is None
+		if name ~= "None" then
+			tinsert(list, name)
+		end
+	end
+	return list
+end
+
+---A choice as shown in Settings.
+---@param choice string
+function Alerts:SoundLabel(choice)
+	if choice == "none" then
+		return "None"
+	end
+	for _, entry in ipairs(GAME_SOUNDS) do
+		if choice == "kit:"..entry[1] then
+			return entry[2]
+		end
+	end
+	return choice:match("^lsm:(.+)$") or "Wanted beep"
+end
+
 ---Plays an alert sound now, ignoring mute and spacing (for previews).
----@param kind string "enemy" | "important" | "stealth"
+---@param kind string "enemy" | "important" | "stealth" | "targeted"
 function Alerts:PlayRaw(kind)
+	local choice = Alerts:GetSoundChoice(kind)
+	if choice == "none" then
+		return
+	end
+	local kit = choice:match("^kit:(.+)$")
+	if kit and SOUNDKIT and SOUNDKIT[kit] then
+		PlaySound(SOUNDKIT[kit], "Master")
+		return
+	end
+	local name = choice:match("^lsm:(.+)$")
+	local media = name and private.SharedMedia()
+	local path = media and media:Fetch("sound", name, true)
+	if path and PlaySoundFile(path, "Master") then
+		return
+	end
+	-- Wanted's beep, also for a game sound or SharedMedia sound that's gone
+	private.PlayWanted(kind)
+end
+
+function private.PlayWanted(kind)
 	local file = SOUND_FILES[kind] or SOUND_FILES.enemy
 	local willPlay = PlaySoundFile and PlaySoundFile(file, "Master")
 	if not willPlay and SOUNDKIT then

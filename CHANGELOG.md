@@ -6,7 +6,7 @@
   up is closed, and its sound is muted for a few seconds around Wanted's own joins and at login.
 - After a channel takeover ends, everyone moves back to the main channel: every 15 minutes (out of fights and
   instances), Wanted quietly tries the main channel again, and once it's let in, it moves there and tells the
-  players it knows.
+  players it knows. If the main channel is taken over again soon after, it waits longer before the next try.
 
 ## [1.3.3] - 2026-10-01
 

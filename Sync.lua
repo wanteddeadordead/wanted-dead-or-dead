@@ -185,6 +185,12 @@ local LOGIN_MUTE_SECONDS = 20
 local HOME_FIRST_CHECK_SECONDS = 60
 local HOME_CHECK_SECONDS = 15 * 60
 local HOME_ANSWER_SECONDS = 5 -- how long the game has to let us in
+local HOME_SETTLE_SECONDS = 5 -- then how long we stay in before believing it (a moderated channel says so)
+-- Taken over again soon after everyone moved back: whoever took it still holds it. The wait between tries doubles
+-- each time (up to a day), and is back to the start once a stay there lasts two hours.
+local HOME_TROUBLE_SECONDS = 30 * 60
+local HOME_MAX_WAIT_SECONDS = 24 * 60 * 60
+local HOME_GOOD_STAY_SECONDS = 2 * 60 * 60
 local HOME_QUIET_SECONDS = 30 -- the first channel's notices are hidden this long after a try
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
@@ -511,8 +517,8 @@ end
 ---undone by rejoining; a ban or a changed password locks this client out, and sync goes on by whisper.
 function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, baseName)
 	if private.homeCheck and type(baseName) == "string" and strlower(baseName) == strlower(private.homeCheck) then
-		-- Our quiet try of the first channel: only whether it let us in matters (CheckHome)
-		if kind == "WRONG_PASSWORD" or kind == "BANNED" then
+		-- Our quiet try of the first channel: only whether it let us in, and isn't moderated, matters (CheckHome)
+		if kind == "WRONG_PASSWORD" or kind == "BANNED" or kind == "MODERATION_ON" then
 			private.homeRefused = true
 		end
 		return
@@ -535,6 +541,9 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			else
 				Wanted:Print(text, tostring(player), who)
 			end
+		end
+		if isUs and (kind == "PLAYER_KICKED" or kind == "PLAYER_BANNED") then
+			private.HomeTrouble(kind == "PLAYER_KICKED" and "we were kicked" or "we were banned")
 		end
 		if kind == "PLAYER_KICKED" and isUs then
 			private.Rejoin("kicked")
@@ -2070,6 +2079,7 @@ end
 ---The current channel was taken over: pick the next one (once per channel) and move there.
 function private.TakenOver(why)
 	private.takenOverAt = GetTime()
+	private.HomeTrouble(why)
 	if Wanted.db.settings.channelMoves == false then
 		return
 	end
@@ -2100,6 +2110,7 @@ function private.Adopt(pointer, why)
 	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, p = pointer.p, t = GetServerTime() }
 	if pointer.n == CHANNEL_BASE..private.faction then
 		if old ~= pointer.n then
+			Wanted.db.homeCheck.home = GetServerTime() -- watched for trouble a while (HomeTrouble)
 			Wanted:Print("Wanted's sync channel is free again, so everyone is moving back to it.")
 		end
 	else
@@ -2125,11 +2136,15 @@ end
 ---ours. If the game lets us in, the takeover is over: everyone moves back, one epoch on so the move beats the old
 ---ones. If not, nothing changes and it's tried again later; a new takeover moves everyone away again as usual.
 function private.CheckHome()
-	local home = CHANNEL_BASE..private.faction
+	local home, state, now = CHANNEL_BASE..private.faction, Wanted.db.homeCheck, GetServerTime()
+	if private.channelName == home and state.home and now - state.home >= HOME_GOOD_STAY_SECONDS and state.wait ~= HOME_CHECK_SECONDS then
+		Wanted:Log("Sync: two hours on %s without trouble; trying it every %d minutes again", home, HOME_CHECK_SECONDS / 60)
+		state.wait = HOME_CHECK_SECONDS
+	end
 	if private.epoch == 0 or private.channelName == home or private.homeCheck then
 		return
 	end
-	if Wanted:InCombat() or IsInInstance() then
+	if Wanted:InCombat() or IsInInstance() or now - state.tried < state.wait then
 		return
 	end
 	local id = GetChannelName(home)
@@ -2142,25 +2157,47 @@ function private.CheckHome()
 		return
 	end
 	private.homeCheck, private.homeRefused, private.homeCheckAt = home, false, GetTime()
+	state.tried = now
 	Wanted:Log("Sync: on %s (%d); trying %s to see if the takeover is over", private.channelName, private.epoch, home)
 	private.Join(home, CHANNEL_PASSWORD)
 	C_Timer.After(HOME_ANSWER_SECONDS, private.HomeAnswer)
 end
 
----What came of the try: in the first channel and not turned down means the takeover is over.
-function private.HomeAnswer()
+---What came of the try: in the first channel, and still there and not moderated a moment later, means the takeover
+---is over.
+function private.HomeAnswer(settled)
 	local home = private.homeCheck
-	private.homeCheck = nil
 	if not home or private.channelName == home then
+		private.homeCheck = nil
 		return
 	end
 	local id = GetChannelName(home)
 	if private.homeRefused or not id or id == 0 then
+		private.homeCheck = nil
 		Wanted:Log("Sync: %s still turns us away; staying on %s", home, private.channelName)
+		if id and id ~= 0 and LeaveChannelByName then
+			LeaveChannelByName(home)
+		end
 		return
 	end
+	if not settled then
+		C_Timer.After(HOME_SETTLE_SECONDS, function() private.HomeAnswer(true) end)
+		return
+	end
+	private.homeCheck = nil
 	Wanted:Log("!! Sync: let into %s again: the takeover is over", home)
 	private.Adopt({ e = private.epoch + 1, n = home, p = CHANNEL_PASSWORD }, "the takeover is over")
+end
+
+---Trouble on the first channel soon after everyone moved back to it: wait twice as long before the next try.
+function private.HomeTrouble(why)
+	local state = Wanted.db.homeCheck
+	if private.channelName ~= CHANNEL_BASE..private.faction or not state.home or GetServerTime() - state.home >= HOME_TROUBLE_SECONDS then
+		return
+	end
+	state.home = nil
+	state.wait = min(state.wait * 2, HOME_MAX_WAIT_SECONDS)
+	Wanted:Log("!! Sync: trouble on %s soon after moving back (%s); next try in %d minutes", private.channelName, why, state.wait / 60)
 end
 
 ---The players this client knows: realm links and those heard on the channel in the last week.

@@ -3261,7 +3261,7 @@ end)()
 	local moved = ns.Sync:GetInfo().channelName
 	check(moved ~= home and ns.db.syncChannel.e >= 1, "we're on a moved channel")
 	local inChannel = { [moved] = true }
-	local homeOpen = false
+	local homeOpen, homeModerated = false, false
 	local mutedAtJoin
 	JoinPermanentChannel = function(name, password)
 		realJoin(name, password)
@@ -3269,6 +3269,9 @@ end)()
 			mutedAtJoin = mutedSounds[INVITE]
 			if homeOpen and password == "wnt1" then
 				inChannel[name] = true
+				if homeModerated then
+					Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Griefer", "", "6. "..name, "", "", 0, 6, name)
+				end
 			else
 				Fire("CHANNEL_PASSWORD_REQUEST", name)
 				Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", name)
@@ -3309,8 +3312,20 @@ end)()
 	check(#hiddenPopups == 1 and hiddenPopups[1].data == home, "its password box is closed")
 	check(ns.db.syncChannel.e == before and ns.Sync:GetInfo().channelName == moved, "turned down: we stay where we are")
 	check(not mutedSounds[INVITE], "and the sound comes back")
+	-- Let in, but moderated: a failure, and the first channel is left
+	homeOpen, homeModerated = true, true
+	clock = clock + 15 * 60
+	Tick()
+	RunTimers()
+	check(HomeTries() == 2 and ns.db.syncChannel.e == before and ns.Sync:GetInfo().channelName == moved, "a moderated first channel is a failure")
+	check(leftChannels[#leftChannels] == home, "and it's left")
+	inChannel[home] = nil
+	-- Not tried again before the wait is up
+	Tick()
+	check(HomeTries() == 2, "not tried again before the wait is up")
 	-- Free again: let in, everyone moves back at the next epoch
-	homeOpen = true
+	homeModerated = false
+	clock = clock + 15 * 60
 	ClearSent()
 	Tick()
 	RunTimers()
@@ -3336,6 +3351,41 @@ end)()
 	Tick()
 	RunTimers()
 	check(HomeTries() == 0, "on the first channel, it isn't tried again")
+	-- Taken over again soon after moving back: the wait between tries doubles each time, up to a day
+	local state = ns.db.homeCheck
+	check(state.wait == 15 * 60, "the wait starts at 15 minutes")
+	local function TakeHome()
+		clock = clock + 60
+		Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Griefer", "", "6. "..home, "", "", 0, 6, home)
+		RunTimers()
+		inChannel[home] = nil
+	end
+	local function GoHome()
+		Tick()
+		RunTimers()
+		return ns.Sync:GetInfo().channelName == home
+	end
+	TakeHome()
+	check(ns.Sync:GetInfo().channelName ~= home and state.wait == 30 * 60, "moderation soon after moving back doubles the wait")
+	clock = clock + 15 * 60
+	check(not GoHome(), "no try after 15 minutes")
+	clock = clock + 15 * 60
+	check(GoHome(), "after 30 minutes, back home")
+	TakeHome()
+	check(state.wait == 60 * 60, "and doubles again")
+	state.wait = 20 * 3600
+	clock = clock + 20 * 3600
+	check(GoHome(), "back home after a long wait")
+	TakeHome()
+	check(state.wait == 24 * 3600, "never more than a day")
+	clock = clock + 24 * 3600
+	check(GoHome(), "back home a day later")
+	-- Trouble long after moving back doesn't count; a two-hour stay starts the wait over
+	clock = clock + 2 * 3600
+	Tick()
+	check(state.wait == 15 * 60, "two hours home without trouble: the wait starts over")
+	TakeHome()
+	check(state.wait == 15 * 60 and ns.Sync:GetInfo().channelName ~= home, "a takeover long after moving back moves us, without a longer wait")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
 -- /wanted who: a /who search, its results printed with full names and guilds

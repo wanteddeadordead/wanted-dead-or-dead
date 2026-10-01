@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-01
+
 - Kills claim bounties you hadn't heard of yet: when a bounty reaches you after you killed its target (or a member of
   its guild), from other players, a resync or the Wanted app's catch-up, Wanted files your claim for your latest kill
   made while the bounty was open. A kill before it was posted, or after it expired or was withdrawn, doesn't count. No

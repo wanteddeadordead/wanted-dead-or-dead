@@ -61,6 +61,7 @@ local private = {
 	membersRetrying = false, -- a member request is waiting for the game's channel list; others don't start one
 	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
+	guildTimes = {}, -- outbound guild message times in the last minute (their own budget)
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
@@ -159,6 +160,9 @@ local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone jus
 local MAX_RECENT_PEERS = 20
 local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
 local LOCKOUT_RETRY_SECONDS = 5 * 60
+-- Locked out and in a guild: what would go on the channel goes to the guild instead (same messages, same checks
+-- when received), on its own budget. Never while the channel works, so nothing is sent twice.
+local MAX_GUILD_PARTS_PER_MINUTE = 20
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
 local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed rejoin is expected
@@ -309,7 +313,7 @@ function Sync:Status()
 		end
 	end
 	local members = Sync:GetMembers()
-	return format("Sync: channel %s (%s%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", members and format(", %d in it", members) or "", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
+	return format("Sync: channel %s (%s%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", members and format(", %d in it", members) or "", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "", private.ViaGuild() and "; locked out, sending to the guild" or "")
 end
 
 ---Whether any of the values is one the game keeps secret from addons (chat text in a PvP match).
@@ -574,6 +578,10 @@ function private.LockOut(why)
 	Wanted:Log("!! Sync: locked out of the channel (%s)", why)
 	Wanted:Print("Wanted can't get into its sync channel (%s). It keeps syncing by whisper with players seen there, and tries the channel again every %d minutes.", why, LOCKOUT_RETRY_SECONDS / 60)
 	private.GreetRecentPeers()
+	if private.ViaGuild() then
+		Wanted:Log("Sync: locked out; channel messages go to the guild until we're back")
+		private.SendHello()
+	end
 	if not private.lockoutTicker then
 		private.lockoutTicker = C_Timer.NewTicker(LOCKOUT_RETRY_SECONDS, function()
 			if private.lockedOut then
@@ -582,6 +590,13 @@ function private.LockOut(why)
 			end
 		end)
 	end
+end
+
+---Whether channel messages go to the guild instead: locked out of the channel (not the moment's rejoin after a
+---loading screen), in a guild, and not in a PvP match.
+---@return boolean
+function private.ViaGuild()
+	return not private.channelId and private.lockedOut ~= nil and IsInGuild() and not Wanted:InPvPMatch()
 end
 
 ---Whispers a hello to the players last heard on the channel, as realm links, while locked out.
@@ -731,15 +746,16 @@ local function PruneTimes(times, now)
 	end
 end
 
----Sends a table as one or more addon messages, on the channel or to one player by whisper (a realm link).
----Returns whether it was sent.
+---Sends a table as one or more addon messages, on the channel (the guild while locked out of it) or to one player
+---by whisper (a realm link). Returns whether it was sent.
 ---@param tag string
 ---@param tbl table
 ---@param attempt number? how many times the game has throttled it already
 ---@param target string? a player to whisper instead of the channel
 ---@return boolean
 function private.Send(tag, tbl, attempt, target)
-	if not target and not private.channelId then
+	local viaGuild = not target and private.ViaGuild()
+	if not target and not private.channelId and not viaGuild then
 		return false
 	end
 	local now = GetTime()
@@ -756,8 +772,15 @@ function private.Send(tag, tbl, attempt, target)
 	end
 	local payload = Encode(tbl)
 	local total = ceil(#payload / CHUNK_LEN)
-	Wanted:Log("Sync: send %s%s, %d bytes in %d part(s)", tag, target and (" to "..target) or "", #payload, total)
-	if target then
+	Wanted:Log("Sync: send %s%s, %d bytes in %d part(s)", tag, target and (" to "..target) or viaGuild and " to the guild" or "", #payload, total)
+	if viaGuild then
+		PruneTimes(private.guildTimes, now)
+		if #private.guildTimes + total > MAX_GUILD_PARTS_PER_MINUTE then
+			Wanted:Log("!! Sync: guild budget reached, dropping %s (the next resync picks it up)", tag)
+			private.stats.dropped = private.stats.dropped + 1
+			return false
+		end
+	elseif target then
 		PruneTimes(private.linkTimes, now)
 		if #private.linkTimes + total > MAX_LINK_PARTS_PER_MINUTE then
 			Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
@@ -781,6 +804,22 @@ function private.Send(tag, tbl, attempt, target)
 		local chunk = strsub(payload, (part - 1) * CHUNK_LEN + 1, part * CHUNK_LEN)
 		parts[part] = tag..":"..msgId..":"..part.."/"..total..":"..chunk
 		assert(#parts[part] <= MAX_MESSAGE_LEN)
+	end
+	if viaGuild then
+		-- Guild messages come back to us too
+		private.ownMessages[tag..":"..msgId] = now
+		for part = 1, total do
+			local result = C_ChatInfo.SendAddonMessage(PREFIX, parts[part], "GUILD")
+			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s to the guild -> %s", part, total, tag, tostring(result))
+			if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
+				private.stats.throttled = private.stats.throttled + 1
+				private.QueueRetry(tag, tbl, attempt, nil)
+				return false
+			end
+			tinsert(private.guildTimes, now)
+			private.stats.sent = private.stats.sent + 1
+		end
+		return true
 	end
 	if not target then
 		-- Channel messages come back to us; whispers don't
@@ -1059,7 +1098,7 @@ function private.FlushSightings()
 			private.recentSightings[guid] = nil
 		end
 	end
-	if #list == 0 or not private.channelId then
+	if #list == 0 or (not private.channelId and not private.ViaGuild()) then
 		return
 	end
 	sort(list, function(a, b)
@@ -1203,13 +1242,14 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
-	-- Whispers carry realm links (players on another realm name); anything else must be our channel
+	-- Whispers carry realm links (players on another realm name); anything else must be our channel, or the guild
+	-- (guildmates locked out of the channel send there, and are taken like the channel)
 	local viaLink = channel == "WHISPER"
 	if not viaLink then
-		if channel ~= "CHANNEL" then
+		if channel ~= "CHANNEL" and channel ~= "GUILD" then
 			return
 		end
-		if channelName and channelName ~= "" and strlower(channelName) ~= strlower(private.channelName) then
+		if channel == "CHANNEL" and channelName and channelName ~= "" and strlower(channelName) ~= strlower(private.channelName) then
 			return
 		end
 	end
@@ -1228,7 +1268,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 			isSelf = true
 		end
 	end
-	Wanted:Log("Sync: received %d bytes from %s%s %s", #text, sender, isSelf and " (self)" or "", viaLink and "by whisper" or ("on "..tostring(channelName)))
+	Wanted:Log("Sync: received %d bytes from %s%s %s", #text, sender, isSelf and " (self)" or "", viaLink and "by whisper" or channel == "GUILD" and "in the guild" or ("on "..tostring(channelName)))
 	if isSelf then
 		-- Our own messages come back to us too, which is the transport check in /wanted synctest
 		private.stats.echoed = private.stats.echoed + 1

@@ -285,10 +285,14 @@ local bnFriends = {
 	{ id = 104, program = "WoW", faction = "Alliance", realm = "Other Realm", name = "Far Away" },
 }
 local bnSent = {}
-local function BnGame(f) return f and { gameAccountID = f.id, isOnline = true, isAppearOffline = false, clientProgram = f.program, factionName = f.faction, realmName = f.realm, characterName = f.name } end
+local function BnGame(f) return f and { gameAccountID = f.id, isOnline = true, isAppearOffline = false, clientProgram = f.program, factionName = f.faction, realmName = f.realm, characterName = f.name, wowProjectID = f.program == "WoW" and (f.project or 1) or nil } end
+WOW_PROJECT_ID = 1
+-- Battle.net accounts by id, as GetAccountInfoByID shows them (the community's members); none = not shown
+bnAccounts = {}
 function BNGetNumFriends() return #bnFriends end
 C_BattleNet = {
-	GetFriendAccountInfo = function(i) return { gameAccountInfo = BnGame(bnFriends[i]) } end,
+	GetFriendAccountInfo = function(i) return { bnetAccountID = 1000 + i, gameAccountInfo = BnGame(bnFriends[i]) } end,
+	GetAccountInfoByID = function(id) local f = bnAccounts[id] return f and { bnetAccountID = id, gameAccountInfo = BnGame(f) } end,
 	GetGameAccountInfoByID = function(id) for _, f in ipairs(bnFriends) do if f.id == id then return BnGame(f) end end end,
 	SendGameData = function(id, prefix, data) bnSent[#bnSent + 1] = { id = id, prefix = prefix, data = data } end,
 }
@@ -1400,7 +1404,7 @@ check(#bnSent == 1 and bnSent[1].id == 101 and bnSent[1].prefix == "WNTDB" and B
 ClearBn()
 Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "0.1.0" }), "WHISPER", 101)
 RunTimers()
-check(ns.Bridge:Status():find("^Bridge: 1 Battle.net friends"), "the answer makes a bridge: "..ns.Bridge:Status())
+check(ns.Bridge:Status():find("^Bridge: 1 players on the other faction run Wanted"), "the answer makes a bridge: "..ns.Bridge:Status())
 ClearBn()
 local crossBounty = ns.Store:NewRecord("bounty", { target = "Player-9-ALLY", targetName = "Ally Target", amount = 50000 })
 RunTimers()
@@ -2990,6 +2994,25 @@ end)()
 	local hello = Sent("WHISPER", "Some Peer")
 	check(#hello == 1 and hello[1].tag == "H" and hello[1].tbl.x == 1 and hello[1].tbl.r == "Realm", "a remembered channel peer is greeted by whisper, saying we're locked out")
 	check(ns.Sync:GetInfo().channelId == nil, "locked out: not in the channel")
+	-- Locked out and in a guild: what would go on the channel goes to the guild, and the guild is heard like the channel
+	local guildHello = Sent("GUILD")
+	check(#guildHello == 1 and guildHello[1].tag == "H" and type(guildHello[1].tbl.c) == "table", "locked out, a hello goes to the guild")
+	ClearSent()
+	ns.Store:NewRecord("pass", { bounty = "via-guild" })
+	RunTimers()
+	local guildLive = Sent("GUILD")
+	check(#guildLive == 1 and guildLive[1].tag == "R" and guildLive[1].tbl.r[1].data.bounty == "via-guild", "locked out, our new record goes to the guild")
+	Fire("CHAT_MSG_ADDON", "WNTD", addonSent[#addonSent].text, "GUILD", ns.Store:GetOrigin())
+	check(ns.Sync:GetInfo().stats.echoed >= 1, "our own guild message coming back is recognised")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { v = ns.VERSION, r = { Rec("Guild Mate", 1) } }), "GUILD", "Guild Mate")
+	RunFrames()
+	check(ns.db.records["Guild Mate:1"] ~= nil, "a guildmate's record sent to the guild is taken like the channel's")
+	local invalidBefore = ns.Sync:GetInfo().stats.invalid
+	Fire("CHAT_MSG_ADDON", "WNTD", "not framed", "GUILD", "Guild Mate")
+	check(ns.Sync:GetInfo().stats.invalid == invalidBefore + 1, "a guild message gets the same checks")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { v = ns.VERSION, r = { Rec("Party Mate", 1) } }), "PARTY", "Party Mate")
+	RunFrames()
+	check(ns.db.records["Party Mate:1"] == nil, "other chat types are still ignored")
 	-- A same-realm player who says they're locked out is accepted as a link; one who doesn't isn't (as before)
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm", x = 1 }), "WHISPER", "Locked Friend")
 	check(ns.Sync:GetLinks()["Locked Friend"] ~= nil, "a locked-out player on our realm links by whisper")
@@ -3011,6 +3034,12 @@ end)()
 	Retry()
 	check(ns.Sync:GetInfo().channelId == 6, "and ends the same way")
 	RunTimers()
+	-- In the channel, nothing goes to the guild
+	ClearSent()
+	ns.Store:NewRecord("pass", { bounty = "channel-again" })
+	clock = clock + 10
+	RunTimers()
+	check(#Sent("GUILD") == 0 and #Sent("CHANNEL") >= 1, "with the channel back, records go on the channel only")
 end)()
 ;(function()
 	-- Outlaws: four kills within twenty minutes, each backed by another record, make a player Wanted in game
@@ -3776,4 +3805,155 @@ end)()
 	RunTimers()
 	check(#MyClaims(guildLate) == 1, "a guild bounty learned of after a member's kill is claimed")
 	ns.Alerts.Warn, ns.Alerts.Sound = origWarn, origSound
+end)()
+;(function()
+	-- The Wanted Battle.net community: its online members in WoW Forever on this ruleset and the other faction are
+	-- bridges alongside friends; nobody else, and nobody while it isn't set up or we're not in it. A bridge that comes
+	-- back is pushed the current notices once; long messages go in parts and come back whole; parts that stop
+	-- coming are dropped
+	local function SentTo(id, prefix)
+		local out = {}
+		for _, m in ipairs(bnSent) do
+			if m.id == id and (not prefix or m.prefix == prefix) then out[#out + 1] = m end
+		end
+		return out
+	end
+	local function Tags(list)
+		local tags = {}
+		for _, m in ipairs(list) do local tbl = m.prefix == "WNTDB" and ns.Sync:Decode(m.data) tags[#tags + 1] = tbl and tbl.k or m.prefix end
+		return table.concat(tags, ",")
+	end
+	local function Drain() for _ = 1, 20 do RunTimers() end end
+	local function Rescan(event, ...) clock = clock + 31 Fire(event, ...) Drain() end
+	local function Notices() local n = 0 for _ in ns.Store:Iterator("notice") do n = n + 1 end return n end
+	clubSubscribed, clubMembers = {}, {}
+	C_Club = {
+		GetSubscribedClubs = function() return clubSubscribed end,
+		GetClubMembers = function() local ids = {} for _, m in ipairs(clubMembers) do ids[#ids + 1] = m.memberId end return ids end,
+		GetMemberInfo = function(_, id)
+			for _, m in ipairs(clubMembers) do
+				if m.memberId == id then return { isSelf = m.isSelf or false, memberId = id, presence = m.presence, bnetAccountId = m.bnet, faction = m.faction } end
+			end
+		end,
+		FocusMembers = function() end,
+	}
+	clubMembers = {
+		{ memberId = 1, bnet = 201, presence = 1 },
+		{ memberId = 2, bnet = 202, presence = 1 },
+		{ memberId = 3, bnet = 203, presence = 4 },
+		{ memberId = 4, bnet = 204, presence = 1 },
+		{ memberId = 5, bnet = 205, presence = 3 },
+		{ memberId = 6, bnet = 206, presence = 1, isSelf = true },
+	}
+	bnAccounts[201] = { id = 301, program = "WoW", faction = "Alliance", realm = "Realm", name = "Club Ally" }
+	bnAccounts[202] = { id = 302, program = "WoW", faction = "Horde", realm = "Realm", name = "Club Horde" }
+	bnAccounts[203] = { id = 303, program = "WoW", faction = "Alliance", realm = "Realm", name = "Club Retail", project = 2 }
+	bnAccounts[205] = { id = 305, program = "WoW", faction = "Alliance", realm = "Realm", name = "Club Offline" }
+	bnAccounts[206] = { id = 306, program = "WoW", faction = "Alliance", realm = "Realm", name = "Club Me" }
+	-- 204 isn't a friend and Battle.net doesn't show their game
+	bnFriends[#bnFriends + 1] = { id = 106, program = "WoW", faction = "Alliance", realm = "Realm", name = "Retail Ally", project = 2 }
+	ns.db.settings.bridge = true
+	local wantedClub = ns.Bridge.clubId
+	check(tostring(wantedClub) == "23053871", "the Wanted community is set up")
+	-- Settings shows its invite link in a copy box
+	ns.UI:Show("settings")
+	local inviteBox
+	for _, f in ipairs(Mock.created) do
+		if f._text == "https://blizzard.com/invite/7mmzbzC47G" then inviteBox = f end
+	end
+	check(inviteBox and inviteBox._scripts.OnEditFocusGained, "Settings has the community's invite link in a copy box")
+	ns.Bridge.clubId = 0
+	bnSent = {}
+	Rescan("BN_FRIEND_INFO_CHANGED")
+	check(#SentTo(301) == 0, "no community while it isn't set up")
+	check(#SentTo(106) == 0, "a friend in another game version on the other faction is no bridge")
+	ns.Bridge.clubId = "77"
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(#SentTo(301) == 0, "no community bridges when we're not in it")
+	local outside = table.concat(ns.Bridge:CommunityReport(), "\n")
+	check(outside:find("not in the Wanted community", 1, true) and outside:find("https://blizzard.com/invite/7mmzbzC47G", 1, true), "/wanted community gives the invite link to a player not in it: "..outside)
+	clubSubscribed = { { clubId = "77", name = "Wanted", clubType = 0, memberCount = 6 } }
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "88", 1, 1)
+	check(#SentTo(301) == 0, "another community's events don't rescan")
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	local hello = SentTo(301)
+	check(#hello == 1 and Tags(hello) == "H" and ns.Sync:Decode(hello[1].data).f == 1, "a community member online on the other faction is greeted, saying we read parts: "..Tags(hello))
+	for _, id in ipairs({ 302, 303, 304, 305, 306 }) do
+		check(#SentTo(id) == 0, "not greeted: same faction, another game version, not shown, offline or ourselves ("..id..")")
+	end
+	local report = table.concat(ns.Bridge:CommunityReport(), "\n")
+	check(report:find("id 77, Battle.net community") and report:find("1 bridges, 1 whose game Battle.net doesn't show"), "/wanted community lists the communities and what it saw: "..report)
+	-- Their answer makes them a bridge and they're sent the backlog
+	bnSent = {}
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "0.1.0", f = 1 }), "WHISPER", 301)
+	Drain()
+	check(Tags(SentTo(301)):find("^N"), "a community bridge gets the recent notices: "..Tags(SentTo(301)))
+	-- Logged off: nothing goes to them meanwhile
+	clubMembers[1].presence = 3
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 3)
+	bnSent = {}
+	math.randomseed(7)
+	local function Noise(n) local t = {} for i = 1, n do t[i] = string.char(math.random(33, 126)) end return table.concat(t) end
+	for i = 1, 50 do
+		ns.Store:NewRecord("bounty", { target = "Player-9-"..Noise(55), targetName = Noise(48), amount = 1000 + i })
+	end
+	Drain()
+	check(#SentTo(301) == 0, "a bridge that logged off is sent nothing")
+	-- Back: pushed the notices it missed at once, in parts (they don't fit one piece of game data)
+	clubMembers[1].presence = 1
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	local parts = SentTo(301, "WNTDP")
+	check(#parts >= 2 and #parts <= 8, "the backlog goes in parts, got "..#parts)
+	for _, part in ipairs(parts) do
+		check(#part.data <= 3800 and part.data:match("^%w+:%d+/"..#parts..":"), "each part fits and says where it belongs")
+	end
+	check(ns.Bridge:Status():find("1 pushed on return"), "the push is counted: "..ns.Bridge:Status())
+	-- The parts come back together: the 50 notices are read whole
+	local before = Notices()
+	for i = #parts, 1, -1 do
+		Fire("BN_CHAT_MSG_ADDON", "WNTDP", parts[i].data, "WHISPER", 101)
+	end
+	Drain()
+	check(Notices() == before + 50, "parts in any order make the whole message, got "..(Notices() - before))
+	-- Gone and back again soon: greeted, not pushed again; what it missed goes once it answers
+	clubMembers[1].presence = 3
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 3)
+	ns.Store:NewRecord("bounty", { target = "Player-9-MISSED", targetName = "Missed Twice", amount = 4000 })
+	Drain()
+	bnSent = {}
+	clubMembers[1].presence = 1
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(Tags(SentTo(301)) == "H", "a second return within minutes is only greeted: "..Tags(SentTo(301)))
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "0.1.0", f = 1 }), "WHISPER", 301)
+	Drain()
+	local missed = SentTo(301)
+	check(Tags(missed) == "H,N" and #ns.Sync:Decode(missed[2].data).n == 1, "its answer brings only what it missed: "..Tags(missed))
+	-- Parts that stop coming are dropped, and a message claiming too many parts is refused
+	before = Notices()
+	local whole = ns.Sync:Encode({ k = "N", n = { { b = "Horde Poster:50", g = "Player-1-ME", n = "Test Player", a = 7000, p = "abcd1234", t = clock } } })
+	local half = math.floor(#whole / 2)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "zz:1/2:"..whole:sub(1, half), "WHISPER", 101)
+	clock = clock + 31
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "zz:2/2:"..whole:sub(half + 1), "WHISPER", 101)
+	check(Notices() == before and ns.Bridge:Status():find("1 expired"), "a part arriving after the rest timed out completes nothing: "..ns.Bridge:Status())
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "yy:1/9:"..whole, "WHISPER", 101)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "yy:9/9:x", "WHISPER", 101)
+	check(Notices() == before, "a message in more parts than allowed is refused")
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "xx:1/2:"..whole:sub(1, half), "WHISPER", 102)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "xx:2/2:"..whole:sub(half + 1), "WHISPER", 102)
+	check(Notices() == before, "parts from our own faction are refused like whole messages")
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "ww:2/2:"..whole:sub(half + 1), "WHISPER", 101)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDP", "ww:1/2:"..whole:sub(1, half), "WHISPER", 101)
+	check(Notices() == before + 1, "and in time they make the message")
+	-- One sender gets a limited number of messages a minute
+	clock = (math.floor(clock / 60) + 1) * 60
+	bnSent = {}
+	for _ = 1, 35 do
+		Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "H", v = "0.1.0", f = 1 }), "WHISPER", 101)
+	end
+	Drain()
+	check(#SentTo(101) == 30, "only 30 messages a minute are taken from one sender, got "..#SentTo(101))
+	ns.Bridge.clubId = wantedClub
+	bnFriends[#bnFriends] = nil
+	C_Club = nil
 end)()

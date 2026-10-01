@@ -7,6 +7,20 @@
   The victim's own record of who killed them is the strongest witness. Altered records are kept but never used for
   claims, kills or the leaderboards; out-of-order records still show but never count as witnesses. /wanted bug counts
   both.
+- The Wanted Battle.net community: join it with the invite link in Settings, Sharing and display (members can see
+  each other's BattleTag). Other-faction Wanted players find each other there, and once you're Battle.net friends,
+  your addons pass bounty notices to each other. Wanted also tries to reach members who aren't your friends; whether
+  the game allows that is not known yet. `/wanted community` shows how many members it could and couldn't reach, or
+  gives the invite link if you're not in it.
+- Only players in WoW Forever carry notices: a friend on the other faction in another version of the game is no
+  longer greeted.
+- A friend on the other faction who logs back in is sent the notices they missed right away, instead of after the
+  next hello. Nothing is sent to them while they're offline.
+- Long bounty notice batches go across in parts and are put back together on arrival, so a whole backlog fits in one
+  message. Clients before this version still get them ten at a time.
+- When Wanted can't get into its sync channel (banned, moderated or a changed password), it now also shares with
+  your guild through hidden guild messages, and hears guildmates who do the same. While the channel works, nothing
+  goes to the guild.
 
 ## [1.3.2] - 2026-10-01
 

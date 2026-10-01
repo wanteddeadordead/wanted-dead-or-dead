@@ -350,6 +350,10 @@ end
 
 ---Starts watching a unit if it is an enemy player, and records a sighting.
 function private.Track(unit)
+	if Wanted:InPvPMatch() then
+		-- A battleground's players aren't world PvP: not watched or sighted
+		return
+	end
 	if not unit or not UnitExists(unit) or not UnitIsPlayer(unit) then
 		private.tracked[unit] = nil
 		return

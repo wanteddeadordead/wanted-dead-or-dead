@@ -294,7 +294,8 @@ C_BattleNet = {
 }
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMessage = function(prefix, text, chatType, target)
 	if throttleSkip and throttleSkip > 0 then throttleSkip = throttleSkip - 1
-	elseif throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3 end
+	elseif throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3
+	elseif lockdownNext and lockdownNext > 0 then lockdownNext = lockdownNext - 1 return 11 end
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target } return 0
 end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
@@ -3439,3 +3440,48 @@ end)()
 	check(db.bountyRequests.r3 == nil and db.requestAnswers.r3 == nil, "an expired request is dropped silently")
 	ns.Widgets.IsDialogShown = realShown
 end)()
+;(function()
+	-- Battlegrounds: the game blocks addon messages and hides chat text in a PvP match, and every enemy there is
+	-- new. Nothing is sent, tracked or alerted inside one; what was waiting goes once outside.
+	local outside = IsInInstance
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	clock = clock + 61
+	RunTimers()
+	addonSent = {}
+	IsInInstance = function() return true, "pvp" end
+	Fire("PLAYER_ENTERING_WORLD")
+	check(ns:InPvPMatch(), "a battleground is a PvP match")
+	SlashCmdList.WANTED("synctest")
+	RunTimers()
+	check(#addonSent == 0, "nothing is sent inside a battleground, got "..#addonSent)
+	-- Text the game hides from addons during a match is never read
+	Fire("CHAT_MSG_SYSTEM", SECRET_SPELL)
+	Fire("CHAT_MSG_CHANNEL_NOTICE", SECRET_SPELL, SECRET_SPELL, "", "", SECRET_SPELL, "", 0, 0, SECRET_SPELL)
+	Fire("CHAT_MSG_ADDON", "WNTD", SECRET_SPELL, "CHANNEL", SECRET_SPELL, nil, nil, nil, "WantedNetHorde")
+	-- An enemy in the battleground isn't listed, counted, sighted or alerted on
+	local alerts = 0
+	ns.Enemies:OnChange(function(event) if event == "new" then alerts = alerts + 1 end end)
+	enemyUnits.nameplate5 = { guid = "Player-9-BGFOE", name = "Bg Foe", class = "WARRIOR", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate5")
+	check(not ns.Enemies:ShouldAlert(), "no alerts in a battleground")
+	check(alerts == 0 and not ns.Enemies:GetStats("Player-9-BGFOE"), "an enemy in a battleground isn't counted or alerted on")
+	check(not ns.db.players["Player-9-BGFOE"], "nor saved as a sighting")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate5")
+	enemyUnits.nameplate5 = nil
+	-- Back outside, the waiting hello goes
+	IsInInstance = outside
+	Fire("PLAYER_ENTERING_WORLD")
+	RunTimers()
+	check(#addonSent >= 1 and addonSent[1].text:find("^H:"), "the hello goes once out of the battleground, got "..#addonSent)
+	-- A send the game refuses in lockdown isn't counted as sent: it waits and goes again
+	addonSent = {}
+	clock = clock + 61
+	lockdownNext = 1
+	SlashCmdList.WANTED("synctest")
+	RunTimers()
+	check(lockdownNext == 0, "the lockdown refusal was hit")
+	clock = clock + 61
+	RunTimers()
+	check(#addonSent >= 1 and addonSent[1].text:find("^H:"), "a part refused in lockdown is sent again later, got "..#addonSent)
+end)()
+

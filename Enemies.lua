@@ -171,6 +171,10 @@ end
 -- ============================================================================
 
 function private.OnEvent(_, event, arg1, _, arg3)
+	if Wanted:InPvPMatch() and event ~= "PLAYER_DEAD" then
+		-- Every enemy in a battleground is new: none are listed, counted or alerted on
+		return
+	end
 	if not private.Settings().enabled then
 		return
 	end
@@ -842,7 +846,7 @@ end
 ---@return boolean
 function Enemies:ShouldAlert()
 	local settings = private.Settings()
-	return settings.enabled and (not settings.onlyWhenExposed or Enemies:IsExposed())
+	return settings.enabled and not Wanted:InPvPMatch() and (not settings.onlyWhenExposed or Enemies:IsExposed())
 end
 
 function Enemies:GetKoSList()

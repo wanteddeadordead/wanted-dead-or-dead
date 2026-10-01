@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Ready for battlegrounds: inside a battleground or arena, Wanted stays quiet. It doesn't list, count or alert on
+  the enemy team, doesn't save sightings, and pauses sharing with other players (the game blocks addon messages
+  there); sharing picks up again when you leave. Chat text the game hides from addons during a match is skipped
+  instead of read, and a message the game refuses during a match waits and goes again later instead of being lost.
+
 ## [1.2.25] - 2026-09-30
 
 - Bounties asked for from Discord: post a bounty from wanteddeadordead.com's Discord bot, and the next time you log in

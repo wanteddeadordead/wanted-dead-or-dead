@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-01
+
 - Claims can no longer be made to look witnessed with forged records relayed by another player: a death counts as a
   witness only when it came straight from the player who recorded it, from the Wanted app's catch-up, or from you.
   The victim's own record of who killed them is the strongest witness. Altered records are kept but never used for

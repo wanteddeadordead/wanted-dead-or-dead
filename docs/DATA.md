@@ -116,6 +116,10 @@ in the middle of the screen (default on), its sound (default on), and where a li
 `"none"` (the default), `"party"` or `"guild"`, never a public channel (`Streaks.lua`). The counts themselves are
 not saved. A new key with defaults: no migration.
 
+`WantedDB.settings.detect.sounds` (from 1.2.26) is `{ enemy, important, stealth, targeted }`: each alert's sound,
+`"wanted"` (the addon's own beep, the default), `"none"`, `"kit:NAME"` (a game SOUNDKIT) or `"lsm:Name"` (a sound
+another addon registered with LibSharedMedia; Wanted's beep when it's gone). A new key with defaults: no migration.
+
 `WantedDB.settings.minimap` is the table LibDBIcon keeps for the minimap button (from 1.2.24): `hide`, and
 `minimapPos`, the button's angle in degrees, filled in at load from the older `angle` (which stays, for older
 versions). LibDBIcon may add `lock`. A new key filled in at load: no migration.

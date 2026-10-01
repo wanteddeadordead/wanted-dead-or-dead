@@ -83,6 +83,7 @@ local DEFAULTS = {
 			mapPins = true,
 			targetWarn = true, -- warning while an enemy has you targeted
 			targetSound = true,
+			sounds = { enemy = "wanted", important = "wanted", stealth = "wanted", targeted = "wanted" }, -- each alert's sound (Alerts:GetSoundChoice)
 			targetHold = true, -- keep it up while targeted (otherwise a few seconds)
 			targetNames = true, -- list who in the warning (off: just TARGETED; the Nearby window shows who)
 			hudPos = nil,

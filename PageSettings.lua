@@ -6,9 +6,18 @@ local UI = Wanted.UI
 local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
-local private = { toggles = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {} }
+local private = { toggles = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {}, soundPicks = {} }
 local EMOTE_STYLES = { fav = "selected", list = "chip", hidden = "ghost" }
 local EMOTE_CHIP_WIDTH, EMOTE_COLUMNS = 82, 8
+local SOUNDS_X = 412 -- the Sounds card sits right of the targeted card
+local SOUND_MENU_PAGE = 25 -- SharedMedia sounds per menu page, so a long list stays on screen
+-- { kind, label, tooltip }
+local SOUND_KINDS = {
+	{ "enemy", "Enemy", "An enemy shows up (and a zone filling up fast)." },
+	{ "important", "KoS and bounty", "A Kill on Sight, bounty or outlaw target shows up, or someone else sees one. Also the kill streak sound." },
+	{ "stealth", "Stealth", "A nearby enemy goes into stealth." },
+	{ "targeted", "Targeted", "An enemy starts targeting you." },
+}
 
 local function Detect()
 	return Wanted.db.settings.detect
@@ -118,25 +127,91 @@ function private.BuildAlerts(panel, width)
 end
 
 function private.BuildTargeted(panel, width)
-	local card = private.Card(panel, -262, 172, "When an enemy targets you", width)
+	local card = private.Card(panel, -262, 172, "When an enemy targets you", SOUNDS_X - 12)
 	private.Toggle(card, Detect, "targetWarn", "Show a TARGETED warning", "A warning in the middle of the screen naming whoever has you targeted.", 16, -38, function() Wanted.Alerts:UpdateTargetedHud() end)
 	private.Toggle(card, Detect, "targetSound", "Play the targeted sound", "A rising double tone each time another enemy starts targeting you.", 16, -62)
 	private.Toggle(card, Detect, "targetHold", "Keep the warning up while I'm targeted", "Otherwise it shows for a few seconds each time someone new targets you.", 16, -86)
 	private.Toggle(card, Detect, "targetNames", "List who in the warning", "Off: the warning just says TARGETED, and the Nearby window shows who (their rows turn red).", 16, -110, function() Wanted.Alerts:UpdateTargetedHud() end)
-	local hear = W:Button(card, "Targeted", "chip", 80, 22, function()
-		Wanted.Alerts:PlayRaw("targeted")
-	end)
-	hear:SetPoint("TOPLEFT", 440, -38)
-	W:AttachTooltip(hear, "Hear it", "The sound you get when an enemy targets you.")
-	private.moveHud = W:Button(card, "Move the warning", "secondary", 140, 26, function()
+	private.moveHud = W:Button(card, "Move the warning", "secondary", 140, 24, function()
 		local moving = not Wanted.Alerts:IsHudMoving()
 		Wanted.Alerts:SetHudMoving(moving)
 		private.moveHud:SetText(moving and "Done" or "Move the warning")
 		private.moveHud:SetStyle(moving and "primary" or "secondary")
 	end)
-	private.moveHud:SetPoint("TOPLEFT", 440, -70)
+	private.moveHud:SetPoint("TOPRIGHT", -12, -10)
 	local hint = Theme:Text(card, "tiny", "Needs enemy detection on. Works from nameplates, your target and focus: someone off screen can't be seen targeting you.")
-	hint:SetPoint("TOPLEFT", 16, -142)
+	hint:SetPoint("TOPLEFT", 16, -136)
+	hint:SetWidth(SOUNDS_X - 44)
+	hint:SetJustifyH("LEFT")
+end
+
+-- Beside the targeted card: each alert's sound, with a button to hear it
+function private.BuildSounds(panel, width)
+	local card = private.Card(panel, -262, 172, "Sounds", width - SOUNDS_X)
+	card:SetPoint("TOPLEFT", SOUNDS_X, -262)
+	for i, kind in ipairs(SOUND_KINDS) do
+		local y = -38 - (i - 1) * 26
+		local label = Theme:Text(card, "small", kind[2])
+		label:SetPoint("TOPLEFT", 16, y - 4)
+		local pick = W:Button(card, "", "secondary", 132, 22)
+		pick:SetScript("OnClick", function(self)
+			private.SoundMenu(kind[1], self)
+		end)
+		pick:SetPoint("TOPLEFT", 116, y)
+		-- A long SharedMedia name is cut short instead of running over the next button
+		pick.label:SetWidth(122)
+		pick.label:SetWordWrap(false)
+		W:AttachTooltip(pick, kind[2], kind[3])
+		private.soundPicks[kind[1]] = pick
+		local hear = W:Button(card, "Hear it", "chip", 52, 22, function()
+			Wanted.Alerts:PlayRaw(kind[1])
+		end)
+		hear:SetPoint("LEFT", pick, "RIGHT", 6, 0)
+	end
+	local hint = Theme:Text(card, "tiny", "Add your own sounds with a SharedMedia addon.")
+	hint:SetPoint("TOPLEFT", 16, -146)
+end
+
+---The sound choices for one alert kind, under its button. SharedMedia sounds get their own menu, a page at a time.
+function private.SoundMenu(kind, anchor, page)
+	local Alerts = Wanted.Alerts
+	local current = Alerts:GetSoundChoice(kind)
+	local function Item(choice, text)
+		return { text = text, color = choice == current and C.accent or nil, onClick = function()
+			Alerts:SetSoundChoice(kind, choice)
+			Alerts:PlayRaw(kind)
+			private.Refresh()
+		end }
+	end
+	local items = {}
+	local shared = Alerts:GetSharedMediaSounds()
+	if page then
+		tinsert(items, { text = "SharedMedia sounds", header = true })
+		local first = (page - 1) * SOUND_MENU_PAGE + 1
+		for i = first, min(#shared, first + SOUND_MENU_PAGE - 1) do
+			tinsert(items, Item("lsm:"..shared[i], shared[i]))
+		end
+		tinsert(items, "-")
+		if #shared > page * SOUND_MENU_PAGE then
+			tinsert(items, { text = "More...", onClick = function() private.SoundMenu(kind, anchor, page + 1) end })
+		end
+		tinsert(items, { text = "Back", onClick = function() private.SoundMenu(kind, anchor) end })
+	else
+		tinsert(items, Item("wanted", Wanted.Alerts:SoundLabel("wanted", kind).." (Wanted)"))
+		tinsert(items, Item("none", "None"))
+		tinsert(items, "-")
+		tinsert(items, { text = "Game sounds", header = true })
+		for _, entry in ipairs(Alerts:GetGameSounds()) do
+			tinsert(items, Item(entry[1], entry[2]))
+		end
+		if #shared > 0 then
+			tinsert(items, "-")
+			tinsert(items, { text = "SharedMedia sounds...", color = current:find("^lsm:") and C.accent or nil, onClick = function()
+				private.SoundMenu(kind, anchor, 1)
+			end })
+		end
+	end
+	W:Menu(items, anchor)
 end
 
 function private.BuildNearby(panel, width)
@@ -360,6 +435,9 @@ function private.Refresh()
 	private.opacity:Select(tostring(NearbyShow().opacity or 1), true)
 	private.streakAnnounce:Select(StreakSettings().announce or "none", true)
 	private.minimap:SetChecked(not Wanted.db.settings.minimap.hide)
+	for kind, pick in pairs(private.soundPicks) do
+		pick:SetText(Wanted.Alerts:SoundLabel(Wanted.Alerts:GetSoundChoice(kind), kind))
+	end
 	for _, button in ipairs(private.iconButtons) do
 		for _, entry in ipairs(button.icons) do
 			Theme:SetClassIcon(entry.texture, entry.class, button.styleKey)
@@ -397,6 +475,7 @@ UI:RegisterPage("settings", {
 		end
 		private.BuildAlerts(private.panels.alerts, width)
 		private.BuildTargeted(private.panels.alerts, width)
+		private.BuildSounds(private.panels.alerts, width)
 		private.BuildNearby(private.panels.nearby, width)
 		private.BuildSharing(private.panels.sharing, width)
 		private.BuildStreaks(private.panels.streaks, width)

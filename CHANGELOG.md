@@ -6,6 +6,8 @@
   the enemy team, doesn't save sightings, and pauses sharing with other players (the game blocks addon messages
   there); sharing picks up again when you leave. Chat text the game hides from addons during a match is skipped
   instead of read, and a message the game refuses during a match waits and goes again later instead of being lost.
+- Choose each alert's sound in Settings, Alerts: Wanted's own sound, none, one of the game's own sounds, or any sound
+  added through a SharedMedia addon. Enemy, Kill on Sight and bounty, Stealth and Targeted each have their own.
 
 ## [1.2.25] - 2026-09-30
 

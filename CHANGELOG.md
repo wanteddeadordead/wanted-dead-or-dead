@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-30
+
 - Ready for battlegrounds: inside a battleground or arena, Wanted stays quiet. It doesn't list, count or alert on
   the enemy team, doesn't save sightings, and pauses sharing with other players (the game blocks addon messages
   there); sharing picks up again when you leave. Chat text the game hides from addons during a match is skipped

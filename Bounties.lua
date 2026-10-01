@@ -690,20 +690,49 @@ function private.ClaimLate(bounty)
 	return claim
 end
 
----Other clients that recorded the same death as a claim's kill (same victim, same place, within the window).
+---Other clients that recorded the same death as a claim's kill (same victim, same place, within the window). Only
+---a death record that is its origin's own word counts (Store:IsTrusted): one relayed by another player could be
+---forged by them to make a claim look witnessed.
 ---@param claim table
 ---@return string[] origins
+---@return boolean victimsOwn whether one of them is the victim's own record of the death naming the claim's killer
 function Bounties:GetWitnesses(claim)
 	local witnesses = {}
 	local seen = {}
+	local victimsOwn = false
 	for death in Store:Iterator("death") do
 		local data = death.data
-		if death.origin ~= claim.origin and not seen[death.origin] and data.victim == claim.data.victim and data.zone == claim.data.zone and abs(death.t - claim.data.killT) <= WITNESS_WINDOW then
-			seen[death.origin] = true
-			tinsert(witnesses, death.origin)
+		if death.origin ~= claim.origin and data.victim == claim.data.victim and data.zone == claim.data.zone
+			and abs(death.t - claim.data.killT) <= WITNESS_WINDOW and Store:IsTrusted(death) then
+			if not seen[death.origin] then
+				seen[death.origin] = true
+				tinsert(witnesses, death.origin)
+			end
+			victimsOwn = victimsOwn or private.IsVictimsOwn(death, claim)
 		end
 	end
-	return witnesses
+	return witnesses, victimsOwn
+end
+
+---Whether a death record is the victim's own, naming the claim's killer: its origin is the victim's character (a
+---trusted link record of that origin names the victim's GUID, or it's one of this account's characters) and it
+---names the killer of the claim's kill. Nobody backs up the one who killed them, so it's the strongest witness.
+function private.IsVictimsOwn(death, claim)
+	local victim, killer = death.data.victim, death.data.killer
+	local kill = type(claim.data.kill) == "string" and Store:Get(claim.data.kill)
+	if type(killer) ~= "string" or not kill or kill.data.killer ~= killer then
+		return false
+	end
+	local character = Wanted.db.characters and Wanted.db.characters[victim]
+	if character and character.n == death.origin then
+		return true
+	end
+	for link in Store:Iterator("link") do
+		if link.origin == death.origin and link.data.guid == victim and Store:IsTrusted(link) then
+			return true
+		end
+	end
+	return false
 end
 
 -- A witness whose records started less than this long before the kill is new to the network
@@ -747,9 +776,13 @@ end
 ---@return string[] warnings
 function Bounties:GetClaimWarnings(claim)
 	local warnings = {}
-	local witnesses = Bounties:GetWitnesses(claim)
+	local witnesses, victimsOwn = Bounties:GetWitnesses(claim)
 	if #witnesses == 0 then
 		tinsert(warnings, "Nobody else recorded this death: only the bounty hunter's own addon says it happened.")
+		return warnings
+	end
+	-- The victim's own record of who killed them settles it
+	if victimsOwn then
 		return warnings
 	end
 	local killT = claim.data.killT or claim.t
@@ -796,7 +829,8 @@ function Bounties:GetWinningClaim(bounty)
 	return best
 end
 
----The claim's level: 1 own client, 2 witnessed, 3 confirmed by the poster. Disputed returns 0.
+---The claim's level: 1 own client, 2 witnessed (a trusted witness, the victim's own record included), 3 confirmed
+---by the poster. Disputed returns 0.
 ---@param claim table
 ---@return number
 function Bounties:GetClaimLevel(claim)

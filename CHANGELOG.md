@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Claims can no longer be made to look witnessed with forged records relayed by another player: a death counts as a
+  witness only when it came straight from the player who recorded it, from the Wanted app's catch-up, or from you.
+  The victim's own record of who killed them is the strongest witness. Altered records are kept but never used for
+  claims, kills or the leaderboards; out-of-order records still show but never count as witnesses. /wanted bug counts
+  both.
+
 ## [1.3.2] - 2026-10-01
 
 - Kills claim bounties you hadn't heard of yet: when a bounty reaches you after you killed its target (or a member of

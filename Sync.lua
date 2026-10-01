@@ -133,6 +133,9 @@ local PAUSE_SECONDS = 10 * 60
 local JOIN_RETRY_SECONDS = 10
 local JOIN_SETTLE_SECONDS = 5
 local RESULT_INVALID_CHANNEL = 7
+-- AddOnMessageLockdown: the game refuses addon messages for now (in a PvP match). The part waits and goes again later.
+local RESULT_LOCKDOWN = 11
+local LOCKDOWN_RETRY_SECONDS = 30
 local MAX_JOIN_ATTEMPTS = 12
 local PEER_TIMEOUT = 10 * 60
 -- How many records a fill answer sends per message batch and per request
@@ -309,13 +312,35 @@ function Sync:Status()
 	return format("Sync: channel %s (%s%s), %d peers in the last 10 min (%d on other realms by whisper); sent %d, received %d (%d own echoes), merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s.", private.channelName or "?", private.channelId and ("#"..private.channelId) or "not joined", members and format(", %d in it", members) or "", numPeers, numLinks, private.stats.sent, private.stats.received, private.stats.echoed, private.stats.merged, private.stats.invalid, private.stats.dropped, private.stats.throttled, private.stats.skipped, now < private.pausedUntil and " PAUSED" or "")
 end
 
+---Whether any of the values is one the game keeps secret from addons (chat text in a PvP match).
+function private.AnySecret(...)
+	if not issecretvalue then
+		return false
+	end
+	for i = 1, select("#", ...) do
+		if issecretvalue((select(i, ...))) then
+			return true
+		end
+	end
+	return false
+end
+
 function private.OnEvent(_, event, ...)
+	if (event == "CHAT_MSG_ADDON" or event == "CHAT_MSG_SYSTEM" or event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER")
+		and private.AnySecret(...) then
+		return
+	end
 	if event == "CHAT_MSG_ADDON" then
 		private.OnAddonMessage(...)
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		-- A zone change or reload can drop the channel id
 		private.channelId = nil
 		private.joinAttempts = 0
+		if Wanted:InPvPMatch() then
+			-- Addon messages are blocked in a battleground: out of the channel until we leave, then the hello resyncs
+			Wanted:Log("Sync: in a PvP match; paused until we leave")
+			return
+		end
 		C_Timer.After(5, private.TryJoin)
 	elseif event == "CHANNEL_PASSWORD_REQUEST" then
 		private.OnPasswordRequest(...)
@@ -612,7 +637,7 @@ end
 -- ============================================================================
 
 function private.TryJoin()
-	if private.channelId then
+	if private.channelId or Wanted:InPvPMatch() then
 		-- Already in (the login and entering-world timers both call this)
 		return
 	end
@@ -771,9 +796,9 @@ function private.Send(tag, tbl, attempt, target)
 	for part = 1, total do
 		local result = C_ChatInfo.SendAddonMessage(PREFIX, parts[part], "WHISPER", target)
 		Wanted:Log("Sync: SendAddonMessage part %d/%d to %s -> %s", part, total, target, tostring(result))
-		if RESULT_THROTTLED[result] then
+		if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
 			private.stats.throttled = private.stats.throttled + 1
-			Wanted:Log("!! Sync: throttled by the game (%s) at part %d/%d of %s to %s", tostring(result), part, total, tag, target)
+			Wanted:Log("!! Sync: refused by the game (%s) at part %d/%d of %s to %s", tostring(result), part, total, tag, target)
 			private.QueueRetry(tag, tbl, attempt, target)
 			return false
 		end
@@ -913,6 +938,10 @@ function private.Drain()
 				private.channelId = nil
 				private.joinAttempts = 0
 				C_Timer.After(JOIN_SETTLE_SECONDS, private.TryJoin)
+			elseif result == RESULT_LOCKDOWN then
+				-- The game refuses addon messages for now: not sent, and not counted against the part
+				Wanted:Log("!! Sync: addon messages locked down (%s) at part %d/%d of %s", tostring(result), part, total, item.tag)
+				wait = LOCKDOWN_RETRY_SECONDS
 			elseif RESULT_THROTTLED[result] then
 				-- Something else used up the game's allowance (another addon, or chat): wait, then send this part again
 				private.stats.throttled = private.stats.throttled + 1

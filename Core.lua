@@ -699,6 +699,14 @@ function Wanted:InCombat()
 	return private.inCombat
 end
 
+---Whether the player is in a battleground or arena: the game blocks addon messages and hides chat text from addons
+---there, and world PvP (kills, sightings, bounties, alerts) doesn't count.
+---@return boolean
+function Wanted:InPvPMatch()
+	local _, kind = IsInInstance()
+	return kind == "pvp" or kind == "arena"
+end
+
 ---Registers a function called once each fight is over.
 ---@param func function
 function Wanted:OnCombatEnd(func)

@@ -197,7 +197,7 @@ function private.SoundMenu(kind, anchor, page)
 		end
 		tinsert(items, { text = "Back", onClick = function() private.SoundMenu(kind, anchor) end })
 	else
-		tinsert(items, Item("wanted", "Wanted beep"))
+		tinsert(items, Item("wanted", Wanted.Alerts:SoundLabel("wanted", kind).." (Wanted)"))
 		tinsert(items, Item("none", "None"))
 		tinsert(items, "-")
 		tinsert(items, { text = "Game sounds", header = true })
@@ -436,7 +436,7 @@ function private.Refresh()
 	private.streakAnnounce:Select(StreakSettings().announce or "none", true)
 	private.minimap:SetChecked(not Wanted.db.settings.minimap.hide)
 	for kind, pick in pairs(private.soundPicks) do
-		pick:SetText(Wanted.Alerts:SoundLabel(Wanted.Alerts:GetSoundChoice(kind)))
+		pick:SetText(Wanted.Alerts:SoundLabel(Wanted.Alerts:GetSoundChoice(kind), kind))
 	end
 	for _, button in ipairs(private.iconButtons) do
 		for _, entry in ipairs(button.icons) do

@@ -159,9 +159,13 @@ function Alerts:GetSharedMediaSounds()
 	return list
 end
 
----A choice as shown in Settings.
+-- Wanted's own sound for each kind, by what it sounds like: they differ, so one name for all of them would mislead
+local WANTED_LABELS = { enemy = "One beep", important = "Three beeps", stealth = "Falling tone", targeted = "Rising tone" }
+
+---A choice as shown in Settings; Wanted's own sound is named for the kind it belongs to.
 ---@param choice string
-function Alerts:SoundLabel(choice)
+---@param kind string? "enemy" | "important" | "stealth" | "targeted"
+function Alerts:SoundLabel(choice, kind)
 	if choice == "none" then
 		return "None"
 	end
@@ -170,7 +174,7 @@ function Alerts:SoundLabel(choice)
 			return entry[2]
 		end
 	end
-	return choice:match("^lsm:(.+)$") or "Wanted beep"
+	return choice:match("^lsm:(.+)$") or WANTED_LABELS[kind] or "Wanted's sound"
 end
 
 ---Plays an alert sound now, ignoring mute and spacing (for previews).

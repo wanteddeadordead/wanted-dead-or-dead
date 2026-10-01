@@ -3249,7 +3249,7 @@ end)()
 	local offered = {}
 	for _, entry in ipairs(Alerts:GetGameSounds()) do offered[entry[1]] = entry[2] end
 	check(offered["kit:RAID_WARNING"] == "Raid warning" and not offered["kit:READY_CHECK"], "only the game sounds this client has are offered")
-	check(Alerts:SoundLabel("kit:RAID_WARNING") == "Raid warning" and Alerts:SoundLabel("wanted") == "Wanted beep" and Alerts:SoundLabel("lsm:Gong") == "Gong", "choices have readable labels")
+	check(Alerts:SoundLabel("kit:RAID_WARNING") == "Raid warning" and Alerts:SoundLabel("wanted", "enemy") == "One beep" and Alerts:SoundLabel("wanted", "stealth") == "Falling tone" and Alerts:SoundLabel("lsm:Gong") == "Gong", "choices have readable labels")
 	Reset()
 	Alerts:SetSoundChoice("targeted", "lsm:Gong")
 	check(#Alerts:GetSharedMediaSounds() == 0, "no SharedMedia sounds without the library")

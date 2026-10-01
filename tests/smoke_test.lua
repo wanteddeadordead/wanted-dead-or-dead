@@ -3853,6 +3853,16 @@ end)()
 	-- 204 isn't a friend and Battle.net doesn't show their game
 	bnFriends[#bnFriends + 1] = { id = 106, program = "WoW", faction = "Alliance", realm = "Realm", name = "Retail Ally", project = 2 }
 	ns.db.settings.bridge = true
+	local wantedClub = ns.Bridge.clubId
+	check(tostring(wantedClub) == "23053871", "the Wanted community is set up")
+	-- Settings shows its invite link in a copy box
+	ns.UI:Show("settings")
+	local inviteBox
+	for _, f in ipairs(Mock.created) do
+		if f._text == "https://blizzard.com/invite/7mmzbzC47G" then inviteBox = f end
+	end
+	check(inviteBox and inviteBox._scripts.OnEditFocusGained, "Settings has the community's invite link in a copy box")
+	ns.Bridge.clubId = 0
 	bnSent = {}
 	Rescan("BN_FRIEND_INFO_CHANGED")
 	check(#SentTo(301) == 0, "no community while it isn't set up")
@@ -3860,6 +3870,8 @@ end)()
 	ns.Bridge.clubId = "77"
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	check(#SentTo(301) == 0, "no community bridges when we're not in it")
+	local outside = table.concat(ns.Bridge:CommunityReport(), "\n")
+	check(outside:find("not in the Wanted community", 1, true) and outside:find("https://blizzard.com/invite/7mmzbzC47G", 1, true), "/wanted community gives the invite link to a player not in it: "..outside)
 	clubSubscribed = { { clubId = "77", name = "Wanted", clubType = 0, memberCount = 6 } }
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "88", 1, 1)
 	check(#SentTo(301) == 0, "another community's events don't rescan")
@@ -3941,7 +3953,7 @@ end)()
 	end
 	Drain()
 	check(#SentTo(101) == 30, "only 30 messages a minute are taken from one sender, got "..#SentTo(101))
-	ns.Bridge.clubId = 0
+	ns.Bridge.clubId = wantedClub
 	bnFriends[#bnFriends] = nil
 	C_Club = nil
 end)()

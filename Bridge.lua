@@ -53,9 +53,9 @@ local MAX_PARTIALS_PER_SENDER = 2
 local MAX_INBOUND_PER_MINUTE = 30 -- game data messages (whole or part) taken from one sender a minute
 local MAX_TARGETS = 20
 local PUSH_SECONDS = 10 * 60 -- a bridge that comes back is sent the current notices at most this often
--- The Wanted Battle.net community: its online members on the other faction are bridges too, as friends are.
--- 0 until it exists (/wanted community lists the communities you're in, with their ids).
-local WANTED_CLUB_ID = 0
+-- The Wanted Battle.net community ("Wanted: Dead or... Dead"): its online members on the other faction are bridges
+-- too, as friends are. 0 turns it off. /wanted community lists the communities you're in, with their ids.
+local WANTED_CLUB_ID = 23053871
 -- Enum.ClubMemberPresence: in the game (Online, Away, Busy), not OnlineMobile (the phone app)
 local PRESENCE_IN_GAME = { [1] = true, [4] = true, [5] = true }
 -- Enum.PvPFaction
@@ -66,6 +66,8 @@ local MAX_AMOUNT = 1e10 -- a million gold in copper; anything above is not a rea
 local ALERT_GATHER_SECONDS = 2 -- notices arriving together (a login's catch-up) make one alert
 -- The community in use (a field so the tests can set one)
 Bridge.clubId = WANTED_CLUB_ID
+-- Its invite link (never expires): shown in Settings and by /wanted community
+Bridge.INVITE_URL = "https://blizzard.com/invite/7mmzbzC47G"
 
 ---Values the game hides from addons for now (in a chat lockdown) can't be read or compared.
 local function IsSecret(value)
@@ -759,7 +761,8 @@ function Bridge:CommunityReport()
 	elseif not Bridge.clubId or Bridge.clubId == 0 then
 		tinsert(lines, "The Wanted community isn't set up in this version.")
 	elseif not seen or not seen.clubId then
-		tinsert(lines, format("You're not in the Wanted community (id %s), or it hasn't loaded yet.", tostring(Bridge.clubId)))
+		tinsert(lines, format("You're not in the Wanted community (id %s), or it hasn't loaded yet. Join it to link your addon to the other faction (members can see each other's BattleTag): %s",
+			tostring(Bridge.clubId), Bridge.INVITE_URL))
 	else
 		tinsert(lines, format("Wanted community, last look: %d members, %d in game, %d maybe on the other faction: %d bridges, %d whose game Battle.net doesn't show, %d elsewhere (own faction, another game or ruleset).",
 			seen.members, seen.inGame, seen.otherFaction, seen.added, seen.hidden, seen.elsewhere))

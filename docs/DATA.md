@@ -180,6 +180,11 @@ Each is asked once, on its own character, out of a fight and out of instances, a
 made the record), `"discarded"`, or `"refused"` with the addon's reason. The app sends the answers to the website; they're
 kept a week, and a request that expired without an answer is dropped silently. No layout change: both are new keys.
 
+`WantedDB.bgProbe` (development builds only, `BGProbe.lua`) is `{ matches, entries, zones }`: what the game showed in the
+last 5 battlegrounds (zone entry, match events, system messages, top-center widgets, one mid-match and the final
+scoreboard, hidden values saved as `"<secret>"`), the last 40 zone entries that were PvP or new, and the last 20 zones
+seen. Released versions never write it. No layout change: a new key.
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

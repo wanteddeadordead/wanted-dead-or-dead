@@ -4167,3 +4167,111 @@ end)()
 	bnFriends[#bnFriends] = nil
 	C_Club = nil
 end)()
+;(function()
+	-- The battleground probe (development builds): inert in the open world, notes what a PvP zone reports, keeps
+	-- hidden values as "<secret>", reads the scoreboard at the end, and keeps within its caps
+	local Probe = ns.BGProbe
+	local realVersion = ns.VERSION
+	ns.VERSION = "0.1.0-dev"
+	local realInstance, realZone = IsInInstance, GetZoneText
+	ns.db.bgProbe = { matches = {}, entries = {}, zones = {} }
+	local probe = ns.db.bgProbe
+	Fire("PLAYER_ENTERING_WORLD")
+	check(#probe.matches == 0 and #probe.entries == 1 and probe.entries[1].zone == "Durotar", "a new open-world zone is noted once, with no match")
+	Fire("ZONE_CHANGED_NEW_AREA")
+	Fire("CHAT_MSG_BG_SYSTEM_NEUTRAL", "The battle has begun!")
+	Fire("UPDATE_BATTLEFIELD_SCORE")
+	check(#probe.matches == 0 and #probe.entries == 1 and #probe.zones == 1, "a known open-world zone and stray events record nothing")
+	-- Into a battleground: mid-match the numbers are hidden, at the end they unlock
+	local state, secretScores, scoreAsks = 3, true, 0
+	local function Row(i)
+		local hidden = function(v) return secretScores and SECRET_SPELL or v end
+		return { name = "Player"..i, guid = hidden("Player-1-"..i), killingBlows = hidden(i), faction = i % 2, classToken = "ROGUE",
+			stats = { { pvpStatID = 1, pvpStatValue = hidden(i * 2), name = "Flag Captures" } }, func = print }
+	end
+	C_PvP = {
+		IsBattleground = function() return true end,
+		IsActiveBattlefield = function() return true end,
+		IsMatchActive = function() return state == 3 end,
+		GetActiveMatchState = function() return state end,
+		GetActiveMatchWinner = function() return 1 end,
+		GetActiveMatchDuration = function() return 600 end,
+		GetTeamInfo = function(i) return { name = i == 0 and "Horde" or "Alliance", size = 3 } end,
+		GetScoreInfo = function(i) return Row(i) end,
+		GetMatchPVPStatColumns = function() return { { pvpStatID = 1, name = "Flag Captures" } } end,
+	}
+	function GetNumBattlefieldScores() return 3 end
+	function RequestBattlefieldScoreData() scoreAsks = scoreAsks + 1 end
+	function GetInstanceInfo() return "Warsong Gulch", "pvp", 0, "", 40, 0, false, 489, 3, nil end
+	C_UIWidgetManager = { GetTopCenterWidgetSetID = function() return 1 end, GetAllWidgetsBySetID = function() return { { widgetID = 7, widgetType = 3 } } end }
+	UIWidgetManager = { GetWidgetTypeInfo = function() return { visInfoDataFunction = function(id) return { text = "Flags 1/3", value = SECRET_SPELL, id = id } end } end }
+	IsInInstance = function() return true, "pvp" end
+	GetZoneText = function() return "Warsong Gulch" end
+	local tickersBefore = #tickers
+	Fire("PLAYER_ENTERING_WORLD")
+	local entry = probe.entries[#probe.entries]
+	check(entry.instanceType == "pvp" and entry.inInstance == true and entry.isBattleground == true and entry.instance[1] == "Warsong Gulch" and entry.instance[8] == 489, "entering a battleground notes its instance info")
+	check(#probe.matches == 1 and #tickers == tickersBefore + 1, "and starts a match with a widget ticker")
+	local match = probe.matches[1]
+	check(#match.widgets == 1 and match.widgets[1].widgets[1].info.text == "Flags 1/3" and match.widgets[1].widgets[1].info.value == Probe.SECRET, "top-center widgets are saved, hidden values as <secret>")
+	check(scoreAsks == 1, "the scoreboard is asked for once mid-match")
+	Fire("UPDATE_BATTLEFIELD_SCORE")
+	Fire("UPDATE_BATTLEFIELD_SCORE")
+	check(match.mid and #match.mid.rows == 3 and match.mid.rows[1].killingBlows == Probe.SECRET and match.mid.rows[1].name == "Player1", "the mid-match read keeps hidden fields as <secret>")
+	check(match.mid.rows[1].stats[1].pvpStatValue == Probe.SECRET and match.mid.rows[1].func == "<function>" and not match.scores, "nested values too, and it isn't the final read")
+	for i = 1, Probe.MAX_CHAT + 5 do
+		Fire("CHAT_MSG_BG_SYSTEM_NEUTRAL", i == 1 and SECRET_SPELL or "line "..i)
+	end
+	check(#match.chat == Probe.MAX_CHAT and match.chat[1].text == Probe.SECRET, "system messages are capped and hidden text is <secret>")
+	tickers[#tickers]()
+	check(#match.widgets == 2 and scoreAsks == 1, "the ticker snaps the widgets again without another mid-match read")
+	-- The end: the result, the teams and every row
+	state, secretScores = 5, false
+	local printedBefore = #printed
+	Fire("PVP_MATCH_COMPLETE", 1, 600)
+	check(match.complete and match.winner == 1 and match.duration == 600 and match.teams[2].name == "Alliance" and scoreAsks == 2, "the end notes the result and asks for the scoreboard")
+	Fire("UPDATE_BATTLEFIELD_SCORE")
+	check(match.scores and #match.scores.rows == 3 and match.scores.rows[3].killingBlows == 3 and match.scores.rows[2].guid == "Player-1-2", "the final rows are saved as plain values")
+	check(match.scores.columns[1].name == "Flag Captures" and match.scores.rows[1].stats[1].pvpStatValue == 2, "with the map's columns")
+	check(#printed == printedBefore + 1 and printed[#printed]:find("battleground probe saved %(3 players%)"), "and one line in chat says so")
+	for _ = 1, Probe.MAX_SCORE_READS + 2 do Fire("UPDATE_BATTLEFIELD_SCORE") end
+	check(#match.scoreReads == Probe.MAX_SCORE_READS and #printed == printedBefore + 1, "later score updates are capped and quiet")
+	Fire("PVP_MATCH_STATE_CHANGED")
+	check(#match.events <= Probe.MAX_EVENTS and match.events[#match.events].event == "PVP_MATCH_STATE_CHANGED", "state changes are logged")
+	-- Leaving ends it; more matches than the cap drop the oldest
+	IsInInstance, GetZoneText = realInstance, realZone
+	state = 0
+	C_PvP.IsBattleground, C_PvP.IsActiveBattlefield = function() return false end, function() return false end
+	Fire("PLAYER_ENTERING_WORLD")
+	check(match.left and #probe.matches == 1, "leaving the battleground ends the match")
+	Fire("CHAT_MSG_BG_SYSTEM_NEUTRAL", "after")
+	check(match.chat[#match.chat].text ~= "after", "nothing is noted after leaving")
+	for _ = 1, Probe.MAX_MATCHES + 1 do
+		IsInInstance = function() return true, "pvp" end
+		Fire("PLAYER_ENTERING_WORLD")
+		IsInInstance = realInstance
+		Fire("PLAYER_ENTERING_WORLD")
+	end
+	check(#probe.matches == Probe.MAX_MATCHES and probe.matches[1] ~= match, "only the newest matches are kept")
+	for i = 1, Probe.MAX_ZONES + 5 do
+		GetZoneText = function() return "Zone "..i end
+		Fire("ZONE_CHANGED_NEW_AREA")
+	end
+	GetZoneText = realZone
+	check(#probe.zones == Probe.MAX_ZONES and #probe.entries <= Probe.MAX_ENTRIES, "zones and entries keep within their caps")
+	printedBefore = #printed
+	SlashCmdList.WANTED("bgprobe")
+	check(#printed > printedBefore and printed[printedBefore + 1]:find("5 matches"), "/wanted bgprobe summarises what's saved")
+	-- A released version runs none of it
+	ns.VERSION = "0.1.0"
+	local entries = #probe.entries
+	IsInInstance = function() return true, "pvp" end
+	Fire("PLAYER_ENTERING_WORLD")
+	Fire("PVP_MATCH_ACTIVE")
+	check(#probe.entries == entries and not Probe:IsOn() and Probe:Summary()[1]:find("off"), "a released version records nothing")
+	IsInInstance = realInstance
+	ns.VERSION = "0.1.0-dev"
+	Fire("PLAYER_ENTERING_WORLD")
+	ns.VERSION = realVersion
+	C_PvP, C_UIWidgetManager, UIWidgetManager, GetInstanceInfo, GetNumBattlefieldScores, RequestBattlefieldScoreData = nil, nil, nil, nil, nil, nil
+end)()

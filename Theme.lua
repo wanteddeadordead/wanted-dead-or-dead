@@ -298,7 +298,10 @@ function Theme:SetClassIcon(texture, class, styleKey)
 	for _, style in ipairs(order) do
 		texture:SetTexCoord(0, 1, 0, 1)
 		if ApplyStyle(texture, style, class) then
-			texture:Show()
+			-- Only when hidden: the Nearby rows' icons sit in secure buttons, where a Show in combat is blocked
+			if not texture:IsShown() then
+				texture:Show()
+			end
 			return
 		end
 	end

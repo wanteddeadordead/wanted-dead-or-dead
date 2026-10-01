@@ -2449,6 +2449,85 @@ end)()
 	check(calls == 0, "no health bar is shown or hidden in combat, got "..calls)
 end)()
 ;(function()
+	-- Issue #79: nothing inside a Nearby row's secure button is shown or hidden in combat (the game blocks it as
+	-- UNKNOWN()): not the class icon when a player leaves or joins a row, not the hover, and a health bar never
+	-- sits at its minimum, where the game hides its fill, as it would for a target just killed
+	local rows = {}
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "_kind") == "Button" and rawget(f, "health") then
+			rows[#rows + 1] = f
+		end
+	end
+	check(#rows > 0, "the Nearby rows are there to watch")
+	local changes, restore = {}, {}
+	for _, row in ipairs(rows) do
+		for _, key in ipairs({ "icon", "hover", "health", "name", "right", "sub", "bar", "tint" }) do
+			local region = row[key]
+			for _, method in ipairs({ "Show", "Hide" }) do
+				local original = rawget(region, method)
+				restore[#restore + 1] = function() region[method] = original end
+				local call = region[method]
+				region[method] = function(self, ...)
+					if InCombatLockdown() then
+						changes[#changes + 1] = key..":"..method
+					end
+					return call(self, ...)
+				end
+			end
+		end
+		row.health.SetMinMaxValues = function(self, low) self._min = low end
+		row.health.SetValue = function(self, value) self._value = value end
+		restore[#restore + 1] = function() row.health.SetMinMaxValues, row.health.SetValue = nil, nil end
+	end
+	local lockdown, health = InCombatLockdown, UnitHealth
+	ns.Enemies:ClearNearby()
+	enemyUnits.nameplate1 = { guid = "Player-9-KILLED", name = "Soon Dead", class = "MAGE", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	InCombatLockdown = function() return true end
+	-- The target is killed: its health is 0
+	UnitHealth = function() return 0 end
+	ns.NearbyWindow:Refresh()
+	local drawn
+	for _, row in ipairs(rows) do
+		if row.health._value == 0 then
+			drawn = row.health
+		end
+	end
+	check(drawn and drawn._min < drawn._value, "a killed enemy's health bar stays above its minimum")
+	UnitHealth = health
+	-- Someone new fills an empty row as text, then everyone leaves the list
+	enemyUnits.nameplate2 = { guid = "Player-9-LATE", name = "Late Comer", class = "ROGUE", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
+	ns.NearbyWindow:Refresh()
+	enemyUnits.nameplate1, enemyUnits.nameplate2 = nil, nil
+	ns.Enemies:ClearNearby()
+	ns.NearbyWindow:Refresh()
+	rows[1].info = false -- the mock would answer a nil field with a function
+	rows[1]:GetScript("OnEnter")(rows[1])
+	rows[1]:GetScript("OnLeave")(rows[1])
+	check(#changes == 0, "nothing in a Nearby row is shown or hidden in combat, got "..table.concat(changes, ", "))
+	-- And a blocked action says what Wanted last did to its windows, and where in Wanted it was asked for
+	Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
+	local problems = ns:GetProblems()
+	local last = problems[#problems]
+	check(last:find("last: Nearby: ", 1, true), "a blocked action lists Wanted's last window actions, got "..last)
+	debugstack = function()
+		return "[C]: in function 'Hide'\n[string \"@Interface/AddOns/WantedDeadOrDead/NearbyWindow.lua\"]:654: in function 'Draw'\n"
+			.."Interface/AddOns/WantedDeadOrDead/NearbyWindow.lua:700: in function 'Refresh'\n"
+	end
+	Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "UNKNOWN()")
+	debugstack = nil
+	last = problems[#problems]
+	check(last:find("from Hide < NearbyWindow.lua:654 < NearbyWindow.lua:700;", 1, true), "and the call and Wanted's lines it came from, got "..last)
+	InCombatLockdown = lockdown
+	for _, undo in ipairs(restore) do
+		undo()
+	end
+	ns.NearbyWindow:Refresh()
+end)()
+;(function()
 	-- An enemy who turns up in combat fills one empty row, as text, and keeps it through every refresh: they
 	-- used to go into another empty row each refresh, so one player filled the list three times
 	local function Rows(name)

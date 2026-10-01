@@ -19,7 +19,7 @@ Wanted.newerVersion = nil
 Wanted.BETA = false
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
-Wanted.DB_VERSION = 1
+Wanted.DB_VERSION = 2
 -- Which game world the saved data belongs to. The first time a release for the live game loads beta data,
 -- it keeps the settings and drops the rest (docs/DATA.md). The launch release sets this to "live".
 Wanted.WORLD = "beta"
@@ -98,7 +98,8 @@ local DEFAULTS = {
 	requestAnswers = {}, -- request id -> { state = "posted"|"discarded"|"refused", reason, t }, read by the app (Catchup)
 	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
 	recentPeers = {}, -- name -> seen: the last players heard on the sync channel, to whisper if locked out of it
-	homeCheck = { wait = 15 * 60, tried = 0 }, -- trying the first sync channel again after a takeover (Sync CheckHome)
+	homeCheck = { wait = 5 * 60, tried = 0 }, -- trying the main sync channel again while it turns us away (Sync CheckMain)
+	syncChannelState = { mainRefused = false, mainOpen = false, at = 0, epoch = 0 }, -- what the main channel last did, for the app
 	channel = nil, -- { name, realm, members, t }: the sync channel's size as the game last said (read by the app)
 	posterShots = {}, -- { t, who, l, top, r, b }: poster pictures for the app to upload (Poster)
 	ignore = {}, -- guid -> { name, t }
@@ -159,7 +160,19 @@ end
 -- keeping everything it can. Saved data is never wiped for being old. Add a step here, bump DB_VERSION, and
 -- add a test that loads a table in the old layout (docs/DATA.md).
 local MIGRATIONS = {
-	-- [2] = function(db) ... end,
+	-- 1.4.0: the server chooses the sync channel, and nobody uses passwords. A channel saved by 1.3.x (picked by an
+	-- addon, with a password) is dropped; the one that isn't the main channel is remembered once, to be left.
+	[2] = function(db)
+		local old = db.syncChannel
+		if type(old) == "table" and type(old.n) == "string" and old.n ~= "WantedNetHorde" and old.n ~= "WantedNetAlliance" then
+			db.oldSyncChannel = old.n
+		end
+		db.syncChannel = nil
+		db.homeCheck = nil
+		if type(db.settings) == "table" then
+			db.settings.channelMoves = nil
+		end
+	end,
 }
 
 ---Loads (or starts) the saved data, upgrading an older layout step by step. Data saved by a newer version

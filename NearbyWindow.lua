@@ -516,7 +516,9 @@ function private.CreateRow(parent, index)
 	row.tint = row:CreateTexture(nil, "BACKGROUND", nil, 1)
 	row.tint:SetAllPoints()
 	row.hover = Theme:Fill(row, C.hover, "BACKGROUND")
-	row.hover:Hide()
+	-- Everything in the row is shown once, here, and faded in and out from then on: inside a secure button, the
+	-- game blocks showing or hiding anything in combat (UNKNOWN() blocked, issue #79)
+	row.hover:SetAlpha(0)
 	row.bar = row:CreateTexture(nil, "ARTWORK")
 	row.bar:SetPoint("TOPLEFT")
 	row.bar:SetPoint("BOTTOMLEFT")
@@ -546,7 +548,8 @@ function private.CreateRow(parent, index)
 	-- on it in combat
 	row.health:SetAlpha(0)
 	row:SetScript("OnEnter", function(self)
-		self.hover:Show()
+		Wanted:Trail("Nearby: row hovered")
+		self.hover:SetAlpha(1)
 		if self.info then
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:SetText(Theme:ClassName(self.info.name, self.info.class))
@@ -557,11 +560,12 @@ function private.CreateRow(parent, index)
 		end
 	end)
 	row:SetScript("OnLeave", function(self)
-		self.hover:Hide()
+		self.hover:SetAlpha(0)
 		GameTooltip:Hide()
 	end)
 	row:HookScript("PostClick", function(self, button)
 		local info = self.info
+		Wanted:Trail("Nearby: row clicked")
 		if not info then
 			return
 		end
@@ -637,6 +641,7 @@ function Nearby:Refresh()
 
 	if inCombat then
 		-- Rows keep their players; new players only fill empty rows, as text (not clickable until combat ends)
+		Wanted:Trail("Nearby: redraw in combat")
 		private.pendingLayout = true
 		local byGuid = {}
 		for _, info in ipairs(items) do
@@ -650,6 +655,7 @@ function Nearby:Refresh()
 				placed[guid] = true
 			elseif guid then
 				-- A text row whose player left is free for the next one
+				Wanted:Trail("Nearby: row emptied in combat")
 				row.textGuid = false
 				private.Draw(row, nil)
 			end
@@ -658,6 +664,7 @@ function Nearby:Refresh()
 			if not placed[info.guid] then
 				for _, row in ipairs(private.rows) do
 					if not row.guid and not row.textGuid then
+						Wanted:Trail("Nearby: row filled in combat")
 						row.textGuid = info.guid
 						private.Draw(row, info)
 						break
@@ -669,6 +676,7 @@ function Nearby:Refresh()
 		return
 	end
 
+	Wanted:Trail("Nearby: layout")
 	private.pendingLayout = false
 	local layout = private.Show().layout or "auto"
 	local compact = layout == "compact" or (layout == "auto" and #items > COMPACT_ABOVE)
@@ -765,15 +773,25 @@ end
 ---Fades a row's contents: full strength for someone in sight, shaded once they're gone. The row itself is
 ---a secure button, so the fade goes on its regions rather than the row.
 function private.SetFade(row, alpha)
-	for _, region in ipairs({ row.name, row.right, row.sub, row.bar, row.tint, row.icon }) do
+	for _, region in ipairs({ row.name, row.right, row.sub, row.bar, row.tint }) do
 		region:SetAlpha(alpha)
 	end
 	row.fade = alpha
+	private.ShowIcon(row, row.iconShown)
 	private.ShowHealth(row, row.healthShown)
+end
+
+---Shows or hides a row's class icon by its alpha, never Show or Hide (blocked in combat inside a secure button).
+function private.ShowIcon(row, shown)
+	row.iconShown = shown
+	row.icon:SetAlpha(shown and (row.fade or 1) or 0)
 end
 
 ---Shows or hides a row's health bar by its alpha, never Show or Hide (blocked in combat inside a secure button).
 function private.ShowHealth(row, shown)
+	if shown ~= row.healthShown then
+		Wanted:Trail(shown and "Nearby: health bar shown" or "Nearby: health bar faded out")
+	end
 	row.healthShown = shown
 	row.health:SetAlpha(shown and (row.fade or 1) or 0)
 end
@@ -820,14 +838,14 @@ function private.Draw(row, info)
 		row.bar:SetColorTexture(0, 0, 0, 0)
 		row.tint:SetColorTexture(0, 0, 0, 0)
 		private.ShowHealth(row, false)
-		row.icon:Hide()
+		row.iconShown = false
 		private.SetFade(row, 1)
 		return
 	end
-	if show.icon then
+	-- The icon stays shown (SetClassIcon only shows it) and fades in and out with iconShown, set before SetFade
+	row.iconShown = show.icon and info.class ~= nil
+	if row.iconShown then
 		Theme:SetClassIcon(row.icon, info.class)
-	else
-		row.icon:Hide()
 	end
 	local classColor = info.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[info.class]
 	if show.targeting and info.targetingMe then
@@ -906,7 +924,9 @@ function private.Draw(row, info)
 	local unit = info.unit
 	-- In instances the game keeps GUIDs secret, and comparing one is an error: Readable makes it nil
 	if show.health and info.nearby and info.inSight and unit and Readable(UnitGUID(unit)) == info.guid then
-		row.health:SetMinMaxValues(0, UnitHealthMax(unit))
+		-- The minimum sits below 0, so a target just killed never puts the bar at its minimum, where the game can
+		-- hide the fill itself: a hide inside a secure button that combat blocks (issue #79, not confirmed in game)
+		row.health:SetMinMaxValues(-1, UnitHealthMax(unit))
 		row.health:SetValue(UnitHealth(unit))
 		private.ShowHealth(row, true)
 	else

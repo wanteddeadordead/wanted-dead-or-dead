@@ -306,6 +306,52 @@ function Wanted:GetProblems()
 	return private.problems
 end
 
+-- What Wanted last did to its windows, newest last, for blocked-action reports: the client often can't name what
+-- it blocked
+private.trail = {}
+private.trailPos = 0
+local MAX_TRAIL = 8
+
+---Notes a window action for the next blocked-action report. A repeat of the last one is counted, not added.
+---@param what string a fixed label, e.g. "Nearby: redraw in combat" (built once, so it costs nothing to note)
+function Wanted:Trail(what)
+	local last = private.trail[private.trailPos]
+	if last and last.what == what then
+		last.count, last.t = last.count + 1, GetTime()
+		return
+	end
+	private.trailPos = private.trailPos % MAX_TRAIL + 1
+	local entry = private.trail[private.trailPos] or {}
+	entry.what, entry.count, entry.t = what, 1, GetTime()
+	private.trail[private.trailPos] = entry
+end
+
+---"Nearby: row emptied in combat 0.1s ago; Nearby: redraw in combat x12 0.3s ago; ...", newest first.
+function private.TrailText()
+	local parts, now = {}, GetTime()
+	for i = 0, MAX_TRAIL - 1 do
+		local entry = private.trail[(private.trailPos - 1 - i) % MAX_TRAIL + 1]
+		if entry then
+			tinsert(parts, format("%s%s %.1fs ago", entry.what, entry.count > 1 and " x"..entry.count or "", now - entry.t))
+		end
+	end
+	return #parts > 0 and table.concat(parts, "; ") or "nothing yet"
+end
+
+---Where in Wanted's code a blocked action was asked for. The event fires inside the blocked call, so the stack
+---holds the caller; none of Wanted's files on it means the client blocked it later, laying frames out.
+function private.BlockedFrom()
+	local stack = debugstack and debugstack(3, 12, 0) or ""
+	-- The game's own function the call went into, when the stack starts there: [C]: in function 'Hide'
+	local places = { strmatch(stack, "^%[C%]: in function [`'\"]?([%w_:%.]+)") }
+	for file, line in string.gmatch(stack, ADDON_NAME.."[/\\]([^\"%]:]+)[\"%]]*:(%d+)") do
+		if #places < 5 then
+			tinsert(places, file..":"..line)
+		end
+	end
+	return #places > 0 and table.concat(places, " < ") or "no Wanted code on the stack"
+end
+
 ---Wraps an event handler or timer so development builds can time it (Debug.lua); released builds get it as is.
 ---@param label string
 ---@param func function
@@ -801,7 +847,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		if arg1 == ADDON_NAME then
-			Wanted:NoteProblem(event..": "..tostring(arg2).." ("..private.BlockContext()..")")
+			Wanted:NoteProblem(format("%s: %s (%s) from %s; last: %s", event, tostring(arg2), private.BlockContext(),
+				private.BlockedFrom(), private.TrailText()))
 			Wanted:Print("The client blocked %s. /wanted bug makes a report you can send.", tostring(arg2))
 		end
 	end

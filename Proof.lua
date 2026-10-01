@@ -23,6 +23,7 @@ Proof.DISCORD_CHANNEL = "#pvp-salt"
 local GATHER_SECONDS = 0.5 -- one kill can claim several bounties; they share one screenshot
 local STAMP_SECONDS = 3 -- the stamp comes down after this even if the game never answers
 local NEXT_SHOT_SECONDS = 0.5 -- between queued screenshots
+local LATE_CLAIM_SECONDS = 10 -- a claim filed this long after its kill is a late one
 
 
 
@@ -46,6 +47,10 @@ end
 
 function private.OnClaim(claim, isOwn)
 	if not isOwn or Store:IsTest(claim) or not Wanted.db.settings.proofShots or not Screenshot then
+		return
+	end
+	-- A late claim (its bounty arrived after the kill) has nothing on screen to prove
+	if type(claim.data.killT) == "number" and claim.t - claim.data.killT > LATE_CLAIM_SECONDS then
 		return
 	end
 	local key = claim.data.deathId or claim.data.kill or claim.id

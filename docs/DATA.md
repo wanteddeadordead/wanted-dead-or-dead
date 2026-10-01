@@ -220,7 +220,8 @@ A received record's `app` flag (from 1.3.3) is local too: set when the desktop a
 server checked who sent it), or later brought a record already held with the same hash. Incoming copies drop it.
 `Store:IsTrusted` believes a record that is this client's own, `live`, `app` or test data, and never one flagged
 `tampered` or `brokenChain`; only trusted `death` records witness a claim (`Bounties:GetWitnesses`). Flagged records
-are kept and synced, but `Store:Iterator` leaves them out, so nothing in game reads them. An optional new field: no
+are kept and synced. `Store:Iterator` leaves `tampered` ones out, so nothing in game reads them; `brokenChain` ones
+can be innocent (a reinstall, lost saved data) and are still listed, but never witness a claim. An optional new field: no
 migration. Records held from before 1.3.3 that came by catch-up have no `app` flag and witness nothing until the
 app or their origin sends them again. The record hash is Adler32, which can be forged; a stronger hash is a planned
 follow-up that needs the server and the desktop app to change with the addon.

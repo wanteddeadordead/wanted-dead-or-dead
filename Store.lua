@@ -719,16 +719,20 @@ function Store:IsTrusted(record)
 	return record.origin == private.origin or record.live == true or record.app == true or Store:IsTest(record)
 end
 
----How many records held are flagged tampered or brokenChain.
----@return number
+---How many records held are flagged tampered, and how many brokenChain.
+---@return number tampered
+---@return number brokenChain
 function Store:CountFlagged()
-	local count = 0
+	local tampered, broken = 0, 0
 	for _, record in pairs(Wanted.db.records) do
-		if record.tampered or record.brokenChain then
-			count = count + 1
+		if record.tampered then
+			tampered = tampered + 1
+		end
+		if record.brokenChain then
+			broken = broken + 1
 		end
 	end
-	return count
+	return tampered, broken
 end
 
 ---Removes every test record, player and sighting.
@@ -833,8 +837,8 @@ function private.AddToIndex(record)
 	private.NoteActive(record)
 end
 
----Iterates the records of one kind, unordered, leaving out records flagged tampered or brokenChain. It walks the
----ids as they were when it started, so records added meanwhile are left for the next walk.
+---Iterates the records of one kind, unordered, leaving out records flagged tampered. It walks the ids as they were
+---when it started, so records added meanwhile are left for the next walk.
 ---@param kind string
 ---@return fun(): table?
 function Store:Iterator(kind)
@@ -846,8 +850,9 @@ function Store:Iterator(kind)
 		while i < n do
 			i = i + 1
 			local record = records[list[i]]
-			-- A record flagged as altered or with a broken chain is kept (and synced) but never read
-			if record and record.kind == kind and not record.tampered and not record.brokenChain then
+			-- An altered record is kept (and synced) but never read. One with a broken chain can be innocent (a
+			-- reinstall, lost saved data): it's listed, but never witnesses a claim (Store:IsTrusted)
+			if record and record.kind == kind and not record.tampered then
 				return record
 			end
 		end

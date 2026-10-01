@@ -28,7 +28,7 @@ function Report:Build()
 		Add("Network: channel %s, members %s, peers %d, sent %d, received %d, merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s", info.channelId and ("#"..info.channelId) or "not joined", tostring(info.members), info.peers, stats.sent, stats.received, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped, info.paused and ", PAUSED" or "")
 	end
 	if Wanted.Store and Wanted.db then
-		Add("Records flagged tampered or broken chain (never used): %d", Wanted.Store:CountFlagged())
+		Add("Records flagged: %d tampered (never used), %d broken chain (never a witness)", Wanted.Store:CountFlagged())
 	end
 	Add("")
 	local problems = Wanted:GetProblems()

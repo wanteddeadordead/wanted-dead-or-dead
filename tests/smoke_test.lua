@@ -2396,7 +2396,20 @@ end)()
 	local flagged
 	for death in ns.Store:Iterator("death") do if death.id == "Altered Witness:1" then flagged = true end end
 	check(not flagged and ns.Store:CountFlagged() >= 1, "a tampered record is never read, and counted")
-	check(ns.Report:Build():find("Records flagged tampered or broken chain (never used): ", 1, true), "/wanted bug counts flagged records")
+	check(ns.Report:Build():find("Records flagged: %d+ tampered %(never used%), %d+ broken chain %(never a witness%)"), "/wanted bug counts both flags")
+	-- A broken chain can be innocent (a reinstall): the record is listed, but never a witness
+	local first = Death("Forked Witness", {})
+	ns.Store:Merge(first, "Forked Witness")
+	ns.Store:Merge(Sealed({ kind = "death", id = "Forked Witness:2", origin = "Forked Witness", seq = 2, prev = "not-first", t = t0 + 3,
+		data = { victim = victim, zone = "Barrens" } }), "Forked Witness")
+	local forked = ns.Store:Get("Forked Witness:2")
+	local listed
+	for death in ns.Store:Iterator("death") do if death == forked then listed = true end end
+	check(forked.brokenChain and listed, "a death with a broken chain is still listed")
+	local _, broken = ns.Store:CountFlagged()
+	check(broken >= 1, "and counted")
+	ns.Store:Get("Forked Witness:1").live = nil
+	check(#B:GetWitnesses(claim) == 2, "but never a witness")
 	-- The victim's own record of their death, naming the claim's killer, is the strongest witness
 	local victimsClaim = ns.Store:InsertTest("claim", "Trust Hunter", { bounty = "b-trust2", kill = hunterKill.id, victim = victim, victimName = "Trust Victim", zone = "Barrens", killT = t0 + 600 }, t0 + 600)
 	local function Own(seq, prev, t)

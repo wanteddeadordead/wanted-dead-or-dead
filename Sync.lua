@@ -59,6 +59,7 @@ local private = {
 	lastChannelSend = -math.huge, -- GetTime() of our last addon message on the channel
 	moderated = false, -- moderation is on in the channel: only its moderators can send, so we don't
 	membersRetrying = false, -- a member request is waiting for the game's channel list; others don't start one
+	membersAskedAt = nil, -- GetTime() of the last member list request
 	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
 	guildTimes = {}, -- outbound guild message times in the last minute (their own budget)
@@ -66,6 +67,7 @@ local private = {
 	homeCheck = nil, -- the first channel's name while we try it again (CheckHome), or nil
 	homeRefused = false, -- the game turned that try down
 	homeCheckAt = nil, -- GetTime() of the last try
+	homeWaitLogged = nil, -- the next try's time, once its wait has been logged
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
@@ -169,6 +171,7 @@ local LOCKOUT_RETRY_SECONDS = 5 * 60
 local MAX_GUILD_PARTS_PER_MINUTE = 20
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
+local MEMBERS_ASK_SECONDS = 10 -- at most one member list request this often
 local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed rejoin is expected
 -- The game's own rejoin fails once per login; this many wrong passwords this close together are ours being turned
 -- down: the channel's password was changed
@@ -392,9 +395,15 @@ function private.OnEvent(_, event, ...)
 	elseif event == "CHAT_MSG_CHANNEL_LIST" then
 		private.OnChannelList(...)
 	elseif event == "CHANNEL_UI_UPDATE" then
-		-- The game (re)built its channel list: ask once it settles, if the count isn't known yet
+		-- The game (re)built its channel list: ask once it settles, if the count isn't known yet. It fires many
+		-- times at login, so whether it's known is asked again when the timer runs (2026-10-01 log: seven requests
+		-- in a second, after the count had come)
 		if private.channelId and not private.members then
-			C_Timer.After(2, function() private.RequestMembers() end)
+			C_Timer.After(2, function()
+				if not private.members then
+					private.RequestMembers()
+				end
+			end)
 		end
 	end
 end
@@ -467,6 +476,10 @@ function private.RequestMembers(attempt)
 		Wanted:Log("!! Sync: no ListChannelByName; can't ask for the member count")
 		return
 	end
+	if private.membersAskedAt and GetTime() - private.membersAskedAt < MEMBERS_ASK_SECONDS then
+		return
+	end
+	private.membersAskedAt = GetTime()
 	Wanted:Log("Sync: asking for the member list of %s (channel list entry %d)", private.channelName, index)
 	ListChannelByName(private.channelName)
 end
@@ -2144,7 +2157,16 @@ function private.CheckHome()
 	if private.epoch == 0 or private.channelName == home or private.homeCheck then
 		return
 	end
-	if Wanted:InCombat() or IsInInstance() or now - state.tried < state.wait then
+	if now - state.tried < state.wait then
+		-- Said once per wait, not every tick
+		local nextTry = state.tried + state.wait
+		if private.homeWaitLogged ~= nextTry then
+			private.homeWaitLogged = nextTry
+			Wanted:Log("Sync: next try of %s at %s (every %d min)", home, date("%H:%M", nextTry), state.wait / 60)
+		end
+		return
+	end
+	if Wanted:InCombat() or IsInInstance() then
 		return
 	end
 	local id = GetChannelName(home)

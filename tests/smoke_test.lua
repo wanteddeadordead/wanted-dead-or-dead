@@ -1672,6 +1672,7 @@ Fire("CHANNEL_UI_UPDATE")
 RunTimers()
 check(FirstAttempts() == chains + 1, "triggers while a member request is retrying start one chain, not one each")
 displayChannels = 2
+clock = clock + 10
 Fire("CHANNEL_UI_UPDATE")
 RunTimers()
 check(selectedDisplayChannel == netName, "once the game builds its list, the member list is asked for")
@@ -3387,6 +3388,51 @@ end)()
 	TakeHome()
 	check(state.wait == 15 * 60 and ns.Sync:GetInfo().channelName ~= home, "a takeover long after moving back moves us, without a longer wait")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
+end)()
+-- The member list is asked for at most once in 10 seconds, and not at all once the count is known, however often
+-- the game rebuilds its channel list (seven requests in a second at login, 2026-10-01)
+;(function()
+	local realList = ListChannelByName
+	local asks = 0
+	ListChannelByName = function(name) asks = asks + 1 realList(name) end
+	clock = clock + 60
+	-- The game's channel list (GetChannelDisplayInfo) has the first channel
+	ns.Sync:AdoptFromApp({ e = ns.db.syncChannel.e + 1, n = "WantedNetHorde", p = "wnt1" })
+	RunTimers()
+	check(ns.Sync:GetMembers() == nil and asks == 1, "a fresh channel: its member list is asked for once")
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	RunTimers()
+	check(asks == 1, "a rebuilt channel list right after doesn't ask again")
+	clock = clock + 10
+	-- Rebuilt lists before the answer: their timers find the count known by the time they run
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	Fire("CHAT_MSG_CHANNEL_LIST", "Peer One, Peer Two", "", "", "", "", "", "", "", "WantedNetHorde")
+	check(ns.Sync:GetMembers() == 2, "the answer gives the count")
+	RunTimers()
+	check(asks == 1, "the requests they had queued aren't sent")
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	RunTimers()
+	check(asks == 1, "once the count is known, a rebuilt list doesn't ask")
+	ListChannelByName = realList
+end)()
+-- The wait before the next try of the first channel is logged once, not every tick
+;(function()
+	ns.Sync:AdoptFromApp({ e = ns.db.syncChannel.e + 1, n = "WantedNetHordewaiting", p = "pass12345" })
+	RunTimers()
+	ns.db.homeCheck.tried = clock
+	local realLog, said = ns.Log, 0
+	ns.Log = function(self, fmt, ...)
+		if fmt:find("next try of", 1, true) then said = said + 1 end
+		return realLog(self, fmt, ...)
+	end
+	Tick()
+	Tick()
+	Tick()
+	check(said == 1, "the next try's time is logged once")
+	ns.db.homeCheck.tried = clock + 60
+	Tick()
+	check(said == 2, "and again for a new wait")
+	ns.Log = realLog
 end)()
 -- /wanted who: a /who search, its results printed with full names and guilds
 ;(function()

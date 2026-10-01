@@ -98,6 +98,7 @@ local DEFAULTS = {
 	requestAnswers = {}, -- request id -> { state = "posted"|"discarded"|"refused", reason, t }, read by the app (Catchup)
 	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
 	recentPeers = {}, -- name -> seen: the last players heard on the sync channel, to whisper if locked out of it
+	homeCheck = { wait = 15 * 60, tried = 0 }, -- trying the first sync channel again after a takeover (Sync CheckHome)
 	channel = nil, -- { name, realm, members, t }: the sync channel's size as the game last said (read by the app)
 	posterShots = {}, -- { t, who, l, top, r, b }: poster pictures for the app to upload (Poster)
 	ignore = {}, -- guid -> { name, t }

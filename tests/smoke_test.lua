@@ -157,6 +157,10 @@ local hiddenPopups = {}
 function StaticPopup_Hide(which, data) hiddenPopups[#hiddenPopups + 1] = { which = which, data = data } end
 leftChannels = {}
 function LeaveChannelByName(name) leftChannels[#leftChannels + 1] = name end
+-- Muted sound files, and how often the game was asked to mute and unmute (globals, see channelMembers)
+mutedSounds, muteCalls, unmuteCalls = {}, 0, 0
+function MuteSoundFile(file) mutedSounds[file] = true muteCalls = muteCalls + 1 end
+function UnmuteSoundFile(file) mutedSounds[file] = nil unmuteCalls = unmuteCalls + 1 end
 function hooksecurefunc() end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
@@ -1668,6 +1672,7 @@ Fire("CHANNEL_UI_UPDATE")
 RunTimers()
 check(FirstAttempts() == chains + 1, "triggers while a member request is retrying start one chain, not one each")
 displayChannels = 2
+clock = clock + 10
 Fire("CHANNEL_UI_UPDATE")
 RunTimers()
 check(selectedDisplayChannel == netName, "once the game builds its list, the member list is asked for")
@@ -3223,6 +3228,211 @@ end)()
 	Refused()
 	check(ns.db.syncChannel.e == before + 1 and ns.Sync:GetInfo().channelName ~= name, "three within two minutes are a takeover: we move")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
+end)()
+-- The game's password box plays the party-invite sound: it's muted around each of our joins and comes back after;
+-- overlapping joins unmute once, after the last
+;(function()
+	local INVITE = 567451
+	RunTimers()
+	check(not mutedSounds[INVITE], "the invite sound isn't muted between joins")
+	local realJoin = JoinPermanentChannel
+	local mutedAtJoin
+	JoinPermanentChannel = function(name, password) mutedAtJoin = mutedSounds[INVITE] realJoin(name, password) end
+	local mutes, unmutes = muteCalls, unmuteCalls
+	local name = ns.Sync:GetInfo().channelName
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	check(mutedAtJoin == true, "the invite sound is muted while we join")
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	check(muteCalls == mutes + 1, "a second join while muted doesn't mute again")
+	RunTimers()
+	check(not mutedSounds[INVITE] and unmuteCalls == unmutes + 1, "both joins over: unmuted once")
+	-- Logging out mid-join unmutes at once
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	Fire("PLAYER_LOGOUT")
+	check(not mutedSounds[INVITE], "logging out unmutes")
+	RunTimers()
+	check(unmuteCalls == unmutes + 2, "and the timer after doesn't unmute twice")
+	JoinPermanentChannel = realJoin
+end)()
+-- Back home: on a moved channel, the first one is tried again now and then. Let in, everyone moves back at the next
+-- epoch; turned down, nothing changes. Never in a fight or an instance; a player back home ignores older moves
+;(function()
+	local INVITE, home = 567451, "WantedNetHorde"
+	local realJoin, realName = JoinPermanentChannel, GetChannelName
+	local moved = ns.Sync:GetInfo().channelName
+	check(moved ~= home and ns.db.syncChannel.e >= 1, "we're on a moved channel")
+	local inChannel = { [moved] = true }
+	local homeOpen, homeModerated = false, false
+	local mutedAtJoin
+	JoinPermanentChannel = function(name, password)
+		realJoin(name, password)
+		if name == home then
+			mutedAtJoin = mutedSounds[INVITE]
+			if homeOpen and password == "wnt1" then
+				inChannel[name] = true
+				if homeModerated then
+					Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Griefer", "", "6. "..name, "", "", 0, 6, name)
+				end
+			else
+				Fire("CHANNEL_PASSWORD_REQUEST", name)
+				Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", name)
+			end
+		else
+			inChannel[name] = true
+		end
+	end
+	GetChannelName = function(name) return inChannel[name] and 6 or 0 end
+	local function HomeTries() local n = 0 for _, j in ipairs(joinedWith) do if j.name == home then n = n + 1 end end return n end
+	local function Move(from, e, n, pw)
+		Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode({ e = e, n = n, p = pw }), "WHISPER", from)
+	end
+	RunTimers()
+	-- The first channel is never valid with another password
+	local before = ns.db.syncChannel.e
+	ns.Sync:AdoptFromApp({ e = before + 5, n = home, p = "notours123" })
+	check(ns.db.syncChannel.e == before, "the first channel with another password isn't followed")
+	-- Not in a fight, not in an instance
+	for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+	local outside = IsInInstance
+	IsInInstance = function() return true, "party" end
+	Tick()
+	IsInInstance = outside
+	Fire("PLAYER_REGEN_DISABLED")
+	Tick()
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	check(HomeTries() == 0, "no try of the first channel in an instance or a fight")
+	-- Still taken: turned down, quietly, and nothing changes
+	for i = #hiddenPopups, 1, -1 do hiddenPopups[i] = nil end
+	Tick()
+	check(HomeTries() == 1 and mutedAtJoin == true, "the first channel is tried with the invite sound muted")
+	check(chatFilters["CHAT_MSG_CHANNEL_NOTICE"](nil, "CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", home) == true, "its notices are hidden")
+	RunTimers()
+	check(HomeTries() == 1, "a password request for it isn't answered with another join")
+	check(#hiddenPopups == 1 and hiddenPopups[1].data == home, "its password box is closed")
+	check(ns.db.syncChannel.e == before and ns.Sync:GetInfo().channelName == moved, "turned down: we stay where we are")
+	check(not mutedSounds[INVITE], "and the sound comes back")
+	-- Let in, but moderated: a failure, and the first channel is left
+	homeOpen, homeModerated = true, true
+	clock = clock + 15 * 60
+	Tick()
+	RunTimers()
+	check(HomeTries() == 2 and ns.db.syncChannel.e == before and ns.Sync:GetInfo().channelName == moved, "a moderated first channel is a failure")
+	check(leftChannels[#leftChannels] == home, "and it's left")
+	inChannel[home] = nil
+	-- Not tried again before the wait is up
+	Tick()
+	check(HomeTries() == 2, "not tried again before the wait is up")
+	-- Free again: let in, everyone moves back at the next epoch
+	homeModerated = false
+	clock = clock + 15 * 60
+	ClearSent()
+	Tick()
+	RunTimers()
+	local now = ns.db.syncChannel
+	check(now.e == before + 1 and now.n == home and now.p == "wnt1", "let in: back on the first channel at the next epoch")
+	check(ns.Sync:GetInfo().channelName == home and ns.Sync:GetInfo().channelId == 6, "and synced on")
+	check(leftChannels[#leftChannels] == moved, "the moved channel is left")
+	local move
+	for _, m in ipairs(Sent("WHISPER", "Peer One")) do if m.tag == "M" then move = m end end
+	check(move and move.tbl.e == before + 1 and move.tbl.n == home and move.tbl.p == "wnt1", "the players we know are told")
+	-- Back home, older and same-epoch moves elsewhere are ignored; the app's old channel too
+	Move("Peer One", before, "WantedNetHordeolder", "pass12345")
+	Move("Peer Two", before, "WantedNetHordeolder", "pass12345")
+	Move("Peer One", before + 1, "WantedNetHordeaaaaaa", "pass12345")
+	Move("Peer Two", before + 1, "WantedNetHordeaaaaaa", "pass12345")
+	ns.Sync:AdoptFromApp({ e = before, n = "WantedNetHordefromapp", p = "apppass99" })
+	check(ns.db.syncChannel.n == home and ns.db.syncChannel.e == before + 1, "a player back home never moves to an older channel")
+	-- A player back home at an earlier epoch follows a later move home (same channel)
+	ns.Sync:AdoptFromApp({ e = before + 3, n = home, p = "wnt1" })
+	check(ns.db.syncChannel.n == home and ns.db.syncChannel.e == before + 3, "a later move home is followed")
+	-- Home: no more tries
+	for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+	Tick()
+	RunTimers()
+	check(HomeTries() == 0, "on the first channel, it isn't tried again")
+	-- Taken over again soon after moving back: the wait between tries doubles each time, up to a day
+	local state = ns.db.homeCheck
+	check(state.wait == 15 * 60, "the wait starts at 15 minutes")
+	local function TakeHome()
+		clock = clock + 60
+		Fire("CHAT_MSG_CHANNEL_NOTICE_USER", "MODERATION_ON", "Griefer", "", "6. "..home, "", "", 0, 6, home)
+		RunTimers()
+		inChannel[home] = nil
+	end
+	local function GoHome()
+		Tick()
+		RunTimers()
+		return ns.Sync:GetInfo().channelName == home
+	end
+	TakeHome()
+	check(ns.Sync:GetInfo().channelName ~= home and state.wait == 30 * 60, "moderation soon after moving back doubles the wait")
+	clock = clock + 15 * 60
+	check(not GoHome(), "no try after 15 minutes")
+	clock = clock + 15 * 60
+	check(GoHome(), "after 30 minutes, back home")
+	TakeHome()
+	check(state.wait == 60 * 60, "and doubles again")
+	state.wait = 20 * 3600
+	clock = clock + 20 * 3600
+	check(GoHome(), "back home after a long wait")
+	TakeHome()
+	check(state.wait == 24 * 3600, "never more than a day")
+	clock = clock + 24 * 3600
+	check(GoHome(), "back home a day later")
+	-- Trouble long after moving back doesn't count; a two-hour stay starts the wait over
+	clock = clock + 2 * 3600
+	Tick()
+	check(state.wait == 15 * 60, "two hours home without trouble: the wait starts over")
+	TakeHome()
+	check(state.wait == 15 * 60 and ns.Sync:GetInfo().channelName ~= home, "a takeover long after moving back moves us, without a longer wait")
+	JoinPermanentChannel, GetChannelName = realJoin, realName
+end)()
+-- The member list is asked for at most once in 10 seconds, and not at all once the count is known, however often
+-- the game rebuilds its channel list (seven requests in a second at login, 2026-10-01)
+;(function()
+	local realList = ListChannelByName
+	local asks = 0
+	ListChannelByName = function(name) asks = asks + 1 realList(name) end
+	clock = clock + 60
+	-- The game's channel list (GetChannelDisplayInfo) has the first channel
+	ns.Sync:AdoptFromApp({ e = ns.db.syncChannel.e + 1, n = "WantedNetHorde", p = "wnt1" })
+	RunTimers()
+	check(ns.Sync:GetMembers() == nil and asks == 1, "a fresh channel: its member list is asked for once")
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	RunTimers()
+	check(asks == 1, "a rebuilt channel list right after doesn't ask again")
+	clock = clock + 10
+	-- Rebuilt lists before the answer: their timers find the count known by the time they run
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	Fire("CHAT_MSG_CHANNEL_LIST", "Peer One, Peer Two", "", "", "", "", "", "", "", "WantedNetHorde")
+	check(ns.Sync:GetMembers() == 2, "the answer gives the count")
+	RunTimers()
+	check(asks == 1, "the requests they had queued aren't sent")
+	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
+	RunTimers()
+	check(asks == 1, "once the count is known, a rebuilt list doesn't ask")
+	ListChannelByName = realList
+end)()
+-- The wait before the next try of the first channel is logged once, not every tick
+;(function()
+	ns.Sync:AdoptFromApp({ e = ns.db.syncChannel.e + 1, n = "WantedNetHordewaiting", p = "pass12345" })
+	RunTimers()
+	ns.db.homeCheck.tried = clock
+	local realLog, said = ns.Log, 0
+	ns.Log = function(self, fmt, ...)
+		if fmt:find("next try of", 1, true) then said = said + 1 end
+		return realLog(self, fmt, ...)
+	end
+	Tick()
+	Tick()
+	Tick()
+	check(said == 1, "the next try's time is logged once")
+	ns.db.homeCheck.tried = clock + 60
+	Tick()
+	check(said == 2, "and again for a new wait")
+	ns.Log = realLog
 end)()
 -- /wanted who: a /who search, its results printed with full names and guilds
 ;(function()

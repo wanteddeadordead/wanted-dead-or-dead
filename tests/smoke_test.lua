@@ -157,6 +157,10 @@ local hiddenPopups = {}
 function StaticPopup_Hide(which, data) hiddenPopups[#hiddenPopups + 1] = { which = which, data = data } end
 leftChannels = {}
 function LeaveChannelByName(name) leftChannels[#leftChannels + 1] = name end
+-- Muted sound files, and how often the game was asked to mute and unmute (globals, see channelMembers)
+mutedSounds, muteCalls, unmuteCalls = {}, 0, 0
+function MuteSoundFile(file) mutedSounds[file] = true muteCalls = muteCalls + 1 end
+function UnmuteSoundFile(file) mutedSounds[file] = nil unmuteCalls = unmuteCalls + 1 end
 function hooksecurefunc() end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
@@ -3222,6 +3226,116 @@ end)()
 	check(ns.db.syncChannel.e == before, "nor do two")
 	Refused()
 	check(ns.db.syncChannel.e == before + 1 and ns.Sync:GetInfo().channelName ~= name, "three within two minutes are a takeover: we move")
+	JoinPermanentChannel, GetChannelName = realJoin, realName
+end)()
+-- The game's password box plays the party-invite sound: it's muted around each of our joins and comes back after;
+-- overlapping joins unmute once, after the last
+;(function()
+	local INVITE = 567451
+	RunTimers()
+	check(not mutedSounds[INVITE], "the invite sound isn't muted between joins")
+	local realJoin = JoinPermanentChannel
+	local mutedAtJoin
+	JoinPermanentChannel = function(name, password) mutedAtJoin = mutedSounds[INVITE] realJoin(name, password) end
+	local mutes, unmutes = muteCalls, unmuteCalls
+	local name = ns.Sync:GetInfo().channelName
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	check(mutedAtJoin == true, "the invite sound is muted while we join")
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	check(muteCalls == mutes + 1, "a second join while muted doesn't mute again")
+	RunTimers()
+	check(not mutedSounds[INVITE] and unmuteCalls == unmutes + 1, "both joins over: unmuted once")
+	-- Logging out mid-join unmutes at once
+	Fire("CHANNEL_PASSWORD_REQUEST", name)
+	Fire("PLAYER_LOGOUT")
+	check(not mutedSounds[INVITE], "logging out unmutes")
+	RunTimers()
+	check(unmuteCalls == unmutes + 2, "and the timer after doesn't unmute twice")
+	JoinPermanentChannel = realJoin
+end)()
+-- Back home: on a moved channel, the first one is tried again now and then. Let in, everyone moves back at the next
+-- epoch; turned down, nothing changes. Never in a fight or an instance; a player back home ignores older moves
+;(function()
+	local INVITE, home = 567451, "WantedNetHorde"
+	local realJoin, realName = JoinPermanentChannel, GetChannelName
+	local moved = ns.Sync:GetInfo().channelName
+	check(moved ~= home and ns.db.syncChannel.e >= 1, "we're on a moved channel")
+	local inChannel = { [moved] = true }
+	local homeOpen = false
+	local mutedAtJoin
+	JoinPermanentChannel = function(name, password)
+		realJoin(name, password)
+		if name == home then
+			mutedAtJoin = mutedSounds[INVITE]
+			if homeOpen and password == "wnt1" then
+				inChannel[name] = true
+			else
+				Fire("CHANNEL_PASSWORD_REQUEST", name)
+				Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", name)
+			end
+		else
+			inChannel[name] = true
+		end
+	end
+	GetChannelName = function(name) return inChannel[name] and 6 or 0 end
+	local function HomeTries() local n = 0 for _, j in ipairs(joinedWith) do if j.name == home then n = n + 1 end end return n end
+	local function Move(from, e, n, pw)
+		Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode({ e = e, n = n, p = pw }), "WHISPER", from)
+	end
+	RunTimers()
+	-- The first channel is never valid with another password
+	local before = ns.db.syncChannel.e
+	ns.Sync:AdoptFromApp({ e = before + 5, n = home, p = "notours123" })
+	check(ns.db.syncChannel.e == before, "the first channel with another password isn't followed")
+	-- Not in a fight, not in an instance
+	for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+	local outside = IsInInstance
+	IsInInstance = function() return true, "party" end
+	Tick()
+	IsInInstance = outside
+	Fire("PLAYER_REGEN_DISABLED")
+	Tick()
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	check(HomeTries() == 0, "no try of the first channel in an instance or a fight")
+	-- Still taken: turned down, quietly, and nothing changes
+	for i = #hiddenPopups, 1, -1 do hiddenPopups[i] = nil end
+	Tick()
+	check(HomeTries() == 1 and mutedAtJoin == true, "the first channel is tried with the invite sound muted")
+	check(chatFilters["CHAT_MSG_CHANNEL_NOTICE"](nil, "CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", home) == true, "its notices are hidden")
+	RunTimers()
+	check(HomeTries() == 1, "a password request for it isn't answered with another join")
+	check(#hiddenPopups == 1 and hiddenPopups[1].data == home, "its password box is closed")
+	check(ns.db.syncChannel.e == before and ns.Sync:GetInfo().channelName == moved, "turned down: we stay where we are")
+	check(not mutedSounds[INVITE], "and the sound comes back")
+	-- Free again: let in, everyone moves back at the next epoch
+	homeOpen = true
+	ClearSent()
+	Tick()
+	RunTimers()
+	local now = ns.db.syncChannel
+	check(now.e == before + 1 and now.n == home and now.p == "wnt1", "let in: back on the first channel at the next epoch")
+	check(ns.Sync:GetInfo().channelName == home and ns.Sync:GetInfo().channelId == 6, "and synced on")
+	check(leftChannels[#leftChannels] == moved, "the moved channel is left")
+	local move
+	for _, m in ipairs(Sent("WHISPER", "Peer One")) do if m.tag == "M" then move = m end end
+	check(move and move.tbl.e == before + 1 and move.tbl.n == home and move.tbl.p == "wnt1", "the players we know are told")
+	-- Back home, older and same-epoch moves elsewhere are ignored; the app's old channel too
+	Move("Peer One", before, "WantedNetHordeolder", "pass12345")
+	Move("Peer Two", before, "WantedNetHordeolder", "pass12345")
+	Move("Peer One", before + 1, "WantedNetHordeaaaaaa", "pass12345")
+	Move("Peer Two", before + 1, "WantedNetHordeaaaaaa", "pass12345")
+	ns.Sync:AdoptFromApp({ e = before, n = "WantedNetHordefromapp", p = "apppass99" })
+	check(ns.db.syncChannel.n == home and ns.db.syncChannel.e == before + 1, "a player back home never moves to an older channel")
+	-- A player back home at an earlier epoch follows a later move home (same channel)
+	ns.Sync:AdoptFromApp({ e = before + 3, n = home, p = "wnt1" })
+	check(ns.db.syncChannel.n == home and ns.db.syncChannel.e == before + 3, "a later move home is followed")
+	-- Home: no more tries
+	for i = #joinedWith, 1, -1 do joinedWith[i] = nil end
+	Tick()
+	RunTimers()
+	check(HomeTries() == 0, "on the first channel, it isn't tried again")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
 -- /wanted who: a /who search, its results printed with full names and guilds

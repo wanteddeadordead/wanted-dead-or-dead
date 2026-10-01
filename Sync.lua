@@ -62,6 +62,10 @@ local private = {
 	members = nil, -- how many are in the channel, as the game's channel list last said
 	lockoutTicker = nil, -- tries the channel again while locked out
 	guildTimes = {}, -- outbound guild message times in the last minute (their own budget)
+	mutes = 0, -- how many of our joins have the invite sound muted right now (MuteInvite)
+	homeCheck = nil, -- the first channel's name while we try it again (CheckHome), or nil
+	homeRefused = false, -- the game turned that try down
+	homeCheckAt = nil, -- GetTime() of the last try
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
@@ -170,6 +174,18 @@ local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed r
 -- down: the channel's password was changed
 local WRONG_PASSWORDS_TAKEOVER = 3
 local WRONG_PASSWORDS_SECONDS = 120
+-- A refused join makes the game ask for the password in a box (CHAT_CHANNEL_PASSWORD) that plays the party-invite
+-- sound, SOUNDKIT.IG_PLAYER_INVITE (kit 880). That kit's one file is FileDataID 567451, sound/interface/iplayerinvitea.ogg
+-- (wago.tools SoundKitEntry, SoundKitID 880, read 2026-10-01). It's muted for a few seconds around our own joins, and
+-- for a while at login, when the game rejoins the channel without its password and is asked for one.
+local INVITE_SOUND_FILE = 567451
+local INVITE_MUTE_SECONDS = 5
+local LOGIN_MUTE_SECONDS = 20
+-- While on a moved channel, the first one is tried again now and then (CheckHome), out of fights and instances
+local HOME_FIRST_CHECK_SECONDS = 60
+local HOME_CHECK_SECONDS = 15 * 60
+local HOME_ANSWER_SECONDS = 5 -- how long the game has to let us in
+local HOME_QUIET_SECONDS = 30 -- the first channel's notices are hidden this long after a try
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -210,6 +226,7 @@ function Sync:OnEnable()
 	private.frame:RegisterEvent("CHANNEL_COUNT_UPDATE")
 	private.frame:RegisterEvent("CHANNEL_UI_UPDATE")
 	private.frame:RegisterEvent("CHAT_MSG_CHANNEL_LIST")
+	private.frame:RegisterEvent("PLAYER_LOGOUT")
 	private.frame:SetScript("OnEvent", Wanted:Timed("Sync events", private.OnEvent))
 	-- Every kind of our own record is shared (a fixed list once left out links and assists)
 	Store:OnRecord("*", private.OnOwnRecord)
@@ -219,8 +236,13 @@ function Sync:OnEnable()
 		private.FlushForward()
 		private.Drain()
 	end)
+	-- The game rejoins the channel at login without its password, and its box asking for one plays the invite sound
+	private.MuteInvite(LOGIN_MUTE_SECONDS)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
+	-- Back to the first channel once a takeover is over
+	C_Timer.After(HOME_FIRST_CHECK_SECONDS, private.CheckHome)
+	C_Timer.NewTicker(HOME_CHECK_SECONDS, private.CheckHome)
 	-- Realm links
 	Store:OnRecord("*", private.OnAnyRecord)
 	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
@@ -242,6 +264,11 @@ end
 ---a public channel's name, for our own sends it refused a moment ago.
 function private.HideChannelNotice(_, event, kind, _, _, channelString, _, _, _, channelNumber, baseName)
 	if type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName) then
+		return true
+	end
+	-- Our quiet try of the first channel (CheckHome)
+	if type(baseName) == "string" and private.homeCheckAt and GetTime() - private.homeCheckAt < HOME_QUIET_SECONDS
+		and strlower(baseName) == strlower(CHANNEL_BASE..private.faction) then
 		return true
 	end
 	if event == "CHAT_MSG_CHANNEL_NOTICE" and type(kind) == "string" and not NEVER_HIDDEN_NOTICES[kind]
@@ -348,6 +375,8 @@ function private.OnEvent(_, event, ...)
 		C_Timer.After(5, private.TryJoin)
 	elseif event == "CHANNEL_PASSWORD_REQUEST" then
 		private.OnPasswordRequest(...)
+	elseif event == "PLAYER_LOGOUT" then
+		private.UnmuteAll()
 	elseif event == "CHAT_MSG_SYSTEM" then
 		private.OnSystemMessage(...)
 	elseif event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER" then
@@ -481,6 +510,13 @@ end
 ---ban, re-password or moderate it; the game names who did what, so it's said in chat and logged. A kick is
 ---undone by rejoining; a ban or a changed password locks this client out, and sync goes on by whisper.
 function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, baseName)
+	if private.homeCheck and type(baseName) == "string" and strlower(baseName) == strlower(private.homeCheck) then
+		-- Our quiet try of the first channel: only whether it let us in matters (CheckHome)
+		if kind == "WRONG_PASSWORD" or kind == "BANNED" then
+			private.homeRefused = true
+		end
+		return
+	end
 	if type(baseName) ~= "string" or not private.channelName or strlower(baseName) ~= strlower(private.channelName) then
 		return
 	end
@@ -627,9 +663,17 @@ end
 
 ---The game rejoins the channels it remembers at login without their passwords, then pops up a box asking for
 ---one. For the sync channel, Wanted answers with its password and closes the box (a moment later, once the
----game's own handler has shown it).
+---game's own handler has shown it). For our try of the first channel (CheckHome) it means the try failed.
 function private.OnPasswordRequest(channel)
-	if type(channel) ~= "string" or strlower(channel) ~= strlower(private.channelName or "") then
+	if type(channel) ~= "string" then
+		return
+	end
+	if private.homeCheck and strlower(channel) == strlower(private.homeCheck) then
+		private.homeRefused = true
+		private.HidePasswordBox(channel)
+		return
+	end
+	if strlower(channel) ~= strlower(private.channelName or "") then
 		return
 	end
 	Wanted:Log("Sync: the game asked for the %s password; joining with it", channel)
@@ -637,12 +681,55 @@ function private.OnPasswordRequest(channel)
 	-- real password change later is still a lockout
 	private.rejoinFailing = true
 	C_Timer.After(REJOIN_FAIL_SECONDS, function() private.rejoinFailing = false end)
-	JoinPermanentChannel(private.channelName, private.password)
+	private.Join(private.channelName, private.password)
+	private.HidePasswordBox(channel)
+end
+
+---Closes the game's password box for one channel, next frame (the game's handler shows it after ours runs). The
+---box is matched by its data, the channel's name as the game gave it, so a box for another channel stays.
+function private.HidePasswordBox(channel)
 	C_Timer.After(0, function()
 		if StaticPopup_Hide then
 			StaticPopup_Hide("CHAT_CHANNEL_PASSWORD", channel)
 		end
 	end)
+end
+
+---Mutes the party-invite sound for a while (see INVITE_SOUND_FILE). Mutes overlap: the sound comes back only when
+---the last one ends. Nothing in the player's settings changes.
+function private.MuteInvite(seconds)
+	if not MuteSoundFile or not UnmuteSoundFile then
+		return
+	end
+	if private.mutes == 0 then
+		MuteSoundFile(INVITE_SOUND_FILE)
+	end
+	private.mutes = private.mutes + 1
+	C_Timer.After(seconds or INVITE_MUTE_SECONDS, private.UnmuteInvite)
+end
+
+function private.UnmuteInvite()
+	if private.mutes == 0 then
+		return
+	end
+	private.mutes = private.mutes - 1
+	if private.mutes == 0 then
+		UnmuteSoundFile(INVITE_SOUND_FILE)
+	end
+end
+
+---Logging out or reloading: the timers that would unmute won't run, so the sound comes back now.
+function private.UnmuteAll()
+	if private.mutes > 0 then
+		private.mutes = 0
+		UnmuteSoundFile(INVITE_SOUND_FILE)
+	end
+end
+
+---Joins a channel with the invite sound muted, in case the game turns us down and asks for a password.
+function private.Join(name, password)
+	private.MuteInvite()
+	JoinPermanentChannel(name, password)
 end
 
 
@@ -670,7 +757,7 @@ function private.TryJoin()
 			-- Joined without a chat frame id, so it is not shown in any tab; it only ever carries addon data, which
 			-- never displays anyway. Permanent channels are remembered by the server, so if this client blocks the
 			-- call, joining once by hand (/join <name> <password>) is enough for good.
-			JoinPermanentChannel(private.channelName, private.password)
+			private.Join(private.channelName, private.password)
 		elseif private.joinAttempts == 3 then
 			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s %s", private.channelName, private.password)
 		end
@@ -1962,11 +2049,13 @@ end)
 -- and password and whispers it to the players it knows; they follow (see MOVE_QUORUM) and pass it on. The Wanted
 -- app also carries the current channel from wanteddeadordead.com (Catchup). WantedDB.syncChannel keeps it.
 
----Whether a channel pointer is one this client could use: a later epoch, a name on this side, a password.
+---Whether a channel pointer is one this client could use: a later epoch, a name on this side, a password. The first
+---channel counts too, with its own password only: everyone moves back to it once a takeover is over (CheckHome).
 function private.ValidPointer(p)
 	return type(p.e) == "number" and p.e >= 1 and p.e == floor(p.e) and p.e < 100000
-		and type(p.n) == "string" and #p.n <= CHANNEL_NAME_MAX and strfind(p.n, "^"..CHANNEL_BASE..private.faction.."%l+$") ~= nil
-		and type(p.p) == "string" and strfind(p.p, "^%w+$") ~= nil and #p.p >= 6 and #p.p <= 16
+		and ((p.n == CHANNEL_BASE..private.faction and p.p == CHANNEL_PASSWORD)
+			or (type(p.n) == "string" and #p.n <= CHANNEL_NAME_MAX and strfind(p.n, "^"..CHANNEL_BASE..private.faction.."%l+$") ~= nil
+				and type(p.p) == "string" and strfind(p.p, "^%w+$") ~= nil and #p.p >= 6 and #p.p <= 16))
 end
 
 local function RandomWord(length, letters)
@@ -1995,7 +2084,8 @@ function private.TakenOver(why)
 end
 
 ---Whether a pointer is newer than ours: a later epoch, or at the same epoch the lower name (two players who saw
----the same takeover pick different names; everyone settles on the same one).
+---the same takeover pick different names; everyone settles on the same one). The first channel's name is the
+---lowest of all, so at the same epoch it wins; a player back on it never follows an older move away.
 function private.IsNewer(p)
 	return p.e > private.epoch or (p.e == private.epoch and p.n < private.channelName)
 end
@@ -2008,7 +2098,13 @@ function private.Adopt(pointer, why)
 	local old = private.channelName
 	private.channelName, private.password, private.epoch = pointer.n, pointer.p, pointer.e
 	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, p = pointer.p, t = GetServerTime() }
-	Wanted:Print("Wanted's sync channel was taken over (%s), so everyone is moving to a new one.", why)
+	if pointer.n == CHANNEL_BASE..private.faction then
+		if old ~= pointer.n then
+			Wanted:Print("Wanted's sync channel is free again, so everyone is moving back to it.")
+		end
+	else
+		Wanted:Print("Wanted's sync channel was taken over (%s), so everyone is moving to a new one.", why)
+	end
 	Wanted:Log("Sync: moving from %s to %s (%d)", old, pointer.n, pointer.e)
 	if LeaveChannelByName and old ~= pointer.n then
 		LeaveChannelByName(old)
@@ -2022,6 +2118,49 @@ function private.Adopt(pointer, why)
 	C_Timer.After(2, private.TryJoin)
 	private.SpreadMove()
 	return true
+end
+
+---While on a moved channel: tries the first one again with its own password, quietly. A taken-over channel keeps
+---its new password only while someone is in it; once the last member leaves, the next joiner makes it afresh with
+---ours. If the game lets us in, the takeover is over: everyone moves back, one epoch on so the move beats the old
+---ones. If not, nothing changes and it's tried again later; a new takeover moves everyone away again as usual.
+function private.CheckHome()
+	local home = CHANNEL_BASE..private.faction
+	if private.epoch == 0 or private.channelName == home or private.homeCheck then
+		return
+	end
+	if Wanted:InCombat() or IsInInstance() then
+		return
+	end
+	local id = GetChannelName(home)
+	if id and id ~= 0 then
+		-- Still in it from before: being in says nothing about its password. Out now, tried next time
+		Wanted:Log("Sync: still in %s from before the move; leaving it", home)
+		if LeaveChannelByName then
+			LeaveChannelByName(home)
+		end
+		return
+	end
+	private.homeCheck, private.homeRefused, private.homeCheckAt = home, false, GetTime()
+	Wanted:Log("Sync: on %s (%d); trying %s to see if the takeover is over", private.channelName, private.epoch, home)
+	private.Join(home, CHANNEL_PASSWORD)
+	C_Timer.After(HOME_ANSWER_SECONDS, private.HomeAnswer)
+end
+
+---What came of the try: in the first channel and not turned down means the takeover is over.
+function private.HomeAnswer()
+	local home = private.homeCheck
+	private.homeCheck = nil
+	if not home or private.channelName == home then
+		return
+	end
+	local id = GetChannelName(home)
+	if private.homeRefused or not id or id == 0 then
+		Wanted:Log("Sync: %s still turns us away; staying on %s", home, private.channelName)
+		return
+	end
+	Wanted:Log("!! Sync: let into %s again: the takeover is over", home)
+	private.Adopt({ e = private.epoch + 1, n = home, p = CHANNEL_PASSWORD }, "the takeover is over")
 end
 
 ---The players this client knows: realm links and those heard on the channel in the last week.

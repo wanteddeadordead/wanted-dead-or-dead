@@ -108,6 +108,8 @@ cuts the model out and uploads it to wanteddeadordead.com. No migration: the fie
 
 `WantedDB.syncChannel` (from 1.2.18) is `{ e, n, p, t }`: the channel everyone moved to after the first was taken
 over (epoch, name, password, when). Absent until then; the addon uses WantedNet<Side> with the built-in password.
+It can also name WantedNet<Side> itself, with the built-in password, at an epoch of 1 or more: everyone
+moved back there once the takeover was over. No migration: older entries are still valid.
 
 `WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
 

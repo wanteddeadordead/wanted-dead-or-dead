@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- No more party-invite sound when Wanted retries its sync channel: the game's password box that a refused join brings
+  up is closed, and its sound is muted for a few seconds around Wanted's own joins and at login.
+- After a channel takeover ends, everyone moves back to the main channel: every 15 minutes (out of fights and
+  instances), Wanted quietly tries the main channel again, and once it's let in, it moves there and tells the
+  players it knows.
+
 ## [1.3.3] - 2026-10-01
 
 - Claims can no longer be made to look witnessed with forged records relayed by another player: a death counts as a

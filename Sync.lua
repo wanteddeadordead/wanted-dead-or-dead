@@ -556,7 +556,7 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			end
 		end
 		if kind == "PLAYER_KICKED" and isUs then
-			if private.channelName == private.MainName() and private.RepeatedKick() then
+			if private.RepeatedKick() then
 				private.Refused("we were kicked again and again")
 			else
 				private.Rejoin("kicked")
@@ -565,9 +565,7 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 			private.Refused("we were banned")
 		elseif kind == "PASSWORD_CHANGED" then
 			-- We're still in, but nobody else gets in without the password
-			if private.channelName == private.MainName() then
-				private.MarkMain(false, "a password was set")
-			end
+			private.MarkFollowed(false, "a password was set")
 		elseif kind == "MODERATION_ON" then
 			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off
 			private.moderated = true
@@ -592,7 +590,7 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 	end
 end
 
----Notes a kick from the main channel; true once they come too often to be a one-off.
+---Notes a kick from the sync channel; true once they come too often to be a one-off.
 ---@return boolean
 function private.RepeatedKick()
 	local now = GetTime()
@@ -607,28 +605,62 @@ function private.RepeatedKick()
 	return #recent >= KICKS_REFUSED
 end
 
----The channel turned us away. The main one is marked refused for the Wanted app to report, and tried again now and
----then (CheckMain); the addon never picks another channel itself, it waits for the server's. The server's channel
----is tried again every few minutes (LockOut).
+---The channel we follow turned us away (the main one, or the server's). It's marked refused for the Wanted app to
+---report, and tried again: the main one now and then (CheckMain), the server's every few minutes (LockOut). The
+---addon never picks another channel itself; it waits for the server's.
 function private.Refused(why)
+	private.MarkFollowed(false, why)
 	if private.channelName == private.MainName() then
-		private.MarkMain(false, why)
 		Wanted.db.homeCheck.tried = GetServerTime()
 	end
 	private.LockOut(why)
 end
 
----Notes what the main channel did, for the Wanted app to pass to wanteddeadordead.com (WantedDB.syncChannelState):
----turned us away (refused) or let us in (open), when we last saw it (the server counts only recent reports), and the
----epoch of the server's pointer we follow.
+---Notes what the channel we follow did, for the Wanted app to pass to wanteddeadordead.com
+---(WantedDB.syncChannelState): mainRefused is whether it turned us away, main channel or the server's (the name is
+---from when only the main one was reported); epoch says which, the epoch of the server's pointer we follow (0: none).
+---On the main channel, mainOpen goes with it.
+---@param open boolean
+---@param why string?
+function private.MarkFollowed(open, why)
+	local mainOpen = nil
+	if private.channelName == private.MainName() then
+		mainOpen = open
+	end
+	private.MarkState(not open, mainOpen, why)
+end
+
+---Notes whether the main channel lets us in, while we follow the server's (CheckMain), or on it (MarkFollowed).
 ---@param open boolean
 ---@param why string?
 function private.MarkMain(open, why)
-	local state = Wanted.db.syncChannelState
-	if state.mainOpen ~= open or state.mainRefused == open then
-		Wanted:Log("%sSync: the main channel %s%s", open and "" or "!! ", open and "lets us in" or "turns us away", why and (" ("..why..")") or "")
+	if private.channelName == private.MainName() then
+		private.MarkFollowed(open, why)
+	else
+		private.MarkState(nil, open, why)
 	end
-	state.mainRefused, state.mainOpen, state.at, state.epoch = not open, open, GetServerTime(), private.epoch
+end
+
+---Sets syncChannelState's flags (nil leaves one as it is), when we last saw them so (the server counts only recent
+---reports) and the epoch we follow.
+---@param refused boolean?
+---@param mainOpen boolean?
+---@param why string?
+function private.MarkState(refused, mainOpen, why)
+	local state = Wanted.db.syncChannelState
+	if refused ~= nil and state.mainRefused ~= refused then
+		Wanted:Log("%sSync: %s %s%s", refused and "!! " or "", private.channelName, refused and "turns us away" or "lets us in", why and (" ("..why..")") or "")
+	end
+	if mainOpen ~= nil and state.mainOpen ~= mainOpen then
+		Wanted:Log("Sync: the main channel %s%s", mainOpen and "lets us in" or "turns us away", why and (" ("..why..")") or "")
+	end
+	if refused ~= nil then
+		state.mainRefused = refused
+	end
+	if mainOpen ~= nil then
+		state.mainOpen = mainOpen
+	end
+	state.at, state.epoch = GetServerTime(), private.epoch
 end
 
 ---Joins again shortly.
@@ -834,8 +866,8 @@ function private.TryJoin()
 		return
 	end
 	private.channelId = id
+	private.MarkFollowed(true)
 	if private.channelName == private.MainName() then
-		private.MarkMain(true)
 		Wanted.db.homeCheck.wait = MAIN_RETRY_SECONDS
 	end
 	if private.lockedOut then

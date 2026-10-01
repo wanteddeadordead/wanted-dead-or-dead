@@ -116,12 +116,14 @@ From 1.2.18 to 1.3.x it was `{ e, n, p, t }`, a channel the addons picked themse
 password; the layout 2 migration drops it and keeps its name in `WantedDB.oldSyncChannel` (when it isn't
 WantedNet<Side>), which the addon leaves once at the next login and clears.
 
-`WantedDB.syncChannelState` (from 1.4.0) is `{ mainRefused, mainOpen, at, epoch }`: what WantedNet<Side> last did
-when this client joined or tried it: turned us away (a password, a ban, moderation, kicked twice within 10 minutes)
-or let us in, the last server time it was seen so (refreshed at every join and try; the server counts only recent
-reports), and the epoch of the server pointer we follow (0 for none). The Wanted app
-passes it to wanteddeadordead.com, which picks a new channel for a side once two accounts report it refused, and
-points everyone back once it's open. A new key with defaults; the migration starts it afresh.
+`WantedDB.syncChannelState` (from 1.4.0) is `{ mainRefused, mainOpen, at, epoch }`. `mainRefused`: the channel this
+client follows (WantedNet<Side>, or the server's) turned it away: a password, a ban, moderation, or two kicks within
+10 minutes (the name is from when only the main channel was reported). `mainOpen`: WantedNet<Side> let us in, on it
+or on a quiet try while following the server's channel. `at`: the last server time the state was seen (refreshed at
+every join and try; the server counts only recent reports). `epoch`: the epoch of the server pointer followed (0 for
+none, so the main channel), which tells the server which channel the report is about. The Wanted app passes it to
+wanteddeadordead.com, which picks a new channel for a side once two accounts report the followed channel refused,
+and points everyone back once the main one is open. A new key with defaults; the migration starts it afresh.
 
 `WantedDB.homeCheck` is `{ wait, tried }` from 1.4.0: how long to wait between quiet tries of WantedNet<Side> while it
 turns us away or we're on the server's channel (5 minutes, doubled after each refusal up to an hour, back to 5

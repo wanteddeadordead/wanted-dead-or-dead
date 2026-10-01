@@ -3299,6 +3299,16 @@ end)()
 	check(ns.db.syncChannel.e == 7 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvfix", "the app's pointer at the same epoch with another name is followed")
 	Catchup({ e = 7, n = "WantedNetHordesrvone" })
 	ClearSent()
+	-- The server's channel turns us away too: reported the same way, at its epoch; we stay, try it again, and wait
+	inChannel["WantedNetHordesrvone"] = nil
+	clock = clock + 60
+	Fire("CHAT_MSG_CHANNEL_NOTICE", "WRONG_PASSWORD", "", "", "", "", "", "", "", "WantedNetHordesrvone")
+	RunTimers()
+	check(state.mainRefused and state.epoch == 7 and state.at == clock and ns.Sync:GetInfo().channelId == nil, "the server's channel refusing us is reported, at its epoch")
+	check(ns.Sync:GetInfo().channelName == "WantedNetHordesrvone" and ns.db.syncChannel.e == 7, "and we stay on it")
+	Tick()
+	RunTimers()
+	check(ns.Sync:GetInfo().channelId == 6 and not state.mainRefused and state.epoch == 7, "tried again: let in, reported open")
 	-- The main channel lets us in again: noted for the app, but we stay
 	mainOpen = true
 	ns.db.homeCheck.tried = clock - ns.db.homeCheck.wait

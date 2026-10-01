@@ -488,7 +488,9 @@ function Store:LearnOrigin(sender)
 end
 
 ---A short hash of a string. Not cryptographic: the unforgeable identity is the server-stamped sender of a
----message; the hash only makes a changed record visible.
+---message; the hash only makes a changed record visible. Adler32 can be forged, so nothing trusts a record for its
+---hash alone (Store:IsTrusted). A stronger hash is a planned follow-up: the server and the desktop app check
+---these hashes too, so all three must change together.
 ---@param str string
 ---@return string
 function Store:Hash(str)
@@ -559,27 +561,35 @@ function Store:Merge(record, sender)
 	return private.Insert(record, true)
 end
 
----Merges a record relayed by a peer answering a gap request (origin may differ from sender).
+---Merges a record relayed by a peer answering a gap request (origin may differ from sender), or taken in from
+---the desktop app's catch-up.
 ---@param record table
+---@param fromApp boolean? true for the app's catch-up: the server checked who sent it, so it's marked `app`
 ---@return boolean isNew
 ---@return string? why when not new, as for Merge
-function Store:MergeRelayed(record)
+function Store:MergeRelayed(record, fromApp)
 	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
 		return false, "malformed"
 	end
-	return private.Insert(record, false)
+	return private.Insert(record, false, fromApp)
 end
 
 ---Stores a received record. live: it came straight from its origin (the game stamped the sender), which the
----desktop app reports so the network can accept this client as a witness to it. Local flags arriving with a
----record are the sender's, not ours, and are dropped: a relayed record can't claim to be live.
-function private.Insert(record, live)
+---desktop app reports so the network can accept this client as a witness to it. fromApp: the desktop app's
+---catch-up brought it. Local flags arriving with a record are the sender's, not ours, and are dropped: a relayed
+---record can't claim to be live.
+function private.Insert(record, live, fromApp)
 	local db = Wanted.db
-	record.live, record.tampered, record.brokenChain = nil, nil, nil
+	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
 	local existing = db.records[record.id]
 	if existing then
-		if live and existing.hash == record.hash and not existing.test then
-			existing.live = true
+		if existing.hash == record.hash and not existing.test then
+			if live then
+				existing.live = true
+			end
+			if fromApp then
+				existing.app = true
+			end
 		end
 		return false, "already held"
 	end
@@ -587,6 +597,7 @@ function private.Insert(record, live)
 		return false, "test data"
 	end
 	record.live = live or nil
+	record.app = fromApp or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
@@ -695,6 +706,31 @@ function Store:IsTest(record)
 	return record.test == true or strsub(record.id, 1, 5) == "TEST:"
 end
 
+---Whether a record is its origin's own word: this client's own, heard straight from its origin (the game stamped
+---the sender), or brought by the desktop app's catch-up (the server checked who sent it). Test data counts too: it
+---never leaves this client. A record another player relayed (a resync or a realm link) could be forged by them,
+---and one flagged tampered or brokenChain is never trusted.
+---@param record table
+---@return boolean
+function Store:IsTrusted(record)
+	if record.tampered or record.brokenChain then
+		return false
+	end
+	return record.origin == private.origin or record.live == true or record.app == true or Store:IsTest(record)
+end
+
+---How many records held are flagged tampered or brokenChain.
+---@return number
+function Store:CountFlagged()
+	local count = 0
+	for _, record in pairs(Wanted.db.records) do
+		if record.tampered or record.brokenChain then
+			count = count + 1
+		end
+	end
+	return count
+end
+
 ---Removes every test record, player and sighting.
 ---@return number removed
 function Store:PurgeTest()
@@ -797,8 +833,8 @@ function private.AddToIndex(record)
 	private.NoteActive(record)
 end
 
----Iterates the records of one kind, unordered. It walks the ids as they were when it started, so records
----added meanwhile are left for the next walk.
+---Iterates the records of one kind, unordered, leaving out records flagged tampered or brokenChain. It walks the
+---ids as they were when it started, so records added meanwhile are left for the next walk.
 ---@param kind string
 ---@return fun(): table?
 function Store:Iterator(kind)
@@ -810,7 +846,8 @@ function Store:Iterator(kind)
 		while i < n do
 			i = i + 1
 			local record = records[list[i]]
-			if record and record.kind == kind then
+			-- A record flagged as altered or with a broken chain is kept (and synced) but never read
+			if record and record.kind == kind and not record.tampered and not record.brokenChain then
 				return record
 			end
 		end

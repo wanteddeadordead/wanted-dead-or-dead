@@ -341,6 +341,18 @@ end
 
 local function check(cond, msg) if not cond then error("CHECK FAILED: "..msg, 2) end end
 
+-- Gives a hand-made record the hash its contents make, as its origin's addon would (Store.lua's Canonical), so it
+-- isn't flagged as altered
+function Sealed(r) -- a global: the main chunk is at its limit of locals
+	local keys = {}
+	for key in pairs(r.data) do keys[#keys + 1] = key end
+	table.sort(keys)
+	local parts = { r.kind, r.id, r.prev, tostring(r.t) }
+	for _, key in ipairs(keys) do parts[#parts + 1] = key.."="..tostring(r.data[key]) end
+	r.hash = ns.Store:Hash(table.concat(parts, "\n"))
+	return r
+end
+
 -- Every page with no data
 for _, key in ipairs({ "board", "mine", "hunters", "activity", "tools" }) do
 	ns.UI:Show(key)
@@ -2357,6 +2369,50 @@ end)()
 	Death("Old Hand", t0 + 5001)
 	check(#B:GetClaimWarnings(fair) == 0, "a claim an established player witnessed has no warnings, got "..table.concat(B:GetClaimWarnings(fair), " / "))
 end)()
+-- Only a death record that is its origin's own word witnesses a claim: one another player relayed could be forged
+;(function()
+	local B = ns.Bounties
+	local victim = "Player-9-TRUSTV"
+	local t0 = clock - 3000
+	local hunterKill = ns.Store:InsertTest("kill", "Trust Hunter", { killer = "Player-1-TRUSTH", victim = victim, zone = "Barrens" }, t0)
+	local claim = ns.Store:InsertTest("claim", "Trust Hunter", { bounty = "b-trust", kill = hunterKill.id, victim = victim, victimName = "Trust Victim", zone = "Barrens", killT = t0 }, t0)
+	local function Death(origin, data)
+		data.victim, data.zone = victim, "Barrens"
+		return Sealed({ kind = "death", id = origin..":1", origin = origin, seq = 1, prev = "0", t = t0 + 2, data = data })
+	end
+	ns.Store:MergeRelayed(Death("Relayed Witness", {}))
+	check(#B:GetWitnesses(claim) == 0 and B:GetClaimLevel(claim) == 1, "a death relayed by another player is not a witness")
+	ns.Store:MergeRelayed(Death("Relayed Witness", {}), true)
+	check(ns.Store:Get("Relayed Witness:1").app == true, "the app's catch-up marks a record it brings, even one already held")
+	check(#B:GetWitnesses(claim) == 1 and B:GetClaimLevel(claim) == 2, "a death from the app's catch-up is a witness")
+	ns.Store:MergeRelayed(Death("Forger", { app = true, live = true }))
+	check(not ns.Store:Get("Forger:1").app and #B:GetWitnesses(claim) == 1, "a relayed record saying it came from the app isn't believed")
+	ns.Store:Merge(Death("Live Witness", {}), "Live Witness")
+	check(#B:GetWitnesses(claim) == 2, "a death heard live from its origin is a witness")
+	local altered = Death("Altered Witness", {})
+	altered.hash = "00000000"
+	ns.Store:Merge(altered, "Altered Witness")
+	check(ns.Store:Get("Altered Witness:1").tampered and #B:GetWitnesses(claim) == 2, "a tampered death is not a witness")
+	local flagged
+	for death in ns.Store:Iterator("death") do if death.id == "Altered Witness:1" then flagged = true end end
+	check(not flagged and ns.Store:CountFlagged() >= 1, "a tampered record is never read, and counted")
+	check(ns.Report:Build():find("Records flagged tampered or broken chain (never used): ", 1, true), "/wanted bug counts flagged records")
+	-- The victim's own record of their death, naming the claim's killer, is the strongest witness
+	local victimsClaim = ns.Store:InsertTest("claim", "Trust Hunter", { bounty = "b-trust2", kill = hunterKill.id, victim = victim, victimName = "Trust Victim", zone = "Barrens", killT = t0 + 600 }, t0 + 600)
+	local function Own(seq, prev, t)
+		return Sealed({ kind = "death", id = "Trust Victim:"..seq, origin = "Trust Victim", seq = seq, prev = prev, t = t,
+			data = { victim = victim, zone = "Barrens", killer = "Player-1-TRUSTH" } })
+	end
+	local link = Sealed({ kind = "link", id = "Trust Victim:1", origin = "Trust Victim", seq = 1, prev = "0", t = t0 + 500, data = { code = "VICT2345", guid = victim } })
+	ns.Store:Merge(link, "Trust Victim")
+	local own = Own(2, link.hash, t0 + 601)
+	ns.Store:MergeRelayed(own)
+	check(B:GetClaimLevel(victimsClaim) == 1, "the victim's own death relayed by another player is not a witness")
+	ns.Store:Merge(Own(2, link.hash, t0 + 601), "Trust Victim")
+	local witnesses, victimsOwn = B:GetWitnesses(victimsClaim)
+	check(#witnesses == 1 and victimsOwn and B:GetClaimLevel(victimsClaim) == 2, "the victim's own death heard live gives the witnessed level alone")
+	check(#B:GetClaimWarnings(victimsClaim) == 0, "and no warnings, though the victim is new to the network, got "..table.concat(B:GetClaimWarnings(victimsClaim), " / "))
+end)()
 ;(function()
 	-- In a dungeon or raid the Nearby window closes, and comes back outside if it was open; battlegrounds keep it
 	local Nearby, outside = ns.NearbyWindow, IsInInstance
@@ -3636,7 +3692,8 @@ end)()
 	ns.Alerts.Warn = function(self, title, sub, color) warns[#warns + 1] = title.." / "..tostring(sub) return origWarn(self, title, sub, color) end
 	ns.Alerts.Sound = function(self, kind) sounds[#sounds + 1] = kind return origSound(self, kind) end
 	local function Relay(origin, seq, kind, data, t)
-		ns.Store:MergeRelayed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = t, data = data })
+		local before = ns.Store:Get(origin..":"..(seq - 1))
+		ns.Store:MergeRelayed(Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t, data = data }))
 		return ns.Store:Get(origin..":"..seq)
 	end
 	local function Kill(guid, name, guild)

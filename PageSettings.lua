@@ -372,7 +372,7 @@ function private.BuildStreaks(panel, width)
 	local function Update() Wanted.Ranks:Update() end
 	private.Toggle(ranks, RankSettings, "tooltip", "In the tooltip", "A line like \"Wanted: Rank 7, Blood Guard\" with the badge, when you mouse over a player.", 16, -38)
 	private.Toggle(ranks, RankSettings, "target", "Over the target frame", "The rank and its title over your target's frame.", 16, -62, Update)
-	private.Toggle(ranks, RankSettings, "nameplates", "On nameplates", "A small R7 over the nameplates of ranked players. New plates follow the switch as they come up.", 16, -86, Update)
+	private.Toggle(ranks, RankSettings, "nameplates", "On nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.", 16, -86, Update)
 	private.Toggle(ranks, RankSettings, "chat", "In chat", "[R7] at the start of what ranked players say, in your own chat windows. Off by default.", 360, -38)
 	private.Toggle(ranks, RankSettings, "nearby", "In the Nearby window", "R7 beside the level of ranked enemies.", 360, -62, RefreshNearby)
 	private.Toggle(ranks, RankSettings, "who", "In the Who list", "R7 beside ranked players' names.", 360, -86)

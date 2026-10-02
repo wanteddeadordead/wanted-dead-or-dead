@@ -171,26 +171,61 @@ function private.PlateHost(plate)
 	return plate
 end
 
----A plate's label, made the first time (our own frame on what's drawn there, so it moves and hides with it, and sits
----above its health bar).
+-- The badge and number left of the name on a plate
+local PLATE_BADGE = 13
+local PLATE_GAP = 3
+
+---Where the rank goes on a plate: left of the name text (ElvUI's Name, the game's name), else left of the health bar
+---(ElvUI's Health, the game's healthBar), else the plate's left edge; never over the level and health texts.
+---@return Region anchor
+---@return string point the anchor's point the label's right edge goes to
+---@return number x
+function private.PlateSpot(host)
+	local name = host.Name or host.name
+	if type(name) == "table" and name.GetText and name.IsShown and name:IsShown() then
+		-- The name's region can be wider than its text (a centred tag): go to where the text starts
+		local justify = name.GetJustifyH and name:GetJustifyH() or "LEFT"
+		local ok, width = pcall(name.GetUnboundedStringWidth, name)
+		if justify ~= "LEFT" and ok and type(width) == "number" and private.Readable(width) then
+			if justify == "CENTER" then
+				return name, "CENTER", -width / 2 - PLATE_GAP
+			end
+			return name, "RIGHT", -width - PLATE_GAP
+		end
+		return name, "LEFT", -PLATE_GAP
+	end
+	local health = host.Health or host.healthBar
+	if type(health) == "table" and health.GetFrameLevel then
+		return health, "LEFT", -PLATE_GAP
+	end
+	return host, "LEFT", -PLATE_GAP
+end
+
+---A plate's label, made the first time: our own frame on what's drawn there (so it moves and hides with it), above
+---it, with the rank's badge and number in gold, left of the name.
 function private.PlateLabel(plate)
 	local host = private.PlateHost(plate)
 	local label = private.plates[plate]
 	if not label then
 		label = CreateFrame("Frame", nil, host)
-		label:SetSize(40, 14)
+		label:SetSize(PLATE_BADGE + 22, PLATE_BADGE)
 		label.text = label:CreateFontString(nil, "OVERLAY")
-		label.text:SetFontObject(Wanted.Theme.Fonts.small)
-		label.text:SetPoint("CENTER")
+		label.text:SetFontObject(Wanted.Theme.Fonts.tiny)
+		label.text:SetPoint("RIGHT")
+		label.text:SetJustifyH("RIGHT")
 		label.text:SetTextColor(1, 0.8, 0.32)
+		label.badge = label:CreateTexture(nil, "OVERLAY")
+		label.badge:SetSize(PLATE_BADGE, PLATE_BADGE)
+		label.badge:SetPoint("RIGHT", label.text, "LEFT", -1, 0)
 		private.plates[plate] = label
 	end
 	if label.host ~= host then
 		label.host = host
 		label:SetParent(host)
-		label:ClearAllPoints()
-		label:SetPoint("BOTTOM", host, "TOP", 0, -2)
 	end
+	local anchor, point, x = private.PlateSpot(host)
+	label:ClearAllPoints()
+	label:SetPoint("RIGHT", anchor, point, x, 0)
 	label:SetFrameLevel(host:GetFrameLevel() + 20)
 	return label
 end
@@ -223,7 +258,8 @@ function private.ShowPlate(unit)
 	local label = private.plates[plate]
 	if rank then
 		label = private.PlateLabel(plate)
-		label.text:SetText(Ranks:Short(rank))
+		label.text:SetText(tostring(rank.r))
+		label.badge:SetTexture(Wanted.Challenges:Badge(rank.r))
 		label:Show()
 	elseif label then
 		label:Hide()

@@ -79,6 +79,7 @@ function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
+function Methods:SetPoint(...) self._point = { ... } end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
@@ -4397,8 +4398,10 @@ end)()
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate9")
 	RunTimers()
 	local plateLabel
-	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "R7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
-	check(plateLabel and plateLabel._parent._shown, "R7 over a ranked player's nameplate")
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
+	check(plateLabel and plateLabel._parent._shown, "the rank on a ranked player's nameplate")
+	local point = plateLabel._parent._point
+	check(point[1] == "RIGHT" and point[2] == plates.nameplate7 and point[3] == "LEFT", "at the plate's left edge when it has no name text")
 	for _, fs in ipairs(Mock.fontStrings) do check(not (fs._parent and fs._parent._parent == plates.nameplate8), "nothing on an unranked player's plate") end
 	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
 	check(not plateLabel._parent._shown, "the number goes with the plate")
@@ -4457,13 +4460,28 @@ end)()
 	ElvUF_Target = nil
 	local elvPlate = CreateFrame("Frame")
 	elvPlate.unitFrame = CreateFrame("Button", nil, elvPlate)
+	elvPlate.unitFrame.Health = CreateFrame("StatusBar", nil, elvPlate.unitFrame)
+	elvPlate.unitFrame.Name = elvPlate.unitFrame:CreateFontString()
+	elvPlate.unitFrame.Name._text = "Thane Oakcrest"
+	elvPlate.unitFrame.Name.GetJustifyH = function() return "CENTER" end
 	plates.nameplate7 = elvPlate
 	C_NamePlate = { GetNamePlateForUnit = function(unit) return plates[unit] end }
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
 	RunTimers()
 	local onElv
-	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "R7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
-	check(onElv, "R7 on ElvUI's nameplate frame, above its health bar")
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
+	check(onElv, "the rank on ElvUI's nameplate frame")
+	local spot = onElv._parent._point
+	check(spot[1] == "RIGHT" and spot[2] == elvPlate.unitFrame.Name and spot[3] == "CENTER" and spot[4] == -(14 * 6) / 2 - 3,
+		"right-aligned 3px left of where the centred name text starts, got "..tostring(spot[3]).." "..tostring(spot[4]))
+	local badge
+	for k, v in pairs(onElv._parent) do if k == "badge" then badge = v end end
+	check(badge and badge._point and badge._point[2] == onElv, "the badge left of the number")
+	-- No name text shown: left of the health bar, away from the level and health texts
+	elvPlate.unitFrame.Name._shown = false
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	RunTimers()
+	check(onElv._parent._point[2] == elvPlate.unitFrame.Health and onElv._parent._point[3] == "LEFT", "left of the health bar without a name")
 	-- A plate the game keeps from addons: asking for it fails, nothing happens
 	C_NamePlate = { GetNamePlateForUnit = function() error("forbidden") end }
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")

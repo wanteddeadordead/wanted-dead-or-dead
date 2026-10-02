@@ -13,7 +13,9 @@
 - A banner when the app brings news of a challenge you finished or a new challenge rank, once each.
 - Other players' challenge ranks, from wanteddeadordead.com through the app: a line in their tooltip ("Wanted: Rank 7,
   Blood Guard" with the badge), over your target's frame, a small R7 on nameplates, beside names in the Nearby window
-  and the Who list, and, if you turn it on, [R7] in chat. Each has a switch under Settings, Streaks and ranks.
+  and the Who list, and, if you turn it on, [R7] in chat. Each has a switch under Settings, Ranks, where you can also
+  place the nameplate rank (around the name or on the health bar, with offsets and size, badge and number each on or
+  off) and the target frame label, and see the change at once. Works with ElvUI's and Plater's nameplates.
 
 ## [1.4.1] - 2026-10-01
 

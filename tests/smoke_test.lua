@@ -80,6 +80,7 @@ function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = par
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
 function Methods:SetPoint(...) self._point = { ... } end
+function Methods:SetScale(scale) self._scale = scale end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
@@ -4401,7 +4402,7 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
 	check(plateLabel and plateLabel._parent._shown, "the rank on a ranked player's nameplate")
 	local point = plateLabel._parent._point
-	check(point[1] == "RIGHT" and point[2] == plates.nameplate7 and point[3] == "LEFT", "at the plate's left edge when it has no name text")
+	check(point[1] == "BOTTOM" and point[2] == plates.nameplate7 and point[3] == "TOP" and point[5] == 2, "above the plate when it has no name text")
 	for _, fs in ipairs(Mock.fontStrings) do check(not (fs._parent and fs._parent._parent == plates.nameplate8), "nothing on an unranked player's plate") end
 	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
 	check(not plateLabel._parent._shown, "the number goes with the plate")
@@ -4471,17 +4472,76 @@ end)()
 	local onElv
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
 	check(onElv, "the rank on ElvUI's nameplate frame")
-	local spot = onElv._parent._point
-	check(spot[1] == "RIGHT" and spot[2] == elvPlate.unitFrame.Name and spot[3] == "CENTER" and spot[4] == -(14 * 6) / 2 - 3,
-		"right-aligned 3px left of where the centred name text starts, got "..tostring(spot[3]).." "..tostring(spot[4]))
-	local badge
-	for k, v in pairs(onElv._parent) do if k == "badge" then badge = v end end
-	check(badge and badge._point and badge._point[2] == onElv, "the badge left of the number")
-	-- No name text shown: left of the health bar, away from the level and health texts
+	local label, layout = onElv._parent, ns.db.settings.ranks.plate
+	local function Spot() local p = label._point return p[1].." "..(p[2] == elvPlate.unitFrame.Name and "name" or p[2] == elvPlate.unitFrame.Health and "bar" or "?").." "..p[3].." "..format("%g %g", p[4], p[5]) end
+	check(Spot() == "BOTTOM name TOP 0 2", "above the name by default, got "..Spot())
+	-- Each anchor, live on the plate already shown; the centred name's text starts 8px in from its 100px region
+	local expected = { left = "RIGHT name LEFT 5 0", right = "LEFT name RIGHT -5 0", below = "TOP name BOTTOM 0 -2",
+		barTopLeft = "BOTTOMLEFT bar TOPLEFT 0 2", barTopRight = "BOTTOMRIGHT bar TOPRIGHT 0 2", above = "BOTTOM name TOP 0 2" }
+	for _, key in ipairs({ "left", "right", "below", "barTopLeft", "barTopRight", "above" }) do
+		layout.anchor = key
+		ns.Ranks:Update()
+		check(Spot() == expected[key], key..": got "..Spot())
+	end
+	-- Offsets and scale, kept within their ranges
+	layout.x, layout.y, layout.scale = 10, -5, 1.4
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOM name TOP 10 -3" and label._scale == 1.4, "offsets and scale, got "..Spot())
+	layout.x, layout.y, layout.scale = 99, "x", 9
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOM name TOP 50 2" and label._scale == 1.6, "out of range values are held to their limits, got "..Spot())
+	layout.x, layout.y, layout.scale = 0, 0, 1
+	-- Badge and number
+	local badge = rawget(label, "badge")
+	check(badge._shown and onElv._shown and onElv._point[4] == 14, "badge then number")
+	layout.badge = false
+	ns.Ranks:Update()
+	check(not badge._shown and onElv._shown and onElv._point[4] == 0 and label._shown, "the number alone")
+	layout.badge, layout.number = true, false
+	ns.Ranks:Update()
+	check(badge._shown and not onElv._shown and label._shown, "the badge alone")
+	layout.badge = false
+	ns.Ranks:Update()
+	check(not label._shown, "neither: nothing")
+	layout.badge, layout.number = true, true
+	ns.Ranks:Update()
+	check(label._shown, "both back")
+	-- From the Settings page: the X offset slider moves the plate already shown
+	ns.UI:Show("settings")
+	local xSlider
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "X offset" and not xSlider then xSlider = fs._parent end end
+	xSlider.slider._scripts.OnValueChanged(xSlider.slider, 12)
+	check(layout.x == 12 and Spot() == "BOTTOM name TOP 12 2", "the slider changes the setting and the plate at once, got "..Spot())
+	layout.x = 0
+	ns.Ranks:Update()
+	-- No name text shown: by the plate itself; the bar anchors still use the bar
 	elvPlate.unitFrame.Name._shown = false
-	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
-	RunTimers()
-	check(onElv._parent._point[2] == elvPlate.unitFrame.Health and onElv._parent._point[3] == "LEFT", "left of the health bar without a name")
+	ns.Ranks:Update()
+	check(label._point[2] == elvPlate and label._point[3] == "TOP", "above the plate without a name")
+	layout.anchor = "barTopRight"
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOMRIGHT bar TOPRIGHT 0 2", "the bar's corner without a name")
+	layout.anchor = "above"
+	elvPlate.unitFrame.Name._shown = true
+	-- The target label: each anchor, offsets and scale, live
+	local tl = ns.db.settings.ranks.targetLabel
+	TargetFrame = CreateFrame("Frame")
+	Fire("PLAYER_TARGET_CHANGED")
+	local targetLabel
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("Rank 4, Senior Sergeant", 1, true) then targetLabel = fs._parent end end
+	local function TSpot() local p = targetLabel._point return p[1].." "..p[3].." "..format("%g %g", p[4], p[5]) end
+	check(TSpot() == "BOTTOM TOP 0 -6" and targetLabel._point[2] == TargetFrame, "the target label above the frame by default")
+	local targetExpected = { below = "TOP BOTTOM 0 6", left = "RIGHT LEFT -4 0", right = "LEFT RIGHT 4 0" }
+	for key, want in pairs(targetExpected) do
+		tl.anchor = key
+		ns.Ranks:Update()
+		check(TSpot() == want, "target "..key..": got "..TSpot())
+	end
+	tl.anchor, tl.x, tl.y, tl.scale = "above", -20, 7, 0.8
+	ns.Ranks:Update()
+	check(TSpot() == "BOTTOM TOP -20 1" and targetLabel._scale == 0.8, "target offsets and scale, got "..TSpot())
+	tl.x, tl.y, tl.scale = 0, 0, 1
+	ns.Ranks:Update()
 	-- A plate the game keeps from addons: asking for it fails, nothing happens
 	C_NamePlate = { GetNamePlateForUnit = function() error("forbidden") end }
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")

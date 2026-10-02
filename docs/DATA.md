@@ -205,7 +205,12 @@ what the banner already announced for each character, so a completion or a rank-
 seen for a character only notes what's already done. Notes older than 21 days are dropped. A new key: no migration.
 
 `WantedDB.settings.ranks` (from 1.5.0) is `{ tooltip, target, nameplates, chat, nearby, who }`: where other players'
-challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. A new key with defaults: no migration.
+challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. `ranks.plate` is `{ anchor, x, y, scale, badge,
+number }`, where the rank goes on nameplates: `anchor` one of `above` (the default), `left`, `right`, `below` (around the
+name text, or the plate without one), `barTopLeft` or `barTopRight` (the health bar's corners), `x` and `y` offsets in
+pixels (-50 to 50), `scale` 0.6 to 1.6, and whether the badge and the number show. `ranks.targetLabel` is
+`{ anchor, x, y, scale }` for the label at the target frame (`above`, `below`, `left` or `right`). Values out of range
+are held to their limits when read. A new key with defaults: no migration.
 
 `WantedDB.settings.lastPage` (from 1.5.0) is the window's page when it was last open; the window opens on Home when it's
 unset or that page is switched off. A new setting: no migration.

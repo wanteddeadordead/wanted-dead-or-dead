@@ -220,6 +220,74 @@ end
 
 
 
+---A horizontal slider with its label and value above it: SetValue(value) without calling onChange.
+---@param format fun(value: number): string the value as shown
+function W:Slider(parent, label, width, low, high, step, format, onChange)
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, 34)
+	holder.label = Theme:Text(holder, "small", label, C.muted)
+	holder.label:SetPoint("TOPLEFT")
+	holder.value = Theme:Text(holder, "small", "", C.text)
+	holder.value:SetPoint("TOPRIGHT")
+	holder.value:SetJustifyH("RIGHT")
+	local slider = CreateFrame("Slider", nil, holder)
+	slider:SetOrientation("HORIZONTAL")
+	slider:SetPoint("BOTTOMLEFT")
+	slider:SetSize(width, 12)
+	slider:SetMinMaxValues(low, high)
+	slider:SetValueStep(step)
+	slider:SetObeyStepOnDrag(true)
+	slider:EnableMouse(true)
+	Theme:Skin(slider, C.input, C.borderLight)
+	local thumb = slider:CreateTexture(nil, "OVERLAY")
+	thumb:SetSize(8, 14)
+	thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	slider:SetThumbTexture(thumb)
+	holder.slider = slider
+	function holder:SetValue(value)
+		self.quiet = true
+		self.slider:SetValue(value)
+		self.value:SetText(format(value))
+		self.quiet = false
+	end
+	slider:SetScript("OnValueChanged", function(_, value)
+		-- Steps as the slider shows them, without float dust
+		value = floor(value / step + 0.5) * step
+		holder.value:SetText(format(value))
+		if not holder.quiet and onChange then
+			onChange(value)
+		end
+	end)
+	return holder
+end
+
+---A button that shows the current choice and opens a menu of the others: SetChoice(key) shows one.
+---@param choices table[] { key, label }
+function W:Choice(parent, width, choices, onSelect)
+	local button = W:Button(parent, "", "secondary", width, 24)
+	function button:SetChoice(key)
+		self.key = key
+		for _, choice in ipairs(choices) do
+			if choice.key == key then
+				self:SetText(choice.label.."  v")
+			end
+		end
+	end
+	button:SetScript("OnClick", function(self)
+		local items = {}
+		for _, choice in ipairs(choices) do
+			tinsert(items, { text = choice.label, onClick = function()
+				self:SetChoice(choice.key)
+				onSelect(choice.key)
+			end })
+		end
+		W:Menu(items, self)
+	end)
+	return button
+end
+
+
+
 -- ============================================================================
 -- Segmented control
 -- ============================================================================

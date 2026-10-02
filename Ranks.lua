@@ -98,6 +98,54 @@ end
 
 
 -- ============================================================================
+-- Placing a label
+-- ============================================================================
+
+-- Where a label can go, each as the label's point on the anchor's point and its own offset from it, before the
+-- player's offsets. Nameplates: around the name text (the plate when there's none), or on the health bar's top
+-- corners. The target label: around the target frame.
+Ranks.PLATE_ANCHORS = {
+	{ key = "above", label = "Above name", point = "BOTTOM", to = "TOP", x = 0, y = 2 },
+	{ key = "left", label = "Left of name", point = "RIGHT", to = "LEFT", x = -3, y = 0 },
+	{ key = "right", label = "Right of name", point = "LEFT", to = "RIGHT", x = 3, y = 0 },
+	{ key = "below", label = "Below name", point = "TOP", to = "BOTTOM", x = 0, y = -2 },
+	{ key = "barTopLeft", label = "Top-left of bar", point = "BOTTOMLEFT", to = "TOPLEFT", x = 0, y = 2, bar = true },
+	{ key = "barTopRight", label = "Top-right of bar", point = "BOTTOMRIGHT", to = "TOPRIGHT", x = 0, y = 2, bar = true },
+}
+Ranks.TARGET_ANCHORS = {
+	{ key = "above", label = "Above the frame", point = "BOTTOM", to = "TOP", x = 0, y = -6 },
+	{ key = "below", label = "Below the frame", point = "TOP", to = "BOTTOM", x = 0, y = 6 },
+	{ key = "left", label = "Left of the frame", point = "RIGHT", to = "LEFT", x = -4, y = 0 },
+	{ key = "right", label = "Right of the frame", point = "LEFT", to = "RIGHT", x = 4, y = 0 },
+}
+local OFFSET_LIMIT = 50
+local MIN_SCALE, MAX_SCALE = 0.6, 1.6
+
+---An anchor by key from a list; the first (the default) for anything else.
+function private.Anchor(list, key)
+	for _, anchor in ipairs(list) do
+		if anchor.key == key then
+			return anchor
+		end
+	end
+	return list[1]
+end
+
+---A saved offset or scale kept within its range, whatever the saved data says.
+function private.Clamp(value, low, high, default)
+	return type(value) == "number" and value == value and max(low, min(high, value)) or default
+end
+
+---Where a layout puts a label: the anchor's spec, the x and y from the saved offsets, and the scale.
+function private.Placement(list, layout)
+	local anchor = private.Anchor(list, layout.anchor)
+	return anchor, anchor.x + private.Clamp(layout.x, -OFFSET_LIMIT, OFFSET_LIMIT, 0),
+		anchor.y + private.Clamp(layout.y, -OFFSET_LIMIT, OFFSET_LIMIT, 0), private.Clamp(layout.scale, MIN_SCALE, MAX_SCALE, 1)
+end
+
+
+
+-- ============================================================================
 -- Target frame
 -- ============================================================================
 
@@ -106,8 +154,8 @@ function private.TargetAnchor()
 	return _G.ElvUF_Target or TargetFrame
 end
 
----Our label over the target frame: our own frame, never a child of the secure one. It follows whichever target
----frame is there, checked each time (ElvUI may make its frames after us).
+---Our label at the target frame: our own frame, never a child of the secure one. It follows whichever target frame
+---is there, checked each time (ElvUI may make its frames after us).
 function private.TargetLabel()
 	local anchor = private.TargetAnchor()
 	if not anchor then
@@ -126,11 +174,11 @@ function private.TargetLabel()
 		label.hooked = {}
 		private.target = label
 	end
-	if label.anchor ~= anchor then
-		label.anchor = anchor
-		label:ClearAllPoints()
-		label:SetPoint("BOTTOM", anchor, "TOP", 0, -6)
-	end
+	label.anchor = anchor
+	local spec, x, y, scale = private.Placement(Ranks.TARGET_ANCHORS, private.Settings().targetLabel)
+	label:ClearAllPoints()
+	label:SetPoint(spec.point, anchor, spec.to, x, y)
+	label:SetScale(scale)
 	-- Hidden with no target; HookScript doesn't taint the frame
 	if not label.hooked[anchor] and anchor.HookScript then
 		label.hooked[anchor] = true
@@ -171,62 +219,102 @@ function private.PlateHost(plate)
 	return plate
 end
 
--- The badge and number left of the name on a plate
 local PLATE_BADGE = 13
-local PLATE_GAP = 3
 
----Where the rank goes on a plate: left of the name text (ElvUI's Name, the game's name), else left of the health bar
----(ElvUI's Health, the game's healthBar), else the plate's left edge; never over the level and health texts.
----@return Region anchor
----@return string point the anchor's point the label's right edge goes to
----@return number x
-function private.PlateSpot(host)
+---The name text on what's drawn on a plate (ElvUI's Name, the game's name), when it's shown.
+function private.PlateName(host)
 	local name = host.Name or host.name
 	if type(name) == "table" and name.GetText and name.IsShown and name:IsShown() then
-		-- The name's region can be wider than its text (a centred tag): go to where the text starts
-		local justify = name.GetJustifyH and name:GetJustifyH() or "LEFT"
-		local ok, width = pcall(name.GetUnboundedStringWidth, name)
-		if justify ~= "LEFT" and ok and type(width) == "number" and private.Readable(width) then
-			if justify == "CENTER" then
-				return name, "CENTER", -width / 2 - PLATE_GAP
-			end
-			return name, "RIGHT", -width - PLATE_GAP
-		end
-		return name, "LEFT", -PLATE_GAP
+		return name
 	end
-	local health = host.Health or host.healthBar
-	if type(health) == "table" and health.GetFrameLevel then
-		return health, "LEFT", -PLATE_GAP
-	end
-	return host, "LEFT", -PLATE_GAP
+	return nil
 end
 
----A plate's label, made the first time: our own frame on what's drawn there (so it moves and hides with it), above
----it, with the rank's badge and number in gold, left of the name.
+---The health bar on what's drawn on a plate (ElvUI's Health, the game's healthBar).
+function private.PlateBar(host)
+	local bar = host.Health or host.healthBar
+	if type(bar) == "table" and bar.GetFrameLevel then
+		return bar
+	end
+	return nil
+end
+
+---How far a name's text starts in from its region's left and right edges: a centred or right-justified name sits
+---inside a wider region, and Left of name or Right of name go by the text. 0 when it can't be read.
+---@return number left
+---@return number right
+function private.TextInset(name)
+	local justify = name.GetJustifyH and name:GetJustifyH() or "LEFT"
+	local ok, width = pcall(name.GetUnboundedStringWidth, name)
+	local okRegion, regionWidth = pcall(name.GetWidth, name)
+	if justify == "LEFT" or not ok or not okRegion or type(width) ~= "number" or type(regionWidth) ~= "number"
+		or not private.Readable(width) or not private.Readable(regionWidth) or width >= regionWidth then
+		return 0, 0
+	end
+	local spare = regionWidth - width
+	if justify == "CENTER" then
+		return spare / 2, spare / 2
+	end
+	return spare, 0
+end
+
+---Places a plate's label by the nameplate settings: around the name text (the plate without one), or on the
+---health bar's corners (the plate without one), offset and scaled.
+function private.PlacePlate(label)
+	local host = label.host
+	local spec, x, y, scale = private.Placement(Ranks.PLATE_ANCHORS, private.Settings().plate)
+	local anchor
+	if spec.bar then
+		anchor = private.PlateBar(host) or label.plate
+	else
+		local name = private.PlateName(host)
+		anchor = name or label.plate
+		if name then
+			local left, right = private.TextInset(name)
+			x = x + (spec.key == "left" and left or 0) - (spec.key == "right" and right or 0)
+		end
+	end
+	label:ClearAllPoints()
+	label:SetPoint(spec.point, anchor, spec.to, x, y)
+	label:SetScale(scale)
+	label:SetFrameLevel(host:GetFrameLevel() + 20)
+end
+
+---Fills a plate's label: the badge then the number, each when switched on; hidden with neither.
+function private.FillPlate(label)
+	local layout = private.Settings().plate
+	local showBadge, showNumber = layout.badge ~= false, layout.number ~= false
+	local rank = label.rank
+	label.badge:SetShown(showBadge)
+	label.text:SetShown(showNumber)
+	label.badge:SetTexture(Wanted.Challenges:Badge(rank.r))
+	label.text:SetText(tostring(rank.r))
+	label.text:ClearAllPoints()
+	label.text:SetPoint("LEFT", label, "LEFT", showBadge and PLATE_BADGE + 1 or 0, 0)
+	local width = (showBadge and PLATE_BADGE or 0) + (showBadge and showNumber and 1 or 0) + (showNumber and label.text:GetUnboundedStringWidth() or 0)
+	label:SetSize(max(width, 1), PLATE_BADGE)
+	label:SetShown(showBadge or showNumber)
+end
+
+---A plate's label, made the first time: our own frame on what's drawn there (so it moves and hides with it), above it.
 function private.PlateLabel(plate)
 	local host = private.PlateHost(plate)
 	local label = private.plates[plate]
 	if not label then
 		label = CreateFrame("Frame", nil, host)
-		label:SetSize(PLATE_BADGE + 22, PLATE_BADGE)
+		label.plate = plate
 		label.text = label:CreateFontString(nil, "OVERLAY")
 		label.text:SetFontObject(Wanted.Theme.Fonts.tiny)
-		label.text:SetPoint("RIGHT")
-		label.text:SetJustifyH("RIGHT")
 		label.text:SetTextColor(1, 0.8, 0.32)
 		label.badge = label:CreateTexture(nil, "OVERLAY")
 		label.badge:SetSize(PLATE_BADGE, PLATE_BADGE)
-		label.badge:SetPoint("RIGHT", label.text, "LEFT", -1, 0)
+		label.badge:SetPoint("LEFT")
 		private.plates[plate] = label
 	end
 	if label.host ~= host then
 		label.host = host
 		label:SetParent(host)
 	end
-	local anchor, point, x = private.PlateSpot(host)
-	label:ClearAllPoints()
-	label:SetPoint("RIGHT", anchor, point, x, 0)
-	label:SetFrameLevel(host:GetFrameLevel() + 20)
 	return label
 end
 
@@ -258,10 +346,11 @@ function private.ShowPlate(unit)
 	local label = private.plates[plate]
 	if rank then
 		label = private.PlateLabel(plate)
-		label.text:SetText(tostring(rank.r))
-		label.badge:SetTexture(Wanted.Challenges:Badge(rank.r))
-		label:Show()
+		label.rank = rank
+		private.FillPlate(label)
+		private.PlacePlate(label)
 	elseif label then
+		label.rank = false
 		label:Hide()
 	end
 end
@@ -270,14 +359,22 @@ function private.OnPlateRemoved(unit)
 	local plate = private.Plate(unit)
 	local label = plate and private.plates[plate]
 	if label then
+		label.rank = false
 		label:Hide()
 	end
 end
 
----Hides every nameplate number (the switch went off).
-function private.HidePlates()
+---Applies the nameplate settings to every plate showing a rank now: hidden with the switch off, otherwise placed and
+---filled again.
+function private.UpdatePlates()
+	local on = private.Settings().nameplates
 	for _, label in pairs(private.plates) do
-		label:Hide()
+		if on and label.rank then
+			private.FillPlate(label)
+			private.PlacePlate(label)
+		else
+			label:Hide()
+		end
 	end
 end
 
@@ -378,12 +475,10 @@ function Ranks:OnEnable()
 	end)
 end
 
----A switch changed (Settings): what's on screen follows at once; plates as they come up again.
+---A setting changed (Settings): the target label and the plates already shown follow at once.
 function Ranks:Update()
 	private.UpdateTarget()
-	if not private.Settings().nameplates then
-		private.HidePlates()
-	end
+	private.UpdatePlates()
 end
 
 ---A Nearby window name's rank tag, or nil (when the player has one and the switch is on).

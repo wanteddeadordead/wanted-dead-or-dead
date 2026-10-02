@@ -62,6 +62,7 @@ PageHunts.lua
 PageHunters.lua
 PageActivity.lua
 PageEnemies.lua
+PageGuildKoS.lua
 PageHotspots.lua
 PageChallenges.lua
 PageWeb.lua

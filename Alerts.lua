@@ -248,7 +248,7 @@ function private.OnEnemyEvent(event, entry)
 	local name = Theme:ClassName(d.name, d.class)
 	if event == "new" then
 		if d.kos then
-			Alerts:Warn("KILL ON SIGHT: "..d.name, Describe(d)..(d.reason and ("  -  "..d.reason) or ""), C.red)
+			Alerts:Warn((d.guildKos and "GUILD KILL ON SIGHT: " or "KILL ON SIGHT: ")..d.name, Describe(d)..(d.reason and ("  -  "..d.reason) or ""), C.red)
 			Alerts:Sound("important")
 		elseif d.bounty > 0 then
 			Alerts:Warn("WANTED: "..d.name, Describe(d).."  -  "..Wanted.Bounties:FormatMoney(d.bounty).." bounty", C.gold)
@@ -396,7 +396,7 @@ function private.Describe(d)
 		tinsert(parts, Theme:Colorize("("..table.concat(extra, " ")..")", { 0.85, 0.85, 0.85 }))
 	end
 	if d.kos then
-		tinsert(parts, Theme:Colorize("KoS", C.red))
+		tinsert(parts, Theme:Colorize(d.guildKos and "Guild KoS" or "KoS", C.red))
 	end
 	if d.bounty > 0 then
 		tinsert(parts, Theme:Colorize(Wanted.Bounties:FormatMoney(d.bounty), C.gold))

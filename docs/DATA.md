@@ -39,6 +39,13 @@ one out. When the app is behind, the addon says so in chat once a login.
 `GetRealmName()`, written at every login. The Wanted app sends it to wanteddeadordead.com, which learns realm names
 from it. Nothing reads it back; a missing or malformed one changes nothing.
 
+`WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
+`{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
+An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is
+`{ kind = "player"|"guild", guid?, name, reason?, state = "pending"|"approved"|"denied"|"removed", by, at, dby?,
+eby, t }` (by: who added it; dby: who approved or denied it; eby: who made its last change; t: when). Denied and
+removed entries are dropped 30 days after their last change. A missing or malformed table starts empty.
+
 `WantedDB.faction` (from 1.2.7) is the account's side ("Horde" or "Alliance"), saved at login for the desktop app.
 `WantedDB.catchupT` (from 1.2.7) is the server time of the last catch-up taken in. The app sends the server the
 account's chains and side, and writes the answer into `!!WantedLink/Catchup.lua` as

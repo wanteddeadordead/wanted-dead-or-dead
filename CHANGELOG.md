@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Guild Kill on Sight: your guild's own Kill on Sight list, beside yours, on a new page under War. Right-click an
+  enemy for Add to Guild Kill on Sight, or their whole guild; or add a guild by name on the page. Guild KoS targets
+  alert and show like your own, marked Guild KoS. Officers switch it on and choose who may change the list: review
+  (anyone adds, an officer approves or denies), rank (the chosen rank and above) or open (any member). Changes reach
+  guildmates online at once over a hidden guild channel, and each one is checked against the sender's guild rank.
+
 ## [1.6.1] - 2026-10-02
 
 - Fixes "Division by zero" errors from LibSerialize for players who also run Deadly Boss Mods. DBM's newer copy of the

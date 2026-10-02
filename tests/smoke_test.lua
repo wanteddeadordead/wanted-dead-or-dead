@@ -3980,6 +3980,16 @@ end)()
 	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
 	check(G:Match("Player-9-0F00D"), "a list in answer to our ask is taken, each entry judged by who made it")
 
+	-- The page shows the list, and what waits for an officer
+	ns.UI:Show("guildkos")
+	ns.UI:Refresh()
+	check(#G:Entries("approved") >= 2, "the page lists the guild's entries")
+	local pendingAdd = { kind = "player", guid = "Player-9-0ABC", name = "Waiting One", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock + 20 }
+	From("Office Rman", "S", { s = { enabled = true, mode = "review", rank = 4, t = clock + 19, by = "Office Rman" } })
+	From("Plain Member", "E", { e = pendingAdd })
+	check(#G:Entries("pending") == 1, "a member's addition waits for review")
+	ns.UI:Refresh()
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()

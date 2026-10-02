@@ -2,17 +2,19 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-01
+
 - A new Home page, where the window now opens: your challenge rank and daily streak, today's challenge and hot zones
   (with how many enemies are there now), this week's three challenges, and a strip with your bounty money, enemies
   nearby, the busiest zone and the latest kill or sighting. Every card opens its page.
 - A Challenges page: today's challenge and hot zones, this week's three, your recent completions, the rules, and the
-  14-rank ladder with where you stand. Challenges and ranks come from wanteddeadordead.com through the Wanted app;
+  14-rank ladder with where you stand. Challenges and ranks come from wanteddeadordead.com through the Wanted app (0.2.27 or later);
   without the app both pages say what it adds, and everything else works as before.
 - The menu is grouped: Bounties, War and You. The window remembers the page you were on.
 - Today's hot zones are tagged HOT on the Hotspots page and in the map's enemy tooltips.
 - A banner when the app brings news of a challenge you finished or a new challenge rank, once each.
 - Other players' challenge ranks, from wanteddeadordead.com through the app: a line in their tooltip ("Wanted: Rank 7,
-  Blood Guard" with the badge), over your target's frame, a small R7 on nameplates, beside names in the Nearby window
+  Blood Guard" with the badge), over your target's frame, a small rank badge and number on nameplates, beside names in the Nearby window
   and the Who list, and, if you turn it on, [R7] in chat. Each has a switch under Settings, Ranks, where you can also
   place the nameplate rank (around the name or on the health bar, with offsets and size, badge and number each on or
   off) and the target frame label, and see the change at once. Works with ElvUI's and Plater's nameplates.

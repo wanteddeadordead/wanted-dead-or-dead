@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-01
+
 - Update required: once players on 1.4.0 are around, older versions pause bounties, claims and sharing and say to
   update (the Nearby window, alerts, hotspots and the map keep working). Older versions moved to channels of their
   own after a takeover, which split the network into several channels; 1.4.0 ends that.

@@ -3884,7 +3884,7 @@ end)()
 	-- Ranks 0 to 2 can listen to officer chat: the guild's officers
 	local roster = {
 		{ guid = "Player-1-0A", order = 1, name = "Grand Master" },
-		{ guid = me, order = 5, name = "Test-Realm" },
+		{ guid = me, order = 5, name = "Test Player" },
 		{ guid = "Player-1-0B", order = 3, name = "Office Rman" },
 		{ guid = "Player-1-0C", order = 5, name = "Plain Member" },
 		{ guid = "Player-1-0D", order = 7, name = "New Recruit" },
@@ -3942,6 +3942,8 @@ end)()
 	local sent = false
 	for _, m in ipairs(addonSent) do sent = sent or (m.prefix == "WNTDK" and m.chatType == "GUILD" and m.text:find("^E:")) end
 	check(e and e.state == "pending" and sent, "a member's addition is pending, and sent to the guild")
+	-- Named as guildmates see us: the full name (WoW Forever's names have a surname), not UnitName's first name alone
+	check(e.by == Ambiguate(ns.Store:GetOrigin()) and e.eby == e.by, "an entry names us as the guild sees us, got "..tostring(e.by))
 	check(G:Match("Player-9-0BAD") == nil, "a pending entry isn't Kill on Sight yet")
 
 	-- Approval: only from an officer, and only by the officer who sent it

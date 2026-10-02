@@ -187,8 +187,10 @@ function GuildKoS:Can(action, entry)
 	return GuildKoS.Allowed(action, book.settings, private.OwnRank(), Wanted.GuildRank:OfficerRanks(), entry, private.Me())
 end
 
+---This character's name as guildmates see it on messages: on WoW Forever a name and a surname, which UnitName gives
+---apart (the store joins them).
 function private.Me()
-	return Ambiguate(UnitName("player") or "", "none")
+	return Ambiguate(Wanted.Store:GetOrigin() or "", "none")
 end
 
 -- ============================================================================

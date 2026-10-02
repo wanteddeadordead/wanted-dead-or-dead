@@ -215,6 +215,8 @@ function private.BuildLadder(container, width, height)
 	end
 	local foot = Theme:Text(card, "tiny", "Each character has its own rank. It never resets.", C.faint)
 	foot:SetPoint("BOTTOMLEFT", 16, 12)
+	foot:SetWidth(ladderWidth - 32)
+	foot:SetWordWrap(true)
 	private.ladder = card
 end
 

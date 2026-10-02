@@ -3992,6 +3992,21 @@ end)()
 	check(#G:Entries("pending") == 1, "a member's addition waits for review")
 	ns.UI:Refresh()
 
+	-- The server's copy, through the app, fills in what the guild channel missed (checked on the server, so taken as
+	-- it is when newer); an older copy and another faction's list change nothing
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, guildKos = {
+		{ guild = "Blood Oath", settings = { enabled = true, mode = "review", rank = 4, discord = true, t = clock + 30, by = "Office Rman" },
+			entries = {
+				{ kind = "player", guid = "Player-9-0D00D", name = "Missed While Away", state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 31 },
+				{ kind = "player", guid = "Player-9-0ABC", name = "Waiting One", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock - 100 },
+				{ kind = "bogus" },
+			} },
+		{ guild = "Some Other Guild", entries = { { kind = "guild", name = "X", state = "approved", by = "A", at = 1, eby = "A", t = 2 } } },
+	} } }
+	ns.Catchup:Import()
+	check(G:Match("Player-9-0D00D") and G:Current().settings.discord == true, "the server's newer entries and settings are taken")
+	check(#G:Entries("pending") == 1 and G:Entries("pending")[1].t == clock + 20, "an older copy from the server doesn't undo a newer change")
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()

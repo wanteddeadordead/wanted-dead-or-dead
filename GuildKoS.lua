@@ -308,6 +308,48 @@ function private.Count(t)
 	return n
 end
 
+---Takes the guilds' lists the app brought from wanteddeadordead.com (the catch-up's guildKos: a list of
+---{ guild, settings, entries }). The server only keeps changes members' own apps made at a rank that allows them, so
+---whatever is newer than ours is taken as it is; that fills in what happened while nobody was online to tell us.
+---@param list table?
+function GuildKoS:TakeServer(list)
+	if type(list) ~= "table" then
+		return
+	end
+	local faction = UnitFactionGroup("player") or ""
+	local changed = 0
+	for _, raw in ipairs(list) do
+		local guild = type(raw) == "table" and cleanText(raw.guild, MAX_NAME)
+		if guild then
+			local book = private.Book(guild, faction)
+			local s = raw.settings
+			if type(s) == "table" and type(s.t) == "number" and s.t > (book.settings.t or 0) then
+				book.settings = {
+					enabled = s.enabled == true, mode = MODE_OK[s.mode] and s.mode or "review",
+					rank = type(s.rank) == "number" and max(0, min(floor(s.rank), 20)) or 1, discord = s.discord == true,
+					t = s.t, by = cleanText(s.by, MAX_NAME) or "",
+				}
+				changed = changed + 1
+			end
+			for _, e in ipairs(type(raw.entries) == "table" and raw.entries or {}) do
+				local clean = GuildKoS.CleanEntry(e)
+				if clean then
+					local id = private.IdOf(clean)
+					local held = book.entries[id]
+					if (not held or clean.t > held.t) and (held or private.Count(book.entries) < MAX_ENTRIES) then
+						book.entries[id] = clean
+						changed = changed + 1
+					end
+				end
+			end
+		end
+	end
+	if changed > 0 then
+		Wanted:Log("GuildKoS: %d changes from the server", changed)
+		private.Changed()
+	end
+end
+
 -- ============================================================================
 -- Changes made here
 -- ============================================================================

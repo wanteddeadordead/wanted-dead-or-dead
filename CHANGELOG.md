@@ -7,6 +7,8 @@
   alert and show like your own, marked Guild KoS. Officers switch it on and choose who may change the list: review
   (anyone adds, an officer approves or denies), rank (the chosen rank and above) or open (any member). Changes reach
   guildmates online at once over a hidden guild channel, and each one is checked against the sender's guild rank.
+  With the Wanted app (0.2.30 or later) the list is also kept on wanteddeadordead.com, private to your guild, so
+  members who were offline get every change at their next login.
 
 ## [1.6.1] - 2026-10-02
 

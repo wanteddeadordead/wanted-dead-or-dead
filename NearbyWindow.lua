@@ -870,6 +870,10 @@ function private.Draw(row, info)
 	if info.outlaw then
 		tinsert(rightParts, Theme:Colorize(info.outlaw.rank, C.amber))
 	end
+	local rankTag = Wanted.Ranks:NearbyTag(info.name)
+	if rankTag then
+		tinsert(rightParts, Theme:Colorize(rankTag, C.gold))
+	end
 	if row.compact and show.state and info.nearby and not info.inSight and not info.active then
 		tinsert(rightParts, Theme:Colorize(format("%ds", info.goneFor or 0), C.faint))
 	end

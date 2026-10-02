@@ -16,6 +16,9 @@ end
 math.atan2 = math.atan2 or math.atan
 format, strfind, strmatch, strsub, strlower, strupper, strrep, gsub, gmatch, strlen = string.format, string.find, string.match, string.sub, string.lower, string.upper, string.rep, string.gsub, string.gmatch, string.len
 strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+-- The game's Ambiguate: a name without its realm ("Name-Realm" -> "Name") for the "none" context
+Ambiguate = function(name) return (name:gsub("%-.*$", "")) end
+random = math.random
 strjoin = function(sep, ...) local t = { ... } for i = 1, select("#", ...) do t[i] = tostring(t[i]) end return table.concat(t, sep) end
 strsplit = function(sep, s) local out = {} for part in (s..sep):gmatch("(.-)"..sep:gsub("%p", "%%%0")) do out[#out + 1] = part end return unpack(out) end
 tinsert, tremove, sort = table.insert, table.remove, table.sort
@@ -3870,6 +3873,121 @@ end)()
 	GetGuildInfo, IsInGuild, IsGuildLeader, C_GuildInfo, C_Club, clock = real.GetGuildInfo, real.IsInGuild, real.IsGuildLeader, real.C_GuildInfo, real.C_Club, real.clock
 	ranks[me] = nil
 	officers["Blood Oath"] = nil
+end)()
+;(function()
+	-- Guild Kill on Sight: the guild's own list, its settings, who may change what, and the guild channel
+	local G = ns.GuildKoS
+	local real = { GetGuildInfo = GetGuildInfo, IsInGuild = IsInGuild, IsGuildLeader = IsGuildLeader, C_GuildInfo = C_GuildInfo, C_Club = C_Club,
+		GuildControlGetNumRanks = GuildControlGetNumRanks }
+	local me = UnitGUID("player")
+	local own = { rankIndex = 4 }
+	-- Ranks 0 to 2 can listen to officer chat: the guild's officers
+	local roster = {
+		{ guid = "Player-1-0A", order = 1, name = "Grand Master" },
+		{ guid = me, order = 5, name = "Test-Realm" },
+		{ guid = "Player-1-0B", order = 3, name = "Office Rman" },
+		{ guid = "Player-1-0C", order = 5, name = "Plain Member" },
+		{ guid = "Player-1-0D", order = 7, name = "New Recruit" },
+	}
+	GetGuildInfo = function(unit) if unit == "player" then return "Blood Oath", "Grunt", own.rankIndex end end
+	IsInGuild = function() return true end
+	IsGuildLeader = function() return false end
+	GuildControlGetNumRanks = function() return 7 end
+	C_GuildInfo = { IsGuildOfficer = function() return own.rankIndex <= 2 end, GuildRoster = function() end,
+		GuildControlGetRankFlags = function(order) local f = {} for i = 1, 22 do f[i] = false end f[3] = order <= 3 return f end }
+	C_Club = {
+		GetGuildClubId = function() return 77 end,
+		GetClubMembers = function() local ids = {} for i = 1, #roster do ids[i] = i end return ids end,
+		GetMemberInfo = function(_, id) local m = roster[id] return { guid = m.guid, guildRankOrder = m.order, name = m.name } end,
+	}
+	ns.GuildRank:NoteOwn()
+	local function Officers() return ns.GuildRank:OfficerRanks() end
+	check(Officers()[0] and Officers()[1] and Officers()[2] and not Officers()[3], "the officer ranks are the ones that hear officer chat")
+
+	-- Who may do what, by mode
+	local A = G.Allowed
+	local off = { [0] = true, [1] = true, [2] = true }
+	local review, rank, open = { mode = "review", rank = 3 }, { mode = "rank", rank = 3 }, { mode = "open", rank = 3 }
+	check(A("settings", review, 2, off) and not A("settings", open, 3, off), "only officers change the settings")
+	check(A("add", review, 6, off) and A("approve", review, 1, off) and not A("approve", review, 4, off) and not A("deny", review, 4, off),
+		"review: anyone adds, officers approve and deny")
+	check(A("remove", review, 1, off) and not A("remove", review, 4, off) and A("remove", review, 4, off, { state = "pending", by = "Plain" }, "Plain"),
+		"review: officers remove; a member takes back their own pending entry")
+	check(A("add", rank, 3, off) and not A("add", rank, 4, off) and A("remove", rank, 2, off) and not A("remove", rank, 5, off),
+		"rank: the chosen rank and above add and remove")
+	check(A("add", open, 6, off) and A("remove", open, 6, off), "open: anyone adds and removes")
+	check(not A("add", open, nil, off), "someone not in the roster can't")
+
+	-- Off by default: nothing can be added
+	local book = G:Current()
+	check(book and book.settings.enabled == false and book.settings.mode == "review", "a guild's list starts off, in review mode")
+	check(G:Add("player", "Bad Rogue", "Player-9-0BAD") == nil, "nothing is added while it's off")
+
+	local function Msg(tag, tbl)
+		local payload = ns.Sync:Encode(tbl)
+		return format("%s:%s:1/1:%s", tag, "a1", payload)
+	end
+	local function From(sender, tag, tbl) Fire("CHAT_MSG_ADDON", "WNTDK", Msg(tag, tbl), "GUILD", sender) end
+
+	-- A member can't switch it on; an officer can
+	From("Plain Member-Realm", "S", { s = { enabled = true, mode = "review", rank = 3, t = clock, by = "Plain Member" } })
+	check(not G:Current().settings.enabled, "a plain member can't change the settings")
+	From("Office Rman-Realm", "S", { s = { enabled = true, mode = "review", rank = 3, t = clock, by = "Office Rman" } })
+	check(G:Current().settings.enabled and G:Current().settings.by == "Office Rman", "an officer switches it on")
+
+	-- A member's addition waits for an officer, and goes to the guild
+	for i = #addonSent, 1, -1 do addonSent[i] = nil end
+	local e = G:Add("player", "Bad Rogue", "Player-9-0BAD", "camps the flight path")
+	RunTimers()
+	local sent = false
+	for _, m in ipairs(addonSent) do sent = sent or (m.prefix == "WNTDK" and m.chatType == "GUILD" and m.text:find("^E:")) end
+	check(e and e.state == "pending" and sent, "a member's addition is pending, and sent to the guild")
+	check(G:Match("Player-9-0BAD") == nil, "a pending entry isn't Kill on Sight yet")
+
+	-- Approval: only from an officer, and only by the officer who sent it
+	local approved = { kind = "player", guid = "Player-9-0BAD", name = "Bad Rogue", reason = "camps the flight path", state = "approved",
+		by = "Test", at = e.at, dby = "Office Rman", eby = "Office Rman", t = e.t + 5 }
+	From("Plain Member", "E", { e = approved })
+	check(G:Match("Player-9-0BAD") == nil, "an approval sent by someone else in the officer's name is ignored")
+	local selfApproved = {}
+	for k, v in pairs(approved) do selfApproved[k] = v end
+	selfApproved.dby, selfApproved.eby = "Plain Member", "Plain Member"
+	From("Plain Member", "E", { e = selfApproved })
+	check(G:Match("Player-9-0BAD") == nil, "a plain member can't approve")
+	From("Office Rman", "E", { e = approved })
+	local m = G:Match("Player-9-0BAD")
+	check(m and m.state == "approved" and m.dby == "Office Rman", "an officer's approval makes them Kill on Sight")
+	local d = ns.Enemies:Describe("Player-9-0BAD")
+	check(d.kos and d.guildKos and d.reason == "camps the flight path", "the enemy shows as the guild's Kill on Sight, with its reason")
+
+	-- A whole guild, added by an officer, approved at once
+	From("Office Rman", "E", { e = { kind = "guild", name = "Gank Squad", state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 6 } })
+	check(G:Match("Player-9-0ANY", "Gank Squad") and G:Match("Player-9-0ANY", "gank squad"), "anyone in a Kill on Sight guild is Kill on Sight")
+	check(G:Match("Player-9-0ANY", "Other Guild") == nil, "other guilds aren't")
+
+	-- Rank mode: the chosen rank and above add straight onto the list; below it, no
+	From("Office Rman", "S", { s = { enabled = true, mode = "rank", rank = 4, t = clock + 7, by = "Office Rman" } })
+	local direct = G:Add("player", "Other Rogue", "Player-9-0BEEF")
+	check(direct and direct.state == "approved", "rank mode: at the chosen rank, an addition counts at once")
+	From("New Recruit", "E", { e = { kind = "player", guid = "Player-9-0CAFE", name = "Recruit Pick", state = "approved", by = "New Recruit", at = clock, eby = "New Recruit", t = clock + 8 } })
+	check(G:Match("Player-9-0CAFE") == nil, "rank mode: below the chosen rank, nothing is added")
+
+	-- A list only counts in answer to our own ask
+	local listed = { kind = "player", guid = "Player-9-0F00D", name = "Listed Guy", state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 9 }
+	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
+	check(G:Match("Player-9-0F00D") == nil, "a list nobody asked for is ignored")
+	G:Ask()
+	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
+	check(G:Match("Player-9-0F00D"), "a list in answer to our ask is taken, each entry judged by who made it")
+
+	-- An officer here removes an entry; it's no longer Kill on Sight
+	own.rankIndex = 1
+	ns.GuildRank:NoteOwn()
+	check(G:Decide(G.EntryId("player", "Player-9-0BAD"), "remove") and G:Match("Player-9-0BAD") == nil, "an officer removes an entry")
+
+	GetGuildInfo, IsInGuild, IsGuildLeader, C_GuildInfo, C_Club, GuildControlGetNumRanks = real.GetGuildInfo, real.IsInGuild, real.IsGuildLeader, real.C_GuildInfo, real.C_Club, real.GuildControlGetNumRanks
+	ns.db.guildRanks[me] = nil
+	ns.db.guildKos = {}
 end)()
 ;(function()
 	-- Bounties asked for from Discord: the app hands on the requests for this account's characters in its catch-up;

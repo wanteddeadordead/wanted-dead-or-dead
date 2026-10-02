@@ -726,8 +726,11 @@ function private.Fill(d, guid)
 	d.targetingMe = entry and entry.targetingMe and GetTime() - entry.targetingMe < 5
 	-- The unit token that showed them last (for widgets that draw secret values such as health)
 	d.unit = entry and entry.unit
-	d.kos = kos ~= nil
-	d.reason = kos and kos.reason
+	-- The guild's Kill on Sight counts as Kill on Sight too, marked as the guild's
+	local guildKos = not kos and Wanted.GuildKoS and Wanted.GuildKoS:Match(guid, guild) or nil
+	d.kos = kos ~= nil or guildKos ~= nil
+	d.guildKos = guildKos ~= nil
+	d.reason = kos and kos.reason or (guildKos and guildKos.reason)
 	-- Wanted by their kills alone (Reputation), { rank, kills, ... } or nil
 	d.outlaw = Wanted.Reputation:GetOutlaw(guid)
 	d.ignored = Wanted.db.ignore[guid] ~= nil

@@ -164,7 +164,7 @@ local MAX_NEED_ORIGINS_LINK = 40
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
-local NOT_FOUND_SECONDS = 30 -- the game's "no player named ..." for someone just whispered is hidden this long
+local NOT_FOUND_SECONDS = 120 -- the game's "no player named ..." for someone just whispered is hidden this long (it can come 25 s or more late)
 local OFFLINE_SECONDS = 10 * 60 -- someone the game said wasn't online isn't whispered again for this long
 -- The realm-link directory: players on other realm names the app names (from wanteddeadordead.com), greeted a few
 -- per realm at a time until one answers

@@ -1820,6 +1820,11 @@ do
 	end
 	check(greeted["Dir One"] and greeted["Dir Two"] and greeted["Dir Three"] and not greeted["Dir Four"], "three names a realm are greeted at a time")
 	check(greeted["Other Place"] and not greeted["Same Realmer Two"], "every other realm gets its own greetings, ours none")
+	-- The game's answer can come late (25 s seen in game, more for a greeting's later parts): still hidden a minute on
+	clock = clock + 60
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Dir Three' is currently playing.") == true,
+		"a late 'not online' for someone greeted a minute ago is still hidden")
+	clock = clock - 60
 	Fire("CHAT_MSG_SYSTEM", "No player named 'Dir One' is currently playing.")
 	Fire("CHAT_MSG_SYSTEM", "No player named 'Dir One' is currently playing.") -- once per message part
 	local said = 0

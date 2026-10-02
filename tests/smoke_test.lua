@@ -78,6 +78,7 @@ function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[
 function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
+function Methods:SetParent(parent) self._parent = parent end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
@@ -4354,7 +4355,9 @@ end)()
 	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch
 	local Challenges, settings = ns.Challenges, ns.db.settings.ranks
 	check(settings.tooltip and settings.target and settings.nameplates and settings.nearby and settings.who and not settings.chat, "rank switches: all on but chat")
-	Challenges:SetDemo({ t = clock, ranks = { ["thane oakcrest"] = { r = 7, f = "A" }, ["khal drogash"] = { r = 4, f = "H" } } })
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, challenges = { t = clock, ranks = { ["thane oakcrest"] = { r = 7, f = "A" }, ["khal drogash"] = { r = 4, f = "H" } } } } }
+	ns.Catchup:Import()
+	RunTimers()
 	local origName = UnitName
 	local names = { nameplate7 = { "Thane", "Oakcrest" }, target = { "Khal", "Drogash" }, nameplate8 = { "Nobody", "Here" } }
 	UnitName = function(unit) local n = names[unit] if n then return n[1], n[2] end return origName(unit) end
@@ -4392,6 +4395,7 @@ end)()
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate8")
 	Fire("NAME_PLATE_UNIT_ADDED", "nameplate9")
+	RunTimers()
 	local plateLabel
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "R7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
 	check(plateLabel and plateLabel._parent._shown, "R7 over a ranked player's nameplate")
@@ -4427,7 +4431,48 @@ end)()
 	check(ns.Ranks:NearbyTag("Thane Oakcrest") == nil, "none with its switch off")
 	settings.nearby = true
 	ns.UI:Show("settings")
+
+	-- The demo ranks every player, the same rank for the same name, on their side's titles
+	ns:RunCommand("demo", "")
+	local nobody = ns.Ranks:ForUnit("nameplate8")
+	check(nobody and nobody.r >= 1 and nobody.r <= 14 and ns.Ranks:ForUnit("nameplate8").r == nobody.r, "the demo gives everyone a steady rank")
+	check(ns.Ranks:ForUnit("nameplate7").r == 7, "a real rank still wins in the demo")
+	check(Challenges:GetRank("Some Body", "Alliance").f == "A" and Challenges:GetRank("Some Body", "Horde").f == "H", "the demo's side follows the player's")
+	lines = {}
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	TooltipUtil = { GetDisplayedUnit = function() return "Nobody Here", "nameplate8" end }
+	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
+	check(#lines > 0 and table.concat(lines, "\n"):find("Wanted: Rank "..nobody.r, 1, true), "the demo's rank in a real player's tooltip")
+	GameTooltip.AddLine = origAdd
+	ns:RunCommand("demo", "")
+
+	-- ElvUI: its target frame and its nameplate frames (plate.unitFrame, as Plater's too) carry the labels
+	ElvUF_Target = CreateFrame("Button")
+	Fire("PLAYER_TARGET_CHANGED")
+	local elvLabel
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("Rank 4, Senior Sergeant", 1, true) and fs._parent._shown then elvLabel = fs end end
+	check(elvLabel and elvLabel._parent.anchor == ElvUF_Target, "the target label follows ElvUI's target frame")
+	ElvUF_Target:Hide()
+	check(not elvLabel._parent._shown, "and hides with it")
+	ElvUF_Target = nil
+	local elvPlate = CreateFrame("Frame")
+	elvPlate.unitFrame = CreateFrame("Button", nil, elvPlate)
+	plates.nameplate7 = elvPlate
+	C_NamePlate = { GetNamePlateForUnit = function(unit) return plates[unit] end }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	RunTimers()
+	local onElv
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "R7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
+	check(onElv, "R7 on ElvUI's nameplate frame, above its health bar")
+	-- A plate the game keeps from addons: asking for it fails, nothing happens
+	C_NamePlate = { GetNamePlateForUnit = function() error("forbidden") end }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	RunTimers()
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
+	C_NamePlate = nil
+
 	UnitName, UnitIsPlayer = origName, origIsPlayer
-	Challenges:SetDemo(nil)
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
 	TargetFrame, TooltipUtil = nil, nil
 end)()

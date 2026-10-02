@@ -3,8 +3,9 @@
 -- the Who list. Ranks come only from wanteddeadordead.com through the Wanted app (Challenges:GetRank); a player
 -- never says their own. Each place has its own switch (settings.ranks).
 --
--- Nothing here touches a secure frame: the target label is a frame of our own that follows the target frame, the
--- nameplate numbers are our own frames on the plates the game lets addons have (never forbidden ones), and the Who
+-- Nothing here touches a secure frame: the target label is a frame of our own that follows the target frame (ElvUI's
+-- when it's there), the nameplate numbers are our own frames on the plates the game lets addons have (never forbidden
+-- ones), on the frame a nameplate addon draws there when there is one (ElvUI and Plater: plate.unitFrame), and the Who
 -- list gets its own text beside the name rather than a changed name (the game reads that name back to whisper).
 
 local _, Wanted = ...
@@ -49,7 +50,8 @@ function Ranks:ForUnit(unit)
 		return nil
 	end
 	local full = (type(surname) == "string" and surname ~= "") and (name.." "..surname) or name
-	return Wanted.Challenges:GetRank(full)
+	local faction = UnitFactionGroup(unit)
+	return Wanted.Challenges:GetRank(full, private.Readable(faction) and faction or nil)
 end
 
 ---"Rank 7, Blood Guard" in the title set of the player's side.
@@ -99,24 +101,42 @@ end
 -- Target frame
 -- ============================================================================
 
----Our label over the target frame: our own frame, never a child of the game's secure one.
+---The target frame on screen: ElvUI's when it's loaded (it hides the game's), otherwise the game's.
+function private.TargetAnchor()
+	return _G.ElvUF_Target or TargetFrame
+end
+
+---Our label over the target frame: our own frame, never a child of the secure one. It follows whichever target
+---frame is there, checked each time (ElvUI may make its frames after us).
 function private.TargetLabel()
-	if private.target or not TargetFrame then
-		return private.target
+	local anchor = private.TargetAnchor()
+	if not anchor then
+		return nil
 	end
-	local label = CreateFrame("Frame", nil, UIParent)
-	label:SetSize(220, 18)
-	label:SetPoint("BOTTOM", TargetFrame, "TOP", 0, -6)
-	label:SetFrameStrata("MEDIUM")
-	label.text = label:CreateFontString(nil, "OVERLAY")
-	label.text:SetFontObject(Wanted.Theme.Fonts.small)
-	label.text:SetPoint("CENTER")
-	label.text:SetTextColor(1, 0.8, 0.32)
-	label:Hide()
-	-- Follows the target frame (hidden with no target, or by a unit frame addon); HookScript doesn't taint it
-	TargetFrame:HookScript("OnShow", function() private.UpdateTarget() end)
-	TargetFrame:HookScript("OnHide", function() label:Hide() end)
-	private.target = label
+	local label = private.target
+	if not label then
+		label = CreateFrame("Frame", nil, UIParent)
+		label:SetSize(220, 18)
+		label:SetFrameStrata("MEDIUM")
+		label.text = label:CreateFontString(nil, "OVERLAY")
+		label.text:SetFontObject(Wanted.Theme.Fonts.small)
+		label.text:SetPoint("CENTER")
+		label.text:SetTextColor(1, 0.8, 0.32)
+		label:Hide()
+		label.hooked = {}
+		private.target = label
+	end
+	if label.anchor ~= anchor then
+		label.anchor = anchor
+		label:ClearAllPoints()
+		label:SetPoint("BOTTOM", anchor, "TOP", 0, -6)
+	end
+	-- Hidden with no target; HookScript doesn't taint the frame
+	if not label.hooked[anchor] and anchor.HookScript then
+		label.hooked[anchor] = true
+		anchor:HookScript("OnShow", function() private.UpdateTarget() end)
+		anchor:HookScript("OnHide", function() if label.anchor == anchor then label:Hide() end end)
+	end
 	return label
 end
 
@@ -125,7 +145,7 @@ function private.UpdateTarget()
 	if not label then
 		return
 	end
-	local rank = private.Settings().target and TargetFrame:IsVisible() and Ranks:ForUnit("target")
+	local rank = private.Settings().target and label.anchor:IsVisible() and Ranks:ForUnit("target")
 	if rank then
 		label.text:SetText(Ranks:BadgeText(rank, 16).." "..Ranks:Label(rank))
 		label:Show()
@@ -140,29 +160,62 @@ end
 -- Nameplates
 -- ============================================================================
 
----A plate's label, made the first time (our own frame on it, so it moves and hides with the plate).
+---What's drawn on a plate: a nameplate addon's frame (ElvUI and Plater keep theirs in plate.unitFrame), the game's
+---(plate.UnitFrame), or the plate itself.
+function private.PlateHost(plate)
+	for _, host in ipairs({ plate.unitFrame, plate.UnitFrame }) do
+		if type(host) == "table" and host.GetFrameLevel then
+			return host
+		end
+	end
+	return plate
+end
+
+---A plate's label, made the first time (our own frame on what's drawn there, so it moves and hides with it, and sits
+---above its health bar).
 function private.PlateLabel(plate)
+	local host = private.PlateHost(plate)
 	local label = private.plates[plate]
 	if not label then
-		label = CreateFrame("Frame", nil, plate)
+		label = CreateFrame("Frame", nil, host)
 		label:SetSize(40, 14)
-		label:SetPoint("BOTTOM", plate, "TOP", 0, -2)
 		label.text = label:CreateFontString(nil, "OVERLAY")
 		label.text:SetFontObject(Wanted.Theme.Fonts.small)
 		label.text:SetPoint("CENTER")
 		label.text:SetTextColor(1, 0.8, 0.32)
 		private.plates[plate] = label
 	end
+	if label.host ~= host then
+		label.host = host
+		label:SetParent(host)
+		label:ClearAllPoints()
+		label:SetPoint("BOTTOM", host, "TOP", 0, -2)
+	end
+	label:SetFrameLevel(host:GetFrameLevel() + 20)
 	return label
 end
 
 ---A nameplate came up: its rank, when the player has one. Forbidden plates (the game keeps some from addons) are
 ---never asked for.
 function private.OnPlateAdded(unit)
-	if not private.Settings().nameplates or not C_NamePlate or not C_NamePlate.GetNamePlateForUnit then
+	-- After the other addons' handlers for the same event, so a nameplate addon has made its frame
+	C_Timer.After(0, function() private.ShowPlate(unit) end)
+end
+
+---A unit's nameplate, or nil (none, or one the game keeps from addons: asking for that one can fail).
+function private.Plate(unit)
+	if not C_NamePlate or not C_NamePlate.GetNamePlateForUnit then
+		return nil
+	end
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+	return ok and plate or nil
+end
+
+function private.ShowPlate(unit)
+	if not private.Settings().nameplates then
 		return
 	end
-	local plate = C_NamePlate.GetNamePlateForUnit(unit)
+	local plate = private.Plate(unit)
 	if not plate then
 		return
 	end
@@ -178,7 +231,7 @@ function private.OnPlateAdded(unit)
 end
 
 function private.OnPlateRemoved(unit)
-	local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit)
+	local plate = private.Plate(unit)
 	local label = plate and private.plates[plate]
 	if label then
 		label:Hide()

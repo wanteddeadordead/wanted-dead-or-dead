@@ -107,6 +107,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("hunters", {
+	group = "War",
 	title = "Leaderboards",
 	subtitle = "Ranked from what happened: witnessed kills, confirmed claims, bounties paid, guild kills and deaths of the last 3 days.",
 	order = 4,

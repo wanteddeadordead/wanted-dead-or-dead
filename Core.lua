@@ -91,6 +91,7 @@ local DEFAULTS = {
 			tab = "nearby",
 		},
 		window = nil, -- { point, x, y }
+		lastPage = nil, -- the window's page when last open (UI); Home when there's none
 	},
 	kos = {}, -- guid -> { name, reason, t }
 	seenNotices = {}, -- bounty id -> amount of the bounties on this player already announced (Bridge)

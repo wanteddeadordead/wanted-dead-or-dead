@@ -288,6 +288,48 @@ function W:Card(parent)
 	return card
 end
 
+---A card that opens something: it lights up under the mouse and shows a ">" in its top right corner.
+---@param parent Frame
+---@param onClick function
+function W:CardButton(parent, onClick)
+	local card = CreateFrame("Button", nil, parent)
+	Theme:Skin(card, C.panel, C.border)
+	card.arrow = Theme:Text(card, "small", ">", C.faint)
+	card.arrow:SetPoint("TOPRIGHT", -10, -10)
+	card:SetScript("OnClick", onClick)
+	card:SetScript("OnEnter", function(self)
+		Theme:SetBg(self, C.panelAlt)
+		Theme:SetBorderColor(self, C.borderLight)
+		ShowTooltip(self)
+	end)
+	card:SetScript("OnLeave", function(self)
+		Theme:SetBg(self, C.panel)
+		Theme:SetBorderColor(self, C.border)
+		GameTooltip:Hide()
+	end)
+	return card
+end
+
+---A thin progress bar: SetValue(fraction, color).
+---@param parent Frame
+---@param height number?
+function W:ProgressBar(parent, height)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetHeight(height or 8)
+	Theme:Skin(bar, C.input, C.border)
+	bar.fill = bar:CreateTexture(nil, "ARTWORK")
+	bar.fill:SetPoint("TOPLEFT", 1, -1)
+	bar.fill:SetPoint("BOTTOMLEFT", 1, 1)
+	function bar:SetValue(fraction, color)
+		fraction = max(0, min(1, fraction or 0))
+		color = color or C.gold
+		self.fill:SetColorTexture(color[1], color[2], color[3], 1)
+		self.fill:SetWidth(max((self:GetWidth() - 2) * fraction, 0.01))
+		self.fill:SetShown(fraction > 0)
+	end
+	return bar
+end
+
 function W:StatTile(parent, label, accent)
 	local tile = W:Card(parent)
 	tile:SetHeight(66)

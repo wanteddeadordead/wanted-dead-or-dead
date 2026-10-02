@@ -85,6 +85,7 @@ function Catchup:Import()
 	WantedAppCatchup = nil
 	local entry = type(all) == "table" and all[Wanted.db.accountMark]
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
+		Wanted.Challenges:Take(nil, true)
 		return
 	end
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
@@ -95,6 +96,8 @@ function Catchup:Import()
 	end
 	-- Bounty requests are kept by id, so taking in the same ones again changes nothing
 	private.TakeRequests(entry.requests)
+	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
+	Wanted.Challenges:Take(entry.challenges)
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

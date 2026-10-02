@@ -2206,8 +2206,10 @@ end
 function private.OnSystemMessage(msg)
 	local name = private.NotFoundName(msg)
 	if name then
+		-- The game says it once per message part: log it once
+		local before = private.offline[name]
 		private.offline[name] = GetTime()
-		if not private.links[name] then
+		if not private.links[name] and not (before and GetTime() - before < NOT_FOUND_SECONDS) then
 			Wanted:Log("Sync: %s isn't online (the game says)", name)
 		end
 	end

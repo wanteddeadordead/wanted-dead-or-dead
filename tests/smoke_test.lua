@@ -1807,6 +1807,10 @@ do
 	end
 	check(greeted["Dir One"] and greeted["Dir Two"] and greeted["Dir Three"] and not greeted["Dir Four"], "three names a realm are greeted at a time")
 	check(greeted["Other Place"] and not greeted["Same Realmer Two"], "every other realm gets its own greetings, ours none")
+	Fire("CHAT_MSG_SYSTEM", "No player named 'Dir One' is currently playing.")
+	local said = false
+	for _, line in ipairs(ns:GetLogLines(5)) do said = said or line:find("Dir One isn't online", 1, true) ~= nil end
+	check(said, "a greeted player the game says is offline is logged as such")
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Dir Realm", a = 1 }), "WHISPER", "Dir Two")
 	RunFrames()
 	check(ns.Sync:GetLinks()["Dir Two"], "an answer makes the realm link")

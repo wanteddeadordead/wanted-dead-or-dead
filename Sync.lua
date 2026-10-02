@@ -2207,6 +2207,9 @@ function private.OnSystemMessage(msg)
 	local name = private.NotFoundName(msg)
 	if name then
 		private.offline[name] = GetTime()
+		if not private.links[name] then
+			Wanted:Log("Sync: %s isn't online (the game says)", name)
+		end
 	end
 	if name and private.links[name] then
 		private.links[name] = nil

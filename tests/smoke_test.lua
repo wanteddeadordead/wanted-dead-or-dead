@@ -2206,15 +2206,18 @@ end)()
 	ns.UI:Refresh()
 	check(Lights():find("App", 1, true) and not Lights():find("Get the app", 1, true), "with the app, the light says so: "..Lights())
 	WantedAppInfo = nil
-	-- Development builds show how many other players are on WantedNet; releases never do
+	-- Development builds show how many are in the channel and how many were heard from lately; releases never do
 	local getInfo, dev = ns.Sync.GetInfo, ns.DEV
-	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 3 } end
+	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 3, members = 6 } end
 	ns.DEV = false
 	ns.UI:Refresh()
-	check(not Lights():find("(3)", 1, true), "a release shows no player count: "..Lights())
+	check(not Lights():find("(", 1, true), "a release shows no player count: "..Lights())
 	ns.DEV = true
 	ns.UI:Refresh()
-	check(Lights():find("WantedNet (3)", 1, true), "a development build shows the player count: "..Lights())
+	check(Lights():find("WantedNet (6, 3 heard)", 1, true), "a development build shows the channel's size and who was heard: "..Lights())
+	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 0 } end
+	ns.UI:Refresh()
+	check(Lights():find("WantedNet (0 heard)", 1, true), "before the game gives the channel's size, only who was heard: "..Lights())
 	ns.Sync.GetInfo, ns.DEV = getInfo, dev
 	ns.UI:Refresh()
 end)()

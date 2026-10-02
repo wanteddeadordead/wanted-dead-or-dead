@@ -788,6 +788,8 @@ Wanted:RegisterCommand("bridge", "Battle.net friends on the other faction who ca
 	for name, link in pairs(Wanted.Sync:GetLinks()) do
 		Wanted:Print("  Realm link: %s on %s, heard %ds ago, %d sent, %d received", name, tostring(link.realm), floor(now - (link.heard or now)), link.sent, link.received)
 	end
+	local directory = Wanted.Sync:GetDirectory()
+	Wanted:Print("Realm-link names from the app: %d, on %d other realm names, %d of them linked now.", directory.names, directory.realms, directory.linked)
 end)
 
 Wanted:RegisterCommand("community", "Your Battle.net communities with their ids, and the Wanted community's members on the other faction: /wanted community", function()

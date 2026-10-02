@@ -1788,6 +1788,65 @@ Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
 RunTimers()
 check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
 bnFriends[#bnFriends] = nil
+-- The ruleset: Wanted runs on the PvP ruleset only. The app's realm map decides; without it, a realm name with "PvE"
+-- in it is Normal
+do
+	local R = ns.RulesetFor
+	check(R(4613, "Classic Beta PvP 2", { ["4613"] = "pvp", ["4620"] = "normal" }) == "pvp", "a PvP realm by the app's map")
+	check(R(4620, "Classic Beta PvE 2", { ["4613"] = "pvp", ["4620"] = "normal" }) == "normal", "a Normal realm by the app's map")
+	check(R(4999, "Somewhere", { ["4613"] = "pvp" }) == "pvp" and R(4999, "Classic Beta PvE 3", { ["4613"] = "pvp" }) == "normal",
+		"a realm the map doesn't know goes by its name")
+	check(R(nil, "Classic Beta PvE", nil) == "normal" and R(nil, nil, nil) == "pvp", "without the map or an id, by the name; unknown is PvP")
+	check(R(4620, "Classic Beta PvE 2", { ["4620"] = "roleplay" }) == "normal", "a map value Wanted doesn't know is ignored")
+	check(ns.db.realm and ns.db.realm.name == "Realm", "the realm is saved for the app")
+	check(not ns.idle, "a PvP character isn't idle")
+end
+-- Players on other realm names from the app (the server's realm-link directory): greeted a few at a time per realm
+-- until one answers, then that realm is left alone; junk and our own realm are dropped
+do
+	ClearSent()
+	clock = clock + 700
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, links = {
+		{ n = "Dir One", r = "Dir Realm", t = clock }, { n = "Dir Two", r = "Dir Realm", t = clock }, { n = "Dir Three", r = "Dir Realm", t = clock },
+		{ n = "Dir Four", r = "Dir Realm", t = clock }, { n = "Same Realmer Two", r = "Realm", t = clock }, { n = "Bad|cffName", r = "Dir Realm", t = clock },
+		42, { n = "", r = "Dir Realm" }, { n = "Other Place", r = "Sixth Realm", t = clock },
+	} } }
+	ns.Catchup:Import()
+	check(ns.Sync:GetDirectory().names == 5, "the app's realm-link names are kept, junk and our own realm dropped, got "..ns.Sync:GetDirectory().names)
+	ns.Sync:GreetDirectory()
+	local greeted = {}
+	for _, name in ipairs({ "Dir One", "Dir Two", "Dir Three", "Dir Four", "Same Realmer Two", "Other Place" }) do
+		greeted[name] = #Sent("WHISPER", name) == 1 and Sent("WHISPER", name)[1].tag == "H"
+	end
+	check(greeted["Dir One"] and greeted["Dir Two"] and greeted["Dir Three"] and not greeted["Dir Four"], "three names a realm are greeted at a time")
+	check(greeted["Other Place"] and not greeted["Same Realmer Two"], "every other realm gets its own greetings, ours none")
+	-- The game's answer can come late (25 s seen in game, more for a greeting's later parts): still hidden a minute on
+	clock = clock + 60
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Dir Three' is currently playing.") == true,
+		"a late 'not online' for someone greeted a minute ago is still hidden")
+	clock = clock - 60
+	Fire("CHAT_MSG_SYSTEM", "No player named 'Dir One' is currently playing.")
+	Fire("CHAT_MSG_SYSTEM", "No player named 'Dir One' is currently playing.") -- once per message part
+	local said = 0
+	for _, line in ipairs(ns:GetLogLines(5)) do said = said + (line:find("Dir One isn't online", 1, true) and 1 or 0) end
+	check(said == 1, "a greeted player the game says is offline is logged once, got "..said)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Dir Realm", a = 1 }), "WHISPER", "Dir Two")
+	RunFrames()
+	check(ns.Sync:GetLinks()["Dir Two"], "an answer makes the realm link")
+	ClearSent()
+	clock = clock + 300
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Dir Realm", a = 1 }), "WHISPER", "Dir Two") -- still there
+	RunFrames()
+	ClearSent()
+	ns.Sync:GreetDirectory()
+	check(#Sent("WHISPER", "Dir Four") == 0 and #Sent("WHISPER", "Dir One") == 0, "a realm with a live link isn't greeted any more")
+	check(#Sent("WHISPER", "Other Place") == 1, "one without is greeted again, five minutes on")
+	check(ns.Sync:GetDirectory().linked == 1, "the directory counts the realms it reaches")
+	-- A catch-up without names (an older app) leaves the list as it was
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
+	check(ns.Sync:GetDirectory().names == 5, "no names from an older app keeps the list")
+end
 -- A bounty carries what its poster knew about the target, so a client that never saw them (another realm, or
 -- offline at the time) still has their class, level, guild and where they were last seen, by the poster;
 -- it only fills gaps and never counts as this client seeing them
@@ -2165,15 +2224,18 @@ end)()
 	ns.UI:Refresh()
 	check(Lights():find("App", 1, true) and not Lights():find("Get the app", 1, true), "with the app, the light says so: "..Lights())
 	WantedAppInfo = nil
-	-- Development builds show how many other players are on WantedNet; releases never do
+	-- Development builds show how many are in the channel and how many were heard from lately; releases never do
 	local getInfo, dev = ns.Sync.GetInfo, ns.DEV
-	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 3 } end
+	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 3, members = 6 } end
 	ns.DEV = false
 	ns.UI:Refresh()
-	check(not Lights():find("(3)", 1, true), "a release shows no player count: "..Lights())
+	check(not Lights():find("(", 1, true), "a release shows no player count: "..Lights())
 	ns.DEV = true
 	ns.UI:Refresh()
-	check(Lights():find("WantedNet (3)", 1, true), "a development build shows the player count: "..Lights())
+	check(Lights():find("WantedNet (6, 3 heard)", 1, true), "a development build shows the channel's size and who was heard: "..Lights())
+	ns.Sync.GetInfo = function() return { channelId = 5, channelName = "WantedNetHorde", peers = 0 } end
+	ns.UI:Refresh()
+	check(Lights():find("WantedNet (0 heard)", 1, true), "before the game gives the channel's size, only who was heard: "..Lights())
 	ns.Sync.GetInfo, ns.DEV = getInfo, dev
 	ns.UI:Refresh()
 end)()

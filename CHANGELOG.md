@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Wanted is for the PvP ruleset. On a Normal-ruleset character it now stays idle and says so: nothing is recorded,
+  shown or shared there, and your PvP characters' data is left as it is. Which realms are which comes from
+  wanteddeadordead.com through the Wanted app (0.2.29 or later); without the app, a realm with "PvE" in its name
+  counts as Normal.
+
+- Live sync across realm names for everyone, not only Battle.net friends: the Wanted app (0.2.28 or later) now brings
+  the names of Wanted players on your side heard lately on other realm names (such as Classic Beta PvP and Classic
+  Beta PvP 2), and Wanted greets a few of them by hidden whisper every five minutes until one answers. Once linked,
+  bounties, claims, kills and payments cross between the two realms' channels as they happen, instead of waiting for
+  the app's catch-up at your next login or /reload. /wanted bridge shows how many names came and how many realms
+  are linked.
+
 ## [1.5.1] - 2026-10-02
 
 - Home and Challenges: if you've already updated the Wanted app, they now say to type /reload to load your challenges

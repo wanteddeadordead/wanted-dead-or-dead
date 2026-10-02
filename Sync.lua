@@ -47,6 +47,7 @@ local private = {
 	retryScheduled = false,
 	testStartedAt = nil,
 	links = {}, -- name -> { realm, heard, since, sent, received } realm links (players on another realm name)
+	directory = {}, -- { name, realm } players on other realm names from the app, newest first (TakeDirectory)
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
@@ -163,8 +164,13 @@ local MAX_NEED_ORIGINS_LINK = 40
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
-local NOT_FOUND_SECONDS = 30 -- the game's "no player named ..." for someone just whispered is hidden this long
+local NOT_FOUND_SECONDS = 120 -- the game's "no player named ..." for someone just whispered is hidden this long (it can come 25 s or more late)
 local OFFLINE_SECONDS = 10 * 60 -- someone the game said wasn't online isn't whispered again for this long
+-- The realm-link directory: players on other realm names the app names (from wanteddeadordead.com), greeted a few
+-- per realm at a time until one answers
+local MAX_DIRECTORY = 20
+local DIRECTORY_GREETS = 3 -- names greeted per realm name each round
+local DIRECTORY_SECONDS = GREET_SECONDS -- how often a round runs
 
 ---Whispers addon data to target, noting it so the game's "No player named ... is currently playing" for them is
 ---hidden (HideNotFound). Someone the game just said wasn't online isn't whispered again for a while.
@@ -269,6 +275,8 @@ function Sync:OnEnable()
 	Store:OnRecord("*", private.OnAnyRecord)
 	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
 	C_Timer.After(15, private.GreetRemembered)
+	C_Timer.After(20, function() Sync:GreetDirectory() end)
+	C_Timer.NewTicker(DIRECTORY_SECONDS, function() Sync:GreetDirectory() end)
 	-- Did everyone move while we were away? Ask the players last heard
 	C_Timer.After(25, private.AskPointer)
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
@@ -2100,6 +2108,73 @@ function private.GreetRemembered()
 	end
 end
 
+---Keeps the players on other realm names the app passed on (the catch-up's links: { n = name, r = realm, t }),
+---newest first. Anything malformed, on our own realm or ourselves is dropped. None (an older app) keeps the list.
+---@param list table?
+function Sync:TakeDirectory(list)
+	if type(list) ~= "table" then
+		return
+	end
+	local kept, me = {}, Store:GetOrigin()
+	for _, entry in ipairs(list) do
+		local name, realm = type(entry) == "table" and entry.n, type(entry) == "table" and entry.r
+		if type(name) == "string" and type(realm) == "string" and name ~= "" and #name <= 48 and realm ~= "" and #realm <= 64
+			and not strfind(name, "|", 1, true) and not strfind(realm, "|", 1, true) and name ~= me and not Sync:IsOwnRealm(realm) then
+			tinsert(kept, { name = name, realm = realm })
+			if #kept >= MAX_DIRECTORY then
+				break
+			end
+		end
+	end
+	private.directory = kept
+	Wanted:Log("Sync: %d realm-link names from the app", #kept)
+end
+
+---The realm names (normalized) with a live realm link now.
+function private.LinkedRealms()
+	local now, realms = GetTime(), {}
+	for _, link in pairs(private.links) do
+		local realm = NormalizeRealm(link.realm)
+		if realm and now - (link.heard or 0) < LINK_TIMEOUT then
+			realms[realm] = true
+		end
+	end
+	return realms
+end
+
+---One round of the directory: for each realm name with no live link, greet the next few names not greeted lately
+---(nor said to be offline). The first to answer makes the link, and that realm is left alone while it lasts.
+function Sync:GreetDirectory()
+	if Wanted:InCombat() or #private.directory == 0 then
+		return
+	end
+	local now, linked, greets = GetTime(), private.LinkedRealms(), {}
+	for _, entry in ipairs(private.directory) do
+		local realm = NormalizeRealm(entry.realm)
+		local recent = private.greeted[entry.name] and now - private.greeted[entry.name] < GREET_SECONDS
+		local offline = private.offline[entry.name] and now - private.offline[entry.name] < OFFLINE_SECONDS
+		if not linked[realm] and (greets[realm] or 0) < DIRECTORY_GREETS and not recent and not offline then
+			greets[realm] = (greets[realm] or 0) + 1
+			Sync:Greet(entry.name, entry.realm)
+		end
+	end
+end
+
+---How the directory is doing: names held, and how many of their realm names have a live link.
+---@return table { names, realms, linked }
+function Sync:GetDirectory()
+	local linked, realms, out = private.LinkedRealms(), {}, { names = #private.directory, realms = 0, linked = 0 }
+	for _, entry in ipairs(private.directory) do
+		local realm = NormalizeRealm(entry.realm)
+		if not realms[realm] then
+			realms[realm] = true
+			out.realms = out.realms + 1
+			out.linked = out.linked + (linked[realm] and 1 or 0)
+		end
+	end
+	return out
+end
+
 ---The player a "No player named ... is currently playing." message is about, if it's one we greeted a moment
 ---ago or a realm link (they logged off).
 function private.NotFoundName(msg)
@@ -2131,7 +2206,12 @@ end
 function private.OnSystemMessage(msg)
 	local name = private.NotFoundName(msg)
 	if name then
+		-- The game says it once per message part: log it once
+		local before = private.offline[name]
 		private.offline[name] = GetTime()
+		if not private.links[name] and not (before and GetTime() - before < NOT_FOUND_SECONDS) then
+			Wanted:Log("Sync: %s isn't online (the game says)", name)
+		end
 	end
 	if name and private.links[name] then
 		private.links[name] = nil

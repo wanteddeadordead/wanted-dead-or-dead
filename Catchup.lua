@@ -98,6 +98,8 @@ function Catchup:Import()
 	private.TakeRequests(entry.requests)
 	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
 	Wanted.Challenges:Take(entry.challenges)
+	-- Players on other realm names to greet as realm links, also at every login
+	Sync:TakeDirectory(entry.links)
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

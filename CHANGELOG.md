@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Update required: once players on 1.4.0 are around, older versions pause bounties, claims and sharing and say to
+  update (the Nearby window, alerts, hotspots and the map keep working). Older versions moved to channels of their
+  own after a takeover, which split the network into several channels; 1.4.0 ends that.
+- One shared sync channel per side, with no password: WantedNetHorde or WantedNetAlliance. Wanted never picks a
+  channel of its own any more. If someone takes the main channel over (a password, a ban, moderation), Wanted keeps
+  syncing by whisper and with your guild, tries the main channel again every few minutes, and tells the Wanted app;
+  wanteddeadordead.com then picks one new channel for everyone on that side, and points everyone back once the main
+  channel is free.
+- Players with the Wanted app pass the new channel on to the players they know by whisper, so players without the app
+  follow too. A channel another player's addon made up is never followed.
+- The channel Wanted moved to under 1.3.x is forgotten and left at the first login on 1.4.0.
+
 ## [1.3.4] - 2026-10-01
 
 - No more party-invite sound when Wanted retries its sync channel: the game's password box that a refused join brings

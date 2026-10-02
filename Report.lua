@@ -26,6 +26,10 @@ function Report:Build()
 	if info then
 		local stats = info.stats
 		Add("Network: channel %s, members %s, peers %d, sent %d, received %d, merged %d, invalid %d, dropped %d, throttled %d, repeats skipped %d%s", info.channelId and ("#"..info.channelId) or "not joined", tostring(info.members), info.peers, stats.sent, stats.received, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped, info.paused and ", PAUSED" or "")
+		local reasons = Wanted.Sync and Wanted.Sync.DropReasons and Wanted.Sync:DropReasons() or ""
+		if reasons ~= "" then
+			Add("Dropped: %s", reasons)
+		end
 	end
 	if Wanted.Store and Wanted.db then
 		Add("Records flagged: %d tampered (never used), %d broken chain (never a witness)", Wanted.Store:CountFlagged())

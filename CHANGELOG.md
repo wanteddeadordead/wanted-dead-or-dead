@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-02
+
 - Home and Challenges: if you've already updated the Wanted app, they now say to type /reload to load your challenges
   (the game only reads what the app brings at login or /reload).
 - The Nearby window's PvP line updates the moment your PvP flag changes, from the game's new PvP flag event.

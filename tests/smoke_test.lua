@@ -4285,7 +4285,7 @@ end)()
 	check(Challenges:Get() == nil and Challenges:CountDone() == nil, "no challenges without the app's")
 	ns.UI:Show("home")
 	ns.UI:Show("challenges")
-	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
+	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
 		and not Shown("Get the Wanted app to track challenges and ranks"), "an app catch-up without challenges: update the app")
 	ns.UI:Show("home")
 	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Update the app"), "Home says update the app too")
@@ -4560,3 +4560,13 @@ end)()
 	ns.Catchup:Import()
 	TargetFrame, TooltipUtil = nil, nil
 end)()
+
+-- 1.5.1: /wanted bug says why messages were dropped, most first
+do
+	local reasons = ns.Sync:DropReasons()
+	check(type(reasons) == "string", "drop reasons are a line of text")
+	if ns.Sync:GetInfo().stats.dropped > 0 then
+		check(reasons ~= "" and reasons:find("%a+ %d+"), "drops this session come with their reasons: "..reasons)
+	end
+end
+print("wanted smoke: 1.5.1 checks pass")

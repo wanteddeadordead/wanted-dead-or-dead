@@ -651,7 +651,45 @@ function Wanted:RunCommand(cmd, args)
 	end
 end
 
+-- ============================================================================
+-- Ruleset
+-- ============================================================================
+
+-- Wanted runs on the PvP ruleset only. On a Normal-ruleset character it stays idle: no module starts, so nothing is
+-- recorded, shown or shared, and the account's data (shared with its PvP characters) is left as it is.
+local IDLE_MESSAGE = "Wanted is for the PvP ruleset. This character plays on Normal, so Wanted stays idle here: nothing is recorded or shared. Your PvP characters' data is untouched."
+
+---A realm's ruleset, "pvp" or "normal": by the app's map from wanteddeadordead.com (realm number to ruleset), else by
+---the realm's name ("PvE" in it means Normal). Anything unknown is PvP.
+---@param id number? GetRealmID()
+---@param name string? the realm's name
+---@param map table? the catch-up's rulesets
+---@return string
+function Wanted.RulesetFor(id, name, map)
+	local known = type(map) == "table" and id and map[tostring(id)]
+	if known == "pvp" or known == "normal" then
+		return known
+	end
+	if type(name) == "string" and strfind(strlower(name), "pve", 1, true) then
+		return "normal"
+	end
+	return "pvp"
+end
+
+---The ruleset of the character logging in, noting its realm for the app (the server learns realm names from it).
+function private.LoginRuleset()
+	local id = type(GetRealmID) == "function" and GetRealmID() or nil
+	local name = GetRealmName()
+	Wanted.db.realm = { id = id, name = name }
+	local catchup = type(WantedAppCatchup) == "table" and WantedAppCatchup[Wanted.db.accountMark]
+	return Wanted.RulesetFor(id, name, type(catchup) == "table" and catchup.rulesets or nil)
+end
+
 function private.OnSlashCommand(input)
+	if Wanted.idle then
+		Wanted:Print(IDLE_MESSAGE)
+		return
+	end
 	local cmd, args = strmatch(strtrim(input or ""), "^(%S*)%s*(.*)$")
 	cmd = strlower(cmd)
 	if cmd == "" then
@@ -864,6 +902,12 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		Wanted:Log("Login as %s (%s)", UnitName("player"), UnitFactionGroup("player") or "?")
 		if private.newerData then
 			Wanted:Print("Your saved data is from a newer version of Wanted. Update the addon to use it; until then nothing you do this session is saved, and your data is left as it is.")
+		end
+		if private.LoginRuleset() == "normal" then
+			Wanted.idle = true
+			Wanted:Log("Normal ruleset (realm %s): idle", tostring(Wanted.db.realm.id))
+			C_Timer.After(6, function() Wanted:Print(IDLE_MESSAGE) end)
+			return
 		end
 		private.CallModules("OnEnable")
 		Wanted:RemindUpdate()

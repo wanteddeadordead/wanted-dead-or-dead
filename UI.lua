@@ -494,10 +494,17 @@ function private.UpdateConnection()
 		Set(private.netStatus, C.amber, "WantedNet paused", "WantedNet paused",
 			"Too much traffic for a moment: sharing resumes shortly.")
 	else
-		-- Development builds also count the other players on it; releases don't, so a quiet channel
-		-- doesn't look like nobody uses Wanted
-		Set(private.netStatus, C.green, Wanted.DEV and format("WantedNet (%d)", info.peers or 0) or "WantedNet", "Connected to WantedNet",
-			"Sharing bounties, kills and sightings with other Wanted players in game, in "..info.channelName..".")
+		-- Development builds also show how many are in the channel (the game's member list) and how many other
+		-- players were heard from in the last 10 minutes; releases don't, so a quiet channel doesn't look like
+		-- nobody uses Wanted
+		local text, tip = "WantedNet", "Sharing bounties, kills and sightings with other Wanted players in game, in "..info.channelName.."."
+		if Wanted.DEV then
+			local heard = format("%d heard", info.peers or 0)
+			text = info.members and format("WantedNet (%d, %s)", info.members, heard) or format("WantedNet (%s)", heard)
+			tip = format("%s\n\n%s in the channel; %d other players heard from in the last 10 minutes. An idle addon only sends when it has something new.",
+				tip, info.members and tostring(info.members) or "Not yet known how many are", info.peers or 0)
+		end
+		Set(private.netStatus, C.green, text, "Connected to WantedNet", tip)
 	end
 	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
 	if app and notRunning then

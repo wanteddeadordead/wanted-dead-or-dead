@@ -4289,7 +4289,7 @@ end)()
 	ns.UI:Refresh()
 	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges and ranks"), "no app: get the app on Home")
 	ns.UI:Show("challenges")
-	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Download it for Windows from wanteddeadordead.com/app."), "no app: get the app on Challenges")
+	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
 	-- The app's version alone says it's there (an app that wrote no catch-up yet)
 	WantedAppInfo = { running = "0.2.26" }
 	ns.UI:Refresh()

@@ -228,7 +228,7 @@ function private.BuildEmpty(container, width)
 	list:SetSpacing(3)
 	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)
 	panel.button:SetPoint("BOTTOMLEFT", 24, 24)
-	W:AttachTooltip(panel.button, "Website & app", "Where to download the Wanted app for Windows.")
+	W:AttachTooltip(panel.button, "Website & app", "Where to download the Wanted app for Windows or Mac.")
 	private.empty = panel
 end
 

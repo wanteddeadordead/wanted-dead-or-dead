@@ -242,7 +242,7 @@ function Challenges:EmptyText()
 		return "Update the Wanted app to track challenges and ranks",
 			"Open the app and it updates itself, or download "..Challenges.APP_VERSION.." from wanteddeadordead.com/app.", "Update the app"
 	end
-	return "Get the Wanted app to track challenges and ranks", "Download it for Windows from wanteddeadordead.com/app.", "Get the app"
+	return "Get the Wanted app to track challenges and ranks", "Download it for Windows or Mac from wanteddeadordead.com/app.", "Get the app"
 end
 
 ---This character's progress, streak and rank (or another of the app's characters'), or nil.

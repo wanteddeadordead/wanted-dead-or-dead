@@ -44,6 +44,18 @@ local DEFAULTS = {
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
 		bridge = true, -- carry bounty notices to and from Battle.net friends on the other faction (Bridge)
+		ranks = { -- other players' challenge ranks from the Wanted app, where they show (Ranks)
+			tooltip = true,
+			target = true,
+			nameplates = true,
+			chat = false, -- "[R7]" at the start of what they say
+			nearby = true,
+			who = true,
+			-- The number on nameplates: where (Ranks.PLATE_ANCHORS), offsets in pixels, scale, and what it shows
+			plate = { anchor = "centre", x = 0, y = 0, scale = 1, badge = true, number = true },
+			-- The label at the target frame (Ranks.TARGET_ANCHORS)
+			targetLabel = { anchor = "above", x = 0, y = 0, scale = 1 },
+		},
 		streaks = { -- kill streak and multi-kill callouts (Streaks)
 			callout = true, -- the big text in the middle of the screen
 			sound = true,

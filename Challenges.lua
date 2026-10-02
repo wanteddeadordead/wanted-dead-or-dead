@@ -339,12 +339,24 @@ end
 ---A player's challenge rank from wanteddeadordead.com: { r, f }, or nil. Never what a player says of themselves.
 ---@param name string? "Name" or "Name-Realm"
 ---@return table?
-function Challenges:GetRank(name)
+---@param faction string? "Horde" or "Alliance", when known: the demo's made-up ranks use it
+function Challenges:GetRank(name, faction)
 	local data = Challenges:Get()
 	if not data or type(name) ~= "string" then
 		return nil
 	end
-	return data.ranks[strlower((strsplit("-", name)))] or nil
+	local key = strlower((strsplit("-", name)))
+	if data.ranks[key] or not private.demo or key == "" then
+		return data.ranks[key] or nil
+	end
+	-- The demo ranks every player, the same rank for the same name, so each place a rank shows can be seen on
+	-- real players
+	local sum = 0
+	for i = 1, #key do
+		sum = (sum * 31 + key:byte(i)) % 1000003
+	end
+	faction = faction or UnitFactionGroup("player")
+	return { r = sum % Challenges.MAX_RANK + 1, f = faction == "Alliance" and "A" or "H" }
 end
 
 

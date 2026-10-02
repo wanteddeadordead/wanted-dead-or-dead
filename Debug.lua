@@ -710,6 +710,6 @@ Wanted:RegisterCommand("demo", "Development builds: made-up challenges and ranks
 		return
 	end
 	Challenges:SetDemo(Debug:DemoChallenges())
-	Wanted:Print("Demo challenges on: made up, nothing saved. /wanted demo again to turn them off.")
+	Wanted:Print("Demo challenges on: made up, and every player gets a made-up rank. Nothing saved. /wanted demo again to turn them off.")
 	Wanted.UI:Show("home")
 end)

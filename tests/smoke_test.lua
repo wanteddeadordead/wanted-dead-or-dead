@@ -78,6 +78,9 @@ function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[
 function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
+function Methods:SetParent(parent) self._parent = parent end
+function Methods:SetPoint(...) self._point = { ... } end
+function Methods:SetScale(scale) self._scale = scale end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
@@ -315,7 +318,8 @@ C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
 Enum = { TooltipDataType = { Unit = 2 } }
-TooltipDataProcessor = { AddTooltipPostCall = function() end }
+tooltipPostCalls = {} -- global: the main chunk is at its limit of locals
+TooltipDataProcessor = { AddTooltipPostCall = function(_, f) tooltipPostCalls[#tooltipPostCalls + 1] = f end }
 RAID_CLASS_COLORS = { ROGUE = { r = 1, g = 0.96, b = 0.41, WrapTextInColorCode = function(_, t) return t end } }
 LOCALIZED_CLASS_NAMES_MALE = { ROGUE = "Rogue" }
 SlashCmdList = {}
@@ -4348,4 +4352,211 @@ end)()
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
 	check(Shown("BOUNTIES") and Shown("WAR") and Shown("YOU"), "the menu's groups are labelled")
+end)()
+;(function()
+	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch
+	local Challenges, settings = ns.Challenges, ns.db.settings.ranks
+	check(settings.tooltip and settings.target and settings.nameplates and settings.nearby and settings.who and not settings.chat, "rank switches: all on but chat")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, challenges = { t = clock, ranks = { ["thane oakcrest"] = { r = 7, f = "A" }, ["khal drogash"] = { r = 4, f = "H" } } } } }
+	ns.Catchup:Import()
+	RunTimers()
+	local origName = UnitName
+	local names = { nameplate7 = { "Thane", "Oakcrest" }, target = { "Khal", "Drogash" }, nameplate8 = { "Nobody", "Here" } }
+	UnitName = function(unit) local n = names[unit] if n then return n[1], n[2] end return origName(unit) end
+	local origIsPlayer = UnitIsPlayer
+	UnitIsPlayer = function(unit) return names[unit] ~= nil or origIsPlayer(unit) end
+	check(ns.Ranks:ForUnit("nameplate7").r == 7 and ns.Ranks:ForUnit("nameplate8") == nil, "a unit's rank by its full name")
+	-- The unit's own side picks the titles, whatever side the data says; the data's only when the game doesn't say
+	check(ns.Ranks:Label(ns.Ranks:ForUnit("nameplate7")) == "Rank 7, Blood Guard", "a Horde unit listed as Alliance gets the Horde title")
+	local origFaction = UnitFactionGroup
+	UnitFactionGroup = function(unit) if unit == "nameplate7" then return nil end return origFaction(unit) end
+	check(ns.Ranks:Label(ns.Ranks:ForUnit("nameplate7")) == "Rank 7, Knight-Lieutenant", "the data's side when the game doesn't say")
+	UnitFactionGroup = origFaction
+	check(ns.Ranks:Label({ r = 7, f = "A" }) == "Rank 7, Knight-Lieutenant" and ns.Ranks:Label({ r = 7, f = "H" }) == "Rank 7, Blood Guard", "labels in the player's side's titles")
+	-- Tooltip
+	local lines = {}
+	local origAdd = GameTooltip.AddLine
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	TooltipUtil = { GetDisplayedUnit = function() return "Khal Drogash", "target" end }
+	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
+	local found = false
+	for _, l in ipairs(lines) do if l:find("Wanted: Rank 4, Senior Sergeant", 1, true) and l:find("PvPRank04", 1, true) then found = true end end
+	check(found, "the tooltip line with the badge")
+	settings.tooltip, lines = false, {}
+	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
+	for _, l in ipairs(lines) do check(not l:find("Wanted: Rank", 1, true), "no tooltip line with the switch off") end
+	settings.tooltip = true
+	GameTooltip.AddLine = origAdd
+	-- Target frame
+	TargetFrame = CreateFrame("Frame")
+	Fire("PLAYER_TARGET_CHANGED")
+	local label
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("Rank 4, Senior Sergeant", 1, true) then label = fs end end
+	check(label and label._parent._shown, "the target frame label shows")
+	settings.target = false
+	ns.Ranks:Update()
+	check(not label._parent._shown, "and hides with its switch off")
+	settings.target = true
+	-- Nameplates: a forbidden plate isn't handed to addons (nil), so nothing is added there
+	local plates = { nameplate7 = CreateFrame("Frame"), nameplate8 = CreateFrame("Frame") }
+	C_NamePlate = { GetNamePlateForUnit = function(unit) return plates[unit] end }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate8")
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate9")
+	RunTimers()
+	local plateLabel
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
+	check(plateLabel and plateLabel._parent._shown, "the rank on a ranked player's nameplate")
+	local point = plateLabel._parent._point
+	check(point[1] == "BOTTOM" and point[2] == plates.nameplate7 and point[3] == "TOP" and point[5] == -2, "centred over the plate by default")
+	for _, fs in ipairs(Mock.fontStrings) do check(not (fs._parent and fs._parent._parent == plates.nameplate8), "nothing on an unranked player's plate") end
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
+	check(not plateLabel._parent._shown, "the number goes with the plate")
+	C_NamePlate = nil
+	-- Chat: off by default, then "[R7]" before what they said
+	local filter = chatFilters.CHAT_MSG_SAY
+	check(filter(nil, "CHAT_MSG_SAY", "hi", "Thane Oakcrest-Realm") == false, "no chat tag by default")
+	local _, msg, author = (function() settings.chat = true return filter(nil, "CHAT_MSG_SAY", "hi", "Thane Oakcrest-Realm") end)()
+	check(msg and msg:find("[R7]", 1, true) and msg:find("hi$") and author == "Thane Oakcrest-Realm", "the chat tag, the name left alone")
+	check(select(2, filter(nil, "CHAT_MSG_SAY", "hi", "Nobody Here")) == nil, "no tag for unranked players")
+	settings.chat = false
+	-- Who list: our own text beside the name
+	local origHook = hooksecurefunc
+	hooksecurefunc = function(a, b, c)
+		if type(a) == "table" then local o = a[b] a[b] = function(...) o(...) c(...) end
+		else local o = _G[a] _G[a] = function(...) o(...) b(...) end end
+	end
+	WhoList_InitButton = function(button, data) button.Name:SetText(data.info.fullName) end
+	Fire("ADDON_LOADED", "Blizzard_FriendsFrame")
+	local button = CreateFrame("Button")
+	button.Name = button:CreateFontString()
+	WhoList_InitButton(button, { info = { fullName = "Khal Drogash" } })
+	local whoTag
+	for _, fs in ipairs(Mock.fontStrings) do if fs._parent == button and fs ~= button.Name then whoTag = fs end end
+	check(button.Name._text == "Khal Drogash" and whoTag and whoTag._text == "R4", "R4 beside the Who list name, the name untouched")
+	hooksecurefunc, WhoList_InitButton = origHook, nil
+	-- Nearby window
+	check(ns.Ranks:NearbyTag("Thane Oakcrest") == "R7" and ns.Ranks:NearbyTag("Nobody") == nil, "the Nearby window's tag")
+	settings.nearby = false
+	check(ns.Ranks:NearbyTag("Thane Oakcrest") == nil, "none with its switch off")
+	settings.nearby = true
+	ns.UI:Show("settings")
+
+	-- The demo ranks every player, the same rank for the same name, on their side's titles
+	ns:RunCommand("demo", "")
+	local nobody = ns.Ranks:ForUnit("nameplate8")
+	check(nobody and nobody.r >= 1 and nobody.r <= 14 and ns.Ranks:ForUnit("nameplate8").r == nobody.r, "the demo gives everyone a steady rank")
+	check(ns.Ranks:ForUnit("nameplate7").r == 7, "a real rank still wins in the demo")
+	check(Challenges:GetRank("Some Body", "Alliance").f == "A" and Challenges:GetRank("Some Body", "Horde").f == "H", "the demo's side follows the player's")
+	lines = {}
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	TooltipUtil = { GetDisplayedUnit = function() return "Nobody Here", "nameplate8" end }
+	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
+	check(#lines > 0 and table.concat(lines, "\n"):find("Wanted: Rank "..nobody.r, 1, true), "the demo's rank in a real player's tooltip")
+	GameTooltip.AddLine = origAdd
+	ns:RunCommand("demo", "")
+
+	-- ElvUI: its target frame and its nameplate frames (plate.unitFrame, as Plater's too) carry the labels
+	ElvUF_Target = CreateFrame("Button")
+	Fire("PLAYER_TARGET_CHANGED")
+	local elvLabel
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("Rank 4, Senior Sergeant", 1, true) and fs._parent._shown then elvLabel = fs end end
+	check(elvLabel and elvLabel._parent.anchor == ElvUF_Target, "the target label follows ElvUI's target frame")
+	ElvUF_Target:Hide()
+	check(not elvLabel._parent._shown, "and hides with it")
+	ElvUF_Target = nil
+	local elvPlate = CreateFrame("Frame")
+	elvPlate.unitFrame = CreateFrame("Button", nil, elvPlate)
+	elvPlate.unitFrame.Health = CreateFrame("StatusBar", nil, elvPlate.unitFrame)
+	elvPlate.unitFrame.Name = elvPlate.unitFrame:CreateFontString()
+	elvPlate.unitFrame.Name._text = "Thane Oakcrest"
+	elvPlate.unitFrame.Name.GetJustifyH = function() return "CENTER" end
+	plates.nameplate7 = elvPlate
+	C_NamePlate = { GetNamePlateForUnit = function(unit) return plates[unit] end }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	RunTimers()
+	local onElv
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
+	check(onElv, "the rank on ElvUI's nameplate frame")
+	local label, layout = onElv._parent, ns.db.settings.ranks.plate
+	local function Spot() local p = label._point return p[1].." "..(p[2] == elvPlate.unitFrame.Name and "name" or p[2] == elvPlate.unitFrame.Health and "bar" or p[2] == elvPlate.unitFrame and "frame" or "?").." "..p[3].." "..format("%g %g", p[4], p[5]) end
+	check(Spot() == "BOTTOM frame TOP 0 -2", "centred over ElvUI's plate frame by default, got "..Spot())
+	-- Each anchor, live on the plate already shown; the centred name's text starts 8px in from its 100px region
+	local expected = { left = "RIGHT name LEFT 5 0", right = "LEFT name RIGHT -5 0", below = "TOP name BOTTOM 0 -2",
+		barTopLeft = "BOTTOMLEFT bar TOPLEFT 0 2", barTopRight = "BOTTOMRIGHT bar TOPRIGHT 0 2", above = "BOTTOM name TOP 0 2", centre = "BOTTOM frame TOP 0 -2" }
+	for _, key in ipairs({ "left", "right", "below", "barTopLeft", "barTopRight", "centre", "above" }) do
+		layout.anchor = key
+		ns.Ranks:Update()
+		check(Spot() == expected[key], key..": got "..Spot())
+	end
+	-- Offsets and scale, kept within their ranges
+	layout.x, layout.y, layout.scale = 10, -5, 1.4
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOM name TOP 10 -3" and label._scale == 1.4, "offsets and scale, got "..Spot())
+	layout.x, layout.y, layout.scale = 99, "x", 9
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOM name TOP 50 2" and label._scale == 1.6, "out of range values are held to their limits, got "..Spot())
+	layout.x, layout.y, layout.scale = 0, 0, 1
+	-- Badge and number
+	local badge = rawget(label, "badge")
+	check(badge._shown and onElv._shown and onElv._point[4] == 14, "badge then number")
+	layout.badge = false
+	ns.Ranks:Update()
+	check(not badge._shown and onElv._shown and onElv._point[4] == 0 and label._shown, "the number alone")
+	layout.badge, layout.number = true, false
+	ns.Ranks:Update()
+	check(badge._shown and not onElv._shown and label._shown, "the badge alone")
+	layout.badge = false
+	ns.Ranks:Update()
+	check(not label._shown, "neither: nothing")
+	layout.badge, layout.number = true, true
+	ns.Ranks:Update()
+	check(label._shown, "both back")
+	-- From the Settings page: the X offset slider moves the plate already shown
+	ns.UI:Show("settings")
+	local xSlider
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "X offset" and not xSlider then xSlider = fs._parent end end
+	xSlider.slider._scripts.OnValueChanged(xSlider.slider, 12)
+	check(layout.x == 12 and Spot() == "BOTTOM name TOP 12 2", "the slider changes the setting and the plate at once, got "..Spot())
+	layout.x = 0
+	ns.Ranks:Update()
+	-- No name text shown: by the plate itself; the bar anchors still use the bar
+	elvPlate.unitFrame.Name._shown = false
+	ns.Ranks:Update()
+	check(label._point[2] == elvPlate and label._point[3] == "TOP", "above the plate without a name")
+	layout.anchor = "barTopRight"
+	ns.Ranks:Update()
+	check(Spot() == "BOTTOMRIGHT bar TOPRIGHT 0 2", "the bar's corner without a name")
+	layout.anchor = "above"
+	elvPlate.unitFrame.Name._shown = true
+	-- The target label: each anchor, offsets and scale, live
+	local tl = ns.db.settings.ranks.targetLabel
+	TargetFrame = CreateFrame("Frame")
+	Fire("PLAYER_TARGET_CHANGED")
+	local targetLabel
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("Rank 4, Senior Sergeant", 1, true) then targetLabel = fs._parent end end
+	local function TSpot() local p = targetLabel._point return p[1].." "..p[3].." "..format("%g %g", p[4], p[5]) end
+	check(TSpot() == "BOTTOM TOP 0 -6" and targetLabel._point[2] == TargetFrame, "the target label above the frame by default")
+	local targetExpected = { below = "TOP BOTTOM 0 6", left = "RIGHT LEFT -4 0", right = "LEFT RIGHT 4 0" }
+	for key, want in pairs(targetExpected) do
+		tl.anchor = key
+		ns.Ranks:Update()
+		check(TSpot() == want, "target "..key..": got "..TSpot())
+	end
+	tl.anchor, tl.x, tl.y, tl.scale = "above", -20, 7, 0.8
+	ns.Ranks:Update()
+	check(TSpot() == "BOTTOM TOP -20 1" and targetLabel._scale == 0.8, "target offsets and scale, got "..TSpot())
+	tl.x, tl.y, tl.scale = 0, 0, 1
+	ns.Ranks:Update()
+	-- A plate the game keeps from addons: asking for it fails, nothing happens
+	C_NamePlate = { GetNamePlateForUnit = function() error("forbidden") end }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	RunTimers()
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
+	C_NamePlate = nil
+
+	UnitName, UnitIsPlayer = origName, origIsPlayer
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
+	TargetFrame, TooltipUtil = nil, nil
 end)()

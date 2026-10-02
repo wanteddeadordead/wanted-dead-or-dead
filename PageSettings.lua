@@ -1,12 +1,13 @@
--- Wanted: settings, in five tabs: Alerts (detection and sounds), Nearby window (what each row shows),
--- Sharing and display (network, map, minimap, class icons), Kill streaks, and Emotes (the emote buttons).
+-- Wanted: settings, in six tabs: Alerts (detection and sounds), Nearby window (what each row shows),
+-- Sharing and display (network, map, minimap, class icons), Kill streaks, Ranks (other players' ranks and where they
+-- show), and Emotes (the emote buttons).
 
 local _, Wanted = ...
 local UI = Wanted.UI
 local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
-local private = { toggles = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {}, soundPicks = {} }
+local private = { toggles = {}, layoutSliders = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {}, soundPicks = {} }
 local EMOTE_STYLES = { fav = "selected", list = "chip", hidden = "ghost" }
 local EMOTE_CHIP_WIDTH, EMOTE_COLUMNS = 82, 8
 local SOUNDS_X = 412 -- the Sounds card sits right of the targeted card
@@ -367,6 +368,70 @@ function private.BuildStreaks(panel, width)
 	hint:SetPoint("TOPLEFT", 16, -154)
 end
 
+---A slider bound to a layout table key (settings.ranks.plate or targetLabel); kept in step by Refresh.
+function private.LayoutSlider(parent, getTable, key, label, low, high, step, format, x, y, width)
+	local slider = W:Slider(parent, label, width, low, high, step, format, function(value)
+		getTable()[key] = value
+		Wanted.Ranks:Update()
+	end)
+	slider:SetPoint("TOPLEFT", x, y)
+	tinsert(private.layoutSliders, { slider = slider, getTable = getTable, key = key })
+	return slider
+end
+
+function private.BuildRanks(panel, width)
+	-- Other players' challenge ranks (Ranks), from the Wanted app only
+	local ranks = private.Card(panel, 0, 128, "Challenge ranks of other players", width)
+	local function RankSettings() return Wanted.db.settings.ranks end
+	local function Update() Wanted.Ranks:Update() end
+	private.Toggle(ranks, RankSettings, "tooltip", "In the tooltip", "A line like \"Wanted: Rank 7, Blood Guard\" with the badge, when you mouse over a player.", 16, -38)
+	private.Toggle(ranks, RankSettings, "target", "Over the target frame", "The rank and its title over your target's frame.", 16, -62, Update)
+	private.Toggle(ranks, RankSettings, "nameplates", "On nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.", 16, -86, Update)
+	private.Toggle(ranks, RankSettings, "chat", "In chat", "[R7] at the start of what ranked players say, in your own chat windows. Off by default.", 360, -38)
+	private.Toggle(ranks, RankSettings, "nearby", "In the Nearby window", "R7 beside the level of ranked enemies.", 360, -62, RefreshNearby)
+	private.Toggle(ranks, RankSettings, "who", "In the Who list", "R7 beside ranked players' names.", 360, -86)
+	local rankHint = Theme:Text(ranks, "tiny", "Ranks come from wanteddeadordead.com through the Wanted app. A player can never set their own.")
+	rankHint:SetPoint("TOPLEFT", 16, -110)
+
+	local function Plate() return Wanted.db.settings.ranks.plate end
+	local function Target() return Wanted.db.settings.ranks.targetLabel end
+	local Ranks = Wanted.Ranks
+	local function Offset(value) return format("%+d", value) end
+	local function Scale(value) return format("%.1fx", value) end
+	local sliderWidth = floor((width - 32 - 2 * 24 - 170) / 3)
+
+	local plate = private.Card(panel, -138, 140, "Rank on nameplates", width)
+	local plateChoices, targetChoices = {}, {}
+	for _, a in ipairs(Ranks.PLATE_ANCHORS) do tinsert(plateChoices, { key = a.key, label = a.label }) end
+	for _, a in ipairs(Ranks.TARGET_ANCHORS) do tinsert(targetChoices, { key = a.key, label = a.label }) end
+	private.plateAnchor = W:Choice(plate, 160, plateChoices, function(key)
+		Plate().anchor = key
+		Ranks:Update()
+	end)
+	private.plateAnchor:SetPoint("TOPLEFT", 16, -44)
+	W:AttachTooltip(private.plateAnchor, "Where", "Centred over the plate, around the player's name, or on the top corners of the health bar.")
+	local x0 = 16 + 170
+	private.LayoutSlider(plate, Plate, "x", "X offset", -50, 50, 1, Offset, x0, -38, sliderWidth)
+	private.LayoutSlider(plate, Plate, "y", "Y offset", -50, 50, 1, Offset, x0 + sliderWidth + 24, -38, sliderWidth)
+	private.LayoutSlider(plate, Plate, "scale", "Size", 0.6, 1.6, 0.1, Scale, x0 + 2 * (sliderWidth + 24), -38, sliderWidth)
+	private.Toggle(plate, Plate, "badge", "Show badge", "The rank's badge, the game's PvP rank insignia.", 16, -86, function() Ranks:Update() end)
+	private.Toggle(plate, Plate, "number", "Show number", "The rank's number, after the badge.", 140, -86, function() Ranks:Update() end)
+	local plateHint = Theme:Text(plate, "tiny", "Changes show at once on the nameplates already up. Works with the game's nameplates, ElvUI and Plater.")
+	plateHint:SetPoint("TOPLEFT", 16, -114)
+
+	local target = private.Card(panel, -288, 100, "Rank at the target frame", width)
+	private.targetAnchor = W:Choice(target, 160, targetChoices, function(key)
+		Target().anchor = key
+		Ranks:Update()
+	end)
+	private.targetAnchor:SetPoint("TOPLEFT", 16, -44)
+	private.LayoutSlider(target, Target, "x", "X offset", -50, 50, 1, Offset, x0, -38, sliderWidth)
+	private.LayoutSlider(target, Target, "y", "Y offset", -50, 50, 1, Offset, x0 + sliderWidth + 24, -38, sliderWidth)
+	private.LayoutSlider(target, Target, "scale", "Size", 0.6, 1.6, 0.1, Scale, x0 + 2 * (sliderWidth + 24), -38, sliderWidth)
+	local targetHint = Theme:Text(target, "tiny", "Your target's frame, or ElvUI's when it's loaded.")
+	targetHint:SetPoint("TOPLEFT", 16, -78)
+end
+
 
 
 -- ============================================================================
@@ -433,6 +498,11 @@ function private.Refresh()
 		return
 	end
 	private.RefreshEmotes()
+	for _, entry in ipairs(private.layoutSliders) do
+		entry.slider:SetValue(entry.getTable()[entry.key] or 0)
+	end
+	private.plateAnchor:SetChoice(Wanted.db.settings.ranks.plate.anchor)
+	private.targetAnchor:SetChoice(Wanted.db.settings.ranks.targetLabel.anchor)
 	for _, entry in ipairs(private.toggles) do
 		entry.toggle:SetChecked(entry.getTable()[entry.key])
 	end
@@ -470,14 +540,15 @@ UI:RegisterPage("settings", {
 			{ key = "nearby", label = "Nearby window" },
 			{ key = "sharing", label = "Sharing and display" },
 			{ key = "streaks", label = "Kill streaks" },
+			{ key = "ranks", label = "Ranks" },
 			{ key = "emotes", label = "Emotes" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
-		end, 140)
+		end, 121)
 		tabs:SetPoint("TOPLEFT")
 		tabs:Select("alerts", true)
-		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "emotes" }) do
+		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "ranks", "emotes" }) do
 			local panel = CreateFrame("Frame", nil, container)
 			panel:SetPoint("TOPLEFT", 0, -40)
 			panel:SetSize(width, height - 40)
@@ -490,6 +561,7 @@ UI:RegisterPage("settings", {
 		private.BuildNearby(private.panels.nearby, width)
 		private.BuildSharing(private.panels.sharing, width)
 		private.BuildStreaks(private.panels.streaks, width)
+		private.BuildRanks(private.panels.ranks, width)
 		private.BuildEmotes(private.panels.emotes, width)
 	end,
 	refresh = private.Refresh,

@@ -1788,6 +1788,19 @@ Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
 RunTimers()
 check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
 bnFriends[#bnFriends] = nil
+-- The ruleset: Wanted runs on the PvP ruleset only. The app's realm map decides; without it, a realm name with "PvE"
+-- in it is Normal
+do
+	local R = ns.RulesetFor
+	check(R(4613, "Classic Beta PvP 2", { ["4613"] = "pvp", ["4620"] = "normal" }) == "pvp", "a PvP realm by the app's map")
+	check(R(4620, "Classic Beta PvE 2", { ["4613"] = "pvp", ["4620"] = "normal" }) == "normal", "a Normal realm by the app's map")
+	check(R(4999, "Somewhere", { ["4613"] = "pvp" }) == "pvp" and R(4999, "Classic Beta PvE 3", { ["4613"] = "pvp" }) == "normal",
+		"a realm the map doesn't know goes by its name")
+	check(R(nil, "Classic Beta PvE", nil) == "normal" and R(nil, nil, nil) == "pvp", "without the map or an id, by the name; unknown is PvP")
+	check(R(4620, "Classic Beta PvE 2", { ["4620"] = "roleplay" }) == "normal", "a map value Wanted doesn't know is ignored")
+	check(ns.db.realm and ns.db.realm.name == "Realm", "the realm is saved for the app")
+	check(not ns.idle, "a PvP character isn't idle")
+end
 -- Players on other realm names from the app (the server's realm-link directory): greeted a few at a time per realm
 -- until one answers, then that realm is left alone; junk and our own realm are dropped
 do

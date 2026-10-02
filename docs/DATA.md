@@ -35,6 +35,10 @@ code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At lo
 The same file also holds `WantedAppInfo = { running, latest }` (from 1.1.3): the app's version and the newest
 one out. When the app is behind, the addon says so in chat once a login.
 
+`WantedDB.realm` (from 1.6.0) is `{ id, name }`: the realm the account last logged in on, `GetRealmID()` and
+`GetRealmName()`, written at every login. The Wanted app sends it to wanteddeadordead.com, which learns realm names
+from it. Nothing reads it back; a missing or malformed one changes nothing.
+
 `WantedDB.faction` (from 1.2.7) is the account's side ("Horde" or "Alliance"), saved at login for the desktop app.
 `WantedDB.catchupT` (from 1.2.7) is the server time of the last catch-up taken in. The app sends the server the
 account's chains and side, and writes the answer into `!!WantedLink/Catchup.lua` as

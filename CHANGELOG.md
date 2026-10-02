@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Wanted is for the PvP ruleset. On a Normal-ruleset character it now stays idle and says so: nothing is recorded,
+  shown or shared there, and your PvP characters' data is left as it is. Which realms are which comes from
+  wanteddeadordead.com through the Wanted app (0.2.29 or later); without the app, a realm with "PvE" in its name
+  counts as Normal.
+
 - Live sync across realm names for everyone, not only Battle.net friends: the Wanted app (0.2.28 or later) now brings
   the names of Wanted players on your side heard lately on other realm names (such as Classic Beta PvP and Classic
   Beta PvP 2), and Wanted greets a few of them by hidden whisper every five minutes until one answers. Once linked,

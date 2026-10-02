@@ -308,7 +308,10 @@ The type byte uses the following formats to implement the above:
     * Followed by the type-dependent payload, including count(s) if needed
 --]]
 
-local MAJOR, MINOR = "LibSerialize", 4
+-- Wanted: registered under a name of its own, so another addon's newer LibSerialize never replaces this copy. DBM's
+-- version 6 serializes 0 by testing 1 / 0, which is an error on WoW Forever's Lua, and broke every Wanted message
+-- holding a 0 for players with DBM installed (2026-10-02).
+local MAJOR, MINOR = "LibSerialize-WantedDeadOrDead", 4
 local LibSerialize
 if LibStub then
     LibSerialize = LibStub:NewLibrary(MAJOR, MINOR)

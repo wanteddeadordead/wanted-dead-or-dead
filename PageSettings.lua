@@ -460,6 +460,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("settings", {
+	group = "You",
 	title = "Settings",
 	subtitle = "Alerts, what the Nearby window shows, and what Wanted shares with other players.",
 	order = 6,

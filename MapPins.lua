@@ -104,6 +104,13 @@ function PinMixin:OnMouseEnter()
 			GameTooltip:AddDoubleLine(Theme:ClassName(d.name, d.class).."  "..(d.level or "?").." "..Theme:ClassLabel(d.class)..tag, Theme:Ago(now - member.sighting.t), 1, 1, 1, C.muted[1], C.muted[2], C.muted[3])
 		end
 	end
+	-- Today's hot zones (from the Wanted app): kills there count double
+	local map = self:GetMap()
+	local info = map and map.GetMapID and C_Map.GetMapInfo(map:GetMapID())
+	if info and Wanted.Challenges:GetHot(info.name) then
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine("HOT ZONE today: kills here count double for challenges.", C.red[1], C.red[2], C.red[3])
+	end
 	GameTooltip:Show()
 end
 

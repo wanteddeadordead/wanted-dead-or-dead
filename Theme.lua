@@ -145,6 +145,36 @@ function Theme:Text(parent, font, text, color, layer)
 	return fs
 end
 
+---Sets the first of several texts that fits a width on one line, in the font string's own font, then in a smaller
+---one; the last text, cut off, when none fits. For cards whose names and numbers can run long.
+---@param fs FontString
+---@param width number
+---@param texts string[] longest first
+---@param smaller string? a theme font to try before giving up
+---@param wrap boolean? when nothing fits, the last text on up to two lines instead of cut off
+function Theme:FitText(fs, width, texts, smaller, wrap)
+	fs.fitFont = fs.fitFont or fs:GetFontObject()
+	-- A font object brings its own colour: keep the one the line had
+	local r, g, b = fs:GetTextColor()
+	if wrap then
+		fs:SetWordWrap(false)
+	end
+	for _, font in ipairs({ fs.fitFont, smaller and Theme.Fonts[smaller] or nil }) do
+		fs:SetFontObject(font)
+		fs:SetTextColor(r, g, b)
+		for _, text in ipairs(texts) do
+			fs:SetText(text)
+			if fs:GetUnboundedStringWidth() <= width then
+				return
+			end
+		end
+	end
+	if wrap then
+		fs:SetWordWrap(true)
+		fs:SetMaxLines(2)
+	end
+end
+
 ---A horizontal 1px line.
 function Theme:Line(parent, color)
 	local line = parent:CreateTexture(nil, "BORDER")

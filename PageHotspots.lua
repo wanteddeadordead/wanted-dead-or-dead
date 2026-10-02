@@ -34,6 +34,8 @@ function private.CreateRow(row)
 	row.zone = Theme:Text(row, "body", "")
 	row.zone:SetPoint("TOPLEFT", 16, -6)
 	row.zone:SetWidth(225)
+	-- Today's hot zones (from the Wanted app): kills there count double
+	row.hot = W:Pill(row)
 	row.sub = Theme:Text(row, "tiny", "")
 	row.sub:SetPoint("TOPLEFT", 16, -23)
 	row.sub:SetWidth(225)
@@ -67,6 +69,12 @@ function private.UpdateRow(row, group)
 	local heat = private.HeatColor(group)
 	row.bar:SetColorTexture(heat[1], heat[2], heat[3], heat[4] or 1)
 	row.zone:SetText(group.zone)
+	local hot = Wanted.Challenges:GetHot(group.zone)
+	row.hot:Set(hot and "HOT" or nil, C.red)
+	if hot then
+		row.hot:ClearAllPoints()
+		row.hot:SetPoint("LEFT", row.zone, "LEFT", min(row.zone:GetStringWidth(), 225) + 8, 0)
+	end
 	if group.guild then
 		row.sub:SetText(Theme:Colorize(format("%d from <%s>", group.guildCount, group.guild), C.gold))
 	elseif group.hour > 0 then
@@ -87,6 +95,9 @@ end
 function private.ShowTooltip(row, group)
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 	GameTooltip:SetText(group.zone, 1, 1, 1)
+	if Wanted.Challenges:GetHot(group.zone) then
+		GameTooltip:AddLine("Hot zone today: kills here count double for challenges.", C.red[1], C.red[2], C.red[3])
+	end
 	local now = GetServerTime()
 	for i, enemy in ipairs(group.enemies) do
 		if i > TOOLTIP_NAMES then
@@ -130,9 +141,10 @@ function private.Refresh()
 end
 
 UI:RegisterPage("hotspots", {
+	group = "War",
 	title = "Hotspots",
 	subtitle = "Where enemy players are right now, from what you and other Wanted users have seen. Busiest first.",
-	order = 3.5,
+	order = 2.9,
 	badge = function()
 		local busy = private.CountBusy(Hotspots:Get())
 		return busy > 0 and busy or nil

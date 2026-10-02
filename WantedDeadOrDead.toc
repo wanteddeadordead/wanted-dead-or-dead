@@ -34,6 +34,7 @@ Hotspots.lua
 LiveLog.lua
 Bridge.lua
 Catchup.lua
+Challenges.lua
 GuildRank.lua
 #@debug@
 # Test data and database-wiping commands: development builds only, left out of packaged releases
@@ -51,6 +52,7 @@ EnemyMenu.lua
 TargetFile.lua
 Emotes.lua
 NearbyWindow.lua
+PageHome.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua
@@ -59,6 +61,7 @@ PageHunters.lua
 PageActivity.lua
 PageEnemies.lua
 PageHotspots.lua
+PageChallenges.lua
 PageWeb.lua
 PageSettings.lua
 PageTools.lua

@@ -195,6 +195,18 @@ Each is asked once, on its own character, out of a fight and out of instances, a
 made the record), `"discarded"`, or `"refused"` with the addon's reason. The app sends the answers to the website; they're
 kept a week, and a request that expired without an answer is dropped silently. No layout change: both are new keys.
 
+Challenges (from 1.5.0): the app's catch-up can carry `challenges = { t, day, dayEnds, weekEnds, hot, daily, weekly,
+allThreeBonus, me, ranks }`, worked out by wanteddeadordead.com: today's hot zones, the daily and weekly challenges, the
+app's own characters' progress, streak, rank and points (`me`, by GUID), and the challenge ranks of other players
+(`ranks`, by lower-case name, `{ r, f }`). `Challenges:Clean` checks it field by field and keeps it in memory only: it is
+read again at every login and `/reload`, taken in or not, and never saved or sent to other players. Missing or unreadable,
+Home and Challenges show what the app adds. `WantedDB.challengeNotes` is `guid -> { rank, done = { [challenge id] = t } }`:
+what the banner already announced for each character, so a completion or a rank-up is announced once. The first catch-up
+seen for a character only notes what's already done. Notes older than 21 days are dropped. A new key: no migration.
+
+`WantedDB.settings.lastPage` (from 1.5.0) is the window's page when it was last open; the window opens on Home when it's
+unset or that page is switched off. A new setting: no migration.
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

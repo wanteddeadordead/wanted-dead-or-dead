@@ -1788,6 +1788,42 @@ Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
 RunTimers()
 check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
 bnFriends[#bnFriends] = nil
+-- Players on other realm names from the app (the server's realm-link directory): greeted a few at a time per realm
+-- until one answers, then that realm is left alone; junk and our own realm are dropped
+do
+	ClearSent()
+	clock = clock + 700
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, links = {
+		{ n = "Dir One", r = "Dir Realm", t = clock }, { n = "Dir Two", r = "Dir Realm", t = clock }, { n = "Dir Three", r = "Dir Realm", t = clock },
+		{ n = "Dir Four", r = "Dir Realm", t = clock }, { n = "Same Realmer Two", r = "Realm", t = clock }, { n = "Bad|cffName", r = "Dir Realm", t = clock },
+		42, { n = "", r = "Dir Realm" }, { n = "Other Place", r = "Sixth Realm", t = clock },
+	} } }
+	ns.Catchup:Import()
+	check(ns.Sync:GetDirectory().names == 5, "the app's realm-link names are kept, junk and our own realm dropped, got "..ns.Sync:GetDirectory().names)
+	ns.Sync:GreetDirectory()
+	local greeted = {}
+	for _, name in ipairs({ "Dir One", "Dir Two", "Dir Three", "Dir Four", "Same Realmer Two", "Other Place" }) do
+		greeted[name] = #Sent("WHISPER", name) == 1 and Sent("WHISPER", name)[1].tag == "H"
+	end
+	check(greeted["Dir One"] and greeted["Dir Two"] and greeted["Dir Three"] and not greeted["Dir Four"], "three names a realm are greeted at a time")
+	check(greeted["Other Place"] and not greeted["Same Realmer Two"], "every other realm gets its own greetings, ours none")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Dir Realm", a = 1 }), "WHISPER", "Dir Two")
+	RunFrames()
+	check(ns.Sync:GetLinks()["Dir Two"], "an answer makes the realm link")
+	ClearSent()
+	clock = clock + 300
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Dir Realm", a = 1 }), "WHISPER", "Dir Two") -- still there
+	RunFrames()
+	ClearSent()
+	ns.Sync:GreetDirectory()
+	check(#Sent("WHISPER", "Dir Four") == 0 and #Sent("WHISPER", "Dir One") == 0, "a realm with a live link isn't greeted any more")
+	check(#Sent("WHISPER", "Other Place") == 1, "one without is greeted again, five minutes on")
+	check(ns.Sync:GetDirectory().linked == 1, "the directory counts the realms it reaches")
+	-- A catch-up without names (an older app) leaves the list as it was
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
+	check(ns.Sync:GetDirectory().names == 5, "no names from an older app keeps the list")
+end
 -- A bounty carries what its poster knew about the target, so a client that never saw them (another realm, or
 -- offline at the time) still has their class, level, guild and where they were last seen, by the poster;
 -- it only fills gaps and never counts as this client seeing them

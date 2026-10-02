@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Live sync across realm names for everyone, not only Battle.net friends: the Wanted app (0.2.28 or later) now brings
+  the names of Wanted players on your side heard lately on other realm names (such as Classic Beta PvP and Classic
+  Beta PvP 2), and Wanted greets a few of them by hidden whisper every five minutes until one answers. Once linked,
+  bounties, claims, kills and payments cross between the two realms' channels as they happen, instead of waiting for
+  the app's catch-up at your next login or /reload. /wanted bridge shows how many names came and how many realms
+  are linked.
+
 ## [1.5.1] - 2026-10-02
 
 - Home and Challenges: if you've already updated the Wanted app, they now say to type /reload to load your challenges

@@ -4366,6 +4366,12 @@ end)()
 	local origIsPlayer = UnitIsPlayer
 	UnitIsPlayer = function(unit) return names[unit] ~= nil or origIsPlayer(unit) end
 	check(ns.Ranks:ForUnit("nameplate7").r == 7 and ns.Ranks:ForUnit("nameplate8") == nil, "a unit's rank by its full name")
+	-- The unit's own side picks the titles, whatever side the data says; the data's only when the game doesn't say
+	check(ns.Ranks:Label(ns.Ranks:ForUnit("nameplate7")) == "Rank 7, Blood Guard", "a Horde unit listed as Alliance gets the Horde title")
+	local origFaction = UnitFactionGroup
+	UnitFactionGroup = function(unit) if unit == "nameplate7" then return nil end return origFaction(unit) end
+	check(ns.Ranks:Label(ns.Ranks:ForUnit("nameplate7")) == "Rank 7, Knight-Lieutenant", "the data's side when the game doesn't say")
+	UnitFactionGroup = origFaction
 	check(ns.Ranks:Label({ r = 7, f = "A" }) == "Rank 7, Knight-Lieutenant" and ns.Ranks:Label({ r = 7, f = "H" }) == "Rank 7, Blood Guard", "labels in the player's side's titles")
 	-- Tooltip
 	local lines = {}
@@ -4402,7 +4408,7 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == plates.nameplate7 then plateLabel = fs end end
 	check(plateLabel and plateLabel._parent._shown, "the rank on a ranked player's nameplate")
 	local point = plateLabel._parent._point
-	check(point[1] == "BOTTOM" and point[2] == plates.nameplate7 and point[3] == "TOP" and point[5] == 2, "above the plate when it has no name text")
+	check(point[1] == "BOTTOM" and point[2] == plates.nameplate7 and point[3] == "TOP" and point[5] == -2, "centred over the plate by default")
 	for _, fs in ipairs(Mock.fontStrings) do check(not (fs._parent and fs._parent._parent == plates.nameplate8), "nothing on an unranked player's plate") end
 	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
 	check(not plateLabel._parent._shown, "the number goes with the plate")
@@ -4473,12 +4479,12 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "7" and fs._parent._parent == elvPlate.unitFrame and fs._parent._shown then onElv = fs end end
 	check(onElv, "the rank on ElvUI's nameplate frame")
 	local label, layout = onElv._parent, ns.db.settings.ranks.plate
-	local function Spot() local p = label._point return p[1].." "..(p[2] == elvPlate.unitFrame.Name and "name" or p[2] == elvPlate.unitFrame.Health and "bar" or "?").." "..p[3].." "..format("%g %g", p[4], p[5]) end
-	check(Spot() == "BOTTOM name TOP 0 2", "above the name by default, got "..Spot())
+	local function Spot() local p = label._point return p[1].." "..(p[2] == elvPlate.unitFrame.Name and "name" or p[2] == elvPlate.unitFrame.Health and "bar" or p[2] == elvPlate.unitFrame and "frame" or "?").." "..p[3].." "..format("%g %g", p[4], p[5]) end
+	check(Spot() == "BOTTOM frame TOP 0 -2", "centred over ElvUI's plate frame by default, got "..Spot())
 	-- Each anchor, live on the plate already shown; the centred name's text starts 8px in from its 100px region
 	local expected = { left = "RIGHT name LEFT 5 0", right = "LEFT name RIGHT -5 0", below = "TOP name BOTTOM 0 -2",
-		barTopLeft = "BOTTOMLEFT bar TOPLEFT 0 2", barTopRight = "BOTTOMRIGHT bar TOPRIGHT 0 2", above = "BOTTOM name TOP 0 2" }
-	for _, key in ipairs({ "left", "right", "below", "barTopLeft", "barTopRight", "above" }) do
+		barTopLeft = "BOTTOMLEFT bar TOPLEFT 0 2", barTopRight = "BOTTOMRIGHT bar TOPRIGHT 0 2", above = "BOTTOM name TOP 0 2", centre = "BOTTOM frame TOP 0 -2" }
+	for _, key in ipairs({ "left", "right", "below", "barTopLeft", "barTopRight", "centre", "above" }) do
 		layout.anchor = key
 		ns.Ranks:Update()
 		check(Spot() == expected[key], key..": got "..Spot())

@@ -52,7 +52,7 @@ local DEFAULTS = {
 			nearby = true,
 			who = true,
 			-- The number on nameplates: where (Ranks.PLATE_ANCHORS), offsets in pixels, scale, and what it shows
-			plate = { anchor = "above", x = 0, y = 0, scale = 1, badge = true, number = true },
+			plate = { anchor = "centre", x = 0, y = 0, scale = 1, badge = true, number = true },
 			-- The label at the target frame (Ranks.TARGET_ANCHORS)
 			targetLabel = { anchor = "above", x = 0, y = 0, scale = 1 },
 		},

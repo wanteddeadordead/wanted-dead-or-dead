@@ -409,7 +409,7 @@ function private.BuildRanks(panel, width)
 		Ranks:Update()
 	end)
 	private.plateAnchor:SetPoint("TOPLEFT", 16, -44)
-	W:AttachTooltip(private.plateAnchor, "Where", "Around the player's name, or on the top corners of the health bar.")
+	W:AttachTooltip(private.plateAnchor, "Where", "Centred over the plate, around the player's name, or on the top corners of the health bar.")
 	local x0 = 16 + 170
 	private.LayoutSlider(plate, Plate, "x", "X offset", -50, 50, 1, Offset, x0, -38, sliderWidth)
 	private.LayoutSlider(plate, Plate, "y", "Y offset", -50, 50, 1, Offset, x0 + sliderWidth + 24, -38, sliderWidth)

@@ -51,7 +51,15 @@ function Ranks:ForUnit(unit)
 	end
 	local full = (type(surname) == "string" and surname ~= "") and (name.." "..surname) or name
 	local faction = UnitFactionGroup(unit)
-	return Wanted.Challenges:GetRank(full, private.Readable(faction) and faction or nil)
+	if not private.Readable(faction) or (faction ~= "Horde" and faction ~= "Alliance") then
+		faction = nil
+	end
+	local rank = Wanted.Challenges:GetRank(full, faction)
+	-- The unit's own side picks the titles; the data's side only counts when the game doesn't say
+	if rank and faction then
+		return { r = rank.r, f = faction == "Alliance" and "A" or "H" }
+	end
+	return rank
 end
 
 ---"Rank 7, Blood Guard" in the title set of the player's side.
@@ -102,9 +110,10 @@ end
 -- ============================================================================
 
 -- Where a label can go, each as the label's point on the anchor's point and its own offset from it, before the
--- player's offsets. Nameplates: around the name text (the plate when there's none), or on the health bar's top
--- corners. The target label: around the target frame.
+-- player's offsets. Nameplates: centred over what's drawn on the plate (the default), around the name text (the plate
+-- when there's none), or on the health bar's top corners. The target label: around the target frame.
 Ranks.PLATE_ANCHORS = {
+	{ key = "centre", label = "Centre of plate", point = "BOTTOM", to = "TOP", x = 0, y = -2, plate = true },
 	{ key = "above", label = "Above name", point = "BOTTOM", to = "TOP", x = 0, y = 2 },
 	{ key = "left", label = "Left of name", point = "RIGHT", to = "LEFT", x = -3, y = 0 },
 	{ key = "right", label = "Right of name", point = "LEFT", to = "RIGHT", x = 3, y = 0 },
@@ -264,7 +273,9 @@ function private.PlacePlate(label)
 	local host = label.host
 	local spec, x, y, scale = private.Placement(Ranks.PLATE_ANCHORS, private.Settings().plate)
 	local anchor
-	if spec.bar then
+	if spec.plate then
+		anchor = host
+	elseif spec.bar then
 		anchor = private.PlateBar(host) or label.plate
 	else
 		local name = private.PlateName(host)

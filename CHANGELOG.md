@@ -11,6 +11,9 @@
 - The menu is grouped: Bounties, War and You. The window remembers the page you were on.
 - Today's hot zones are tagged HOT on the Hotspots page and in the map's enemy tooltips.
 - A banner when the app brings news of a challenge you finished or a new challenge rank, once each.
+- Other players' challenge ranks, from wanteddeadordead.com through the app: a line in their tooltip ("Wanted: Rank 7,
+  Blood Guard" with the badge), over your target's frame, a small R7 on nameplates, beside names in the Nearby window
+  and the Who list, and, if you turn it on, [R7] in chat. Each has a switch under Settings, Streaks and ranks.
 
 ## [1.4.1] - 2026-10-01
 

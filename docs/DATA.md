@@ -204,6 +204,9 @@ Home and Challenges show what the app adds. `WantedDB.challengeNotes` is `guid -
 what the banner already announced for each character, so a completion or a rank-up is announced once. The first catch-up
 seen for a character only notes what's already done. Notes older than 21 days are dropped. A new key: no migration.
 
+`WantedDB.settings.ranks` (from 1.5.0) is `{ tooltip, target, nameplates, chat, nearby, who }`: where other players'
+challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. A new key with defaults: no migration.
+
 `WantedDB.settings.lastPage` (from 1.5.0) is the window's page when it was last open; the window opens on Home when it's
 unset or that page is switched off. A new setting: no migration.
 

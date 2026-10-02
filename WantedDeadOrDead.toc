@@ -35,6 +35,7 @@ LiveLog.lua
 Bridge.lua
 Catchup.lua
 Challenges.lua
+Ranks.lua
 GuildRank.lua
 #@debug@
 # Test data and database-wiping commands: development builds only, left out of packaged releases

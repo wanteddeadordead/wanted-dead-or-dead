@@ -85,6 +85,7 @@ function Catchup:Import()
 	WantedAppCatchup = nil
 	local entry = type(all) == "table" and all[Wanted.db.accountMark]
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
+		Wanted.Challenges:Take(nil, true)
 		return
 	end
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now

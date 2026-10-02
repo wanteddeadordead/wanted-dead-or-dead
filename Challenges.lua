@@ -197,7 +197,10 @@ end
 ---Takes the challenges from this login's catch-up (Catchup:Import), and a little later shows a banner for what
 ---this character newly finished or a rank it newly reached.
 ---@param raw any entry.challenges as the app wrote it
-function Challenges:Take(raw)
+---@param noCatchup boolean? the app wrote no catch-up for this account at all
+function Challenges:Take(raw, noCatchup)
+	-- A catch-up for this account means the app is there: without challenges in it, it's an older app
+	private.appSeen = not noCatchup
 	private.data = Challenges:Clean(raw)
 	if raw ~= nil and not private.data then
 		Wanted:Log("Challenges: the catch-up's challenges could not be read")
@@ -218,6 +221,28 @@ end
 ---@return table?
 function Challenges:Get()
 	return private.demo or private.data
+end
+
+-- The app version that first brings challenges, for the empty state's update line
+Challenges.APP_VERSION = "0.2.27"
+
+---Whether the Wanted app is on this computer: it wrote this account a catch-up, or says its version.
+---@return boolean
+function Challenges:HasApp()
+	return private.appSeen == true or Wanted:AppVersion() ~= nil
+end
+
+---The empty state's heading, line and button when there are no challenges: get the app, or update it when it's
+---there but too old to bring them.
+---@return string title
+---@return string line
+---@return string button
+function Challenges:EmptyText()
+	if Challenges:HasApp() then
+		return "Update the Wanted app to track challenges and ranks",
+			"Open the app and it updates itself, or download "..Challenges.APP_VERSION.." from wanteddeadordead.com/app.", "Update the app"
+	end
+	return "Get the Wanted app to track challenges and ranks", "Download it for Windows from wanteddeadordead.com/app.", "Get the app"
 end
 
 ---This character's progress, streak and rank (or another of the app's characters'), or nil.

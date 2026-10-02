@@ -204,15 +204,18 @@ function private.BuildEmpty(container, width)
 	local panel = W:Card(container)
 	panel:SetPoint("TOPLEFT")
 	panel:SetSize(width, 210)
-	local title = Theme:Text(panel, "title", "Get the Wanted app to track challenges and ranks")
-	title:SetPoint("TOPLEFT", 24, -26)
+	panel.title = Theme:Text(panel, "title", "")
+	panel.title:SetPoint("TOPLEFT", 24, -26)
+	panel.line = Theme:Text(panel, "body", "", C.amber)
+	panel.line:SetPoint("TOPLEFT", 24, -52)
+	panel.line:SetWidth(width - 48)
 	local about = Theme:Text(panel, "body", "wanteddeadordead.com sets a daily challenge, three weekly ones and today's hot zones, counts your kills toward them, and gives each character a rank. The app brings it all here when you log in.", C.muted)
-	about:SetPoint("TOPLEFT", 24, -56)
+	about:SetPoint("TOPLEFT", 24, -78)
 	about:SetWidth(width - 48)
 	about:SetWordWrap(true)
 	about:SetSpacing(3)
-	local get = W:Button(panel, "Get the app", "primary", 140, 30, function() UI:Show("web") end)
-	get:SetPoint("BOTTOMLEFT", 24, 24)
+	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)
+	panel.button:SetPoint("BOTTOMLEFT", 24, 24)
 	private.empty = panel
 end
 
@@ -380,6 +383,12 @@ function private.Refresh()
 	local data = Challenges:Get()
 	local shown = data ~= nil
 	private.empty:SetShown(not shown)
+	if not shown then
+		local title, line, button = Challenges:EmptyText()
+		private.empty.title:SetText(title)
+		private.empty.line:SetText(line)
+		private.empty.button:SetText(button)
+	end
 	for _, part in ipairs({ private.daily, private.hot, private.week, private.recent, private.ladder, private.rules }) do
 		part:SetShown(shown)
 	end

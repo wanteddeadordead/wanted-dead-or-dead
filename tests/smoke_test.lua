@@ -4236,14 +4236,16 @@ end)()
 		for _, f in ipairs(Mock.fontStrings) do
 			if f._text == text then
 				shown = shown or false
-				local p = f._parent
-				if f._shown and p and p._shown then shown = true end
+				-- On screen: it and every frame it sits in are shown
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then shown = true end
 			end
 		end
 		return shown
 	end
 	check(Shown("1/4"), "the Challenges menu item shows 1/4 done")
-	check(Shown("Get the Wanted app to track challenges and ranks") == false, "the empty state is hidden with challenges")
+	check(not Shown("Get the Wanted app to track challenges and ranks") and not Shown("Update the Wanted app to track challenges and ranks"), "the empty state is hidden with challenges")
 
 	-- A later catch-up: the daily done and a rank up are announced once
 	local later = Sample({ t = clock })
@@ -4274,7 +4276,26 @@ end)()
 	ns.Catchup:Import()
 	check(Challenges:Get() == nil and Challenges:CountDone() == nil, "no challenges without the app's")
 	ns.UI:Show("home")
-	check(Shown("Get the Wanted app to track challenges and ranks"), "the empty state shows without challenges")
+	ns.UI:Show("challenges")
+	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
+		and not Shown("Get the Wanted app to track challenges and ranks"), "an app catch-up without challenges: update the app")
+	ns.UI:Show("home")
+	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Update the app"), "Home says update the app too")
+	-- No catch-up for this account and no app version: get the app, on both pages
+	local appInfo = WantedAppInfo
+	WantedAppInfo = nil
+	WantedAppCatchup = nil
+	ns.Catchup:Import()
+	ns.UI:Refresh()
+	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges and ranks"), "no app: get the app on Home")
+	ns.UI:Show("challenges")
+	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Download it for Windows from wanteddeadordead.com/app."), "no app: get the app on Challenges")
+	-- The app's version alone says it's there (an app that wrote no catch-up yet)
+	WantedAppInfo = { running = "0.2.26" }
+	ns.UI:Refresh()
+	check(Shown("Update the Wanted app to track challenges and ranks"), "an app that says its version: update it")
+	WantedAppInfo = appInfo
+	ns.UI:Show("home")
 	check(Shown("YOUR BOUNTY MONEY"), "the strip still shows")
 
 	-- The demo (development builds)

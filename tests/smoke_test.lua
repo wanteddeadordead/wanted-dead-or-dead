@@ -75,7 +75,8 @@ function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
-function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self return t end
+Mock.fontStrings = {} -- every font string made, so tests can find text on screen
+function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
 UIParent, Minimap, GameTooltip, DEFAULT_CHAT_FRAME, MailFrame = NewMock(), NewMock(), NewMock(), NewMock(), NewMock()
@@ -230,7 +231,7 @@ local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
 -- The world map's pin system, enough to drive a data provider
 function CreateFromMixins(...) local t = {} for _, m in ipairs({ ... }) do for k, v in pairs(m) do t[k] = v end end return t end
-MapCanvasPinMixin = { CheckMouseButtonPassthrough = function(self) self:SetPassThroughButtons() end, SetPassThroughButtons = function() error("protected: SetPassThroughButtons") end, SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end }
+MapCanvasPinMixin = { CheckMouseButtonPassthrough = function(self) self:SetPassThroughButtons() end, SetPassThroughButtons = function() error("protected: SetPassThroughButtons") end, SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end, GetMap = function() return WorldMapFrame end }
 MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, GetMap = function(self) return self.owningMap end }
 local insertedLevel
 WorldMapFrame = NewMock()
@@ -4169,4 +4170,128 @@ end)()
 	ns.Bridge.clubId = wantedClub
 	bnFriends[#bnFriends] = nil
 	C_Club = nil
+end)()
+;(function()
+	-- Challenges from the app's catch-up (Challenges.lua): read field by field, missing or partial data never an error
+	local Challenges = ns.Challenges
+	local db = ns.db
+	local function Sample(over)
+		local c = {
+			t = clock - 60, day = "2026-10-02", dayEnds = clock + 3600, weekEnds = clock + 3 * 86400,
+			hot = { { zone = "Ashenvale", band = "16-30" }, { zone = "The Barrens", band = "10-25" } },
+			daily = { id = "d:1", name = "Ambush", text = "4 killing blows in a hot zone", target = 4, points = 5 },
+			weekly = {
+				{ id = "w:1", name = "Hold the line", text = "Win 2 rounds", target = 2, points = 10, hot = false },
+				{ id = "w:2", name = "Headhunter", text = "Collect any bounty", target = 1, points = 10 },
+				{ id = "w:3", name = "Road warrior", text = "10 killing blows in Ashenvale", target = 10, points = 10, hot = true },
+			},
+			allThreeBonus = 15,
+			me = { ["Player-1-ME"] = { daily = { n = 2, done = false }, weekly = { { n = 1 }, { n = 1, done = true }, { n = 4 } },
+				streak = 4, rank = 4, points = 302, nextAt = 480, recent = { { name = "Headhunter", points = 10, at = clock - 86400 } } } },
+			ranks = { ["khal drogash"] = { r = 4, f = "H" }, ["Thane Oakcrest"] = { r = 7, f = "A" } },
+		}
+		for k, v in pairs(over or {}) do c[k] = v end
+		return c
+	end
+	check(Challenges:Clean(nil) == nil and Challenges:Clean({}) == nil and Challenges:Clean("x") == nil, "no challenges, or no time: nothing")
+	local clean = Challenges:Clean(Sample())
+	check(clean and #clean.hot == 2 and clean.daily.name == "Ambush" and #clean.weekly == 3 and clean.weekly[3].hot, "a whole catch-up reads")
+	check(clean.me["Player-1-ME"].rank == 4 and clean.me["Player-1-ME"].weekly[2].done and not clean.me["Player-1-ME"].weekly[1].done, "progress reads")
+	local partial = Challenges:Clean({ t = clock, hot = "no", daily = { name = "No id" }, weekly = { { id = "w", name = "Only", target = 1 }, 5 },
+		me = { ["not a guid"] = {}, ["Player-1-ME"] = { rank = 99, streak = -1, points = "lots", weekly = "x", recent = { { name = "|cffff0000Red|r", at = clock } } } },
+		ranks = { ["a"] = { r = 15, f = "H" }, ["b"] = { r = 3, f = "X" }, ["c|r"] = { r = 3, f = "H" }, ["ok"] = { r = 2, f = "A" } } })
+	local me = partial.me["Player-1-ME"]
+	check(partial and #partial.hot == 0 and partial.daily == nil and #partial.weekly == 1, "malformed parts are left out, the rest kept")
+	check(me and me.rank == 0 and me.streak == 0 and me.points == 0 and #me.weekly == 3 and me.recent[1].name == "cffff0000Redr", "bad numbers fall back and escape codes are dropped")
+	check(partial.ranks.a == nil and partial.ranks.b == nil and partial.ranks["c|r"] == nil and partial.ranks.ok.r == 2, "only well-formed ranks are kept")
+	local many = {}
+	for i = 1, 6000 do many["p"..i] = { r = 1, f = "H" } end
+	local count = 0
+	for _ in pairs(Challenges:Clean({ t = clock, ranks = many }).ranks) do count = count + 1 end
+	check(count == 5000, "ranks are capped at 5000, got "..count)
+
+	-- Read at every login, even from a catch-up already taken in; none from the app: the empty state
+	local warned = {}
+	local origWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." / "..tostring(sub) end
+	db.challengeNotes = {}
+	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = Sample() } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(Challenges:Get() and Challenges:GetMine().points == 302, "challenges are read from a catch-up already taken in")
+	check(#warned == 0 and db.challengeNotes["Player-1-ME"].done["w:2"], "the first catch-up only notes what's already done")
+	check(Challenges:GetRank("Khal Drogash") and Challenges:GetRank("Khal Drogash-Realm").r == 4 and Challenges:GetRank("thane oakcrest").f == "A", "ranks are found by name, any case, realm or not")
+	check(Challenges:GetRank("Nobody") == nil and Challenges:GetRank(nil) == nil, "no rank for players not listed")
+	check(Challenges:Title(4, "H") == "Senior Sergeant" and Challenges:Title(4, "A") == "Master Sergeant" and Challenges:Title(14, "Alliance") == "Grand Marshal", "rank titles by side")
+	check(Challenges:Badge(4) == "Interface\\PvPRankBadges\\PvPRank04" and Challenges:Badge(0) == nil and Challenges:Badge(15) == nil, "badges for ranks 1 to 14")
+	check(Challenges:GetHot("ashenvale") and not Challenges:GetHot("Durotar"), "hot zones by name, any case")
+	local done, total = Challenges:CountDone()
+	check(done == 1 and total == 4, "1 of 4 done, got "..tostring(done).."/"..tostring(total))
+	for _, key in ipairs({ "home", "challenges", "hotspots" }) do
+		ns.UI:Show(key)
+	end
+	ns.UI:Refresh(true)
+	local function Shown(text)
+		local shown = nil
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				shown = shown or false
+				local p = f._parent
+				if f._shown and p and p._shown then shown = true end
+			end
+		end
+		return shown
+	end
+	check(Shown("1/4"), "the Challenges menu item shows 1/4 done")
+	check(Shown("Get the Wanted app to track challenges and ranks") == false, "the empty state is hidden with challenges")
+
+	-- A later catch-up: the daily done and a rank up are announced once
+	local later = Sample({ t = clock })
+	later.me["Player-1-ME"].daily = { n = 4, done = true }
+	later.me["Player-1-ME"].rank = 5
+	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = later } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(#warned == 1 and warned[1]:find("RANK UP: FIRST SERGEANT", 1, true) and warned[1]:find("Ambush (+5)", 1, true), "a rank up and the daily done: one banner, got "..tostring(warned[1]))
+	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = later } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(#warned == 1, "the same completion is never announced again")
+	later.me["Player-1-ME"].weekly[3] = { n = 10, done = true }
+	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = later } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(#warned == 2 and warned[2]:find("CHALLENGE DONE / Road warrior (+10)", 1, true), "a weekly done: its banner, got "..tostring(warned[2]))
+
+	-- The day ends: no hot zones until the app brings the next ones
+	clock = clock + 7200
+	check(Challenges:IsDayOver() and not Challenges:GetHot("Ashenvale"), "yesterday's hot zones aren't hot")
+	ns.UI:Show("home")
+	ns.UI:Show("challenges")
+
+	-- No challenges in the catch-up: the empty state, and the strip still shows
+	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
+	check(Challenges:Get() == nil and Challenges:CountDone() == nil, "no challenges without the app's")
+	ns.UI:Show("home")
+	check(Shown("Get the Wanted app to track challenges and ranks"), "the empty state shows without challenges")
+	check(Shown("YOUR BOUNTY MONEY"), "the strip still shows")
+
+	-- The demo (development builds)
+	ns:RunCommand("demo", "")
+	check(Challenges:IsDemo() and Challenges:GetMine().rank == 4, "the demo shows made-up challenges")
+	ns.UI:Show("challenges")
+	ns:RunCommand("demo", "banner")
+	check(warned[#warned]:find("RANK UP", 1, true), "the demo's banner")
+	ns:RunCommand("demo", "")
+	check(not Challenges:IsDemo() and Challenges:Get() == nil, "the demo turns off")
+	ns.Alerts.Warn = origWarn
+
+	-- The window remembers its page; a page switched off falls back to Home
+	ns.UI:Show("hotspots")
+	check(db.settings.lastPage == "hotspots", "the page shown is remembered")
+	db.settings.showTools = false
+	ns.UI:Show("tools")
+	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
+	check(Shown("BOUNTIES") and Shown("WAR") and Shown("YOU"), "the menu's groups are labelled")
 end)()

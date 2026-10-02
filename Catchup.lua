@@ -95,6 +95,8 @@ function Catchup:Import()
 	end
 	-- Bounty requests are kept by id, so taking in the same ones again changes nothing
 	private.TakeRequests(entry.requests)
+	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
+	Wanted.Challenges:Take(entry.challenges)
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

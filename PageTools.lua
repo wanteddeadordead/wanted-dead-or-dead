@@ -92,6 +92,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("tools", {
+	group = "You",
 	title = "Tools",
 	subtitle = "The player-to-player network and the log to send when something looks wrong.",
 	hidden = function() return not Wanted.db.settings.showTools end,

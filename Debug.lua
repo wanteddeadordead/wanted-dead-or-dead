@@ -657,3 +657,59 @@ Wanted:RegisterCommand("streaktest", "Development builds: three pretend kills 2 
 	end
 	Wanted:Print("Streak test: three pretend kills over the next 6 seconds. Nothing is recorded.")
 end)
+
+---Made-up challenges in the shape the Wanted app brings them (docs: the challenges contract), for this character
+---at rank 4 with a few done, so Home and Challenges can be seen before the app sends any.
+function Debug:DemoChallenges()
+	local now = GetServerTime()
+	local day = 24 * 60 * 60
+	local faction = UnitFactionGroup("player") == "Alliance" and "A" or "H"
+	local other = faction == "A" and "H" or "A"
+	return {
+		t = now - 180,
+		day = date("%Y-%m-%d", now),
+		dayEnds = now + 6 * 3600 + 40 * 60,
+		weekEnds = now + 3 * day + 6 * 3600,
+		hot = { { zone = "Ashenvale", band = "16-30" }, { zone = "Westfall", band = "1-15" } },
+		daily = { id = "d:demo", name = "Ambush", text = "4 killing blows in a hot zone", target = 4, points = 5 },
+		weekly = {
+			{ id = "w:demo:1", name = "Hold the line", text = "Win 2 rounds at Hillsbrad Foothills", target = 2, points = 10, hot = false },
+			{ id = "w:demo:2", name = "Headhunter", text = "Collect any bounty", target = 1, points = 10, hot = false },
+			{ id = "w:demo:3", name = "Road warrior", text = "10 killing blows in Ashenvale", target = 10, points = 10, hot = true },
+		},
+		allThreeBonus = 15,
+		me = {
+			[UnitGUID("player")] = {
+				daily = { n = 2, done = false },
+				weekly = { { n = 1, done = false }, { n = 1, done = true }, { n = 4, done = false } },
+				streak = 4, rank = 4, points = 302, nextAt = 480,
+				recent = {
+					{ name = "Daily: First blood in Westfall", points = 5, at = now - day },
+					{ name = "Weekly: Headhunter", points = 10, at = now - 2 * day },
+					{ name = "All three weekly done", points = 15, at = now - 8 * day },
+				},
+			},
+		},
+		ranks = {
+			["khal drogash"] = { r = 4, f = other },
+			["thane oakcrest"] = { r = 7, f = other },
+			["elyra"] = { r = 11, f = faction },
+		},
+	}
+end
+
+Wanted:RegisterCommand("demo", "Development builds: made-up challenges and ranks on Home and Challenges (again to turn off); /wanted demo banner shows the rank-up banner: /wanted demo [banner]", function(args)
+	local Challenges = Wanted.Challenges
+	if strtrim(args or "") == "banner" then
+		Challenges:Announce({ { name = "Ambush", points = 5 } }, 5)
+		return
+	end
+	if Challenges:IsDemo() then
+		Challenges:SetDemo(nil)
+		Wanted:Print("Demo challenges off.")
+		return
+	end
+	Challenges:SetDemo(Debug:DemoChallenges())
+	Wanted:Print("Demo challenges on: made up, nothing saved. /wanted demo again to turn them off.")
+	Wanted.UI:Show("home")
+end)

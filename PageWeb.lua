@@ -138,6 +138,7 @@ function Wanted:PromptForApp()
 end
 
 UI:RegisterPage("web", {
+	group = "You",
 	title = "Website & app",
 	subtitle = "Where the leaderboards are, and the app that puts you on them.",
 	order = 5.5,

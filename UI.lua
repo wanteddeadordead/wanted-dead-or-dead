@@ -10,7 +10,7 @@ local private = {
 	frame = nil,
 	pages = {}, -- ordered page definitions
 	pageByKey = {},
-	current = "board",
+	current = nil, -- the page shown; the last one shown (settings.lastPage) when the window first opens
 	refreshQueued = false,
 	toastTimer = nil,
 }
@@ -22,6 +22,11 @@ local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22
 local HEADER_HEIGHT = 58
 local FOOTER_HEIGHT = 30
+local NAV_HEIGHT = 30
+local GROUP_HEIGHT = 26
+-- The sidebar's groups, in order; a page names its group (none: above them all, like Home)
+local GROUPS = { "Bounties", "War", "You" }
+local DEFAULT_PAGE = "home"
 
 
 
@@ -31,7 +36,8 @@ local FOOTER_HEIGHT = 30
 
 ---Registers a page.
 ---@param key string
----@param def table title, subtitle, order, icon, build(container, width, height), refresh(), badge() -> number?
+---@param def table title, subtitle, order, group (one of GROUPS), noHeader (the page takes the header's room too),
+---build(container, width, height), refresh(), badge() -> number|string?, color?
 function UI:RegisterPage(key, def)
 	def.key = key
 	tinsert(private.pages, def)
@@ -40,10 +46,11 @@ function UI:RegisterPage(key, def)
 end
 
 ---The size a page has to lay itself out in.
+---@param noHeader boolean? for a page without the title and subtitle
 ---@return number width
 ---@return number height
-function UI:GetPageSize()
-	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD - HEADER_HEIGHT - FOOTER_HEIGHT
+function UI:GetPageSize(noHeader)
+	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD - (noHeader and 0 or HEADER_HEIGHT) - FOOTER_HEIGHT
 end
 
 
@@ -213,9 +220,13 @@ function private.Create()
 	sideLine:SetWidth(1)
 	sideLine:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
 	private.navButtons = {}
+	private.groupLabels = {}
+	for _, group in ipairs(GROUPS) do
+		private.groupLabels[group] = W:SectionLabel(sidebar, group)
+	end
 	for _, def in ipairs(private.pages) do
 		local nav = CreateFrame("Button", nil, sidebar)
-		nav:SetSize(SIDEBAR_WIDTH - 1, 38)
+		nav:SetSize(SIDEBAR_WIDTH - 1, NAV_HEIGHT)
 		nav.bg = Theme:Fill(nav, C.transparent)
 		nav.bar = nav:CreateTexture(nil, "ARTWORK")
 		nav.bar:SetPoint("TOPLEFT")
@@ -282,11 +293,12 @@ function private.Create()
 	local pageWidth, pageHeight = UI:GetPageSize()
 	for _, def in ipairs(private.pages) do
 		local container = CreateFrame("Frame", nil, content)
-		container:SetPoint("TOPLEFT", 0, -HEADER_HEIGHT)
-		container:SetSize(pageWidth, pageHeight)
+		local width, height = UI:GetPageSize(def.noHeader)
+		container:SetPoint("TOPLEFT", 0, def.noHeader and 0 or -HEADER_HEIGHT)
+		container:SetSize(width, height)
 		container:Hide()
 		def.container = container
-		def.build(container, pageWidth, pageHeight)
+		def.build(container, width, height)
 	end
 
 	-- Waiting for an update: the pages that share records with other players are covered by this
@@ -326,13 +338,15 @@ end
 -- Showing and refreshing
 -- ============================================================================
 
----Shows the window on a page (or the current one).
+---Shows the window on a page (or the current one: the last one shown, Home the first time).
 ---@param key string?
 function UI:Show(key)
 	UI:GetFrame()
 	if key and private.pageByKey[key] then
 		private.current = key
 	end
+	private.current = private.UsablePage(private.current or Wanted.db.settings.lastPage)
+	Wanted.db.settings.lastPage = private.current
 	for _, def in ipairs(private.pages) do
 		def.container:SetShown(def.key == private.current)
 	end
@@ -347,20 +361,42 @@ function UI:Show(key)
 	end
 end
 
----Places the sidebar buttons, leaving out pages that are switched off (e.g. Tools).
+---The page to show for a key: Home when there is no such page, or it's switched off.
+---@param key string?
+---@return string
+function private.UsablePage(key)
+	local def = key and private.pageByKey[key]
+	if not def or (def.hidden and def.hidden()) then
+		return DEFAULT_PAGE
+	end
+	return key
+end
+
+---Places the sidebar buttons under their groups' labels, leaving out pages that are switched off (e.g. Tools).
 function private.LayoutNav()
-	local y = -16
-	for _, def in ipairs(private.pages) do
-		local nav = private.navButtons[def.key]
-		local hidden = def.hidden and def.hidden()
-		nav:ClearAllPoints()
-		if hidden then
-			nav:Hide()
-		else
-			nav:SetPoint("TOPLEFT", 0, y)
-			nav:Show()
-			y = y - 40
+	local y = -12
+	local function Place(group)
+		for _, def in ipairs(private.pages) do
+			local nav = private.navButtons[def.key]
+			if def.group == group then
+				nav:ClearAllPoints()
+				if def.hidden and def.hidden() then
+					nav:Hide()
+				else
+					nav:SetPoint("TOPLEFT", 0, y)
+					nav:Show()
+					y = y - NAV_HEIGHT
+				end
+			end
 		end
+	end
+	Place(nil)
+	for _, group in ipairs(GROUPS) do
+		local label = private.groupLabels[group]
+		label:ClearAllPoints()
+		label:SetPoint("TOPLEFT", 22, y - 12)
+		y = y - GROUP_HEIGHT
+		Place(group)
 	end
 end
 
@@ -380,18 +416,19 @@ end
 -- again at most this often, and only one per refresh, except when the window opens or changes page
 local BADGE_SECONDS = 5
 
----A page's badge, from the last time it was worked out unless that's stale and this refresh hasn't worked one
----out yet (or all is set).
+---A page's badge and its colour, from the last time it was worked out unless that's stale and this refresh hasn't
+---worked one out yet (or all is set).
 function private.Badge(page, all)
 	private.badges = private.badges or {}
+	private.badgeColors = private.badgeColors or {}
 	private.badgeAt = private.badgeAt or {}
 	local at = private.badgeAt[page.key]
 	if all or not at or (not private.badgeDone and GetTime() - at >= BADGE_SECONDS) then
-		private.badges[page.key] = page.badge()
+		private.badges[page.key], private.badgeColors[page.key] = page.badge()
 		private.badgeAt[page.key] = GetTime()
 		private.badgeDone = not all
 	end
-	return private.badges[page.key]
+	return private.badges[page.key], private.badgeColors[page.key]
 end
 
 ---Redraws the window. allBadges: work every menu badge out afresh (opening the window, changing page).
@@ -402,26 +439,30 @@ function UI:Refresh(allBadges)
 	end
 	private.badgeDone = false
 	private.LayoutNav()
-	local def = private.pageByKey[private.current]
-	if def.hidden and def.hidden() then
+	local usable = private.UsablePage(private.current)
+	if usable ~= private.current then
 		-- Its page was switched off while open
-		private.current = "board"
+		private.current = usable
+		Wanted.db.settings.lastPage = usable
 		for _, page in ipairs(private.pages) do
 			page.container:SetShown(page.key == private.current)
 		end
-		def = private.pageByKey[private.current]
 	end
-	private.title:SetText(def.title)
-	private.subtitle:SetText(def.subtitle or "")
+	local def = private.pageByKey[private.current]
+	private.title:SetText(def.noHeader and "" or def.title)
+	private.subtitle:SetText(def.noHeader and "" or def.subtitle or "")
 	for _, page in ipairs(private.pages) do
 		local nav = private.navButtons[page.key]
 		local selected = page.key == private.current
 		nav.bar:SetShown(selected)
 		nav.bg:SetColorTexture(1, 1, 1, selected and 0.06 or 0)
 		nav.label:SetTextColor(unpack(selected and C.white or C.muted))
-		local badge = page.badge and private.Badge(page, allBadges)
-		if badge and badge > 0 then
-			nav.badge:Set(tostring(badge), C.accent)
+		local badge, color = nil, nil
+		if page.badge then
+			badge, color = private.Badge(page, allBadges)
+		end
+		if (type(badge) == "number" and badge > 0) or (type(badge) == "string" and badge ~= "") then
+			nav.badge:Set(tostring(badge), color or C.accent)
 		else
 			nav.badge:Hide()
 		end
@@ -509,7 +550,7 @@ end
 -- Commands
 -- ============================================================================
 
-Wanted:RegisterCommand("show", "Opens the window: /wanted show [board|mine|enemies|hotspots|hunters|activity|settings].", function(args)
+Wanted:RegisterCommand("show", "Opens the window: /wanted show [home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
 	local key = strtrim(args or "")
 	UI:Show(key ~= "" and key or nil)
 end)

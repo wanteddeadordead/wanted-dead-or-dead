@@ -36,6 +36,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("mine", {
+	group = "Bounties",
 	title = "Your bounties",
 	subtitle = "The bounties you posted: what you owe, what's waiting on you, and your record as a poster.",
 	order = 2,

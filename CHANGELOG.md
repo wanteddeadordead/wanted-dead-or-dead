@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- A new Home page, where the window now opens: your challenge rank and daily streak, today's challenge and hot zones
+  (with how many enemies are there now), this week's three challenges, and a strip with your bounty money, enemies
+  nearby, the busiest zone and the latest kill or sighting. Every card opens its page.
+- A Challenges page: today's challenge and hot zones, this week's three, your recent completions, the rules, and the
+  14-rank ladder with where you stand. Challenges and ranks come from wanteddeadordead.com through the Wanted app;
+  without the app both pages say what it adds, and everything else works as before.
+- The menu is grouped: Bounties, War and You. The window remembers the page you were on.
+- Today's hot zones are tagged HOT on the Hotspots page and in the map's enemy tooltips.
+- A banner when the app brings news of a challenge you finished or a new challenge rank, once each.
+
 ## [1.4.1] - 2026-10-01
 
 - No more "No player named ... is currently playing" lines in chat. Wanted now hides the game's notice for every

@@ -45,7 +45,7 @@ function private.BuildApp(container, width)
 	card:SetSize(width, 226)
 	local label = W:SectionLabel(card, "The desktop app")
 	label:SetPoint("TOPLEFT", 16, -14)
-	local about = Theme:Text(card, "body", "Puts your records on the website's leaderboards, lets your records confirm other players' kills, links your characters by itself, and keeps Wanted's saved data safe between sessions. Windows. The addon works the same without it.")
+	local about = Theme:Text(card, "body", "Puts your records on the website's leaderboards, lets your records confirm other players' kills, links your characters by itself, and keeps Wanted's saved data safe between sessions. Windows and Mac. The addon works the same without it.")
 	about:SetPoint("TOPLEFT", 16, -34)
 	about:SetPoint("RIGHT", -16, 0)
 	about:SetJustifyH("LEFT")
@@ -128,7 +128,7 @@ function Wanted:PromptForApp()
 	end
 	W:Dialog({
 		title = "Get the Wanted app",
-		text = "The Wanted desktop app isn't set up on this computer. It puts your kills on the website's leaderboards, lets your records confirm other players' kills, and keeps Wanted's saved data safe. For Windows.\n\nClick the address, press Ctrl+C, and paste it into your browser:",
+		text = "The Wanted desktop app isn't set up on this computer. It puts your kills on the website's leaderboards, lets your records confirm other players' kills, and keeps Wanted's saved data safe. For Windows and Mac.\n\nClick the address, press Ctrl+C, and paste it into your browser:",
 		input = { value = SITE.."/app" },
 		confirmLabel = "Close",
 		cancelLabel = "Don't remind me",

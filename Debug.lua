@@ -26,6 +26,8 @@ end
 -- Every wrapped handler and timer is timed. One call over SLOW_MS, or a second in which they add up to over
 -- BUSY_MS, is logged with the worst offenders, so a slow moment in a big fight names its cause.
 local SLOW_MS = 12
+local SLOW_LOG_SECONDS = 10 * 60 -- a slow label is noted at most this often
+local slowSeen = {} -- label -> { count, worst, logged } slow calls since the label was last noted
 local BUSY_MS = 50
 local second, secondTotal, secondByLabel = 0, 0, {}
 
@@ -67,7 +69,22 @@ function Wanted:Timed(label, func)
 		stat.ms = stat.ms + ms
 		stat.calls = stat.calls + 1
 		if ms > SLOW_MS then
-			Wanted:Log("!! Slow: %s took %.0fms", label, ms)
+			-- Once per label every SLOW_LOG_SECONDS, with how often and how slow it was in between, so a steady
+			-- small cost doesn't fill the log
+			local seen = slowSeen[label]
+			if not seen then
+				seen = { count = 0, worst = 0 }
+				slowSeen[label] = seen
+			end
+			seen.count, seen.worst = seen.count + 1, max(seen.worst, ms)
+			if not seen.logged or GetTime() - seen.logged >= SLOW_LOG_SECONDS then
+				if seen.count > 1 then
+					Wanted:Log("!! Slow: %s took up to %.0fms (%d times since the last note)", label, seen.worst, seen.count)
+				else
+					Wanted:Log("!! Slow: %s took %.0fms", label, ms)
+				end
+				seen.logged, seen.count, seen.worst = GetTime(), 0, 0
+			end
 		end
 		return ...
 	end

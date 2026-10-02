@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Home and Challenges: if you've already updated the Wanted app, they now say to type /reload to load your challenges
+  (the game only reads what the app brings at login or /reload).
+- The Nearby window's PvP line updates the moment your PvP flag changes, from the game's new PvP flag event.
+- /wanted bug says why messages were dropped (for example the sighting budget in a busy zone), most first.
+- The debug log notes a slow task at most once every ten minutes, with how often and how slow it was, instead of every
+  time.
+
 ## [1.5.0] - 2026-10-01
 
 - A new Home page, where the window now opens: your challenge rank and daily streak, today's challenge and hot zones

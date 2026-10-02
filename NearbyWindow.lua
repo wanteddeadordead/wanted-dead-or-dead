@@ -102,6 +102,10 @@ function Nearby:OnEnable()
 	for _, event in ipairs({ "PLAYER_FLAGS_CHANGED", "UNIT_FACTION", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
 		private.flagFrame:RegisterEvent(event)
 	end
+	-- The PvP flag's own event (from build 70170): the moment the flag turns on or off. Older clients don't have it
+	if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("PLAYER_PVP_FLAG_CHANGED") then
+		private.flagFrame:RegisterEvent("PLAYER_PVP_FLAG_CHANGED")
+	end
 	private.flagFrame:SetScript("OnEvent", Wanted:Timed("Nearby flag events", function(_, event, unit)
 		if event == "UNIT_FACTION" and unit ~= "player" then
 			return

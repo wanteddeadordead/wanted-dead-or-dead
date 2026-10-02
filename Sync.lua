@@ -37,6 +37,7 @@ local private = {
 	pendingNeedAnswers = {}, -- origin -> { from, t } scheduled answers
 	recentFills = {}, -- origin -> highest seq seen filled by anyone recently
 	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
+	dropReasons = {}, -- why messages were dropped, reason -> count (shown in /wanted bug)
 	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
 	sightingQueue = {}, -- guid -> { data, urgent, t } waiting for the next batch
 	flushDue = nil,
@@ -970,7 +971,7 @@ function private.Send(tag, tbl, attempt, target)
 	-- Every message says which version sent it: the newest version wins (Core)
 	tbl.v = Wanted.VERSION
 	if not target and not isSighting and now < private.pausedUntil then
-		private.stats.dropped = private.stats.dropped + 1
+		private.Drop("paused", 1)
 		return false
 	end
 	local payload = Encode(tbl)
@@ -980,21 +981,21 @@ function private.Send(tag, tbl, attempt, target)
 		PruneTimes(private.guildTimes, now)
 		if #private.guildTimes + total > MAX_GUILD_PARTS_PER_MINUTE then
 			Wanted:Log("!! Sync: guild budget reached, dropping %s (the next resync picks it up)", tag)
-			private.stats.dropped = private.stats.dropped + 1
+			private.Drop("guild budget", 1)
 			return false
 		end
 	elseif target then
 		PruneTimes(private.linkTimes, now)
 		if #private.linkTimes + total > MAX_LINK_PARTS_PER_MINUTE then
 			Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
-			private.stats.dropped = private.stats.dropped + 1
+			private.Drop("realm link budget", 1)
 			return false
 		end
 	elseif isSighting then
 		PruneTimes(private.sightingTimes, now)
 		if #private.sightingTimes + total > MAX_SIGHTING_MESSAGES_PER_MINUTE then
 			Wanted:Log("Sync: sighting budget reached, dropping a batch")
-			private.stats.dropped = private.stats.dropped + 1
+			private.Drop("sighting budget", 1)
 			return false
 		end
 	elseif not private.MakeRoom(tag, total, now) then
@@ -1090,7 +1091,7 @@ function private.MakeRoom(tag, total, now)
 		Wanted:Print("Sync had more to send than the game allows two minutes running, so it is paused for %d minutes.", PAUSE_SECONDS / 60)
 	end
 	private.ceilingHitMinute = minute
-	private.stats.dropped = private.stats.dropped + 1
+	private.Drop("send queue full", 1)
 	return false
 end
 
@@ -1144,14 +1145,14 @@ function private.Drain()
 		local item = outbox[at]
 		if not private.channelId then
 			-- Left the channel: the queue is stale, and the hello after rejoining starts a resync
-			private.stats.dropped = private.stats.dropped + #outbox
+			private.Drop("left the channel", #outbox)
 			wipe(outbox)
 			private.outboxParts = 0
 			return
 		elseif item.tag == TAG_SIGHTINGS and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
 			tremove(outbox, at)
 			private.outboxParts = private.outboxParts - #item.parts
-			private.stats.dropped = private.stats.dropped + 1
+			private.Drop("stale sightings", 1)
 		elseif private.tokens < 1 then
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
 		else
@@ -1162,7 +1163,7 @@ function private.Drain()
 				Wanted:Log("!! Sync: %s has no channel number now; not sending, rejoining", tostring(private.channelName))
 				private.channelId = nil
 				private.joinAttempts = 0
-				private.stats.dropped = private.stats.dropped + #outbox
+				private.Drop("no channel number", #outbox)
 				wipe(outbox)
 				private.outboxParts = 0
 				C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
@@ -1192,7 +1193,7 @@ function private.Drain()
 				if item.refusals > MAX_RETRIES then
 					tremove(outbox, at)
 					private.outboxParts = private.outboxParts - (total - part + 1)
-					private.stats.dropped = private.stats.dropped + 1
+					private.Drop("throttled too often", 1)
 				end
 				private.tokens = 0
 				-- Longer each time: every refusal also puts a notice on the screen (hidden, but still)
@@ -1214,11 +1215,34 @@ function private.Drain()
 	end
 end
 
+---Counts n messages dropped (not sent, or not taken in) for reason, for /wanted bug.
+---@param reason string
+---@param n number
+function private.Drop(reason, n)
+	private.stats.dropped = private.stats.dropped + n
+	private.dropReasons[reason] = (private.dropReasons[reason] or 0) + n
+end
+
+---Why messages were dropped, most first: "sighting budget 120, stale sightings 30", or "" for none.
+---@return string
+function Sync:DropReasons()
+	local list = {}
+	for reason, n in pairs(private.dropReasons) do
+		tinsert(list, { reason = reason, n = n })
+	end
+	sort(list, function(a, b) return a.n > b.n or (a.n == b.n and a.reason < b.reason) end)
+	local parts = {}
+	for i = 1, min(#list, 5) do
+		parts[i] = list[i].reason.." "..list[i].n
+	end
+	return table.concat(parts, ", ")
+end
+
 ---Sends a throttled message again in a few seconds, up to a few times.
 function private.QueueRetry(tag, tbl, attempt, target)
 	attempt = (attempt or 0) + 1
 	if attempt > MAX_RETRIES or #private.retryQueue >= MAX_RETRY_QUEUE then
-		private.stats.dropped = private.stats.dropped + 1
+		private.Drop("retries used up", 1)
 		return
 	end
 	tinsert(private.retryQueue, { tag = tag, tbl = tbl, attempt = attempt, target = target })
@@ -1541,7 +1565,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES then
 			-- The next resync asks again for anything this leaves out
-			private.stats.dropped = private.stats.dropped + 1
+			private.Drop("busy in combat", 1)
 			return
 		end
 		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink) end)

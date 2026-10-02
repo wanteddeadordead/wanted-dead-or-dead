@@ -49,6 +49,10 @@ function Methods:IsVisible() return self._shown end
 function Methods:SetText(t) self._text = t or "" if self._fs then self._fs._text = t or "" end end
 function Methods:GetText() return self._text end
 function Methods:GetStringWidth() return #tostring(self._text) * 6 end
+function Methods:GetUnboundedStringWidth() return #tostring(self._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * 6 end
+function Methods:SetFontObject(font) self._font = font end
+function Methods:SetWordWrap(wrap) self._wrap = wrap end
+function Methods:GetFontObject() return self._font end
 function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
 function Methods:SetEnabled(v) self._enabled = v and true or false end
@@ -4307,6 +4311,35 @@ end)()
 	ns:RunCommand("demo", "")
 	check(not Challenges:IsDemo() and Challenges:Get() == nil, "the demo turns off")
 	ns.Alerts.Warn = origWarn
+
+	-- Long names fit their cards: every fitted line on Home and Challenges fits its width
+	local long = Sample()
+	long.hot = { { zone = "Hillsbrad Foothills", band = "20-30" }, { zone = "Stranglethorn Vale", band = "30-45" } }
+	long.daily.name, long.daily.text = "Stranglethorn bloodbath", "Win 2 rounds at Hillsbrad Foothills"
+	long.weekly[1].name = "Lieutenant General's errand"
+	long.me["Player-1-ME"].rank, long.me["Player-1-ME"].nextAt = 10, 5100
+	ns.Challenges:SetDemo(long)
+	for _, key in ipairs({ "home", "challenges" }) do
+		ns.UI:Show(key)
+		for _, fs in ipairs(Mock.fontStrings) do
+			if rawget(fs, "fitWidth") and fs._text ~= "" and fs._parent._shown and not fs._wrap then
+				check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for its card: "..fs._text)
+			end
+		end
+	end
+	long.daily.text = "Win 2 rounds at Hillsbrad Foothills and Stranglethorn Vale"
+	ns.Challenges:SetDemo(long)
+	ns.UI:Show("home")
+	local wrapped = false
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == long.daily.text and fs._wrap then wrapped = true end end
+	check(wrapped, "a challenge too long for one line goes on two")
+	local enemiesLine
+	for _, fs in ipairs(Mock.fontStrings) do if tostring(fs._text):find("No enemies there now", 1, true) then enemiesLine = fs end end
+	check(enemiesLine and rawget(enemiesLine, "fitWidth") and enemiesLine:GetUnboundedStringWidth() <= enemiesLine.fitWidth, "the hot zone line stops short of the 2x")
+	local moneyLine
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Nothing owed or earned yet" or fs._text == "Nothing owed yet" then moneyLine = fs end end
+	check(moneyLine, "no zero amounts on the bounty money card")
+	ns.Challenges:SetDemo(nil)
 
 	-- The window remembers its page; a page switched off falls back to Home
 	ns.UI:Show("hotspots")

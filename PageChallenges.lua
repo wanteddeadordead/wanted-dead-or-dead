@@ -32,6 +32,11 @@ function private.Duration(seconds)
 	return format("%dm", max(floor(seconds / 60), 1))
 end
 
+---Fits a line to the width it was given at build (fitWidth): the first text that fits, then smaller.
+function private.Fit(fs, texts, smaller, wrap)
+	Theme:FitText(fs, fs.fitWidth, texts, smaller, wrap)
+end
+
 ---"Today", "Yesterday", a weekday within the week, otherwise "Last week" or older.
 function private.When(at)
 	local days = floor((GetServerTime() - at) / 86400)
@@ -64,11 +69,15 @@ function private.BuildDaily(container)
 	card.resets:SetJustifyH("RIGHT")
 	card.name = Theme:Text(card, "title", "")
 	card.name:SetPoint("TOPLEFT", 16, -32)
+	-- Room left for the points pill beside it
+	card.name:SetWidth(DAILY_WIDTH - 100)
+	card.name.fitWidth = DAILY_WIDTH - 100
 	card.points = W:Pill(card)
 	card.points:SetPoint("LEFT", card.name, "RIGHT", 10, 0)
 	card.text = Theme:Text(card, "small", "")
 	card.text:SetPoint("TOPLEFT", 16, -56)
 	card.text:SetWidth(DAILY_WIDTH - 32)
+	card.text.fitWidth = DAILY_WIDTH - 32
 	card.bar = W:ProgressBar(card, 8)
 	card.bar:SetPoint("TOPLEFT", 16, -82)
 	card.bar:SetWidth(DAILY_WIDTH - 90)
@@ -91,6 +100,7 @@ function private.BuildHot(container)
 		local zone = Theme:Text(card, "body", "")
 		zone:SetPoint("TOPLEFT", 16, -32 - (i - 1) * 34)
 		zone:SetWidth(width - 32)
+		zone.fitWidth = width - 32
 		local enemies = Theme:Text(card, "tiny", "")
 		enemies:SetPoint("TOPLEFT", 16, -49 - (i - 1) * 34)
 		card.zones[i] = { zone = zone, enemies = enemies }
@@ -122,11 +132,15 @@ function private.BuildWeek(container)
 		row.number:SetPoint("TOPLEFT", 16, y - 6)
 		row.name = Theme:Text(card, "body", "")
 		row.name:SetPoint("TOPLEFT", 40, y - 4)
+		-- Room left for the HOT pill and the bar
+		row.name:SetWidth(200)
+		row.name.fitWidth = 200
 		row.hot = W:Pill(card)
 		row.hot:SetPoint("LEFT", row.name, "RIGHT", 8, 0)
 		row.text = Theme:Text(card, "tiny", "")
 		row.text:SetPoint("TOPLEFT", 40, y - 21)
 		row.text:SetWidth(260)
+		row.text.fitWidth = 260
 		row.bar = W:ProgressBar(card, 6)
 		row.bar:SetPoint("TOPRIGHT", -16, y - 8)
 		row.bar:SetWidth(130)
@@ -153,6 +167,7 @@ function private.BuildRecent(container)
 		row.name = Theme:Text(card, "small", "", C.text)
 		row.name:SetPoint("TOPLEFT", 106, y)
 		row.name:SetWidth(280)
+		row.name.fitWidth = 280
 		row.points = Theme:Text(card, "small", "", C.green)
 		row.points:SetPoint("TOPRIGHT", -16, y)
 		row.points:SetJustifyH("RIGHT")
@@ -190,6 +205,9 @@ function private.BuildLadder(container, width, height)
 		row.badge:SetTexture(Challenges:Badge(rank))
 		row.title = Theme:Text(row, "small", "")
 		row.title:SetPoint("LEFT", 52, 0)
+		-- Up to the points on the right
+		row.title:SetWidth(ladderWidth - 20 - 52 - 48)
+		row.title.fitWidth = ladderWidth - 20 - 52 - 48
 		row.at = Theme:Text(row, "tiny", "")
 		row.at:SetPoint("RIGHT", -6, 0)
 		row.at:SetJustifyH("RIGHT")
@@ -254,11 +272,11 @@ function private.RefreshDaily(data, mine)
 		return
 	end
 	local done = mine and mine.daily.done
-	card.name:SetText(daily.name)
+	private.Fit(card.name, { daily.name }, "heading")
 	local color = done and C.green or C.text
 	card.name:SetTextColor(color[1], color[2], color[3])
 	card.points:Set("+"..daily.points.." pts", C.gold)
-	card.text:SetText(daily.text or "")
+	private.Fit(card.text, { daily.text or "" }, "tiny", true)
 	card.resets:SetText(data.dayEnds and ("resets in "..private.Duration(data.dayEnds - GetServerTime())) or "")
 	private.SetProgress(card.bar, card.progress, daily, mine and mine.daily)
 end
@@ -272,7 +290,7 @@ function private.RefreshHot(data)
 	for i, slot in ipairs(private.hot.zones) do
 		local hot = not dayOver and data.hot[i]
 		if hot then
-			slot.zone:SetText(hot.zone..(hot.band and Theme:Colorize("  "..hot.band, C.faint) or ""))
+			private.Fit(slot.zone, { hot.zone..(hot.band and Theme:Colorize("  "..hot.band, C.faint) or ""), hot.zone }, "small")
 			local group = byZone[strlower(hot.zone)]
 			local now = group and group.recent or 0
 			slot.enemies:SetText(now > 0 and Theme:Colorize(format("%d enem%s now", now, now == 1 and "y" or "ies"), C.red) or Theme:Colorize("No enemies seen there now", C.faint))
@@ -297,11 +315,11 @@ function private.RefreshWeek(data, mine)
 		local progress = challenge and mine and mine.weekly[i]
 		row.number:SetShown(challenge and true or false)
 		if challenge then
-			row.name:SetText(challenge.name)
+			private.Fit(row.name, { challenge.name }, "small")
 			local color = progress and progress.done and C.green or C.text
 			row.name:SetTextColor(color[1], color[2], color[3])
 			row.hot:Set(challenge.hot and "HOT" or nil, C.red)
-			row.text:SetText(challenge.text or "")
+			private.Fit(row.text, { challenge.text or "" })
 			private.SetProgress(row.bar, row.progress, challenge, progress, challenge.points)
 		else
 			row.name:SetText(i == 1 and Theme:Colorize("None this week yet", C.faint) or "")
@@ -324,7 +342,7 @@ function private.RefreshRecent(mine)
 	for i, row in ipairs(card.rows) do
 		local r = recent[i]
 		row.when:SetText(r and private.When(r.at) or "")
-		row.name:SetText(r and r.name or "")
+		private.Fit(row.name, { r and r.name or "" }, "tiny")
 		row.points:SetText(r and ("+"..r.points) or "")
 	end
 end
@@ -351,7 +369,7 @@ function private.RefreshLadder(mine)
 	for r, row in ipairs(card.rows) do
 		local you = r == rank
 		local title = Challenges:Title(r, faction)
-		row.title:SetText(you and (title.." (you)") or title)
+		private.Fit(row.title, you and { title.." (you)", title } or { title }, "tiny")
 		local color = you and C.gold or (r <= rank and C.text or C.faint)
 		row.title:SetTextColor(color[1], color[2], color[3])
 		row.at:SetText(BreakUpLargeNumbers and BreakUpLargeNumbers(Challenges:Threshold(r)) or tostring(Challenges:Threshold(r)))

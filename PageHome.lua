@@ -22,6 +22,8 @@ local DAILY_WIDTH = 262
 local STREAK_BOXES = 7
 local BigFont = Theme:MakeFont("WantedFontHomeBig", 30, C.faint)
 local TRENDS = { up = "rising", down = "falling", steady = "steady" }
+-- Room the big "2x" takes at the right of a hot zone card, which the lines beside it stop short of
+local BIG_ROOM = 56
 
 ---"6h 40m", "40m" or "2d 5h".
 function private.Duration(seconds)
@@ -51,6 +53,11 @@ function private.SetProgress(bar, label, challenge, progress)
 	end
 end
 
+---Fits a card line to the width it was given at build (fitWidth): the first text that fits, then smaller.
+function private.Fit(fs, texts, smaller, wrap)
+	Theme:FitText(fs, fs.fitWidth, texts, smaller, wrap)
+end
+
 ---Enemy counts by zone, lower-case zone name -> the Hotspots group.
 function private.HotspotsByZone(groups)
 	local byZone = {}
@@ -78,12 +85,15 @@ function private.BuildBand(container, width)
 	band.label:SetPoint("TOPLEFT", 68, -15)
 	band.title = Theme:Text(band, "heading", "", C.gold)
 	band.title:SetPoint("TOPLEFT", 68, -33)
-	band.title:SetWidth(180)
+	band.title:SetWidth(176)
+	band.title.fitWidth = 176
 	band.points = Theme:Text(band, "small", "", C.text)
 	band.points:SetPoint("TOPLEFT", 250, -17)
 	band.toNext = Theme:Text(band, "small", "")
 	band.toNext:SetPoint("TOPRIGHT", band, "TOPLEFT", 500, -17)
 	band.toNext:SetJustifyH("RIGHT")
+	band.toNext:SetWidth(176)
+	band.toNext.fitWidth = 176
 	band.bar = W:ProgressBar(band, 8)
 	band.bar:SetPoint("TOPLEFT", 250, -36)
 	band.bar:SetWidth(250)
@@ -125,11 +135,15 @@ function private.BuildDaily(container)
 	card.resets:SetJustifyH("RIGHT")
 	card.name = Theme:Text(card, "title", "")
 	card.name:SetPoint("TOPLEFT", 16, -36)
+	-- Room left for the points pill beside it
+	card.name:SetWidth(DAILY_WIDTH - 100)
+	card.name.fitWidth = DAILY_WIDTH - 100
 	card.points = W:Pill(card)
 	card.points:SetPoint("LEFT", card.name, "RIGHT", 10, 0)
 	card.text = Theme:Text(card, "small", "")
 	card.text:SetPoint("TOPLEFT", 16, -60)
 	card.text:SetWidth(DAILY_WIDTH - 32)
+	card.text.fitWidth = DAILY_WIDTH - 32
 	card.bar = W:ProgressBar(card, 8)
 	card.bar:SetPoint("TOPLEFT", 16, -88)
 	card.bar:SetWidth(DAILY_WIDTH - 90)
@@ -160,11 +174,14 @@ function private.BuildHot(container, width, index)
 	card.zone = Theme:Text(card, "title", "")
 	card.zone:SetPoint("TOPLEFT", 16, -44)
 	card.zone:SetWidth(cardWidth - 32)
+	card.zone.fitWidth = cardWidth - 32
 	card.double = Theme:Text(card, "small", "Kills here count double", C.amber)
 	card.double:SetPoint("TOPLEFT", 16, -72)
+	card.double:SetWidth(cardWidth - 32 - BIG_ROOM)
 	card.enemies = Theme:Text(card, "small", "")
 	card.enemies:SetPoint("TOPLEFT", 16, -92)
-	card.enemies:SetWidth(cardWidth - 70)
+	card.enemies:SetWidth(cardWidth - 32 - BIG_ROOM)
+	card.enemies.fitWidth = cardWidth - 32 - BIG_ROOM
 	card.big = card:CreateFontString(nil, "ARTWORK")
 	card.big:SetFontObject(BigFont)
 	card.big:SetText("2x")
@@ -191,9 +208,11 @@ function private.BuildWeek(container, width)
 		card.name = Theme:Text(card, "heading", "")
 		card.name:SetPoint("TOPLEFT", 16, -42)
 		card.name:SetWidth(cardWidth - 32)
+		card.name.fitWidth = cardWidth - 32
 		card.text = Theme:Text(card, "small", "")
 		card.text:SetPoint("TOPLEFT", 16, -60)
 		card.text:SetWidth(cardWidth - 32)
+		card.text.fitWidth = cardWidth - 32
 		card.bar = W:ProgressBar(card, 6)
 		card.bar:SetPoint("TOPLEFT", 16, -90)
 		card.bar:SetWidth(cardWidth - 96)
@@ -248,9 +267,11 @@ function private.StripCard(container, index, cardWidth, label, color, page, tip)
 	card.value = Theme:Text(card, "body", "")
 	card.value:SetPoint("TOPLEFT", 14, -32)
 	card.value:SetWidth(cardWidth - 28)
+	card.value.fitWidth = cardWidth - 28
 	card.sub = Theme:Text(card, "tiny", "")
 	card.sub:SetPoint("TOPLEFT", 14, -50)
 	card.sub:SetWidth(cardWidth - 28)
+	card.sub.fitWidth = cardWidth - 28
 	return card
 end
 
@@ -295,7 +316,7 @@ function private.RefreshBand(data, mine)
 	if rank > 0 then
 		band.badge:SetTexture(Challenges:Badge(rank))
 		band.label:SetText("CHALLENGE RANK "..rank)
-		band.title:SetText(Challenges:Title(rank))
+		private.Fit(band.title, { Challenges:Title(rank) }, "small")
 	else
 		band.label:SetText("NO RANK YET")
 		band.title:SetText("Unranked")
@@ -304,7 +325,8 @@ function private.RefreshBand(data, mine)
 	local floorPoints = Challenges:Threshold(rank)
 	if rank < Challenges.MAX_RANK then
 		local nextAt = mine.nextAt or Challenges:Threshold(rank + 1)
-		band.toNext:SetText(Theme:Colorize(max(nextAt - mine.points, 0).." to ", C.muted)..Theme:Colorize(Challenges:Title(rank + 1), C.gold))
+		local toGo, nextTitle = max(nextAt - mine.points, 0), Theme:Colorize(Challenges:Title(rank + 1), C.gold)
+		private.Fit(band.toNext, { Theme:Colorize(toGo.." to ", C.muted)..nextTitle, Theme:Colorize(toGo.." to go", C.muted) }, "tiny")
 		band.bar:SetValue((mine.points - floorPoints) / max(nextAt - floorPoints, 1))
 		band.nextBadge:SetTexture(Challenges:Badge(rank + 1))
 	else
@@ -336,11 +358,11 @@ function private.RefreshDaily(data, mine)
 		return
 	end
 	local done = mine and mine.daily.done
-	card.name:SetText(daily.name)
+	private.Fit(card.name, { daily.name }, "heading")
 	local color = done and C.green or C.text
 	card.name:SetTextColor(color[1], color[2], color[3])
 	card.points:Set("+"..daily.points.." pts", C.gold)
-	card.text:SetText(daily.text or "")
+	private.Fit(card.text, { daily.text or "" }, "tiny", true)
 	card.resets:SetText(data.dayEnds and ("resets in "..private.Duration(data.dayEnds - GetServerTime())) or "")
 	private.SetProgress(card.bar, card.progress, daily, mine and mine.daily)
 	card.note:SetText(mine and "" or "Link this character in the app to track it.")
@@ -355,15 +377,17 @@ function private.RefreshHot(data, byZone)
 		card.double:SetShown(hot and true or false)
 		card.big:SetShown(hot and true or false)
 		if hot then
-			card.zone:SetText(hot.zone)
+			private.Fit(card.zone, { hot.zone }, "heading")
 			card.band:SetText(hot.band and ("Levels "..hot.band) or "")
 			local group = byZone[strlower(hot.zone)]
 			local now = group and group.recent or 0
 			local trend = group and group.trend and TRENDS[group.trend]
 			if now > 0 then
-				card.enemies:SetText(Theme:Colorize(format("%d enem%s", now, now == 1 and "y" or "ies"), C.red)..Theme:Colorize(" there now"..(trend and (", "..trend) or ""), C.muted))
+				local count = Theme:Colorize(format("%d enem%s", now, now == 1 and "y" or "ies"), C.red)
+				local after = trend and (", "..trend) or ""
+				private.Fit(card.enemies, { count..Theme:Colorize(" there now"..after, C.muted), count..Theme:Colorize(" now"..after, C.muted), count..Theme:Colorize(" now", C.muted) }, "tiny")
 			else
-				card.enemies:SetText(Theme:Colorize("No enemies seen there now", C.faint))
+				private.Fit(card.enemies, { Theme:Colorize("No enemies there now", C.faint) }, "tiny")
 			end
 		else
 			card.zone:SetText(Theme:Colorize(i == 1 and "None yet today" or "", C.faint))
@@ -393,10 +417,10 @@ function private.RefreshWeek(data, mine)
 				card.points:Set("+"..challenge.points.." pts", C.gold)
 			end
 			card.hot:Set(challenge.hot and "HOT" or nil, C.red)
-			card.name:SetText(challenge.name)
+			private.Fit(card.name, { challenge.name }, "small")
 			local color = done and C.green or C.text
 			card.name:SetTextColor(color[1], color[2], color[3])
-			card.text:SetText(challenge.text or "")
+			private.Fit(card.text, { challenge.text or "" }, "tiny", true)
 		else
 			card.points:Hide()
 			card.hot:Hide()
@@ -409,8 +433,19 @@ end
 
 function private.RefreshStrip()
 	local summary = Wanted.Model:GetMySummary()
-	private.money.value:SetText(Theme:Money(summary.hunting)..Theme:Colorize(format("  hunting, %d hunt%s", summary.huntingCount, summary.huntingCount == 1 and "" or "s"), C.muted))
-	private.money.sub:SetText("Owed to you "..Theme:Money(summary.owed)..", earned "..Theme:Money(summary.earned))
+	local hunting = Theme:Money(summary.hunting)
+	private.Fit(private.money.value, { hunting..Theme:Colorize(format("  hunting, %d hunt%s", summary.huntingCount, summary.huntingCount == 1 and "" or "s"), C.muted),
+		hunting..Theme:Colorize("  hunting", C.muted), hunting }, "small")
+	-- Only what isn't zero
+	local owed = summary.owed > 0 and ("Owed "..Theme:Money(summary.owed)) or nil
+	local earned = summary.earned > 0 and Theme:Money(summary.earned) or nil
+	if owed and earned then
+		private.Fit(private.money.sub, { owed..", earned "..earned, owed })
+	elseif owed or earned then
+		private.Fit(private.money.sub, { owed or ("Earned "..earned) })
+	else
+		private.Fit(private.money.sub, { "Nothing owed or earned yet", "Nothing owed yet" })
+	end
 
 	local nearby = Wanted.Enemies:GetNearby()
 	local kos = 0
@@ -420,7 +455,12 @@ function private.RefreshStrip()
 		end
 	end
 	if #nearby > 0 then
-		private.nearby.value:SetText(Theme:Colorize(#nearby.." nearby", C.red)..(kos > 0 and Theme:Colorize(format("  %d kill on sight", kos), C.text) or ""))
+		local count = Theme:Colorize(#nearby.." nearby", C.red)
+		if kos > 0 then
+			private.Fit(private.nearby.value, { count..Theme:Colorize(format("  %d kill on sight", kos), C.text), count..Theme:Colorize(format("  %d KoS", kos), C.text) }, "small")
+		else
+			private.Fit(private.nearby.value, { count })
+		end
 		local first = nearby[1]
 		local level = first.level
 		if (issecretvalue and issecretvalue(level)) or type(level) ~= "number" then
@@ -428,7 +468,7 @@ function private.RefreshStrip()
 		elseif level < 0 then
 			level = "??"
 		end
-		private.nearby.sub:SetText(format("%s, level %s", first.name or "?", tostring(level)))
+		private.Fit(private.nearby.sub, { format("%s, level %s", first.name or "?", tostring(level)), first.name or "?" })
 	else
 		private.nearby.value:SetText(Theme:Colorize("None nearby", C.muted))
 		private.nearby.sub:SetText("")
@@ -436,7 +476,7 @@ function private.RefreshStrip()
 
 	local top = Wanted.Hotspots:GetTop(1)[1]
 	if top then
-		private.topZone.value:SetText(top.zone..Theme:Colorize(format("  %d now", top.recent), C.red))
+		private.Fit(private.topZone.value, { top.zone..Theme:Colorize(format("  %d now", top.recent), C.red), top.zone..Theme:Colorize("  "..top.recent, C.red) }, "small")
 		local trend = top.trend and TRENDS[top.trend]
 		private.topZone.sub:SetText("Levels "..Wanted.Hotspots:FormatLevels(top)..(trend and (", "..trend) or ""))
 	else
@@ -449,13 +489,14 @@ function private.RefreshStrip()
 		local player = latest.player or (latest.guid and Wanted.Store:GetPlayer(latest.guid))
 		local name = Theme:ClassName(latest.name or "?", player and player.class)
 		if latest.kind == "kill" then
-			private.latest.value:SetText(format("%s killed %s", latest.who, name))
+			private.Fit(private.latest.value, { format("%s killed %s", latest.who, name), Theme:Colorize("Killed ", C.muted)..name }, "small")
 		elseif latest.kind == "death" then
-			private.latest.value:SetText(name..Theme:Colorize(" died", C.muted))
+			private.Fit(private.latest.value, { name..Theme:Colorize(" died", C.muted) }, "small")
 		else
-			private.latest.value:SetText(name..Theme:Colorize(" seen", C.muted))
+			private.Fit(private.latest.value, { name..Theme:Colorize(" seen", C.muted) }, "small")
 		end
-		private.latest.sub:SetText((latest.zone or "?")..", "..Theme:Ago(GetServerTime() - latest.t))
+		local ago = Theme:Ago(GetServerTime() - latest.t)
+		private.Fit(private.latest.sub, { (latest.zone or "?")..", "..ago, ago })
 	else
 		private.latest.value:SetText(Theme:Colorize("Nothing yet", C.muted))
 		private.latest.sub:SetText("")

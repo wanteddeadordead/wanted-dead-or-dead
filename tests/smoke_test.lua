@@ -885,6 +885,10 @@ local function OldMessage(tag, tbl) return tag..":zo"..tag..":1/1:"..LibDeflate0
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Player-9-OLDNEWS", n = "Old News", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Old Timer", nil, nil, nil, "WantedNetHorde")
 check(ns.Store:GetPlayer("Player-9-OLDNEWS") == nil, "an older version's news isn't taken in")
 check(#addonSent == 1 and addonSent[1].text:find("^U:"), "the older player is told to update")
+-- Every hidden whisper hides the game's "No player named ..." for its target, not just realm-link greetings: an
+-- offline player told to update (or asked where everyone went) mustn't fill the chat with it
+check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Old Timer' is currently playing.") == true,
+	"the 'not online' for someone just told to update is hidden")
 check(ns.db.addonVersions["Old Timer"] and ns.db.addonVersions["Old Timer"].v == "0.0.5", "the version book notes the older player's version")
 -- And an update notice whispered to us locks us
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")

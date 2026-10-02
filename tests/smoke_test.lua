@@ -334,6 +334,12 @@ for line in io.lines(ADDON.."WantedDeadOrDead.toc") do
 		chunk("WantedDeadOrDead", ns)
 	end
 end
+-- Another addon (DBM) loading a newer, broken LibSerialize after Wanted: Wanted keeps its own copy
+do
+	local broken = LibStub:NewLibrary("LibSerialize", 99)
+	broken.Serialize = function() error("Division by zero") end
+	broken.Deserialize = function() error("Division by zero") end
+end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
 Fire("PLAYER_LOGIN")
 RunTimers()
@@ -889,7 +895,7 @@ ns:LoadSavedData()
 check(ns:GetRequiredUpdate() == nil, "a version nobody has shown for days stops locking")
 -- A player on an older version is told to update, privately, and their news isn't taken in
 addonSent = {}
-local LibSerialize0, LibDeflate0 = LibStub("LibSerialize"), LibStub("LibDeflate")
+local LibSerialize0, LibDeflate0 = LibStub("LibSerialize-WantedDeadOrDead"), LibStub("LibDeflate")
 local function OldMessage(tag, tbl) return tag..":zo"..tag..":1/1:"..LibDeflate0:EncodeForWoWAddonChannel(LibDeflate0:CompressDeflate(LibSerialize0:Serialize(tbl))) end
 Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("S", { v = "0.0.5", s = { { g = "Player-9-OLDNEWS", n = "Old News", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Old Timer", nil, nil, nil, "WantedNetHorde")
 check(ns.Store:GetPlayer("Player-9-OLDNEWS") == nil, "an older version's news isn't taken in")
@@ -988,7 +994,7 @@ SlashCmdList.WANTED("synctest")
 check(#addonSent == 1 and addonSent[1].text:find("^H:"), "records still go out after the raid")
 for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
 -- Another player's batch: stored, shown, and not sent again by us
-local LibSerialize, LibDeflate = LibStub("LibSerialize"), LibStub("LibDeflate")
+local LibSerialize, LibDeflate = LibStub("LibSerialize-WantedDeadOrDead"), LibStub("LibDeflate")
 local function Message(tag, tbl)
 	return tag..":zz"..tag..":1/1:"..LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(LibSerialize:Serialize(tbl)))
 end
@@ -1788,6 +1794,11 @@ Fire("BN_FRIEND_ACCOUNT_ONLINE", 1)
 RunTimers()
 check(#Sent("WHISPER", "Horde Far") == 1 and Sent("WHISPER", "Horde Far")[1].tag == "H", "a Battle.net friend on our faction and another realm is greeted as a realm link")
 bnFriends[#bnFriends] = nil
+-- Wanted's messages survive another addon's broken LibSerialize (DBM's, which can't serialize 0 on WoW Forever)
+do
+	local tbl = ns.Sync:Decode(ns.Sync:Encode({ e = 0, q = 1 }))
+	check(type(tbl) == "table" and tbl.e == 0 and tbl.q == 1, "a message holding 0 encodes and decodes with Wanted's own LibSerialize")
+end
 -- The ruleset: Wanted runs on the PvP ruleset only. The app's realm map decides; without it, a realm name with "PvE"
 -- in it is Normal
 do

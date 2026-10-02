@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- No more "No player named ... is currently playing" lines in chat. Wanted now hides the game's notice for every
+  hidden message it sends, not only realm-link greetings, and stops messaging a player for ten minutes once the game
+  says they are offline.
+
 ## [1.4.0] - 2026-10-01
 
 - Update required: once players on 1.4.0 are around, older versions pause bounties, claims and sharing and say to

@@ -50,6 +50,8 @@ local private = {
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
 	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
+	whispered = {}, -- name -> when we last whispered them addon data (any kind: the game's "not online" stays hidden)
+	offline = {}, -- name -> when the game said they weren't online (no more whispers to them for a while)
 	forwardQueue = {}, -- name -> records to forward to that link
 	reshareQueue = {}, -- records from a link to share on this realm's channel
 	forwardDue = false,
@@ -160,7 +162,21 @@ local MAX_NEED_ORIGINS_LINK = 40
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
-local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone just greeted is hidden this long
+local NOT_FOUND_SECONDS = 30 -- the game's "no player named ..." for someone just whispered is hidden this long
+local OFFLINE_SECONDS = 10 * 60 -- someone the game said wasn't online isn't whispered again for this long
+
+---Whispers addon data to target, noting it so the game's "No player named ... is currently playing" for them is
+---hidden (HideNotFound). Someone the game just said wasn't online isn't whispered again for a while.
+---@return any result SendAddonMessage's result, or nil when skipped
+local function Whisper(text, target)
+	local off = private.offline[target]
+	if off and GetTime() - off < OFFLINE_SECONDS then
+		return nil
+	end
+	private.whispered[target] = GetTime()
+	return C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", target)
+end
+
 -- Locked out of the channel (an owner banned us or set a password): sync goes on by whisper links to the
 -- players last heard on it, and joining is tried again now and then (a passworded channel is gone once its last
 -- member leaves, and the next joiner makes it afresh without one)
@@ -1020,7 +1036,7 @@ function private.Send(tag, tbl, attempt, target)
 		return true
 	end
 	for part = 1, total do
-		local result = C_ChatInfo.SendAddonMessage(PREFIX, parts[part], "WHISPER", target)
+		local result = Whisper(parts[part], target)
 		Wanted:Log("Sync: SendAddonMessage part %d/%d to %s -> %s", part, total, target, tostring(result))
 		if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
 			private.stats.throttled = private.stats.throttled + 1
@@ -1556,7 +1572,7 @@ function private.TellOutdated(sender)
 	private.toldOutdated[sender] = now
 	private.msgCounter = (private.msgCounter % 46655) + 1
 	local text = TAG_UPDATE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode({ v = Wanted.VERSION })
-	C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", sender)
+	Whisper(text, sender)
 	Wanted:Log("Sync: told %s to update", tostring(sender))
 end
 
@@ -2072,7 +2088,7 @@ function private.NotFoundName(msg)
 			return name
 		end
 	end
-	for _, names in ipairs({ private.greeted, private.endedLinks }) do
+	for _, names in ipairs({ private.greeted, private.endedLinks, private.whispered }) do
 		for name, t in pairs(names) do
 			if now - t < NOT_FOUND_SECONDS and msg == format(ERR_CHAT_PLAYER_NOT_FOUND_S, name) then
 				return name
@@ -2090,6 +2106,9 @@ end
 ---A link who logged off: end the link at once, so nothing more is whispered to them.
 function private.OnSystemMessage(msg)
 	local name = private.NotFoundName(msg)
+	if name then
+		private.offline[name] = GetTime()
+	end
 	if name and private.links[name] then
 		private.links[name] = nil
 		private.forwardQueue[name] = nil
@@ -2316,7 +2335,7 @@ local function SendMove(target, question, hops)
 		-- The server's pointer: only those ever travel (the main channel at epoch 0 is known to everyone)
 		tbl.n, tbl.a, tbl.h = private.channelName, 1, hops or min((private.hop or MOVE_MAX_HOPS) + 1, MOVE_MAX_HOPS + 1)
 	end
-	C_ChatInfo.SendAddonMessage(PREFIX, TAG_MOVE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode(tbl), "WHISPER", target)
+	Whisper(TAG_MOVE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode(tbl), target)
 end
 
 ---Tells every player we know where we are now.

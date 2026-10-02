@@ -13,7 +13,7 @@
 local _, Wanted = ...
 local Sync = Wanted:NewModule("Sync")
 local Store = Wanted.Store
-local LibSerialize = LibStub("LibSerialize")
+local LibSerialize = LibStub("LibSerialize-WantedDeadOrDead") -- Wanted's own copy (see its MAJOR)
 local LibDeflate = LibStub("LibDeflate")
 local private = {
 	frame = CreateFrame("Frame"),

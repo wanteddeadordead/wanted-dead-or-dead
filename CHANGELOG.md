@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-02
+
+- Fixes "Division by zero" errors from LibSerialize for players who also run Deadly Boss Mods. DBM's newer copy of the
+  library, which addons share, fails on WoW Forever whenever a message holds a 0, so Wanted's messages with one (the
+  channel check at login among them) never went out. Wanted now uses its own copy, which no other addon replaces.
+
 ## [1.6.0] - 2026-10-02
 
 - Wanted is for the PvP ruleset. On a Normal-ruleset character it now stays idle and says so: nothing is recorded,

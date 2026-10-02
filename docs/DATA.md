@@ -77,7 +77,7 @@ except bounty targets, Kill on Sight, Ignore, players with a history in `tracks`
 Kill on Sight and not seen for 30 days are dropped, then the least recently seen past 5000 (from 1.2.21).
 
 `WantedDB.recentPeers` (from 1.2.10) is `name -> seen` for the last 20 players heard on the sync channel. A client
-locked out of the channel (banned, password changed, or no answer after 12 join attempts) whispers them a hello
+locked out of the channel (banned, a password set, or no answer after 12 join attempts) whispers them a hello
 with `x = 1`, and a peer accepts a same-realm whispered hello only when it carries `x`; sync then runs over
 whisper links until the channel can be joined again (tried every 5 minutes). Older clients ignore `x` and refuse
 same-realm whispers as before.
@@ -106,15 +106,30 @@ entries older than 14 days are dropped, then the oldest until it holds 500. A ne
 was on screen as fractions of the screen from its top left. The app finds the PNG in the game's Screenshots folder,
 cuts the model out and uploads it to wanteddeadordead.com. No migration: the field is filled in at load.
 
-`WantedDB.syncChannel` (from 1.2.18) is `{ e, n, p, t }`: the channel everyone moved to after the first was taken
-over (epoch, name, password, when). Absent until then; the addon uses WantedNet<Side> with the built-in password.
-It can also name WantedNet<Side> itself, with the built-in password, at an epoch of 1 or more: everyone
-moved back there once the takeover was over. No migration: older entries are still valid.
+`WantedDB.syncChannel` is `{ e, n, t }` from 1.4.0 (layout 2): the channel wanteddeadordead.com last pointed
+everyone to (epoch, name, when we took it), from the Wanted app's catch-up (`channel = { e, n }`) or whispered by a
+player whose app brought it. No password: every sync channel is joined without one. It can name WantedNet<Side>
+itself, when the server points everyone back. The app's pointer is followed when its epoch is newer, or the same with
+another name; a whispered one only when newer. The app's default, the main channel at epoch 0, and any pointer with a
+`p` (an app before 0.2.26) are ignored. Absent until a pointer comes; the addon then uses WantedNet<Side>.
+From 1.2.18 to 1.3.x it was `{ e, n, p, t }`, a channel the addons picked themselves after a takeover, with a
+password; the layout 2 migration drops it and keeps its name in `WantedDB.oldSyncChannel` (when it isn't
+WantedNet<Side>), which the addon leaves once at the next login and clears.
 
-`WantedDB.homeCheck` is `{ wait, tried, home }`: how long to wait between tries of WantedNet<Side> while on a moved
-channel (15 minutes, doubled up to a day each time it's taken over again within 30 minutes of everyone moving back,
-and back to 15 minutes after two hours there), when it was last tried, and when we last moved back (server times).
-No migration: filled in with defaults at load.
+`WantedDB.syncChannelState` (from 1.4.0) is `{ mainRefused, mainOpen, at, epoch }`. `mainRefused`: the channel this
+client follows (WantedNet<Side>, or the server's) turned it away: a password, a ban, moderation, or two kicks within
+10 minutes (the name is from when only the main channel was reported). `mainOpen`: WantedNet<Side> let us in, on it
+or on a quiet try while following the server's channel. `at`: the last server time the state was seen (refreshed at
+every join and try; the server counts only recent reports). `epoch`: the epoch of the server pointer followed (0 for
+none, so the main channel), which tells the server which channel the report is about. The Wanted app passes it to
+wanteddeadordead.com, which picks a new channel for a side once two accounts report the followed channel refused,
+and points everyone back once the main one is open. A new key with defaults; the migration starts it afresh.
+
+`WantedDB.homeCheck` is `{ wait, tried }` from 1.4.0: how long to wait between quiet tries of WantedNet<Side> while it
+turns us away or we're on the server's channel (5 minutes, doubled after each refusal up to 25 minutes, under the server's 30-minute window for reports, back to 5
+minutes once let in), and when it was last tried (server time). Up to 1.3.x it timed tries of the first channel
+after an addon-made move, with a `home` field; the layout 2 migration resets it. `settings.channelMoves` (the old
+moves' switch) is removed by the same migration.
 
 `WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
 
@@ -188,7 +203,13 @@ kept a week, and a request that expired without an answer is dropped silently. N
   map keep working. The lock lifts on update, or when nobody on that version has been seen for three days
   (so a made-up version number can't lock people out for good).
 - A newer client ignores what older clients send and tells each of them, by a private addon whisper
-  (`U`), at most every 10 minutes, to update.
+  (`U`), at most every 10 minutes, to update. From 1.4.0 it also tells, at login, the players it knows whose last
+  message came from an older release: 1.3.x clients pick channels themselves, so 1.4.0 needs them updated.
+- Channel moves (`M`, whispers only) carry `{ e, n, a = 1, h }` from 1.4.0: the server's pointer, marked as the
+  server's (`a`), with how many whispers it has taken since an app delivered it (`h`); `{ e, q = 1 }` asks for the
+  current one. A client follows only a marked pointer with a higher epoch than its own, from a player it has heard on
+  the channel or linked with, and passes it on only while `h` is under 2 (each client spreads a pointer once). The
+  1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

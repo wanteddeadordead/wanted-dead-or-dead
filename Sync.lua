@@ -54,8 +54,7 @@ local private = {
 	reshareQueue = {}, -- records from a link to share on this realm's channel
 	forwardDue = false,
 	currentSource = nil, -- the link whose records are being merged (not sent back to it)
-	lockedOut = nil, -- why this client can't get into the channel (banned, wrong password, no answer), or nil
-	rejoinFailing = false, -- the game asked for the password: its own rejoin without one is about to fail
+	lockedOut = nil, -- why this client can't get into the channel (banned, a password set, no answer), or nil
 	lastChannelSend = -math.huge, -- GetTime() of our last addon message on the channel
 	moderated = false, -- moderation is on in the channel: only its moderators can send, so we don't
 	membersRetrying = false, -- a member request is waiting for the game's channel list; others don't start one
@@ -64,19 +63,20 @@ local private = {
 	lockoutTicker = nil, -- tries the channel again while locked out
 	guildTimes = {}, -- outbound guild message times in the last minute (their own budget)
 	mutes = 0, -- how many of our joins have the invite sound muted right now (MuteInvite)
-	homeCheck = nil, -- the first channel's name while we try it again (CheckHome), or nil
-	homeRefused = false, -- the game turned that try down
-	homeCheckAt = nil, -- GetTime() of the last try
-	homeWaitLogged = nil, -- the next try's time, once its wait has been logged
+	mainCheck = nil, -- the main channel's name while we try it quietly (CheckMain), or nil
+	mainCheckRefused = false, -- the game turned that try down
+	mainCheckAt = nil, -- GetTime() of the last try
+	mainWaitLogged = nil, -- the next try's time, once its wait has been logged
+	epoch = 0, -- the server's channel pointer we're on (0: none ever came, so the main channel)
+	hop = nil, -- how that pointer reached us: 0 from our own app, 1 or more by whisper; nil when unknown (saved)
+	kicks = nil, -- GetTime() of our recent kicks from the main channel
 }
 local PREFIX = "WNTD"
 local CHANNEL_BASE = "WantedNet"
--- The password only keeps stray chat out of the channel; the addon is public, so it is not a secret
-local CHANNEL_PASSWORD = "wnt1"
--- Moving channels. A move is followed when this client saw the takeover itself (in the last few minutes), when
--- MOVE_QUORUM different players it knows sent the same move, or when the Wanted app passed it on from the server.
-local MOVE_TRUST_SECONDS = 10 * 60
-local MOVE_QUORUM = 2
+-- Moving channels (from 1.4.0). Only wanteddeadordead.com picks a channel other than the main one; the Wanted app
+-- passes its choice on (Catchup), and players it reached whisper it on. A whispered pointer travels at most
+-- MOVE_MAX_HOPS whispers from a player whose own app delivered it: each player spreads a pointer once, when it's new.
+local MOVE_MAX_HOPS = 2
 local MOVE_ASK_PEERS = 5 -- players asked for the current channel at login
 local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
 local CHANNEL_NAME_MAX = 31
@@ -93,8 +93,9 @@ local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 local TAG_UPDATE = "U"
 -- Sent privately to a posse's caller: I'm joining (Posse)
 local TAG_POSSE_JOIN = "J"
--- A move to a new sync channel after the old one was taken over, or (q) a player asking for the current one:
--- { e = epoch, n = name, p = password, q = 1 when asking }. Whispers only, never on a channel.
+-- The server's sync channel, or (q) a player asking for the current one: { e = epoch, n = name, a = 1 (the
+-- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
+-- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
@@ -160,9 +161,9 @@ local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
 local NOT_FOUND_SECONDS = 10 -- the game's "no player named ..." for someone just greeted is hidden this long
--- Locked out of the channel (an owner banned us or changed its password): sync goes on by whisper links to the
--- players last heard on it, and joining is tried again now and then (a re-passworded channel is gone once its
--- last member leaves, and the next joiner makes it afresh with the addon's password)
+-- Locked out of the channel (an owner banned us or set a password): sync goes on by whisper links to the
+-- players last heard on it, and joining is tried again now and then (a passworded channel is gone once its last
+-- member leaves, and the next joiner makes it afresh without one)
 local MAX_RECENT_PEERS = 20
 local RECENT_PEER_SECONDS = 7 * 24 * 60 * 60
 local LOCKOUT_RETRY_SECONDS = 5 * 60
@@ -172,29 +173,24 @@ local MAX_GUILD_PARTS_PER_MINUTE = 20
 local MEMBERS_INTERVAL = 5 * 60 -- how often the game is asked for the channel's member count
 local MEMBERS_RETRY_SECONDS, MEMBERS_ATTEMPTS = 10, 6 -- when the channel isn't in the game's list yet
 local MEMBERS_ASK_SECONDS = 10 -- at most one member list request this often
-local REJOIN_FAIL_SECONDS = 15 -- how long after a password request its failed rejoin is expected
--- The game's own rejoin fails once per login; this many wrong passwords this close together are ours being turned
--- down: the channel's password was changed
-local WRONG_PASSWORDS_TAKEOVER = 3
-local WRONG_PASSWORDS_SECONDS = 120
 -- A refused join makes the game ask for the password in a box (CHAT_CHANNEL_PASSWORD) that plays the party-invite
 -- sound, SOUNDKIT.IG_PLAYER_INVITE (kit 880). That kit's one file is FileDataID 567451, sound/interface/iplayerinvitea.ogg
 -- (wago.tools SoundKitEntry, SoundKitID 880, read 2026-10-01). It's muted for a few seconds around our own joins, and
--- for a while at login, when the game rejoins the channel without its password and is asked for one.
+-- for a while at login, when the game rejoins the channels it remembers.
 local INVITE_SOUND_FILE = 567451
 local INVITE_MUTE_SECONDS = 5
 local LOGIN_MUTE_SECONDS = 20
--- While on a moved channel, the first one is tried again now and then (CheckHome), out of fights and instances
-local HOME_FIRST_CHECK_SECONDS = 60
-local HOME_CHECK_SECONDS = 15 * 60
-local HOME_ANSWER_SECONDS = 5 -- how long the game has to let us in
-local HOME_SETTLE_SECONDS = 5 -- then how long we stay in before believing it (a moderated channel says so)
--- Taken over again soon after everyone moved back: whoever took it still holds it. The wait between tries doubles
--- each time (up to a day), and is back to the start once a stay there lasts two hours.
-local HOME_TROUBLE_SECONDS = 30 * 60
-local HOME_MAX_WAIT_SECONDS = 24 * 60 * 60
-local HOME_GOOD_STAY_SECONDS = 2 * 60 * 60
-local HOME_QUIET_SECONDS = 30 -- the first channel's notices are hidden this long after a try
+-- While the main channel turns us away, or we're on the server's channel, the main one is tried again quietly
+-- (CheckMain), out of fights and instances: after 5 minutes, then twice as long after each refusal, up to 25 minutes (the server counts a report for 30).
+-- Let in, the wait is back to 5 minutes.
+local MAIN_TICK_SECONDS = 60
+local MAIN_RETRY_SECONDS = 5 * 60
+local MAIN_MAX_WAIT_SECONDS = 25 * 60
+local MAIN_ANSWER_SECONDS = 5 -- how long the game has to let us in
+local MAIN_SETTLE_SECONDS = 5 -- then how long we stay in before believing it (a moderated channel says so)
+local MAIN_QUIET_SECONDS = 30 -- the main channel's notices are hidden this long after a try
+-- Kicked from the main channel this many times this close together: it's turning us away
+local KICKS_REFUSED, KICKS_SECONDS = 2, 10 * 60
 -- Channel notices an owner or moderator causes, and what to say: kicks and bans name the target then the actor
 local HOSTILE_NOTICES = {
 	PLAYER_KICKED = "%s was kicked from the sync channel by %s.",
@@ -218,11 +214,11 @@ local HOSTILE_NOTICES_SELF = {
 
 function Sync:OnEnable()
 	private.faction = UnitFactionGroup("player") or ""
-	private.channelName, private.password, private.epoch = CHANNEL_BASE..private.faction, CHANNEL_PASSWORD, 0
-	-- The channel everyone moved to, if the first was ever taken over
+	private.channelName, private.epoch = private.MainName(), 0
+	-- The channel wanteddeadordead.com last pointed everyone to, if it ever did
 	local pointer = Wanted.db.syncChannel
 	if type(pointer) == "table" and private.ValidPointer(pointer) then
-		private.channelName, private.password, private.epoch = pointer.n, pointer.p, pointer.e
+		private.channelName, private.epoch = pointer.n, pointer.e
 	end
 	local result = C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
@@ -245,13 +241,13 @@ function Sync:OnEnable()
 		private.FlushForward()
 		private.Drain()
 	end)
-	-- The game rejoins the channel at login without its password, and its box asking for one plays the invite sound
+	-- The game rejoins the channels it remembers at login, and its box asking for a password plays the invite sound
 	private.MuteInvite(LOGIN_MUTE_SECONDS)
 	-- Channels are joined a little after login, so wait before trying
 	C_Timer.After(5, private.TryJoin)
-	-- Back to the first channel once a takeover is over
-	C_Timer.After(HOME_FIRST_CHECK_SECONDS, private.CheckHome)
-	C_Timer.NewTicker(HOME_CHECK_SECONDS, private.CheckHome)
+	C_Timer.After(5, private.LeaveOldChannel)
+	-- The main channel, tried again while it turns us away or we're on the server's channel
+	C_Timer.NewTicker(MAIN_TICK_SECONDS, private.CheckMain)
 	-- Realm links
 	Store:OnRecord("*", private.OnAnyRecord)
 	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
@@ -275,9 +271,9 @@ function private.HideChannelNotice(_, event, kind, _, _, channelString, _, _, _,
 	if type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName) then
 		return true
 	end
-	-- Our quiet try of the first channel (CheckHome)
-	if type(baseName) == "string" and private.homeCheckAt and GetTime() - private.homeCheckAt < HOME_QUIET_SECONDS
-		and strlower(baseName) == strlower(CHANNEL_BASE..private.faction) then
+	-- Our quiet try of the main channel (CheckMain)
+	if type(baseName) == "string" and private.mainCheckAt and GetTime() - private.mainCheckAt < MAIN_QUIET_SECONDS
+		and strlower(baseName) == strlower(private.MainName()) then
 		return true
 	end
 	if event == "CHAT_MSG_CHANNEL_NOTICE" and type(kind) == "string" and not NEVER_HIDDEN_NOTICES[kind]
@@ -526,13 +522,17 @@ end
 
 ---The game's notices about the sync channel (hidden from chat since 1.2.8, so this is where they're seen).
 ---Whoever has been in a custom channel longest becomes its owner when the owner leaves, and an owner can kick,
----ban, re-password or moderate it; the game names who did what, so it's said in chat and logged. A kick is
----undone by rejoining; a ban or a changed password locks this client out, and sync goes on by whisper.
+---ban, password or moderate it; the game names who did what, so it's said in chat and logged. A kick is undone by
+---rejoining; a ban, a password or moderation turns us away (Refused), and sync goes on by whisper.
 function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, baseName)
-	if private.homeCheck and type(baseName) == "string" and strlower(baseName) == strlower(private.homeCheck) then
-		-- Our quiet try of the first channel: only whether it let us in, and isn't moderated, matters (CheckHome)
+	if private.mainCheck and type(baseName) == "string" and strlower(baseName) == strlower(private.mainCheck) then
+		-- Our quiet try of the main channel: only whether it let us in, and isn't moderated, matters (CheckMain)
 		if kind == "WRONG_PASSWORD" or kind == "BANNED" or kind == "MODERATION_ON" then
-			private.homeRefused = true
+			private.mainCheckRefused = true
+			if kind == "MODERATION_ON" and private.channelName == private.mainCheck then
+				-- Still in it, but moderated: we wait for moderation to go off
+				private.moderated = true
+			end
 		end
 		return
 	end
@@ -555,22 +555,21 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 				Wanted:Print(text, tostring(player), who)
 			end
 		end
-		if isUs and (kind == "PLAYER_KICKED" or kind == "PLAYER_BANNED") then
-			private.HomeTrouble(kind == "PLAYER_KICKED" and "we were kicked" or "we were banned")
-		end
 		if kind == "PLAYER_KICKED" and isUs then
-			private.Rejoin("kicked")
-		elseif kind == "PLAYER_BANNED" and isUs then
-			private.LockOut("banned")
-			private.TakenOver("we were banned")
-		elseif kind == "MODERATION_ON" then
-			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off, and
-			-- move everyone to a new channel
-			private.moderated = true
-			private.LockOut("moderation is on")
-			if not isUs then
-				private.TakenOver("moderation was turned on")
+			if private.RepeatedKick() then
+				private.Refused("we were kicked again and again")
+			else
+				private.Rejoin("kicked")
 			end
+		elseif kind == "PLAYER_BANNED" and isUs then
+			private.Refused("we were banned")
+		elseif kind == "PASSWORD_CHANGED" then
+			-- We're still in, but nobody else gets in without the password
+			private.MarkFollowed(false, "a password was set")
+		elseif kind == "MODERATION_ON" then
+			-- Only moderators can send now: every message would be refused. Sync by whisper until it's off
+			private.moderated = true
+			private.Refused("moderation is on")
 		elseif kind == "MODERATION_OFF" and private.moderated then
 			private.moderated = false
 			if private.lockedOut then
@@ -584,38 +583,84 @@ function private.OnChannelNotice(event, kind, player, _, _, actor, _, _, _, base
 		-- Left without leaving: kicked, or the channel was closed under us
 		private.Rejoin("out of the channel")
 	elseif kind == "BANNED" then
-		private.LockOut("banned")
+		private.Refused("banned")
 	elseif kind == "WRONG_PASSWORD" then
-		if private.RepeatedWrongPassword() then
-			private.rejoinFailing, private.wrongPasswords = false, nil
-			private.LockOut("its password was changed")
-			private.TakenOver("its password was changed")
-		elseif private.rejoinFailing then
-			-- The game rejoined the channel at login without its password and asked for one: this is that
-			-- attempt failing, and the join with the password is on its way
-			private.rejoinFailing = false
-			Wanted:Log("Sync: the game's rejoin without the password failed; ours follows")
-			C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
-		else
-			private.LockOut("its password was changed")
-			private.TakenOver("its password was changed")
-		end
+		-- We join without a password (from 1.4.0): the channel has one now
+		private.Refused("it has a password now")
 	end
 end
 
----Notes a wrong-password notice; true once they come too often to be the game's rejoin at login.
+---Notes a kick from the sync channel; true once they come too often to be a one-off.
 ---@return boolean
-function private.RepeatedWrongPassword()
+function private.RepeatedKick()
 	local now = GetTime()
 	local recent = {}
-	for _, t in ipairs(private.wrongPasswords or {}) do
-		if now - t < WRONG_PASSWORDS_SECONDS then
+	for _, t in ipairs(private.kicks or {}) do
+		if now - t < KICKS_SECONDS then
 			recent[#recent + 1] = t
 		end
 	end
 	recent[#recent + 1] = now
-	private.wrongPasswords = recent
-	return #recent >= WRONG_PASSWORDS_TAKEOVER
+	private.kicks = recent
+	return #recent >= KICKS_REFUSED
+end
+
+---The channel we follow turned us away (the main one, or the server's). It's marked refused for the Wanted app to
+---report, and tried again: the main one now and then (CheckMain), the server's every few minutes (LockOut). The
+---addon never picks another channel itself; it waits for the server's.
+function private.Refused(why)
+	private.MarkFollowed(false, why)
+	if private.channelName == private.MainName() then
+		Wanted.db.homeCheck.tried = GetServerTime()
+	end
+	private.LockOut(why)
+end
+
+---Notes what the channel we follow did, for the Wanted app to pass to wanteddeadordead.com
+---(WantedDB.syncChannelState): mainRefused is whether it turned us away, main channel or the server's (the name is
+---from when only the main one was reported); epoch says which, the epoch of the server's pointer we follow (0: none).
+---On the main channel, mainOpen goes with it.
+---@param open boolean
+---@param why string?
+function private.MarkFollowed(open, why)
+	local mainOpen = nil
+	if private.channelName == private.MainName() then
+		mainOpen = open
+	end
+	private.MarkState(not open, mainOpen, why)
+end
+
+---Notes whether the main channel lets us in, while we follow the server's (CheckMain), or on it (MarkFollowed).
+---@param open boolean
+---@param why string?
+function private.MarkMain(open, why)
+	if private.channelName == private.MainName() then
+		private.MarkFollowed(open, why)
+	else
+		private.MarkState(nil, open, why)
+	end
+end
+
+---Sets syncChannelState's flags (nil leaves one as it is), when we last saw them so (the server counts only recent
+---reports) and the epoch we follow.
+---@param refused boolean?
+---@param mainOpen boolean?
+---@param why string?
+function private.MarkState(refused, mainOpen, why)
+	local state = Wanted.db.syncChannelState
+	if refused ~= nil and state.mainRefused ~= refused then
+		Wanted:Log("%sSync: %s %s%s", refused and "!! " or "", private.channelName, refused and "turns us away" or "lets us in", why and (" ("..why..")") or "")
+	end
+	if mainOpen ~= nil and state.mainOpen ~= mainOpen then
+		Wanted:Log("Sync: the main channel %s%s", mainOpen and "lets us in" or "turns us away", why and (" ("..why..")") or "")
+	end
+	if refused ~= nil then
+		state.mainRefused = refused
+	end
+	if mainOpen ~= nil then
+		state.mainOpen = mainOpen
+	end
+	state.at, state.epoch = GetServerTime(), private.epoch
 end
 
 ---Joins again shortly.
@@ -634,13 +679,20 @@ function private.LockOut(why)
 	private.lockedOut = why
 	private.channelId = nil
 	Wanted:Log("!! Sync: locked out of the channel (%s)", why)
-	Wanted:Print("Wanted can't get into its sync channel (%s). It keeps syncing by whisper with players seen there, and tries the channel again every %d minutes.", why, LOCKOUT_RETRY_SECONDS / 60)
+	local onMain = private.channelName == private.MainName()
+	Wanted:Print("Wanted can't get into its sync channel (%s). It keeps syncing by whisper with players seen there, and tries the channel again every few minutes.%s",
+		why, onMain and " If it stays shut, wanteddeadordead.com picks a new channel and the Wanted app brings it." or "")
+	if onMain and Wanted:AppVersion() then
+		-- The app reads the saved data, which the game writes only at logout or /reload
+		Wanted:Print("A /reload lets your Wanted app report it right away.")
+	end
 	private.GreetRecentPeers()
 	if private.ViaGuild() then
 		Wanted:Log("Sync: locked out; channel messages go to the guild until we're back")
 		private.SendHello()
 	end
-	if not private.lockoutTicker then
+	-- The main channel is tried again by CheckMain, with its own wait
+	if not onMain and not private.lockoutTicker then
 		private.lockoutTicker = C_Timer.NewTicker(LOCKOUT_RETRY_SECONDS, function()
 			if private.lockedOut then
 				private.joinAttempts = 0
@@ -683,28 +735,50 @@ function private.NoteRecentPeer(name)
 	end
 end
 
----The game rejoins the channels it remembers at login without their passwords, then pops up a box asking for
----one. For the sync channel, Wanted answers with its password and closes the box (a moment later, once the
----game's own handler has shown it). For our try of the first channel (CheckHome) it means the try failed.
+---The game asks for a channel's password when a join is turned down; its box plays the invite sound and is closed.
+---Wanted joins without a password (from 1.4.0), so for the sync channel it means the channel has one now; for our
+---try of the main channel (CheckMain), that the try failed. A channel 1.3.x used (WantedNet<Side><letters>, with a
+---password) that the game rejoins at login is left.
 function private.OnPasswordRequest(channel)
 	if type(channel) ~= "string" then
 		return
 	end
-	if private.homeCheck and strlower(channel) == strlower(private.homeCheck) then
-		private.homeRefused = true
+	local lower = strlower(channel)
+	if private.mainCheck and lower == strlower(private.mainCheck) then
+		private.mainCheckRefused = true
 		private.HidePasswordBox(channel)
 		return
 	end
-	if strlower(channel) ~= strlower(private.channelName or "") then
+	if lower == strlower(private.channelName or "") then
+		Wanted:Log("Sync: the game asked for the %s password: it has one now", channel)
+		private.HidePasswordBox(channel)
+		private.Refused("it has a password now")
 		return
 	end
-	Wanted:Log("Sync: the game asked for the %s password; joining with it", channel)
-	-- The game's own attempt fails with a wrong-password notice in a moment. Expected only for a short while, so a
-	-- real password change later is still a lockout
-	private.rejoinFailing = true
-	C_Timer.After(REJOIN_FAIL_SECONDS, function() private.rejoinFailing = false end)
-	private.Join(private.channelName, private.password)
-	private.HidePasswordBox(channel)
+	if strfind(lower, "^"..strlower(CHANNEL_BASE)) then
+		Wanted:Log("Sync: the game asked for the password of %s, not our sync channel now; leaving it", channel)
+		if lower == strlower(private.MainName()) then
+			private.MarkMain(false, "it has a password")
+		end
+		private.HidePasswordBox(channel)
+		if LeaveChannelByName then
+			LeaveChannelByName(channel)
+		end
+	end
+end
+
+---Leaves, once, the channel 1.3.x had moved to (saved by the 1.4.0 migration), if the game rejoined it at login.
+function private.LeaveOldChannel()
+	local old = Wanted.db.oldSyncChannel
+	Wanted.db.oldSyncChannel = nil
+	if type(old) ~= "string" or strlower(old) == strlower(private.channelName) then
+		return
+	end
+	local id = GetChannelName(old)
+	if id and id ~= 0 and LeaveChannelByName then
+		Wanted:Log("Sync: leaving %s, the channel 1.3.x had moved to", old)
+		LeaveChannelByName(old)
+	end
 end
 
 ---Closes the game's password box for one channel, next frame (the game's handler shows it after ours runs). The
@@ -748,10 +822,10 @@ function private.UnmuteAll()
 	end
 end
 
----Joins a channel with the invite sound muted, in case the game turns us down and asks for a password.
-function private.Join(name, password)
+---Joins a channel, without a password, with the invite sound muted in case the game turns us down and asks for one.
+function private.Join(name)
 	private.MuteInvite()
-	JoinPermanentChannel(name, password)
+	JoinPermanentChannel(name)
 end
 
 
@@ -778,10 +852,10 @@ function private.TryJoin()
 			Wanted:Log("Sync: calling JoinPermanentChannel")
 			-- Joined without a chat frame id, so it is not shown in any tab; it only ever carries addon data, which
 			-- never displays anyway. Permanent channels are remembered by the server, so if this client blocks the
-			-- call, joining once by hand (/join <name> <password>) is enough for good.
-			private.Join(private.channelName, private.password)
+			-- call, joining once by hand (/join <name>) is enough for good.
+			private.Join(private.channelName)
 		elseif private.joinAttempts == 3 then
-			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s %s", private.channelName, private.password)
+			Wanted:Print("Not in the sync channel yet. If it never joins, type once: /join %s", private.channelName)
 		end
 		C_Timer.After(JOIN_RETRY_SECONDS, private.TryJoin)
 		return
@@ -792,6 +866,10 @@ function private.TryJoin()
 		return
 	end
 	private.channelId = id
+	private.MarkFollowed(true)
+	if private.channelName == private.MainName() then
+		Wanted.db.homeCheck.wait = MAIN_RETRY_SECONDS
+	end
 	if private.lockedOut then
 		Wanted:Log("Sync: back in the channel after being locked out (%s)", private.lockedOut)
 		private.lockedOut = nil
@@ -2066,70 +2144,52 @@ end)
 -- ============================================================================
 -- Moving channels
 -- ============================================================================
--- The sync channel is an ordinary custom channel: whoever owns it can moderate, ban or re-password it, and its
--- name is in this public code. When that happens, the client that sees it picks a new channel with a random name
--- and password and whispers it to the players it knows; they follow (see MOVE_QUORUM) and pass it on. The Wanted
--- app also carries the current channel from wanteddeadordead.com (Catchup). WantedDB.syncChannel keeps it.
+-- The sync channel is an ordinary custom channel: whoever owns it can moderate, ban or password it, and its name is
+-- in this public code. The main channel, WantedNet<Side>, has no password. When it turns us away, the addon marks
+-- it refused (WantedDB.syncChannelState), keeps trying it, and waits: the Wanted app reports it to
+-- wanteddeadordead.com, which alone picks another channel (no password, a higher epoch) once two accounts say so,
+-- and points everyone back to the main one once it's open again. The app brings the server's pointer in its
+-- catch-up (Catchup); the addon follows it and whispers it to the players it knows, so those without the app follow
+-- too. WantedDB.syncChannel keeps it. An addon never picks a channel itself, and never follows one another addon
+-- made up (1.3.x moves, with a password, are ignored).
 
----Whether a channel pointer is one this client could use: a later epoch, a name on this side, a password. The first
----channel counts too, with its own password only: everyone moves back to it once a takeover is over (CheckHome).
+---The main sync channel's name for this side.
+---@return string
+function private.MainName()
+	return CHANNEL_BASE..(private.faction or "")
+end
+
+---Whether a pointer is one the server could have sent: an epoch, and the main channel or a name on this side, with
+---no password (a pointer with one is from before 1.4.0).
 function private.ValidPointer(p)
-	return type(p.e) == "number" and p.e >= 1 and p.e == floor(p.e) and p.e < 100000
-		and ((p.n == CHANNEL_BASE..private.faction and p.p == CHANNEL_PASSWORD)
-			or (type(p.n) == "string" and #p.n <= CHANNEL_NAME_MAX and strfind(p.n, "^"..CHANNEL_BASE..private.faction.."%l+$") ~= nil
-				and type(p.p) == "string" and strfind(p.p, "^%w+$") ~= nil and #p.p >= 6 and #p.p <= 16))
+	local main = private.MainName()
+	return type(p) == "table" and p.p == nil and type(p.e) == "number" and p.e >= 1 and p.e == floor(p.e) and p.e < 100000
+		and type(p.n) == "string" and #p.n <= CHANNEL_NAME_MAX and (p.n == main or strfind(p.n, "^"..main.."%w+$") ~= nil)
 end
 
-local function RandomWord(length, letters)
-	local out = {}
-	for i = 1, length do
-		local at = math.random(1, #letters)
-		out[i] = strsub(letters, at, at)
-	end
-	return table.concat(out)
-end
-
----The current channel was taken over: pick the next one (once per channel) and move there.
-function private.TakenOver(why)
-	private.takenOverAt = GetTime()
-	private.HomeTrouble(why)
-	if Wanted.db.settings.channelMoves == false then
-		return
-	end
-	if private.proposedFrom == private.epoch then
-		return
-	end
-	private.proposedFrom = private.epoch
-	local pointer = { e = private.epoch + 1, n = CHANNEL_BASE..private.faction..RandomWord(6, "abcdefghijklmnopqrstuvwxyz"),
-		p = RandomWord(10, "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789") }
-	Wanted:Log("!! Sync: the channel was taken over (%s); moving to %s (%d)", why, pointer.n, pointer.e)
-	private.Adopt(pointer, why)
-end
-
----Whether a pointer is newer than ours: a later epoch, or at the same epoch the lower name (two players who saw
----the same takeover pick different names; everyone settles on the same one). The first channel's name is the
----lowest of all, so at the same epoch it wins; a player back on it never follows an older move away.
-function private.IsNewer(p)
-	return p.e > private.epoch or (p.e == private.epoch and p.n < private.channelName)
-end
-
----Moves to a channel: leaves the old one, joins the new, tells the players we know.
-function private.Adopt(pointer, why)
-	if not private.ValidPointer(pointer) or not private.IsNewer(pointer) then
+---Moves to the server's channel (or back to the main one): leaves the old one, joins the new, and tells the players
+---we know unless the pointer has already gone as far by whisper as it may. Followed when its epoch is newer than ours;
+---from our own app, also at the same epoch with another name (the server's word).
+---@param pointer table { e, n }
+---@param why string
+---@param hop number 0 from our own app, else how many whispers it took
+---@return boolean moved
+function private.Adopt(pointer, why, hop)
+	if not private.ValidPointer(pointer) or pointer.e < private.epoch
+		or (pointer.e == private.epoch and (hop > 0 or pointer.n == private.channelName)) then
 		return false
 	end
 	local old = private.channelName
-	private.channelName, private.password, private.epoch = pointer.n, pointer.p, pointer.e
-	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, p = pointer.p, t = GetServerTime() }
-	if pointer.n == CHANNEL_BASE..private.faction then
-		if old ~= pointer.n then
-			Wanted.db.homeCheck.home = GetServerTime() -- watched for trouble a while (HomeTrouble)
-			Wanted:Print("Wanted's sync channel is free again, so everyone is moving back to it.")
+	private.channelName, private.epoch, private.hop = pointer.n, pointer.e, hop
+	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime() }
+	if old ~= pointer.n then
+		if pointer.n == private.MainName() then
+			Wanted:Print("Wanted's sync channel is back to the main one, as wanteddeadordead.com says.")
+		else
+			Wanted:Print("Wanted's sync channel moved to %s, chosen by wanteddeadordead.com while the main one turns players away.", pointer.n)
 		end
-	else
-		Wanted:Print("Wanted's sync channel was taken over (%s), so everyone is moving to a new one.", why)
 	end
-	Wanted:Log("Sync: moving from %s to %s (%d)", old, pointer.n, pointer.e)
+	Wanted:Log("Sync: moving from %s to %s (%d), %s", old, pointer.n, pointer.e, why)
 	if LeaveChannelByName and old ~= pointer.n then
 		LeaveChannelByName(old)
 	end
@@ -2140,86 +2200,95 @@ function private.Adopt(pointer, why)
 	end
 	private.joinAttempts = 0
 	C_Timer.After(2, private.TryJoin)
-	private.SpreadMove()
+	if hop < MOVE_MAX_HOPS then
+		private.SpreadMove(hop + 1)
+	end
 	return true
 end
 
----While on a moved channel: tries the first one again with its own password, quietly. A taken-over channel keeps
----its new password only while someone is in it; once the last member leaves, the next joiner makes it afresh with
----ours. If the game lets us in, the takeover is over: everyone moves back, one epoch on so the move beats the old
----ones. If not, nothing changes and it's tried again later; a new takeover moves everyone away again as usual.
-function private.CheckHome()
-	local home, state, now = CHANNEL_BASE..private.faction, Wanted.db.homeCheck, GetServerTime()
-	if private.channelName == home and state.home and now - state.home >= HOME_GOOD_STAY_SECONDS and state.wait ~= HOME_CHECK_SECONDS then
-		Wanted:Log("Sync: two hours on %s without trouble; trying it every %d minutes again", home, HOME_CHECK_SECONDS / 60)
-		state.wait = HOME_CHECK_SECONDS
+---Tries the main channel again, quietly, while it turns us away or we're on the server's channel. On the main
+---channel, being let in brings sync back there; on the server's, it's only reported (the server decides when
+---everyone goes back), and the main channel is left again.
+function private.CheckMain()
+	local main, state, now = private.MainName(), Wanted.db.homeCheck, GetServerTime()
+	if private.mainCheck or Wanted:InPvPMatch() then
+		return
 	end
-	if private.epoch == 0 or private.channelName == home or private.homeCheck then
+	if private.channelName == main and (private.channelId or not private.lockedOut) then
+		-- In it, or joining it the usual way (TryJoin)
 		return
 	end
 	if now - state.tried < state.wait then
 		-- Said once per wait, not every tick
 		local nextTry = state.tried + state.wait
-		if private.homeWaitLogged ~= nextTry then
-			private.homeWaitLogged = nextTry
-			Wanted:Log("Sync: next try of %s at %s (every %d min)", home, date("%H:%M", nextTry), state.wait / 60)
+		if private.mainWaitLogged ~= nextTry then
+			private.mainWaitLogged = nextTry
+			Wanted:Log("Sync: next try of %s at %s (every %d min)", main, date("%H:%M", nextTry), state.wait / 60)
 		end
 		return
 	end
 	if Wanted:InCombat() or IsInInstance() then
 		return
 	end
-	local id = GetChannelName(home)
+	local id = GetChannelName(main)
 	if id and id ~= 0 then
-		-- Still in it from before: being in says nothing about its password. Out now, tried next time
-		Wanted:Log("Sync: still in %s from before the move; leaving it", home)
+		if private.channelName == main then
+			-- Still in it. Moderated, moderation going off brings us back (OnChannelNotice); otherwise sync on it
+			if not private.moderated then
+				private.joinAttempts = 0
+				private.TryJoin()
+			end
+			return
+		end
+		-- Still in it from before: being in says nothing about a password. Out now, tried next time
+		Wanted:Log("Sync: still in %s from before; leaving it", main)
 		if LeaveChannelByName then
-			LeaveChannelByName(home)
+			LeaveChannelByName(main)
 		end
 		return
 	end
-	private.homeCheck, private.homeRefused, private.homeCheckAt = home, false, GetTime()
+	private.mainCheck, private.mainCheckRefused, private.mainCheckAt = main, false, GetTime()
 	state.tried = now
-	Wanted:Log("Sync: on %s (%d); trying %s to see if the takeover is over", private.channelName, private.epoch, home)
-	private.Join(home, CHANNEL_PASSWORD)
-	C_Timer.After(HOME_ANSWER_SECONDS, private.HomeAnswer)
+	Wanted:Log("Sync: on %s (%d); trying %s again", private.channelName, private.epoch, main)
+	private.Join(main)
+	C_Timer.After(MAIN_ANSWER_SECONDS, private.MainAnswer)
 end
 
----What came of the try: in the first channel, and still there and not moderated a moment later, means the takeover
----is over.
-function private.HomeAnswer(settled)
-	local home = private.homeCheck
-	if not home or private.channelName == home then
-		private.homeCheck = nil
+---What came of the try: in the main channel, and still there and not moderated a moment later, means it's open.
+function private.MainAnswer(settled)
+	local main = private.mainCheck
+	if not main then
 		return
 	end
-	local id = GetChannelName(home)
-	if private.homeRefused or not id or id == 0 then
-		private.homeCheck = nil
-		Wanted:Log("Sync: %s still turns us away; staying on %s", home, private.channelName)
-		if id and id ~= 0 and LeaveChannelByName then
-			LeaveChannelByName(home)
+	local state = Wanted.db.homeCheck
+	local id = GetChannelName(main)
+	if private.mainCheckRefused or not id or id == 0 then
+		private.mainCheck = nil
+		state.wait = min(state.wait * 2, MAIN_MAX_WAIT_SECONDS)
+		private.MarkMain(false, "tried again")
+		Wanted:Log("Sync: %s still turns us away; next try in %d minutes", main, state.wait / 60)
+		if id and id ~= 0 and private.channelName ~= main and LeaveChannelByName then
+			LeaveChannelByName(main)
 		end
 		return
 	end
 	if not settled then
-		C_Timer.After(HOME_SETTLE_SECONDS, function() private.HomeAnswer(true) end)
+		C_Timer.After(MAIN_SETTLE_SECONDS, function() private.MainAnswer(true) end)
 		return
 	end
-	private.homeCheck = nil
-	Wanted:Log("!! Sync: let into %s again: the takeover is over", home)
-	private.Adopt({ e = private.epoch + 1, n = home, p = CHANNEL_PASSWORD }, "the takeover is over")
-end
-
----Trouble on the first channel soon after everyone moved back to it: wait twice as long before the next try.
-function private.HomeTrouble(why)
-	local state = Wanted.db.homeCheck
-	if private.channelName ~= CHANNEL_BASE..private.faction or not state.home or GetServerTime() - state.home >= HOME_TROUBLE_SECONDS then
-		return
+	private.mainCheck = nil
+	state.wait = MAIN_RETRY_SECONDS
+	private.MarkMain(true)
+	if private.channelName == main then
+		Wanted:Log("!! Sync: let into %s again", main)
+		private.joinAttempts = 0
+		private.TryJoin()
+	else
+		Wanted:Log("Sync: %s lets us in again; staying on %s until wanteddeadordead.com says so", main, private.channelName)
+		if LeaveChannelByName then
+			LeaveChannelByName(main)
+		end
 	end
-	state.home = nil
-	state.wait = min(state.wait * 2, HOME_MAX_WAIT_SECONDS)
-	Wanted:Log("!! Sync: trouble on %s soon after moving back (%s); next try in %d minutes", private.channelName, why, state.wait / 60)
 end
 
 ---The players this client knows: realm links and those heard on the channel in the last week.
@@ -2236,30 +2305,41 @@ function private.KnownPeers()
 	return out
 end
 
-local function SendMove(target, question)
+---Whispers our channel pointer (or, asking, our epoch) to a player.
+---@param target string
+---@param question boolean?
+---@param hops number? whispers the pointer will have taken; by default one more than it took to reach us
+local function SendMove(target, question, hops)
 	private.msgCounter = (private.msgCounter % 46655) + 1
-	local tbl = { e = private.epoch, n = private.channelName, p = private.password, q = question and 1 or nil }
-	if private.epoch == 0 then
-		tbl.n, tbl.p = nil, nil -- the first channel: everyone knows it
+	local tbl = { e = private.epoch, q = question and 1 or nil }
+	if private.epoch > 0 then
+		-- The server's pointer: only those ever travel (the main channel at epoch 0 is known to everyone)
+		tbl.n, tbl.a, tbl.h = private.channelName, 1, hops or min((private.hop or MOVE_MAX_HOPS) + 1, MOVE_MAX_HOPS + 1)
 	end
 	C_ChatInfo.SendAddonMessage(PREFIX, TAG_MOVE..":"..private.ToBase36(private.msgCounter)..":1/1:"..Encode(tbl), "WHISPER", target)
 end
 
 ---Tells every player we know where we are now.
-function private.SpreadMove()
+---@param hops number
+function private.SpreadMove(hops)
 	for name in pairs(private.KnownPeers()) do
 		if name ~= Store:GetOrigin() then
-			SendMove(name)
+			SendMove(name, false, hops)
 		end
 	end
 end
 
----At login: asks the few players heard most recently which channel they're on.
+---At login: asks the few players heard most recently which channel they're on, and tells those whose last message
+---came from an older release to update (1.4.0 needs everyone on it: older ones pick channels themselves).
 function private.AskPointer()
 	local peers = {}
 	for name, seen in pairs(private.KnownPeers()) do
 		if name ~= Store:GetOrigin() then
 			tinsert(peers, { name = name, seen = seen })
+			local known = Wanted.db.addonVersions[strmatch(name, "^([^%-]+)") or name]
+			if type(known) == "table" and Wanted:IsRelease(Wanted.VERSION) and Wanted:IsNewerVersion(Wanted.VERSION, known.v) then
+				private.TellOutdated(name)
+			end
 		end
 	end
 	sort(peers, function(a, b) return a.seen > b.seen end)
@@ -2268,7 +2348,8 @@ function private.AskPointer()
 	end
 end
 
----A move (or a question) from another player.
+---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
+---and newer than ours; passed on once more while under the hop cap (Adopt).
 function private.OnMove(tbl, sender)
 	if type(sender) ~= "string" or sender == Store:GetOrigin() then
 		return
@@ -2283,34 +2364,29 @@ function private.OnMove(tbl, sender)
 		end
 		return
 	end
-	if tbl.q or not private.ValidPointer(tbl) or not private.IsNewer(tbl) then
+	if tbl.q then
 		return
 	end
-	-- Only players we know count, and one player alone isn't enough unless we saw the takeover ourselves
+	if tbl.a ~= 1 or not private.ValidPointer(tbl) then
+		Wanted:Log("Sync: a channel move from %s that isn't the server's; ignored", tostring(sender))
+		return
+	end
+	if tbl.e <= private.epoch then
+		return
+	end
 	if not private.KnownPeers()[sender] then
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
 		return
 	end
-	local key = tbl.e.."|"..tbl.n.."|"..tbl.p
-	private.moveVotes = private.moveVotes or {}
-	local votes = private.moveVotes[key] or {}
-	private.moveVotes[key] = votes
-	votes[sender] = true
-	local count = 0
-	for _ in pairs(votes) do
-		count = count + 1
-	end
-	local sawIt = private.takenOverAt and GetTime() - private.takenOverAt < MOVE_TRUST_SECONDS
-	Wanted:Log("Sync: %s says the channel moved to %s (%d); %d player(s) so far%s", sender, tbl.n, tbl.e, count, sawIt and ", and we saw the takeover" or "")
-	if sawIt or count >= MOVE_QUORUM then
-		private.Adopt(tbl, sawIt and "we saw it too" or "players we know moved")
-	end
+	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS
+	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
+	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
 end
 
----The channel the Wanted app passed on from wanteddeadordead.com (Catchup): trusted like our own eyes.
----@param pointer table { e, n, p }
+---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed when newer than ours.
+---@param pointer table { e, n }
 function Sync:AdoptFromApp(pointer)
-	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so") then
+	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so", 0) then
 		Wanted:Log("Sync: moved to the app's channel %s (%d)", pointer.n, pointer.e)
 	end
 end

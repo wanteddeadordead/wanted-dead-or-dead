@@ -4676,6 +4676,17 @@ end)()
 	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
 	check(#lines > 0 and table.concat(lines, "\n"):find("Wanted: Rank "..nobody.r, 1, true), "the demo's rank in a real player's tooltip")
 	GameTooltip.AddLine = origAdd
+	-- The game can hand the tooltip a secret unit token, and UnitIsPlayer refuses one from addon code
+	local origIsPlayer = UnitIsPlayer
+	UnitIsPlayer = function(unit)
+		if issecretvalue(unit) then error("Secret values are only allowed during untainted execution for this argument.") end
+		return origIsPlayer(unit)
+	end
+	TooltipUtil = { GetDisplayedUnit = function() return SECRET_SPELL, SECRET_SPELL end }
+	local tooltipOk = true
+	for _, f in ipairs(tooltipPostCalls) do tooltipOk = pcall(f, GameTooltip) and tooltipOk end
+	check(tooltipOk, "a secret unit token in the tooltip is skipped, not an error")
+	UnitIsPlayer = origIsPlayer
 	ns:RunCommand("demo", "")
 
 	-- ElvUI: its target frame and its nameplate frames (plate.unitFrame, as Plater's too) carry the labels

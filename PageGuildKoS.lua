@@ -1,6 +1,6 @@
 -- Wanted: the guild's Kill on Sight page. The guild's list (players and whole guilds) with who added each and why,
 -- the names waiting for an officer, a box to add a guild by name, and the guild's settings, which officers change:
--- on or off, who may change the list (review, rank or open), the rank for rank mode, and Discord sightings.
+-- on or off, who may change the list (review, rank or open), and the rank for rank mode.
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -147,6 +147,8 @@ UI:RegisterPage("guildkos", {
 		private.enabled:SetPoint("TOPLEFT", 0, 0)
 		private.discord = W:Toggle(settings, "Post sightings to the guild's Discord", function(checked) GuildKoS:SetSettings({ discord = checked }) end)
 		private.discord:SetPoint("TOPLEFT", 0, -26)
+		-- Discord sightings aren't posted yet: the switch shows once they are
+		private.discord:Hide()
 		local choices = {}
 		for _, key in ipairs(GuildKoS.MODES) do
 			tinsert(choices, { key = key, label = MODE_LABELS[key] })

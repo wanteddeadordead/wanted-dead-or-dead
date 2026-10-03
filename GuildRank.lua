@@ -152,11 +152,41 @@ function private.Roster()
 		if fine and type(info) == "table" and not (issecrettable and issecrettable(info)) then
 			local guid, order = info.guid, info.guildRankOrder
 			if type(guid) == "string" and not secret(guid) and strfind(guid, "^Player%-") and type(order) == "number" and not secret(order) then
-				out[#out + 1] = { guid = guid, ri = order - 1 }
+				local name = type(info.name) == "string" and not secret(info.name) and info.name or nil
+				out[#out + 1] = { guid = guid, ri = order - 1, name = name }
 			end
 		end
 	end
 	return out
+end
+
+---The guild's members as the game's guild window reads them: { guid, ri (rank index, 0 = the guild master), name };
+---nil when the game won't say. For Guild Kill on Sight, which checks who may change its list.
+function GuildRank:Members()
+	return private.Roster()
+end
+
+---The guild's officer ranks as the game sets them: rank index -> true for the ranks that can listen to officer chat,
+---the guild window's own test. The guild master's rank always counts, and this character's own rank when the game
+---says it's an officer's (also all that's known if the game won't give the ranks' permissions).
+---@return table
+function GuildRank:OfficerRanks()
+	local ranks = { [0] = true }
+	local own = Wanted.db.guildRanks[UnitGUID("player")]
+	if own and own.o and type(own.ri) == "number" then
+		ranks[own.ri] = true
+	end
+	local numRanks = GuildControlGetNumRanks and select(2, pcall(GuildControlGetNumRanks))
+	if C_GuildInfo and C_GuildInfo.GuildControlGetRankFlags and type(numRanks) == "number" and not secret(numRanks) then
+		for order = 1, min(numRanks, 20) do
+			local ok, flags = pcall(C_GuildInfo.GuildControlGetRankFlags, order)
+			-- The third permission is listening to officer chat
+			if ok and type(flags) == "table" and not (issecrettable and issecrettable(flags)) and flags[3] == true then
+				ranks[order - 1] = true
+			end
+		end
+	end
+	return ranks
 end
 
 ---Drops officers books not read for KEEP_SECONDS.

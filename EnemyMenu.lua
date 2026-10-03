@@ -178,17 +178,55 @@ function EnemyMenu:SetReason(d)
 	})
 end
 
+---Asks for a reason, then adds the enemy (or their whole guild) to the guild's Kill on Sight list.
+---@param d table
+---@param wholeGuild boolean
+function EnemyMenu:AddToGuildKoS(d, wholeGuild)
+	local target = wholeGuild and ("everyone in <"..d.guild..">") or Theme:ClassName(d.name, d.class)
+	local review = Wanted.GuildKoS:Current().settings.mode == "review" and not Wanted.GuildKoS:Can("approve")
+	W:Dialog({
+		title = "Guild Kill on Sight",
+		text = format("Add %s to your guild's Kill on Sight list?%s", target, review and " An officer approves it first." or ""),
+		input = { placeholder = "Reason, e.g. camps the Crossroads", value = d.reason or "" },
+		confirmLabel = "Add",
+		onConfirm = function(value)
+			local reason = strtrim(value or "")
+			local e, why
+			if wholeGuild then
+				e, why = Wanted.GuildKoS:Add("guild", d.guild, nil, reason)
+			else
+				e, why = Wanted.GuildKoS:Add("player", d.name, d.guid, reason)
+			end
+			if e then
+				Wanted:Print("%s %s your guild's Kill on Sight list.", wholeGuild and ("<"..d.guild..">") or d.name, e.state == "pending" and "is waiting for an officer to approve it for" or "is on")
+			else
+				Wanted:Print("%s", why)
+			end
+		end,
+	})
+end
+
 ---Shows the menu for an enemy (a Describe() result).
 ---@param d table
 function EnemyMenu:Show(d)
 	local items = {
 		{ text = Theme:ClassName(d.name, d.class), header = true },
 	}
-	if d.kos then
+	if d.kos and not d.guildKos then
 		tinsert(items, { text = "Remove from Kill on Sight", onClick = function() Enemies:SetKoS(d.guid, d.name, false) end })
 		tinsert(items, { text = d.reason and "Change reason..." or "Add a reason...", onClick = function() EnemyMenu:SetReason(d) end })
 	else
 		tinsert(items, { text = "Kill on Sight", color = C.red, onClick = function() Enemies:SetKoS(d.guid, d.name, true) end })
+	end
+	-- The guild's own list, when the guild has it on and this character's rank may add to it
+	local guildKoS = Wanted.GuildKoS and Wanted.GuildKoS:Current()
+	if d.guildKos then
+		tinsert(items, { text = "On your guild's Kill on Sight", disabled = true })
+	elseif guildKoS and guildKoS.settings.enabled and Wanted.GuildKoS:Can("add") then
+		tinsert(items, { text = "Add to Guild Kill on Sight...", color = C.red, onClick = function() EnemyMenu:AddToGuildKoS(d, false) end })
+		if d.guild and d.guild ~= "" then
+			tinsert(items, { text = format("Their whole guild <%s>...", d.guild), color = C.red, onClick = function() EnemyMenu:AddToGuildKoS(d, true) end })
+		end
 	end
 	if Wanted.Posse and Wanted.Posse:CanCall(d) then
 		tinsert(items, { text = "Form a posse", color = C.amber, onClick = function() Wanted.Posse:Call(d.guid) end })

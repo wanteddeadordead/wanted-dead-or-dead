@@ -100,6 +100,10 @@ function Catchup:Import()
 	Wanted.Challenges:Take(entry.challenges)
 	-- Players on other realm names to greet as realm links, also at every login
 	Sync:TakeDirectory(entry.links)
+	-- The guilds' Kill on Sight lists as the server keeps them: newer changes only, so taking them again is harmless
+	if Wanted.GuildKoS then
+		Wanted.GuildKoS:TakeServer(entry.guildKos)
+	end
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

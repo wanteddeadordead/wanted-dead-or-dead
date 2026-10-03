@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-02
+
 - The version book (which Wanted version each player runs, for wanteddeadordead.com) now notes players on released
   versions: their version carries the release tag's "v" (v1.7.0), which it used to turn away, so it only ever held
   development builds. Your own entry is under your full name.

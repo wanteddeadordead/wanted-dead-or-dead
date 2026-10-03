@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Fixed a Lua error ("bad argument #1 to 'UnitIsPlayer'") when hovering some players: the game sometimes hides
+  which unit a tooltip shows, and Wanted now skips its tooltip lines then instead of erroring.
+
 ## [1.7.1] - 2026-10-02
 
 - The version book (which Wanted version each player runs, for wanteddeadordead.com) now notes players on released

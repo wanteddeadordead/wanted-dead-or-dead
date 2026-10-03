@@ -42,7 +42,8 @@ end
 ---@param unit string
 ---@return table?
 function Ranks:ForUnit(unit)
-	if not UnitIsPlayer(unit) then
+	-- A tooltip can hand over a secret unit token, which UnitIsPlayer refuses from addon code
+	if not private.Readable(unit) or not UnitIsPlayer(unit) then
 		return nil
 	end
 	local name, surname = UnitName(unit)

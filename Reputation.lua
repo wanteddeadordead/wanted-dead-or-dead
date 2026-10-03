@@ -391,7 +391,8 @@ function private.OnTooltipUnit(tooltip)
 		return
 	end
 	local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)
-	if not unit or not UnitIsPlayer(unit) then
+	-- The game can hand over a secret unit token, which UnitIsPlayer refuses from addon code
+	if not unit or (issecretvalue and issecretvalue(unit)) or not UnitIsPlayer(unit) then
 		return
 	end
 	-- The origin form of a name on this client is "First Last"

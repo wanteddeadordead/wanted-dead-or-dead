@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-02
+
 - Fixed a Lua error ("bad argument #1 to 'UnitIsPlayer'") when hovering some players: the game sometimes hides
   which unit a tooltip shows, and Wanted now skips its tooltip lines then instead of erroring.
 

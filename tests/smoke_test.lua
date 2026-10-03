@@ -3576,7 +3576,11 @@ end)()
 ;(function()
 	-- The version book: each player's Wanted version from their messages, for the app to pass on
 	local book = ns.db.addonVersions
-	check(book[UnitName("player")] and book[UnitName("player")].v == ns.VERSION, "the version book has this player's own version")
+	local me = Ambiguate(ns.Store:GetOrigin())
+	check(book[me] and book[me].v == ns.VERSION, "the version book has this player's own version, under their full name")
+	-- A released build's version carries the tag's "v" (v1.6.1): noted without it
+	ns.Store:NoteAddonVersion("Release Player", "v1.6.1")
+	check(book["Release Player"] and book["Release Player"].v == "1.6.1", "a released build's v1.6.1 is noted as 1.6.1")
 	ns.Store:NoteAddonVersion("Realm Walker-SomeRealm", "1.2.20")
 	check(book["Realm Walker"] and book["Realm Walker"].v == "1.2.20", "a realm on the sender's name is dropped")
 	for _, junk in ipairs({ { "Junk One", "not a version" }, { "Junk Two", 12 }, { "Junk Three", string.rep("1", 30) } }) do

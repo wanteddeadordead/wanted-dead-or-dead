@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-02
+
 - Guild Kill on Sight: your guild's own Kill on Sight list, beside yours, on a new page under War. Right-click an
   enemy for Add to Guild Kill on Sight, or their whole guild; or add a guild by name on the page. Guild KoS targets
   alert and show like your own, marked Guild KoS. Officers switch it on and choose who may change the list: review

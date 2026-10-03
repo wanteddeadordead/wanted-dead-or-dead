@@ -46,7 +46,8 @@ function Store:OnLoad()
 	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)
 	private.PruneNames(db.names)
 	db.addonVersions = db.addonVersions or {} -- "Name" -> { v = "1.2.19", t } the Wanted version each player's messages carried
-	Store:NoteAddonVersion(UnitName("player"), Wanted.VERSION)
+	-- Under the full name others see on our messages (a name and a surname on WoW Forever), not UnitName's first name
+	Store:NoteAddonVersion(Store:GetOrigin(), Wanted.VERSION)
 	private.PruneVersions(db.addonVersions)
 	db.characters = db.characters or {} -- guid -> { n = origin, t } this account's characters
 end
@@ -329,6 +330,10 @@ local VERSION_BOOK_DAYS = 14
 ---@param name string?
 ---@param version any
 function Store:NoteAddonVersion(name, version)
+	-- A released build's version carries the tag's "v" (the packager stamps v1.6.1)
+	if type(version) == "string" then
+		version = gsub(version, "^v", "")
+	end
 	if type(name) ~= "string" or type(version) ~= "string" or #version > 24 or not strfind(version, "^%d+%.%d+%.%d+[%w%.%-]*$") then
 		return
 	end

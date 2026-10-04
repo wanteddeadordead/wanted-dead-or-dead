@@ -152,7 +152,9 @@ function private.Fill(guid, how)
 	if d.outlaw then
 		tinsert(status, Theme:Colorize("Outlaw: "..d.outlaw.rank, C.amber))
 	end
-	if d.guildKos then
+	if d.kosGuild then
+		tinsert(status, Theme:Colorize("<"..d.guild.."> is on your Kill on Sight", C.red))
+	elseif d.guildKos then
 		tinsert(status, Theme:Colorize("On your guild's Kill on Sight", C.red))
 	end
 	f.status:SetText(#status > 0 and table.concat(status, "   ") or "No bounty on them yet")
@@ -161,7 +163,7 @@ end
 
 function private.UpdateKoSButton(d)
 	local f = private.frame
-	if d.kos and not d.guildKos then
+	if d.kos and not d.guildKos and not d.kosGuild then
 		f.kos:SetText("On your Kill on Sight")
 		f.kos:SetStyle("secondary")
 		f.kos:Disable()

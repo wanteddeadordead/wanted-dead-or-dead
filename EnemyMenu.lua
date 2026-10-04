@@ -212,11 +212,17 @@ function EnemyMenu:Show(d)
 	local items = {
 		{ text = Theme:ClassName(d.name, d.class), header = true },
 	}
-	if d.kos and not d.guildKos then
+	if d.kos and not d.guildKos and not d.kosGuild then
 		tinsert(items, { text = "Remove from Kill on Sight", onClick = function() Enemies:SetKoS(d.guid, d.name, false) end })
 		tinsert(items, { text = d.reason and "Change reason..." or "Add a reason...", onClick = function() EnemyMenu:SetReason(d) end })
 	else
 		tinsert(items, { text = "Kill on Sight", color = C.red, onClick = function() Enemies:SetKoS(d.guid, d.name, true) end })
+	end
+	-- Their whole guild, on your own list
+	if d.kosGuild then
+		tinsert(items, { text = format("Remove <%s> from Kill on Sight", d.guild), onClick = function() Enemies:SetKoSGuild(d.guild, false) end })
+	elseif d.guild and d.guild ~= "" then
+		tinsert(items, { text = format("Kill on Sight: all of <%s>", d.guild), color = C.red, onClick = function() Enemies:SetKoSGuild(d.guild, true) end })
 	end
 	-- The guild's own list, when the guild has it on and this character's rank may add to it
 	local guildKoS = Wanted.GuildKoS and Wanted.GuildKoS:Current()

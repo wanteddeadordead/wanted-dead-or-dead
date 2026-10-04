@@ -4897,8 +4897,8 @@ end
 	ns.UI:Show("enemies")
 	ns.UI:Refresh()
 	local importButton
-	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Import from Spy (3)" then importButton = fs._parent end end
-	check(importButton and importButton:IsShown(), "the Enemies page has an Import from Spy (3) button")
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Import Kill on Sight (3)" then importButton = fs._parent end end
+	check(importButton and importButton:IsShown(), "the Enemies page has an Import Kill on Sight (3) button")
 	local added, waiting = ns.KoSImport:ImportSpy()
 	check(added == 1 and waiting == 2, "one known player added, two waiting to be seen: "..tostring(added)..", "..tostring(waiting))
 	check(ns.Enemies:IsKoS("Player-9-ENEMY"), "the known one is on Kill on Sight")
@@ -4923,6 +4923,27 @@ end
 	enemyUnits.nameplate44 = nil
 	SpyPerCharDB, SpyDB = nil, nil
 	ns.Enemies:SetKoS("Player-9-NOTYETMET", "Notyet Met", false)
+	-- True Spy: its list is per realm, and on Forever it keys players by first name only. A first name Wanted knows
+	-- one player by is theirs; one shared by several, or unknown, is skipped and counted, never guessed
+	ns.Store:UpdatePlayer("Player-9-ONLYONE", { name = "Uniqfirst Solo" })
+	ns.Store:UpdatePlayer("Player-9-TWINA", { name = "Twin Alpha" })
+	ns.Store:UpdatePlayer("Player-9-TWINB", { name = "Twin Beta" })
+	TrueSpyDB = { realms = { ["Classic Beta PvP"] = { kos = {
+		["Uniqfirst"] = { reason = "Rogue camper", added = 1790000000 },
+		["Twin"] = { reason = "", added = 1790000000 },
+		["Nobody"] = { reason = "", added = 1790000000 },
+		["Full Name"] = { reason = "Spelled out", added = 1790000000 },
+	} } } }
+	check(ns.KoSImport:SpyCount() == 2, "True Spy: the one known first name and the full name can come over: "..tostring(ns.KoSImport:SpyCount()))
+	local a, w, skipped = ns.KoSImport:ImportSpy()
+	check(a == 1 and w == 1 and skipped == 2, "one on Kill on Sight, one full name waiting, two first names skipped: "..tostring(a)..", "..tostring(w)..", "..tostring(skipped))
+	check(ns.Enemies:IsKoS("Player-9-ONLYONE") and ns.db.kos["Player-9-ONLYONE"].reason == "Rogue camper"
+		and ns.db.kos["Player-9-ONLYONE"].name == "Uniqfirst Solo", "Uniqfirst is Uniqfirst Solo, by full name, with True Spy's reason")
+	check(not ns.Enemies:IsKoS("Player-9-TWINA") and not ns.Enemies:IsKoS("Player-9-TWINB"), "a first name two players share is never guessed")
+	check(ns.db.kosPending["full name"] ~= nil, "a full name waits like Spy's")
+	TrueSpyDB = nil
+	ns.db.kosPending["full name"] = nil
+	ns.Enemies:SetKoS("Player-9-ONLYONE", "Uniqfirst Solo", false)
 end)()
 -- Kill on Sight for a whole guild on your own list: every member alerts as Kill on Sight, the Enemies page's Kill on
 -- Sight filter lists the members known (yours and other Wanted users' sightings), and the menu adds and removes it

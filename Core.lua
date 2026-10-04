@@ -93,6 +93,8 @@ local DEFAULTS = {
 			share = true, -- tell other Wanted users about enemies seen
 			sharedAlerts = true, -- alert when others see a Kill on Sight or bounty target
 			mapPins = true,
+			deathCard = true, -- a card naming who killed you, with Kill on Sight, Post a bounty and their file (DeathCard)
+			deathCardPos = nil,
 			targetWarn = true, -- warning while an enemy has you targeted
 			targetSound = true,
 			sounds = { enemy = "wanted", important = "wanted", stealth = "wanted", targeted = "wanted" }, -- each alert's sound (Alerts:GetSoundChoice)

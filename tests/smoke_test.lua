@@ -2228,6 +2228,70 @@ end)()
 	for r in ns.Store:Iterator("death") do if r.data.victim == "Player-1-ME" and r.t >= clock - 10 then mine = r end end
 	check(mine and mine.data.killer == "Player-9-ENEMY" and mine.data.killerName == "Stabby Mcstab", "our death names the killer the recap gave")
 	check(mine.data.killerFaction == "Alliance" and mine.data.victimFaction == "Horde", "with each side")
+	-- The death card: who killed us and what we know of them, with ways to act on it
+	local card = ns.DeathCard
+	check(card:IsShown() and card:GetKiller() == "Player-9-ENEMY", "a death card comes up for the player who killed us")
+	local f = card:GetFrame()
+	local stats = ns.Enemies:GetStats("Player-9-ENEMY")
+	check(f.name._text:find("Stabby Mcstab", 1, true) and not f.sure:IsShown(), "it names them, without a doubt: the recap said")
+	check(f.record._text == string.format("They've won %d, you've won %d", stats.losses, stats.wins), "with our record against them: "..tostring(f.record._text))
+	-- The buttons: Kill on Sight, Post a bounty (the board, their name filled in), Where they've been
+	f.kos:Click()
+	check(ns.Enemies:IsKoS("Player-9-ENEMY") and ns.db.kos["Player-9-ENEMY"].reason == "Killed me", "Kill on Sight adds them, reason Killed me")
+	check(f.kos._text == "On your Kill on Sight", "and the button says so")
+	local shownPage, prefilled, filed
+	local realShow, realPrefill, realFile = ns.UI.Show, ns.BoardPage.PrefillTarget, ns.TargetFile.ShowPlayer
+	ns.UI.Show = function(_, page) shownPage = page end
+	ns.BoardPage.PrefillTarget = function(_, name) prefilled = name end
+	ns.TargetFile.ShowPlayer = function(_, guid) filed = guid end
+	f.post:Click()
+	f.where:Click()
+	ns.UI.Show, ns.BoardPage.PrefillTarget, ns.TargetFile.ShowPlayer = realShow, realPrefill, realFile
+	check(shownPage == "board" and prefilled == "Stabby Mcstab", "Post a bounty opens the board with their name")
+	check(filed == "Player-9-ENEMY", "Where they've been opens their file")
+	-- Alive again: it goes
+	Fire("PLAYER_ALIVE")
+	check(not card:IsShown(), "it goes when we're alive again")
+	-- No "Killed by" warning while the card is on; the warning when it's off, and no card
+	local warned = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	clock = clock + 120
+	RunTimers()
+	C_DeathRecap.GetRecapLink = function() return "|Hdeath:4244|h[Death]|h" end
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(card:IsShown(), "a second death by them brings it back")
+	for _, title in ipairs(warned) do check(not title:find("^Killed by"), "no Killed by warning beside the card") end
+	Fire("PLAYER_ALIVE")
+	ns.db.settings.detect.deathCard = false
+	clock = clock + 120
+	RunTimers()
+	C_DeathRecap.GetRecapLink = function() return "|Hdeath:4343|h[Death]|h" end
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(not card:IsShown(), "with the setting off there's no card")
+	local killedBy = false
+	for _, title in ipairs(warned) do if title:find("^Killed by") then killedBy = true end end
+	check(killedBy, "and the Killed by warning is back")
+	ns.Alerts.Warn = realWarn
+	ns.db.settings.detect.deathCard = true
+	-- The recap can't say: the one enemy who had us targeted is only probably the killer, and the card says so
+	C_DeathRecap = nil
+	clock = clock + 120
+	RunTimers()
+	STAB43 = enemyUnits.nameplate43
+	STAB43.targetsMe = true
+	Fire("UNIT_TARGET", "nameplate43")
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(card:IsShown() and f.sure:IsShown() and f.sure._text:find("Probably", 1, true), "a guess from who had us targeted says probably: "..tostring(f.sure._text))
+	-- It doesn't stay forever
+	clock = clock + 121
+	RunTimers()
+	check(not card:IsShown(), "it goes after two minutes")
+	STAB43.targetsMe = nil
+	STAB43 = nil
 	C_DeathRecap = nil
 	enemyUnits.nameplate43 = nil
 end)()

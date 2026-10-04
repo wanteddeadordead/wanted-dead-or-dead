@@ -52,6 +52,7 @@ UI.lua
 Rows.lua
 EnemyMenu.lua
 TargetFile.lua
+DeathCard.lua
 Emotes.lua
 NearbyWindow.lua
 PageHome.lua

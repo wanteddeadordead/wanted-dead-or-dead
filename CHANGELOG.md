@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+
+## [1.8.0] - 2026-10-04
+
+- A death card when an enemy player kills you in the open world: who it was, your record against them, their rank,
+  any bounty on them and whether they're an outlaw, with Kill on Sight, Post a bounty and Where they've been. When the
+  game's death recap doesn't name the killer, the one enemy who had you targeted is shown as "probably". It goes when
+  you're alive again or after two minutes, can be moved, and replaces the "Killed by" line. Settings, Alerts: "Show a
+  card when a player kills you" (on).
 - Put a whole guild on your own Kill on Sight: right-click an enemy, "Kill on Sight: all of <guild>". Every member
   alerts as Kill on Sight, and Enemies, Kill on Sight lists the members Wanted knows, including ones only other Wanted
   users have seen. The same menu takes the guild off again. (Your guild's shared list is separate, as before.)
@@ -15,11 +23,6 @@
 - Confirming a bounty claim: the death page's address in the box was cut off after 48 letters, so the copied link
   didn't work; it's whole now. A claim on a guild bounty names the member who died ("Fresh Meat of <OLYMPUS>"), in
   the confirm and dispute boxes alike, instead of only the guild.
-- A death card when an enemy player kills you in the open world: who it was, your record against them, their rank,
-  any bounty on them and whether they're an outlaw, with Kill on Sight, Post a bounty and Where they've been. When the
-  game's death recap doesn't name the killer, the one enemy who had you targeted is shown as "probably". It goes when
-  you're alive again or after two minutes, can be moved, and replaces the "Killed by" line. Settings, Alerts: "Show a
-  card when a player kills you" (on).
 - Fewer "No player named ... is currently playing" lines in chat: the game can answer Wanted's hidden greetings to
   players on other realm names minutes late, after Wanted had stopped hiding the answer. It now hides them for 10
   minutes instead of 2.

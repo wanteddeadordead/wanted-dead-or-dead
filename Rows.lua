@@ -215,6 +215,14 @@ local function Done(text, color)
 	UI:Refresh()
 end
 
+---Who a claim says was killed: the target's name, or for a guild bounty the member who died, with the guild.
+local function Killed(info, name)
+	if info.guild and info.claim and info.claim.data.victimName then
+		return format("%s of <%s>", info.claim.data.victimName, info.guild)
+	end
+	return name
+end
+
 function Rows:DoAction(action, info)
 	local W = Wanted.Widgets
 	local name = Theme:ClassName(info.targetName, info.player and info.player.class)
@@ -272,12 +280,13 @@ function Rows:DoAction(action, info)
 		Bounties:Pass(info.bounty)
 		Done(format("Passed on the bounty on %s. Tick Show passed to see it again.", info.targetName), C.muted)
 	elseif action == "confirm" then
+		local killed = Killed(info, name)
 		local warnings = Bounties:GetClaimWarnings(info.claim)
 		local caution = #warnings > 0 and ("\n\n"..Theme:Colorize("Before you pay: "..table.concat(warnings, " "), C.amber)) or ""
 		W:Dialog({
 			title = "Confirm the kill",
 			text = format("You agree %s killed %s, and you owe them %s.%s%s\n\nEvery record of this death, from both factions, including who the victim's own record says killed them (click the address, Ctrl+C, paste into a browser):",
-				info.hunter, name, Theme:Money(info.amount), caution,
+				info.hunter, killed, Theme:Money(info.amount), caution,
 				Wanted.Proof:Get(info.claim.id) and format("\n\n%s has a screenshot of the kill.", info.hunter) or ""),
 			input = { value = Bounties:DeathPageURL(info.claim) },
 			confirmLabel = "Confirm",
@@ -290,7 +299,7 @@ function Rows:DoAction(action, info)
 	elseif action == "dispute" then
 		W:Dialog({
 			title = "Dispute the claim",
-			text = format("%s's claim on %s goes on their record as disputed, and your bounty opens again. Only dispute a claim you believe is false.", info.hunter, name)
+			text = format("%s's claim on %s goes on their record as disputed, and your bounty opens again. Only dispute a claim you believe is false.", info.hunter, Killed(info, name))
 				..(Wanted.Proof:Get(info.claim.id) and format("\n\n%s saved a screenshot of this kill. Check %s on the Forever PvP Discord first.", info.hunter, Wanted.Proof.DISCORD_CHANNEL) or ""),
 			confirmLabel = "Dispute",
 			confirmStyle = "danger",

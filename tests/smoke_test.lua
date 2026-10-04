@@ -4878,4 +4878,50 @@ do
 		check(reasons ~= "" and reasons:find("%a+ %d+"), "drops this session come with their reasons: "..reasons)
 	end
 end
+-- Import Kill on Sight from Spy: names Wanted knows become Kill on Sight at once, with Spy's reasons; the rest wait
+-- until the player is first seen (and alert as Kill on Sight that first time)
+;(function()
+	ns.Enemies:SetKoS("Player-9-ENEMY", "Stabby Mcstab", false)
+	check(ns.KoSImport:SpyCount() == 0, "no Spy loaded: nothing to import")
+	SpyPerCharDB = {
+		KOSData = { ["Stabby-Mcstab"] = 1790000000, ["Notyet-Met"] = 1790000100 },
+		PlayerData = {
+			["Stabby-Mcstab"] = { name = "Stabby-Mcstab", reason = { ["Camping"] = true, ["Other..."] = "ganks lowbies" }, isEnemy = true },
+			["Notyet-Met"] = { name = "Notyet-Met", isEnemy = true },
+		},
+	}
+	-- Another character's list, kept by Spy in the account-wide data
+	SpyDB = { kosData = { ["Classic Beta PvP"] = { ["Horde"] = { ["Alt"] = { ["Far-Gone"] = 1790000200, ["Notyet-Met"] = 1790000100 } } } } }
+	check(ns.KoSImport:SpyCount() == 3, "three players to import, the one on both lists once: "..tostring(ns.KoSImport:SpyCount()))
+	-- The Enemies page offers it
+	ns.UI:Show("enemies")
+	ns.UI:Refresh()
+	local importButton
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Import from Spy (3)" then importButton = fs._parent end end
+	check(importButton and importButton:IsShown(), "the Enemies page has an Import from Spy (3) button")
+	local added, waiting = ns.KoSImport:ImportSpy()
+	check(added == 1 and waiting == 2, "one known player added, two waiting to be seen: "..tostring(added)..", "..tostring(waiting))
+	check(ns.Enemies:IsKoS("Player-9-ENEMY"), "the known one is on Kill on Sight")
+	local reason = ns.db.kos["Player-9-ENEMY"].reason or ""
+	check(reason:find("Camping", 1, true) and reason:find("ganks lowbies", 1, true), "with Spy's reasons: "..reason)
+	check(ns.KoSImport:SpyCount() == 0, "a second import has nothing new")
+	-- One waiting is seen: Kill on Sight before the first alert, so that alert is the Kill on Sight one
+	local warned = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	enemyUnits.nameplate44 = { guid = "Player-9-NOTYETMET", name = "Notyet Met", class = "MAGE", level = 22 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate44")
+	RunTimers()
+	ns.Alerts.Warn = realWarn
+	check(ns.Enemies:IsKoS("Player-9-NOTYETMET"), "a waiting name becomes Kill on Sight when first seen")
+	check(warned[1] and warned[1]:find("KILL ON SIGHT: Notyet Met", 1, true), "and the first alert is the Kill on Sight one: "..tostring(warned[1]))
+	check(ns.db.kosPending["notyet met"] == nil and ns.db.kosPending["far gone"] ~= nil, "it leaves the waiting list; the other stays")
+	-- Waiting names don't wait forever
+	ns.db.kosPending["far gone"].t = clock - 31 * 86400
+	ns.KoSImport:PrunePending()
+	check(ns.db.kosPending["far gone"] == nil, "waiting names go after 30 days")
+	enemyUnits.nameplate44 = nil
+	SpyPerCharDB, SpyDB = nil, nil
+	ns.Enemies:SetKoS("Player-9-NOTYETMET", "Notyet Met", false)
+end)()
 print("wanted smoke: 1.5.1 checks pass")

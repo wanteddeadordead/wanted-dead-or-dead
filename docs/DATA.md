@@ -290,3 +290,9 @@ follow-up that needs the server and the desktop app to change with the addon.
 `/wanted freshstart` deletes every shared record on the client and starts its record chain again. Only
 safe before anyone has synced with that client: their copies of its records would no longer match. It
 exists only in development builds.
+
+`WantedDB.kosPending` (from 1.8.0) holds Kill on Sight brought over from Spy for players Wanted hasn't seen yet:
+`lower-case name -> { name = "First Last", reason, t, from = "Spy" }`. The first time a player of that name is seen,
+they go on Kill on Sight (`kos`, by game ID) and leave this table; names nobody sees in 30 days are dropped at
+login. `WantedDB.spyImportHinted` is true once the one-time "bring Spy's Kill on Sight over" hint was shown. Both are
+new keys with defaults: no migration.

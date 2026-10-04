@@ -373,6 +373,14 @@ function private.Scan(unit)
 		stats.first = stats.first or GetServerTime()
 		stats.last = GetServerTime()
 		stats.name = name
+		-- An imported name waiting to be seen (KoSImport) goes on Kill on Sight now, so the first alert is that one
+		local pending = Wanted.db.kosPending[strlower(name)]
+		if pending and not Wanted.db.kos[guid] then
+			Enemies:SetKoS(guid, name, true)
+			Enemies:SetReason(guid, pending.reason)
+			Wanted.db.kosPending[strlower(name)] = nil
+			Wanted:Log("Enemies: %s, imported from %s, is on Kill on Sight now", name, tostring(pending.from))
+		end
 		Fire("new", entry)
 		private.Share(entry)
 	else

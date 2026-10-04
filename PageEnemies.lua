@@ -134,6 +134,11 @@ function private.Refresh()
 		header.fs:SetTextColor(unpack(header.key == key and C.text or C.faint))
 	end
 	private.count:SetText(format("%d enem%s", #items, #items == 1 and "y" or "ies"))
+	local importable = Wanted.KoSImport and Wanted.KoSImport:SpyCountCached() or 0
+	private.import:SetText(format("Import from Spy (%d)", importable))
+	private.import:SetShown(importable > 0)
+	private.count:ClearAllPoints()
+	private.count:SetPoint("RIGHT", importable > 0 and private.import or private.nearby, "LEFT", -12, 0)
 	local hints = {
 		kos = "Right-click an enemy in the Nearby window or click one here, then Kill on Sight.",
 		ignored = "Ignored enemies never trigger alerts.",
@@ -202,10 +207,17 @@ UI:RegisterPage("enemies", {
 		private.search = W:Input(container, 170, "Search name or guild", function() private.Refresh() end)
 		private.search:SetPoint("LEFT", filter, "RIGHT", 12, 0)
 		local nearby = W:Button(container, "Nearby window", "secondary", 130, 26, function() Wanted.NearbyWindow:Toggle() end)
+		private.nearby = nearby
 		nearby:SetPoint("TOPRIGHT", 0, -TOP)
 		W:AttachTooltip(nearby, "Nearby window", "The small list of enemies around you. Also right-click the minimap button, or /wanted nearby.")
+		-- Only when Spy is installed with players Wanted doesn't have (KoSImport)
+		private.import = W:Button(container, "Import from Spy", "secondary", 150, 26, function()
+			Wanted.KoSImport:Run()
+			private.Refresh()
+		end)
+		private.import:SetPoint("RIGHT", nearby, "LEFT", -8, 0)
+		W:AttachTooltip(private.import, "Import from Spy", "Brings Spy's Kill on Sight lists over, with their reasons. Players Wanted hasn't seen yet go on Kill on Sight the first time it sees them.")
 		private.count = Theme:Text(container, "small", "")
-		private.count:SetPoint("RIGHT", nearby, "LEFT", -12, 0)
 
 		local headerBar = CreateFrame("Frame", nil, container)
 		headerBar:SetPoint("TOPLEFT", 0, -TOP - 40)

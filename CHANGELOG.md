@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Bring your Kill on Sight over from Spy: with Spy installed, Enemies, Kill on Sight shows "Import from Spy" (or
+  type /wanted importspy). Spy's lists for all your characters come over with their reasons. Players Wanted hasn't
+  seen yet go on Kill on Sight the first time it sees them, so that first sighting already alerts as Kill on Sight.
 - A death card when an enemy player kills you in the open world: who it was, your record against them, their rank,
   any bounty on them and whether they're an outlaw, with Kill on Sight, Post a bounty and Where they've been. When the
   game's death recap doesn't name the killer, the one enemy who had you targeted is shown as "probably". It goes when

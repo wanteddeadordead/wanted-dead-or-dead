@@ -108,6 +108,7 @@ local DEFAULTS = {
 		lastPage = nil, -- the window's page when last open (UI); Home when there's none
 	},
 	kos = {}, -- guid -> { name, reason, t }
+	kosGuilds = {}, -- guild name -> { reason, t }: every member is Kill on Sight (Enemies:SetKoSGuild)
 	kosPending = {}, -- lower-case name -> { name, reason, t, from }: imported Kill on Sight waiting to be seen (KoSImport)
 	spyImportHinted = false, -- the one-time "bring Spy's Kill on Sight over" hint was shown (KoSImport)
 	seenNotices = {}, -- bounty id -> amount of the bounties on this player already announced (Bridge)

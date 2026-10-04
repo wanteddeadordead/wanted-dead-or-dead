@@ -4924,4 +4924,46 @@ end
 	SpyPerCharDB, SpyDB = nil, nil
 	ns.Enemies:SetKoS("Player-9-NOTYETMET", "Notyet Met", false)
 end)()
+-- Kill on Sight for a whole guild on your own list: every member alerts as Kill on Sight, the Enemies page's Kill on
+-- Sight filter lists the members known (yours and other Wanted users' sightings), and the menu adds and removes it
+;(function()
+	ns.Enemies:SetKoS("Player-9-ENEMY", "Stabby Mcstab", false)
+	ns.Store:UpdatePlayer("Player-9-GUILDMATE", { name = "Other Vanguard", guild = "Crimson Vanguard", class = "WARRIOR" })
+	check(not ns.Enemies:Describe("Player-9-GUILDMATE").kos, "not Kill on Sight before")
+	ns.Enemies:SetKoSGuild("Crimson Vanguard", true, "Camps the flight path")
+	local d = ns.Enemies:Describe("Player-9-GUILDMATE")
+	check(d.kos and d.kosGuild and d.reason == "Camps the flight path", "a member of a listed guild is Kill on Sight, with the guild's reason")
+	check(not ns.Enemies:IsKoS("Player-9-GUILDMATE"), "without being on the list one by one")
+	local listed = {}
+	for _, e in ipairs(ns.Enemies:GetAll("kos")) do listed[e.guid] = true end
+	check(listed["Player-9-GUILDMATE"], "the Kill on Sight filter lists a member only seen in the records")
+	-- A member comes into view: the Kill on Sight alert
+	local warned = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	enemyUnits.nameplate45 = { guid = "Player-9-GUILDMATE", name = "Other Vanguard", class = "WARRIOR", level = 21, guild = "Crimson Vanguard" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate45")
+	RunTimers()
+	ns.Alerts.Warn = realWarn
+	check(warned[1] and warned[1]:find("KILL ON SIGHT: Other Vanguard", 1, true), "a member in view alerts as Kill on Sight: "..tostring(warned[1]))
+	-- The menu: remove the guild; add it back
+	local function MenuItems(guid)
+		local texts = {}
+		local realMenu = ns.Widgets.Menu
+		ns.Widgets.Menu = function(_, items) for _, item in ipairs(items) do if type(item) == "table" then texts[item.text] = item end end end
+		ns.EnemyMenu:Show(ns.Enemies:Describe(guid))
+		ns.Widgets.Menu = realMenu
+		return texts
+	end
+	local items = MenuItems("Player-9-GUILDMATE")
+	check(items["Remove <Crimson Vanguard> from Kill on Sight"], "the menu offers to take the guild off")
+	items["Remove <Crimson Vanguard> from Kill on Sight"].onClick()
+	check(not ns.Enemies:Describe("Player-9-GUILDMATE").kos, "and does")
+	items = MenuItems("Player-9-GUILDMATE")
+	check(items["Kill on Sight: all of <Crimson Vanguard>"], "and to put the whole guild on")
+	items["Kill on Sight: all of <Crimson Vanguard>"].onClick()
+	check(ns.Enemies:Describe("Player-9-GUILDMATE").kosGuild, "which puts it back")
+	ns.Enemies:SetKoSGuild("Crimson Vanguard", false)
+	enemyUnits.nameplate45 = nil
+end)()
 print("wanted smoke: 1.5.1 checks pass")

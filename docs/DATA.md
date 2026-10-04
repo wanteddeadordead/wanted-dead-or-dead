@@ -296,3 +296,7 @@ exists only in development builds.
 they go on Kill on Sight (`kos`, by game ID) and leave this table; names nobody sees in 30 days are dropped at
 login. `WantedDB.spyImportHinted` is true once the one-time "bring Spy's Kill on Sight over" hint was shown. Both are
 new keys with defaults: no migration.
+
+`WantedDB.kosGuilds` (from 1.8.0) is your own Kill on Sight for whole guilds: `guild name -> { reason, t }`. Every
+member counts as Kill on Sight (alerts, the Nearby window, the Enemies page) without being listed one by one. A new
+key with a default: no migration.

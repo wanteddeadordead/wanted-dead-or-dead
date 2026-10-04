@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Put a whole guild on your own Kill on Sight: right-click an enemy, "Kill on Sight: all of <guild>". Every member
+  alerts as Kill on Sight, and Enemies, Kill on Sight lists the members Wanted knows, including ones only other Wanted
+  users have seen. The same menu takes the guild off again. (Your guild's shared list is separate, as before.)
 - Bring your Kill on Sight over from Spy: with Spy installed, Enemies, Kill on Sight shows "Import from Spy" (or
   type /wanted importspy). Spy's lists for all your characters come over with their reasons. Players Wanted hasn't
   seen yet go on Kill on Sight the first time it sees them, so that first sighting already alerts as Kill on Sight.

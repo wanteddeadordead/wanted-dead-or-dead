@@ -641,6 +641,25 @@ function Enemies:SetKoS(guid, name, on)
 	Fire("lists", nil)
 end
 
+---Puts a whole guild on your own Kill on Sight (every member alerts as Kill on Sight), or takes it off.
+---@param guild string
+---@param on boolean
+---@param reason string?
+function Enemies:SetKoSGuild(guild, on, reason)
+	if type(guild) ~= "string" or guild == "" then
+		return
+	end
+	if on then
+		Wanted.db.kosGuilds[guild] = Wanted.db.kosGuilds[guild] or { t = GetServerTime() }
+		if reason and reason ~= "" then
+			Wanted.db.kosGuilds[guild].reason = reason
+		end
+	else
+		Wanted.db.kosGuilds[guild] = nil
+	end
+	Fire("lists", nil)
+end
+
 function Enemies:SetReason(guid, reason)
 	local kos = Wanted.db.kos[guid]
 	if kos then
@@ -735,11 +754,13 @@ function private.Fill(d, guid)
 	d.targetingMe = entry and entry.targetingMe and GetTime() - entry.targetingMe < 5
 	-- The unit token that showed them last (for widgets that draw secret values such as health)
 	d.unit = entry and entry.unit
-	-- The guild's Kill on Sight counts as Kill on Sight too, marked as the guild's
-	local guildKos = not kos and Wanted.GuildKoS and Wanted.GuildKoS:Match(guid, guild) or nil
-	d.kos = kos ~= nil or guildKos ~= nil
+	-- A whole guild on your own list, then the guild's shared Kill on Sight, count as Kill on Sight too, each marked
+	local kosGuild = not kos and guild and Wanted.db.kosGuilds[guild] or nil
+	local guildKos = not kos and not kosGuild and Wanted.GuildKoS and Wanted.GuildKoS:Match(guid, guild) or nil
+	d.kos = kos ~= nil or kosGuild ~= nil or guildKos ~= nil
+	d.kosGuild = kosGuild ~= nil
 	d.guildKos = guildKos ~= nil
-	d.reason = kos and kos.reason or (guildKos and guildKos.reason)
+	d.reason = kos and kos.reason or (kosGuild and kosGuild.reason) or (guildKos and guildKos.reason)
 	-- Wanted by their kills alone (Reputation), { rank, kills, ... } or nil
 	d.outlaw = Wanted.Reputation:GetOutlaw(guid)
 	d.ignored = Wanted.db.ignore[guid] ~= nil
@@ -907,8 +928,21 @@ function Enemies:GetAll(filter)
 	for guid in pairs(Wanted.db.ignore) do
 		guids[guid] = true
 	end
+	-- A listed guild's members: every one the records know, also those only other Wanted users have seen
+	local kosGuilds = Wanted.db.kosGuilds
+	local function InListedGuild(guid)
+		local player = Wanted.db.players[guid]
+		return player and player.guild and kosGuilds[player.guild] ~= nil
+	end
+	if filter == "kos" and next(kosGuilds) then
+		for guid in pairs(Wanted.db.players) do
+			if InListedGuild(guid) then
+				guids[guid] = true
+			end
+		end
+	end
 	for guid in pairs(guids) do
-		if strfind(guid, "^Player%-") and (not filter or (filter == "kos" and Wanted.db.kos[guid]) or (filter == "ignored" and Wanted.db.ignore[guid])) then
+		if strfind(guid, "^Player%-") and (not filter or (filter == "kos" and (Wanted.db.kos[guid] or InListedGuild(guid))) or (filter == "ignored" and Wanted.db.ignore[guid])) then
 			tinsert(list, Enemies:Describe(guid))
 		end
 	end

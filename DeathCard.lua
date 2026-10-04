@@ -10,7 +10,9 @@ local W = Wanted.Widgets
 local C = Theme.C
 local Store = Wanted.Store
 local private = {}
-local WIDTH, HEIGHT = 360, 168
+local WIDTH = 410
+-- Taller when the "probably" line shows (the recap didn't name the killer)
+local HEIGHT, HEIGHT_UNSURE = 160, 178
 local SHOW_SECONDS = 120
 local KOS_REASON = "Killed me"
 
@@ -26,7 +28,7 @@ end
 
 function private.Create()
 	local f = CreateFrame("Frame", "WantedDeathCard", UIParent)
-	f:SetSize(WIDTH, HEIGHT)
+	f:SetSize(WIDTH, HEIGHT_UNSURE)
 	f:SetFrameStrata("HIGH")
 	f:SetClampedToScreen(true)
 	f:SetMovable(true)
@@ -75,15 +77,15 @@ function private.Create()
 	f.sure:SetPoint("TOPLEFT", 14, -74)
 	f.sure:SetPoint("RIGHT", -14, 0)
 	f.record = Theme:Text(f, "body", "")
-	f.record:SetPoint("TOPLEFT", 14, -92)
 	f.record:SetPoint("RIGHT", -14, 0)
 	f.status = Theme:Text(f, "body", "")
 	f.status:SetPoint("TOPLEFT", f.record, "BOTTOMLEFT", 0, -4)
 	f.status:SetPoint("RIGHT", -14, 0)
 
-	f.kos = W:Button(f, "Kill on Sight", "primary", 120, 26, function() private.AddKoS() end)
+	-- Each wide enough for its longest label ("On your Kill on Sight" once added)
+	f.kos = W:Button(f, "Kill on Sight", "primary", 140, 26, function() private.AddKoS() end)
 	f.kos:SetPoint("BOTTOMLEFT", 14, 12)
-	f.post = W:Button(f, "Post a bounty", "secondary", 112, 26, function() private.PostBounty() end)
+	f.post = W:Button(f, "Post a bounty", "secondary", 104, 26, function() private.PostBounty() end)
 	f.post:SetPoint("LEFT", f.kos, "RIGHT", 6, 0)
 	f.where = W:Button(f, "Where they've been", "secondary", 0, 26, function() private.ShowFile() end)
 	f.where:SetPoint("LEFT", f.post, "RIGHT", 6, 0)
@@ -129,11 +131,18 @@ function private.Fill(guid, how)
 		tinsert(who, Wanted.Ranks:BadgeText(rank).." "..Wanted.Ranks:Label(rank))
 	end
 	f.who:SetText(table.concat(who, "   "))
+	-- The record sits where the "probably" line would be when there's none
+	f.record:ClearAllPoints()
+	f.record:SetPoint("RIGHT", -14, 0)
 	if how == "recap" then
 		f.sure:Hide()
+		f.record:SetPoint("TOPLEFT", 14, -76)
+		f:SetHeight(HEIGHT)
 	else
 		f.sure:SetText("Probably "..d.name..": the death recap didn't say, but they had you targeted")
 		f.sure:Show()
+		f.record:SetPoint("TOPLEFT", 14, -94)
+		f:SetHeight(HEIGHT_UNSURE)
 	end
 	f.record:SetText(format("They've won %d, you've won %d", d.losses, d.wins))
 	local status = {}

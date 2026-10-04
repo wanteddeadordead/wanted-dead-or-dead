@@ -49,7 +49,14 @@ function Methods:Hide() self._shown = false if self._scripts.OnHide then self._s
 function Methods:SetShown(v) if v then self:Show() else self:Hide() end end
 function Methods:IsShown() return self._shown end
 function Methods:IsVisible() return self._shown end
-function Methods:SetText(t) self._text = t or "" if self._fs then self._fs._text = t or "" end end
+-- An edit box keeps at most its letter limit, as the game's do
+function Methods:SetMaxLetters(n) self._maxLetters = n end
+function Methods:SetText(t)
+	t = t or ""
+	if self._maxLetters and self._maxLetters > 0 and #t > self._maxLetters then t = t:sub(1, self._maxLetters) end
+	self._text = t
+	if self._fs then self._fs._text = t end
+end
 function Methods:GetText() return self._text end
 function Methods:GetStringWidth() return #tostring(self._text) * 6 end
 function Methods:GetUnboundedStringWidth() return #tostring(self._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * 6 end
@@ -398,14 +405,39 @@ check(#ns.Model:GetBoard({ minAmount = 0, showPassed = true }) == 2, "show passe
 ns.Rows:DoAction("confirm", board[1])
 check(lastDialog and lastDialog.input and lastDialog.input.value:find("^https://wanteddeadordead.com/death/") and lastDialog.text:find("Before you pay", 1, true),
 	"confirming a claim nobody witnessed warns first and gives the death's page")
+-- The box holds the whole address, not the first 48 letters a typed answer is held to
+do
+	local deathURL = lastDialog.input.value
+	local shownURL
+	for _, f in ipairs(Mock.created) do
+		local t = rawget(f, "_text")
+		if type(t) == "string" and t:find("^https://wanteddeadordead%.com/death/") and rawget(f, "_maxLetters") then shownURL = t end
+	end
+	check(shownURL == deathURL and #deathURL > 48, "the dialog's box holds the whole death page address: "..tostring(shownURL))
+end
+-- A guild bounty's claim names the member who died, not just the guild
+do
+	local guildInfo = { guild = "OLYMPUS", targetName = "<OLYMPUS>", hunter = "Mhureth Theolia", amount = 10000,
+		claim = { id = "Test Hunter:999", t = clock, data = { victim = "Player-9-FRESHMEAT", victimName = "Fresh Meat", killT = clock } } }
+	local keep = lastDialog
+	ns.Rows:DoAction("confirm", guildInfo)
+	check(lastDialog.text:find("killed Fresh Meat of <OLYMPUS>", 1, true), "a guild bounty's claim names who died: "..lastDialog.text:sub(1, 80))
+	lastDialog = keep
+end
 ConfirmDialog()
 local info = ns.Model:GetBountyInfo(board[1].bounty)
-check(info.state == "owed" and info.actions[1] == "pay", "confirmed bounty is owed with pay, got "..info.state)
+check(info.state == "owed" and info.actions[#info.actions] == "pay", "confirmed bounty is owed with pay, got "..info.state)
+-- After confirming, the death's page is still a click away: beside Pay, and once paid
+check(info.actions[1] == "deathpage", "an owed bounty offers its death page beside Pay")
+ns.Rows:DoAction("deathpage", info)
+check(lastDialog and lastDialog.input and lastDialog.input.value == ns.Bounties:DeathPageURL(info.claim), "which opens the address to copy")
+lastDialog = nil
 check(ns.Model:GetActionCount() == 1, "one thing waits: the payment")
 ns.Rows:DoAction("pay", info)
 ConfirmDialog()
 ns:RunCommand("simulate", "paid")
 check(ns.Model:GetBountyInfo(board[1].bounty).state == "paid", "paid after simulate paid")
+check(ns.Model:GetBountyInfo(board[1].bounty).actions[1] == "deathpage", "a paid bounty still offers its death page")
 
 -- Post a bounty through the board page, then raise it and dispute nothing
 ns.Store:UpdatePlayer("Player-TEST-00000001", { name = "Corvin Ashdale", faction = "Alliance", level = 22 })

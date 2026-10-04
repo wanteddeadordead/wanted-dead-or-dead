@@ -4878,4 +4878,113 @@ do
 		check(reasons ~= "" and reasons:find("%a+ %d+"), "drops this session come with their reasons: "..reasons)
 	end
 end
+-- Import Kill on Sight from Spy: names Wanted knows become Kill on Sight at once, with Spy's reasons; the rest wait
+-- until the player is first seen (and alert as Kill on Sight that first time)
+;(function()
+	ns.Enemies:SetKoS("Player-9-ENEMY", "Stabby Mcstab", false)
+	check(ns.KoSImport:SpyCount() == 0, "no Spy loaded: nothing to import")
+	SpyPerCharDB = {
+		KOSData = { ["Stabby-Mcstab"] = 1790000000, ["Notyet-Met"] = 1790000100 },
+		PlayerData = {
+			["Stabby-Mcstab"] = { name = "Stabby-Mcstab", reason = { ["Camping"] = true, ["Other..."] = "ganks lowbies" }, isEnemy = true },
+			["Notyet-Met"] = { name = "Notyet-Met", isEnemy = true },
+		},
+	}
+	-- Another character's list, kept by Spy in the account-wide data
+	SpyDB = { kosData = { ["Classic Beta PvP"] = { ["Horde"] = { ["Alt"] = { ["Far-Gone"] = 1790000200, ["Notyet-Met"] = 1790000100 } } } } }
+	check(ns.KoSImport:SpyCount() == 3, "three players to import, the one on both lists once: "..tostring(ns.KoSImport:SpyCount()))
+	-- The Enemies page offers it
+	ns.UI:Show("enemies")
+	ns.UI:Refresh()
+	local importButton
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Import Kill on Sight (3)" then importButton = fs._parent end end
+	check(importButton and importButton:IsShown(), "the Enemies page has an Import Kill on Sight (3) button")
+	local added, waiting = ns.KoSImport:ImportSpy()
+	check(added == 1 and waiting == 2, "one known player added, two waiting to be seen: "..tostring(added)..", "..tostring(waiting))
+	check(ns.Enemies:IsKoS("Player-9-ENEMY"), "the known one is on Kill on Sight")
+	local reason = ns.db.kos["Player-9-ENEMY"].reason or ""
+	check(reason:find("Camping", 1, true) and reason:find("ganks lowbies", 1, true), "with Spy's reasons: "..reason)
+	check(ns.KoSImport:SpyCount() == 0, "a second import has nothing new")
+	-- One waiting is seen: Kill on Sight before the first alert, so that alert is the Kill on Sight one
+	local warned = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	enemyUnits.nameplate44 = { guid = "Player-9-NOTYETMET", name = "Notyet Met", class = "MAGE", level = 22 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate44")
+	RunTimers()
+	ns.Alerts.Warn = realWarn
+	check(ns.Enemies:IsKoS("Player-9-NOTYETMET"), "a waiting name becomes Kill on Sight when first seen")
+	check(warned[1] and warned[1]:find("KILL ON SIGHT: Notyet Met", 1, true), "and the first alert is the Kill on Sight one: "..tostring(warned[1]))
+	check(ns.db.kosPending["notyet met"] == nil and ns.db.kosPending["far gone"] ~= nil, "it leaves the waiting list; the other stays")
+	-- Waiting names don't wait forever
+	ns.db.kosPending["far gone"].t = clock - 31 * 86400
+	ns.KoSImport:PrunePending()
+	check(ns.db.kosPending["far gone"] == nil, "waiting names go after 30 days")
+	enemyUnits.nameplate44 = nil
+	SpyPerCharDB, SpyDB = nil, nil
+	ns.Enemies:SetKoS("Player-9-NOTYETMET", "Notyet Met", false)
+	-- True Spy: its list is per realm, and on Forever it keys players by first name only. A first name Wanted knows
+	-- one player by is theirs; one shared by several, or unknown, is skipped and counted, never guessed
+	ns.Store:UpdatePlayer("Player-9-ONLYONE", { name = "Uniqfirst Solo" })
+	ns.Store:UpdatePlayer("Player-9-TWINA", { name = "Twin Alpha" })
+	ns.Store:UpdatePlayer("Player-9-TWINB", { name = "Twin Beta" })
+	TrueSpyDB = { realms = { ["Classic Beta PvP"] = { kos = {
+		["Uniqfirst"] = { reason = "Rogue camper", added = 1790000000 },
+		["Twin"] = { reason = "", added = 1790000000 },
+		["Nobody"] = { reason = "", added = 1790000000 },
+		["Full Name"] = { reason = "Spelled out", added = 1790000000 },
+	} } } }
+	check(ns.KoSImport:SpyCount() == 2, "True Spy: the one known first name and the full name can come over: "..tostring(ns.KoSImport:SpyCount()))
+	local a, w, skipped = ns.KoSImport:ImportSpy()
+	check(a == 1 and w == 1 and skipped == 2, "one on Kill on Sight, one full name waiting, two first names skipped: "..tostring(a)..", "..tostring(w)..", "..tostring(skipped))
+	check(ns.Enemies:IsKoS("Player-9-ONLYONE") and ns.db.kos["Player-9-ONLYONE"].reason == "Rogue camper"
+		and ns.db.kos["Player-9-ONLYONE"].name == "Uniqfirst Solo", "Uniqfirst is Uniqfirst Solo, by full name, with True Spy's reason")
+	check(not ns.Enemies:IsKoS("Player-9-TWINA") and not ns.Enemies:IsKoS("Player-9-TWINB"), "a first name two players share is never guessed")
+	check(ns.db.kosPending["full name"] ~= nil, "a full name waits like Spy's")
+	TrueSpyDB = nil
+	ns.db.kosPending["full name"] = nil
+	ns.Enemies:SetKoS("Player-9-ONLYONE", "Uniqfirst Solo", false)
+end)()
+-- Kill on Sight for a whole guild on your own list: every member alerts as Kill on Sight, the Enemies page's Kill on
+-- Sight filter lists the members known (yours and other Wanted users' sightings), and the menu adds and removes it
+;(function()
+	ns.Enemies:SetKoS("Player-9-ENEMY", "Stabby Mcstab", false)
+	ns.Store:UpdatePlayer("Player-9-GUILDMATE", { name = "Other Vanguard", guild = "Crimson Vanguard", class = "WARRIOR" })
+	check(not ns.Enemies:Describe("Player-9-GUILDMATE").kos, "not Kill on Sight before")
+	ns.Enemies:SetKoSGuild("Crimson Vanguard", true, "Camps the flight path")
+	local d = ns.Enemies:Describe("Player-9-GUILDMATE")
+	check(d.kos and d.kosGuild and d.reason == "Camps the flight path", "a member of a listed guild is Kill on Sight, with the guild's reason")
+	check(not ns.Enemies:IsKoS("Player-9-GUILDMATE"), "without being on the list one by one")
+	local listed = {}
+	for _, e in ipairs(ns.Enemies:GetAll("kos")) do listed[e.guid] = true end
+	check(listed["Player-9-GUILDMATE"], "the Kill on Sight filter lists a member only seen in the records")
+	-- A member comes into view: the Kill on Sight alert
+	local warned = {}
+	local realWarn = ns.Alerts.Warn
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	enemyUnits.nameplate45 = { guid = "Player-9-GUILDMATE", name = "Other Vanguard", class = "WARRIOR", level = 21, guild = "Crimson Vanguard" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate45")
+	RunTimers()
+	ns.Alerts.Warn = realWarn
+	check(warned[1] and warned[1]:find("KILL ON SIGHT: Other Vanguard", 1, true), "a member in view alerts as Kill on Sight: "..tostring(warned[1]))
+	-- The menu: remove the guild; add it back
+	local function MenuItems(guid)
+		local texts = {}
+		local realMenu = ns.Widgets.Menu
+		ns.Widgets.Menu = function(_, items) for _, item in ipairs(items) do if type(item) == "table" then texts[item.text] = item end end end
+		ns.EnemyMenu:Show(ns.Enemies:Describe(guid))
+		ns.Widgets.Menu = realMenu
+		return texts
+	end
+	local items = MenuItems("Player-9-GUILDMATE")
+	check(items["Remove <Crimson Vanguard> from Kill on Sight"], "the menu offers to take the guild off")
+	items["Remove <Crimson Vanguard> from Kill on Sight"].onClick()
+	check(not ns.Enemies:Describe("Player-9-GUILDMATE").kos, "and does")
+	items = MenuItems("Player-9-GUILDMATE")
+	check(items["Kill on Sight: all of <Crimson Vanguard>"], "and to put the whole guild on")
+	items["Kill on Sight: all of <Crimson Vanguard>"].onClick()
+	check(ns.Enemies:Describe("Player-9-GUILDMATE").kosGuild, "which puts it back")
+	ns.Enemies:SetKoSGuild("Crimson Vanguard", false)
+	enemyUnits.nameplate45 = nil
+end)()
 print("wanted smoke: 1.5.1 checks pass")

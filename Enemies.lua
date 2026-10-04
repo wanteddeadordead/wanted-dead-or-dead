@@ -592,6 +592,7 @@ function private.ResolveDeath(suspects, attempt)
 		killer, how = suspects[1], "targeting"
 	end
 	Wanted:Log("Enemies: death, killer %s (%s)", tostring(killer), how)
+	private.lastDeath = killer and { guid = killer, how = how, t = GetTime() } or nil
 	if killer and how == "recap" then
 		-- The death recap named them: our own death record names them too (Recorder)
 		private.lastKiller = { guid = killer, t = GetTime() }
@@ -754,6 +755,12 @@ function Enemies:GetLastKiller(maxAge)
 		return k.guid
 	end
 	return nil
+end
+
+---Who the latest death named and how: { guid, how = "recap" | "targeting", t = GetTime() }, or nil.
+---@return table?
+function Enemies:GetLastDeath()
+	return private.lastDeath
 end
 
 ---When an enemy player was last in view (GetTime()), or nil if none is on the Nearby list.

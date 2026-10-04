@@ -272,7 +272,7 @@ function private.OnEnemyEvent(event, entry)
 			Alerts:Warn(format("%s seen by %s", d.name, entry.by), where..why, d.kos and C.red or (d.bounty > 0 and C.gold) or C.amber)
 			Alerts:Sound("important")
 		end
-	elseif event == "killedby" then
+	elseif event == "killedby" and not (Wanted.DeathCard and Wanted.DeathCard:IsOn()) then
 		Alerts:Warn("Killed by "..(d.name or "?"), Describe(d)..format("  -  they've won %d, you've won %d", d.losses, d.wins), C.muted)
 	end
 end

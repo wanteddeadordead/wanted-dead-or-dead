@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fewer "No player named ... is currently playing" lines in chat: the game can answer Wanted's hidden greetings to
+  players on other realm names minutes late, after Wanted had stopped hiding the answer. It now hides them for 10
+  minutes instead of 2.
+
 ## [1.7.2] - 2026-10-02
 
 - Fixed a Lua error ("bad argument #1 to 'UnitIsPlayer'") when hovering some players: the game sometimes hides

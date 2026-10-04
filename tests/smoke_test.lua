@@ -1661,6 +1661,18 @@ local hellos = Sent("WHISPER", "Far Friend")
 check(#hellos == 1 and hellos[1].tag == "H" and hellos[1].tbl.r == "Realm" and type(hellos[1].tbl.c) == "table" and not hellos[1].tbl.a, "a realm link starts with a whispered hello carrying our realm")
 check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Far Friend' is currently playing.") == true
 	and chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing.") == false, "the game's 'not online' for someone just greeted is hidden, others aren't")
+-- The game can answer a cross-realm whisper minutes late (seen: 72 s, 119 s, and past 2 minutes), all names at once
+do
+	local before = clock
+	ns.Sync:Greet("Late Answer", "Other Realm")
+	clock = clock + 150
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Late Answer' is currently playing.") == true,
+		"a 'not online' that comes two and a half minutes after the greeting is still hidden")
+	clock = clock + 900
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Late Answer' is currently playing.") == false,
+		"but not one that comes a quarter of an hour later")
+	clock = before
+end
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { ["Far Origin"] = 2 }, r = "Other Realm", a = 1 }), "WHISPER", "Far Friend")
 local needs = Sent("WHISPER", "Far Friend")

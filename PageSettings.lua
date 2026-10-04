@@ -111,6 +111,7 @@ function private.BuildAlerts(panel, width)
 	private.Toggle(card, Detect, "onlyWhenExposed", "Only when I can be attacked", "Alerts, the TARGETED warning and the Nearby window stay quiet while you're not PvP flagged or are in a sanctuary. Enemies are still seen and shared.", 440, -100, function()
 		Wanted.NearbyWindow:UpdateExposure()
 	end)
+	private.Toggle(card, Detect, "deathCard", "Show a card when a player kills you", "Who killed you, your record against them and what's on their head, with Kill on Sight, Post a bounty and Where they've been.", 440, -124)
 	local previewLabel = Theme:Text(card, "small", "Hear them")
 	previewLabel:SetPoint("TOPLEFT", 440, -38)
 	local previous = nil

@@ -643,6 +643,8 @@ function W:Dialog(options)
 	if options.input then
 		frame.input:SetPoint("BOTTOMLEFT", 20, 56)
 		frame.input.placeholder:SetText(options.input.placeholder or "")
+		-- Typed answers are held to 48 letters; a longer value to copy (a death page's address) fits whole
+		frame.input:SetMaxLetters(max(48, #(options.input.value or "")))
 		frame.input:SetValue(options.input.value or "")
 		frame.input:Show()
 	else

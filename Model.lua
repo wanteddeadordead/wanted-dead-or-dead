@@ -98,7 +98,11 @@ function Model:GetBountyInfo(bounty)
 			tinsert(actions, "dispute")
 			tinsert(actions, "confirm")
 		elseif info.state == STATE.OWED then
+			-- The death's page stays a click away after confirming: to check it again before paying, or after
+			tinsert(actions, "deathpage")
 			tinsert(actions, "pay")
+		elseif info.state == STATE.PAID then
+			tinsert(actions, "deathpage")
 		end
 	elseif (info.state == STATE.OPEN or info.state == STATE.UNVERIFIED) and not info.passed then
 		if info.iHunt then

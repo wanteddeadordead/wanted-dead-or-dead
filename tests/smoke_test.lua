@@ -426,12 +426,18 @@ do
 end
 ConfirmDialog()
 local info = ns.Model:GetBountyInfo(board[1].bounty)
-check(info.state == "owed" and info.actions[1] == "pay", "confirmed bounty is owed with pay, got "..info.state)
+check(info.state == "owed" and info.actions[#info.actions] == "pay", "confirmed bounty is owed with pay, got "..info.state)
+-- After confirming, the death's page is still a click away: beside Pay, and once paid
+check(info.actions[1] == "deathpage", "an owed bounty offers its death page beside Pay")
+ns.Rows:DoAction("deathpage", info)
+check(lastDialog and lastDialog.input and lastDialog.input.value == ns.Bounties:DeathPageURL(info.claim), "which opens the address to copy")
+lastDialog = nil
 check(ns.Model:GetActionCount() == 1, "one thing waits: the payment")
 ns.Rows:DoAction("pay", info)
 ConfirmDialog()
 ns:RunCommand("simulate", "paid")
 check(ns.Model:GetBountyInfo(board[1].bounty).state == "paid", "paid after simulate paid")
+check(ns.Model:GetBountyInfo(board[1].bounty).actions[1] == "deathpage", "a paid bounty still offers its death page")
 
 -- Post a bounty through the board page, then raise it and dispute nothing
 ns.Store:UpdatePlayer("Player-TEST-00000001", { name = "Corvin Ashdale", faction = "Alliance", level = 22 })

@@ -22,6 +22,7 @@ local ACTION_BUTTONS = {
 	pass = { label = "Pass", style = "ghost", tip = "Hide this bounty from your board, e.g. because it pays too little." },
 	confirm = { label = "Confirm", style = "success", tip = "Agree the kill happened. You then owe the bounty hunter the bounty." },
 	dispute = { label = "Dispute", style = "danger", tip = "Say the claim is false. It goes on the bounty hunter's record and the bounty opens again." },
+	deathpage = { label = "Death page", style = "ghost", tip = "The address of every record of this death on wanteddeadordead.com, to copy into a browser." },
 	pay = { label = "Pay", style = "primary", tip = "Fill in a mail to the bounty hunter at a mailbox. You check it and press Send." },
 }
 local ROW_HEIGHT = 50
@@ -295,6 +296,14 @@ function Rows:DoAction(action, info)
 				Bounties:Decide(info.claim, false)
 				Done(format("Confirmed. You owe %s %s: press Pay at a mailbox.", info.hunter, Bounties:FormatMoney(info.amount)))
 			end,
+		})
+	elseif action == "deathpage" and info.claim then
+		W:Dialog({
+			title = "The death's page",
+			text = format("Every record of %s's death, from both factions, including who the victim's own record says killed them (click the address, Ctrl+C, paste into a browser):",
+				Killed(info, name)),
+			input = { value = Bounties:DeathPageURL(info.claim) },
+			confirmLabel = "Close",
 		})
 	elseif action == "dispute" then
 		W:Dialog({

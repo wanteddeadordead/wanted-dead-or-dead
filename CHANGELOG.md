@@ -10,6 +10,8 @@
   Spy's for every realm. Players Wanted hasn't seen yet go on Kill on Sight the first time it sees them, so that first
   sighting already alerts as Kill on Sight. True Spy names players by first name only on Forever: a first name comes
   over only when Wanted knows exactly one player by it, and the rest are counted, never guessed.
+- Your bounties: once you've confirmed a claim, the death's page is still a click away ("Death page", beside Pay and
+  after paying), so you can check it again.
 - Confirming a bounty claim: the death page's address in the box was cut off after 48 letters, so the copied link
   didn't work; it's whole now. A claim on a guild bounty names the member who died ("Fresh Meat of <OLYMPUS>"), in
   the confirm and dispute boxes alike, instead of only the guild.

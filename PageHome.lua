@@ -547,6 +547,7 @@ UI:RegisterPage("home", {
 	title = "Home",
 	order = 0,
 	noHeader = true,
+	tabs = { "home", "calendar" },
 	build = function(container, width)
 		private.hot = {}
 		private.BuildEmpty(container, width)

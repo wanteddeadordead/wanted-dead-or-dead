@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- The menu is grouped as World PvP (the bounty pages, Hotspots, Enemies, Guild Kill on Sight, Leaderboards, Activity,
+  Challenges), Battlegrounds and You. Arenas get a heading only if WoW Forever adds them.
+- Rank & Gear, under Battlegrounds: your Blizzard PvP rank as the game tells it, the fourteen ranks with what each
+  unlocks at the rank vendors, your points toward the next, this week's cap, Honor Points and your battleground
+  Marks of Honor.
 ## [1.9.1] - 2026-10-05
 
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General

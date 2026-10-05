@@ -101,7 +101,14 @@ function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
-function Methods:SetPoint(...) self._point = { ... } end
+-- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
+function Methods:SetPoint(point, ...)
+	self._point = { point, ... }
+	if type(point) == "string" then
+		if point:find("LEFT") then self._leftAnchored = true end
+		if point:find("RIGHT") then self._rightAnchored = true end
+	end
+end
 function Methods:SetScale(scale) self._scale = scale end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
@@ -4727,8 +4734,8 @@ end)()
 	db.settings.showTools = false
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
-	check(Shown("WORLD PVP") and Shown("YOU"), "the menu's groups are labelled")
-	check(not Shown("BATTLEGROUNDS"), "a group with no page yet shows no heading")
+	check(Shown("WORLD PVP") and Shown("BATTLEGROUNDS") and Shown("YOU"), "the menu's groups are labelled")
+	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
 	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch
@@ -5363,5 +5370,66 @@ end)()
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
+end)()
+-- Rank & Gear: Blizzard's rank as the game tells it, mid-season at the longest title (Lieutenant Commander, rank 10)
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local unlocks = { "Faction Tabard", "Insignia Trinket", "Faction Cloak", "Faction Necklace", "Combat Potions", "Elite Faction Tabard",
+		"Battle Standard", { "Elite Wrist Upgrade", "Elite Waist Upgrade" }, "Elite Boot Upgrade", "Elite Glove Upgrade", "Black War Mounts",
+		{ "Elite Leg Upgrade", "Elite Shoulder Upgrade" }, { "Elite Chest Upgrade", "Elite Helmet Upgrade" }, "Weapon Arsenal" }
+	local realFactions, realCurrency, realCount, realSide = C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup
+	UnitFactionGroup = function() return "Alliance", "Alliance" end
+	C_MajorFactions = {
+		GetMajorFactionProgressionInfo = function() return { renownLevel = 10, renownReputationEarned = 900, renownLevelThreshold = 2350,
+			currentWeekProgressiveMaxLevel = 11, maxLevel = 14, weekNumber = 8 } end,
+		GetRenownRewardsForLevel = function(_, rank)
+			local u = unlocks[rank]
+			local out = {}
+			for _, d in ipairs(type(u) == "table" and u or { u }) do out[#out + 1] = { name = "Rank "..rank.." Rewards", description = d } end
+			return out
+		end,
+	}
+	C_CurrencyInfo = { GetCurrencyInfo = function(id) return id == 1792 and { name = "Honor Points", quantity = 12450, maxQuantity = 25000 } or nil end }
+	GetItemCount = function(id) return id == 20560 and 7 or 0 end
+	ns.UI:Show("rank")
+	check(ns.UI:IsShown("rank"), "Rank & Gear opens")
+	check(Shown("BATTLEGROUNDS"), "the Battlegrounds heading shows with its first page")
+	check(Shown("12,450") and Shown("of 25,000"), "honor, with thousands separators and the cap")
+	check(Shown("Rank 11 of 14") and Shown("week 8"), "this week's cap")
+	check(Shown("10  Lieutenant Commander"), "the ladder names each rank by Blizzard's title")
+	check(Shown("1,450 more points"), "the points to the next rank")
+	check(Shown("Rank 11  Commander") and Shown("Black War Mounts"), "the next rank and what it unlocks")
+	check(Shown("Lieutenant Commander  (10)") or Shown("Lieutenant Commander"), "your rank's title on its tile, fitted to it")
+	check(Shown("You") and Shown("capped"), "your rank, and the ranks above this week's cap")
+	check(Shown("7"), "your Alterac Valley marks")
+	-- Before a season: no rank
+	C_MajorFactions.GetMajorFactionProgressionInfo = function() return { renownLevel = 0, renownReputationEarned = 0, renownLevelThreshold = 750,
+		currentWeekProgressiveMaxLevel = 0, maxLevel = 14, weekNumber = -1 } end
+	ns.UI:Refresh(true)
+	check(Shown("No rank yet") and Shown("Ranks start with the PvP season."), "no rank before the season")
+	C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup = realFactions, realCurrency, realCount, realSide
+end)()
+-- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space
+;(function()
+	local over = {}
+	for _, fs in ipairs(Mock.fontStrings) do
+		local width = rawget(fs, "fitWidth")
+		if width and fs._text ~= "" and not rawget(fs, "_wrap") and fs:GetUnboundedStringWidth() > width + 0.5 then
+			local bounded = (rawget(fs, "_wSet") and fs._w <= width + 0.5) or (rawget(fs, "_leftAnchored") and rawget(fs, "_rightAnchored"))
+			if not bounded then
+				over[#over + 1] = format("%q (%d wide, %d to fit)", fs._text, math.floor(fs:GetUnboundedStringWidth()), math.floor(width))
+			end
+		end
+	end
+	check(#over == 0, "lines wider than their space:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")

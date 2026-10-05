@@ -12,6 +12,11 @@ local private = {
 local WEEK = 7 * 24 * 60 * 60
 local MAX_DAY_EVENTS = 8 -- the game's events read per day, at most
 local MAX_UPCOMING = 10
+-- The order a day's events are listed in: Wanted's and Blizzard's dates before the game's holidays
+local KIND_ORDER = { pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
+-- The game marks no holiday as PvP (every one is event type Other on Forever, build 70205); its battleground
+-- weekends are titled "Call to Arms: <battleground>"
+local BATTLEGROUND_WEEKEND = "^Call to Arms: "
 
 function PvPCalendar:OnEnable()
 	local frame = CreateFrame("Frame")
@@ -57,7 +62,12 @@ function private.Readable(value)
 	return not (issecretvalue and issecretvalue(value))
 end
 
----The game's holidays in a month, added to days: the PvP ones as "pvpholiday", the rest as "holiday". The game's
+---A holiday's label for a day's box: the part after "Call to Arms: " (the battleground), or the whole title.
+function private.ShortTitle(title)
+	return (gsub(title, BATTLEGROUND_WEEKEND, ""))
+end
+
+---The game's holidays in a month, added to days: battleground weekends as "pvpholiday", the rest as "holiday". The game's
 ---calendar reads months by offset from the one it is on (which Blizzard's calendar window may have moved).
 function private.AddGameEvents(year, month, Add)
 	if not C_Calendar or not C_Calendar.GetMonthInfo or not C_Calendar.GetNumDayEvents or not C_Calendar.GetDayEvent then
@@ -78,27 +88,29 @@ function private.AddGameEvents(year, month, Add)
 				local okEvent, e = pcall(C_Calendar.GetDayEvent, offset, day, i)
 				if okEvent and type(e) == "table" and private.Readable(e.title) and private.Readable(e.calendarType)
 					and private.Readable(e.eventType) and e.calendarType == "HOLIDAY" and type(e.title) == "string" and e.title ~= "" then
-					local pvp = pvpType ~= nil and e.eventType == pvpType
+					local pvp = (pvpType ~= nil and e.eventType == pvpType) or strfind(e.title, BATTLEGROUND_WEEKEND) ~= nil
 					if not private.logged[e.title] then
-						-- Which of the game's holidays Forever has, and which it calls PvP (to check against in game)
+						-- Which of the game's holidays Forever has, with their icons: a way to tell battleground weekends
+						-- in any language
 						private.logged[e.title] = true
-						Wanted:Log("PvPCalendar: holiday %q, event type %s", e.title, tostring(e.eventType))
+						Wanted:Log("PvPCalendar: holiday %q, event type %s, icon %s", e.title, tostring(e.eventType),
+							private.Readable(e.iconTexture) and tostring(e.iconTexture) or "secret")
 					end
-					Add(day, e.title, pvp and "pvpholiday" or "holiday")
+					Add(day, e.title, pvp and "pvpholiday" or "holiday", private.ShortTitle(e.title))
 				end
 			end
 		end
 	end
 end
 
----A month's events by day: days[day] = { { text, kind }, ... }, kinds "pvpseason", "wanted", "weekly",
----"pvpholiday" and "holiday".
+---A month's events by day, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... }, kinds
+---"pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box.
 ---@param year number
 ---@param month number
 ---@return table<number, table[]>
 function PvPCalendar:GetMonth(year, month)
 	local days = {}
-	local function Add(day, text, kind)
+	local function Add(day, text, kind, short)
 		days[day] = days[day] or {}
 		-- A holiday the game lists twice on one day shows once
 		for _, e in ipairs(days[day]) do
@@ -106,7 +118,7 @@ function PvPCalendar:GetMonth(year, month)
 				return
 			end
 		end
-		tinsert(days[day], { text = text, kind = kind })
+		tinsert(days[day], { text = text, short = short or text, kind = kind })
 	end
 	local function AddAt(t, text, kind)
 		local d = date("*t", t)
@@ -147,6 +159,14 @@ function PvPCalendar:GetMonth(year, month)
 		end
 	end
 	private.AddGameEvents(year, month, Add)
+	for _, events in pairs(days) do
+		sort(events, function(a, b)
+			if KIND_ORDER[a.kind] ~= KIND_ORDER[b.kind] then
+				return KIND_ORDER[a.kind] < KIND_ORDER[b.kind]
+			end
+			return a.text < b.text
+		end)
+	end
 	return days
 end
 
@@ -164,7 +184,7 @@ function PvPCalendar:GetUpcoming()
 			for _, e in ipairs(days[day] or {}) do
 				if not seen[e.text] then
 					seen[e.text] = true
-					tinsert(out, { year = y, month = m, day = day, text = e.text, kind = e.kind })
+					tinsert(out, { year = y, month = m, day = day, text = e.text, short = e.short, kind = e.kind })
 					if #out == MAX_UPCOMING then
 						return out
 					end

@@ -54,8 +54,9 @@ function private.RefreshTiles()
 		tile.value:SetText(season.name)
 		tile.note:SetText(season.endsAt and season.endsAt > now and Theme:Left(season.endsAt - now) or "")
 	else
-		tile.value:SetText("Not known")
-		tile.note:SetText("comes with the Wanted app")
+		-- From the Wanted app's catch-up; the note would run into the value on a tile this wide
+		tile.value:SetText("Not known yet")
+		tile.note:SetText("")
 	end
 end
 
@@ -116,7 +117,7 @@ function private.RefreshGrid()
 			Theme:SetBorderColor(cell, isToday and C.accent or C.border)
 			for i, line in ipairs(cell.lines) do
 				local e = events[i]
-				line:SetText(e and e.text or "")
+				line:SetText(e and e.short or "")
 				if e then
 					local color = KIND_COLORS[e.kind] or C.text
 					line:SetTextColor(color[1], color[2], color[3])
@@ -138,7 +139,7 @@ function private.RefreshUpcoming()
 		if e then
 			local color = KIND_COLORS[e.kind] or C.text
 			line.date:SetText(format("%s %d", strsub(MONTHS[e.month], 1, 3), e.day))
-			line.text:SetText(e.text)
+			line.text:SetText(e.short)
 			line.text:SetTextColor(color[1], color[2], color[3])
 			line:Show()
 		else
@@ -175,8 +176,10 @@ end
 UI:RegisterPage("pvp", {
 	group = "You",
 	title = "PvP",
+	tabLabel = "Calendar",
 	subtitle = "The season calendar: Blizzard's PvP season, Wanted's season and weekly resets, and the game's holidays.",
 	order = 5.3,
+	tabs = { "challenges", "pvp" },
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.blizzTile = W:StatTile(container, "Blizzard PvP season", C.accent)
@@ -237,7 +240,7 @@ UI:RegisterPage("pvp", {
 		private.upcomingEmpty:SetPoint("TOPLEFT", 14, -44)
 		local legend = {
 			{ "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
-			{ "PvP holiday (battlegrounds)", "pvpholiday" }, { "Other holiday", "holiday" },
+			{ "Battleground weekend", "pvpholiday" }, { "Other holiday", "holiday" },
 		}
 		for i, item in ipairs(legend) do
 			local key = Theme:Text(side, "tiny", item[1], KIND_COLORS[item[2]])

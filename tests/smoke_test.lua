@@ -5170,22 +5170,32 @@ end)()
 	check(launch and launch[1].text == "WoW Forever launches (3 p.m. PST)" and launch[1].short == "Launch day", "launch day, first on its day")
 	local betaEnd = ns.PvPCalendar:GetMonth(2026, 10)[21]
 	check(betaEnd and betaEnd[1].kind == "game" and betaEnd[1].short == "Beta ends", "the beta's last day")
-	ns.UI:Show("pvp")
+	ns.UI:Show("calendar")
 	check(opened, "the page asks the game for its calendar")
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
 	check(Shown("Darkmoon Faire"), "the holiday is on the grid")
 	check(Shown("Battleground weekends start with launch, Nov 4."), "saying when they start")
-	-- Challenges is a tab of the PvP page: one menu entry, tabs in the header, the menu's footer buttons gone
-	local menuPvP, tabs = 0, 0
-	for _, f in ipairs(Mock.fontStrings) do
-		if f._text == "PvP" and f._shown then menuPvP = menuPvP + 1 end
-		if f._text == "Calendar" and f._shown then tabs = tabs + 1 end
+	-- The calendar is a tab of Home: Home | Calendar along the top of both, no menu entry of its own; Challenges has
+	-- its own again; the menu's footer buttons are gone
+	local function Count(text)
+		local n = 0
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then n = n + 1 end
+			end
+		end
+		return n
 	end
-	check(menuPvP >= 1 and tabs == 1, "the PvP page has its menu entry and a Calendar tab")
+	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
+	check(calendarTabs == 1 and homeTabs == 2, "the calendar shows Home | Calendar tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
 	check(not Shown("Your wanted poster"), "the menu's poster button is gone (the poster is on Your bounties)")
+	ns.UI:Show("home")
+	check(ns.UI:IsShown("home") and Shown("Calendar"), "Home shows the Calendar tab")
 	ns.UI:Show("challenges")
-	check(ns.UI:IsShown("challenges") and Shown("Calendar"), "the Challenges tab keeps the tabs in view")
-	ns.UI:Show("pvp")
+	check(ns.UI:IsShown("challenges") and not Shown("Calendar"), "Challenges is its own page again, without those tabs")
+	ns.UI:Show("calendar")
 	-- The beta: no season running
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
 	ns.UI:Refresh(true)

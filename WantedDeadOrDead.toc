@@ -68,7 +68,7 @@ PageEnemies.lua
 PageGuildKoS.lua
 PageHotspots.lua
 PageChallenges.lua
-PagePvP.lua
+PageCalendar.lua
 PageWeb.lua
 PageSettings.lua
 PageTools.lua

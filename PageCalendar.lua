@@ -1,4 +1,4 @@
--- Wanted: the PvP page. The season calendar: Blizzard's PvP season and this week's rank cap as the game tells them,
+-- Wanted: the calendar, a tab of Home. The season calendar: Blizzard's PvP season and this week's rank cap as the game tells them,
 -- Wanted's season and weekly challenge reset, and the game's holidays (battleground weekends marked), on a month grid
 -- with what's coming up beside it. Arenas aren't on WoW Forever yet.
 
@@ -210,13 +210,11 @@ end
 -- The page
 -- ============================================================================
 
-UI:RegisterPage("pvp", {
-	group = "You",
-	title = "PvP",
-	tabLabel = "Calendar",
-	subtitle = "The season calendar: Blizzard's PvP season, Wanted's season and weekly resets, and the game's holidays.",
-	order = 5.3,
-	tabs = { "challenges", "pvp" },
+UI:RegisterPage("calendar", {
+	title = "Calendar",
+	under = "home", -- a tab of Home
+	noHeader = true,
+	order = 0.1,
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.blizzTile = W:StatTile(container, "Blizzard PvP season", C.accent)

@@ -5525,6 +5525,11 @@ end)()
 	check(rank == 5 and season == 1 and ns.BlizzRank:Of(ns.Store:GetOrigin()) == 5, "our own rank goes in the hello and the book")
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
 	check(ns.BlizzRank:Mine() == nil, "nothing to share on the beta (no season)")
+	-- Ranks the site heard, from the catch-up: taken unless we heard that player more lately
+	ns.db.pvpSeason.season = 1
+	ns.BlizzRank:Take({ ["Site Heard"] = { r = 9, s = 1, t = clock - 100 }, ["Rank Seven"] = { r = 2, s = 1, t = clock - 999999 } })
+	check(ns.BlizzRank:Of("Site Heard") == 9, "a rank from the site is taken")
+	check(ns.BlizzRank:Of("Rank Seven") == 7, "but not over one we heard more lately")
 	C_MajorFactions, ns.db.pvpSeason, ns.db.blizzRanks = realFactions, nil, {}
 end)()
 -- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space

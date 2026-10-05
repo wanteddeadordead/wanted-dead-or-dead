@@ -98,6 +98,10 @@ function Catchup:Import()
 	private.TakeRequests(entry.requests)
 	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
 	Wanted.Challenges:Take(entry.challenges)
+	-- Blizzard PvP ranks other Wanted players shared, from the site (app with addon 1.10.0)
+	if Wanted.BlizzRank then
+		Wanted.BlizzRank:Take(entry.blizzRanks)
+	end
 	-- Players on other realm names to greet as realm links, also at every login
 	Sync:TakeDirectory(entry.links)
 	-- The guilds' Kill on Sight lists as the server keeps them: newer changes only, so taking them again is harmless

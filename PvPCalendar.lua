@@ -103,6 +103,13 @@ function private.AddGameEvents(year, month, Add)
 	end
 end
 
+---Whether the game says a Blizzard PvP season is running (season 0 or week -1 is none, as on the beta).
+---@return boolean
+function PvPCalendar:SeasonRunning()
+	local s = Wanted.db.pvpSeason
+	return type(s) == "table" and type(s.season) == "number" and s.season > 0 and type(s.week) == "number" and s.week >= 0
+end
+
 ---A month's events by day, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... }, kinds
 ---"pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box.
 ---@param year number
@@ -158,7 +165,11 @@ function PvPCalendar:GetMonth(year, month)
 			t = t + WEEK
 		end
 	end
-	private.AddGameEvents(year, month, Add)
+	-- The game's calendar lists Blizzard's holiday schedule even where none of it runs (the beta's calendar has
+	-- battleground weekends that never happen): its holidays show only while a Blizzard PvP season is running
+	if PvPCalendar:SeasonRunning() then
+		private.AddGameEvents(year, month, Add)
+	end
 	for _, events in pairs(days) do
 		sort(events, function(a, b)
 			if KIND_ORDER[a.kind] ~= KIND_ORDER[b.kind] then

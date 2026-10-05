@@ -5158,6 +5158,10 @@ end)()
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
 	ns.UI:Refresh(true)
 	check(Shown("None running"), "no season running on the beta")
+	check(not Shown("Warsong Gulch"), "and no battleground weekends: the beta's calendar lists ones that never happen")
+	check(Shown("Battleground weekends and the game's holidays show once a Blizzard PvP season is running."), "saying why")
+	local beta = ns.PvPCalendar:GetMonth(today.year, today.month)
+	check(not beta[15], "no game holidays in the month's events either")
 	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
 	ns.Challenges:Take(nil)
 end)()

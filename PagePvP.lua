@@ -147,6 +147,10 @@ function private.RefreshUpcoming()
 		end
 	end
 	private.upcomingEmpty:SetShown(#items == 0)
+	-- Under the list: why the game's holidays are missing while no Blizzard season runs
+	private.noSeasonNote:SetShown(not PvPCalendar:SeasonRunning())
+	private.noSeasonNote:ClearAllPoints()
+	private.noSeasonNote:SetPoint("TOPLEFT", 14, -44 - max(#items, 1) * 20 - 8)
 end
 
 function private.Refresh()
@@ -238,6 +242,9 @@ UI:RegisterPage("pvp", {
 		end
 		private.upcomingEmpty = Theme:Text(side, "small", "Nothing on the calendar yet.", C.faint)
 		private.upcomingEmpty:SetPoint("TOPLEFT", 14, -44)
+		private.noSeasonNote = Theme:Text(side, "tiny", "Battleground weekends and the game's holidays show once a Blizzard PvP season is running.", C.faint)
+		private.noSeasonNote:SetWidth(SIDE_WIDTH - 28)
+		private.noSeasonNote:SetWordWrap(true)
 		local legend = {
 			{ "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
 			{ "Battleground weekend", "pvpholiday" }, { "Other holiday", "holiday" },

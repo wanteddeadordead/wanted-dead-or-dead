@@ -192,6 +192,10 @@ function Challenges:Clean(raw)
 		me = {},
 		ranks = {},
 	}
+	-- The Wanted season, for the PvP page's calendar (from the server in October 2026): an end of 0 is none planned
+	if type(raw.season) == "table" and private.Text(raw.season.name, 40) and private.Count(raw.season.startsAt, 1) then
+		out.season = { name = private.Text(raw.season.name, 40), startsAt = raw.season.startsAt, endsAt = private.Count(raw.season.endsAt, 1) }
+	end
 	if type(raw.hot) == "table" then
 		for i = 1, min(#raw.hot, MAX_HOT) do
 			local h = raw.hot[i]

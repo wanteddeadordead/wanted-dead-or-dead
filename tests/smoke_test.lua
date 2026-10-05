@@ -25,6 +25,7 @@ tinsert, tremove, sort = table.insert, table.remove, table.sort
 wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 date = os.date
+time = os.time
 bit = { band = function(a, b) local r, p = 0, 1 while a > 0 and b > 0 do if a % 2 == 1 and b % 2 == 1 then r = r + p end a, b, p = a // 2, b // 2, p * 2 end return r end }
 
 -- Frames
@@ -5096,5 +5097,57 @@ end)()
 	check(ns.db.pvpSeason.season == 0, "nor does a missing rank track")
 	GetCurrentArenaSeason, C_SeasonInfo, C_MajorFactions = realSeason, realInfo, realFactions
 	ns.db.pvpSeason = nil
+end)()
+-- The PvP page's calendar: Blizzard's season and week cap, Wanted's season and weekly resets, and the game's
+-- holidays with the PvP ones marked
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local today = os.date("*t", clock)
+	local opened = false
+	local realEnum = Enum.CalendarEventType
+	Enum.CalendarEventType = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4 }
+	C_Calendar = {
+		OpenCalendar = function() opened = true end,
+		GetMonthInfo = function(offset)
+			local index = today.year * 12 + today.month - 1 + offset
+			local y, m = index // 12, index % 12 + 1
+			return { year = y, month = m, numDays = os.date("*t", os.time({ year = y, month = m + 1, day = 0, hour = 12 })).day, firstWeekday = 1 }
+		end,
+		GetNumDayEvents = function(offset, day) return (offset == 0 and day == 15) and 2 or 0 end,
+		GetDayEvent = function(_, _, index)
+			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 2 } end
+			return { title = "Darkmoon Faire", calendarType = "HOLIDAY", eventType = 4 }
+		end,
+	}
+	ns.db.pvpSeason = { season = 1, week = 3, endsAt = clock + 10 * 86400, weekMax = 6, seasonMax = 14, at = clock }
+	ns.Challenges:Take({ t = clock, weekEnds = clock + 2 * 86400, season = { name = "Wanted Season 1", startsAt = clock - 5 * 86400, endsAt = clock + 60 * 86400 } })
+	local days = ns.PvPCalendar:GetMonth(today.year, today.month)
+	local holidays = {}
+	for _, e in ipairs(days[15] or {}) do holidays[e.text] = e.kind end
+	check(holidays["Call to Arms: Warsong Gulch"] == "pvpholiday" and holidays["Darkmoon Faire"] == "holiday", "the game's holidays, the PvP one marked")
+	local upcoming = {}
+	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = (upcoming[e.text] or 0) + 1 end
+	check(upcoming["PvP Season 1 ends"] == 1 and upcoming["Wanted Season 1 ends"] == 1, "the seasons' ends are coming up")
+	check(upcoming["Weekly reset"] == 1, "the weekly reset is listed once")
+	check(not upcoming["Wanted Season 1 starts"], "nothing already past")
+	ns.UI:Show("pvp")
+	check(opened, "the page asks the game for its calendar")
+	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
+	check(Shown("Call to Arms: Warsong Gulch"), "the holiday is on the grid")
+	-- The beta: no season running
+	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
+	ns.UI:Refresh(true)
+	check(Shown("None running"), "no season running on the beta")
+	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
+	ns.Challenges:Take(nil)
 end)()
 print("wanted smoke: 1.5.1 checks pass")

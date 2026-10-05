@@ -5139,6 +5139,10 @@ end)()
 	check(upcoming["PvP Season 1 ends"] == 1 and upcoming["Wanted Season 1 ends"] == 1, "the seasons' ends are coming up")
 	check(upcoming["Weekly reset"] == 1, "the weekly reset is listed once")
 	check(not upcoming["Wanted Season 1 starts"], "nothing already past")
+	local launch = ns.PvPCalendar:GetMonth(2026, 11)[os.date("*t", 1793833200).day]
+	check(launch and launch[1].text == "WoW Forever launches (3 p.m. PST)" and launch[1].short == "Launch day", "launch day, first on its day")
+	local betaEnd = ns.PvPCalendar:GetMonth(2026, 10)[21]
+	check(betaEnd and betaEnd[1].kind == "game" and betaEnd[1].short == "Beta ends", "the beta's last day")
 	ns.UI:Show("pvp")
 	check(opened, "the page asks the game for its calendar")
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")

@@ -17,7 +17,7 @@ local CELL_LINES = 2 -- events written in a day's box; the rest are in its toolt
 local WEEKDAYS = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
 local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
 	"November", "December" }
-local KIND_COLORS = { pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue, pvpholiday = C.amber, holiday = C.muted }
+local KIND_COLORS = { game = C.green, pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue, pvpholiday = C.amber, holiday = C.muted }
 
 
 
@@ -246,7 +246,7 @@ UI:RegisterPage("pvp", {
 		private.noSeasonNote:SetWidth(SIDE_WIDTH - 28)
 		private.noSeasonNote:SetWordWrap(true)
 		local legend = {
-			{ "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
+			{ "WoW Forever", "game" }, { "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
 			{ "Battleground weekend", "pvpholiday" }, { "Other holiday", "holiday" },
 		}
 		for i, item in ipairs(legend) do

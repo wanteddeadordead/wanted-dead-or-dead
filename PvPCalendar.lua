@@ -13,7 +13,11 @@ local WEEK = 7 * 24 * 60 * 60
 local MAX_DAY_EVENTS = 8 -- the game's events read per day, at most
 local MAX_UPCOMING = 10
 -- The order a day's events are listed in: Wanted's and Blizzard's dates before the game's holidays
-local KIND_ORDER = { pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
+local KIND_ORDER = { game = 0, pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
+-- WoW Forever's own dates, from Blizzard's beta schedule (forum post, BlizzCon 2026): the beta ends on October 21,
+-- 2026 (no time given: that day everywhere), and the game launches on November 4, 2026 at 3:00 p.m. PST
+local BETA_ENDS = { year = 2026, month = 10, day = 21 }
+local LAUNCH_AT = 1793833200 -- 2026-11-04 23:00 UTC
 -- The game marks no holiday as PvP (every one is event type Other on Forever, build 70205); its battleground
 -- weekends are titled "Call to Arms: <battleground>"
 local BATTLEGROUND_WEEKEND = "^Call to Arms: "
@@ -110,8 +114,8 @@ function PvPCalendar:SeasonRunning()
 	return type(s) == "table" and type(s.season) == "number" and s.season > 0 and type(s.week) == "number" and s.week >= 0
 end
 
----A month's events by day, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... }, kinds
----"pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box.
+---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
+---kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box.
 ---@param year number
 ---@param month number
 ---@return table<number, table[]>
@@ -127,15 +131,19 @@ function PvPCalendar:GetMonth(year, month)
 		end
 		tinsert(days[day], { text = text, short = short or text, kind = kind })
 	end
-	local function AddAt(t, text, kind)
+	local function AddAt(t, text, kind, short)
 		local d = date("*t", t)
 		if d.year == year and d.month == month then
-			Add(d.day, text, kind)
+			Add(d.day, text, kind, short)
 		end
 	end
 	local monthStart = time({ year = year, month = month, day = 1, hour = 0 })
 	local nextYear, nextMonth = PvPCalendar:AddMonths(year, month, 1)
 	local monthEnd = time({ year = nextYear, month = nextMonth, day = 1, hour = 0 })
+	if year == BETA_ENDS.year and month == BETA_ENDS.month then
+		Add(BETA_ENDS.day, "WoW Forever beta ends", "game", "Beta ends")
+	end
+	AddAt(LAUNCH_AT, "WoW Forever launches (3 p.m. PST)", "game", "Launch day")
 	-- Blizzard's season: only its end is told
 	local s = Wanted.db.pvpSeason
 	if type(s) == "table" and type(s.season) == "number" and s.season > 0 and type(s.endsAt) == "number" and s.endsAt > 0 then

@@ -9,6 +9,7 @@
   them, Wanted's season and its weekly resets, and the holidays in the game's calendar with the battleground
   weekends ("Call to Arms") marked, on a month grid with what's coming up beside it. The game's holidays show only
   while a Blizzard PvP season is running: the beta's calendar lists battleground weekends that never happen.
+  WoW Forever's own dates are on it too: the beta's last day (October 21) and launch day (November 4, 3 p.m. PST).
 - Challenges is now a tab of the PvP page, beside the calendar, and the menu's "Your wanted poster" and "Report a
   bug" buttons are gone (the poster is on Your bounties, Report a bug in the title bar): the menu fits again.
 - Wanted keeps Blizzard's PvP season as the game tells it (the season, its week, this week's highest rank and when it

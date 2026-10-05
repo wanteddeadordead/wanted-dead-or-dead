@@ -5,6 +5,10 @@
 - Wanted reads no other player in any instance (dungeons and raids as well as battlegrounds): no enemy scanning,
   sightings, tooltip lines, nameplate ranks or "use my target" there. A party member mind-controlled by a dungeon boss
   is a hostile player whose identity the game keeps secret, which caused a Lua error.
+- Paying a bounty is recorded however the mail goes out. A send another mail addon makes (TradeSkillMaster keeps its
+  own copy of the game's send) counts when it takes the bounty from your gold soon after Pay, and a mail written by
+  hand counts when it carries at least the bounty to the hunter. The hunter's side counts a hand-written mail from
+  the poster too. Before, a payment sent this way still showed as owed.
 - Killed by a hunter's or warlock's pet: the pet's owner now gets the death card, the death record and the loss
   against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
   is shown as "probably". Before, a pet's kill counted as no player's.

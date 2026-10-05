@@ -199,6 +199,8 @@ end
 UI:RegisterPage("rank", {
 	group = "Battlegrounds",
 	title = "Rank & Gear",
+	tabLabel = "Rank",
+	tabs = { "rank", "gear" },
 	subtitle = "Your Blizzard PvP rank, what each rank unlocks at the rank vendors, and your honor and marks.",
 	order = 7,
 	build = function(container, width, height)

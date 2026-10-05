@@ -5418,6 +5418,96 @@ end)()
 	check(Shown("No rank yet") and Shown("Ranks start with the PvP season."), "no rank before the season")
 	C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup = realFactions, realCurrency, realCount, realSide
 end)()
+-- The gear catalogue, from a rank vendor's real stock (Lady Palanseer, Brave Stonehide, Sergeant Thunderhorn,
+-- 2026-10-05): what's kept, what a rogue can use, what's missing, and chasing an item
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local AV, AB, DI = "|cnIQ2:|Hitem:20560::::::::15:1488:::::::::|h[Alterac Valley Mark of Honor]|h|r", "|cnIQ2:|Hitem:20559::::::::15:1488:::::::::|h[Arathi Basin Mark of Honor]|h|r",
+		"|cnIQ2:|Hitem:274895::::::::15:1488:::::::::|h[Darkspear Islands Mark of Honor]|h|r"
+	local stock = {
+		{ id = 272474, name = "Premier Shadowhide Headguard", q = 3, level = 55, class = 4, sub = 2, slot = "INVTYPE_HEAD", costs = { { AV, 15 }, { "Honor Points", 9000 } }, needs = { "Classes: Rogue", "Requires Level 55" } },
+		{ id = 999002, name = "Premier Wildheart Headguard", q = 3, level = 55, class = 4, sub = 2, slot = "INVTYPE_HEAD", costs = { { AV, 15 }, { "Honor Points", 9000 } }, needs = { "Classes: Druid", "Requires Level 55" } },
+		{ id = 272589, name = "Premier Sergeant's Cape", q = 3, level = 55, class = 4, sub = 1, slot = "INVTYPE_CLOAK", costs = { { AB, 10 }, { "Honor Points", 4500 } }, needs = { "Requires Level 55", "Requires Sergeant (Rank 3)" } },
+		{ id = 275240, name = "Premier Emboldened Wrist Seal", q = 4, level = 60, class = 15, sub = 0, slot = "INVTYPE_NON_EQUIP_IGNORE", costs = { { "Honor Points", 1200 } }, needs = { "Requires Level 60", "Requires Knight-Captain / Legionnaire (Rank 8)" } },
+		{ id = 272612, name = "Premier High Warlord's Razor", q = 4, level = 60, class = 2, sub = 15, slot = "INVTYPE_WEAPON", costs = { { DI, 10 }, { "Honor Points", 12000 } }, needs = { "Requires Level 60", "Requires Grand Marshal / High Warlord (Rank 14)" } },
+		{ id = 272604, name = "Premier High Warlord's Greatsword", q = 4, level = 60, class = 2, sub = 8, slot = "INVTYPE_2HWEAPON", costs = { { AV, 20 }, { "Honor Points", 22500 } }, needs = { "Requires Level 60", "Requires Grand Marshal / High Warlord (Rank 14)" } },
+		{ id = 272449, name = "Scout's Tabard", q = 1, level = 0, class = 4, sub = 0, slot = "INVTYPE_TABARD", price = 10000, costs = {}, needs = { "Requires Private/Scout (Rank 1)" } },
+		{ id = 17034, name = "Maple Seed", q = 1, level = 0, class = 7, sub = 0, slot = "INVTYPE_NON_EQUIP_IGNORE", price = 200, costs = {}, needs = {} },
+		{ id = 999001, name = "Premier Lamellar Breastplate", q = 3, level = 55, class = 4, sub = 4, slot = "INVTYPE_CHEST", costs = { { "Honor Points", 9350 } }, needs = { "Requires Level 55" } },
+	}
+	local byID = {}
+	for _, s in ipairs(stock) do byID[s.id] = s end
+	local real = { GetMerchantNumItems = GetMerchantNumItems, GetMerchantItemID = GetMerchantItemID, GetMerchantItemCostInfo = GetMerchantItemCostInfo,
+		GetMerchantItemCostItem = GetMerchantItemCostItem, C_TooltipInfo = C_TooltipInfo, C_MerchantFrame = C_MerchantFrame, C_Item = C_Item,
+		UnitClass = UnitClass, UnitLevel = UnitLevel, UnitName = UnitName, C_MajorFactions = C_MajorFactions, C_CurrencyInfo = C_CurrencyInfo, GetItemCount = GetItemCount }
+	GetMerchantNumItems = function() return #stock end
+	GetMerchantItemID = function(i) return stock[i].id end
+	GetMerchantItemCostInfo = function(i) return #stock[i].costs end
+	GetMerchantItemCostItem = function(i, c)
+		local cost = stock[i].costs[c]
+		if cost[1]:find("|H") then return 133308, cost[2], cost[1], nil end
+		return 2173920, cost[2], nil, cost[1]
+	end
+	C_TooltipInfo = { GetMerchantItem = function(i) local lines = {} for _, t in ipairs(stock[i].needs) do lines[#lines + 1] = { leftText = t } end return { lines = lines } end }
+	C_MerchantFrame = { GetItemInfo = function(i) return { name = stock[i].name, price = stock[i].price or 0 } end }
+	C_Item = { GetItemInfoInstant = function(id) local s = byID[id] return id, nil, nil, s.slot, 134400, s.class, s.sub end,
+		GetItemInfo = function(id) local s = byID[id] return s.name, nil, s.q, 60, s.level end,
+		GetItemQualityColor = function() return 1, 1, 1 end, GetItemIconByID = function() return 134400 end }
+	UnitClass = function(unit) if unit == "player" then return "Rogue", "ROGUE", 4 end return real.UnitClass(unit) end
+	UnitLevel = function(unit) if unit == "player" then return 30 end return real.UnitLevel(unit) end
+	UnitName = function(unit) if unit == "npc" then return "Lady Palanseer" end return real.UnitName(unit) end
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function() return { renownLevel = 3, renownReputationEarned = 100, renownLevelThreshold = 1200,
+		currentWeekProgressiveMaxLevel = 4, maxLevel = 14, weekNumber = 2 } end, GetRenownRewardsForLevel = function() return {} end }
+	C_CurrencyInfo = { GetCurrencyInfo = function(id) return id == 1792 and { name = "Honor Points", quantity = 1500, maxQuantity = 25000 } or nil end }
+	GetItemCount = function(id) return id == 20560 and 4 or 0 end
+	ns.GearCatalog:ReadVendor()
+	local items = ns.GearCatalog:Items()
+	check(items[272474] and items[272474].honor == 9000 and items[272474].marks[20560] == 15 and items[272474].level == 55, "a set piece is kept with its honor, marks and level")
+	check(items[275240] and items[275240].rank == 8, "a seal's rank comes from its tooltip")
+	check(items[272449] and items[272449].rank == 1, "a rank item with no honor (the tabard) is kept")
+	check(not items[17034], "a vendor's other goods aren't")
+	check(items[999002] and items[999002].classes[1] == "Druid", "another class's set is kept, with its class")
+	local mine, names = ns.GearCatalog:ForMe(), {}
+	for i, item in ipairs(mine) do names[i] = item.entry.name end
+	check(table.concat(names, "|") == "Premier Shadowhide Headguard|Scout's Tabard|Premier Sergeant's Cape|Premier Emboldened Wrist Seal|Premier High Warlord's Razor",
+		"a rogue's gear, by rank then slot, without the greatsword, plate or the druid's leather: "..table.concat(names, "|"))
+	local function Missing(id) for _, item in ipairs(mine) do if item.itemID == id then return table.concat(item.missing, ", ") end end end
+	check(Missing(272449) == "", "the tabard is ready to buy")
+	check(Missing(272474) == "Level 55, 7,500 more honor, 11 more AV marks", "the headguard's shortfall: "..tostring(Missing(272474)))
+	check(Missing(272612) == "Rank 14, Level 60, 10,500 more honor, 10 more DI marks", "the razor's: "..tostring(Missing(272612)))
+	ns.GearCatalog:ToggleGoal(272612)
+	check(ns.GearCatalog:ForMe()[1].itemID == 272612, "a chased item goes to the top")
+	ns.UI:Show("gear")
+	check(ns.UI:IsShown("gear") and Shown("Rogue: 5 items, 1 chased"), "the Gear tab lists the rogue's items")
+	check(Shown("Chasing") and Shown("Ready to buy"), "with the chased item marked and the ready one said")
+	check(Shown("Rank") and Shown("Gear"), "Rank | Gear tabs")
+	ns.GearCatalog:ToggleGoal(272612)
+	-- Opening a rank vendor: read, then once with the filter on All (every class), then the filter put back
+	local filter, sets = 2, {}
+	LE_LOOT_FILTER_ALL, LE_LOOT_FILTER_CLASS = 5, 2
+	GetMerchantFilter = function() return filter end
+	SetMerchantFilter = function(f) filter = f sets[#sets + 1] = f end
+	MerchantFrame = CreateFrame("Frame")
+	Fire("MERCHANT_SHOW")
+	RunTimers()
+	check(sets[1] == 5 and sets[2] == 2 and filter == 2, "the vendor's filter goes to All for the read, then back: "..table.concat(sets, ","))
+	Fire("MERCHANT_SHOW")
+	RunTimers()
+	check(#sets == 2, "once a session per vendor")
+	MerchantFrame = nil
+	GetMerchantFilter, SetMerchantFilter, LE_LOOT_FILTER_ALL, LE_LOOT_FILTER_CLASS = nil, nil, nil, nil
+	for k, v in pairs(real) do _G[k] = v end
+	ns.db.pvpGear = {}
+end)()
 -- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space
 ;(function()
 	local over = {}

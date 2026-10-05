@@ -45,6 +45,15 @@ game tells it (`GetCurrentArenaSeason()`, the PvP rank track's `weekNumber`, `cu
 Read 15 seconds after login and each hour. Season 0 or week -1 means no season is running. The Wanted app sends it
 to wanteddeadordead.com, whose seasons follow the game's. Nothing reads it back.
 
+`WantedDB.pvpGear` (from 1.10.0) is the rank vendors' PvP gear, per faction: `pvpGear[faction][itemID] = { name,
+quality, icon, slot, class, subclass, level, rank, classes, honor, marks = { [markItemID] = count }, price, vendor,
+seen }`. Kept when a rank vendor opens (every item that costs Honor Points or needs a rank; all classes, read with the
+vendor's filter on All, then put back). `rank` is from the tooltip's "(Rank N)", `classes` from its "Classes:" line
+(the game's names), `class`/`subclass` the game's item class numbers. An item no vendor has shown in 60 days is
+dropped. Nothing is shared.
+
+`WantedDB.gearGoals` (from 1.10.0) is each character's chased items: `gearGoals[characterGUID][itemID] = true`.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

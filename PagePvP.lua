@@ -74,7 +74,7 @@ function private.ShowDayTooltip(cell)
 	GameTooltip:AddLine(format("%s %d", MONTHS[private.month], cell.day), 1, 1, 1)
 	for _, e in ipairs(cell.events) do
 		local color = KIND_COLORS[e.kind] or C.text
-		GameTooltip:AddLine(e.text, color[1], color[2], color[3], true)
+		GameTooltip:AddLine(e.running and e.text.." (running)" or e.text, color[1], color[2], color[3], true)
 	end
 	GameTooltip:Show()
 end
@@ -111,19 +111,26 @@ function private.RefreshGrid()
 		if day >= 1 and day <= numDays then
 			local events = days[day] or {}
 			cell.day, cell.events = day, events
+			-- The box names what starts or ends that day; the tooltip also has what's running
+			local named = {}
+			for _, e in ipairs(events) do
+				if not e.running then
+					tinsert(named, e)
+				end
+			end
 			local isToday = year == todayYear and month == todayMonth and day == today
 			cell.number:SetText(day)
 			cell.number:SetTextColor(unpack(isToday and C.white or C.muted))
 			Theme:SetBorderColor(cell, isToday and C.accent or C.border)
 			for i, line in ipairs(cell.lines) do
-				local e = events[i]
+				local e = named[i]
 				line:SetText(e and e.short or "")
 				if e then
 					local color = KIND_COLORS[e.kind] or C.text
 					line:SetTextColor(color[1], color[2], color[3])
 				end
 			end
-			cell.more:SetText(#events > CELL_LINES and "+"..(#events - CELL_LINES) or "")
+			cell.more:SetText(#named > CELL_LINES and "+"..(#named - CELL_LINES) or "")
 			cell:Show()
 		else
 			cell.events = nil

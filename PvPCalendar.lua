@@ -100,7 +100,10 @@ function private.AddGameEvents(year, month, Add)
 						Wanted:Log("PvPCalendar: holiday %q, event type %s, icon %s", e.title, tostring(e.eventType),
 							private.Readable(e.iconTexture) and tostring(e.iconTexture) or "secret")
 					end
-					Add(day, e.title, pvp and "pvpholiday" or "holiday", private.ShortTitle(e.title))
+					-- Like Blizzard's calendar, a holiday over several days is named on its first and last days; the days
+					-- between are marked running (a Call to Arms runs Tuesday to Tuesday)
+					local running = private.Readable(e.sequenceType) and e.sequenceType == "ONGOING"
+					Add(day, e.title, pvp and "pvpholiday" or "holiday", private.ShortTitle(e.title), running)
 				end
 			end
 		end
@@ -115,13 +118,14 @@ function PvPCalendar:SeasonRunning()
 end
 
 ---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
----kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box.
+---kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box;
+---running marks a day between a holiday's first and last.
 ---@param year number
 ---@param month number
 ---@return table<number, table[]>
 function PvPCalendar:GetMonth(year, month)
 	local days = {}
-	local function Add(day, text, kind, short)
+	local function Add(day, text, kind, short, running)
 		days[day] = days[day] or {}
 		-- A holiday the game lists twice on one day shows once
 		for _, e in ipairs(days[day]) do
@@ -129,7 +133,7 @@ function PvPCalendar:GetMonth(year, month)
 				return
 			end
 		end
-		tinsert(days[day], { text = text, short = short or text, kind = kind })
+		tinsert(days[day], { text = text, short = short or text, kind = kind, running = running or nil })
 	end
 	local function AddAt(t, text, kind, short)
 		local d = date("*t", t)
@@ -201,7 +205,7 @@ function PvPCalendar:GetUpcoming()
 		local numDays = date("*t", time({ year = y, month = m + 1, day = 0, hour = 12 })).day
 		for day = (ahead == 0 and today or 1), numDays do
 			for _, e in ipairs(days[day] or {}) do
-				if not seen[e.text] then
+				if not seen[e.text] and not e.running then
 					seen[e.text] = true
 					tinsert(out, { year = y, month = m, day = day, text = e.text, short = e.short, kind = e.kind })
 					if #out == MAX_UPCOMING then

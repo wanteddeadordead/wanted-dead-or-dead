@@ -5122,9 +5122,9 @@ end)()
 			local y, m = index // 12, index % 12 + 1
 			return { year = y, month = m, numDays = os.date("*t", os.time({ year = y, month = m + 1, day = 0, hour = 12 })).day, firstWeekday = 1 }
 		end,
-		GetNumDayEvents = function(offset, day) return (offset == 0 and day == 15) and 2 or 0 end,
-		GetDayEvent = function(_, _, index)
-			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4 } end
+		GetNumDayEvents = function(offset, day) return (offset == 0 and (day == 15 or day == 16)) and 2 or 0 end,
+		GetDayEvent = function(_, day, index)
+			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4, sequenceType = day == 15 and "START" or "ONGOING" } end
 			return { title = "Darkmoon Faire", calendarType = "HOLIDAY", eventType = 4 }
 		end,
 	}
@@ -5134,6 +5134,9 @@ end)()
 	local holidays = {}
 	for _, e in ipairs(days[15] or {}) do holidays[e.text] = e.kind end
 	check(holidays["Call to Arms: Warsong Gulch"] == "pvpholiday" and holidays["Darkmoon Faire"] == "holiday", "the game's holidays, the PvP one marked")
+	local running = nil
+	for _, e in ipairs(days[16] or {}) do if e.text == "Call to Arms: Warsong Gulch" then running = e.running end end
+	check(running == true, "the days after its first are marked running")
 	local upcoming = {}
 	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = (upcoming[e.text] or 0) + 1 end
 	check(upcoming["PvP Season 1 ends"] == 1 and upcoming["Wanted Season 1 ends"] == 1, "the seasons' ends are coming up")

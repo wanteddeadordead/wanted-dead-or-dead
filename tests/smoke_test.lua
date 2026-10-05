@@ -5510,6 +5510,20 @@ end)()
 	check(ns.BlizzRank:Of("Rank Seven") == 7, "but not over one we heard more lately")
 	C_MajorFactions, ns.db.pvpSeason, ns.db.blizzRanks = realFactions, nil, {}
 end)()
+-- Every stat tile on every page: its value and its note side by side fit the tile (they share the bottom row)
+;(function()
+	local over = {}
+	for _, f in ipairs(Mock.created) do
+		local value, note = rawget(f, "value"), rawget(f, "note")
+		if type(value) == "table" and type(note) == "table" and rawget(f, "label") and rawget(f, "bar") and rawget(f, "_wSet") then
+			local used = 16 + value:GetUnboundedStringWidth() + (note._text ~= "" and 12 + note:GetUnboundedStringWidth() or 0) + 12
+			if value._text ~= "" and used > f._w then
+				over[#over + 1] = format("%q + %q (%d wide in a %d tile)", value._text, note._text, math.floor(used), math.floor(f._w))
+			end
+		end
+	end
+	check(#over == 0, "tiles whose value runs into their note:\n  "..table.concat(over, "\n  "))
+end)()
 -- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space
 ;(function()
 	local over = {}

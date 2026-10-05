@@ -17,6 +17,10 @@
   game; Home's band shows yours, with the points to the next. Challenges stay, for fun: they make a weekly score
   (reset each Sunday) on a new "This week" card with your streak and points in all, and the challenge rank ladder,
   rank-up banner and the demo's made-up ranks are gone.
+- Players' lifetime honorable kills, read from the game when you target or mouse over them (either side, Wanted or
+  not; out of combat, a few seconds apart, never in the achievement window's way), and your own characters' rank,
+  rank points, honor and kills, for wanteddeadordead.com's Blizzard PvP boards. Settings, "Read players' honorable
+  kills" turns the reading off.
 ## [1.9.1] - 2026-10-05
 
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General

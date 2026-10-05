@@ -5098,5 +5098,37 @@ end)()
 	check(ok, "no error in an instance: "..tostring(err))
 	check(#asked == 0, "and no unit asked about: "..table.concat(asked, ", "))
 	check(ns.db.players["Player-9-CONTROLLED"] == nil, "nobody listed from inside")
+-- Blizzard's PvP season as the game tells it, kept for the app (WantedDB.pvpSeason): read again each hour; missing
+-- or secret answers leave the last one alone
+;(function()
+	local realSeason, realInfo, realFactions = GetCurrentArenaSeason, C_SeasonInfo, C_MajorFactions
+	GetCurrentArenaSeason = function() return 1 end
+	C_SeasonInfo = { GetTimeUntilCurrentPVPSeasonEnd = function() return 86400 * 30 end }
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function(id)
+		return id == 2800 and { weekNumber = 3, currentWeekProgressiveMaxLevel = 6, maxLevel = 14 } or nil
+	end }
+	ns.Challenges:ReadSeason()
+	local s = ns.db.pvpSeason
+	check(s and s.season == 1 and s.week == 3 and s.weekMax == 6 and s.seasonMax == 14, "the season is kept")
+	check(s.endsAt == GetServerTime() + 86400 * 30 and s.at == GetServerTime(), "with its end and when it was read")
+	-- The beta: no season running, kept as the game says it (the server ignores it)
+	GetCurrentArenaSeason = function() return 0 end
+	C_SeasonInfo.GetTimeUntilCurrentPVPSeasonEnd = function() return 0 end
+	C_MajorFactions.GetMajorFactionProgressionInfo = function() return { weekNumber = -1, currentWeekProgressiveMaxLevel = 0, maxLevel = 14 } end
+	ns.Challenges:ReadSeason()
+	s = ns.db.pvpSeason
+	check(s.season == 0 and s.week == -1 and s.endsAt == 0, "no season, and an end not known, kept as 0")
+	-- A secret or missing answer: the last reading stays
+	local realSecret = issecretvalue
+	issecretvalue = function(v) return v == 7 end
+	GetCurrentArenaSeason = function() return 7 end
+	ns.Challenges:ReadSeason()
+	issecretvalue = realSecret
+	check(ns.db.pvpSeason.season == 0, "a secret season number changes nothing")
+	C_MajorFactions = nil
+	ns.Challenges:ReadSeason()
+	check(ns.db.pvpSeason.season == 0, "nor does a missing rank track")
+	GetCurrentArenaSeason, C_SeasonInfo, C_MajorFactions = realSeason, realInfo, realFactions
+	ns.db.pvpSeason = nil
 end)()
 print("wanted smoke: 1.5.1 checks pass")

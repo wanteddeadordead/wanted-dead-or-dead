@@ -8,6 +8,8 @@
 - Killed by a hunter's or warlock's pet: the pet's owner now gets the death card, the death record and the loss
   against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
   is shown as "probably". Before, a pet's kill counted as no player's.
+- Wanted keeps Blizzard's PvP season as the game tells it (the season, its week, this week's highest rank and when it
+  ends), for the Wanted app to pass to wanteddeadordead.com, so the site's seasons can follow the game's.
 
 ## [1.8.0] - 2026-10-04
 

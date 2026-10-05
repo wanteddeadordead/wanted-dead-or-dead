@@ -25,6 +25,7 @@ tinsert, tremove, sort = table.insert, table.remove, table.sort
 wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 date = os.date
+time = os.time
 bit = { band = function(a, b) local r, p = 0, 1 while a > 0 and b > 0 do if a % 2 == 1 and b % 2 == 1 then r = r + p end a, b, p = a // 2, b // 2, p * 2 end return r end }
 
 -- Frames
@@ -58,8 +59,19 @@ function Methods:SetText(t)
 	if self._fs then self._fs._text = t end
 end
 function Methods:GetText() return self._text end
-function Methods:GetStringWidth() return #tostring(self._text) * 6 end
-function Methods:GetUnboundedStringWidth() return #tostring(self._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * 6 end
+-- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
+-- character (12pt: about 6.7 pixels), colour codes and textures taking none
+function Methods:SetFont(_, size) self._size = size end
+do
+	local function TextWidth(fs)
+		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
+		local size = type(fs._font) == "table" and fs._font._size
+		-- Another addon's font, size unknown: 6 pixels a character
+		return #text * (size and size * 0.56 or 6)
+	end
+	function Methods:GetStringWidth() return TextWidth(self) end
+	function Methods:GetUnboundedStringWidth() return TextWidth(self) end
+end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
 function Methods:GetFontObject() return self._font end
@@ -68,9 +80,9 @@ function Methods:IsEnabled() return self._enabled end
 function Methods:SetEnabled(v) self._enabled = v and true or false end
 function Methods:Enable() self._enabled = true end
 function Methods:Disable() self._enabled = false end
-function Methods:SetWidth(w) self._w = w end
+function Methods:SetWidth(w) self._w, self._wSet = w, true end
 function Methods:SetHeight(h) self._h = h end
-function Methods:SetSize(w, h) self._w, self._h = w, h end
+function Methods:SetSize(w, h) self._w, self._h, self._wSet = w, h, true end
 function Methods:GetWidth() return self._w end
 function Methods:GetHeight() return self._h end
 function Methods:HasFocus() return false end
@@ -5063,6 +5075,161 @@ end)()
 	Fire("PLAYER_ALIVE")
 	enemyUnits.nameplate46, enemyUnits.nameplate47 = nil, nil
 	UnitIsPlayer, C_NamePlate, UnitIsOwnerOrControllerOfUnit, C_DeathRecap = realIsPlayer, realNamePlate, realOwner, nil
+end)()
+-- Blizzard's PvP season as the game tells it, kept for the app (WantedDB.pvpSeason): read again each hour; missing
+-- or secret answers leave the last one alone
+;(function()
+	local realSeason, realInfo, realFactions = GetCurrentArenaSeason, C_SeasonInfo, C_MajorFactions
+	GetCurrentArenaSeason = function() return 1 end
+	C_SeasonInfo = { GetTimeUntilCurrentPVPSeasonEnd = function() return 86400 * 30 end }
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function(id)
+		return id == 2800 and { weekNumber = 3, currentWeekProgressiveMaxLevel = 6, maxLevel = 14 } or nil
+	end }
+	ns.Challenges:ReadSeason()
+	local s = ns.db.pvpSeason
+	check(s and s.season == 1 and s.week == 3 and s.weekMax == 6 and s.seasonMax == 14, "the season is kept")
+	check(s.endsAt == GetServerTime() + 86400 * 30 and s.at == GetServerTime(), "with its end and when it was read")
+	-- The beta: no season running, kept as the game says it (the server ignores it)
+	GetCurrentArenaSeason = function() return 0 end
+	C_SeasonInfo.GetTimeUntilCurrentPVPSeasonEnd = function() return 0 end
+	C_MajorFactions.GetMajorFactionProgressionInfo = function() return { weekNumber = -1, currentWeekProgressiveMaxLevel = 0, maxLevel = 14 } end
+	ns.Challenges:ReadSeason()
+	s = ns.db.pvpSeason
+	check(s.season == 0 and s.week == -1 and s.endsAt == 0, "no season, and an end not known, kept as 0")
+	-- A secret or missing answer: the last reading stays
+	local realSecret = issecretvalue
+	issecretvalue = function(v) return v == 7 end
+	GetCurrentArenaSeason = function() return 7 end
+	ns.Challenges:ReadSeason()
+	issecretvalue = realSecret
+	check(ns.db.pvpSeason.season == 0, "a secret season number changes nothing")
+	C_MajorFactions = nil
+	ns.Challenges:ReadSeason()
+	check(ns.db.pvpSeason.season == 0, "nor does a missing rank track")
+	GetCurrentArenaSeason, C_SeasonInfo, C_MajorFactions = realSeason, realInfo, realFactions
+	ns.db.pvpSeason = nil
+end)()
+-- The PvP page's calendar: Blizzard's season and week cap, Wanted's season and weekly resets, and the game's
+-- holidays with the PvP ones marked
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local today = os.date("*t", clock)
+	local opened = false
+	local realEnum = Enum.CalendarEventType
+	Enum.CalendarEventType = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4 }
+	C_Calendar = {
+		OpenCalendar = function() opened = true end,
+		GetMonthInfo = function(offset)
+			local index = today.year * 12 + today.month - 1 + offset
+			local y, m = index // 12, index % 12 + 1
+			return { year = y, month = m, numDays = os.date("*t", os.time({ year = y, month = m + 1, day = 0, hour = 12 })).day, firstWeekday = 1 }
+		end,
+		GetNumDayEvents = function(_, day) return (day == 15 or day == 16) and 2 or 0 end,
+		GetHolidayInfo = function(_, _, index) return { name = "x", description = index == 1 and "The battle for Warsong Gulch grows intense." or "" } end,
+		GetDayEvent = function(_, day, index)
+			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4, sequenceType = day == 15 and "START" or "ONGOING",
+				startTime = { month = 10, monthDay = 15, hour = 8, minute = 0 }, endTime = { month = 10, monthDay = 22, hour = 8, minute = 0 } } end
+			return { title = "Darkmoon Faire", calendarType = "HOLIDAY", eventType = 4 }
+		end,
+	}
+	ns.db.pvpSeason = { season = 1, week = 3, endsAt = clock + 10 * 86400, weekMax = 6, seasonMax = 14, at = clock }
+	ns.Challenges:Take({ t = clock, weekEnds = clock + 2 * 86400, season = { name = "Wanted Season 1", startsAt = clock - 5 * 86400, endsAt = clock + 60 * 86400 } })
+	-- Before launch (the beta): the game's holidays, but none of its battleground weekends, which don't run
+	local function Kinds(events)
+		local out = {}
+		for _, e in ipairs(events or {}) do out[e.text] = e end
+		return out
+	end
+	local before = Kinds(ns.PvPCalendar:GetMonth(today.year, today.month)[15])
+	check(before["Darkmoon Faire"] and before["Darkmoon Faire"].kind == "holiday", "a holiday shows before launch")
+	check(table.concat(before["Darkmoon Faire"].labels, "|") == "Darkmoon Faire|Darkmoon", "a holiday's labels, longest first, down to its first word")
+	check(not before["Call to Arms: Warsong Gulch"], "a battleground weekend doesn't, before launch")
+	-- From launch: battleground weekends too, with the game's times and description
+	local after = Kinds(ns.PvPCalendar:GetMonth(2026, 11)[15])
+	local wsg = after["Call to Arms: Warsong Gulch"]
+	check(wsg and wsg.kind == "pvpholiday" and wsg.short == "Warsong Gulch", "after launch, the battleground weekend, marked")
+	check(table.concat(wsg.labels, "|") == "Warsong Gulch|Warsong", "a battleground weekend shortens to its first word")
+	check(wsg.detail.seq == "START" and wsg.detail.begins == "8:00 AM" and wsg.detail.range == "10/15 - 10/22", "with its time and dates")
+	check(wsg.detail.description == "The battle for Warsong Gulch grows intense.", "and the game's description")
+	check(not after["Darkmoon Faire"].detail.description, "an empty description is left out")
+	local nextDay = Kinds(ns.PvPCalendar:GetMonth(2026, 11)[16])
+	check(nextDay["Call to Arms: Warsong Gulch"].running == true, "the days after its first are marked running")
+	local upcoming = {}
+	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = (upcoming[e.text] or 0) + 1 end
+	check(upcoming["PvP Season 1 ends"] == 1 and upcoming["Wanted Season 1 ends"] == 1, "the seasons' ends are coming up")
+	check(upcoming["Weekly reset"] == 1, "the weekly reset is listed once")
+	check(not upcoming["Wanted Season 1 starts"], "nothing already past")
+	local launch = ns.PvPCalendar:GetMonth(2026, 11)[os.date("*t", 1793833200).day]
+	check(launch and launch[1].text == "WoW Forever launches (3 p.m. PST)" and launch[1].short == "Launch day", "launch day, first on its day")
+	local betaEnd = ns.PvPCalendar:GetMonth(2026, 10)[21]
+	check(betaEnd and betaEnd[1].kind == "game" and betaEnd[1].short == "Beta ends", "the beta's last day")
+	ns.UI:Show("calendar")
+	check(opened, "the page asks the game for its calendar")
+	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
+	check(Shown("Darkmoon Faire"), "the holiday is on the grid")
+	check(Shown("Battleground weekends start with launch, Nov 4."), "saying when they start")
+	-- The calendar is a tab of Home: Home | Calendar along the top of both, no menu entry of its own; Challenges has
+	-- its own again; the menu's footer buttons are gone
+	local function Count(text)
+		local n = 0
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then n = n + 1 end
+			end
+		end
+		return n
+	end
+	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
+	check(calendarTabs == 1 and homeTabs == 2, "the calendar shows Home | Calendar tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
+	check(not Shown("Your wanted poster"), "the menu's poster button is gone (the poster is on Your bounties)")
+	ns.UI:Show("home")
+	check(ns.UI:IsShown("home") and Shown("Calendar"), "Home shows the Calendar tab")
+	ns.UI:Show("challenges")
+	check(ns.UI:IsShown("challenges") and not Shown("Calendar"), "Challenges is its own page again, without those tabs")
+	ns.UI:Show("calendar")
+	-- The beta: no season running
+	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
+	ns.UI:Refresh(true)
+	check(Shown("None running"), "no season running on the beta")
+	check(Shown("Darkmoon Faire"), "the game's holidays still show with no season running")
+	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
+	ns.Challenges:Take(nil)
+end)()
+-- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
+-- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
+-- 0, or never set) aren't measured here.
+;(function()
+	local PADDING = 2
+	local over = {}
+	for _, f in ipairs(Mock.created) do
+		local label = rawget(f, "label")
+		if f._kind == "Button" and rawget(f, "_wSet") and f._w > 0 and type(label) == "table" and rawget(label, "_font") and label._text ~= "" then
+			local width = label:GetStringWidth()
+			if width > f._w - PADDING * 2 then
+				over[#over + 1] = format("%q is %d wide in a %d button", label._text, math.floor(width + 0.5), math.floor(f._w))
+			end
+		end
+	end
+	check(#over == 0, "button labels wider than their buttons:\n  "..table.concat(over, "\n  "))
+end)()
+-- A segmented control's selected button sits above its neighbours, so its outline isn't drawn under theirs
+;(function()
+	local control = ns.Widgets:Segmented(UIParent, { { key = "a", label = "Home" }, { key = "b", label = "Calendar" } }, nil, 110)
+	control:Select("b", true)
+	check(control.buttons[2]._level > control.buttons[1]._level, "the selected button is above the one before it")
+	control:Select("a", true)
+	check(control.buttons[1]._level > control.buttons[2]._level, "and moves when another is selected")
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

@@ -8,6 +8,17 @@
 - Killed by a hunter's or warlock's pet: the pet's owner now gets the death card, the death record and the loss
   against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
   is shown as "probably". Before, a pet's kill counted as no player's.
+- A Calendar tab on Home (Home | Calendar along the top): Blizzard's PvP season and this week's rank cap as the game tells
+  them, Wanted's season and its weekly resets, and the holidays in the game's calendar with the battleground
+  weekends ("Call to Arms") marked, on a month grid with what's coming up beside it. Every holiday in the game's
+  calendar shows (Hallow's End, the Stranglethorn Fishing Extravaganza and the rest), named on its first and last days
+  like Blizzard's calendar, with what's running each day in a faint line and the game's times, dates and description
+  when you hover a day. Battleground weekends start with launch: the beta's calendar lists ones that never happen.
+  WoW Forever's own dates are on it too: the beta's last day (October 21) and launch day (November 4, 3 p.m. PST).
+- The menu's "Your wanted poster" and "Report a bug" buttons are gone (the poster is on Your bounties, Report a bug
+  in the title bar): the menu fits again.
+- Wanted keeps Blizzard's PvP season as the game tells it (the season, its week, this week's highest rank and when it
+  ends), for the Wanted app to pass to wanteddeadordead.com, so the site's seasons can follow the game's.
 
 ## [1.8.0] - 2026-10-04
 

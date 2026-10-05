@@ -191,7 +191,9 @@ function LeaveChannelByName(name) leftChannels[#leftChannels + 1] = name end
 mutedSounds, muteCalls, unmuteCalls = {}, 0, 0
 function MuteSoundFile(file) mutedSounds[file] = true muteCalls = muteCalls + 1 end
 function UnmuteSoundFile(file) mutedSounds[file] = nil unmuteCalls = unmuteCalls + 1 end
-function hooksecurefunc() end
+-- Hooks on global functions, kept so tests can call them as the game would (globalHooks.SendMail)
+globalHooks = {}
+function hooksecurefunc(name, f) if type(name) == "string" and type(f) == "function" then globalHooks[name] = globalHooks[name] or {} table.insert(globalHooks[name], f) end end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
 -- An enemy on nameplate1 and, when set, as the target
@@ -5265,5 +5267,68 @@ end)()
 	check(ok, "no error in an instance: "..tostring(err))
 	check(#asked == 0, "and no unit asked about: "..table.concat(asked, ", "))
 	check(ns.db.players["Player-9-CONTROLLED"] == nil, "nobody listed from inside")
+end)()
+-- Paying a bounty is recorded however the mail goes out: Wanted's own Send (the SendMail hook), a send another mail
+-- addon makes without the hook seeing it (TSM keeps its own copy of SendMail) when the gold left with it, and a mail
+-- written by hand with at least the bounty. The hunter's side counts a hand-written mail from the poster too.
+;(function()
+	local me = ns.Store:GetOrigin()
+	local function Owed(hunter, amount)
+		local key = hunter:gsub("%W", "")
+		local target = { guid = "Player-9-PAY"..key, name = "Paid Target "..key }
+		local bounty = ns.Store:InsertTest("bounty", me, { target = target.guid, targetName = target.name, amount = amount, level = 20 }, clock - 7200)
+		local kill = ns.Store:InsertTest("kill", hunter, { killer = "Player-9-K"..key, killerName = hunter, victim = target.guid, victimName = target.name, deathId = "pay-"..key, honor = true }, clock - 3600)
+		local claim = ns.Store:InsertTest("claim", hunter, { bounty = bounty.id, kill = kill.id, deathId = "pay-"..key, victim = target.guid, victimName = target.name, killT = clock - 3600 }, clock - 3500)
+		ns.Store:InsertTest("confirm", me, { claim = claim.id }, clock - 3000)
+		return claim, bounty
+	end
+	local money = 1000000
+	local realMoney, realSendMoney = GetMoney, GetSendMailMoney
+	GetMoney = function() return money end
+	MailFrame._shown = true
+	MailFrameTab_OnClick, MoneyInputFrame_SetCopper = function() end, function() end
+	SendMailNameEditBox, SendMailSubjectEditBox, SendMailBodyEditBox, SendMailMoney = CreateFrame("EditBox"), CreateFrame("EditBox"), CreateFrame("EditBox"), CreateFrame("Frame")
+	local function SendHook(recipient, subject, amount)
+		GetSendMailMoney = function() return amount end
+		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
+	end
+	-- 1. A send TSM makes: Pay fills the mail in, the hook never sees the send, the gold leaves, the game says sent
+	local tsmClaim = Owed("Tsm Hunter", 10000)
+	check(ns.Payments:Prefill(tsmClaim), "Pay fills in the mail")
+	money = money - 10000 - 30
+	Fire("MAIL_SEND_SUCCESS")
+	local paid = ns.Payments:GetForClaim(tsmClaim.id)
+	check(paid and paid.data.amount == 10000 and paid.data.to == "Tsm Hunter", "a send the hook missed is recorded from the gold that left")
+	-- 2. Pay, then a mail that didn't take the gold (another letter): not the payment
+	local otherClaim = Owed("Other Hunter", 20000)
+	ns.Payments:Prefill(otherClaim)
+	money = money - 30
+	Fire("MAIL_SEND_SUCCESS")
+	check(not ns.Payments:GetForClaim(otherClaim.id), "a mail without the gold isn't the payment")
+	-- 3. Written by hand: no subject, to the hunter, with at least the bounty
+	local handClaim = Owed("Hand Hunter", 5000)
+	SendHook("Hand Hunter", "for the kill", 5000)
+	money = money - 5000 - 30
+	Fire("MAIL_SEND_SUCCESS")
+	check(ns.Payments:GetForClaim(handClaim.id), "a hand-written mail with the bounty is the payment")
+	-- Less than the bounty isn't
+	local shortClaim = Owed("Short Hunter", 9000)
+	SendHook("Short Hunter", "here", 100)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not ns.Payments:GetForClaim(shortClaim.id), "a mail with less than the bounty isn't")
+	-- 4. The hunter's side: a hand-written mail from the poster, with the bounty
+	local target = "Player-9-PAYME"
+	local bounty = ns.Store:InsertTest("bounty", "Kind Poster", { target = target, targetName = "Paid Me", amount = 7000, level = 20 }, clock - 7200)
+	local kill = ns.Store:InsertTest("kill", me, { killer = "Player-1-ME", killerName = me, victim = target, victimName = "Paid Me", deathId = "pay-me", honor = true }, clock - 3600)
+	local myClaim = ns.Store:InsertTest("claim", me, { bounty = bounty.id, kill = kill.id, deathId = "pay-me", victim = target, victimName = "Paid Me", killT = clock - 3600 }, clock - 3500)
+	ns.Store:InsertTest("confirm", "Kind Poster", { claim = myClaim.id }, clock - 3000)
+	local realCount, realHeader = GetInboxNumItems, GetInboxHeaderInfo
+	GetInboxNumItems = function() return 1 end
+	GetInboxHeaderInfo = function() return nil, nil, "Kind Poster", "thanks", 7000 end
+	Fire("MAIL_INBOX_UPDATE")
+	local got = ns.Payments:GetForClaim(myClaim.id)
+	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
+	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
+	MailFrame._shown = false
 end)()
 print("wanted smoke: 1.5.1 checks pass")

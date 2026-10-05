@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- The menu is grouped as World PvP (the bounty pages, Hotspots, Enemies, Guild Kill on Sight, Leaderboards, Activity,
+  Challenges), Battlegrounds and You. Arenas get a heading only if WoW Forever adds them.
+- Rank & Gear, under Battlegrounds: your Blizzard PvP rank as the game tells it, the fourteen ranks with what each
+  unlocks at the rank vendors, your points toward the next, this week's cap, Honor Points and your battleground
+  Marks of Honor.
+- Rank & Gear's Gear tab: the rank vendors' PvP gear for your class (Wanted remembers it when you open a rank vendor,
+  every class's at once), what each piece costs in honor and Marks of Honor, the rank and level it needs, and what
+  you're still missing. Click an item to chase it; chased items stay at the top.
 ## [1.9.1] - 2026-10-05
 
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General

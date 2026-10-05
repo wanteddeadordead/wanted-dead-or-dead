@@ -121,7 +121,7 @@ function private.EntryMenu(e, row)
 end
 
 UI:RegisterPage("guildkos", {
-	group = "War",
+	group = "World PvP",
 	title = "Guild Kill on Sight",
 	subtitle = "Your guild's own Kill on Sight list, shared with your guildmates and kept apart from yours.",
 	order = 3.5,

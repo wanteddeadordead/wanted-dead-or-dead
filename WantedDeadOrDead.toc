@@ -35,6 +35,8 @@ LiveLog.lua
 Bridge.lua
 Catchup.lua
 Challenges.lua
+BlizzRank.lua
+GearCatalog.lua
 PvPCalendar.lua
 Ranks.lua
 GuildRank.lua
@@ -68,6 +70,8 @@ PageEnemies.lua
 PageGuildKoS.lua
 PageHotspots.lua
 PageChallenges.lua
+PageRank.lua
+PageGear.lua
 PageCalendar.lua
 PageWeb.lua
 PageSettings.lua

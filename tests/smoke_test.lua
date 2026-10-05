@@ -101,7 +101,14 @@ function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
 function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
-function Methods:SetPoint(...) self._point = { ... } end
+-- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
+function Methods:SetPoint(point, ...)
+	self._point = { point, ... }
+	if type(point) == "string" then
+		if point:find("LEFT") then self._leftAnchored = true end
+		if point:find("RIGHT") then self._rightAnchored = true end
+	end
+end
 function Methods:SetScale(scale) self._scale = scale end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
@@ -4727,7 +4734,8 @@ end)()
 	db.settings.showTools = false
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
-	check(Shown("BOUNTIES") and Shown("WAR") and Shown("YOU"), "the menu's groups are labelled")
+	check(Shown("WORLD PVP") and Shown("BATTLEGROUNDS") and Shown("YOU"), "the menu's groups are labelled")
+	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
 	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch
@@ -5362,5 +5370,156 @@ end)()
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
+end)()
+-- Rank & Gear: Blizzard's rank as the game tells it, mid-season at the longest title (Lieutenant Commander, rank 10)
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local unlocks = { "Faction Tabard", "Insignia Trinket", "Faction Cloak", "Faction Necklace", "Combat Potions", "Elite Faction Tabard",
+		"Battle Standard", { "Elite Wrist Upgrade", "Elite Waist Upgrade" }, "Elite Boot Upgrade", "Elite Glove Upgrade", "Black War Mounts",
+		{ "Elite Leg Upgrade", "Elite Shoulder Upgrade" }, { "Elite Chest Upgrade", "Elite Helmet Upgrade" }, "Weapon Arsenal" }
+	local realFactions, realCurrency, realCount, realSide = C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup
+	UnitFactionGroup = function() return "Alliance", "Alliance" end
+	C_MajorFactions = {
+		GetMajorFactionProgressionInfo = function() return { renownLevel = 10, renownReputationEarned = 900, renownLevelThreshold = 2350,
+			currentWeekProgressiveMaxLevel = 11, maxLevel = 14, weekNumber = 8 } end,
+		GetRenownRewardsForLevel = function(_, rank)
+			local u = unlocks[rank]
+			local out = {}
+			for _, d in ipairs(type(u) == "table" and u or { u }) do out[#out + 1] = { name = "Rank "..rank.." Rewards", description = d } end
+			return out
+		end,
+	}
+	C_CurrencyInfo = { GetCurrencyInfo = function(id) return id == 1792 and { name = "Honor Points", quantity = 12450, maxQuantity = 25000 } or nil end }
+	GetItemCount = function(id) return id == 20560 and 7 or 0 end
+	ns.UI:Show("rank")
+	check(ns.UI:IsShown("rank"), "Rank & Gear opens")
+	check(Shown("BATTLEGROUNDS"), "the Battlegrounds heading shows with its first page")
+	check(Shown("12,450") and Shown("of 25,000"), "honor, with thousands separators and the cap")
+	check(Shown("Rank 11 of 14") and Shown("week 8"), "this week's cap")
+	check(Shown("10  Lieutenant Commander"), "the ladder names each rank by Blizzard's title")
+	check(Shown("1,450 more points"), "the points to the next rank")
+	check(Shown("Rank 11  Commander") and Shown("Black War Mounts"), "the next rank and what it unlocks")
+	check(Shown("Lieutenant Commander  (10)") or Shown("Lieutenant Commander"), "your rank's title on its tile, fitted to it")
+	check(Shown("You") and Shown("capped"), "your rank, and the ranks above this week's cap")
+	check(Shown("7"), "your Alterac Valley marks")
+	-- Before a season: no rank
+	C_MajorFactions.GetMajorFactionProgressionInfo = function() return { renownLevel = 0, renownReputationEarned = 0, renownLevelThreshold = 750,
+		currentWeekProgressiveMaxLevel = 0, maxLevel = 14, weekNumber = -1 } end
+	ns.UI:Refresh(true)
+	check(Shown("No rank yet") and Shown("Ranks start with the PvP season."), "no rank before the season")
+	C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup = realFactions, realCurrency, realCount, realSide
+end)()
+-- The gear catalogue, from a rank vendor's real stock (Lady Palanseer, Brave Stonehide, Sergeant Thunderhorn,
+-- 2026-10-05): what's kept, what a rogue can use, what's missing, and chasing an item
+;(function()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local AV, AB, DI = "|cnIQ2:|Hitem:20560::::::::15:1488:::::::::|h[Alterac Valley Mark of Honor]|h|r", "|cnIQ2:|Hitem:20559::::::::15:1488:::::::::|h[Arathi Basin Mark of Honor]|h|r",
+		"|cnIQ2:|Hitem:274895::::::::15:1488:::::::::|h[Darkspear Islands Mark of Honor]|h|r"
+	local stock = {
+		{ id = 272474, name = "Premier Shadowhide Headguard", q = 3, level = 55, class = 4, sub = 2, slot = "INVTYPE_HEAD", costs = { { AV, 15 }, { "Honor Points", 9000 } }, needs = { "Classes: Rogue", "Requires Level 55" } },
+		{ id = 999002, name = "Premier Wildheart Headguard", q = 3, level = 55, class = 4, sub = 2, slot = "INVTYPE_HEAD", costs = { { AV, 15 }, { "Honor Points", 9000 } }, needs = { "Classes: Druid", "Requires Level 55" } },
+		{ id = 272589, name = "Premier Sergeant's Cape", q = 3, level = 55, class = 4, sub = 1, slot = "INVTYPE_CLOAK", costs = { { AB, 10 }, { "Honor Points", 4500 } }, needs = { "Requires Level 55", "Requires Sergeant (Rank 3)" } },
+		{ id = 275240, name = "Premier Emboldened Wrist Seal", q = 4, level = 60, class = 15, sub = 0, slot = "INVTYPE_NON_EQUIP_IGNORE", costs = { { "Honor Points", 1200 } }, needs = { "Requires Level 60", "Requires Knight-Captain / Legionnaire (Rank 8)" } },
+		{ id = 272612, name = "Premier High Warlord's Razor", q = 4, level = 60, class = 2, sub = 15, slot = "INVTYPE_WEAPON", costs = { { DI, 10 }, { "Honor Points", 12000 } }, needs = { "Requires Level 60", "Requires Grand Marshal / High Warlord (Rank 14)" } },
+		{ id = 272604, name = "Premier High Warlord's Greatsword", q = 4, level = 60, class = 2, sub = 8, slot = "INVTYPE_2HWEAPON", costs = { { AV, 20 }, { "Honor Points", 22500 } }, needs = { "Requires Level 60", "Requires Grand Marshal / High Warlord (Rank 14)" } },
+		{ id = 272449, name = "Scout's Tabard", q = 1, level = 0, class = 4, sub = 0, slot = "INVTYPE_TABARD", price = 10000, costs = {}, needs = { "Requires Private/Scout (Rank 1)" } },
+		{ id = 17034, name = "Maple Seed", q = 1, level = 0, class = 7, sub = 0, slot = "INVTYPE_NON_EQUIP_IGNORE", price = 200, costs = {}, needs = {} },
+		{ id = 999001, name = "Premier Lamellar Breastplate", q = 3, level = 55, class = 4, sub = 4, slot = "INVTYPE_CHEST", costs = { { "Honor Points", 9350 } }, needs = { "Requires Level 55" } },
+	}
+	local byID = {}
+	for _, s in ipairs(stock) do byID[s.id] = s end
+	local real = { GetMerchantNumItems = GetMerchantNumItems, GetMerchantItemID = GetMerchantItemID, GetMerchantItemCostInfo = GetMerchantItemCostInfo,
+		GetMerchantItemCostItem = GetMerchantItemCostItem, C_TooltipInfo = C_TooltipInfo, C_MerchantFrame = C_MerchantFrame, C_Item = C_Item,
+		UnitClass = UnitClass, UnitLevel = UnitLevel, UnitName = UnitName, C_MajorFactions = C_MajorFactions, C_CurrencyInfo = C_CurrencyInfo, GetItemCount = GetItemCount }
+	GetMerchantNumItems = function() return #stock end
+	GetMerchantItemID = function(i) return stock[i].id end
+	GetMerchantItemCostInfo = function(i) return #stock[i].costs end
+	GetMerchantItemCostItem = function(i, c)
+		local cost = stock[i].costs[c]
+		if cost[1]:find("|H") then return 133308, cost[2], cost[1], nil end
+		return 2173920, cost[2], nil, cost[1]
+	end
+	C_TooltipInfo = { GetMerchantItem = function(i) local lines = {} for _, t in ipairs(stock[i].needs) do lines[#lines + 1] = { leftText = t } end return { lines = lines } end }
+	C_MerchantFrame = { GetItemInfo = function(i) return { name = stock[i].name, price = stock[i].price or 0 } end }
+	C_Item = { GetItemInfoInstant = function(id) local s = byID[id] return id, nil, nil, s.slot, 134400, s.class, s.sub end,
+		GetItemInfo = function(id) local s = byID[id] return s.name, nil, s.q, 60, s.level end,
+		GetItemQualityColor = function() return 1, 1, 1 end, GetItemIconByID = function() return 134400 end }
+	UnitClass = function(unit) if unit == "player" then return "Rogue", "ROGUE", 4 end return real.UnitClass(unit) end
+	UnitLevel = function(unit) if unit == "player" then return 30 end return real.UnitLevel(unit) end
+	UnitName = function(unit) if unit == "npc" then return "Lady Palanseer" end return real.UnitName(unit) end
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function() return { renownLevel = 3, renownReputationEarned = 100, renownLevelThreshold = 1200,
+		currentWeekProgressiveMaxLevel = 4, maxLevel = 14, weekNumber = 2 } end, GetRenownRewardsForLevel = function() return {} end }
+	C_CurrencyInfo = { GetCurrencyInfo = function(id) return id == 1792 and { name = "Honor Points", quantity = 1500, maxQuantity = 25000 } or nil end }
+	GetItemCount = function(id) return id == 20560 and 4 or 0 end
+	ns.GearCatalog:ReadVendor()
+	local items = ns.GearCatalog:Items()
+	check(items[272474] and items[272474].honor == 9000 and items[272474].marks[20560] == 15 and items[272474].level == 55, "a set piece is kept with its honor, marks and level")
+	check(items[275240] and items[275240].rank == 8, "a seal's rank comes from its tooltip")
+	check(items[272449] and items[272449].rank == 1, "a rank item with no honor (the tabard) is kept")
+	check(not items[17034], "a vendor's other goods aren't")
+	check(items[999002] and items[999002].classes[1] == "Druid", "another class's set is kept, with its class")
+	local mine, names = ns.GearCatalog:ForMe(), {}
+	for i, item in ipairs(mine) do names[i] = item.entry.name end
+	check(table.concat(names, "|") == "Premier Shadowhide Headguard|Scout's Tabard|Premier Sergeant's Cape|Premier Emboldened Wrist Seal|Premier High Warlord's Razor",
+		"a rogue's gear, by rank then slot, without the greatsword, plate or the druid's leather: "..table.concat(names, "|"))
+	local function Missing(id) for _, item in ipairs(mine) do if item.itemID == id then return table.concat(item.missing, ", ") end end end
+	check(Missing(272449) == "", "the tabard is ready to buy")
+	check(Missing(272474) == "Level 55, 7,500 more honor, 11 more AV marks", "the headguard's shortfall: "..tostring(Missing(272474)))
+	check(Missing(272612) == "Rank 14, Level 60, 10,500 more honor, 10 more DI marks", "the razor's: "..tostring(Missing(272612)))
+	ns.GearCatalog:ToggleGoal(272612)
+	check(ns.GearCatalog:ForMe()[1].itemID == 272612, "a chased item goes to the top")
+	ns.UI:Show("gear")
+	check(ns.UI:IsShown("gear") and Shown("Rogue: 5 items, 1 chased"), "the Gear tab lists the rogue's items")
+	check(Shown("Chasing") and Shown("Ready to buy"), "with the chased item marked and the ready one said")
+	check(Shown("Rank") and Shown("Gear"), "Rank | Gear tabs")
+	ns.GearCatalog:ToggleGoal(272612)
+	-- Opening a rank vendor: read, then once with the filter on All (every class), then the filter put back
+	local filter, sets = 2, {}
+	LE_LOOT_FILTER_ALL, LE_LOOT_FILTER_CLASS = 5, 2
+	GetMerchantFilter = function() return filter end
+	SetMerchantFilter = function(f) filter = f sets[#sets + 1] = f end
+	MerchantFrame = CreateFrame("Frame")
+	Fire("MERCHANT_SHOW")
+	RunTimers()
+	check(sets[1] == 5 and sets[2] == 2 and filter == 2, "the vendor's filter goes to All for the read, then back: "..table.concat(sets, ","))
+	Fire("MERCHANT_SHOW")
+	RunTimers()
+	check(#sets == 2, "once a session per vendor")
+	MerchantFrame = nil
+	GetMerchantFilter, SetMerchantFilter, LE_LOOT_FILTER_ALL, LE_LOOT_FILTER_CLASS = nil, nil, nil, nil
+	for k, v in pairs(real) do _G[k] = v end
+	ns.db.pvpGear = {}
+end)()
+-- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space
+;(function()
+	local over = {}
+	for _, fs in ipairs(Mock.fontStrings) do
+		local width = rawget(fs, "fitWidth")
+		if width and fs._text ~= "" and not rawget(fs, "_wrap") and fs:GetUnboundedStringWidth() > width + 0.5 then
+			local bounded = (rawget(fs, "_wSet") and fs._w <= width + 0.5) or (rawget(fs, "_leftAnchored") and rawget(fs, "_rightAnchored"))
+			if not bounded then
+				over[#over + 1] = format("%q (%d wide, %d to fit)", fs._text, math.floor(fs:GetUnboundedStringWidth()), math.floor(width))
+			end
+		end
+	end
+	check(#over == 0, "lines wider than their space:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")

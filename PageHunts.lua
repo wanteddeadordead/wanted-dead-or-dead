@@ -39,7 +39,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("hunts", {
-	group = "Bounties",
+	group = "World PvP",
 	title = "Your hunts",
 	subtitle = "The bounties you're hunting, the claims your kills made, and your record as a bounty hunter.",
 	order = 2.5,

@@ -170,6 +170,7 @@ end
 ---@param wrap boolean? when nothing fits, the last text on up to two lines instead of cut off
 function Theme:FitText(fs, width, texts, smaller, wrap)
 	fs.fitFont = fs.fitFont or fs:GetFontObject()
+	fs.fitWidth = width -- what the line has to fit (the tests check every fitted line against it)
 	-- A font object brings its own colour: keep the one the line had
 	local r, g, b = fs:GetTextColor()
 	if wrap then

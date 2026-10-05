@@ -115,7 +115,9 @@ function private.Labels(text, short, kind)
 	if kind == "weekly" then
 		tinsert(labels, "Reset")
 	elseif kind == "pvpseason" or kind == "wanted" then
-		tinsert(labels, strfind(text, " starts$") and "Season starts" or "Season ends")
+		local starts = strfind(text, " starts$") ~= nil
+		tinsert(labels, starts and "Season starts" or "Season ends")
+		tinsert(labels, starts and "Starts" or "Ends")
 	elseif kind == "game" and short == "Launch day" then
 		tinsert(labels, "Launch")
 	elseif strfind(short, " ") then

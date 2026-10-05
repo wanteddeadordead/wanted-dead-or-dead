@@ -276,7 +276,7 @@ end
 -- ============================================================================
 
 UI:RegisterPage("board", {
-	group = "Bounties",
+	group = "World PvP",
 	title = "Board",
 	subtitle = "Bounties on enemy players. Kill the target and the claim files itself; the poster pays by mail.",
 	order = 1,

@@ -141,7 +141,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("hotspots", {
-	group = "War",
+	group = "World PvP",
 	title = "Hotspots",
 	subtitle = "Where enemy players are right now, from what you and other Wanted users have seen. Busiest first.",
 	order = 2.9,

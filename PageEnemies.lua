@@ -147,7 +147,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("enemies", {
-	group = "War",
+	group = "World PvP",
 	title = "Enemies",
 	subtitle = "Every enemy you've met: how often, who won, their guild, and where they were last. Click one for options.",
 	order = 3,

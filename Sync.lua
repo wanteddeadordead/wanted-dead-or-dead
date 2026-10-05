@@ -418,6 +418,14 @@ function private.OnEvent(_, event, ...)
 	elseif event == "CHAT_MSG_CHANNEL_LIST" then
 		private.OnChannelList(...)
 	elseif event == "CHANNEL_UI_UPDATE" then
+		-- The list changed (a join, a leave, the login rejoin): once it settles, put the sync channel back at the end
+		if private.channelId and not private.movePending then
+			private.movePending = true
+			C_Timer.After(1, function()
+				private.movePending = nil
+				private.MoveToEnd()
+			end)
+		end
 		-- The game (re)built its channel list: ask once it settles, if the count isn't known yet. It fires many
 		-- times at login, so whether it's known is asked again when the timer runs (2026-10-01 log: seven requests
 		-- in a second, after the count had come)
@@ -453,6 +461,33 @@ function private.CurrentChannelId()
 		return nil
 	end
 	return id
+end
+
+---Moves the sync channel to the end of the channel list. The game numbers channels in the order they're joined,
+---so a sync channel joined first took /1 and pushed General and Trade down (player report, 2026-10-05). It goes
+---one slot at a time, as the chat settings' Move Down does, so the other channels keep their order and colours.
+function private.MoveToEnd()
+	local id = private.CurrentChannelId()
+	if not id or not GetChannelList or not C_ChatInfo.SwapChatChannelsByChannelIndex then
+		return
+	end
+	local list, last = { GetChannelList() }, id
+	for i = 1, #list, 3 do
+		if type(list[i]) == "number" and list[i] > last then
+			last = list[i]
+		end
+	end
+	for i = id, last - 1 do
+		if ChatTypeInfo then
+			local a, b = "CHANNEL"..i, "CHANNEL"..(i + 1)
+			ChatTypeInfo[a], ChatTypeInfo[b] = ChatTypeInfo[b], ChatTypeInfo[a]
+		end
+		C_ChatInfo.SwapChatChannelsByChannelIndex(i, i + 1)
+	end
+	if last > id then
+		Wanted:Log("Sync: moved %s from #%d to the end of the channel list (#%d)", private.channelName, id, last)
+		private.channelId = last
+	end
 end
 
 ---The sync channel's index in the game's channel list, if it's there.
@@ -894,6 +929,7 @@ function private.TryJoin()
 	end
 	private.channelId = id
 	private.MarkFollowed(true)
+	private.MoveToEnd()
 	if private.channelName == private.MainName() then
 		Wanted.db.homeCheck.wait = MAIN_RETRY_SECONDS
 	end

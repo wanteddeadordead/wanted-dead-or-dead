@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General
+  and Trade down a number.
+
 ## [1.9.0] - 2026-10-05
 
 - Wanted reads no other player in any instance (dungeons and raids as well as battlegrounds): no enemy scanning,

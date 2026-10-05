@@ -13,7 +13,7 @@ local GRID_TOP = 116 -- below the tiles and the month bar
 local WEEKDAY_HEIGHT = 18
 local CELL_GAP = 3
 local SIDE_WIDTH = 220
-local CELL_LINES = 2 -- events written in a day's box; the rest are in its tooltip
+local CELL_LINES = 2 -- events starting or ending written in a day's box; the rest are in its tooltip
 local WEEKDAYS = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
 local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
 	"November", "December" }
@@ -72,9 +72,23 @@ function private.ShowDayTooltip(cell)
 	end
 	GameTooltip:SetOwner(cell, "ANCHOR_RIGHT")
 	GameTooltip:AddLine(format("%s %d", MONTHS[private.month], cell.day), 1, 1, 1)
+	-- Like Blizzard's calendar: what begins or ends that day and at what time, then what's running and its dates,
+	-- each holiday that begins or ends with the game's description of it
 	for _, e in ipairs(cell.events) do
 		local color = KIND_COLORS[e.kind] or C.text
-		GameTooltip:AddLine(e.running and e.text.." (running)" or e.text, color[1], color[2], color[3], true)
+		local d = e.detail or {}
+		local text = e.text
+		if e.running then
+			text = text.." (running"..(d.range and ", "..d.range or "")..")"
+		elseif d.seq == "START" and d.begins then
+			text = text.." begins "..d.begins
+		elseif d.seq == "END" and d.ends then
+			text = text.." ends "..d.ends
+		end
+		GameTooltip:AddLine(text, color[1], color[2], color[3], true)
+		if d.description and not e.running then
+			GameTooltip:AddLine(d.description, C.muted[1], C.muted[2], C.muted[3], true)
+		end
 	end
 	GameTooltip:Show()
 end
@@ -92,6 +106,11 @@ function private.CreateCell(parent, width, height)
 		line:SetPoint("RIGHT", -4, 0)
 		cell.lines[i] = line
 	end
+	-- What's running that day (the battleground weekend first), faint, under what starts or ends
+	cell.running = Theme:Text(cell, "tiny", "")
+	cell.running:SetPoint("TOPLEFT", 6, -8 - (CELL_LINES + 1) * 12)
+	cell.running:SetPoint("RIGHT", -4, 0)
+	cell.running:SetAlpha(0.6)
 	cell.more = Theme:Text(cell, "tiny", "", C.faint)
 	cell.more:SetPoint("TOPRIGHT", -5, -6)
 	cell:SetScript("OnEnter", private.ShowDayTooltip)
@@ -112,11 +131,18 @@ function private.RefreshGrid()
 			local events = days[day] or {}
 			cell.day, cell.events = day, events
 			-- The box names what starts or ends that day; the tooltip also has what's running
-			local named = {}
+			local named, running = {}, nil
 			for _, e in ipairs(events) do
 				if not e.running then
 					tinsert(named, e)
+				elseif not running then
+					running = e
 				end
+			end
+			cell.running:SetText(running and running.short or "")
+			if running then
+				local color = KIND_COLORS[running.kind] or C.text
+				cell.running:SetTextColor(color[1], color[2], color[3])
 			end
 			local isToday = year == todayYear and month == todayMonth and day == today
 			cell.number:SetText(day)
@@ -154,8 +180,8 @@ function private.RefreshUpcoming()
 		end
 	end
 	private.upcomingEmpty:SetShown(#items == 0)
-	-- Under the list: why the game's holidays are missing while no Blizzard season runs
-	private.noSeasonNote:SetShown(not PvPCalendar:SeasonRunning())
+	-- Under the list, before launch: why there are no battleground weekends yet
+	private.noSeasonNote:SetShown(not PvPCalendar:Launched())
 	private.noSeasonNote:ClearAllPoints()
 	private.noSeasonNote:SetPoint("TOPLEFT", 14, -44 - max(#items, 1) * 20 - 8)
 end
@@ -249,7 +275,7 @@ UI:RegisterPage("pvp", {
 		end
 		private.upcomingEmpty = Theme:Text(side, "small", "Nothing on the calendar yet.", C.faint)
 		private.upcomingEmpty:SetPoint("TOPLEFT", 14, -44)
-		private.noSeasonNote = Theme:Text(side, "tiny", "Battleground weekends and the game's holidays show once a Blizzard PvP season is running.", C.faint)
+		private.noSeasonNote = Theme:Text(side, "tiny", "Battleground weekends start with launch, Nov 4.", C.faint)
 		private.noSeasonNote:SetWidth(SIDE_WIDTH - 28)
 		private.noSeasonNote:SetWordWrap(true)
 		local legend = {

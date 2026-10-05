@@ -5122,21 +5122,34 @@ end)()
 			local y, m = index // 12, index % 12 + 1
 			return { year = y, month = m, numDays = os.date("*t", os.time({ year = y, month = m + 1, day = 0, hour = 12 })).day, firstWeekday = 1 }
 		end,
-		GetNumDayEvents = function(offset, day) return (offset == 0 and (day == 15 or day == 16)) and 2 or 0 end,
+		GetNumDayEvents = function(_, day) return (day == 15 or day == 16) and 2 or 0 end,
+		GetHolidayInfo = function(_, _, index) return { name = "x", description = index == 1 and "The battle for Warsong Gulch grows intense." or "" } end,
 		GetDayEvent = function(_, day, index)
-			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4, sequenceType = day == 15 and "START" or "ONGOING" } end
+			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4, sequenceType = day == 15 and "START" or "ONGOING",
+				startTime = { month = 10, monthDay = 15, hour = 8, minute = 0 }, endTime = { month = 10, monthDay = 22, hour = 8, minute = 0 } } end
 			return { title = "Darkmoon Faire", calendarType = "HOLIDAY", eventType = 4 }
 		end,
 	}
 	ns.db.pvpSeason = { season = 1, week = 3, endsAt = clock + 10 * 86400, weekMax = 6, seasonMax = 14, at = clock }
 	ns.Challenges:Take({ t = clock, weekEnds = clock + 2 * 86400, season = { name = "Wanted Season 1", startsAt = clock - 5 * 86400, endsAt = clock + 60 * 86400 } })
-	local days = ns.PvPCalendar:GetMonth(today.year, today.month)
-	local holidays = {}
-	for _, e in ipairs(days[15] or {}) do holidays[e.text] = e.kind end
-	check(holidays["Call to Arms: Warsong Gulch"] == "pvpholiday" and holidays["Darkmoon Faire"] == "holiday", "the game's holidays, the PvP one marked")
-	local running = nil
-	for _, e in ipairs(days[16] or {}) do if e.text == "Call to Arms: Warsong Gulch" then running = e.running end end
-	check(running == true, "the days after its first are marked running")
+	-- Before launch (the beta): the game's holidays, but none of its battleground weekends, which don't run
+	local function Kinds(events)
+		local out = {}
+		for _, e in ipairs(events or {}) do out[e.text] = e end
+		return out
+	end
+	local before = Kinds(ns.PvPCalendar:GetMonth(today.year, today.month)[15])
+	check(before["Darkmoon Faire"] and before["Darkmoon Faire"].kind == "holiday", "a holiday shows before launch")
+	check(not before["Call to Arms: Warsong Gulch"], "a battleground weekend doesn't, before launch")
+	-- From launch: battleground weekends too, with the game's times and description
+	local after = Kinds(ns.PvPCalendar:GetMonth(2026, 11)[15])
+	local wsg = after["Call to Arms: Warsong Gulch"]
+	check(wsg and wsg.kind == "pvpholiday" and wsg.short == "Warsong Gulch", "after launch, the battleground weekend, marked")
+	check(wsg.detail.seq == "START" and wsg.detail.begins == "8:00 AM" and wsg.detail.range == "10/15 - 10/22", "with its time and dates")
+	check(wsg.detail.description == "The battle for Warsong Gulch grows intense.", "and the game's description")
+	check(not after["Darkmoon Faire"].detail.description, "an empty description is left out")
+	local nextDay = Kinds(ns.PvPCalendar:GetMonth(2026, 11)[16])
+	check(nextDay["Call to Arms: Warsong Gulch"].running == true, "the days after its first are marked running")
 	local upcoming = {}
 	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = (upcoming[e.text] or 0) + 1 end
 	check(upcoming["PvP Season 1 ends"] == 1 and upcoming["Wanted Season 1 ends"] == 1, "the seasons' ends are coming up")
@@ -5149,7 +5162,8 @@ end)()
 	ns.UI:Show("pvp")
 	check(opened, "the page asks the game for its calendar")
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
-	check(Shown("Warsong Gulch"), "the battleground weekend is on the grid by its battleground")
+	check(Shown("Darkmoon Faire"), "the holiday is on the grid")
+	check(Shown("Battleground weekends start with launch, Nov 4."), "saying when they start")
 	-- Challenges is a tab of the PvP page: one menu entry, tabs in the header, the menu's footer buttons gone
 	local menuPvP, tabs = 0, 0
 	for _, f in ipairs(Mock.fontStrings) do
@@ -5165,10 +5179,7 @@ end)()
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
 	ns.UI:Refresh(true)
 	check(Shown("None running"), "no season running on the beta")
-	check(not Shown("Warsong Gulch"), "and no battleground weekends: the beta's calendar lists ones that never happen")
-	check(Shown("Battleground weekends and the game's holidays show once a Blizzard PvP season is running."), "saying why")
-	local beta = ns.PvPCalendar:GetMonth(today.year, today.month)
-	check(not beta[15], "no game holidays in the month's events either")
+	check(Shown("Darkmoon Faire"), "the game's holidays still show with no season running")
 	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
 	ns.Challenges:Take(nil)
 end)()

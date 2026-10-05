@@ -66,13 +66,48 @@ function private.Readable(value)
 	return not (issecretvalue and issecretvalue(value))
 end
 
+---A CalendarTime's clock time as Blizzard's calendar shows it: "8:00 AM". nil without one.
+function private.Clock(t)
+	if type(t) ~= "table" or type(t.hour) ~= "number" or type(t.minute) ~= "number" then
+		return nil
+	end
+	local hour = t.hour % 12
+	return format("%d:%02d %s", hour == 0 and 12 or hour, t.minute, t.hour < 12 and "AM" or "PM")
+end
+
+---A holiday's dates as Blizzard's calendar shows them: "9/29 - 10/06". nil without both.
+function private.Range(from, to)
+	if type(from) ~= "table" or type(to) ~= "table" or type(from.month) ~= "number" or type(to.month) ~= "number" then
+		return nil
+	end
+	return format("%d/%02d - %d/%02d", from.month, from.monthDay or 0, to.month, to.monthDay or 0)
+end
+
+---What the tooltip says about a holiday: when it begins or ends that day, its dates, and the game's description.
+function private.Detail(offset, day, index, e)
+	local detail = { seq = private.Readable(e.sequenceType) and e.sequenceType or nil }
+	if private.Readable(e.startTime) and private.Readable(e.endTime) then
+		detail.begins, detail.ends = private.Clock(e.startTime), private.Clock(e.endTime)
+		detail.range = private.Range(e.startTime, e.endTime)
+	end
+	if C_Calendar.GetHolidayInfo then
+		local ok, info = pcall(C_Calendar.GetHolidayInfo, offset, day, index)
+		if ok and type(info) == "table" and private.Readable(info.description) and type(info.description) == "string"
+			and info.description ~= "" then
+			detail.description = info.description
+		end
+	end
+	return detail
+end
+
 ---A holiday's label for a day's box: the part after "Call to Arms: " (the battleground), or the whole title.
 function private.ShortTitle(title)
 	return (gsub(title, BATTLEGROUND_WEEKEND, ""))
 end
 
----The game's holidays in a month, added to days: battleground weekends as "pvpholiday", the rest as "holiday". The game's
----calendar reads months by offset from the one it is on (which Blizzard's calendar window may have moved).
+---The game's holidays in a month, added to days: battleground weekends as "pvpholiday", the rest as "holiday". The
+---game's calendar lists battleground weekends on the beta too, where none run: those show from launch day on. The
+---game's calendar reads months by offset from the one it is on (which Blizzard's calendar window may have moved).
 function private.AddGameEvents(year, month, Add)
 	if not C_Calendar or not C_Calendar.GetMonthInfo or not C_Calendar.GetNumDayEvents or not C_Calendar.GetDayEvent then
 		return
@@ -85,7 +120,10 @@ function private.AddGameEvents(year, month, Add)
 	local okShown, shown = pcall(C_Calendar.GetMonthInfo, offset)
 	local numDays = okShown and type(shown) == "table" and type(shown.numDays) == "number" and shown.numDays or 0
 	local pvpType = Enum and Enum.CalendarEventType and Enum.CalendarEventType.PvP
+	local launch = date("*t", LAUNCH_AT)
+	local launchKey = launch.year * 10000 + launch.month * 100 + launch.day
 	for day = 1, numDays do
+		local beforeLaunch = year * 10000 + month * 100 + day < launchKey
 		local okCount, count = pcall(C_Calendar.GetNumDayEvents, offset, day)
 		if okCount and type(count) == "number" and private.Readable(count) then
 			for i = 1, min(count, MAX_DAY_EVENTS) do
@@ -103,29 +141,32 @@ function private.AddGameEvents(year, month, Add)
 					-- Like Blizzard's calendar, a holiday over several days is named on its first and last days; the days
 					-- between are marked running (a Call to Arms runs Tuesday to Tuesday)
 					local running = private.Readable(e.sequenceType) and e.sequenceType == "ONGOING"
-					Add(day, e.title, pvp and "pvpholiday" or "holiday", private.ShortTitle(e.title), running)
+					if not (pvp and beforeLaunch) then
+						Add(day, e.title, pvp and "pvpholiday" or "holiday", private.ShortTitle(e.title), running,
+							private.Detail(offset, day, i, e))
+					end
 				end
 			end
 		end
 	end
 end
 
----Whether the game says a Blizzard PvP season is running (season 0 or week -1 is none, as on the beta).
+---Whether WoW Forever has launched: battleground weekends run from then.
 ---@return boolean
-function PvPCalendar:SeasonRunning()
-	local s = Wanted.db.pvpSeason
-	return type(s) == "table" and type(s.season) == "number" and s.season > 0 and type(s.week) == "number" and s.week >= 0
+function PvPCalendar:Launched()
+	return GetServerTime() >= LAUNCH_AT
 end
 
 ---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
 ---kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box;
----running marks a day between a holiday's first and last.
+---running marks a day between a holiday's first and last; detail is a holiday's { seq, begins, ends, range,
+---description } from the game.
 ---@param year number
 ---@param month number
 ---@return table<number, table[]>
 function PvPCalendar:GetMonth(year, month)
 	local days = {}
-	local function Add(day, text, kind, short, running)
+	local function Add(day, text, kind, short, running, detail)
 		days[day] = days[day] or {}
 		-- A holiday the game lists twice on one day shows once
 		for _, e in ipairs(days[day]) do
@@ -133,7 +174,7 @@ function PvPCalendar:GetMonth(year, month)
 				return
 			end
 		end
-		tinsert(days[day], { text = text, short = short or text, kind = kind, running = running or nil })
+		tinsert(days[day], { text = text, short = short or text, kind = kind, running = running or nil, detail = detail })
 	end
 	local function AddAt(t, text, kind, short)
 		local d = date("*t", t)
@@ -177,11 +218,7 @@ function PvPCalendar:GetMonth(year, month)
 			t = t + WEEK
 		end
 	end
-	-- The game's calendar lists Blizzard's holiday schedule even where none of it runs (the beta's calendar has
-	-- battleground weekends that never happen): its holidays show only while a Blizzard PvP season is running
-	if PvPCalendar:SeasonRunning() then
-		private.AddGameEvents(year, month, Add)
-	end
+	private.AddGameEvents(year, month, Add)
 	for _, events in pairs(days) do
 		sort(events, function(a, b)
 			if KIND_ORDER[a.kind] ~= KIND_ORDER[b.kind] then

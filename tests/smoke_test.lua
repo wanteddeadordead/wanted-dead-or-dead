@@ -5508,6 +5508,25 @@ end)()
 	for k, v in pairs(real) do _G[k] = v end
 	ns.db.pvpGear = {}
 end)()
+-- Blizzard ranks shared in the sync hello: kept per player for the season the game says is running
+;(function()
+	ns.db.pvpSeason = { season = 1, week = 2, endsAt = 0, weekMax = 4, seasonMax = 14, at = clock }
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, v = ns.VERSION, b = 7, bs = 1 }), "CHANNEL", "Rank Seven", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	check(ns.BlizzRank:Of("Rank Seven") == 7, "a hello's Blizzard rank is kept")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, v = ns.VERSION, b = 99, bs = 1 }), "CHANNEL", "Rank Bogus", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	check(ns.BlizzRank:Of("Rank Bogus") == nil, "a rank out of range isn't")
+	ns.db.pvpSeason.season = 2
+	check(ns.BlizzRank:Of("Rank Seven") == nil, "a rank from another season isn't shown")
+	ns.db.pvpSeason.season = 1
+	local realFactions = C_MajorFactions
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function() return { renownLevel = 5, renownReputationEarned = 0, renownLevelThreshold = 1500,
+		currentWeekProgressiveMaxLevel = 6, maxLevel = 14, weekNumber = 3 } end }
+	local rank, season = ns.BlizzRank:Mine()
+	check(rank == 5 and season == 1 and ns.BlizzRank:Of(ns.Store:GetOrigin()) == 5, "our own rank goes in the hello and the book")
+	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
+	check(ns.BlizzRank:Mine() == nil, "nothing to share on the beta (no season)")
+	C_MajorFactions, ns.db.pvpSeason, ns.db.blizzRanks = realFactions, nil, {}
+end)()
 -- Every line fitted to a width (Theme:FitText) fits it, or is bounded so the game cuts it short inside its space
 ;(function()
 	local over = {}

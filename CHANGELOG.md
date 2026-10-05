@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-10-05
+
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General
   and Trade down a number.
 

@@ -3696,6 +3696,38 @@ end)()
 	check(ns.Sync:GetInfo().channelId == 6, "and it's back once the game has it again")
 end)()
 ;(function()
+	-- The sync channel goes to the end of the channel list. The game numbers channels in the order they're joined, so
+	-- a sync channel joined first took /1 and pushed General and Trade down (player report, 2026-10-05)
+	local realName, realList, realSwap = GetChannelName, GetChannelList, C_ChatInfo.SwapChatChannelsByChannelIndex
+	local netName = ns.Sync:GetInfo().channelName
+	local slots = { netName, "General - Durotar", "Trade - City", "LocalDefense - Durotar" }
+	GetChannelList = function()
+		local out = {}
+		for i = 1, 10 do
+			if slots[i] then out[#out + 1], out[#out + 2], out[#out + 3] = i, slots[i], false end
+		end
+		return (table.unpack or unpack)(out)
+	end
+	GetChannelName = function(name) for i = 1, 10 do if slots[i] == name then return i, name end end return 0 end
+	local swaps = 0
+	C_ChatInfo.SwapChatChannelsByChannelIndex = function(a, b) swaps = swaps + 1 slots[a], slots[b] = slots[b], slots[a] end
+	Fire("CHANNEL_UI_UPDATE")
+	RunTimers()
+	check(slots[1] == "General - Durotar" and slots[2] == "Trade - City" and slots[3] == "LocalDefense - Durotar" and slots[4] == netName,
+		"the sync channel moves to the end, and the others keep their order")
+	check(ns.Sync:GetInfo().channelId == 4, "and the addon knows its new number")
+	local before = swaps
+	Fire("CHANNEL_UI_UPDATE")
+	RunTimers()
+	check(swaps == before, "already last: nothing moves")
+	slots[5] = "MyChannel"
+	Fire("CHANNEL_UI_UPDATE")
+	RunTimers()
+	check(slots[4] == "MyChannel" and slots[5] == netName, "a channel joined after it goes ahead of it")
+	GetChannelName, GetChannelList, C_ChatInfo.SwapChatChannelsByChannelIndex = realName, realList, realSwap
+	RunTimers()
+end)()
+;(function()
 	-- The version book: each player's Wanted version from their messages, for the app to pass on
 	local book = ns.db.addonVersions
 	local me = Ambiguate(ns.Store:GetOrigin())

@@ -105,6 +105,31 @@ function BlizzRank:Note(name, rank, season)
 	Wanted.db.blizzRanks[name] = { r = rank, s = season, t = GetServerTime() }
 end
 
+---Takes the ranks the site has heard from Wanted players (the catch-up's blizzRanks: "Name" -> { r, s, t }), each
+---unless we heard that player more lately ourselves.
+---@param raw any
+function BlizzRank:Take(raw)
+	if type(raw) ~= "table" then
+		return
+	end
+	local book, taken = Wanted.db.blizzRanks, 0
+	for name, entry in pairs(raw) do
+		local at = type(entry) == "table" and private.Number(entry.t)
+		local mine = type(name) == "string" and book[strmatch(name, "^([^%-]+)") or name]
+		if at and at <= GetServerTime() + 86400 and (type(mine) ~= "table" or (mine.t or 0) < at) then
+			BlizzRank:Note(name, entry.r, entry.s)
+			local kept = book[strmatch(name, "^([^%-]+)") or name]
+			if kept then
+				kept.t = at
+				taken = taken + 1
+			end
+		end
+	end
+	if taken > 0 then
+		Wanted:Log("BlizzRank: %d ranks from the site", taken)
+	end
+end
+
 ---A player's Blizzard rank as they last told it, in the season the game says is running now; nil otherwise.
 ---@param name string
 ---@return number?

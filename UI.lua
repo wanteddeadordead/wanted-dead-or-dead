@@ -24,6 +24,7 @@ local HEADER_HEIGHT = 58
 local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 30
 local GROUP_HEIGHT = 26
+local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
 -- The sidebar's groups, in order; a page names its group (none: above them all, like Home)
 local GROUPS = { "Bounties", "War", "You" }
 local DEFAULT_PAGE = "home"
@@ -37,7 +38,9 @@ local DEFAULT_PAGE = "home"
 ---Registers a page.
 ---@param key string
 ---@param def table title, subtitle, order, group (one of GROUPS), noHeader (the page takes the header's room too),
----build(container, width, height), refresh(), badge() -> number|string?, color?
+---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
+---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
+---out of the menu itself), tabLabel (its tab's label)
 function UI:RegisterPage(key, def)
 	def.key = key
 	tinsert(private.pages, def)
@@ -48,7 +51,7 @@ end
 ---The size a page has to lay itself out in.
 ---@param noHeader boolean? for a page without the title and subtitle
 ---@return number width
----@return number height
+---@return number height (a page with tabs along its top gets less: build is given its real size)
 function UI:GetPageSize(noHeader)
 	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD - (noHeader and 0 or HEADER_HEIGHT) - FOOTER_HEIGHT
 end
@@ -238,14 +241,14 @@ function private.Create()
 		nav.badge = W:Pill(nav)
 		nav.badge:SetPoint("RIGHT", -14, 0)
 		nav.key = def.key
-		nav:SetScript("OnClick", function() UI:Show(def.key) end)
+		nav:SetScript("OnClick", function() UI:Show(def.tabs and def.tabs[1] or def.key) end)
 		nav:SetScript("OnEnter", function(self)
-			if private.current ~= self.key then
+			if (private.owner or private.current) ~= self.key then
 				self.bg:SetColorTexture(1, 1, 1, 0.035)
 			end
 		end)
 		nav:SetScript("OnLeave", function(self)
-			if private.current ~= self.key then
+			if (private.owner or private.current) ~= self.key then
 				self.bg:SetColorTexture(0, 0, 0, 0)
 			end
 		end)
@@ -254,28 +257,6 @@ function private.Create()
 	private.LayoutNav()
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
-	-- The foot of the menu, above the version: the wanted poster, and Report a bug (in reach with the Tools
-	-- page hidden)
-	local function FootButton(label, color, y, onClick, tip)
-		local button = CreateFrame("Button", nil, sidebar)
-		button:SetSize(SIDEBAR_WIDTH - 1, 34)
-		button:SetPoint("BOTTOMLEFT", 0, y)
-		button.bg = Theme:Fill(button, C.transparent)
-		button.line = Theme:Line(button)
-		button.line:SetPoint("TOPLEFT", 16, 0)
-		button.line:SetPoint("TOPRIGHT", -16, 0)
-		button.label = Theme:Text(button, "body", label, color)
-		button.label:SetPoint("LEFT", 22, 0)
-		button:SetScript("OnClick", onClick)
-		button:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
-		button:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
-		W:AttachTooltip(button, label, tip)
-		return button
-	end
-	private.posterButton = FootButton("Your wanted poster", C.gold, 68, function() Wanted.Poster:Show() end,
-		"The price the other faction has put on your head, on a poster with your character, to screenshot and share. Also /wanted poster.")
-	private.bugButton = FootButton("Report a bug", C.amber, 34, function() Wanted.Report:Show() end,
-		"Builds a report to copy, with the address to send it to. Also /wanted bug.")
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)
@@ -287,6 +268,22 @@ function private.Create()
 	private.subtitle:SetPoint("TOPLEFT", 0, -26)
 	private.subtitle:SetPoint("RIGHT", 0, 0)
 	private.subtitle:SetWordWrap(false)
+	-- Tabs for pages that share a menu entry (Home and the calendar): at the right of the title, or along the top of
+	-- a page without a header
+	private.tabBars = {}
+	for _, def in ipairs(private.pages) do
+		if def.tabs then
+			local items = {}
+			for _, key in ipairs(def.tabs) do
+				local page = private.pageByKey[key]
+				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key })
+			end
+			local bar = W:Segmented(content, items, function(key) UI:Show(key) end, 110)
+			bar:SetPoint(def.noHeader and "TOPLEFT" or "TOPRIGHT", 0, 0)
+			bar:Hide()
+			private.tabBars[def.key] = bar
+		end
+	end
 	private.toast = Theme:Text(content, "small", "")
 	private.toast:SetPoint("BOTTOMLEFT", 0, 10)
 	private.toast:SetPoint("BOTTOMRIGHT", 0, 10)
@@ -294,8 +291,11 @@ function private.Create()
 	for _, def in ipairs(private.pages) do
 		local container = CreateFrame("Frame", nil, content)
 		local width, height = UI:GetPageSize(def.noHeader)
-		container:SetPoint("TOPLEFT", 0, def.noHeader and 0 or -HEADER_HEIGHT)
-		container:SetSize(width, height)
+		local owner = def.under and private.pageByKey[def.under] or def
+		-- Without a header, a page's tabs sit along its top (Home | Calendar)
+		local tabRow = def.noHeader and owner.tabs and TAB_ROW or 0
+		container:SetPoint("TOPLEFT", 0, def.noHeader and -tabRow or -HEADER_HEIGHT)
+		container:SetSize(width, height - tabRow)
 		container:Hide()
 		def.container = container
 		def.build(container, width, height)
@@ -378,9 +378,9 @@ function private.LayoutNav()
 	local function Place(group)
 		for _, def in ipairs(private.pages) do
 			local nav = private.navButtons[def.key]
-			if def.group == group then
+			if def.group == group or (def.under and group == nil) then
 				nav:ClearAllPoints()
-				if def.hidden and def.hidden() then
+				if def.under or (def.hidden and def.hidden()) then
 					nav:Hide()
 				else
 					nav:SetPoint("TOPLEFT", 0, y)
@@ -451,15 +451,35 @@ function UI:Refresh(allBadges)
 	local def = private.pageByKey[private.current]
 	private.title:SetText(def.noHeader and "" or def.title)
 	private.subtitle:SetText(def.noHeader and "" or def.subtitle or "")
+	-- The menu entry and tabs the current page belongs to
+	local owner = def.under or def.key
+	private.owner = owner
+	for key, bar in pairs(private.tabBars) do
+		bar:SetShown(key == owner)
+		if key == owner and bar.selected ~= private.current then
+			bar:Select(private.current, true)
+		end
+	end
+	-- A page kept out of the menu shows its badge on its menu entry, when that has none of its own
+	local underBadges = {}
+	for _, page in ipairs(private.pages) do
+		if page.under and page.badge then
+			local badge, color = private.Badge(page, allBadges)
+			underBadges[page.under] = underBadges[page.under] or (badge and { badge, color })
+		end
+	end
 	for _, page in ipairs(private.pages) do
 		local nav = private.navButtons[page.key]
-		local selected = page.key == private.current
+		local selected = page.key == owner
 		nav.bar:SetShown(selected)
 		nav.bg:SetColorTexture(1, 1, 1, selected and 0.06 or 0)
 		nav.label:SetTextColor(unpack(selected and C.white or C.muted))
 		local badge, color = nil, nil
 		if page.badge then
 			badge, color = private.Badge(page, allBadges)
+		end
+		if not badge and underBadges[page.key] then
+			badge, color = underBadges[page.key][1], underBadges[page.key][2]
 		end
 		if (type(badge) == "number" and badge > 0) or (type(badge) == "string" and badge ~= "") then
 			nav.badge:Set(tostring(badge), color or C.accent)

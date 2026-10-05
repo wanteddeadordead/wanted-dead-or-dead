@@ -1,7 +1,8 @@
 -- Wanted: daily and weekly challenges, hot zones and challenge ranks. wanteddeadordead.com works everything out;
 -- the desktop app puts it in the catch-up (WantedAppCatchup[mark].challenges) and the addon only shows it. Nothing
 -- here is computed from the addon's own records or sent to other players. Missing data (no app, an older app, the
--- server off) leaves the pages on their empty state.
+-- server off) leaves the pages on their empty state. The one thing read here is Blizzard's PvP season, kept for the
+-- app (WantedDB.pvpSeason), as the site's seasons follow the game's.
 
 local _, Wanted = ...
 local Challenges = Wanted:NewModule("Challenges")
@@ -32,10 +33,56 @@ local MAX_TEXT = 80
 local NOTE_KEEP_SECONDS = 21 * 24 * 60 * 60
 -- After login, so the banner isn't lost behind the loading screen
 local BANNER_DELAY = 8
+-- Blizzard's PvP season: read a little after login (the client has its season data by then) and each hour after
+local SEASON_DELAY = 15
+local SEASON_EVERY = 60 * 60
+local PVP_RANK_FACTION = 2800 -- PVP_RANK_POINTS_FACTION_ID in Blizzard's PVPRankFrame.lua (a local there)
 
 function Challenges:OnLoad()
 	-- character GUID -> { rank, done = { [challenge id] = when noted } }: what the banner already said (docs/DATA.md)
 	Wanted.db.challengeNotes = type(Wanted.db.challengeNotes) == "table" and Wanted.db.challengeNotes or {}
+end
+
+function Challenges:OnEnable()
+	C_Timer.After(SEASON_DELAY, function()
+		Challenges:ReadSeason()
+		C_Timer.NewTicker(SEASON_EVERY, function() Challenges:ReadSeason() end)
+	end)
+end
+
+-- ============================================================================
+-- Blizzard's PvP season
+-- ============================================================================
+
+---One of the game's answers, or nil when the call is missing, fails or answers with a secret.
+function private.Ask(func, ...)
+	if type(func) ~= "function" then
+		return nil
+	end
+	local ok, value = pcall(func, ...)
+	if not ok or (issecretvalue and issecretvalue(value)) then
+		return nil
+	end
+	return value
+end
+
+---Keeps the game's PvP season in WantedDB.pvpSeason for the app to pass to wanteddeadordead.com, whose seasons follow
+---Blizzard's (docs/DATA.md). Season 0 or week -1 is no season running; an end of 0 is not known yet. A missing or
+---secret answer keeps the last reading.
+function Challenges:ReadSeason()
+	local season = private.Ask(GetCurrentArenaSeason)
+	local left = private.Ask(C_SeasonInfo and C_SeasonInfo.GetTimeUntilCurrentPVPSeasonEnd)
+	local info = private.Ask(C_MajorFactions and C_MajorFactions.GetMajorFactionProgressionInfo, PVP_RANK_FACTION)
+	if type(season) ~= "number" or type(left) ~= "number" or type(info) ~= "table" then
+		return
+	end
+	local week, weekMax, seasonMax = info.weekNumber, info.currentWeekProgressiveMaxLevel, info.maxLevel
+	if type(week) ~= "number" or type(weekMax) ~= "number" or type(seasonMax) ~= "number" then
+		return
+	end
+	local now = GetServerTime()
+	Wanted.db.pvpSeason = { season = season, week = week, endsAt = left > 0 and now + floor(left) or 0, weekMax = weekMax,
+		seasonMax = seasonMax, at = now }
 end
 
 

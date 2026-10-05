@@ -63,7 +63,7 @@ function private.Refresh()
 end
 
 UI:RegisterPage("activity", {
-	group = "War",
+	group = "World PvP",
 	title = "Activity",
 	subtitle = "Kills, deaths and sightings (others' kept 3 days; wanteddeadordead.com has all). Click an enemy to post a bounty.",
 	order = 5,

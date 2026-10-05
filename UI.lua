@@ -25,8 +25,9 @@ local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 30
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
--- The sidebar's groups, in order; a page names its group (none: above them all, like Home)
-local GROUPS = { "Bounties", "War", "You" }
+-- The sidebar's groups, in order; a page names its group (none: above them all, like Home). A group with no page
+-- shown (Battlegrounds until its first page; Arenas, should the game add them) shows no heading.
+local GROUPS = { "World PvP", "Battlegrounds", "You" }
 local DEFAULT_PAGE = "home"
 
 
@@ -394,9 +395,16 @@ function private.LayoutNav()
 	for _, group in ipairs(GROUPS) do
 		local label = private.groupLabels[group]
 		label:ClearAllPoints()
-		label:SetPoint("TOPLEFT", 22, y - 12)
-		y = y - GROUP_HEIGHT
-		Place(group)
+		local shown = false
+		for _, def in ipairs(private.pages) do
+			shown = shown or (def.group == group and not def.under and not (def.hidden and def.hidden()))
+		end
+		label:SetShown(shown)
+		if shown then
+			label:SetPoint("TOPLEFT", 22, y - 12)
+			y = y - GROUP_HEIGHT
+			Place(group)
+		end
 	end
 end
 

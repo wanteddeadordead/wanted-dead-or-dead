@@ -4727,7 +4727,8 @@ end)()
 	db.settings.showTools = false
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
-	check(Shown("BOUNTIES") and Shown("WAR") and Shown("YOU"), "the menu's groups are labelled")
+	check(Shown("WORLD PVP") and Shown("YOU"), "the menu's groups are labelled")
+	check(not Shown("BATTLEGROUNDS"), "a group with no page yet shows no heading")
 end)()
 ;(function()
 	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch

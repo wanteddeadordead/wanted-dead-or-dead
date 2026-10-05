@@ -89,6 +89,22 @@ function Theme:Fill(frame, color, layer)
 	return texture
 end
 
+---A line's thickness: at least one screen pixel at any UI scale. A plain 1-unit line can round away to nothing where
+---it falls between pixels (the seam between two tabs lost both its edges).
+local function Thickness(edge, horizontal)
+	if PixelUtil and PixelUtil.SetHeight then
+		if horizontal then
+			PixelUtil.SetHeight(edge, 1, 1)
+		else
+			PixelUtil.SetWidth(edge, 1, 1)
+		end
+	elseif horizontal then
+		edge:SetHeight(1)
+	else
+		edge:SetWidth(1)
+	end
+end
+
 ---A 1px border drawn as four textures.
 function Theme:Border(frame, color)
 	local edges = {}
@@ -97,16 +113,16 @@ function Theme:Border(frame, color)
 	end
 	edges[1]:SetPoint("TOPLEFT")
 	edges[1]:SetPoint("TOPRIGHT")
-	edges[1]:SetHeight(1)
+	Thickness(edges[1], true)
 	edges[2]:SetPoint("BOTTOMLEFT")
 	edges[2]:SetPoint("BOTTOMRIGHT")
-	edges[2]:SetHeight(1)
+	Thickness(edges[2], true)
 	edges[3]:SetPoint("TOPLEFT")
 	edges[3]:SetPoint("BOTTOMLEFT")
-	edges[3]:SetWidth(1)
+	Thickness(edges[3], false)
 	edges[4]:SetPoint("TOPRIGHT")
 	edges[4]:SetPoint("BOTTOMRIGHT")
-	edges[4]:SetWidth(1)
+	Thickness(edges[4], false)
 	frame._edges = edges
 	Theme:SetBorderColor(frame, color)
 	return edges

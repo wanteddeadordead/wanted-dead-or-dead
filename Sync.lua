@@ -1440,8 +1440,17 @@ function private.GetHaveTable()
 	return chains
 end
 
+---A hello's fields: what we hold, our version, and our Blizzard PvP rank and its season when we have one.
+function private.HelloFields()
+	local fields = { c = private.GetHaveTable(), v = Wanted.VERSION }
+	if Wanted.BlizzRank then
+		fields.b, fields.bs = Wanted.BlizzRank:Mine()
+	end
+	return fields
+end
+
 function private.SendHello()
-	private.Send(TAG_HELLO, { c = private.GetHaveTable(), v = Wanted.VERSION })
+	private.Send(TAG_HELLO, private.HelloFields())
 end
 
 -- Our new records go out together: a busy fight makes one every few seconds, and one message each hit the send
@@ -1651,6 +1660,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 	-- development build is not a release, so it neither locks others nor turns them away.
 	Wanted:NoteVersion(tbl.v)
 	Store:NoteAddonVersion(sender, tbl.v)
+	-- Their Blizzard PvP rank, in a hello (from 1.10.0)
+	if tbl.b and Wanted.BlizzRank then
+		Wanted.BlizzRank:Note(sender, tbl.b, tbl.bs)
+	end
 	if type(tbl.v) == "string" and Wanted:IsRelease(Wanted.VERSION) and Wanted:IsNewerVersion(Wanted.VERSION, tbl.v) then
 		private.TellOutdated(sender)
 		if tag ~= TAG_HELLO and tag ~= TAG_HAVE and tag ~= TAG_NEED then
@@ -2280,7 +2293,7 @@ Wanted:RegisterCommand("synctest", "Sends a message through the channel and repo
 		return
 	end
 	private.testStartedAt = GetTime()
-	if private.Send(TAG_HELLO, { c = private.GetHaveTable(), v = Wanted.VERSION }) then
+	if private.Send(TAG_HELLO, private.HelloFields()) then
 		Wanted:Print("Sync test: message sent on channel #%d, waiting for it to come back...", private.channelId)
 		C_Timer.After(5, function()
 			if private.testStartedAt then

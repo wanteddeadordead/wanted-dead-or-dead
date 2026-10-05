@@ -10,6 +10,8 @@
 - Rank & Gear's Gear tab: the rank vendors' PvP gear for your class (Wanted remembers it when you open a rank vendor,
   every class's at once), what each piece costs in honor and Marks of Honor, the rank and level it needs, and what
   you're still missing. Click an item to chase it; chased items stay at the top.
+- Wanted players share their Blizzard PvP rank: it rides along in the sync hello, once you have a rank in a running
+  season, and other Wanted players keep it to show on you.
 ## [1.9.1] - 2026-10-05
 
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General

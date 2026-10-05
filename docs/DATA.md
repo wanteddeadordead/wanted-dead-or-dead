@@ -54,6 +54,11 @@ dropped. Nothing is shared.
 
 `WantedDB.gearGoals` (from 1.10.0) is each character's chased items: `gearGoals[characterGUID][itemID] = true`.
 
+`WantedDB.blizzRanks` (from 1.10.0) is Blizzard PvP ranks as Wanted players' hellos told them, and this character's
+own: `blizzRanks["Name"] = { r, s, t }` (rank 1-14, the season, when heard). The hello carries `b` (rank) and `bs`
+(season) once a player has a rank in a running season. Shown only for the season the game says is running; an entry
+not heard in 30 days is dropped, and at most 5,000 are kept. The Wanted app sends them to wanteddeadordead.com.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

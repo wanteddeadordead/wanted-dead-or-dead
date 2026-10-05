@@ -5,6 +5,8 @@
 local _, Wanted = ...
 local BlizzRank = Wanted:NewModule("BlizzRank")
 local private = { listeners = {}, unlocks = nil }
+local SHARED_DAYS = 30 -- a rank heard from another player is forgotten after this long
+local SHARED_MAX = 5000 -- players kept at most
 
 BlizzRank.MAX_RANK = 14
 BlizzRank.FACTION = 2800 -- PVP_RANK_POINTS_FACTION_ID in Blizzard's PVPRankFrame.lua (a local there)
@@ -23,6 +25,12 @@ BlizzRank.TITLES = {
 	Horde = { "Scout", "Grunt", "Sergeant", "Senior Sergeant", "First Sergeant", "Stone Guard", "Blood Guard", "Legionnaire",
 		"Centurion", "Champion", "Lieutenant General", "General", "Warlord", "High Warlord" },
 }
+
+function BlizzRank:OnLoad()
+	-- Blizzard ranks heard from other Wanted players (in their sync hello), and our own: "Name" -> { r, s, t }
+	Wanted.db.blizzRanks = type(Wanted.db.blizzRanks) == "table" and Wanted.db.blizzRanks or {}
+	private.PruneShared()
+end
 
 function BlizzRank:OnEnable()
 	local frame = CreateFrame("Frame")
@@ -56,6 +64,76 @@ end
 ---A whole number from the game, or nil.
 function private.Number(value)
 	return type(value) == "number" and value == floor(value) and value or nil
+end
+
+---This character's rank and the season it's in, for the sync hello: rank, season. nil before it has a rank in a
+---running season (nothing to share on the beta).
+---@return number? rank
+---@return number? season
+function BlizzRank:Mine()
+	local r = BlizzRank:Get()
+	local s = Wanted.db.pvpSeason
+	local season = type(s) == "table" and private.Number(s.season) or nil
+	if not r or r.rank < 1 or not season or season < 1 then
+		return nil
+	end
+	-- Kept with the others', so the app sends it up with theirs
+	local me = Wanted.Store and Wanted.Store:GetOrigin()
+	if type(me) == "string" then
+		BlizzRank:Note(me, r.rank, season)
+	end
+	return r.rank, season
+end
+
+---Keeps a player's Blizzard rank as their hello told it (or our own). Bad values are ignored.
+---@param name string the player's name as sync gives it
+---@param rank any
+---@param season any
+function BlizzRank:Note(name, rank, season)
+	rank, season = private.Number(rank), private.Number(season)
+	if type(name) ~= "string" or not rank or not season or rank < 1 or rank > BlizzRank.MAX_RANK or season < 1 or season > 1000 then
+		return
+	end
+	name = strmatch(name, "^([^%-]+)") or name
+	if name == "" or #name > 48 then
+		return
+	end
+	local entry = Wanted.db.blizzRanks[name]
+	if entry and entry.r == rank and entry.s == season and GetServerTime() - (entry.t or 0) < 600 then
+		return
+	end
+	Wanted.db.blizzRanks[name] = { r = rank, s = season, t = GetServerTime() }
+end
+
+---A player's Blizzard rank as they last told it, in the season the game says is running now; nil otherwise.
+---@param name string
+---@return number?
+function BlizzRank:Of(name)
+	local entry = type(name) == "string" and Wanted.db.blizzRanks[strmatch(name, "^([^%-]+)") or name]
+	local s = Wanted.db.pvpSeason
+	local season = type(s) == "table" and s.season or nil
+	if type(entry) ~= "table" or not season or entry.s ~= season then
+		return nil
+	end
+	return entry.r
+end
+
+---Drops ranks not heard in SHARED_DAYS, and the oldest past SHARED_MAX.
+function private.PruneShared()
+	local book, now, kept = Wanted.db.blizzRanks, GetServerTime(), {}
+	for name, entry in pairs(book) do
+		if type(entry) ~= "table" or type(entry.t) ~= "number" or entry.t < now - SHARED_DAYS * 86400 then
+			book[name] = nil
+		else
+			tinsert(kept, name)
+		end
+	end
+	if #kept > SHARED_MAX then
+		sort(kept, function(a, b) return book[a].t > book[b].t end)
+		for i = SHARED_MAX + 1, #kept do
+			book[kept[i]] = nil
+		end
+	end
 end
 
 ---A rank's title on a side ("Horde" or "Alliance", or "H" / "A"); this character's side by default.

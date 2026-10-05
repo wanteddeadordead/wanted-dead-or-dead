@@ -816,6 +816,13 @@ function Wanted:InCombat()
 	return private.inCombat
 end
 
+---Whether the player is in any instance (dungeon, raid, battleground, arena, scenario): there the game keeps other
+---units' identity secret, so Wanted reads no other unit, and nothing there is world PvP.
+---@return boolean
+function Wanted:InInstance()
+	return IsInInstance() == true
+end
+
 ---Whether the player is in a battleground or arena: the game blocks addon messages and hides chat text from addons
 ---there, and world PvP (kills, sightings, bounties, alerts) doesn't count.
 ---@return boolean

@@ -316,7 +316,7 @@ end
 Wanted:RegisterCommand("file", "The file on a player: where they've been, when they're about, their record. /wanted file <First Last>.", function(args)
 	local name = strtrim(args or "")
 	local guid, player
-	if name == "" and UnitExists("target") and UnitIsPlayer("target") then
+	if name == "" and not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 		guid, name = UnitGUID("target"), GetUnitName("target", true)
 	else
 		guid, player = Store:FindPlayerByName(name)

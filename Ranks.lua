@@ -43,7 +43,8 @@ end
 ---@return table?
 function Ranks:ForUnit(unit)
 	-- A tooltip can hand over a secret unit token, which UnitIsPlayer refuses from addon code
-	if not private.Readable(unit) or not UnitIsPlayer(unit) then
+	-- Nor any unit in an instance, where identity is secret
+	if Wanted:InInstance() or not private.Readable(unit) or not UnitIsPlayer(unit) then
 		return nil
 	end
 	local name, surname = UnitName(unit)
@@ -333,6 +334,9 @@ end
 ---A nameplate came up: its rank, when the player has one. Forbidden plates (the game keeps some from addons) are
 ---never asked for.
 function private.OnPlateAdded(unit)
+	if Wanted:InInstance() then
+		return
+	end
 	-- After the other addons' handlers for the same event, so a nameplate addon has made its frame
 	C_Timer.After(0, function() private.ShowPlate(unit) end)
 end

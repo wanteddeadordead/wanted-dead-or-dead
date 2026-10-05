@@ -5064,4 +5064,39 @@ end)()
 	enemyUnits.nameplate46, enemyUnits.nameplate47 = nil, nil
 	UnitIsPlayer, C_NamePlate, UnitIsOwnerOrControllerOfUnit, C_DeathRecap = realIsPlayer, realNamePlate, realOwner, nil
 end)()
+-- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
+-- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
+;(function()
+	local outside, realGUID, realIsPlayer, realExists = IsInInstance, UnitGUID, UnitIsPlayer, UnitExists
+	local asked = {}
+	local function Refuse(name, real)
+		return function(unit, ...)
+			if unit ~= "player" then
+				asked[#asked + 1] = name.."("..tostring(unit)..")"
+				error("Secret values are only allowed during untainted execution for this argument.")
+			end
+			return real(unit, ...)
+		end
+	end
+	IsInInstance = function() return true, "party" end
+	UnitGUID, UnitIsPlayer, UnitExists = Refuse("UnitGUID", realGUID), Refuse("UnitIsPlayer", realIsPlayer), Refuse("UnitExists", realExists)
+	check(ns:InInstance(), "a dungeon is an instance")
+	enemyUnits.party1 = { guid = "Player-9-CONTROLLED", name = "Mind Controlled", class = "MAGE", level = 20 }
+	local ok, err = pcall(function()
+		Fire("NAME_PLATE_UNIT_ADDED", "party1")
+		Fire("PLAYER_TARGET_CHANGED")
+		Fire("UPDATE_MOUSEOVER_UNIT")
+		Fire("PLAYER_FOCUS_CHANGED")
+		Fire("UNIT_TARGET", "party1")
+		Fire("UNIT_HEALTH", "party1")
+		Fire("UNIT_SPELLCAST_SUCCEEDED", "party1", nil, 1)
+		check(ns.Ranks:ForUnit("party1") == nil, "no rank for a unit in an instance")
+		RunTimers()
+	end)
+	UnitGUID, UnitIsPlayer, UnitExists, IsInInstance = realGUID, realIsPlayer, realExists, outside
+	enemyUnits.party1 = nil
+	check(ok, "no error in an instance: "..tostring(err))
+	check(#asked == 0, "and no unit asked about: "..table.concat(asked, ", "))
+	check(ns.db.players["Player-9-CONTROLLED"] == nil, "nobody listed from inside")
+end)()
 print("wanted smoke: 1.5.1 checks pass")

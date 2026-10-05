@@ -231,9 +231,10 @@ allThreeBonus, me, ranks }`, worked out by wanteddeadordead.com: today's hot zon
 app's own characters' progress, streak, rank and points (`me`, by GUID), and the challenge ranks of other players
 (`ranks`, by lower-case name, `{ r, f }`). `Challenges:Clean` checks it field by field and keeps it in memory only: it is
 read again at every login and `/reload`, taken in or not, and never saved or sent to other players. Missing or unreadable,
-Home and Challenges show what the app adds. `WantedDB.challengeNotes` is `guid -> { rank, done = { [challenge id] = t } }`:
-what the banner already announced for each character, so a completion or a rank-up is announced once. The first catch-up
-seen for a character only notes what's already done. Notes older than 21 days are dropped. A new key: no migration.
+Home and Challenges show what the app adds. `WantedDB.challengeNotes` is `guid -> { done = { [challenge id] = t } }`:
+what the banner already announced for each character, so a completion is announced once. The first catch-up seen for a
+character only notes what's already done. Notes older than 21 days are dropped. A new key: no migration. (Before 1.10.0
+a note also kept the character's challenge rank; challenges have no ranks now, and the field is cleared when next written.)
 
 `WantedDB.settings.ranks` (from 1.5.0) is `{ tooltip, target, nameplates, chat, nearby, who }`: where other players'
 challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. `ranks.plate` is `{ anchor, x, y, scale, badge,

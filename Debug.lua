@@ -680,8 +680,6 @@ end)
 function Debug:DemoChallenges()
 	local now = GetServerTime()
 	local day = 24 * 60 * 60
-	local faction = UnitFactionGroup("player") == "Alliance" and "A" or "H"
-	local other = faction == "A" and "H" or "A"
 	return {
 		t = now - 180,
 		day = date("%Y-%m-%d", now),
@@ -699,7 +697,7 @@ function Debug:DemoChallenges()
 			[UnitGUID("player")] = {
 				daily = { n = 2, done = false },
 				weekly = { { n = 1, done = false }, { n = 1, done = true }, { n = 4, done = false } },
-				streak = 4, rank = 4, points = 302, nextAt = 480,
+				streak = 4, points = 302, week = 25,
 				recent = {
 					{ name = "Daily: First blood in Westfall", points = 5, at = now - day },
 					{ name = "Weekly: Headhunter", points = 10, at = now - 2 * day },
@@ -707,18 +705,13 @@ function Debug:DemoChallenges()
 				},
 			},
 		},
-		ranks = {
-			["khal drogash"] = { r = 4, f = other },
-			["thane oakcrest"] = { r = 7, f = other },
-			["elyra"] = { r = 11, f = faction },
-		},
 	}
 end
 
-Wanted:RegisterCommand("demo", "Development builds: made-up challenges and ranks on Home and Challenges (again to turn off); /wanted demo banner shows the rank-up banner: /wanted demo [banner]", function(args)
+Wanted:RegisterCommand("demo", "Development builds: made-up challenges on Home and Challenges (again to turn off); /wanted demo banner shows the challenge-done banner: /wanted demo [banner]", function(args)
 	local Challenges = Wanted.Challenges
 	if strtrim(args or "") == "banner" then
-		Challenges:Announce({ { name = "Ambush", points = 5 } }, 5)
+		Challenges:Announce({ { name = "Ambush", points = 5 } })
 		return
 	end
 	if Challenges:IsDemo() then
@@ -727,6 +720,6 @@ Wanted:RegisterCommand("demo", "Development builds: made-up challenges and ranks
 		return
 	end
 	Challenges:SetDemo(Debug:DemoChallenges())
-	Wanted:Print("Demo challenges on: made up, and every player gets a made-up rank. Nothing saved. /wanted demo again to turn them off.")
+	Wanted:Print("Demo challenges on: made up. Nothing saved. /wanted demo again to turn them off.")
 	Wanted.UI:Show("home")
 end)

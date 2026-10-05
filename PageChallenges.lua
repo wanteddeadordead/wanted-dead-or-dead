@@ -1,5 +1,5 @@
 -- Wanted: Challenges. Today's challenge and hot zones, this week's three, what this character finished lately,
--- the rules, and the 14-rank ladder with where this character stands. Everything comes from wanteddeadordead.com
+-- the rules, and this week's score. Challenges are for fun: no rank (Wanted's ranks are Blizzard's, Rank & Gear). Everything comes from wanteddeadordead.com
 -- through the Wanted app (Challenges.lua); without it the page says what the app adds.
 
 local _, Wanted = ...
@@ -19,7 +19,6 @@ local WEEK_HEIGHT = 36 + 3 * WEEK_ROW
 local RECENT_TOP = WEEK_TOP - WEEK_HEIGHT - GAP
 local RECENT_ROWS = 3
 local RECENT_HEIGHT = 34 + RECENT_ROWS * 18
-local LADDER_ROW = 24
 
 ---"6h 40m", "40m" or "2d 5h".
 function private.Duration(seconds)
@@ -178,46 +177,43 @@ function private.BuildRecent(container)
 	private.recent = card
 end
 
-function private.BuildLadder(container, width, height)
-	local ladderWidth = width - LEFT_WIDTH - GAP
+---The week card: this week's score and when it resets, the streak, the weekly challenges done, points in all, and
+---the way to Blizzard's rank (Rank & Gear). Challenges are for fun: they make a weekly score, never a rank.
+function private.BuildScore(container, width, height)
+	local cardWidth = width - LEFT_WIDTH - GAP
+	local inner = cardWidth - 32
 	local card = W:Card(container)
 	card:SetPoint("TOPLEFT", LEFT_WIDTH + GAP, 0)
-	card:SetSize(ladderWidth, height - 10)
-	card.label = W:SectionLabel(card, "")
+	card:SetSize(cardWidth, height - 10)
+	card.label = W:SectionLabel(card, "This week")
 	card.label:SetPoint("TOPLEFT", 16, -14)
-	card.bar = W:ProgressBar(card, 8)
-	card.bar:SetPoint("TOPLEFT", 16, -32)
-	card.bar:SetWidth(ladderWidth - 32)
-	card.points = Theme:Text(card, "tiny", "")
-	card.points:SetPoint("TOPLEFT", 16, -46)
-	card.points:SetWidth(ladderWidth - 32)
-	card.rows = {}
-	for rank = 1, Challenges.MAX_RANK do
-		local row = CreateFrame("Frame", nil, card)
-		row:SetPoint("TOPLEFT", 10, -66 - (rank - 1) * LADDER_ROW)
-		row:SetSize(ladderWidth - 20, LADDER_ROW - 2)
-		Theme:Skin(row, C.transparent, C.transparent)
-		row.number = Theme:Text(row, "tiny", tostring(rank), C.faint)
-		row.number:SetPoint("LEFT", 6, 0)
-		row.badge = row:CreateTexture(nil, "ARTWORK")
-		row.badge:SetSize(18, 18)
-		row.badge:SetPoint("LEFT", 26, 0)
-		row.badge:SetTexture(Challenges:Badge(rank))
-		row.title = Theme:Text(row, "small", "")
-		row.title:SetPoint("LEFT", 52, 0)
-		-- Up to the points on the right
-		row.title:SetWidth(ladderWidth - 20 - 52 - 48)
-		row.title.fitWidth = ladderWidth - 20 - 52 - 48
-		row.at = Theme:Text(row, "tiny", "")
-		row.at:SetPoint("RIGHT", -6, 0)
-		row.at:SetJustifyH("RIGHT")
-		card.rows[rank] = row
-	end
-	local foot = Theme:Text(card, "tiny", "Each character has its own rank. It never resets.", C.faint)
-	foot:SetPoint("BOTTOMLEFT", 16, 12)
-	foot:SetWidth(ladderWidth - 32)
+	card.score = Theme:Text(card, "stat", "")
+	card.score:SetPoint("TOPLEFT", 16, -34)
+	card.resets = Theme:Text(card, "small", "")
+	card.resets:SetPoint("TOPLEFT", 16, -62)
+	card.resets:SetWidth(inner)
+	card.streak = Theme:Text(card, "body", "")
+	card.streak:SetPoint("TOPLEFT", 16, -92)
+	card.streak:SetWidth(inner)
+	card.weekly = Theme:Text(card, "body", "")
+	card.weekly:SetPoint("TOPLEFT", 16, -112)
+	card.weekly:SetWidth(inner)
+	card.bonus = Theme:Text(card, "small", "", C.gold)
+	card.bonus:SetPoint("TOPLEFT", 16, -132)
+	card.bonus:SetWidth(inner)
+	local line = Theme:Line(card)
+	line:SetPoint("TOPLEFT", 16, -158)
+	line:SetPoint("TOPRIGHT", -16, -158)
+	card.total = Theme:Text(card, "small", "")
+	card.total:SetPoint("TOPLEFT", 16, -170)
+	card.total:SetWidth(inner)
+	local foot = Theme:Text(card, "tiny", "Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's.", C.faint)
+	foot:SetPoint("BOTTOMLEFT", 16, 50)
+	foot:SetWidth(inner)
 	foot:SetWordWrap(true)
-	private.ladder = card
+	local rankButton = W:Button(card, "Your PvP rank", "secondary", inner, 26, function() UI:Show("rank") end)
+	rankButton:SetPoint("BOTTOMLEFT", 16, 14)
+	private.score = card
 end
 
 function private.BuildEmpty(container, width)
@@ -349,36 +345,29 @@ function private.RefreshRecent(mine)
 	end
 end
 
-function private.RefreshLadder(mine)
-	local card = private.ladder
-	local faction = UnitFactionGroup("player")
-	local rank = mine and mine.rank or 0
-	card.label:SetText(strupper("Challenge rank, "..(faction == "Alliance" and "Alliance" or "Horde")))
-	if mine then
-		local floorPoints = Challenges:Threshold(rank)
-		if rank < Challenges.MAX_RANK then
-			local nextAt = mine.nextAt or Challenges:Threshold(rank + 1)
-			card.bar:SetValue((mine.points - floorPoints) / max(nextAt - floorPoints, 1))
-			card.points:SetText(format("%d points, %d to %s", mine.points, max(nextAt - mine.points, 0), Challenges:Title(rank + 1, faction)))
-		else
-			card.bar:SetValue(1)
-			card.points:SetText(format("%d points, the top rank", mine.points))
-		end
-	else
-		card.bar:SetValue(0)
-		card.points:SetText("This character isn't linked to the app yet.")
+function private.RefreshScore(data, mine)
+	local card = private.score
+	if not mine then
+		card.score:SetText("")
+		card.resets:SetText("This character isn't linked to the app yet.")
+		card.streak:SetText("")
+		card.weekly:SetText("")
+		card.bonus:SetText("")
+		card.total:SetText("")
+		return
 	end
-	for r, row in ipairs(card.rows) do
-		local you = r == rank
-		local title = Challenges:Title(r, faction)
-		private.Fit(row.title, you and { title.." (you)", title } or { title }, "tiny")
-		local color = you and C.gold or (r <= rank and C.text or C.faint)
-		row.title:SetTextColor(color[1], color[2], color[3])
-		row.at:SetText(BreakUpLargeNumbers and BreakUpLargeNumbers(Challenges:Threshold(r)) or tostring(Challenges:Threshold(r)))
-		row.badge:SetAlpha(r <= rank and 1 or 0.4)
-		Theme:SetBg(row, you and { C.gold[1], C.gold[2], C.gold[3], 0.12 } or C.transparent)
-		Theme:SetBorderColor(row, you and { C.gold[1], C.gold[2], C.gold[3], 0.6 } or C.transparent)
+	card.score:SetText(format("%d point%s", mine.week, mine.week == 1 and "" or "s"))
+	local left = data.weekEnds and data.weekEnds - GetServerTime()
+	card.resets:SetText(left and left > 0 and "Resets Sunday, in "..private.Duration(left) or "Resets Sunday")
+	card.streak:SetText(mine.streak > 0 and format("%d day%s in a row", mine.streak, mine.streak == 1 and "" or "s") or "No streak yet: a daily starts one")
+	local done = 0
+	for i in ipairs(data.weekly) do
+		done = done + (mine.weekly[i] and mine.weekly[i].done and 1 or 0)
 	end
+	card.weekly:SetText(#data.weekly > 0 and format("Weekly challenges: %d of %d done", done, #data.weekly) or "")
+	card.bonus:SetText(#data.weekly > 0 and (data.allThreeBonus or 0) > 0 and (done == #data.weekly and format("All three: +%d earned", data.allThreeBonus)
+		or format("All three: +%d more", data.allThreeBonus)) or "")
+	card.total:SetText(format("%s points in all", BreakUpLargeNumbers and BreakUpLargeNumbers(mine.points) or tostring(mine.points)))
 end
 
 function private.RefreshRules(data)
@@ -397,7 +386,7 @@ function private.RefreshRules(data)
 end
 
 function private.Refresh()
-	if not private.ladder then
+	if not private.score then
 		return
 	end
 	local data = Challenges:Get()
@@ -409,7 +398,7 @@ function private.Refresh()
 		private.empty.line:SetText(line)
 		private.empty.button:SetText(button)
 	end
-	for _, part in ipairs({ private.daily, private.hot, private.week, private.recent, private.ladder, private.rules }) do
+	for _, part in ipairs({ private.daily, private.hot, private.week, private.recent, private.score, private.rules }) do
 		part:SetShown(shown)
 	end
 	if not shown then
@@ -420,13 +409,13 @@ function private.Refresh()
 	private.RefreshHot(data)
 	private.RefreshWeek(data, mine)
 	private.RefreshRecent(mine)
-	private.RefreshLadder(mine)
+	private.RefreshScore(data, mine)
 	private.RefreshRules(data)
 end
 
 UI:RegisterPage("challenges", {
 	title = "Challenges",
-	subtitle = "Daily and weekly goals for both factions, and a lifetime rank. Kills in today's hot zones count double.",
+	subtitle = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double.",
 	group = "World PvP",
 	order = 5.2,
 	badge = function()
@@ -442,7 +431,7 @@ UI:RegisterPage("challenges", {
 		private.BuildHot(container)
 		private.BuildWeek(container)
 		private.BuildRecent(container)
-		private.BuildLadder(container, width, height)
+		private.BuildScore(container, width, height)
 		private.rules = Theme:Text(container, "tiny", "", C.faint)
 		private.rules:SetPoint("TOPLEFT", 0, RECENT_TOP - RECENT_HEIGHT - 10)
 		private.rules:SetWidth(LEFT_WIDTH)

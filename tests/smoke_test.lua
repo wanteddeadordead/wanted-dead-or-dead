@@ -5124,7 +5124,7 @@ end)()
 		end,
 		GetNumDayEvents = function(offset, day) return (offset == 0 and day == 15) and 2 or 0 end,
 		GetDayEvent = function(_, _, index)
-			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 2 } end
+			if index == 1 then return { title = "Call to Arms: Warsong Gulch", calendarType = "HOLIDAY", eventType = 4 } end
 			return { title = "Darkmoon Faire", calendarType = "HOLIDAY", eventType = 4 }
 		end,
 	}
@@ -5142,7 +5142,18 @@ end)()
 	ns.UI:Show("pvp")
 	check(opened, "the page asks the game for its calendar")
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
-	check(Shown("Call to Arms: Warsong Gulch"), "the holiday is on the grid")
+	check(Shown("Warsong Gulch"), "the battleground weekend is on the grid by its battleground")
+	-- Challenges is a tab of the PvP page: one menu entry, tabs in the header, the menu's footer buttons gone
+	local menuPvP, tabs = 0, 0
+	for _, f in ipairs(Mock.fontStrings) do
+		if f._text == "PvP" and f._shown then menuPvP = menuPvP + 1 end
+		if f._text == "Calendar" and f._shown then tabs = tabs + 1 end
+	end
+	check(menuPvP >= 1 and tabs == 1, "the PvP page has its menu entry and a Calendar tab")
+	check(not Shown("Your wanted poster"), "the menu's poster button is gone (the poster is on Your bounties)")
+	ns.UI:Show("challenges")
+	check(ns.UI:IsShown("challenges") and Shown("Calendar"), "the Challenges tab keeps the tabs in view")
+	ns.UI:Show("pvp")
 	-- The beta: no season running
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
 	ns.UI:Refresh(true)

@@ -427,7 +427,7 @@ end
 UI:RegisterPage("challenges", {
 	title = "Challenges",
 	subtitle = "Daily and weekly goals for both factions, and a lifetime rank. Kills in today's hot zones count double.",
-	group = "You",
+	under = "pvp", -- a tab of the PvP page
 	order = 5.2,
 	badge = function()
 		local done, total = Challenges:CountDone()

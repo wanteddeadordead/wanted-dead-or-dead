@@ -6,8 +6,10 @@
   against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
   is shown as "probably". Before, a pet's kill counted as no player's.
 - A PvP page (under You) with a season calendar: Blizzard's PvP season and this week's rank cap as the game tells
-  them, Wanted's season and its weekly resets, and the holidays in the game's calendar with the PvP ones
-  (battleground weekends) marked, on a month grid with what's coming up beside it.
+  them, Wanted's season and its weekly resets, and the holidays in the game's calendar with the battleground
+  weekends ("Call to Arms") marked, on a month grid with what's coming up beside it.
+- Challenges is now a tab of the PvP page, beside the calendar, and the menu's "Your wanted poster" and "Report a
+  bug" buttons are gone (the poster is on Your bounties, Report a bug in the title bar): the menu fits again.
 - Wanted keeps Blizzard's PvP season as the game tells it (the season, its week, this week's highest rank and when it
   ends), for the Wanted app to pass to wanteddeadordead.com, so the site's seasons can follow the game's.
 

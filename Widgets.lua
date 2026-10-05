@@ -439,6 +439,31 @@ function W:StatTile(parent, label, accent)
 	tile.note = Theme:Text(tile, "tiny", "")
 	tile.note:SetPoint("BOTTOMRIGHT", -12, 14)
 	tile.note:SetJustifyH("RIGHT")
+	-- The value and the note share the bottom row: whenever either changes, the value fits what the note leaves it
+	-- (a smaller font, then cut short), so "Wanted Season 1" never runs into "60d 0h left"
+	local setValue, setNote = tile.value.SetText, tile.note.SetText
+	local fitting = false
+	function tile:Fit()
+		if fitting then
+			return
+		end
+		fitting = true
+		local noteWidth = self.note:GetText() ~= "" and self.note:GetUnboundedStringWidth() + 12 or 0
+		local room = self:GetWidth() - 16 - 12 - noteWidth
+		if room > 0 then
+			self.value:SetWidth(room)
+			Theme:FitText(self.value, room, { self.value:GetText() or "" }, "heading")
+		end
+		fitting = false
+	end
+	tile.value.SetText = function(fs, text)
+		setValue(fs, text)
+		tile:Fit()
+	end
+	tile.note.SetText = function(fs, text)
+		setNote(fs, text)
+		tile:Fit()
+	end
 	return tile
 end
 

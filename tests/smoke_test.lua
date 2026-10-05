@@ -5250,6 +5250,15 @@ end)()
 	check(control.buttons[2]._level > control.buttons[1]._level, "the selected button is above the one before it")
 	control:Select("a", true)
 	check(control.buttons[1]._level > control.buttons[2]._level, "and moves when another is selected")
+	-- Labels too long for their share (the Nearby window's tabs): the row stays the width it was given
+	local tight = ns.Widgets:Segmented(UIParent, { { key = "a", label = "Nearby" }, { key = "b", label = "Last hour" }, { key = "c", label = "KoS" },
+		{ key = "d", label = "Ignored" } }, nil, 60)
+	local right = 0
+	for _, b in ipairs(tight.buttons) do right = math.max(right, b._point[2] + b._w) end
+	check(right <= 60 * 4 - 3 + 0.5, "a tight tab row stays inside its width: "..right)
+	for _, b in ipairs(tight.buttons) do
+		check(b.label:GetStringWidth() <= b._w - 4, "and each label inside its tab: "..b.label._text)
+	end
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

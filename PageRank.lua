@@ -11,7 +11,7 @@ local BlizzRank = Wanted.BlizzRank
 local private = { rows = {}, marks = {} }
 local LADDER_WIDTH = 400
 local TITLE_LEFT, TITLE_WIDTH = 38, 166
-local TAG_WIDTH = 50
+local TAG_WIDTH = 40
 local ROW_HEIGHT = 26
 local BODY_TOP = 82 -- below the tiles
 
@@ -31,8 +31,9 @@ function private.RefreshTiles(r)
 		tile.value:SetText("Not read yet")
 		tile.note:SetText("")
 	elseif r.rank < 1 then
+		-- The Next card says when ranks start: the note would run into the value on a tile this wide
 		tile.value:SetText("No rank yet")
-		tile.note:SetText(r.weekMax > 0 and "win honor to start" or "ranks start with the season")
+		tile.note:SetText("")
 	else
 		-- "Lieutenant Commander (10)" doesn't fit a tile at the big font: smaller, then without the number
 		local title = BlizzRank:Title(r.rank) or ""
@@ -54,6 +55,30 @@ function private.RefreshTiles(r)
 	tile.note:SetText(have and most and most > 0 and "of "..private.Count(most) or "")
 end
 
+---A rank's unlock, longest first, for the ladder's narrow column: "Elite Wrist Upgrade + Elite Waist Upgrade", then
+---without "Elite" and "Faction", then "Wrist + Waist Upgrade", then "Wrist + Waist".
+function private.UnlockLabels(unlock)
+	local plain = gsub(gsub(unlock, "Elite ", ""), "Faction ", "")
+	local labels = { unlock, plain }
+	if strfind(plain, " %+ ") then
+		local parts = {}
+		for part in gmatch(plain, "[^+]+") do
+			tinsert(parts, strtrim(part))
+		end
+		local last = parts[#parts]
+		local suffix = strmatch(last, " (%a+)$")
+		if suffix then
+			local short = {}
+			for k, part in ipairs(parts) do
+				short[k] = gsub(part, " "..suffix.."$", "")
+			end
+			tinsert(labels, table.concat(short, " + ").." "..suffix)
+			tinsert(labels, table.concat(short, " + "))
+		end
+	end
+	return labels
+end
+
 function private.RefreshLadder(r)
 	local unlocks = BlizzRank:Unlocks()
 	local rank, cap = r and r.rank or 0, r and r.weekMax or 0
@@ -66,9 +91,7 @@ function private.RefreshLadder(r)
 		row.badge:SetAlpha(locked and 0.5 or 1)
 		row.title:SetText(i.."  "..(BlizzRank:Title(i) or ""))
 		row.title:SetTextColor(unpack(current and C.white or done and C.text or C.muted))
-		-- "Elite Wrist Upgrade + Elite Waist Upgrade" is long: without "Elite" and "Faction", then cut short
-		local unlock = unlocks[i] or ""
-		Theme:FitText(row.unlock, row.unlockWidth, { unlock, (gsub(gsub(unlock, "Elite ", ""), "Faction ", "")) })
+		Theme:FitText(row.unlock, row.unlockWidth, private.UnlockLabels(unlocks[i] or ""))
 		row.unlock:SetTextColor(unpack(current and C.gold or done and C.muted or C.faint))
 		row.tag:SetText(current and "You" or overCap and "capped" or "")
 		row.tag:SetTextColor(unpack(current and C.accentHover or C.faint))

@@ -307,20 +307,32 @@ function W:Segmented(parent, items, onSelect, width)
 		tinsert(control.buttons, button)
 		x = x + (width or 110) - 1
 	end
-	-- A label too long for its equal share: each button as wide as its label, the room left shared out evenly,
-	-- in the same total width (more if the labels need it)
-	local share, padding = width or 110, 24
-	local needs, total, tooLong = {}, 0, false
-	for i, button in ipairs(control.buttons) do
-		needs[i] = ceil(button.label:GetStringWidth()) + padding
-		total = total + needs[i]
-		tooLong = tooLong or needs[i] > share
+	-- A label too long for its equal share: each button as wide as its label plus an equal share of the room left,
+	-- never wider in all than the row was given (the Nearby window's tabs ran past its edge). Tight: less padding,
+	-- down to MIN_PADDING; tighter still: the labels in a smaller font.
+	local share, MIN_PADDING = width or 110, 10
+	local count, room = #control.buttons, (width or 110) * #control.buttons - (#control.buttons - 1)
+	local function Labels()
+		local widths, total, tooLong = {}, 0, false
+		for i, button in ipairs(control.buttons) do
+			widths[i] = ceil(button.label:GetStringWidth())
+			total = total + widths[i]
+			tooLong = tooLong or widths[i] + 24 > share
+		end
+		return widths, total, tooLong
 	end
+	local widths, total, tooLong = Labels()
 	if tooLong then
-		local spare = max(share * #control.buttons - total, 0) / #control.buttons
+		if total + MIN_PADDING * count > room then
+			for _, button in ipairs(control.buttons) do
+				button.label:SetFontObject(Theme.Fonts.small)
+			end
+			widths, total = Labels()
+		end
+		local spare = max(room - total, 0) / count
 		x = 0
 		for i, button in ipairs(control.buttons) do
-			local buttonWidth = floor(needs[i] + spare)
+			local buttonWidth = i < count and floor(widths[i] + spare) or (room - x)
 			button:SetWidth(buttonWidth)
 			button:ClearAllPoints()
 			button:SetPoint("LEFT", x, 0)

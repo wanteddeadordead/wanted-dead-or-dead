@@ -387,7 +387,7 @@ end
 -- ============================================================================
 
 function private.OnTooltipUnit(tooltip)
-	if tooltip ~= GameTooltip or not TooltipUtil or not TooltipUtil.GetDisplayedUnit then
+	if tooltip ~= GameTooltip or not TooltipUtil or not TooltipUtil.GetDisplayedUnit or Wanted:InInstance() then
 		return
 	end
 	local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)

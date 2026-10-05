@@ -525,7 +525,7 @@ function Bounties:ResolveName(name)
 	if name == "" then
 		return nil, nil
 	end
-	if UnitExists("target") and UnitIsPlayer("target") then
+	if not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 		local targetName = GetUnitName("target", true)
 		if targetName and strlower(targetName) == strlower(name) then
 			return UnitGUID("target"), targetName
@@ -866,7 +866,7 @@ end
 
 local function ResolveTarget(nameArg)
 	if nameArg == "" then
-		if UnitExists("target") and UnitIsPlayer("target") then
+		if not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 			return UnitGUID("target"), GetUnitName("target", true)
 		end
 		return nil, nil, "no name given and no player targeted"

@@ -171,8 +171,9 @@ end
 -- ============================================================================
 
 function private.OnEvent(_, event, arg1, _, arg3)
-	if Wanted:InPvPMatch() and event ~= "PLAYER_DEAD" then
-		-- Every enemy in a battleground is new: none are listed, counted or alerted on
+	if Wanted:InInstance() and event ~= "PLAYER_DEAD" then
+		-- No unit in an instance is read: their identity is secret there, and nothing there is world PvP (a
+		-- battleground's enemies, a mind-controlled party member)
 		return
 	end
 	if not private.Settings().enabled then
@@ -928,7 +929,7 @@ end
 ---@return boolean
 function Enemies:ShouldAlert()
 	local settings = private.Settings()
-	return settings.enabled and not Wanted:InPvPMatch() and (not settings.onlyWhenExposed or Enemies:IsExposed())
+	return settings.enabled and not Wanted:InInstance() and (not settings.onlyWhenExposed or Enemies:IsExposed())
 end
 
 function Enemies:GetKoSList()

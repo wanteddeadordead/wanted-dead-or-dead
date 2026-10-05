@@ -36,7 +36,7 @@ function private.BuildPostCard(parent, width)
 	private.targetBox = W:Input(card, 210, "Player name", private.OnFormChanged)
 	private.targetBox:SetPoint("TOPLEFT", 16, -34)
 	local useTarget = W:Button(card, "Use my target", "secondary", 116, 26, function()
-		if UnitExists("target") and UnitIsPlayer("target") then
+		if not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 			private.targetBox:SetValue(GetUnitName("target", true))
 			private.OnFormChanged()
 		else

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Wanted reads no other player in any instance (dungeons and raids as well as battlegrounds): no enemy scanning,
+  sightings, tooltip lines, nameplate ranks or "use my target" there. A party member mind-controlled by a dungeon boss
+  is a hostile player whose identity the game keeps secret, which caused a Lua error.
 - Killed by a hunter's or warlock's pet: the pet's owner now gets the death card, the death record and the loss
   against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
   is shown as "probably". Before, a pet's kill counted as no player's.

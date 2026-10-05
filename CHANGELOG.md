@@ -12,6 +12,11 @@
   you're still missing. Click an item to chase it; chased items stay at the top.
 - Wanted players share their Blizzard PvP rank: it rides along in the sync hello, once you have a rank in a running
   season, and other Wanted players keep it to show on you.
+- Wanted has no ranks of its own any more: every rank it shows is Blizzard's PvP rank. Tooltips ("PvP rank"), the
+  target label, nameplates, chat, Who, Nearby and the death card show the rank a player's Wanted addon reads from the
+  game; Home's band shows yours, with the points to the next. Challenges stay, for fun: they make a weekly score
+  (reset each Sunday) on a new "This week" card with your streak and points in all, and the challenge rank ladder,
+  rank-up banner and the demo's made-up ranks are gone.
 ## [1.9.1] - 2026-10-05
 
 - The WantedNet channel now always sits at the end of your chat channel list. It could take /1 and push General

@@ -39,7 +39,7 @@ one out. When the app is behind, the addon says so in chat once a login.
 `GetRealmName()`, written at every login. The Wanted app sends it to wanteddeadordead.com, which learns realm names
 from it. Nothing reads it back; a missing or malformed one changes nothing.
 
-`WantedDB.pvpSeason` (from 1.8.1) is `{ season, week, endsAt, weekMax, seasonMax, at }`: Blizzard's PvP season as the
+`WantedDB.pvpSeason` (from 1.9.0) is `{ season, week, endsAt, weekMax, seasonMax, at }`: Blizzard's PvP season as the
 game tells it (`GetCurrentArenaSeason()`, the PvP rank track's `weekNumber`, `currentWeekProgressiveMaxLevel` and
 `maxLevel`), `endsAt` the game-server time it ends (0 when the game doesn't know yet) and `at` when it was read.
 Read 15 seconds after login and each hour. Season 0 or week -1 means no season is running. The Wanted app sends it

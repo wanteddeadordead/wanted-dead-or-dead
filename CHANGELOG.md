@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-05
+
 - Wanted reads no other player in any instance (dungeons and raids as well as battlegrounds): no enemy scanning,
   sightings, tooltip lines, nameplate ranks or "use my target" there. A party member mind-controlled by a dungeon boss
   is a hostile player whose identity the game keeps secret, which caused a Lua error.
@@ -21,6 +23,8 @@
   WoW Forever's own dates are on it too: the beta's last day (October 21) and launch day (November 4, 3 p.m. PST).
 - The menu's "Your wanted poster" and "Report a bug" buttons are gone (the poster is on Your bounties, Report a bug
   in the title bar): the menu fits again.
+- Tabs size themselves to their labels when one is too long (Settings' "Sharing and display"), the selected tab
+  shows its whole outline, and borders stay at least one screen pixel wide at any UI scale, so none disappears.
 - Wanted keeps Blizzard's PvP season as the game tells it (the season, its week, this week's highest rank and when it
   ends), for the Wanted app to pass to wanteddeadordead.com, so the site's seasons can follow the game's.
 

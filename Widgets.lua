@@ -307,6 +307,26 @@ function W:Segmented(parent, items, onSelect, width)
 		tinsert(control.buttons, button)
 		x = x + (width or 110) - 1
 	end
+	-- A label too long for its equal share: each button as wide as its label, the room left shared out evenly,
+	-- in the same total width (more if the labels need it)
+	local share, padding = width or 110, 24
+	local needs, total, tooLong = {}, 0, false
+	for i, button in ipairs(control.buttons) do
+		needs[i] = ceil(button.label:GetStringWidth()) + padding
+		total = total + needs[i]
+		tooLong = tooLong or needs[i] > share
+	end
+	if tooLong then
+		local spare = max(share * #control.buttons - total, 0) / #control.buttons
+		x = 0
+		for i, button in ipairs(control.buttons) do
+			local buttonWidth = floor(needs[i] + spare)
+			button:SetWidth(buttonWidth)
+			button:ClearAllPoints()
+			button:SetPoint("LEFT", x, 0)
+			x = x + buttonWidth - 1
+		end
+	end
 	control:SetWidth(x + 1)
 	function control:Select(key, silent)
 		self.selected = key

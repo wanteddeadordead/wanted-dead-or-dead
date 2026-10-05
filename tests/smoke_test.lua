@@ -59,8 +59,19 @@ function Methods:SetText(t)
 	if self._fs then self._fs._text = t end
 end
 function Methods:GetText() return self._text end
-function Methods:GetStringWidth() return #tostring(self._text) * 6 end
-function Methods:GetUnboundedStringWidth() return #tostring(self._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * 6 end
+-- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
+-- character (12pt: about 6.7 pixels), colour codes and textures taking none
+function Methods:SetFont(_, size) self._size = size end
+do
+	local function TextWidth(fs)
+		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
+		local size = type(fs._font) == "table" and fs._font._size
+		-- Another addon's font, size unknown: 6 pixels a character
+		return #text * (size and size * 0.56 or 6)
+	end
+	function Methods:GetStringWidth() return TextWidth(self) end
+	function Methods:GetUnboundedStringWidth() return TextWidth(self) end
+end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
 function Methods:GetFontObject() return self._font end
@@ -69,9 +80,9 @@ function Methods:IsEnabled() return self._enabled end
 function Methods:SetEnabled(v) self._enabled = v and true or false end
 function Methods:Enable() self._enabled = true end
 function Methods:Disable() self._enabled = false end
-function Methods:SetWidth(w) self._w = w end
+function Methods:SetWidth(w) self._w, self._wSet = w, true end
 function Methods:SetHeight(h) self._h = h end
-function Methods:SetSize(w, h) self._w, self._h = w, h end
+function Methods:SetSize(w, h) self._w, self._h, self._wSet = w, h, true end
 function Methods:GetWidth() return self._w end
 function Methods:GetHeight() return self._h end
 function Methods:HasFocus() return false end
@@ -5182,5 +5193,22 @@ end)()
 	check(Shown("Darkmoon Faire"), "the game's holidays still show with no season running")
 	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
 	ns.Challenges:Take(nil)
+end)()
+-- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
+-- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
+-- 0, or never set) aren't measured here.
+;(function()
+	local PADDING = 2
+	local over = {}
+	for _, f in ipairs(Mock.created) do
+		local label = rawget(f, "label")
+		if f._kind == "Button" and rawget(f, "_wSet") and f._w > 0 and type(label) == "table" and rawget(label, "_font") and label._text ~= "" then
+			local width = label:GetStringWidth()
+			if width > f._w - PADDING * 2 then
+				over[#over + 1] = format("%q is %d wide in a %d button", label._text, math.floor(width + 0.5), math.floor(f._w))
+			end
+		end
+	end
+	check(#over == 0, "button labels wider than their buttons:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")

@@ -138,8 +138,22 @@ function private.Fill(guid, how)
 		f.sure:Hide()
 		f.record:SetPoint("TOPLEFT", 14, -76)
 		f:SetHeight(HEIGHT)
+	elseif how == "pet" then
+		-- Certain, so not a warning: said in the card's quiet colour
+		f.sure:SetText("Their pet landed the killing blow")
+		f.sure:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+		f.sure:Show()
+		f.record:SetPoint("TOPLEFT", 14, -94)
+		f:SetHeight(HEIGHT_UNSURE)
+	elseif how == "pet guess" then
+		f.sure:SetText("Probably "..d.name..": a pet landed the killing blow, and they had you targeted")
+		f.sure:SetTextColor(C.amber[1], C.amber[2], C.amber[3])
+		f.sure:Show()
+		f.record:SetPoint("TOPLEFT", 14, -94)
+		f:SetHeight(HEIGHT_UNSURE)
 	else
 		f.sure:SetText("Probably "..d.name..": the death recap didn't say, but they had you targeted")
+		f.sure:SetTextColor(C.amber[1], C.amber[2], C.amber[3])
 		f.sure:Show()
 		f.record:SetPoint("TOPLEFT", 14, -94)
 		f:SetHeight(HEIGHT_UNSURE)

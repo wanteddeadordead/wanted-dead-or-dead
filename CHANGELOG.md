@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Killed by a hunter's or warlock's pet: the pet's owner now gets the death card, the death record and the loss
+  against them, when the pet and its owner are in view. With the pet out of view, the one enemy who had you targeted
+  is shown as "probably". Before, a pet's kill counted as no player's.
 
 ## [1.8.0] - 2026-10-04
 

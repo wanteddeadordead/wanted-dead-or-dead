@@ -5019,4 +5019,49 @@ end)()
 	ns.Enemies:SetKoSGuild("Crimson Vanguard", false)
 	enemyUnits.nameplate45 = nil
 end)()
+-- Killed by a hunter's pet: the death recap names the pet. Its owner, among the players in view, gets the kill (the
+-- card, the death record, the record against them); with the pet out of view, the one enemy who had us targeted is
+-- only probably the killer
+;(function()
+	local realIsPlayer, realNamePlate, realOwner = UnitIsPlayer, C_NamePlate, UnitIsOwnerOrControllerOfUnit
+	UnitIsPlayer = function(unit) local e = enemyUnits[unit] return e ~= nil and not e.isPet end
+	enemyUnits.nameplate46 = { guid = "Player-9-HUNTER", name = "Bow Hunter", class = "HUNTER", level = 24 }
+	enemyUnits.nameplate47 = { guid = "Pet-0-1-2-3-WOLF", name = "Wolfie", isPet = true }
+	local platesShown = { "nameplate46", "nameplate47" }
+	C_NamePlate = {
+		GetNamePlates = function() local out = {} for _, u in ipairs(platesShown) do out[#out + 1] = { namePlateUnitToken = u } end return out end,
+		GetNamePlateForUnit = function() return nil end,
+	}
+	UnitIsOwnerOrControllerOfUnit = function(owner, pet) return owner == "nameplate46" and pet == "nameplate47" end
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate46")
+	local lossesBefore = (ns.Enemies:GetStats("Player-9-HUNTER") or {}).losses or 0
+	clock = clock + 120
+	RunTimers()
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:5151|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Pet-0-1-2-3-WOLF", sourceName = "Wolfie" } } end,
+	}
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	local card, f = ns.DeathCard, ns.DeathCard:GetFrame()
+	check(card:IsShown() and card:GetKiller() == "Player-9-HUNTER", "the pet's owner gets the death card")
+	check(f.sure:IsShown() and f.sure._text:find("pet", 1, true) and not f.sure._text:find("Probably", 1, true), "which says their pet landed the blow, without a doubt: "..tostring(f.sure._text))
+	check(ns.Enemies:GetStats("Player-9-HUNTER").losses == lossesBefore + 1, "the loss counts against the owner")
+	check(ns.Enemies:GetLastKiller(15) == "Player-9-HUNTER", "and our death record will name them")
+	Fire("PLAYER_ALIVE")
+	-- The pet out of view: only the hunter who had us targeted, as probably
+	platesShown = { "nameplate46" }
+	clock = clock + 120
+	RunTimers()
+	enemyUnits.nameplate46.targetsMe = true
+	Fire("UNIT_TARGET", "nameplate46")
+	C_DeathRecap.GetRecapLink = function() return "|Hdeath:5252|h[Death]|h" end
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(card:IsShown() and card:GetKiller() == "Player-9-HUNTER" and f.sure._text:find("Probably", 1, true) and f.sure._text:find("pet", 1, true),
+		"with the pet out of view, the one who had us targeted is probably the killer: "..tostring(f.sure._text))
+	Fire("PLAYER_ALIVE")
+	enemyUnits.nameplate46, enemyUnits.nameplate47 = nil, nil
+	UnitIsPlayer, C_NamePlate, UnitIsOwnerOrControllerOfUnit, C_DeathRecap = realIsPlayer, realNamePlate, realOwner, nil
+end)()
 print("wanted smoke: 1.5.1 checks pass")

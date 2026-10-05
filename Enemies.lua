@@ -586,7 +586,50 @@ function private.KillerFromRecap()
 	if type(sourceGUID) == "string" and strfind(sourceGUID, "^Player%-") then
 		return sourceGUID, "recap"
 	end
+	-- A hunter's or warlock's pet: its owner, if they and the pet are in view
+	if type(sourceGUID) == "string" and strfind(sourceGUID, "^Pet%-") then
+		local owner = private.OwnerOf(sourceGUID)
+		if owner then
+			return owner, "pet"
+		end
+		return nil, "pet out of view"
+	end
 	return nil, "not a player"
+end
+
+---The enemy player in view who owns the pet with this GUID: the pet must be in view too (a nameplate, the target,
+---focus or mouseover), as the game only says who owns a unit it can show.
+function private.OwnerOf(petGUID)
+	local units = { "target", "focus", "mouseover" }
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		local ok, plates = pcall(C_NamePlate.GetNamePlates)
+		for _, plate in ipairs(ok and type(plates) == "table" and plates or {}) do
+			local unit = plate.namePlateUnitToken
+			if type(unit) == "string" then
+				tinsert(units, unit)
+			end
+		end
+	end
+	local petUnit = nil
+	for _, unit in ipairs(units) do
+		if private.Readable(UnitGUID(unit)) == petGUID then
+			petUnit = unit
+			break
+		end
+	end
+	if not petUnit or not UnitIsOwnerOrControllerOfUnit then
+		return nil
+	end
+	for _, unit in ipairs(units) do
+		local guid = private.Readable(UnitGUID(unit))
+		if unit ~= petUnit and type(guid) == "string" and strfind(guid, "^Player%-") then
+			local ok, owns = pcall(UnitIsOwnerOrControllerOfUnit, unit, petUnit)
+			if ok and private.Readable(owns) then
+				return guid
+			end
+		end
+	end
+	return nil
 end
 
 function private.ResolveDeath(suspects, attempt)
@@ -596,13 +639,13 @@ function private.ResolveDeath(suspects, attempt)
 		return
 	end
 	if not killer and how ~= "not a player" and #suspects == 1 then
-		-- The recap couldn't say: the one enemy who had us targeted is the likely killer
-		killer, how = suspects[1], "targeting"
+		-- The recap couldn't say (or names a pet out of view): the one enemy who had us targeted is the likely killer
+		killer, how = suspects[1], how == "pet out of view" and "pet guess" or "targeting"
 	end
 	Wanted:Log("Enemies: death, killer %s (%s)", tostring(killer), how)
 	private.lastDeath = killer and { guid = killer, how = how, t = GetTime() } or nil
-	if killer and how == "recap" then
-		-- The death recap named them: our own death record names them too (Recorder)
+	if killer and (how == "recap" or how == "pet") then
+		-- The death recap named them, or their pet in view: our own death record names them too (Recorder)
 		private.lastKiller = { guid = killer, t = GetTime() }
 	end
 	if killer then

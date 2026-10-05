@@ -330,8 +330,12 @@ function W:Segmented(parent, items, onSelect, width)
 	control:SetWidth(x + 1)
 	function control:Select(key, silent)
 		self.selected = key
+		-- The buttons overlap by a pixel so their borders join: the selected one sits above its neighbours, so its
+		-- whole outline shows (its left edge was drawn under the button before it)
+		local level = self:GetFrameLevel()
 		for _, button in ipairs(self.buttons) do
 			button:SetStyle(button.key == key and "selected" or "secondary")
+			button:SetFrameLevel(level + (button.key == key and 2 or 1))
 		end
 		if not silent and onSelect then
 			onSelect(key)

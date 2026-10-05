@@ -5221,4 +5221,12 @@ end)()
 	end
 	check(#over == 0, "button labels wider than their buttons:\n  "..table.concat(over, "\n  "))
 end)()
+-- A segmented control's selected button sits above its neighbours, so its outline isn't drawn under theirs
+;(function()
+	local control = ns.Widgets:Segmented(UIParent, { { key = "a", label = "Home" }, { key = "b", label = "Calendar" } }, nil, 110)
+	control:Select("b", true)
+	check(control.buttons[2]._level > control.buttons[1]._level, "the selected button is above the one before it")
+	control:Select("a", true)
+	check(control.buttons[1]._level > control.buttons[2]._level, "and moves when another is selected")
+end)()
 print("wanted smoke: 1.5.1 checks pass")

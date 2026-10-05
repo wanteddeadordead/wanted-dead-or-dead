@@ -1,7 +1,9 @@
 -- Wanted: payments. The honour system made visible: a poster pays a hunter by mail, prefilled by the
 -- addon and sent by the poster's own click (this client confirms mail money through its secure transfer
 -- prompt, so an addon could not send it anyway). The poster's client records the send, the hunter's
--- client records the arrival, and the two records merge into "paid". Unpaid is computed from the
+-- client records the arrival, and the two records merge into "paid". A mail without Wanted's subject counts
+-- when it carries at least the bounty between the poster and the hunter, and a send another mail addon makes
+-- counts when it takes the amount from the poster's gold soon after Pay. Unpaid is computed from the
 -- records: a witnessed or confirmed claim with no payment after 48 hours.
 
 local _, Wanted = ...
@@ -11,10 +13,15 @@ local Bounties = Wanted.Bounties
 local private = {
 	frame = CreateFrame("Frame"),
 	pendingSend = nil, -- { claimId, recipient, amount } between SendMail and MAIL_SEND_SUCCESS
+	-- What Pay last filled in, and the player's gold then: { claimId, recipient, amount, money, t }. A mail addon can
+	-- send without the SendMail hook seeing it (TSM keeps its own copy of SendMail), so a sent mail that took at least
+	-- the amount from the player's gold soon after counts as this payment
+	prefilled = nil,
 	seenInbox = {}, -- claim id -> true once recorded from the inbox
 }
 local SUBJECT_PREFIX = "Wanted bounty "
 local UNPAID_AFTER_SECONDS = 48 * 60 * 60
+local PREFILL_SECONDS = 10 * 60 -- how long after Pay a sent mail can be that payment
 
 
 
@@ -64,6 +71,50 @@ function Payments:GetForClaim(claimId)
 	for payment in Store:Iterator("payment") do
 		if payment.data.claim == claimId then
 			return payment
+		end
+	end
+	return nil
+end
+
+---Whether a claim is the one its bounty is paid to and not paid yet: witnessed or confirmed, and the poster's
+---confirmed claim or the earliest kill.
+---@param claim table
+---@return boolean
+function private.Payable(claim)
+	if Payments:GetForClaim(claim.id) then
+		return false
+	end
+	local level = Bounties:GetClaimLevel(claim)
+	if level < 2 then
+		return false
+	end
+	if level == 3 then
+		return true
+	end
+	local bounty = Store:Get(claim.data.bounty)
+	local winner = bounty and Bounties:GetWinningClaim(bounty)
+	return winner ~= nil and winner.id == claim.id
+end
+
+---A name as mail and records compare it: lower case, no realm.
+function private.SameName(a, b)
+	if type(a) ~= "string" or type(b) ~= "string" then
+		return false
+	end
+	return strlower((gsub(a, "%-.*$", ""))) == strlower((gsub(b, "%-.*$", "")))
+end
+
+---The payable claim between a poster and a hunter that an amount covers, or nil: for a mail without Wanted's subject.
+---@param poster string the poster's name (an origin)
+---@param hunter string the hunter's name (an origin)
+---@param amount number copper
+---@return table?
+function private.ClaimCovered(poster, hunter, amount)
+	for claim in Store:Iterator("claim") do
+		local bounty = Store:Get(claim.data.bounty)
+		if bounty and private.SameName(bounty.origin, poster) and private.SameName(claim.origin, hunter)
+			and amount >= Bounties:GetAmount(bounty) and private.Payable(claim) then
+			return claim
 		end
 	end
 	return nil
@@ -121,16 +172,22 @@ function Payments:Prefill(claim)
 	if SendMailCODButton then
 		SendMailCODButton:SetChecked(false)
 	end
+	private.prefilled = { claimId = claim.id, recipient = claim.origin, amount = amount, money = GetMoney(), t = GetTime() }
 	Wanted:Log("Payments: prefilled %s to %s for claim %s", Bounties:FormatMoney(amount), claim.origin, claim.id)
 	return true
 end
 
 function private.OnSendMail(recipient, subject)
+	local amount = (GetSendMailMoney and GetSendMailMoney()) or (MoneyInputFrame_GetCopper and MoneyInputFrame_GetCopper(SendMailMoney)) or 0
 	local claimId = subject and strmatch(subject, "^"..SUBJECT_PREFIX.."(%S+)")
+	if not claimId and amount > 0 then
+		-- Written by hand: a mail to a hunter we owe, with at least what we owe them
+		local claim = private.ClaimCovered(Store:GetOrigin(), recipient, amount)
+		claimId = claim and claim.id
+	end
 	if not claimId then
 		return
 	end
-	local amount = (GetSendMailMoney and GetSendMailMoney()) or (MoneyInputFrame_GetCopper and MoneyInputFrame_GetCopper(SendMailMoney)) or 0
 	private.pendingSend = { claimId = claimId, recipient = recipient, amount = amount }
 	Wanted:Log("Payments: sending %s to %s for claim %s", Bounties:FormatMoney(amount), tostring(recipient), claimId)
 end
@@ -138,7 +195,17 @@ end
 function private.OnSendSuccess()
 	local pending = private.pendingSend
 	private.pendingSend = nil
-	if not pending then
+	local prefilled = private.prefilled
+	if not pending and prefilled and GetTime() - prefilled.t <= PREFILL_SECONDS
+		and prefilled.money - GetMoney() >= prefilled.amount then
+		-- The SendMail hook didn't see this send (another addon sent it), but it took the payment from our gold
+		Wanted:Log("Payments: a mail went out %s lighter after Pay for claim %s", Bounties:FormatMoney(prefilled.money - GetMoney()), prefilled.claimId)
+		pending = { claimId = prefilled.claimId, recipient = prefilled.recipient, amount = prefilled.amount }
+	end
+	if pending and prefilled and pending.claimId == prefilled.claimId then
+		private.prefilled = nil
+	end
+	if not pending or Payments:GetForClaim(pending.claimId) then
 		return
 	end
 	local claim = Store:Get(pending.claimId)
@@ -163,6 +230,11 @@ function private.ScanInbox()
 	for i = 1, numItems do
 		local _, _, sender, subject, money = GetInboxHeaderInfo(i)
 		local claimId = subject and strmatch(subject, "^"..SUBJECT_PREFIX.."(%S+)")
+		if not claimId and money and money > 0 then
+			-- Written by hand: a mail from a poster whose bounty we're owed, with at least the bounty
+			local claim = private.ClaimCovered(sender, Store:GetOrigin(), money)
+			claimId = claim and claim.id
+		end
 		if claimId and money and money > 0 and not private.seenInbox[claimId] then
 			private.seenInbox[claimId] = true
 			local claim = Store:Get(claimId)

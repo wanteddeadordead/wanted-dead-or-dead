@@ -100,6 +100,30 @@ function private.Detail(offset, day, index, e)
 	return detail
 end
 
+-- Shorter names for long holidays, longest first, for a day's box and the coming-up list
+local SHORTER = {
+	["Stranglethorn Fishing Extravaganza"] = { "Fishing Extravaganza", "Fishing contest", "Fishing" },
+}
+
+---An event's labels, longest first: the page shows the longest that fits its space. A name's first word is the last
+---resort ("Hallow's End", "Hallow's"; "Warsong Gulch", "Warsong").
+function private.Labels(text, short, kind)
+	local labels = { short }
+	for _, shorter in ipairs(SHORTER[text] or {}) do
+		tinsert(labels, shorter)
+	end
+	if kind == "weekly" then
+		tinsert(labels, "Reset")
+	elseif kind == "pvpseason" or kind == "wanted" then
+		tinsert(labels, strfind(text, " starts$") and "Season starts" or "Season ends")
+	elseif kind == "game" and short == "Launch day" then
+		tinsert(labels, "Launch")
+	elseif strfind(short, " ") then
+		tinsert(labels, (strmatch(short, "^(%S+)")))
+	end
+	return labels
+end
+
 ---A holiday's label for a day's box: the part after "Call to Arms: " (the battleground), or the whole title.
 function private.ShortTitle(title)
 	return (gsub(title, BATTLEGROUND_WEEKEND, ""))
@@ -158,7 +182,8 @@ function PvPCalendar:Launched()
 end
 
 ---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
----kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box;
+---kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box and
+---labels its shorter forms, longest first;
 ---running marks a day between a holiday's first and last; detail is a holiday's { seq, begins, ends, range,
 ---description } from the game.
 ---@param year number
@@ -174,7 +199,9 @@ function PvPCalendar:GetMonth(year, month)
 				return
 			end
 		end
-		tinsert(days[day], { text = text, short = short or text, kind = kind, running = running or nil, detail = detail })
+		short = short or text
+		tinsert(days[day], { text = text, short = short, labels = private.Labels(text, short, kind), kind = kind,
+			running = running or nil, detail = detail })
 	end
 	local function AddAt(t, text, kind, short)
 		local d = date("*t", t)
@@ -244,7 +271,7 @@ function PvPCalendar:GetUpcoming()
 			for _, e in ipairs(days[day] or {}) do
 				if not seen[e.text] and not e.running then
 					seen[e.text] = true
-					tinsert(out, { year = y, month = m, day = day, text = e.text, short = e.short, kind = e.kind })
+					tinsert(out, { year = y, month = m, day = day, text = e.text, short = e.short, labels = e.labels, kind = e.kind })
 					if #out == MAX_UPCOMING then
 						return out
 					end

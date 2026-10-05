@@ -5151,11 +5151,13 @@ end)()
 	end
 	local before = Kinds(ns.PvPCalendar:GetMonth(today.year, today.month)[15])
 	check(before["Darkmoon Faire"] and before["Darkmoon Faire"].kind == "holiday", "a holiday shows before launch")
+	check(table.concat(before["Darkmoon Faire"].labels, "|") == "Darkmoon Faire|Darkmoon", "a holiday's labels, longest first, down to its first word")
 	check(not before["Call to Arms: Warsong Gulch"], "a battleground weekend doesn't, before launch")
 	-- From launch: battleground weekends too, with the game's times and description
 	local after = Kinds(ns.PvPCalendar:GetMonth(2026, 11)[15])
 	local wsg = after["Call to Arms: Warsong Gulch"]
 	check(wsg and wsg.kind == "pvpholiday" and wsg.short == "Warsong Gulch", "after launch, the battleground weekend, marked")
+	check(table.concat(wsg.labels, "|") == "Warsong Gulch|Warsong", "a battleground weekend shortens to its first word")
 	check(wsg.detail.seq == "START" and wsg.detail.begins == "8:00 AM" and wsg.detail.range == "10/15 - 10/22", "with its time and dates")
 	check(wsg.detail.description == "The battle for Warsong Gulch grows intense.", "and the game's description")
 	check(not after["Darkmoon Faire"].detail.description, "an empty description is left out")

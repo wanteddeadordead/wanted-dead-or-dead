@@ -84,7 +84,14 @@ function Recorder:Status()
 	return format("Recorder: %d honor kills recorded, %d enemy deaths witnessed.", numKills, numDeaths)
 end
 
+-- Events about other units: none is read in an instance, where their identity is secret
+local UNIT_EVENTS = { PLAYER_TARGET_CHANGED = true, UPDATE_MOUSEOVER_UNIT = true, NAME_PLATE_UNIT_ADDED = true,
+	UNIT_HEALTH = true, PARTY_KILL = true, UNIT_DIED = true }
+
 function private.OnEvent(_, event, arg1, arg2)
+	if UNIT_EVENTS[event] and Wanted:InInstance() then
+		return
+	end
 	if event == "PLAYER_TARGET_CHANGED" then
 		private.Track("target")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
@@ -350,8 +357,8 @@ end
 
 ---Starts watching a unit if it is an enemy player, and records a sighting.
 function private.Track(unit)
-	if Wanted:InPvPMatch() then
-		-- A battleground's players aren't world PvP: not watched or sighted
+	if Wanted:InInstance() then
+		-- An instance's players aren't world PvP, and their identity is secret: not watched or sighted
 		return
 	end
 	if not unit or not UnitExists(unit) or not UnitIsPlayer(unit) then

@@ -85,11 +85,13 @@ function BlizzRank:Mine()
 	return r.rank, season
 end
 
----Keeps a player's Blizzard rank as their hello told it (or our own). Bad values are ignored.
+---Keeps a player's Blizzard rank as their hello told it (or our own, or the site's). Bad values are ignored. side ("H"
+---or "A") names its titles when the game doesn't say the player's side: the site's say it; a hello's player is ours.
 ---@param name string the player's name as sync gives it
 ---@param rank any
 ---@param season any
-function BlizzRank:Note(name, rank, season)
+---@param side string?
+function BlizzRank:Note(name, rank, season, side)
 	rank, season = private.Number(rank), private.Number(season)
 	if type(name) ~= "string" or not rank or not season or rank < 1 or rank > BlizzRank.MAX_RANK or season < 1 or season > 1000 then
 		return
@@ -98,11 +100,12 @@ function BlizzRank:Note(name, rank, season)
 	if name == "" or #name > 48 then
 		return
 	end
+	side = (side == "H" or side == "A") and side or nil
 	local entry = Wanted.db.blizzRanks[name]
-	if entry and entry.r == rank and entry.s == season and GetServerTime() - (entry.t or 0) < 600 then
+	if entry and entry.r == rank and entry.s == season and GetServerTime() - (entry.t or 0) < 600 and (not side or entry.f == side) then
 		return
 	end
-	Wanted.db.blizzRanks[name] = { r = rank, s = season, t = GetServerTime() }
+	Wanted.db.blizzRanks[name] = { r = rank, s = season, t = GetServerTime(), f = side or (entry and entry.f) or nil }
 end
 
 ---Takes the ranks the site has heard from Wanted players (the catch-up's blizzRanks: "Name" -> { r, s, t }), each
@@ -117,7 +120,7 @@ function BlizzRank:Take(raw)
 		local at = type(entry) == "table" and private.Number(entry.t)
 		local mine = type(name) == "string" and book[strmatch(name, "^([^%-]+)") or name]
 		if at and at <= GetServerTime() + 86400 and (type(mine) ~= "table" or (mine.t or 0) < at) then
-			BlizzRank:Note(name, entry.r, entry.s)
+			BlizzRank:Note(name, entry.r, entry.s, entry.f)
 			local kept = book[strmatch(name, "^([^%-]+)") or name]
 			if kept then
 				kept.t = at
@@ -130,9 +133,11 @@ function BlizzRank:Take(raw)
 	end
 end
 
----A player's Blizzard rank as they last told it, in the season the game says is running now; nil otherwise.
+---A player's Blizzard rank as they last told it, in the season the game says is running now, and the side kept with
+---it ("H", "A" or nil); nil otherwise.
 ---@param name string
 ---@return number?
+---@return string?
 function BlizzRank:Of(name)
 	local entry = type(name) == "string" and Wanted.db.blizzRanks[strmatch(name, "^([^%-]+)") or name]
 	local s = Wanted.db.pvpSeason
@@ -140,7 +145,33 @@ function BlizzRank:Of(name)
 	if type(entry) ~= "table" or not season or entry.s ~= season then
 		return nil
 	end
-	return entry.r
+	return entry.r, entry.f
+end
+
+---A player's Blizzard rank to show: { r, f } (f "H" or "A", the side whose titles name it), or nil. Our own from the
+---game; anyone else's as their Wanted addon shared it, this season. faction is theirs when known.
+---@param name string
+---@param faction string?
+---@return table?
+function BlizzRank:RankOf(name, faction)
+	if type(name) ~= "string" or name == "" then
+		return nil
+	end
+	local rank, kept
+	local me = Wanted.Store and Wanted.Store:GetOrigin()
+	if name == me or name == UnitName("player") then
+		local r = BlizzRank:Get()
+		rank = r and r.rank >= 1 and r.rank or nil
+		faction = faction or UnitFactionGroup("player")
+	else
+		rank, kept = BlizzRank:Of(name)
+	end
+	if not rank then
+		return nil
+	end
+	-- The player's side as the game says it picks the titles; the one kept with the rank only when it doesn't
+	local side = (faction == "Alliance" or faction == "A") and "A" or (faction == "Horde" or faction == "H") and "H" or kept
+	return { r = rank, f = side }
 end
 
 ---Drops ranks not heard in SHARED_DAYS, and the oldest past SHARED_MAX.

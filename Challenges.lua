@@ -1,4 +1,5 @@
--- Wanted: daily and weekly challenges, hot zones and challenge ranks. wanteddeadordead.com works everything out;
+-- Wanted: daily and weekly challenges and hot zones, for fun: points make a weekly score, with no rank (Wanted's ranks
+-- are Blizzard's, BlizzRank). wanteddeadordead.com works everything out;
 -- the desktop app puts it in the catch-up (WantedAppCatchup[mark].challenges) and the addon only shows it. Nothing
 -- here is computed from the addon's own records or sent to other players. Missing data (no app, an older app, the
 -- server off) leaves the pages on their empty state. The one thing read here is Blizzard's PvP season, kept for the
@@ -11,23 +12,11 @@ local private = {
 	demo = nil, -- development builds: made-up challenges to look at (/wanted demo)
 }
 
--- Challenge ranks, copied from the server's stats.ChallengeRanks: the points each rank starts at, and its title
--- on each side. The badges are the game's own PvP rank badges.
-Challenges.MAX_RANK = 14
-Challenges.THRESHOLDS = { 5, 40, 120, 260, 480, 800, 1250, 1850, 2650, 3700, 5100, 7000, 9600, 13000 }
-Challenges.TITLES = {
-	Alliance = { "Private", "Corporal", "Sergeant", "Master Sergeant", "Sergeant Major", "Knight", "Knight-Lieutenant",
-		"Knight-Captain", "Knight-Champion", "Lieutenant Commander", "Commander", "Marshal", "Field Marshal", "Grand Marshal" },
-	Horde = { "Scout", "Grunt", "Sergeant", "Senior Sergeant", "First Sergeant", "Stone Guard", "Blood Guard", "Legionnaire",
-		"Centurion", "Champion", "Lieutenant General", "General", "Warlord", "High Warlord" },
-}
-
 -- What the catch-up may hold at most: more is cut off rather than refused
 local MAX_HOT = 4
 local MAX_WEEKLY = 3
 local MAX_ME = 60
 local MAX_RECENT = 10
-local MAX_RANKS = 5000
 local MAX_TEXT = 80
 -- Completions noted for the banner are forgotten after this long
 local NOTE_KEEP_SECONDS = 21 * 24 * 60 * 60
@@ -39,7 +28,7 @@ local SEASON_EVERY = 60 * 60
 local PVP_RANK_FACTION = 2800 -- PVP_RANK_POINTS_FACTION_ID in Blizzard's PVPRankFrame.lua (a local there)
 
 function Challenges:OnLoad()
-	-- character GUID -> { rank, done = { [challenge id] = when noted } }: what the banner already said (docs/DATA.md)
+	-- character GUID -> { done = { [challenge id] = when noted } }: what the banner already said (docs/DATA.md)
 	Wanted.db.challengeNotes = type(Wanted.db.challengeNotes) == "table" and Wanted.db.challengeNotes or {}
 end
 
@@ -142,7 +131,8 @@ function private.CleanProgress(p)
 	return { n = private.Count(p.n, 0) or 0, done = p.done == true }
 end
 
----One of the app's characters: progress, streak, rank and points. nil when malformed.
+---One of the app's characters: progress, streak, this week's points (the weekly score) and points in all. nil when
+---malformed.
 function private.CleanMine(m)
 	if type(m) ~= "table" then
 		return nil
@@ -151,9 +141,8 @@ function private.CleanMine(m)
 		daily = private.CleanProgress(m.daily),
 		weekly = {},
 		streak = private.Count(m.streak, 0) or 0,
-		rank = private.Count(m.rank, 0, Challenges.MAX_RANK) or 0,
+		week = private.Count(m.week, 0) or 0,
 		points = private.Count(m.points, 0) or 0,
-		nextAt = private.Count(m.nextAt, 1),
 		recent = {},
 	}
 	for i = 1, MAX_WEEKLY do
@@ -190,7 +179,6 @@ function Challenges:Clean(raw)
 		weekly = {},
 		allThreeBonus = private.Count(raw.allThreeBonus, 0),
 		me = {},
-		ranks = {},
 	}
 	-- The Wanted season, for the PvP page's calendar (from the server in October 2026): an end of 0 is none planned
 	if type(raw.season) == "table" and private.Text(raw.season.name, 40) and private.Count(raw.season.startsAt, 1) then
@@ -229,24 +217,11 @@ function Challenges:Clean(raw)
 			end
 		end
 	end
-	if type(raw.ranks) == "table" then
-		local count = 0
-		for name, r in pairs(raw.ranks) do
-			if count >= MAX_RANKS then
-				break
-			end
-			local rank = type(r) == "table" and private.Count(r.r, 1, Challenges.MAX_RANK)
-			if type(name) == "string" and #name <= 64 and not strfind(name, "|", 1, true) and rank and (r.f == "H" or r.f == "A") then
-				out.ranks[strlower(name)] = { r = rank, f = r.f }
-				count = count + 1
-			end
-		end
-	end
 	return out
 end
 
 ---Takes the challenges from this login's catch-up (Catchup:Import), and a little later shows a banner for what
----this character newly finished or a rank it newly reached.
+---this character newly finished.
 ---@param raw any entry.challenges as the app wrote it
 ---@param noCatchup boolean? the app wrote no catch-up for this account at all
 function Challenges:Take(raw, noCatchup)
@@ -256,8 +231,8 @@ function Challenges:Take(raw, noCatchup)
 	if raw ~= nil and not private.data then
 		Wanted:Log("Challenges: the catch-up's challenges could not be read")
 	elseif private.data then
-		Wanted:Log("Challenges: from %s, %d hot zones, %d of your characters, %d ranks", Wanted.Theme:Ago(GetServerTime() - private.data.t),
-			#private.data.hot, private.CountKeys(private.data.me), private.CountKeys(private.data.ranks))
+		Wanted:Log("Challenges: from %s, %d hot zones, %d of your characters", Wanted.Theme:Ago(GetServerTime() - private.data.t),
+			#private.data.hot, private.CountKeys(private.data.me))
 		C_Timer.After(BANNER_DELAY, function() Challenges:CheckNews() end)
 	end
 end
@@ -290,13 +265,13 @@ end
 ---@return string button
 function Challenges:EmptyText()
 	if Challenges:HasApp() then
-		return "Update the Wanted app to track challenges and ranks",
+		return "Update the Wanted app to track challenges",
 			"Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download "..Challenges.APP_VERSION.." from wanteddeadordead.com/app.", "Update the app"
 	end
-	return "Get the Wanted app to track challenges and ranks", "Download it for Windows or Mac from wanteddeadordead.com/app.", "Get the app"
+	return "Get the Wanted app to track challenges", "Download it for Windows or Mac from wanteddeadordead.com/app.", "Get the app"
 end
 
----This character's progress, streak and rank (or another of the app's characters'), or nil.
+---This character's progress, streak and points (or another of the app's characters'), or nil.
 ---@param guid string?
 ---@return table?
 function Challenges:GetMine(guid)
@@ -335,33 +310,6 @@ function Challenges:IsWeekOver()
 	return data ~= nil and data.weekEnds ~= nil and GetServerTime() >= data.weekEnds
 end
 
----A rank's title on a side ("Horde" or "Alliance", or "H" / "A"); this character's side by default.
----@param rank number
----@param faction string?
----@return string?
-function Challenges:Title(rank, faction)
-	faction = faction == "A" and "Alliance" or faction == "H" and "Horde" or faction or UnitFactionGroup("player")
-	local titles = Challenges.TITLES[faction] or Challenges.TITLES.Horde
-	return titles[rank]
-end
-
----The points a rank starts at (0 for no rank).
----@param rank number
----@return number
-function Challenges:Threshold(rank)
-	return Challenges.THRESHOLDS[rank] or 0
-end
-
----The game's PvP rank badge for a rank (1 to 14).
----@param rank number
----@return string?
-function Challenges:Badge(rank)
-	if not private.Count(rank, 1, Challenges.MAX_RANK) then
-		return nil
-	end
-	return format("Interface\\PvPRankBadges\\PvPRank%02d", rank)
-end
-
 ---Daily and weekly challenges done out of those there are, for this character: done, total. nil without them.
 ---@return number? done
 ---@return number? total
@@ -387,45 +335,18 @@ function Challenges:CountDone()
 	return done, total
 end
 
----A player's challenge rank from wanteddeadordead.com: { r, f }, or nil. Never what a player says of themselves.
----@param name string? "Name" or "Name-Realm"
----@return table?
----@param faction string? "Horde" or "Alliance", when known: the demo's made-up ranks use it
-function Challenges:GetRank(name, faction)
-	local data = Challenges:Get()
-	if not data or type(name) ~= "string" then
-		return nil
-	end
-	local key = strlower((strsplit("-", name)))
-	if data.ranks[key] or not private.demo or key == "" then
-		return data.ranks[key] or nil
-	end
-	-- The demo ranks every player, the same rank for the same name, so each place a rank shows can be seen on
-	-- real players
-	local sum = 0
-	for i = 1, #key do
-		sum = (sum * 31 + key:byte(i)) % 1000003
-	end
-	faction = faction or UnitFactionGroup("player")
-	return { r = sum % Challenges.MAX_RANK + 1, f = faction == "Alliance" and "A" or "H" }
-end
-
-
-
 -- ============================================================================
 -- Banner for what's newly done
 -- ============================================================================
 
----What this character finished or reached since the banner last spoke: a list of { name, points } and the new
----rank or nil. Notes it, so each completion is announced once. The first time a character is seen, what's
----already done is only noted.
+---What this character finished since the banner last spoke: a list of { name, points }. Notes it, so each completion
+---is announced once. The first time a character is seen, what's already done is only noted.
 ---@return table[] done
----@return number? rank
 function Challenges:TakeNews()
 	local data, guid = private.data, UnitGUID("player")
 	local mine = data and guid and data.me[guid]
 	if not mine then
-		return {}, nil
+		return {}
 	end
 	local notes = Wanted.db.challengeNotes
 	local now = GetServerTime()
@@ -437,7 +358,7 @@ function Challenges:TakeNews()
 		end
 	end
 	local first = type(notes[guid]) ~= "table"
-	local note = not first and notes[guid] or { rank = mine.rank, done = {} }
+	local note = not first and notes[guid] or { done = {} }
 	notes[guid] = note
 	note.done = type(note.done) == "table" and note.done or {}
 	local done = {}
@@ -453,35 +374,25 @@ function Challenges:TakeNews()
 	for i, challenge in ipairs(data.weekly) do
 		Check(challenge, mine.weekly[i])
 	end
-	local rank = nil
-	if not first and mine.rank > (tonumber(note.rank) or 0) then
-		rank = mine.rank
-	end
-	note.rank = mine.rank
-	return done, rank
+	note.rank = nil -- kept by versions before 1.10.0, when challenges had ranks
+	return done
 end
 
 ---Shows a banner (and a chat line) for what this character newly finished or reached.
 function Challenges:CheckNews()
-	local done, rank = Challenges:TakeNews()
-	Challenges:Announce(done, rank)
+	Challenges:Announce(Challenges:TakeNews())
 end
 
----The banner and chat line for completions and a rank-up.
+---The banner and chat line for completions.
 ---@param done table[] { name, points }
----@param rank number?
-function Challenges:Announce(done, rank)
+function Challenges:Announce(done)
 	local C = Wanted.Theme.C
 	local names = {}
 	for _, d in ipairs(done) do
 		tinsert(names, format("%s (+%d)", d.name, d.points))
 	end
 	local doneText = #names > 0 and table.concat(names, ", ") or nil
-	if rank then
-		local title = Challenges:Title(rank) or ("Rank "..rank)
-		Wanted:Print("Challenge rank %d: %s.%s", rank, title, doneText and (" Done: "..doneText..".") or "")
-		Wanted.Alerts:Warn("RANK UP: "..strupper(title), doneText and ("Challenge rank "..rank..". Done: "..doneText) or ("Challenge rank "..rank), C.gold)
-	elseif doneText then
+	if doneText then
 		Wanted:Print("Challenge done: %s.", doneText)
 		Wanted.Alerts:Warn(#done == 1 and "CHALLENGE DONE" or format("%d CHALLENGES DONE", #done), doneText, C.gold)
 	else
@@ -518,6 +429,5 @@ function Challenges:Status()
 	if not data then
 		return "Challenges: none from the app"
 	end
-	return format("Challenges: %sfrom %s, %d hot zones, %d ranks", private.demo and "demo, " or "", Wanted.Theme:Ago(GetServerTime() - data.t),
-		#data.hot, private.CountKeys(data.ranks))
+	return format("Challenges: %sfrom %s, %d hot zones", private.demo and "demo, " or "", Wanted.Theme:Ago(GetServerTime() - data.t), #data.hot)
 end

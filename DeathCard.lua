@@ -126,7 +126,7 @@ function private.Fill(guid, how)
 	local player = Store:GetPlayer(guid) or {}
 	local ours = UnitFactionGroup("player")
 	local faction = player.faction or (ours == "Horde" and "Alliance" or "Horde")
-	local rank = Wanted.Challenges and Wanted.Challenges:GetRank(d.name, faction)
+	local rank = Wanted.BlizzRank and Wanted.BlizzRank:RankOf(d.name, faction)
 	if rank and Wanted.Ranks then
 		tinsert(who, Wanted.Ranks:BadgeText(rank).." "..Wanted.Ranks:Label(rank))
 	end

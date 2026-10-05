@@ -4578,8 +4578,7 @@ end)()
 			},
 			allThreeBonus = 15,
 			me = { ["Player-1-ME"] = { daily = { n = 2, done = false }, weekly = { { n = 1 }, { n = 1, done = true }, { n = 4 } },
-				streak = 4, rank = 4, points = 302, nextAt = 480, recent = { { name = "Headhunter", points = 10, at = clock - 86400 } } } },
-			ranks = { ["khal drogash"] = { r = 4, f = "H" }, ["Thane Oakcrest"] = { r = 7, f = "A" } },
+				streak = 4, points = 302, week = 25, recent = { { name = "Headhunter", points = 10, at = clock - 86400 } } } },
 		}
 		for k, v in pairs(over or {}) do c[k] = v end
 		return c
@@ -4587,19 +4586,13 @@ end)()
 	check(Challenges:Clean(nil) == nil and Challenges:Clean({}) == nil and Challenges:Clean("x") == nil, "no challenges, or no time: nothing")
 	local clean = Challenges:Clean(Sample())
 	check(clean and #clean.hot == 2 and clean.daily.name == "Ambush" and #clean.weekly == 3 and clean.weekly[3].hot, "a whole catch-up reads")
-	check(clean.me["Player-1-ME"].rank == 4 and clean.me["Player-1-ME"].weekly[2].done and not clean.me["Player-1-ME"].weekly[1].done, "progress reads")
+	check(clean.me["Player-1-ME"].week == 25 and clean.me["Player-1-ME"].weekly[2].done and not clean.me["Player-1-ME"].weekly[1].done, "progress and the weekly score read")
+	check(clean.ranks == nil and clean.me["Player-1-ME"].rank == nil, "no challenge ranks: Wanted's ranks are Blizzard's")
 	local partial = Challenges:Clean({ t = clock, hot = "no", daily = { name = "No id" }, weekly = { { id = "w", name = "Only", target = 1 }, 5 },
-		me = { ["not a guid"] = {}, ["Player-1-ME"] = { rank = 99, streak = -1, points = "lots", weekly = "x", recent = { { name = "|cffff0000Red|r", at = clock } } } },
-		ranks = { ["a"] = { r = 15, f = "H" }, ["b"] = { r = 3, f = "X" }, ["c|r"] = { r = 3, f = "H" }, ["ok"] = { r = 2, f = "A" } } })
+		me = { ["not a guid"] = {}, ["Player-1-ME"] = { week = -5, streak = -1, points = "lots", weekly = "x", recent = { { name = "|cffff0000Red|r", at = clock } } } } })
 	local me = partial.me["Player-1-ME"]
 	check(partial and #partial.hot == 0 and partial.daily == nil and #partial.weekly == 1, "malformed parts are left out, the rest kept")
-	check(me and me.rank == 0 and me.streak == 0 and me.points == 0 and #me.weekly == 3 and me.recent[1].name == "cffff0000Redr", "bad numbers fall back and escape codes are dropped")
-	check(partial.ranks.a == nil and partial.ranks.b == nil and partial.ranks["c|r"] == nil and partial.ranks.ok.r == 2, "only well-formed ranks are kept")
-	local many = {}
-	for i = 1, 6000 do many["p"..i] = { r = 1, f = "H" } end
-	local count = 0
-	for _ in pairs(Challenges:Clean({ t = clock, ranks = many }).ranks) do count = count + 1 end
-	check(count == 5000, "ranks are capped at 5000, got "..count)
+	check(me and me.week == 0 and me.streak == 0 and me.points == 0 and #me.weekly == 3 and me.recent[1].name == "cffff0000Redr", "bad numbers fall back and escape codes are dropped")
 
 	-- Read at every login, even from a catch-up already taken in; none from the app: the empty state
 	local warned = {}
@@ -4611,10 +4604,8 @@ end)()
 	RunTimers()
 	check(Challenges:Get() and Challenges:GetMine().points == 302, "challenges are read from a catch-up already taken in")
 	check(#warned == 0 and db.challengeNotes["Player-1-ME"].done["w:2"], "the first catch-up only notes what's already done")
-	check(Challenges:GetRank("Khal Drogash") and Challenges:GetRank("Khal Drogash-Realm").r == 4 and Challenges:GetRank("thane oakcrest").f == "A", "ranks are found by name, any case, realm or not")
-	check(Challenges:GetRank("Nobody") == nil and Challenges:GetRank(nil) == nil, "no rank for players not listed")
-	check(Challenges:Title(4, "H") == "Senior Sergeant" and Challenges:Title(4, "A") == "Master Sergeant" and Challenges:Title(14, "Alliance") == "Grand Marshal", "rank titles by side")
-	check(Challenges:Badge(4) == "Interface\\PvPRankBadges\\PvPRank04" and Challenges:Badge(0) == nil and Challenges:Badge(15) == nil, "badges for ranks 1 to 14")
+	check(ns.BlizzRank:Title(4, "H") == "Senior Sergeant" and ns.BlizzRank:Title(4, "A") == "Master Sergeant" and ns.BlizzRank:Title(14, "Alliance") == "Grand Marshal", "Blizzard's rank titles by side")
+	check(ns.BlizzRank:Badge(4) == "Interface\\PvPRankBadges\\PvPRank04" and ns.BlizzRank:Badge(0) == nil and ns.BlizzRank:Badge(15) == nil, "badges for ranks 1 to 14")
 	check(Challenges:GetHot("ashenvale") and not Challenges:GetHot("Durotar"), "hot zones by name, any case")
 	local done, total = Challenges:CountDone()
 	check(done == 1 and total == 4, "1 of 4 done, got "..tostring(done).."/"..tostring(total))
@@ -4636,16 +4627,15 @@ end)()
 		return shown
 	end
 	check(Shown("1/4"), "the Challenges menu item shows 1/4 done")
-	check(not Shown("Get the Wanted app to track challenges and ranks") and not Shown("Update the Wanted app to track challenges and ranks"), "the empty state is hidden with challenges")
+	check(not Shown("Get the Wanted app to track challenges") and not Shown("Update the Wanted app to track challenges"), "the empty state is hidden with challenges")
 
-	-- A later catch-up: the daily done and a rank up are announced once
+	-- A later catch-up: the daily done is announced once (challenges have no ranks to announce)
 	local later = Sample({ t = clock })
 	later.me["Player-1-ME"].daily = { n = 4, done = true }
-	later.me["Player-1-ME"].rank = 5
 	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = later } }
 	ns.Catchup:Import()
 	RunTimers()
-	check(#warned == 1 and warned[1]:find("RANK UP: FIRST SERGEANT", 1, true) and warned[1]:find("Ambush (+5)", 1, true), "a rank up and the daily done: one banner, got "..tostring(warned[1]))
+	check(#warned == 1 and warned[1]:find("CHALLENGE DONE / Ambush (+5)", 1, true), "the daily done: its banner, got "..tostring(warned[1]))
 	WantedAppCatchup = { [db.accountMark] = { t = 1, records = {}, challenges = later } }
 	ns.Catchup:Import()
 	RunTimers()
@@ -4668,33 +4658,33 @@ end)()
 	check(Challenges:Get() == nil and Challenges:CountDone() == nil, "no challenges without the app's")
 	ns.UI:Show("home")
 	ns.UI:Show("challenges")
-	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
-		and not Shown("Get the Wanted app to track challenges and ranks"), "an app catch-up without challenges: update the app")
+	check(Shown("Update the Wanted app to track challenges") and Shown("Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
+		and not Shown("Get the Wanted app to track challenges"), "an app catch-up without challenges: update the app")
 	ns.UI:Show("home")
-	check(Shown("Update the Wanted app to track challenges and ranks") and Shown("Update the app"), "Home says update the app too")
+	check(Shown("Update the Wanted app to track challenges") and Shown("Update the app"), "Home says update the app too")
 	-- No catch-up for this account and no app version: get the app, on both pages
 	local appInfo = WantedAppInfo
 	WantedAppInfo = nil
 	WantedAppCatchup = nil
 	ns.Catchup:Import()
 	ns.UI:Refresh()
-	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges and ranks"), "no app: get the app on Home")
+	check(Shown("Get the Wanted app to track challenges") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges"), "no app: get the app on Home")
 	ns.UI:Show("challenges")
-	check(Shown("Get the Wanted app to track challenges and ranks") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
+	check(Shown("Get the Wanted app to track challenges") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
 	-- The app's version alone says it's there (an app that wrote no catch-up yet)
 	WantedAppInfo = { running = "0.2.26" }
 	ns.UI:Refresh()
-	check(Shown("Update the Wanted app to track challenges and ranks"), "an app that says its version: update it")
+	check(Shown("Update the Wanted app to track challenges"), "an app that says its version: update it")
 	WantedAppInfo = appInfo
 	ns.UI:Show("home")
 	check(Shown("YOUR BOUNTY MONEY"), "the strip still shows")
 
 	-- The demo (development builds)
 	ns:RunCommand("demo", "")
-	check(Challenges:IsDemo() and Challenges:GetMine().rank == 4, "the demo shows made-up challenges")
+	check(Challenges:IsDemo() and Challenges:GetMine().week == 25, "the demo shows made-up challenges")
 	ns.UI:Show("challenges")
 	ns:RunCommand("demo", "banner")
-	check(warned[#warned]:find("RANK UP", 1, true), "the demo's banner")
+	check(warned[#warned]:find("CHALLENGE DONE", 1, true), "the demo's banner")
 	ns:RunCommand("demo", "")
 	check(not Challenges:IsDemo() and Challenges:Get() == nil, "the demo turns off")
 	ns.Alerts.Warn = origWarn
@@ -4704,7 +4694,7 @@ end)()
 	long.hot = { { zone = "Hillsbrad Foothills", band = "20-30" }, { zone = "Stranglethorn Vale", band = "30-45" } }
 	long.daily.name, long.daily.text = "Stranglethorn bloodbath", "Win 2 rounds at Hillsbrad Foothills"
 	long.weekly[1].name = "Lieutenant General's errand"
-	long.me["Player-1-ME"].rank, long.me["Player-1-ME"].nextAt = 10, 5100
+	long.me["Player-1-ME"].week = 12345
 	ns.Challenges:SetDemo(long)
 	for _, key in ipairs({ "home", "challenges" }) do
 		ns.UI:Show(key)
@@ -4738,10 +4728,11 @@ end)()
 	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
-	-- Other players' ranks (Ranks.lua): only from the app's ranks, each place behind its switch
-	local Challenges, settings = ns.Challenges, ns.db.settings.ranks
+	-- Players' Blizzard ranks (Ranks.lua), as Wanted players shared them (BlizzRank), each place behind its switch
+	local settings = ns.db.settings.ranks
 	check(settings.tooltip and settings.target and settings.nameplates and settings.nearby and settings.who and not settings.chat, "rank switches: all on but chat")
-	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, challenges = { t = clock, ranks = { ["thane oakcrest"] = { r = 7, f = "A" }, ["khal drogash"] = { r = 4, f = "H" } } } } }
+	ns.db.pvpSeason = { season = 1, week = 3, endsAt = 0, weekMax = 9, seasonMax = 14, at = clock }
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, blizzRanks = { ["Thane Oakcrest"] = { r = 7, s = 1, t = clock, f = "A" }, ["Khal Drogash"] = { r = 4, s = 1, t = clock, f = "H" } } } }
 	ns.Catchup:Import()
 	RunTimers()
 	local origName = UnitName
@@ -4764,11 +4755,11 @@ end)()
 	TooltipUtil = { GetDisplayedUnit = function() return "Khal Drogash", "target" end }
 	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
 	local found = false
-	for _, l in ipairs(lines) do if l:find("Wanted: Rank 4, Senior Sergeant", 1, true) and l:find("PvPRank04", 1, true) then found = true end end
+	for _, l in ipairs(lines) do if l:find("PvP rank: Rank 4, Senior Sergeant", 1, true) and l:find("PvPRank04", 1, true) then found = true end end
 	check(found, "the tooltip line with the badge")
 	settings.tooltip, lines = false, {}
 	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
-	for _, l in ipairs(lines) do check(not l:find("Wanted: Rank", 1, true), "no tooltip line with the switch off") end
+	for _, l in ipairs(lines) do check(not l:find("PvP rank:", 1, true), "no tooltip line with the switch off") end
 	settings.tooltip = true
 	GameTooltip.AddLine = origAdd
 	-- Target frame
@@ -4826,18 +4817,6 @@ end)()
 	settings.nearby = true
 	ns.UI:Show("settings")
 
-	-- The demo ranks every player, the same rank for the same name, on their side's titles
-	ns:RunCommand("demo", "")
-	local nobody = ns.Ranks:ForUnit("nameplate8")
-	check(nobody and nobody.r >= 1 and nobody.r <= 14 and ns.Ranks:ForUnit("nameplate8").r == nobody.r, "the demo gives everyone a steady rank")
-	check(ns.Ranks:ForUnit("nameplate7").r == 7, "a real rank still wins in the demo")
-	check(Challenges:GetRank("Some Body", "Alliance").f == "A" and Challenges:GetRank("Some Body", "Horde").f == "H", "the demo's side follows the player's")
-	lines = {}
-	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
-	TooltipUtil = { GetDisplayedUnit = function() return "Nobody Here", "nameplate8" end }
-	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
-	check(#lines > 0 and table.concat(lines, "\n"):find("Wanted: Rank "..nobody.r, 1, true), "the demo's rank in a real player's tooltip")
-	GameTooltip.AddLine = origAdd
 	-- The game can hand the tooltip a secret unit token, and UnitIsPlayer refuses one from addon code
 	local origIsPlayer = UnitIsPlayer
 	UnitIsPlayer = function(unit)
@@ -4849,7 +4828,6 @@ end)()
 	for _, f in ipairs(tooltipPostCalls) do tooltipOk = pcall(f, GameTooltip) and tooltipOk end
 	check(tooltipOk, "a secret unit token in the tooltip is skipped, not an error")
 	UnitIsPlayer = origIsPlayer
-	ns:RunCommand("demo", "")
 
 	-- ElvUI: its target frame and its nameplate frames (plate.unitFrame, as Plater's too) carry the labels
 	ElvUF_Target = CreateFrame("Button")

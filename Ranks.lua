@@ -1,7 +1,7 @@
--- Wanted: other players' challenge ranks, where you meet them: a line in the unit tooltip, a label over the target
--- frame, a small number over nameplates, a tag in chat (off by default), and beside names in the Nearby window and
--- the Who list. Ranks come only from wanteddeadordead.com through the Wanted app (Challenges:GetRank); a player
--- never says their own. Each place has its own switch (settings.ranks).
+-- Wanted: players' Blizzard PvP ranks, where you meet them: a line in the unit tooltip, a label over the target frame,
+-- a small number over nameplates, a tag in chat (off by default), and beside names in the Nearby window and the Who
+-- list. Wanted has no ranks of its own: a rank is the one a player's Wanted addon reads from the game and shares
+-- (BlizzRank:RankOf), so players without Wanted show none. Each place has its own switch (settings.ranks).
 --
 -- Nothing here touches a secure frame: the target label is a frame of our own that follows the target frame (ElvUI's
 -- when it's there), the nameplate numbers are our own frames on the plates the game lets addons have (never forbidden
@@ -38,7 +38,7 @@ end
 -- Looking ranks up
 -- ============================================================================
 
----A unit's challenge rank ({ r, f }), or nil: players only, by their full name ("First Last").
+---A unit's Blizzard PvP rank ({ r, f }), or nil: players only, by their full name ("First Last").
 ---@param unit string
 ---@return table?
 function Ranks:ForUnit(unit)
@@ -56,19 +56,14 @@ function Ranks:ForUnit(unit)
 	if not private.Readable(faction) or (faction ~= "Horde" and faction ~= "Alliance") then
 		faction = nil
 	end
-	local rank = Wanted.Challenges:GetRank(full, faction)
-	-- The unit's own side picks the titles; the data's side only counts when the game doesn't say
-	if rank and faction then
-		return { r = rank.r, f = faction == "Alliance" and "A" or "H" }
-	end
-	return rank
+	return Wanted.BlizzRank:RankOf(full, faction)
 end
 
 ---"Rank 7, Blood Guard" in the title set of the player's side.
 ---@param rank table { r, f }
 ---@return string
 function Ranks:Label(rank)
-	local title = Wanted.Challenges:Title(rank.r, rank.f)
+	local title = Wanted.BlizzRank:Title(rank.r, rank.f)
 	return title and format("Rank %d, %s", rank.r, title) or format("Rank %d", rank.r)
 end
 
@@ -77,7 +72,7 @@ end
 ---@param size number?
 ---@return string
 function Ranks:BadgeText(rank, size)
-	local badge = Wanted.Challenges:Badge(rank.r)
+	local badge = Wanted.BlizzRank:Badge(rank.r)
 	return badge and format("|T%s:%d:%d|t", badge, size or BADGE_SIZE, size or BADGE_SIZE) or ""
 end
 
@@ -101,7 +96,7 @@ function private.OnTooltipUnit(tooltip)
 	local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)
 	local rank = unit and Ranks:ForUnit(unit)
 	if rank then
-		tooltip:AddLine(Ranks:BadgeText(rank).." Wanted: "..Ranks:Label(rank), 1, 0.8, 0.32)
+		tooltip:AddLine(Ranks:BadgeText(rank).." PvP rank: "..Ranks:Label(rank), 1, 0.8, 0.32)
 	end
 end
 
@@ -300,7 +295,7 @@ function private.FillPlate(label)
 	local rank = label.rank
 	label.badge:SetShown(showBadge)
 	label.text:SetShown(showNumber)
-	label.badge:SetTexture(Wanted.Challenges:Badge(rank.r))
+	label.badge:SetTexture(Wanted.BlizzRank:Badge(rank.r))
 	label.text:SetText(tostring(rank.r))
 	label.text:ClearAllPoints()
 	label.text:SetPoint("LEFT", label, "LEFT", showBadge and PLATE_BADGE + 1 or 0, 0)
@@ -407,7 +402,7 @@ function private.ChatFilter(_, _, message, author, ...)
 		or not private.Readable(message) or not private.Readable(author) then
 		return false
 	end
-	local rank = Wanted.Challenges:GetRank(author)
+	local rank = Wanted.BlizzRank:RankOf(author)
 	if not rank then
 		return false
 	end
@@ -433,7 +428,7 @@ function private.UpdateWhoButton(button, info)
 		private.whoLabels[button] = label
 	end
 	local name = type(info) == "table" and info.fullName
-	local rank = private.Settings().who and type(name) == "string" and private.Readable(name) and Wanted.Challenges:GetRank(name)
+	local rank = private.Settings().who and type(name) == "string" and private.Readable(name) and Wanted.BlizzRank:RankOf(name)
 	label:ClearAllPoints()
 	label:SetPoint("LEFT", button.Name, "LEFT", min(button.Name:GetStringWidth(), button.Name:GetWidth()) + 4, 0)
 	label:SetText(rank and Ranks:Short(rank) or "")
@@ -504,6 +499,6 @@ function Ranks:NearbyTag(name)
 	if not private.Settings().nearby or type(name) ~= "string" then
 		return nil
 	end
-	local rank = Wanted.Challenges:GetRank(name)
+	local rank = Wanted.BlizzRank:RankOf(name)
 	return rank and Ranks:Short(rank) or nil
 end

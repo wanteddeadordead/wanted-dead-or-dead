@@ -74,10 +74,10 @@ end
 -- ============================================================================
 
 function private.BuildBand(container, width)
-	local band = W:CardButton(container, function() UI:Show("challenges") end)
+	local band = W:CardButton(container, function() UI:Show("rank") end)
 	band:SetPoint("TOPLEFT")
 	band:SetSize(width, BAND_HEIGHT)
-	W:AttachTooltip(band, "Challenges", "Your rank, streak and challenges, and the rank ladder.")
+	W:AttachTooltip(band, "Your PvP rank", "Blizzard's PvP rank as the game tells it, and your challenge streak. Opens Rank & Gear.")
 	band.badge = band:CreateTexture(nil, "ARTWORK")
 	band.badge:SetSize(40, 40)
 	band.badge:SetPoint("LEFT", 16, 0)
@@ -117,10 +117,11 @@ function private.BuildBand(container, width)
 		Theme:Skin(box, C.input, C.border)
 		band.boxes[i] = box
 	end
-	-- Without a rank for this character: one line in place of the rank and the streak
+	-- Before a season, or without a rank yet: one line in place of the points and bar
 	band.note = Theme:Text(band, "small", "", C.muted)
-	band.note:SetPoint("TOPLEFT", 250, -36)
-	band.note:SetWidth(width - 270)
+	band.note:SetPoint("TOPLEFT", 250, -26)
+	band.note:SetWidth(280)
+	band.note:SetWordWrap(true)
 	private.band = band
 end
 
@@ -292,46 +293,48 @@ end
 -- Refreshing
 -- ============================================================================
 
+---The band: your Blizzard PvP rank as the game tells it (Wanted has no ranks of its own), the points to the next and
+---its badge; and your challenge streak, from the app.
 function private.RefreshBand(data, mine)
 	local band = private.band
-	local ranked = mine ~= nil
-	band.badge:SetShown(ranked and mine.rank > 0)
-	band.points:SetShown(ranked)
-	band.toNext:SetShown(ranked)
-	band.bar:SetShown(ranked)
-	band.nextBadge:SetShown(ranked and mine.rank < Challenges.MAX_RANK)
-	band.streakLabel:SetShown(ranked)
-	band.streak:SetShown(ranked)
-	for _, box in ipairs(band.boxes) do
-		box:SetShown(ranked)
-	end
-	band.note:SetShown(not ranked)
-	if not ranked then
-		band.label:SetText("CHALLENGE RANK")
-		band.title:SetText("Not linked")
-		band.note:SetText("This character isn't linked to the Wanted app yet. Log in with the app running and it links itself.")
-		return
-	end
-	local rank = mine.rank
+	local BlizzRank = Wanted.BlizzRank
+	local r = BlizzRank:Get()
+	local rank = r and r.rank or 0
+	local climbing = r ~= nil and r.weekMax > 0 and rank < BlizzRank.MAX_RANK and r.toNext > 0
+	band.badge:SetShown(rank > 0)
+	band.points:SetShown(climbing)
+	band.toNext:SetShown(climbing)
+	band.bar:SetShown(climbing)
+	band.nextBadge:SetShown(climbing)
+	band.note:SetShown(not climbing)
 	if rank > 0 then
-		band.badge:SetTexture(Challenges:Badge(rank))
-		band.label:SetText("CHALLENGE RANK "..rank)
-		private.Fit(band.title, { Challenges:Title(rank) }, "small")
+		band.badge:SetTexture(BlizzRank:Badge(rank))
+		band.label:SetText("PVP RANK "..rank)
+		private.Fit(band.title, { BlizzRank:Title(rank) or "" }, "small")
 	else
-		band.label:SetText("NO RANK YET")
-		band.title:SetText("Unranked")
+		band.label:SetText("PVP RANK")
+		band.title:SetText(r and "No rank yet" or "Not read yet")
 	end
-	band.points:SetText(format("%d points", mine.points))
-	local floorPoints = Challenges:Threshold(rank)
-	if rank < Challenges.MAX_RANK then
-		local nextAt = mine.nextAt or Challenges:Threshold(rank + 1)
-		local toGo, nextTitle = max(nextAt - mine.points, 0), Theme:Colorize(Challenges:Title(rank + 1), C.gold)
+	if climbing then
+		band.points:SetText(format("%d / %d points", r.earned, r.toNext))
+		local toGo, nextTitle = max(r.toNext - r.earned, 0), Theme:Colorize(BlizzRank:Title(rank + 1) or "", C.gold)
 		private.Fit(band.toNext, { Theme:Colorize(toGo.." to ", C.muted)..nextTitle, Theme:Colorize(toGo.." to go", C.muted) }, "tiny")
-		band.bar:SetValue((mine.points - floorPoints) / max(nextAt - floorPoints, 1))
-		band.nextBadge:SetTexture(Challenges:Badge(rank + 1))
+		band.bar:SetValue(r.earned / max(r.toNext, 1))
+		band.nextBadge:SetTexture(BlizzRank:Badge(rank + 1))
+	elseif rank >= BlizzRank.MAX_RANK then
+		band.note:SetText(Theme:Colorize("The top rank", C.gold))
 	else
-		band.toNext:SetText(Theme:Colorize("Top rank", C.gold))
-		band.bar:SetValue(1)
+		band.note:SetText("Ranks start with the PvP season: honor from world PvP and battlegrounds climbs Blizzard's ladder.")
+	end
+	-- The challenge streak needs the app
+	local streak = mine ~= nil
+	band.streakLabel:SetShown(streak)
+	band.streak:SetShown(streak)
+	for _, box in ipairs(band.boxes) do
+		box:SetShown(streak)
+	end
+	if not streak then
+		return
 	end
 	band.streak:SetText(mine.streak == 1 and "1 day" or format("%d days", mine.streak))
 	-- Days kept filled; today's box outlined while today's challenge is still open

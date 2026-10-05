@@ -59,6 +59,17 @@ own: `blizzRanks["Name"] = { r, s, t }` (rank 1-14, the season, when heard). The
 (season) once a player has a rank in a running season. Shown only for the season the game says is running; an entry
 not heard in 30 days is dropped, and at most 5,000 are kept. The Wanted app sends them to wanteddeadordead.com.
 
+`WantedDB.hkBook` (from 1.10.0) is players' lifetime honorable kills, read from the game (the achievement comparison's
+"Total Honorable Kills" statistic) when a Wanted player targets or mouses over them: `hkBook[guid] = { n, f, hk, t }`
+(name, "H"/"A", the count, when read). Each player again only after six hours; out of combat and instances; never
+while the achievement window is open; settings.honorScout turns it off. Readings older than 30 days are dropped, and
+at most 5,000 kept. The Wanted app sends them to wanteddeadordead.com.
+
+`WantedDB.myPvp` (from 1.10.0) is each of the account's characters' own PvP numbers: `myPvp[guid] = { n, f, rank,
+points, honor, hk, season, t }` (Blizzard rank, the season's rank points, Honor Points, lifetime honorable kills, the
+season). Written at login and when the rank, honor or bags change. The Wanted app sends them for the Blizzard PvP
+boards; the site takes them only for the account's own characters.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

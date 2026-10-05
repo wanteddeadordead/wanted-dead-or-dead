@@ -381,18 +381,20 @@ function private.LayoutSlider(parent, getTable, key, label, low, high, step, for
 end
 
 function private.BuildRanks(panel, width)
-	-- Other players' challenge ranks (Ranks), from the Wanted app only
-	local ranks = private.Card(panel, 0, 128, "Challenge ranks of other players", width)
+	-- Players' Blizzard PvP ranks (Ranks), as Wanted players' addons read them from the game, and the honor scout
+	local ranks = private.Card(panel, 0, 152, "Blizzard PvP ranks of other players", width)
 	local function RankSettings() return Wanted.db.settings.ranks end
 	local function Update() Wanted.Ranks:Update() end
-	private.Toggle(ranks, RankSettings, "tooltip", "In the tooltip", "A line like \"Wanted: Rank 7, Blood Guard\" with the badge, when you mouse over a player.", 16, -38)
+	private.Toggle(ranks, RankSettings, "tooltip", "In the tooltip", "A line like \"PvP rank: Rank 7, Blood Guard\" with the badge, when you mouse over a player.", 16, -38)
 	private.Toggle(ranks, RankSettings, "target", "Over the target frame", "The rank and its title over your target's frame.", 16, -62, Update)
 	private.Toggle(ranks, RankSettings, "nameplates", "On nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.", 16, -86, Update)
 	private.Toggle(ranks, RankSettings, "chat", "In chat", "[R7] at the start of what ranked players say, in your own chat windows. Off by default.", 360, -38)
 	private.Toggle(ranks, RankSettings, "nearby", "In the Nearby window", "R7 beside the level of ranked enemies.", 360, -62, RefreshNearby)
 	private.Toggle(ranks, RankSettings, "who", "In the Who list", "R7 beside ranked players' names.", 360, -86)
-	local rankHint = Theme:Text(ranks, "tiny", "Ranks come from wanteddeadordead.com through the Wanted app. A player can never set their own.")
-	rankHint:SetPoint("TOPLEFT", 16, -110)
+	local function Root() return Wanted.db.settings end
+	private.Toggle(ranks, Root, "honorScout", "Read players' honorable kills", "When you target or mouse over a player, Wanted reads their lifetime honorable kills from the game (out of combat, a few seconds apart) for wanteddeadordead.com's Honorable Kills board.", 16, -110)
+	local rankHint = Theme:Text(ranks, "tiny", "Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none.")
+	rankHint:SetPoint("TOPLEFT", 16, -134)
 
 	local function Plate() return Wanted.db.settings.ranks.plate end
 	local function Target() return Wanted.db.settings.ranks.targetLabel end
@@ -401,7 +403,7 @@ function private.BuildRanks(panel, width)
 	local function Scale(value) return format("%.1fx", value) end
 	local sliderWidth = floor((width - 32 - 2 * 24 - 170) / 3)
 
-	local plate = private.Card(panel, -138, 140, "Rank on nameplates", width)
+	local plate = private.Card(panel, -162, 140, "Rank on nameplates", width)
 	local plateChoices, targetChoices = {}, {}
 	for _, a in ipairs(Ranks.PLATE_ANCHORS) do tinsert(plateChoices, { key = a.key, label = a.label }) end
 	for _, a in ipairs(Ranks.TARGET_ANCHORS) do tinsert(targetChoices, { key = a.key, label = a.label }) end
@@ -420,7 +422,7 @@ function private.BuildRanks(panel, width)
 	local plateHint = Theme:Text(plate, "tiny", "Changes show at once on the nameplates already up. Works with the game's nameplates, ElvUI and Plater.")
 	plateHint:SetPoint("TOPLEFT", 16, -114)
 
-	local target = private.Card(panel, -288, 100, "Rank at the target frame", width)
+	local target = private.Card(panel, -312, 100, "Rank at the target frame", width)
 	private.targetAnchor = W:Choice(target, 160, targetChoices, function(key)
 		Target().anchor = key
 		Ranks:Update()

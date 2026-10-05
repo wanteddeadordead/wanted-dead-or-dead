@@ -5519,6 +5519,80 @@ end)()
 	check(ns.BlizzRank:Of("Rank Seven") == 7, "but not over one we heard more lately")
 	C_MajorFactions, ns.db.pvpSeason, ns.db.blizzRanks = realFactions, nil, {}
 end)()
+-- The honor scout: players' lifetime honorable kills from the achievement comparison (statistic 588), one at a time,
+-- never in combat, an instance or the achievement window's way, each player again only after six hours
+;(function()
+	local asked, cleared, answer = {}, 0, "553"
+	local real = { SetAchievementComparisonUnit = SetAchievementComparisonUnit, GetComparisonStatistic = GetComparisonStatistic,
+		ClearAchievementComparisonUnit = ClearAchievementComparisonUnit, UnitIsPlayer = UnitIsPlayer, UnitName = UnitName, UnitGUID = UnitGUID,
+		UnitFactionGroup = UnitFactionGroup, IsInInstance = IsInInstance }
+	local units = { target = { guid = "Player-9-ELRIN", first = "Elrin", last = "Bones", side = "Horde" },
+		mouseover = { guid = "Player-9-SYZZ", first = "Syzz", last = "Zx", side = "Alliance" } }
+	SetAchievementComparisonUnit = function(unit) asked[#asked + 1] = unit return 1 end
+	GetComparisonStatistic = function(id) return id == 588 and answer or nil end
+	ClearAchievementComparisonUnit = function() cleared = cleared + 1 end
+	UnitIsPlayer = function(u) return units[u] ~= nil or real.UnitIsPlayer(u) end
+	UnitName = function(u) if units[u] then return units[u].first, units[u].last end return real.UnitName(u) end
+	UnitGUID = function(u) if units[u] then return units[u].guid end return real.UnitGUID(u) end
+	UnitFactionGroup = function(u) if units[u] then return units[u].side end return real.UnitFactionGroup(u) end
+	ns.db.hkBook = {}
+	clock = clock + 60
+	Fire("PLAYER_TARGET_CHANGED")
+	check(asked[1] == "target", "a targeted player's comparison is asked for")
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-OTHER")
+	check(ns.db.hkBook["Player-9-ELRIN"] == nil, "an answer for someone else is ignored")
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-ELRIN")
+	local e = ns.db.hkBook["Player-9-ELRIN"]
+	check(e and e.hk == 553 and e.n == "Elrin Bones" and e.f == "H" and cleared == 1, "their lifetime honorable kills are kept, and the comparison let go")
+	-- Too soon after the last: wait; then an enemy, with none ("--")
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	check(#asked == 1, "a few seconds between comparisons")
+	clock = clock + 5
+	answer = "--"
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-SYZZ")
+	check(asked[2] == "mouseover" and ns.db.hkBook["Player-9-SYZZ"].hk == 0 and ns.db.hkBook["Player-9-SYZZ"].f == "A", "an enemy too; '--' is none")
+	-- Read lately: not again for six hours
+	clock = clock + 5
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 2, "a player read lately isn't asked about again")
+	-- Never with the achievement window open, the switch off, or in an instance
+	ns.db.hkBook = {}
+	AchievementFrame = CreateFrame("Frame")
+	clock = clock + 5
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 2, "not while the achievement window is open")
+	AchievementFrame = nil
+	ns.db.settings.honorScout = false
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 2, "not with the switch off")
+	ns.db.settings.honorScout = true
+	IsInInstance = function() return true, "party" end
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 2, "not in an instance")
+	IsInInstance = real.IsInInstance
+	-- No answer: given up, so the next can be asked
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 3, "asked again once nothing's in the way")
+	RunTimers()
+	clock = clock + 5
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	check(#asked == 4, "an unanswered comparison is given up")
+	for k, v in pairs(real) do _G[k] = v end
+	ns.db.hkBook = {}
+	-- Our own numbers, for the Blizzard PvP boards: the season's rank points are the rank's threshold plus the points into it
+	local realFactions, realCurrency, realStats = C_MajorFactions, C_CurrencyInfo, GetPVPLifetimeStats
+	C_MajorFactions = { GetMajorFactionProgressionInfo = function() return { renownLevel = 3, renownReputationEarned = 400, renownLevelThreshold = 1200,
+		currentWeekProgressiveMaxLevel = 5, maxLevel = 14, weekNumber = 2 } end,
+		GetTotalReputationForRenownLevel = function(_, level) return ({ 750, 1650, 2700 })[level] end }
+	C_CurrencyInfo = { GetCurrencyInfo = function() return { quantity = 3200, maxQuantity = 25000 } end }
+	GetPVPLifetimeStats = function() return 214, 7 end
+	ns.db.pvpSeason = { season = 1, week = 2, endsAt = 0, weekMax = 5, seasonMax = 14, at = clock }
+	ns.BlizzRank:RecordMine()
+	local mine = ns.db.myPvp[UnitGUID("player")]
+	check(mine and mine.rank == 3 and mine.points == 3100 and mine.honor == 3200 and mine.hk == 214 and mine.season == 1, "our own rank, points, honor and kills are kept")
+	C_MajorFactions, C_CurrencyInfo, GetPVPLifetimeStats, ns.db.pvpSeason, ns.db.myPvp = realFactions, realCurrency, realStats, nil, {}
+end)()
 -- Every stat tile on every page: its value and its note side by side fit the tile (they share the bottom row)
 ;(function()
 	local over = {}

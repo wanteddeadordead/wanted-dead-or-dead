@@ -30,6 +30,9 @@ function BlizzRank:OnLoad()
 	-- Blizzard ranks heard from other Wanted players (in their sync hello), and our own: "Name" -> { r, s, t }
 	Wanted.db.blizzRanks = type(Wanted.db.blizzRanks) == "table" and Wanted.db.blizzRanks or {}
 	private.PruneShared()
+	-- Each of the account's characters' own PvP numbers, for the app (the Blizzard PvP boards): GUID -> { n, f, rank,
+	-- points, honor, hk, season, t }
+	Wanted.db.myPvp = type(Wanted.db.myPvp) == "table" and Wanted.db.myPvp or {}
 end
 
 function BlizzRank:OnEnable()
@@ -38,10 +41,43 @@ function BlizzRank:OnEnable()
 		pcall(frame.RegisterEvent, frame, event)
 	end
 	frame:SetScript("OnEvent", function()
+		BlizzRank:RecordMine()
 		for _, func in ipairs(private.listeners) do
 			func()
 		end
 	end)
+	-- A moment after login, once the client has its rank data
+	C_Timer.After(15, function() BlizzRank:RecordMine() end)
+end
+
+---Keeps this character's own PvP numbers for the app: rank, the season's rank points (the rank's threshold plus the
+---points into it), Honor Points, lifetime honorable kills and the season. Nothing when the game doesn't answer.
+function BlizzRank:RecordMine()
+	local r = BlizzRank:Get()
+	local guid = UnitGUID("player")
+	if not r or type(guid) ~= "string" then
+		return
+	end
+	local floorPoints = r.rank >= 1 and private.Number(private.Ask(C_MajorFactions and C_MajorFactions.GetTotalReputationForRenownLevel,
+		BlizzRank.FACTION, r.rank)) or 0
+	local okStats, hk = pcall(GetPVPLifetimeStats)
+	local s = Wanted.db.pvpSeason
+	local faction = UnitFactionGroup("player")
+	Wanted.db.myPvp[guid] = {
+		n = Wanted.Store and Wanted.Store:GetOrigin() or UnitName("player"),
+		f = faction == "Alliance" and "A" or "H",
+		rank = r.rank,
+		points = floorPoints + r.earned,
+		honor = BlizzRank:Honor() or 0,
+		hk = okStats and private.Readable(hk) and private.Number(hk) or 0,
+		season = type(s) == "table" and private.Number(s.season) or 0,
+		t = GetServerTime(),
+	}
+end
+
+---A value the addon may use: not a secret.
+function private.Readable(value)
+	return not (issecretvalue and issecretvalue(value))
 end
 
 ---Registers a function called when the rank, honor or marks may have changed.

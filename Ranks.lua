@@ -42,6 +42,12 @@ end
 ---@param unit string
 ---@return table?
 function Ranks:ForUnit(unit)
+	local full, faction = private.FullName(unit)
+	return full and Wanted.BlizzRank:RankOf(full, faction)
+end
+
+---A player unit's full name ("First Last") and side ("Horde", "Alliance" or nil), or nil when it can't be read.
+function private.FullName(unit)
 	-- A tooltip can hand over a secret unit token, which UnitIsPlayer refuses from addon code
 	-- Nor any unit in an instance, where identity is secret
 	if Wanted:InInstance() or not private.Readable(unit) or not UnitIsPlayer(unit) then
@@ -56,7 +62,7 @@ function Ranks:ForUnit(unit)
 	if not private.Readable(faction) or (faction ~= "Horde" and faction ~= "Alliance") then
 		faction = nil
 	end
-	return Wanted.BlizzRank:RankOf(full, faction)
+	return full, faction
 end
 
 ---"Rank 7, Blood Guard" in the title set of the player's side.
@@ -94,9 +100,15 @@ function private.OnTooltipUnit(tooltip)
 		return
 	end
 	local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)
-	local rank = unit and Ranks:ForUnit(unit)
+	local full, faction = private.FullName(unit)
+	local rank = full and Wanted.BlizzRank:RankOf(full, faction)
 	if rank then
 		tooltip:AddLine(Ranks:BadgeText(rank).." PvP rank: "..Ranks:Label(rank), 1, 0.8, 0.32)
+	end
+	-- World PvP achievements, under the same switch
+	local held = full and Wanted.Achievements:Of(full) or {}
+	if #held > 0 then
+		tooltip:AddLine("Achievements: "..Wanted.Achievements:Names(held, 3), 0.85, 0.72, 0.45, true)
 	end
 end
 

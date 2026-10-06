@@ -2288,6 +2288,14 @@ end)()
 	local stats = ns.Enemies:GetStats("Player-9-ENEMY")
 	check(f.name._text:find("Stabby Mcstab", 1, true) and not f.sure:IsShown(), "it names them, without a doubt: the recap said")
 	check(f.record._text == string.format("They've won %d, you've won %d", stats.losses, stats.wins), "with our record against them: "..tostring(f.record._text))
+	-- Their world PvP achievements on the status line, when there's room
+	ns.Achievements:Take({ { id = "witness", name = "Witness", text = "Witness 50 deaths." }, { id = "patron", name = "Patron", text = "Pay 5." } },
+		{ ["stabby mcstab"] = { "witness", "patron" } })
+	card:ShowFor("Player-9-ENEMY")
+	check(f.status._text:find("2 achievements", 1, true) and f.status:GetUnboundedStringWidth() <= f.status.fitWidth, "the death card counts their achievements: "..tostring(f.status._text))
+	ns.Achievements:Take(nil, nil)
+	card:ShowFor("Player-9-ENEMY")
+	check(not f.status._text:find("achievement", 1, true), "none without the catch-up's")
 	-- The buttons: Kill on Sight, Post a bounty (the board, their name filled in), Where they've been
 	f.kos:Click()
 	check(ns.Enemies:IsKoS("Player-9-ENEMY") and ns.db.kos["Player-9-ENEMY"].reason == "Killed me", "Kill on Sight adds them, reason Killed me")
@@ -4696,6 +4704,9 @@ end)()
 	long.weekly[1].name = "Lieutenant General's errand"
 	long.me["Player-1-ME"].week = 12345
 	ns.Challenges:SetDemo(long)
+	local defs, ids = {}, {}
+	for i = 1, 8 do defs[i], ids[i] = { id = "a"..i, name = "Achievement number "..i, text = "" }, "a"..i end
+	ns.Achievements:Take(defs, { [ns.Store:GetOrigin():lower()] = ids })
 	for _, key in ipairs({ "home", "challenges" }) do
 		ns.UI:Show(key)
 		for _, fs in ipairs(Mock.fontStrings) do
@@ -4704,6 +4715,8 @@ end)()
 			end
 		end
 	end
+	check(Shown("Achievements: Achievement number 1, +7") or Shown("8 achievements"), "your achievements on the week card, shortened to fit")
+	ns.Achievements:Take(nil, nil)
 	long.daily.text = "Win 2 rounds at Hillsbrad Foothills and Stranglethorn Vale"
 	ns.Challenges:SetDemo(long)
 	ns.UI:Show("home")
@@ -4732,7 +4745,10 @@ end)()
 	local settings = ns.db.settings.ranks
 	check(settings.tooltip and settings.target and settings.nameplates and settings.nearby and settings.who and not settings.chat, "rank switches: all on but chat")
 	ns.db.pvpSeason = { season = 1, week = 3, endsAt = 0, weekMax = 9, seasonMax = 14, at = clock }
-	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, blizzRanks = { ["Thane Oakcrest"] = { r = 7, s = 1, t = clock, f = "A" }, ["Khal Drogash"] = { r = 4, s = 1, t = clock, f = "H" } } } }
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, blizzRanks = { ["Thane Oakcrest"] = { r = 7, s = 1, t = clock, f = "A" }, ["Khal Drogash"] = { r = 4, s = 1, t = clock, f = "H" } },
+		achievementDefs = { { id = "headhunter", name = "Headhunter", text = "Collect 10." }, { id = "patron", name = "Patron", text = "Pay 5." },
+			{ id = "witness", name = "Witness", text = "See 50." }, { id = "bodyguard", name = "Bodyguard", text = "Guard 5." }, { name = "No id" }, "junk" },
+		achievements = { ["khal drogash"] = { "headhunter", "patron", "witness", "bodyguard", "made-up" }, ["Thane Oakcrest"] = { "made-up" }, [7] = { "patron" } } } }
 	ns.Catchup:Import()
 	RunTimers()
 	local origName = UnitName
@@ -4757,9 +4773,14 @@ end)()
 	local found = false
 	for _, l in ipairs(lines) do if l:find("PvP rank: Rank 4, Senior Sergeant", 1, true) and l:find("PvPRank04", 1, true) then found = true end end
 	check(found, "the tooltip line with the badge")
+	-- Achievements: unknown ones dropped, any case of name, the first three and how many more
+	check(#ns.Achievements:All() == 4 and #ns.Achievements:Of("Thane Oakcrest") == 0 and #ns.Achievements:Of("KHAL DROGASH") == 4, "the catch-up's achievements, cleaned")
+	local achLine
+	for _, l in ipairs(lines) do if l:find("Achievements:", 1, true) then achLine = l end end
+	check(achLine == "Achievements: Headhunter, Patron, Witness, +1", "the tooltip's achievements line: "..tostring(achLine))
 	settings.tooltip, lines = false, {}
 	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
-	for _, l in ipairs(lines) do check(not l:find("PvP rank:", 1, true), "no tooltip line with the switch off") end
+	for _, l in ipairs(lines) do check(not l:find("PvP rank:", 1, true) and not l:find("Achievements:", 1, true), "no tooltip lines with the switch off") end
 	settings.tooltip = true
 	GameTooltip.AddLine = origAdd
 	-- Target frame

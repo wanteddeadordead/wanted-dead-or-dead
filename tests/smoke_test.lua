@@ -4738,6 +4738,18 @@ end)()
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
 	check(Shown("WORLD PVP") and Shown("BATTLEGROUNDS") and Shown("YOU"), "the menu's groups are labelled")
+	-- Your wanted poster, at the foot of the menu on every page
+	local footPoster
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Your wanted poster" and fs._parent._shown and fs._parent.line and fs._parent:GetScript("OnClick") then footPoster = fs._parent end
+	end
+	check(footPoster, "the menu has Your wanted poster")
+	local posterShown
+	local realPosterShow = ns.Poster.Show
+	ns.Poster.Show = function() posterShown = true end
+	footPoster:GetScript("OnClick")(footPoster)
+	ns.Poster.Show = realPosterShow
+	check(posterShown, "which opens the poster")
 	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
@@ -5233,7 +5245,7 @@ end)()
 	end
 	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
 	check(calendarTabs == 1 and homeTabs == 2, "the calendar shows Home | Calendar tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
-	check(not Shown("Your wanted poster"), "the menu's poster button is gone (the poster is on Your bounties)")
+	check(Count("Your wanted poster") == 1, "the menu's poster button shows on the calendar")
 	ns.UI:Show("home")
 	check(ns.UI:IsShown("home") and Shown("Calendar"), "Home shows the Calendar tab")
 	ns.UI:Show("challenges")

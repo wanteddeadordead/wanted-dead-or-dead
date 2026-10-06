@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-06
+
 - Badges with art: your achievements and weekly medals show as icons on the Challenges card, in player tooltips
   (behind the PvP rank tooltip switch) and on the death card, and a banner with the art when you earn a new one.
 - The Challenges card shows your place on this week's boards (Top Killer, Defender, Weekly Challenger, Bounty Hunter).

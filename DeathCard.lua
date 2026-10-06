@@ -172,10 +172,14 @@ function private.Fill(guid, how)
 		tinsert(status, Theme:Colorize("On your guild's Kill on Sight", C.red))
 	end
 	local line = #status > 0 and table.concat(status, "   ") or "No bounty on them yet"
-	-- Their world PvP achievements, when there's room on the line
-	local held = Wanted.Achievements:Of(d.name)
-	local withHeld = #held > 0 and (line.."   "..(#held == 1 and held[1].name or format("%d achievements", #held))) or line
-	Theme:FitText(f.status, WIDTH - 28, { withHeld, line })
+	-- Their badges as icons, when there's room on the line
+	local badges = Wanted.Achievements:BadgesOf(d.name)
+	local candidates = { line }
+	if #badges > 0 then
+		candidates = { line.."   "..Wanted.Achievements:IconRow(badges, 4, 18),
+			line.."   "..(#badges == 1 and badges[1].name or format("%d badges", #badges)), line }
+	end
+	Theme:FitText(f.status, WIDTH - 28, candidates)
 	private.UpdateKoSButton(d)
 end
 

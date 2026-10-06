@@ -480,20 +480,18 @@ function Model:GetMySummary()
 			summary.owedCount = summary.owedCount + 1
 		end
 	end
-	-- Payments: both sides record one, so each claim counts once
-	local counted = {}
-	for payment in Store:Iterator("payment") do
-		local claimId = payment.data.claim
-		local claim = claimId and Store:Get(claimId)
-		local bounty = payment.data.bounty and Store:Get(payment.data.bounty)
-		if claimId and not counted[claimId] then
-			counted[claimId] = true
+	-- Payments: each claim paid counts once, whichever side recorded it (Payments:GetForClaim, which also reads the
+	-- first-name payments older addons recorded)
+	for claim in Store:Iterator("claim") do
+		local bounty = Store:Get(claim.data.bounty)
+		local payment = bounty and (bounty.origin == me or claim.origin == me) and Payments:GetForClaim(claim.id)
+		if payment then
 			local amount = payment.data.amount or 0
-			if bounty and bounty.origin == me then
+			if bounty.origin == me then
 				summary.paidOut = summary.paidOut + amount
 				summary.paidOutCount = summary.paidOutCount + 1
 			end
-			if claim and claim.origin == me then
+			if claim.origin == me then
 				summary.earned = summary.earned + amount
 				summary.earnedCount = summary.earnedCount + 1
 			end

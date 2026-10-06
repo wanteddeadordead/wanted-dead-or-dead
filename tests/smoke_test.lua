@@ -5474,6 +5474,15 @@ end)()
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
 end)()
+-- Trust wording: Reliable with nothing unpaid (or disputed) is a short record, never "mostly"
+;(function()
+	local meaning = ns.Reputation:GetPosterAdvice({ posted = 2, paid = 1, unpaid = 0 })
+	check(meaning:find("paid every claim", 1, true) and not meaning:find("mostly", 1, true), "one claim paid of one: every claim paid, got "..meaning)
+	meaning = ns.Reputation:GetPosterAdvice({ posted = 9, paid = 5, unpaid = 2 })
+	check(meaning:find("mostly", 1, true), "some unpaid: mostly paid, got "..meaning)
+	meaning = ns.Reputation:GetHunterAdvice({ claims = 1, witnessed = 1, confirmed = 0, disputed = 0, lone = 0, earned = 0, points = 0 })
+	check(meaning:find("checked out", 1, true) and not meaning:find("mostly", 1, true), "one kill verified of one: every kill checked out, got "..meaning)
+end)()
 -- Rank & Gear: Blizzard's rank as the game tells it, mid-season at the longest title (Lieutenant Commander, rank 10)
 ;(function()
 	local function Shown(text)

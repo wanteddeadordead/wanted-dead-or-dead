@@ -134,6 +134,11 @@ for _, b in ipairs(Achievements.BOARDS) do
 	BOARD_NAMES[b.id] = b.name
 end
 local METAL_ORDER = { gold = 1, silver = 2, bronze = 3 }
+-- The playstyle badges the site gives (how a player kills this season; they can come and go), by name, as their art
+local PLAYSTYLES = {
+	["Bully"] = "bully", ["Underdog"] = "underdog", ["Lone Wolf"] = "lone-wolf", ["Duo"] = "duo", ["Gang"] = "gang",
+	["Serial"] = "serial", ["Camper"] = "camper", ["Field Medic"] = "field-medic",
+}
 local MAX_BOARD_LINES = 25
 
 ---A badge's art: the texture and its coordinates (left, right, top, bottom), or nil for a badge with none. key is an
@@ -211,6 +216,30 @@ function Achievements:TakeWeekly(medals, week)
 	end
 end
 
+---Takes in the catch-up's playstyle badges: by lower-case name, a list of badge names. Unknown names are left out.
+---@param styles table?
+function Achievements:TakePlaystyle(styles)
+	private.playstyle = {}
+	local holders = 0
+	for name, list in pairs(type(styles) == "table" and styles or {}) do
+		if holders >= MAX_HOLDERS then
+			break
+		end
+		if type(name) == "string" and type(list) == "table" then
+			local kept = {}
+			for _, b in ipairs(list) do
+				if PLAYSTYLES[b] then
+					tinsert(kept, b)
+				end
+			end
+			if #kept > 0 then
+				private.playstyle[strlower(name)] = kept
+				holders = holders + 1
+			end
+		end
+	end
+end
+
 ---The weekly medals a player won, by full name (any case): { key, board, metal, count, name }, by board then metal.
 ---@param name string?
 ---@return table
@@ -229,8 +258,8 @@ function Achievements:MedalsOf(name)
 	return out
 end
 
----Every badge a player holds, for a row of icons: their weekly medals (gold first), then their achievements. Each is
----{ key, name, count? }.
+---Every badge a player holds, for a row of icons: their weekly medals (gold first), their achievements, then their
+---playstyle badges. Each is { key, name, count?, playstyle? }.
 ---@param name string?
 ---@return table
 function Achievements:BadgesOf(name)
@@ -240,6 +269,9 @@ function Achievements:BadgesOf(name)
 	end
 	for _, a in ipairs(Achievements:Of(name)) do
 		tinsert(out, { key = a.id, name = a.name })
+	end
+	for _, b in ipairs(type(name) == "string" and private.playstyle and private.playstyle[strlower(name)] or {}) do
+		tinsert(out, { key = PLAYSTYLES[b], name = b, playstyle = true })
 	end
 	return out
 end
@@ -308,9 +340,10 @@ function Achievements:CheckNew()
 	seen = first and {} or seen
 	local new = {}
 	for _, b in ipairs(Achievements:BadgesOf(me)) do
-		-- A medal won again counts as new: its count is part of what was seen
+		-- A medal won again counts as new: its count is part of what was seen. Playstyle badges describe the season's
+		-- play and come and go, so they're never announced
 		local mark = b.count and (b.key..":"..b.count) or b.key
-		if not seen[mark] then
+		if not b.playstyle and not seen[mark] then
 			seen[mark] = true
 			tinsert(new, b)
 		end

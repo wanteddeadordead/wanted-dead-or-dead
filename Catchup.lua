@@ -107,6 +107,7 @@ function Catchup:Import()
 	-- Weekly medals and this week's boards (app 0.2.34), then a banner for any badge that's new to this character
 	Wanted.Achievements:TakeWeekly(entry.medals, entry.weekBoards)
 	Wanted.Achievements:TakePlaystyle(entry.playstyle) -- app 0.2.35
+	Wanted.Achievements:TakeCosmetics(entry.cosmetics) -- app 0.2.36
 	Wanted.Achievements:CheckNew()
 	-- Players on other realm names to greet as realm links, also at every login
 	Sync:TakeDirectory(entry.links)

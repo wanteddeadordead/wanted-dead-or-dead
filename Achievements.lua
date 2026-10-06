@@ -273,6 +273,14 @@ function Achievements:BadgesOf(name)
 	for _, b in ipairs(type(name) == "string" and private.playstyle and private.playstyle[strlower(name)] or {}) do
 		tinsert(out, { key = PLAYSTYLES[b], name = b, playstyle = true })
 	end
+	-- Their signature badge (a cosmetic they picked) leads
+	local signature = Achievements:CosmeticsOf(name).signature
+	for i, b in ipairs(out) do
+		if b.key == signature and i > 1 then
+			tinsert(out, 1, tremove(out, i))
+			break
+		end
+	end
 	return out
 end
 
@@ -359,4 +367,91 @@ function Achievements:CheckNew()
 	Wanted:Print("New badge%s: %s.", #new == 1 and "" or "s", table.concat(names, ", "))
 	Wanted.Alerts:Warn(#new == 1 and "BADGE EARNED" or format("%d BADGES EARNED", #new), table.concat(names, "   "), Wanted.Theme.C.gold)
 	Wanted.Alerts:Sound("important")
+end
+
+
+
+-- ============================================================================
+-- Cosmetics (picked on wanteddeadordead.com, checked there against what each player has unlocked)
+-- ============================================================================
+
+-- The poster frames' colours, for the death card's border
+Achievements.FRAME_COLORS = {
+	gold = { 0.87, 0.70, 0.28 }, silver = { 0.78, 0.80, 0.83 }, bronze = { 0.69, 0.43, 0.25 }, founding = { 0.62, 0.14, 0.16 },
+}
+
+---Takes in the catch-up's cosmetics: by lower-case name, { s = signature badge, f = frame, t = stamp }. Unknown
+---frames and signatures without art are left out.
+---@param looks table?
+function Achievements:TakeCosmetics(looks)
+	private.cosmetics = {}
+	local holders = 0
+	for name, c in pairs(type(looks) == "table" and looks or {}) do
+		if holders >= MAX_HOLDERS then
+			break
+		end
+		if type(name) == "string" and type(c) == "table" then
+			local kept = {
+				signature = type(c.s) == "string" and CELLS[c.s] and c.s or nil,
+				frame = type(c.f) == "string" and Achievements.FRAME_COLORS[c.f] and c.f or nil,
+				stamp = private.Text(c.t, 40),
+			}
+			if kept.signature or kept.frame or kept.stamp then
+				private.cosmetics[strlower(name)] = kept
+				holders = holders + 1
+			end
+		end
+	end
+end
+
+---A player's cosmetics by full name (any case): { signature?, frame?, stamp? }; an empty table for none.
+---@param name string?
+---@return table
+function Achievements:CosmeticsOf(name)
+	return type(name) == "string" and private.cosmetics and private.cosmetics[strlower(name)] or {}
+end
+
+---A stamp's words, as inked on a poster: "FOUNDING HUNTER", "DEFENDER"; nil for one unknown.
+---@param id string?
+---@return string?
+function Achievements:StampText(id)
+	if type(id) ~= "string" then
+		return nil
+	end
+	local board = strmatch(id, "^board%-(.+)$")
+	if board then
+		return BOARD_NAMES[board] and strupper(BOARD_NAMES[board]) or nil
+	end
+	local def = private.defs[id]
+	return def and strupper(def.name) or nil
+end
+
+---Puts a player's signature badge before what they said, in your own chat windows (the name is the game's link, so
+---it stays as it is). On by default (settings.signatureChat).
+function private.ChatFilter(_, _, message, author, ...)
+	if not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
+		or (issecretvalue and (issecretvalue(message) or issecretvalue(author))) then
+		return false
+	end
+	local signature = Achievements:CosmeticsOf(strmatch(author, "^([^%-]+)") or author).signature
+	if not signature then
+		return false
+	end
+	return false, Achievements:IconText(signature, 14).." "..message, author, ...
+end
+
+-- Chat where a player says something; the badge goes at the start of what they said
+local CHAT_EVENTS = {
+	"CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_CHANNEL", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_PARTY",
+	"CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_INSTANCE_CHAT",
+	"CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_WHISPER", "CHAT_MSG_EMOTE",
+}
+
+function Achievements:OnEnable()
+	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
+	if addFilter then
+		for _, event in ipairs(CHAT_EVENTS) do
+			addFilter(event, private.ChatFilter)
+		end
+	end
 end

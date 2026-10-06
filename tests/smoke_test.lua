@@ -310,7 +310,13 @@ local chatSent = {}
 addonSent = {}
 -- Chat filters (the realm links hide "No player named ..." for someone just greeted)
 local chatFilters = {}
-ChatFrameUtil = { AddMessageEventFilter = function(event, func) chatFilters[event] = func end }
+-- Every filter on each event, in the order added: the game runs them all, each on what the last one gave back
+chatFilterLists = {} -- a global: the main chunk is at its limit of locals
+ChatFrameUtil = { AddMessageEventFilter = function(event, func)
+	chatFilters[event] = func
+	chatFilterLists[event] = chatFilterLists[event] or {}
+	table.insert(chatFilterLists[event], func)
+end }
 -- Chat windows: the game lists a channel in a window when it was joined by hand there, and shows its notices
 NUM_CHAT_WINDOWS = 2
 removedChannels = {}
@@ -5537,6 +5543,63 @@ end)()
 	ns:RunCommand("demo", "")
 	A:Take(nil, nil)
 	A:TakeWeekly(nil, nil)
+end)()
+-- Cosmetics from the site: a player's signature badge leads their badges and goes before what they say in chat; the
+-- death card wears the killer's frame colour, signature and stamp
+;(function()
+	local A = ns.Achievements
+	A:Take({ { id = "witness", name = "Witness", text = "See 50." }, { id = "founding-hunter", name = "Founding Hunter", text = "Beta." } },
+		{ ["stabby mcstab"] = { "witness", "founding-hunter" } })
+	A:TakeCosmetics({ ["stabby mcstab"] = { s = "founding-hunter", f = "gold", t = "founding-hunter" }, ["odd one"] = { s = "made-up", f = "plastic" }, [7] = { f = "gold" } })
+	local looks = A:CosmeticsOf("Stabby Mcstab")
+	check(looks.signature == "founding-hunter" and looks.frame == "gold" and looks.stamp == "founding-hunter", "a player's cosmetics")
+	check(next(A:CosmeticsOf("Odd One")) == nil and next(A:CosmeticsOf("Nobody")) == nil, "unknown frames and signatures are dropped")
+	check(A:StampText("founding-hunter") == "FOUNDING HUNTER" and A:StampText("board-defender") == "DEFENDER" and A:StampText("nope") == nil, "stamp words")
+	check(A:BadgesOf("Stabby Mcstab")[1].key == "founding-hunter", "the signature leads the badges")
+	-- Chat: every filter on the event in turn, as the game runs them
+	local function Say(message, author)
+		local out = message
+		for _, f in ipairs(chatFilterLists.CHAT_MSG_SAY or {}) do
+			local hide, m = f(nil, "CHAT_MSG_SAY", out, author)
+			if hide then return nil end
+			out = m or out
+		end
+		return out
+	end
+	local said = Say("hello", "Stabby Mcstab-Realm")
+	check(said and said:find(":448:512:0:64|t hello", 1, true), "the signature before what they said: "..tostring(said))
+	check(Say("hi", "Nobody Special") == "hi", "nothing for a player without one")
+	ns.db.settings.signatureChat = false
+	check(not tostring(Say("hello", "Stabby Mcstab")):find("|T", 1, true), "and nothing with the switch off")
+	ns.db.settings.signatureChat = true
+	-- The death card for this killer
+	local card, f = ns.DeathCard, ns.DeathCard:GetFrame()
+	ns.Store:UpdatePlayer("Player-9-COSMETIC", { name = "Stabby Mcstab", class = "ROGUE", level = 20, faction = "Alliance" }, clock)
+	card:ShowFor("Player-9-COSMETIC")
+	check(f.name._text:find("|T", 1, true) and f.name._text:find("Stabby Mcstab", 1, true), "the death card's name carries the signature: "..tostring(f.name._text))
+	check(f.stamp._text == "FOUNDING HUNTER", "and the stamp")
+	A:TakeCosmetics(nil)
+	card:ShowFor("Player-9-COSMETIC")
+	check(f.stamp._text == "" and not f.name._text:find("|T", 1, true), "none once the cosmetics are gone")
+	card:Hide()
+	A:Take(nil, nil)
+end)()
+-- Your wanted poster wears your cosmetics: the frame tinted to its metal (the poster smaller to fit it), the Founding
+-- seal, and the stamp
+;(function()
+	local A, me = ns.Achievements, ns.Store:GetOrigin()
+	A:Take({ { id = "founding-hunter", name = "Founding Hunter", text = "Beta." } }, { [me:lower()] = { "founding-hunter" } })
+	A:TakeCosmetics({ [me:lower()] = { f = "founding", t = "founding-hunter" } })
+	ns.Poster:Show()
+	local f = _G.WantedPosterFrame
+	check(f.frameArt._shown and f.seal._shown and f.painting._scale == 0.78, "a framed poster: the frame, the seal, smaller")
+	check(f.stamp._shown and f.stampText._text == "FOUNDING HUNTER", "and the stamp")
+	ns.Poster:Hide()
+	A:TakeCosmetics(nil)
+	ns.Poster:Show()
+	check(not f.frameArt._shown and not f.seal._shown and not f.stamp._shown and f.painting._scale == 1, "no cosmetics: the plain poster")
+	ns.Poster:Hide()
+	A:Take(nil, nil)
 end)()
 -- Trust wording: Reliable with nothing unpaid (or disputed) is a short record, never "mostly"
 ;(function()

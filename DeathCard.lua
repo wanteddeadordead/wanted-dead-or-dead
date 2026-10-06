@@ -39,6 +39,7 @@ function private.Create()
 	stripe:SetPoint("TOPLEFT", 1, -1)
 	stripe:SetPoint("TOPRIGHT", -1, -1)
 	stripe:SetHeight(3)
+	f.stripe = stripe
 	-- Below the game's Release Spirit box, which sits at the top of the screen
 	local pos = private.Settings().deathCardPos
 	if pos and pos.point then
@@ -62,6 +63,9 @@ function private.Create()
 	f.heading:SetPoint("TOPLEFT", 14, -14)
 	f.close = W:Button(f, "x", "chip", 22, 20, function() DeathCard:Hide() end)
 	f.close:SetPoint("TOPRIGHT", -8, -8)
+	-- The killer's stamp, a cosmetic, in red under the close button
+	f.stamp = Theme:Text(f, "tiny", "", C.red)
+	f.stamp:SetPoint("TOPRIGHT", -36, -16)
 
 	f.icon = f:CreateTexture(nil, "ARTWORK")
 	f.icon:SetSize(28, 28)
@@ -112,7 +116,16 @@ function private.Fill(guid, how)
 	local d = Wanted.Enemies:Describe(guid)
 	private.guid, private.name = guid, d.name
 	Theme:SetClassIcon(f.icon, d.class)
-	f.name:SetText(Theme:ClassName(d.name, d.class))
+	-- The killer's cosmetics, from the site: their signature badge before the name, their frame's colour on the card's
+	-- border and stripe, and their stamp
+	local looks = Wanted.Achievements:CosmeticsOf(d.name)
+	local signature = looks.signature and (Wanted.Achievements:IconText(looks.signature, 20).." ") or ""
+	f.name:SetText(signature..Theme:ClassName(d.name, d.class))
+	local frame = looks.frame and Wanted.Achievements.FRAME_COLORS[looks.frame]
+	local edge, stripe = frame or C.borderLight, frame or C.accent
+	Theme:SetBorderColor(f, edge)
+	f.stripe:SetColorTexture(stripe[1], stripe[2], stripe[3], 1)
+	f.stamp:SetText(Wanted.Achievements:StampText(looks.stamp) or "")
 	local who = {}
 	if d.level then
 		tinsert(who, "Level "..d.level)

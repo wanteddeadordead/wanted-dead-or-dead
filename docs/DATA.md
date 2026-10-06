@@ -253,6 +253,10 @@ knew each character held, so each is announced once. A badge is an achievement i
 Achievements, medals, this week's boards and playstyle badges come from the app's catch-up (`achievementDefs`,
 `achievements`, `medals`, `weekBoards`, `playstyle`) and are kept in memory only. Playstyle badges are never announced. A new key: no migration.
 
+`WantedDB.settings.signatureChat` (from 1.14.0, default on): players' signature badges before what they say in chat.
+Cosmetics (each player's signature badge, poster frame and stamp, picked on wanteddeadordead.com and checked there
+against what they've unlocked) come in the catch-up's `cosmetics` and are kept in memory only.
+
 `WantedDB.settings.ranks` (from 1.5.0) is `{ tooltip, target, nameplates, chat, nearby, who }`: where other players'
 challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. `ranks.plate` is `{ anchor, x, y, scale, badge,
 number }`, where the rank goes on nameplates: `anchor` one of `centre` (the default, centred over the plate), `above`,

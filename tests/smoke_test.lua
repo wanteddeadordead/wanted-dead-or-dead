@@ -4738,6 +4738,18 @@ end)()
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
 	check(Shown("WORLD PVP") and Shown("BATTLEGROUNDS") and Shown("YOU"), "the menu's groups are labelled")
+	-- Your wanted poster, at the foot of the menu on every page
+	local footPoster
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Your wanted poster" and fs._parent._shown and fs._parent.line and fs._parent:GetScript("OnClick") then footPoster = fs._parent end
+	end
+	check(footPoster, "the menu has Your wanted poster")
+	local posterShown
+	local realPosterShow = ns.Poster.Show
+	ns.Poster.Show = function() posterShown = true end
+	footPoster:GetScript("OnClick")(footPoster)
+	ns.Poster.Show = realPosterShow
+	check(posterShown, "which opens the poster")
 	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
@@ -5233,7 +5245,7 @@ end)()
 	end
 	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
 	check(calendarTabs == 1 and homeTabs == 2, "the calendar shows Home | Calendar tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
-	check(not Shown("Your wanted poster"), "the menu's poster button is gone (the poster is on Your bounties)")
+	check(Count("Your wanted poster") == 1, "the menu's poster button shows on the calendar")
 	ns.UI:Show("home")
 	check(ns.UI:IsShown("home") and Shown("Calendar"), "Home shows the Calendar tab")
 	ns.UI:Show("challenges")
@@ -5376,6 +5388,26 @@ end)()
 	Fire("MAIL_INBOX_UPDATE")
 	local got = ns.Payments:GetForClaim(myClaim.id)
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
+	-- 5. Wanted's own mail: claim ids hold a space ("First Last:seq"), and the subject carries all of it
+	SendHook("Mhureth Theolia", "Wanted bounty Mhureth Theolia:7515", 10000)
+	Fire("MAIL_SEND_SUCCESS")
+	paid = ns.Payments:GetForClaim("Mhureth Theolia:7515")
+	check(paid and paid.data.claim == "Mhureth Theolia:7515", "Wanted's own mail pays the whole claim id")
+	-- The hunter's side reads the whole id from the subject too
+	GetInboxHeaderInfo = function() return nil, nil, "Kind Poster", "Wanted bounty Hunter Me:42", 7000 end
+	Fire("MAIL_INBOX_UPDATE")
+	got = ns.Payments:GetForClaim("Hunter Me:42")
+	check(got and got.data.side == "payee", "the hunter reads the whole claim id from the subject")
+	-- 6. Payments recorded before (1.10.0 and older) kept only the first name: they still pay the claim to that hunter
+	local legacy, legacyBounty = Owed("Legacy Hunter", 10000)
+	ns.Store:InsertTest("payment", me, { claim = "Legacy", to = "Legacy Hunter", amount = 10000, side = "payer" }, clock - 2000)
+	check(ns.Payments:GetForClaim(legacy.id), "an old first-name payment pays the hunter's claim")
+	check(not ns.Payments:IsUnpaid(legacy) and ns.Bounties:IsSettled(legacyBounty), "so it's neither owed nor open")
+	local namesake = Owed("Legacy Other", 10000)
+	check(not ns.Payments:GetForClaim(namesake.id), "but not another hunter's who shares the first name")
+	local later = Owed("Legacy Hunter", 10000)
+	later.t = clock - 1000
+	check(not ns.Payments:GetForClaim(later.id), "nor the same hunter's later claim")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
 end)()

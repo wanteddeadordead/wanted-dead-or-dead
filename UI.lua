@@ -256,6 +256,21 @@ function private.Create()
 		private.navButtons[def.key] = nav
 	end
 	private.LayoutNav()
+	-- Your wanted poster, at the foot of the menu above the version (the nav ends well above it: 14 pages at most)
+	local poster = CreateFrame("Button", nil, sidebar)
+	poster:SetSize(SIDEBAR_WIDTH - 1, 34)
+	poster:SetPoint("BOTTOMLEFT", 0, 30)
+	poster.bg = Theme:Fill(poster, C.transparent)
+	poster.line = Theme:Line(poster)
+	poster.line:SetPoint("TOPLEFT", 16, 0)
+	poster.line:SetPoint("TOPRIGHT", -16, 0)
+	poster.label = Theme:Text(poster, "body", "Your wanted poster", C.gold)
+	poster.label:SetPoint("LEFT", 22, 0)
+	poster:SetScript("OnClick", function() Wanted.Poster:Show() end)
+	poster:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
+	poster:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
+	W:AttachTooltip(poster, "Your wanted poster", "The price the other faction has put on your head, on a poster with your character, to screenshot and share. Also /wanted poster.")
+	private.posterButton = poster
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
 

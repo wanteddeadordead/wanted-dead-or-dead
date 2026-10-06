@@ -68,12 +68,42 @@ end
 ---@param claimId string
 ---@return table?
 function Payments:GetForClaim(claimId)
+	local claim
 	for payment in Store:Iterator("payment") do
-		if payment.data.claim == claimId then
+		local paid = payment.data.claim
+		if paid == claimId then
 			return payment
+		end
+		-- Addon 1.10.0 and older read the claim id from the mail subject only up to its first space, so a payment
+		-- for "Mhureth Theolia:7515" says "Mhureth": it pays that claim when it went between its poster and hunter
+		if type(paid) == "string" and not strfind(paid, ":", 1, true) then
+			claim = claim or Store:Get(claimId) or false
+			if claim and private.LegacyPays(payment, claim) then
+				return payment
+			end
 		end
 	end
 	return nil
+end
+
+---Whether an old first-name payment is for a claim: it names the hunter's first name, came after the claim with at
+---least the bounty, and went between the claim's poster and hunter (sent to the hunter, or received by them).
+function private.LegacyPays(payment, claim)
+	local bounty = Store:Get(claim.data.bounty)
+	if not bounty or payment.data.claim ~= strmatch(claim.origin or "", "^(%S+)") or payment.t < claim.t
+		or (tonumber(payment.data.amount) or 0) < Bounties:GetAmount(bounty) then
+		return false
+	end
+	if payment.data.side == "payer" then
+		return payment.origin == bounty.origin and private.SameName(payment.data.to, claim.origin)
+	end
+	return payment.data.side == "payee" and payment.origin == claim.origin and private.SameName(payment.data.from, bounty.origin)
+end
+
+---The claim id in a Wanted payment mail's subject ("Wanted bounty Mhureth Theolia:7515"), or nil. Ids hold a space.
+function private.SubjectClaim(subject)
+	local claimId = type(subject) == "string" and strmatch(subject, "^"..SUBJECT_PREFIX.."(.-)%s*$")
+	return claimId ~= "" and claimId or nil
 end
 
 ---Whether a claim is the one its bounty is paid to and not paid yet: witnessed or confirmed, and the poster's
@@ -179,7 +209,7 @@ end
 
 function private.OnSendMail(recipient, subject)
 	local amount = (GetSendMailMoney and GetSendMailMoney()) or (MoneyInputFrame_GetCopper and MoneyInputFrame_GetCopper(SendMailMoney)) or 0
-	local claimId = subject and strmatch(subject, "^"..SUBJECT_PREFIX.."(%S+)")
+	local claimId = private.SubjectClaim(subject)
 	if not claimId and amount > 0 then
 		-- Written by hand: a mail to a hunter we owe, with at least what we owe them
 		local claim = private.ClaimCovered(Store:GetOrigin(), recipient, amount)
@@ -229,7 +259,7 @@ function private.ScanInbox()
 	local numItems = GetInboxNumItems()
 	for i = 1, numItems do
 		local _, _, sender, subject, money = GetInboxHeaderInfo(i)
-		local claimId = subject and strmatch(subject, "^"..SUBJECT_PREFIX.."(%S+)")
+		local claimId = private.SubjectClaim(subject)
 		if not claimId and money and money > 0 then
 			-- Written by hand: a mail from a poster whose bounty we're owed, with at least the bounty
 			local claim = private.ClaimCovered(sender, Store:GetOrigin(), money)

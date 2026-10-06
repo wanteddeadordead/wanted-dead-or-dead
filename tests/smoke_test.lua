@@ -5376,6 +5376,26 @@ end)()
 	Fire("MAIL_INBOX_UPDATE")
 	local got = ns.Payments:GetForClaim(myClaim.id)
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
+	-- 5. Wanted's own mail: claim ids hold a space ("First Last:seq"), and the subject carries all of it
+	SendHook("Mhureth Theolia", "Wanted bounty Mhureth Theolia:7515", 10000)
+	Fire("MAIL_SEND_SUCCESS")
+	paid = ns.Payments:GetForClaim("Mhureth Theolia:7515")
+	check(paid and paid.data.claim == "Mhureth Theolia:7515", "Wanted's own mail pays the whole claim id")
+	-- The hunter's side reads the whole id from the subject too
+	GetInboxHeaderInfo = function() return nil, nil, "Kind Poster", "Wanted bounty Hunter Me:42", 7000 end
+	Fire("MAIL_INBOX_UPDATE")
+	got = ns.Payments:GetForClaim("Hunter Me:42")
+	check(got and got.data.side == "payee", "the hunter reads the whole claim id from the subject")
+	-- 6. Payments recorded before (1.10.0 and older) kept only the first name: they still pay the claim to that hunter
+	local legacy, legacyBounty = Owed("Legacy Hunter", 10000)
+	ns.Store:InsertTest("payment", me, { claim = "Legacy", to = "Legacy Hunter", amount = 10000, side = "payer" }, clock - 2000)
+	check(ns.Payments:GetForClaim(legacy.id), "an old first-name payment pays the hunter's claim")
+	check(not ns.Payments:IsUnpaid(legacy) and ns.Bounties:IsSettled(legacyBounty), "so it's neither owed nor open")
+	local namesake = Owed("Legacy Other", 10000)
+	check(not ns.Payments:GetForClaim(namesake.id), "but not another hunter's who shares the first name")
+	local later = Owed("Legacy Hunter", 10000)
+	later.t = clock - 1000
+	check(not ns.Payments:GetForClaim(later.id), "nor the same hunter's later claim")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
 end)()

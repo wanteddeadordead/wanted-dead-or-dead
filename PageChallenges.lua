@@ -178,7 +178,7 @@ function private.BuildRecent(container)
 end
 
 ---The week card: this week's score and when it resets, the streak, the weekly challenges done, points in all, and
----the way to Blizzard's rank (Rank & Gear). Challenges are for fun: they make a weekly score, never a rank.
+---your world PvP achievements and the way to Blizzard's rank (Rank & Gear). Challenges are for fun: never a rank.
 function private.BuildScore(container, width, height)
 	local cardWidth = width - LEFT_WIDTH - GAP
 	local inner = cardWidth - 32
@@ -207,6 +207,10 @@ function private.BuildScore(container, width, height)
 	card.total = Theme:Text(card, "small", "")
 	card.total:SetPoint("TOPLEFT", 16, -170)
 	card.total:SetWidth(inner)
+	card.achievements = Theme:Text(card, "small", "", C.gold)
+	card.achievements:SetPoint("TOPLEFT", 16, -190)
+	card.achievements:SetWidth(inner)
+	card.inner = inner
 	local foot = Theme:Text(card, "tiny", "Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's.", C.faint)
 	foot:SetPoint("BOTTOMLEFT", 16, 50)
 	foot:SetWidth(inner)
@@ -345,8 +349,21 @@ function private.RefreshRecent(mine)
 	end
 end
 
+---This character's world PvP achievements on the week card: they're kept for good, linked to the app or not.
+function private.RefreshAchievements(card)
+	local held = Wanted.Achievements:Mine()
+	if #held == 0 then
+		card.achievements:SetText("")
+		return
+	end
+	local A = Wanted.Achievements
+	Theme:FitText(card.achievements, card.inner, { "Achievements: "..A:Names(held), "Achievements: "..A:Names(held, 2),
+		"Achievements: "..A:Names(held, 1), format("%d achievements", #held) })
+end
+
 function private.RefreshScore(data, mine)
 	local card = private.score
+	private.RefreshAchievements(card)
 	if not mine then
 		card.score:SetText("")
 		card.resets:SetText("This character isn't linked to the app yet.")

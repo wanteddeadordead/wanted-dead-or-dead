@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- World PvP achievements from wanteddeadordead.com (with the app, 0.2.33 or later): yours on the Challenges week card,
+  a player's in their tooltip (behind the PvP rank tooltip switch) and on the death card when there's room. They're
+  earned once and kept for good, for fun: not a rank.
+
 ## [1.10.0] - 2026-10-05
 
 - The menu is grouped as World PvP (the bounty pages, Hotspots, Enemies, Guild Kill on Sight, Leaderboards, Activity,

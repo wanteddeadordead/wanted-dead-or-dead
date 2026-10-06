@@ -171,7 +171,11 @@ function private.Fill(guid, how)
 	elseif d.guildKos then
 		tinsert(status, Theme:Colorize("On your guild's Kill on Sight", C.red))
 	end
-	f.status:SetText(#status > 0 and table.concat(status, "   ") or "No bounty on them yet")
+	local line = #status > 0 and table.concat(status, "   ") or "No bounty on them yet"
+	-- Their world PvP achievements, when there's room on the line
+	local held = Wanted.Achievements:Of(d.name)
+	local withHeld = #held > 0 and (line.."   "..(#held == 1 and held[1].name or format("%d achievements", #held))) or line
+	Theme:FitText(f.status, WIDTH - 28, { withHeld, line })
 	private.UpdateKoSButton(d)
 end
 

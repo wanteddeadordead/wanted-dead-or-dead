@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-06
+
+- Playstyle badges with art (Bully, Underdog, Lone Wolf, Duo, Gang, Serial, Camper, Field Medic) show with a player's
+  other badges in tooltips, on the death card and on the Challenges card. They describe the season's play, so they
+  come and go and are never announced. Needs the app 0.2.35 or later.
+
 ## [1.12.0] - 2026-10-06
 
 - Badges with art: your achievements and weekly medals show as icons on the Challenges card, in player tooltips

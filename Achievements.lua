@@ -101,3 +101,226 @@ function Achievements:Names(list, most)
 	end
 	return table.concat(names, ", ")
 end
+
+
+
+-- ============================================================================
+-- Badge art, weekly medals and this week's boards
+-- ============================================================================
+
+local TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\badges"
+local SHEET, CELL = 512, 64
+-- Each badge's cell in Media/badges.tga: 64 px cells, 8 to a row from the top left (made by the private export script)
+local CELLS = {
+	["headhunter"] = 0, ["patron"] = 1, ["untouchable"] = 2, ["outlaw-catcher"] = 3, ["witness"] = 4,
+	["hot-zone-regular"] = 5, ["bodyguard"] = 6, ["founding-hunter"] = 7,
+	["top-killer:gold"] = 8, ["top-killer:silver"] = 9, ["top-killer:bronze"] = 10,
+	["defender:gold"] = 11, ["defender:silver"] = 12, ["defender:bronze"] = 13,
+	["weekly-challenger:gold"] = 14, ["weekly-challenger:silver"] = 15, ["weekly-challenger:bronze"] = 16,
+	["bounty-hunter:gold"] = 17, ["bounty-hunter:silver"] = 18, ["bounty-hunter:bronze"] = 19,
+}
+-- The weekly boards, in the order they're shown, and the medals' metals by place
+Achievements.BOARDS = {
+	{ id = "top-killer", name = "Top Killer", unit = "kills" },
+	{ id = "defender", name = "Defender", unit = "kills" },
+	{ id = "weekly-challenger", name = "Weekly Challenger", unit = "points" },
+	{ id = "bounty-hunter", name = "Bounty Hunter", unit = "bounties" },
+}
+local BOARD_NAMES = {}
+for _, b in ipairs(Achievements.BOARDS) do
+	BOARD_NAMES[b.id] = b.name
+end
+local METAL_ORDER = { gold = 1, silver = 2, bronze = 3 }
+local MAX_BOARD_LINES = 25
+
+---A badge's art: the texture and its coordinates (left, right, top, bottom), or nil for a badge with none. key is an
+---achievement's id, or a medal's "board:metal".
+---@param key string
+---@return string? texture
+---@return number? left
+---@return number? right
+---@return number? top
+---@return number? bottom
+function Achievements:Icon(key)
+	local cell = CELLS[key]
+	if not cell then
+		return nil
+	end
+	local col, row = cell % 8, floor(cell / 8)
+	return TEXTURE, col * CELL / SHEET, (col + 1) * CELL / SHEET, row * CELL / SHEET, (row + 1) * CELL / SHEET
+end
+
+---A badge's art as inline text for tooltips and lines: "|T...|t", or "" for a badge with none.
+---@param key string
+---@param size number? pixels, default 20
+---@return string
+function Achievements:IconText(key, size)
+	local cell = CELLS[key]
+	if not cell then
+		return ""
+	end
+	size = size or 20
+	local col, row = cell % 8, floor(cell / 8)
+	return format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", TEXTURE, size, size, SHEET, SHEET, col * CELL, (col + 1) * CELL, row * CELL, (row + 1) * CELL)
+end
+
+---Takes in the catch-up's weekly medals (by lower-case name: { b, m, n }) and this week's boards. Unknown boards and
+---metals are left out.
+---@param medals table?
+---@param week table?
+function Achievements:TakeWeekly(medals, week)
+	private.medals, private.week = {}, nil
+	local holders = 0
+	for name, list in pairs(type(medals) == "table" and medals or {}) do
+		if holders >= MAX_HOLDERS then
+			break
+		end
+		if type(name) == "string" and type(list) == "table" then
+			local kept = {}
+			for _, m in ipairs(list) do
+				local n = type(m) == "table" and tonumber(m.n)
+				if n and n >= 1 and BOARD_NAMES[m.b] and METAL_ORDER[m.m] then
+					tinsert(kept, { board = m.b, metal = m.m, count = min(floor(n), 999) })
+				end
+			end
+			if #kept > 0 then
+				private.medals[strlower(name)] = kept
+				holders = holders + 1
+			end
+		end
+	end
+	if type(week) == "table" and tonumber(week.start) and tonumber(week.ends) and type(week.boards) == "table" then
+		local boards = {}
+		for id in pairs(BOARD_NAMES) do
+			local lines, kept = week.boards[id], {}
+			if type(lines) == "table" then
+				for i = 1, min(#lines, MAX_BOARD_LINES) do
+					local l = lines[i]
+					local name = type(l) == "table" and private.Text(l.n, 60)
+					if name and tonumber(l.v) then
+						tinsert(kept, { name = name, faction = l.f == "H" and "Horde" or l.f == "A" and "Alliance" or nil, value = tonumber(l.v) })
+					end
+				end
+			end
+			boards[id] = kept
+		end
+		private.week = { start = tonumber(week.start), ends = tonumber(week.ends), boards = boards }
+	end
+end
+
+---The weekly medals a player won, by full name (any case): { key, board, metal, count, name }, by board then metal.
+---@param name string?
+---@return table
+function Achievements:MedalsOf(name)
+	local out = {}
+	for _, m in ipairs(type(name) == "string" and private.medals and private.medals[strlower(name)] or {}) do
+		tinsert(out, { key = m.board..":"..m.metal, board = m.board, metal = m.metal, count = m.count,
+			name = BOARD_NAMES[m.board].." "..m.metal })
+	end
+	sort(out, function(a, b)
+		if a.metal ~= b.metal then
+			return METAL_ORDER[a.metal] < METAL_ORDER[b.metal]
+		end
+		return a.board < b.board
+	end)
+	return out
+end
+
+---Every badge a player holds, for a row of icons: their weekly medals (gold first), then their achievements. Each is
+---{ key, name, count? }.
+---@param name string?
+---@return table
+function Achievements:BadgesOf(name)
+	local out = {}
+	for _, m in ipairs(Achievements:MedalsOf(name)) do
+		tinsert(out, { key = m.key, name = m.name, count = m.count })
+	end
+	for _, a in ipairs(Achievements:Of(name)) do
+		tinsert(out, { key = a.id, name = a.name })
+	end
+	return out
+end
+
+---A row of badge icons as inline text: the first `most`, then "+N". A badge this addon has no art for (one the site
+---added since) shows its name.
+---@param badges table from BadgesOf
+---@param most number
+---@param size number? pixels
+---@return string
+function Achievements:IconRow(badges, most, size)
+	local parts = {}
+	for i = 1, min(#badges, most) do
+		local icon = Achievements:IconText(badges[i].key, size)
+		tinsert(parts, icon ~= "" and icon or badges[i].name)
+	end
+	if #badges > most then
+		tinsert(parts, "+"..(#badges - most))
+	end
+	return table.concat(parts, " ")
+end
+
+---This character's place on each of this week's boards: { name, place?, value?, unit }, in board order; nil when the
+---catch-up brought no boards for this week (or the week has ended).
+---@return table?
+function Achievements:MyPlaces()
+	local week = private.week
+	if not week or week.ends <= GetServerTime() then
+		return nil
+	end
+	local me = strlower(Wanted.Store and Wanted.Store:GetOrigin() or UnitName("player") or "")
+	local out = {}
+	for _, b in ipairs(Achievements.BOARDS) do
+		local line = { name = b.name, unit = b.unit }
+		for i, l in ipairs(week.boards[b.id] or {}) do
+			if strlower(l.name) == me then
+				line.place, line.value = i, l.value
+				break
+			end
+		end
+		tinsert(out, line)
+	end
+	return out
+end
+
+---"1st", "2nd", "3rd", "11th", "22nd".
+function Achievements:Ordinal(n)
+	local last2, last = n % 100, n % 10
+	local suffix = "th"
+	if last2 < 11 or last2 > 13 then
+		suffix = last == 1 and "st" or last == 2 and "nd" or last == 3 and "rd" or "th"
+	end
+	return n..suffix
+end
+
+---Announces this character's badges that are new since the last catch-up: a banner with the art. The first catch-up
+---a character sees only notes what they hold (WantedDB.badgesSeen).
+function Achievements:CheckNew()
+	local me = Wanted.Store and Wanted.Store:GetOrigin() or UnitName("player")
+	if type(me) ~= "string" then
+		return
+	end
+	Wanted.db.badgesSeen = type(Wanted.db.badgesSeen) == "table" and Wanted.db.badgesSeen or {}
+	local seen = Wanted.db.badgesSeen[me]
+	local first = type(seen) ~= "table"
+	seen = first and {} or seen
+	local new = {}
+	for _, b in ipairs(Achievements:BadgesOf(me)) do
+		-- A medal won again counts as new: its count is part of what was seen
+		local mark = b.count and (b.key..":"..b.count) or b.key
+		if not seen[mark] then
+			seen[mark] = true
+			tinsert(new, b)
+		end
+	end
+	Wanted.db.badgesSeen[me] = seen
+	if first or #new == 0 then
+		return
+	end
+	local names = {}
+	for _, b in ipairs(new) do
+		tinsert(names, Achievements:IconText(b.key, 24).." "..b.name..(b.count and b.count > 1 and (" x"..b.count) or ""))
+	end
+	Wanted:Print("New badge%s: %s.", #new == 1 and "" or "s", table.concat(names, ", "))
+	Wanted.Alerts:Warn(#new == 1 and "BADGE EARNED" or format("%d BADGES EARNED", #new), table.concat(names, "   "), Wanted.Theme.C.gold)
+	Wanted.Alerts:Sound("important")
+end

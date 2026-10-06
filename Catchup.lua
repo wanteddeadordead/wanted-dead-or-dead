@@ -104,6 +104,9 @@ function Catchup:Import()
 	end
 	-- World PvP achievements and what each is, from the site (app 0.2.33)
 	Wanted.Achievements:Take(entry.achievementDefs, entry.achievements)
+	-- Weekly medals and this week's boards (app 0.2.34), then a banner for any badge that's new to this character
+	Wanted.Achievements:TakeWeekly(entry.medals, entry.weekBoards)
+	Wanted.Achievements:CheckNew()
 	-- Players on other realm names to greet as realm links, also at every login
 	Sync:TakeDirectory(entry.links)
 	-- The guilds' Kill on Sight lists as the server keeps them: newer changes only, so taking them again is harmless

@@ -178,7 +178,7 @@ end
 ---@return boolean
 function Bounties:IsSettled(bounty)
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id and Bounties:GetClaimLevel(claim) >= 3 then
+		if claim.data.bounty == bounty.id and (Bounties:GetClaimLevel(claim) >= 3 or Wanted.Payments:GetForClaim(claim.id)) then
 			return true
 		end
 	end

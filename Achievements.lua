@@ -118,6 +118,9 @@ local CELLS = {
 	["defender:gold"] = 11, ["defender:silver"] = 12, ["defender:bronze"] = 13,
 	["weekly-challenger:gold"] = 14, ["weekly-challenger:silver"] = 15, ["weekly-challenger:bronze"] = 16,
 	["bounty-hunter:gold"] = 17, ["bounty-hunter:silver"] = 18, ["bounty-hunter:bronze"] = 19,
+	-- Playstyle badges (the site's; not sent to the addon yet) and the weekly all-three challenge badge
+	["bully"] = 20, ["underdog"] = 21, ["lone-wolf"] = 22, ["duo"] = 23, ["gang"] = 24, ["serial"] = 25, ["camper"] = 26,
+	["field-medic"] = 27, ["all-three"] = 28,
 }
 -- The weekly boards, in the order they're shown, and the medals' metals by place
 Achievements.BOARDS = {

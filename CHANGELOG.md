@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-10-05
+
+- Your record no longer says you "mostly" paid (or that your kills "mostly" check out) when nothing is unpaid or
+  disputed: it says every claim was paid, and that the stars rise with each one.
+
 ## [1.11.1] - 2026-10-05
 
 - Fixed: Your bounty money left out payments that older versions recorded with only the hunter's first name.

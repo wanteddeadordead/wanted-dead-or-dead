@@ -14,14 +14,14 @@ local CARD_HEIGHT = 196
 local KEYS = {
 	poster = {
 		{ 5, "Trusted", C.green, "4 or more claims paid, next to none unpaid." },
-		{ 3.5, "Reliable", C.green, "Most claims owed paid." },
+		{ 3.5, "Reliable", C.green, "Claims paid, few or none unpaid: rises with each one paid." },
 		{ nil, "New poster", C.muted, "No claim on your bounties has come due yet." },
 		{ 2, "Doubtful", C.amber, "A fair share of claims left unpaid." },
 		{ 0.5, "Untrustworthy", C.red, "As many claims unpaid as paid, or more." },
 	},
 	hunter = {
 		{ 5, "Trusted", C.green, "4 or more kills verified, next to none disputed." },
-		{ 3.5, "Reliable", C.green, "Most kills verified." },
+		{ 3.5, "Reliable", C.green, "Kills verified, few or none disputed: rises with each one." },
 		{ nil, "Unproven", C.muted, "No kill verified by a witness or the poster yet." },
 		{ 2, "Doubtful", C.amber, "A fair share of claims disputed." },
 		{ 0.5, "Untrustworthy", C.red, "As many claims disputed as verified, or more." },

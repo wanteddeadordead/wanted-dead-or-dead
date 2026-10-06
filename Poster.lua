@@ -18,6 +18,13 @@ local private = {
 	customAmount = nil, -- copper; a made-up reward to show instead, just for fun (never saved or shared)
 }
 local TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\poster"
+-- A poster frame, a cosmetic (picked on wanteddeadordead.com): one grey frame, tinted to its metal, in the top
+-- 512x682 of a 512x1024 texture; the painting sits in its window, these fractions of the frame in from its edges
+local FRAME_TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\poster-frame"
+local SEAL_TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal"
+local FRAME_HEIGHT = 682 / 1024
+local FRAME_WINDOW = { 0.1525, 0.1122, 0.6931, 0.7756 } -- left, top, width, height of the window, as fractions of the frame
+local FRAMED_SCALE = 0.78 -- a framed poster draws smaller, so the frame fits on screen
 -- Rye (SIL Open Font License, see THIRD_PARTY_NOTICES.md): western wood type, like the painted WANTED
 local POSTER_FONT = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\Rye.ttf"
 -- The painting fills the top of a 512x1024 texture; its own shape, and where its empty spaces are, as
@@ -145,6 +152,22 @@ function private.GetFrame()
 	art:SetTexture(TEXTURE)
 	art:SetTexCoord(0, 1, 0, PAINTING_HEIGHT)
 
+	-- The frame and its stamp, shown when this character has picked them (private.Dress)
+	local frameArt = painting:CreateTexture(nil, "OVERLAY")
+	frameArt:SetTexture(FRAME_TEXTURE)
+	frameArt:SetTexCoord(0, 1, 0, FRAME_HEIGHT)
+	local frameWidth, frameHeight = painting:GetWidth() / FRAME_WINDOW[3], painting:GetHeight() / FRAME_WINDOW[4]
+	frameArt:SetSize(frameWidth, frameHeight)
+	frameArt:SetPoint("TOPLEFT", painting, "TOPLEFT", -FRAME_WINDOW[1] * frameWidth, FRAME_WINDOW[2] * frameHeight)
+	frameArt:Hide()
+	frame.frameArt = frameArt
+	local seal = painting:CreateTexture(nil, "OVERLAY", nil, 1)
+	seal:SetTexture(SEAL_TEXTURE)
+	seal:SetSize(frameWidth * 0.17, frameWidth * 0.17)
+	seal:SetPoint("CENTER", frameArt, "TOP", 0, -FRAME_WINDOW[2] * frameHeight * 0.5)
+	seal:Hide()
+	frame.seal = seal
+
 	-- The player, live, head and shoulders
 	local model = CreateFrame("PlayerModel", nil, painting)
 	Place(model, painting, PORTRAIT)
@@ -190,9 +213,22 @@ function private.GetFrame()
 	frame.rewardNote:SetPoint("TOP", rewardBand, "BOTTOM", 0, -height * 0.004)
 	frame.rewardNote:SetTextColor(INK[1], INK[2], INK[3], 0.85)
 
+	-- The stamp: a pasted-on label in the poster's lettering, across the bottom of the portrait
+	local stamp = CreateFrame("Frame", nil, text)
+	stamp:SetPoint("BOTTOMLEFT", painting, "TOPLEFT", PORTRAIT[1] * painting:GetWidth() - 6, -(PORTRAIT[4] - 0.02) * painting:GetHeight())
+	stamp:Hide()
+	local stampBg = stamp:CreateTexture(nil, "BACKGROUND")
+	stampBg:SetAllPoints()
+	stampBg:SetColorTexture(0.96, 0.89, 0.77, 0.95)
+	frame.stampText = stamp:CreateFontString(nil, "OVERLAY")
+	frame.stampText:SetFontObject(PosterFont("WantedFontPosterStamp", floor(height * 0.026)))
+	frame.stampText:SetTextColor(0.62, 0.12, 0.1)
+	frame.stampText:SetPoint("CENTER")
+	frame.stamp = stamp
+
 	-- Under the poster: where it's from, then the buttons (hidden for the screenshot)
 	frame.credit = Theme:Text(frame, "small", "Wanted: Dead or... Dead  -  a World PvP addon for WoW Forever", { 0.85, 0.78, 0.66 })
-	frame.credit:SetPoint("TOP", painting, "BOTTOM", 0, -10)
+	frame.credit:SetPoint("TOP", painting, "BOTTOM", 0, -10) -- below the frame instead when there is one (private.Dress)
 	local buttons = CreateFrame("Frame", nil, frame)
 	buttons:SetSize(470, 30)
 	buttons:SetPoint("TOP", frame.credit, "BOTTOM", 0, -12)
@@ -263,6 +299,30 @@ function private.Fill(frame)
 	else
 		FitText(frame.reward, "No price on your head yet", frame.rewardFont, frame.rewardFontSmall, frame.rewardWidth)
 		frame.rewardNote:SetText("")
+	end
+	private.Dress(frame)
+end
+
+---This character's cosmetics on the poster, from the site: the frame tinted to its metal (the poster draws smaller to
+---fit it, with the Founding frame's wax seal on top) and the stamp.
+function private.Dress(frame)
+	local looks = Wanted.Achievements:CosmeticsOf(Wanted.Store:GetOrigin())
+	local color = looks.frame and Wanted.Achievements.FRAME_COLORS[looks.frame]
+	frame.frameArt:SetShown(color ~= nil)
+	frame.seal:SetShown(looks.frame == "founding")
+	frame.painting:SetScale(color and FRAMED_SCALE or 1)
+	frame.credit:ClearAllPoints()
+	if color then
+		frame.frameArt:SetVertexColor(color[1], color[2], color[3])
+		frame.credit:SetPoint("TOP", frame.frameArt, "BOTTOM", 0, -10)
+	else
+		frame.credit:SetPoint("TOP", frame.painting, "BOTTOM", 0, -10)
+	end
+	local stamp = Wanted.Achievements:StampText(looks.stamp)
+	frame.stamp:SetShown(stamp ~= nil)
+	if stamp then
+		frame.stampText:SetText(stamp)
+		frame.stamp:SetSize(frame.stampText:GetStringWidth() + 16, frame.stampText:GetStringHeight() + 8)
 	end
 end
 

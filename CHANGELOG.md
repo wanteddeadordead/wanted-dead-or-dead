@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-06
+
+- Cosmetics, picked on wanteddeadordead.com (member area, Characters) from what your badges and weekly medals unlock:
+  - your signature badge goes before what you say in other Wanted players' chat (Settings: Signature badges in chat,
+    on by default) and leads your badges in their tooltips
+  - when you kill a Wanted player, their death card wears your frame's colour, your signature badge and your stamp
+  - your wanted poster in game shows your frame (gold, silver, bronze, or Founding with its wax seal) and stamp
+  Needs the app 0.2.36 or later.
+
 ## [1.13.0] - 2026-10-06
 
 - Playstyle badges with art (Bully, Underdog, Lone Wolf, Duo, Gang, Serial, Camper, Field Medic) show with a player's

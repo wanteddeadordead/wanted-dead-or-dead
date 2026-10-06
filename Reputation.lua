@@ -304,6 +304,10 @@ function Reputation:GetPosterAdvice(tally)
 	else
 		advice = "Keep paying confirmed claims within 2 days to stay Trusted."
 	end
+	-- Reliable with nothing unpaid is a short record, not a missed payment: the stars rise with each claim paid
+	if label == "Reliable" and tally.unpaid == 0 then
+		return "You've paid every claim you owed. Your stars rise with each claim you pay, to 5 at five.", advice
+	end
 	return POSTER_MEANING[label], advice
 end
 
@@ -327,6 +331,9 @@ function Reputation:GetHunterAdvice(tally)
 		advice = format("%d more verified kill%s, with no disputes, makes you Trusted.", more, more == 1 and "" or "s")
 	else
 		advice = "Keep claiming only kills you made to stay Trusted."
+	end
+	if label == "Reliable" and tally.disputed == 0 then
+		return "Every kill you've claimed checked out. Your stars rise with each verified kill, to 5 at five.", advice
 	end
 	return HUNTER_MEANING[label], advice
 end

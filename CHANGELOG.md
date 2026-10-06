@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-05
+
 - Fixed: Your bounty money left out payments that older versions recorded with only the hunter's first name.
 
 ## [1.11.0] - 2026-10-05

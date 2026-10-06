@@ -210,6 +210,9 @@ function private.BuildScore(container, width, height)
 	card.achievements = Theme:Text(card, "small", "", C.gold)
 	card.achievements:SetPoint("TOPLEFT", 16, -190)
 	card.achievements:SetWidth(inner)
+	card.boards = Theme:Text(card, "small", "")
+	card.boards:SetPoint("TOPLEFT", 16, -212)
+	card.boards:SetWidth(inner)
 	card.inner = inner
 	local foot = Theme:Text(card, "tiny", "Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's.", C.faint)
 	foot:SetPoint("BOTTOMLEFT", 16, 50)
@@ -349,16 +352,37 @@ function private.RefreshRecent(mine)
 	end
 end
 
----This character's world PvP achievements on the week card: they're kept for good, linked to the app or not.
+---This character's badges on the week card (kept for good, linked to the app or not), and their place on each of
+---this week's boards.
 function private.RefreshAchievements(card)
-	local held = Wanted.Achievements:Mine()
-	if #held == 0 then
+	local A = Wanted.Achievements
+	local badges = A:BadgesOf(Wanted.Store:GetOrigin())
+	if #badges == 0 then
 		card.achievements:SetText("")
+	else
+		Theme:FitText(card.achievements, card.inner, { "Badges: "..A:IconRow(badges, 8, 18), "Badges: "..A:IconRow(badges, 4, 18),
+			format("%d badge%s", #badges, #badges == 1 and "" or "s") })
+	end
+	local places = A:MyPlaces()
+	if not places then
+		card.boards:SetText("")
 		return
 	end
-	local A = Wanted.Achievements
-	Theme:FitText(card.achievements, card.inner, { "Achievements: "..A:Names(held), "Achievements: "..A:Names(held, 2),
-		"Achievements: "..A:Names(held, 1), format("%d achievements", #held) })
+	local long, short = {}, {}
+	for _, p in ipairs(places) do
+		if p.place then
+			tinsert(long, format("%s %s", p.name, A:Ordinal(p.place)))
+			tinsert(short, A:Ordinal(p.place))
+		end
+	end
+	if #long == 0 then
+		Theme:FitText(card.boards, card.inner, { "Weekly boards: not in a top 25 yet", "Not on a weekly board yet" })
+		card.boards:SetTextColor(unpack(C.muted))
+		return
+	end
+	Theme:FitText(card.boards, card.inner, { "Weekly boards: "..table.concat(long, ", "), table.concat(long, ", "),
+		"Boards: "..table.concat(short, ", ") })
+	card.boards:SetTextColor(unpack(C.text))
 end
 
 function private.RefreshScore(data, mine)

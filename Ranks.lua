@@ -105,10 +105,10 @@ function private.OnTooltipUnit(tooltip)
 	if rank then
 		tooltip:AddLine(Ranks:BadgeText(rank).." PvP rank: "..Ranks:Label(rank), 1, 0.8, 0.32)
 	end
-	-- World PvP achievements, under the same switch
-	local held = full and Wanted.Achievements:Of(full) or {}
-	if #held > 0 then
-		tooltip:AddLine("Achievements: "..Wanted.Achievements:Names(held, 3), 0.85, 0.72, 0.45, true)
+	-- Their badges (weekly medals, then achievements) as a row of icons, under the same switch
+	local badges = full and Wanted.Achievements:BadgesOf(full) or {}
+	if #badges > 0 then
+		tooltip:AddLine("Badges: "..Wanted.Achievements:IconRow(badges, 6, 20), 0.85, 0.72, 0.45)
 	end
 end
 

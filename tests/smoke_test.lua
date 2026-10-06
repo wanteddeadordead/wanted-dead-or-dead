@@ -2292,10 +2292,11 @@ end)()
 	ns.Achievements:Take({ { id = "witness", name = "Witness", text = "Witness 50 deaths." }, { id = "patron", name = "Patron", text = "Pay 5." } },
 		{ ["stabby mcstab"] = { "witness", "patron" } })
 	card:ShowFor("Player-9-ENEMY")
-	check(f.status._text:find("2 achievements", 1, true) and f.status:GetUnboundedStringWidth() <= f.status.fitWidth, "the death card counts their achievements: "..tostring(f.status._text))
+	check((f.status._text:find("Media\\badges", 1, true) or f.status._text:find("2 badges", 1, true)) and f.status:GetUnboundedStringWidth() <= f.status.fitWidth,
+		"the death card shows their badges: "..tostring(f.status._text))
 	ns.Achievements:Take(nil, nil)
 	card:ShowFor("Player-9-ENEMY")
-	check(not f.status._text:find("achievement", 1, true), "none without the catch-up's")
+	check(not f.status._text:find("badge", 1, true), "none without the catch-up's")
 	-- The buttons: Kill on Sight, Post a bounty (the board, their name filled in), Where they've been
 	f.kos:Click()
 	check(ns.Enemies:IsKoS("Player-9-ENEMY") and ns.db.kos["Player-9-ENEMY"].reason == "Killed me", "Kill on Sight adds them, reason Killed me")
@@ -4715,7 +4716,7 @@ end)()
 			end
 		end
 	end
-	check(Shown("Achievements: Achievement number 1, +7") or Shown("8 achievements"), "your achievements on the week card, shortened to fit")
+	check(Shown("8 badges"), "your badges on the week card, down to a count when they don't fit (badges with no art show their names)")
 	ns.Achievements:Take(nil, nil)
 	long.daily.text = "Win 2 rounds at Hillsbrad Foothills and Stranglethorn Vale"
 	ns.Challenges:SetDemo(long)
@@ -4788,11 +4789,12 @@ end)()
 	-- Achievements: unknown ones dropped, any case of name, the first three and how many more
 	check(#ns.Achievements:All() == 4 and #ns.Achievements:Of("Thane Oakcrest") == 0 and #ns.Achievements:Of("KHAL DROGASH") == 4, "the catch-up's achievements, cleaned")
 	local achLine
-	for _, l in ipairs(lines) do if l:find("Achievements:", 1, true) then achLine = l end end
-	check(achLine == "Achievements: Headhunter, Patron, Witness, +1", "the tooltip's achievements line: "..tostring(achLine))
+	for _, l in ipairs(lines) do if l:find("Badges:", 1, true) then achLine = l end end
+	local _, icons = tostring(achLine):gsub("|T", "")
+	check(achLine and icons == 4 and achLine:find(":256:320:0:64|t", 1, true), "the tooltip's badges line: four icons, Witness's cell among them: "..tostring(achLine))
 	settings.tooltip, lines = false, {}
 	for _, f in ipairs(tooltipPostCalls) do f(GameTooltip) end
-	for _, l in ipairs(lines) do check(not l:find("PvP rank:", 1, true) and not l:find("Achievements:", 1, true), "no tooltip lines with the switch off") end
+	for _, l in ipairs(lines) do check(not l:find("PvP rank:", 1, true) and not l:find("Badges:", 1, true), "no tooltip lines with the switch off") end
 	settings.tooltip = true
 	GameTooltip.AddLine = origAdd
 	-- Target frame
@@ -5473,6 +5475,60 @@ end)()
 	check(ns.Model:GetMySummary().earnedCount == after.earnedCount + 1, "and counts it earned")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
+end)()
+-- Badge art, weekly medals and this week's boards (Achievements.lua, from the app's catch-up)
+;(function()
+	local A, me = ns.Achievements, ns.Store:GetOrigin()
+	local function Shown(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+		return false
+	end
+	local tex, l, r, t, b = A:Icon("defender:silver")
+	check(tex:find("Media\\badges", 1, true) and l == 4 * 64 / 512 and r == 5 * 64 / 512 and t == 64 / 512 and b == 128 / 512, "a medal's cell in the sheet")
+	check(A:Icon("made-up") == nil and A:IconText("made-up") == "", "no art for an unknown badge")
+	check(A:Ordinal(1) == "1st" and A:Ordinal(2) == "2nd" and A:Ordinal(3) == "3rd" and A:Ordinal(11) == "11th" and A:Ordinal(22) == "22nd" and A:Ordinal(113) == "113th", "ordinals")
+	A:Take({ { id = "witness", name = "Witness", text = "See 50." } }, { [me:lower()] = { "witness" } })
+	A:TakeWeekly({ [me:lower()] = { { b = "defender", m = "silver", n = 2 }, { b = "top-killer", m = "gold", n = 1 }, { b = "made-up", m = "gold", n = 1 }, { b = "defender", m = "tin", n = 1 } } },
+		{ start = clock - 3600, ends = clock + 86400, boards = { ["top-killer"] = { { n = "Someone", v = 30 }, { n = me, f = "H", v = 12 } }, ["made-up"] = { { n = me, v = 1 } } } })
+	local medals = A:MedalsOf(me)
+	check(#medals == 2 and medals[1].key == "top-killer:gold" and medals[2].name == "Defender silver" and medals[2].count == 2, "medals, gold first, unknown ones dropped")
+	local badges = A:BadgesOf(me)
+	check(#badges == 3 and badges[3].key == "witness", "badges: medals, then achievements")
+	local places = A:MyPlaces()
+	check(places and #places == 4 and places[1].place == 2 and places[1].value == 12 and places[2].place == nil, "my places on this week's boards")
+	-- The banner: the first catch-up only notes what's held; a new medal (or one won again) is announced
+	local realWarn, warned = ns.Alerts.Warn, {}
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." / "..sub end
+	ns.db.badgesSeen = nil
+	A:CheckNew()
+	check(#warned == 0 and ns.db.badgesSeen[me]["witness"], "the first catch-up notes the badges quietly")
+	A:TakeWeekly({ [me:lower()] = { { b = "defender", m = "silver", n = 3 }, { b = "top-killer", m = "gold", n = 1 } } }, nil)
+	A:CheckNew()
+	check(#warned == 1 and warned[1]:find("BADGE EARNED", 1, true) and warned[1]:find("Defender silver x3", 1, true), "a medal won again is announced: "..tostring(warned[1]))
+	A:CheckNew()
+	check(#warned == 1, "and only once")
+	check(A:MyPlaces() == nil, "no boards without this week's")
+	ns.Alerts.Warn = realWarn
+	-- The week card: the places line fits
+	ns.Challenges:SetDemo(nil)
+	A:TakeWeekly(nil, { start = clock - 3600, ends = clock + 86400, boards = { ["weekly-challenger"] = { { n = me, v = 35 } }, ["bounty-hunter"] = { { n = "X", v = 1 }, { n = me, v = 1 } } } })
+	ns:RunCommand("demo", "")
+	ns.UI:Show("challenges")
+	check(Shown("Weekly boards: Weekly Challenger 1st, Bounty Hunter 2nd") or Shown("Weekly Challenger 1st, Bounty Hunter 2nd") or Shown("Boards: 1st, 2nd"), "your places on the week card")
+	for _, fs in ipairs(Mock.fontStrings) do
+		if rawget(fs, "fitWidth") and fs._text ~= "" and fs._parent._shown and not fs._wrap then
+			check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for its card: "..fs._text)
+		end
+	end
+	ns:RunCommand("demo", "")
+	A:Take(nil, nil)
+	A:TakeWeekly(nil, nil)
 end)()
 -- Trust wording: Reliable with nothing unpaid (or disputed) is a short record, never "mostly"
 ;(function()

@@ -5400,7 +5400,11 @@ end)()
 	check(got and got.data.side == "payee", "the hunter reads the whole claim id from the subject")
 	-- 6. Payments recorded before (1.10.0 and older) kept only the first name: they still pay the claim to that hunter
 	local legacy, legacyBounty = Owed("Legacy Hunter", 10000)
+	local paidBefore = ns.Model:GetMySummary()
 	ns.Store:InsertTest("payment", me, { claim = "Legacy", to = "Legacy Hunter", amount = 10000, side = "payer" }, clock - 2000)
+	local paidAfter = ns.Model:GetMySummary()
+	check(paidAfter.paidOutCount == paidBefore.paidOutCount + 1 and paidAfter.paidOut == paidBefore.paidOut + 10000 and paidAfter.oweCount == paidBefore.oweCount - 1,
+		"your bounty money counts an old first-name payment as paid out, not owed")
 	check(ns.Payments:GetForClaim(legacy.id), "an old first-name payment pays the hunter's claim")
 	check(not ns.Payments:IsUnpaid(legacy) and ns.Bounties:IsSettled(legacyBounty), "so it's neither owed nor open")
 	local namesake = Owed("Legacy Other", 10000)
@@ -5408,6 +5412,65 @@ end)()
 	local later = Owed("Legacy Hunter", 10000)
 	later.t = clock - 1000
 	check(not ns.Payments:GetForClaim(later.id), "nor the same hunter's later claim")
+	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
+	MailFrame._shown = false
+end)()
+-- A bounty's whole path with real record ids ("First Last:seq", as every character's are on WoW Forever), as the
+-- <OLYMPUS> bounty went: posted, claimed, confirmed, paid by Wanted's mail, then a late claim from a client that hadn't
+-- heard. Then the hunter's side of a payment. Test records ("TEST:n") have no space, which once hid a bug here.
+;(function()
+	local me = ns.Store:GetOrigin()
+	check(me:find(" ", 1, true), "the test player has a surname: "..me)
+	local function Foreign(origin, kind, seq, t, data)
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = t, data = data })
+		ns.Store:Merge(r, origin)
+		return ns.db.records[r.id]
+	end
+	local function State(bounty) return (ns.Model:GetStateLabel(ns.Model:GetBountyInfo(bounty))) end
+	local before = ns.Model:GetMySummary()
+	local bounty = ns.Bounties:PostGuild("Real Guild", "Alliance", 10000)
+	check(bounty and bounty.id:find("^"..me..":"), "the bounty has a real id: "..tostring(bounty and bounty.id))
+	local hunter = "Mhureth Theolia"
+	local victim = { victim = "Player-4619-HEAL", victimName = "Healing Myself", victimGuild = "Real Guild", deathId = "real-1" }
+	local kill = Foreign(hunter, "kill", 8514, clock - 600, { killer = "Player-4619-MHU", killerName = hunter, victim = victim.victim, victimName = victim.victimName, victimGuild = victim.victimGuild, deathId = victim.deathId, zone = "Duskwood", honor = true })
+	local claim = Foreign(hunter, "claim", 8515, clock - 500, { bounty = bounty.id, kill = kill.id, victim = victim.victim, victimName = victim.victimName, victimGuild = victim.victimGuild, deathId = victim.deathId, killT = clock - 600 })
+	check(claim and claim.id == "Mhureth Theolia:8515", "the hunter's claim is taken in")
+	ns.Bounties:Decide(claim, false)
+	check(State(bounty) == "You owe" and ns.Bounties:IsSettled(bounty), "confirmed: settled, and owed")
+	-- Pay: Wanted fills in the mail, the player presses Send
+	local money, realMoney, realSendMoney = 1000000, GetMoney, GetSendMailMoney
+	GetMoney = function() return money end
+	MailFrame._shown = true
+	check(ns.Payments:Prefill(claim), "Pay fills in the mail")
+	local subject = SendMailSubjectEditBox:GetText()
+	check(subject == "Wanted bounty Mhureth Theolia:8515", "the subject carries the whole claim id: "..tostring(subject))
+	GetSendMailMoney = function() return 10000 end
+	for _, f in ipairs(globalHooks.SendMail or {}) do f(hunter, subject, "") end
+	money = money - 10000 - 30
+	Fire("MAIL_SEND_SUCCESS")
+	local payment = ns.Payments:GetForClaim(claim.id)
+	check(payment and payment.data.claim == claim.id and payment.data.bounty == bounty.id and payment.data.to == hunter, "the payment names the claim and the bounty")
+	check(State(bounty) == "Paid", "the bounty says Paid, got "..State(bounty))
+	local after = ns.Model:GetMySummary()
+	check(after.paidOutCount == before.paidOutCount + 1 and after.paidOut == before.paidOut + 10000 and after.oweCount == before.oweCount, "your bounty money: paid out, nothing more owed")
+	check(ns.Reputation:GetTally(me).paid >= 1, "your record as a poster counts it")
+	-- Another hunter's client, that hadn't heard of the confirm, files a claim later: it changes nothing
+	local late = Foreign("Elmonito Melee", "claim", 113, clock - 100, { bounty = bounty.id, kill = "Elmonito Melee:11", victim = "Player-4613-HOLY", victimName = "Holy Crits", victimGuild = "Real Guild", deathId = "real-2", killT = clock - 200 })
+	check(late and not ns.Payments:IsUnpaid(late) and State(bounty) == "Paid" and ns.Model:GetBountyInfo(bounty).hunter == hunter, "a late claim on a paid bounty is owed nothing")
+	-- The hunter's side: our claim, paid by a poster's Wanted mail
+	local poster = "Kind Poster"
+	local theirs = Foreign(poster, "bounty", 40, clock - 7200, { target = "Player-9-REALT", targetName = "Real Target", amount = 7000, level = 20 })
+	local myKill = ns.Store:NewRecord("kill", { killer = "Player-1-ME", killerName = me, victim = "Player-9-REALT", victimName = "Real Target", deathId = "real-3", honor = true })
+	local myClaim = ns.Store:NewRecord("claim", { bounty = theirs.id, kill = myKill.id, victim = "Player-9-REALT", victimName = "Real Target", deathId = "real-3", killT = myKill.t })
+	check(myClaim.id:find(" ", 1, true), "our claim id holds a space: "..myClaim.id)
+	Foreign(poster, "confirm", 41, clock, { claim = myClaim.id })
+	local realCount, realHeader = GetInboxNumItems, GetInboxHeaderInfo
+	GetInboxNumItems = function() return 1 end
+	GetInboxHeaderInfo = function() return nil, nil, poster, "Wanted bounty "..myClaim.id, 7000 end
+	Fire("MAIL_INBOX_UPDATE")
+	local got = ns.Payments:GetForClaim(myClaim.id)
+	check(got and got.data.side == "payee" and got.data.claim == myClaim.id and got.data.bounty == theirs.id, "the hunter's record names the whole claim")
+	check(ns.Model:GetMySummary().earnedCount == after.earnedCount + 1, "and counts it earned")
 	GetInboxNumItems, GetInboxHeaderInfo, GetMoney, GetSendMailMoney = realCount, realHeader, realMoney, realSendMoney
 	MailFrame._shown = false
 end)()

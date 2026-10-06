@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed: Your bounty money left out payments that older versions recorded with only the hunter's first name.
+
 ## [1.11.0] - 2026-10-05
 
 - Fixed: paying a bounty by Wanted's mail recorded only the hunter's first name, so the bounty still said you owed

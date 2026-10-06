@@ -2,10 +2,11 @@
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-05
+
 - Fixed: paying a bounty by Wanted's mail recorded only the hunter's first name, so the bounty still said you owed
   them. Payments made that way before now count too, on both sides.
 - Your wanted poster is back at the foot of the menu.
-
 - World PvP achievements from wanteddeadordead.com (with the app, 0.2.33 or later): yours on the Challenges week card,
   a player's in their tooltip (behind the PvP rank tooltip switch) and on the death card when there's room. They're
   earned once and kept for good, for fun: not a rank.

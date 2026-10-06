@@ -250,8 +250,8 @@ a note also kept the character's challenge rank; challenges have no ranks now, a
 `WantedDB.badgesSeen` (from 1.12.0) is `name -> { [badge] = true }`: the badges the "badge earned" banner already
 knew each character held, so each is announced once. A badge is an achievement id, or a weekly medal as
 `"board:metal:count"` (a medal won again is new). The first catch-up a character sees only notes what they hold.
-Achievements, medals and this week's boards come from the app's catch-up (`achievementDefs`, `achievements`, `medals`,
-`weekBoards`) and are kept in memory only. A new key: no migration.
+Achievements, medals, this week's boards and playstyle badges come from the app's catch-up (`achievementDefs`,
+`achievements`, `medals`, `weekBoards`, `playstyle`) and are kept in memory only. Playstyle badges are never announced. A new key: no migration.
 
 `WantedDB.settings.ranks` (from 1.5.0) is `{ tooltip, target, nameplates, chat, nearby, who }`: where other players'
 challenge ranks (from the catch-up's `ranks`) show. All on but `chat`. `ranks.plate` is `{ anchor, x, y, scale, badge,

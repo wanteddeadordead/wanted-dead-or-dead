@@ -5514,6 +5514,14 @@ end)()
 	A:CheckNew()
 	check(#warned == 1, "and only once")
 	check(A:MyPlaces() == nil, "no boards without this week's")
+	-- Playstyle badges: after medals and achievements, unknown names dropped, never announced
+	A:TakePlaystyle({ [me:lower()] = { "Lone Wolf", "Made Up", "Camper" }, ["someone else"] = { "Bully" } })
+	badges = A:BadgesOf(me)
+	check(badges[#badges].key == "camper" and badges[#badges - 1].key == "lone-wolf" and badges[#badges].playstyle, "playstyle badges come last")
+	check(#A:BadgesOf("Someone Else") == 1 and A:IconText("lone-wolf") ~= "", "anyone's playstyle, with art")
+	A:CheckNew()
+	check(#warned == 1, "playstyle badges are never announced")
+	A:TakePlaystyle(nil)
 	ns.Alerts.Warn = realWarn
 	-- The week card: the places line fits
 	ns.Challenges:SetDemo(nil)

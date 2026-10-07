@@ -122,6 +122,28 @@ local CELLS = {
 	["bully"] = 20, ["underdog"] = 21, ["lone-wolf"] = 22, ["duo"] = 23, ["gang"] = 24, ["serial"] = 25, ["camper"] = 26,
 	["field-medic"] = 27, ["all-three"] = 28,
 }
+-- The calling-card emblems (each player's, picked on the site, else their best unlocked): Media/emblems.tga, cells as
+-- above (made by the private export script)
+local EMBLEM_TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\emblems"
+local EMBLEM_CELLS = {
+	["killer-emblem"] = 0, ["honor-emblem"] = 1, ["headhunter-emblem"] = 2, ["patron-emblem"] = 3,
+	["defender-emblem"] = 4, ["underdog-emblem"] = 5, ["streak-emblem"] = 6, ["multi-emblem"] = 7,
+	["witness-emblem"] = 8, ["battles-emblem"] = 9, ["champion-emblem"] = 10, ["challenger-emblem"] = 11,
+	["zone-hillsbrad-foothills-emblem"] = 12, ["zone-stranglethorn-vale-emblem"] = 13, ["zone-ashenvale-emblem"] = 14,
+	["zone-the-barrens-emblem"] = 15, ["zone-duskwood-emblem"] = 16, ["zone-redridge-mountains-emblem"] = 17,
+	["zone-westfall-emblem"] = 18, ["zone-elwynn-forest-emblem"] = 19, ["zone-stonetalon-mountains-emblem"] = 20,
+	["zone-arathi-highlands-emblem"] = 21, ["zone-wetlands-emblem"] = 22, ["zone-thousand-needles-emblem"] = 23,
+	["zone-moonglade-emblem"] = 24, ["zone-loch-modan-emblem"] = 25, ["zone-tanaris-emblem"] = 26,
+	["zone-swamp-of-sorrows-emblem"] = 27, ["zone-silverpine-forest-emblem"] = 28,
+	["zone-alterac-mountains-emblem"] = 29, ["zone-badlands-emblem"] = 30, ["zone-desolace-emblem"] = 31,
+	["zone-dustwallow-marsh-emblem"] = 32, ["zone-feralas-emblem"] = 33, ["zone-searing-gorge-emblem"] = 34,
+	["zone-blasted-lands-emblem"] = 35, ["zone-felwood-emblem"] = 36, ["zone-ungoro-crater-emblem"] = 37,
+	["zone-azshara-emblem"] = 38, ["zone-burning-steppes-emblem"] = 39, ["zone-winterspring-emblem"] = 40,
+	["zone-western-plaguelands-emblem"] = 41, ["zone-eastern-plaguelands-emblem"] = 42, ["zone-silithus-emblem"] = 43,
+	["class-warrior-emblem"] = 44, ["class-paladin-emblem"] = 45, ["class-hunter-emblem"] = 46,
+	["class-rogue-emblem"] = 47, ["class-priest-emblem"] = 48, ["class-shaman-emblem"] = 49,
+	["class-mage-emblem"] = 50, ["class-warlock-emblem"] = 51, ["class-druid-emblem"] = 52,
+}
 -- The weekly boards, in the order they're shown, and the medals' metals by place
 Achievements.BOARDS = {
 	{ id = "top-killer", name = "Top Killer", unit = "kills" },
@@ -170,6 +192,20 @@ function Achievements:IconText(key, size)
 	size = size or 20
 	local col, row = cell % 8, floor(cell / 8)
 	return format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", TEXTURE, size, size, SHEET, SHEET, col * CELL, (col + 1) * CELL, row * CELL, (row + 1) * CELL)
+end
+
+---A calling-card emblem as chat text (|T...|t), or "" for one without art in this version.
+---@param id string
+---@param size number?
+---@return string
+function Achievements:EmblemText(id, size)
+	local cell = EMBLEM_CELLS[id]
+	if not cell then
+		return ""
+	end
+	size = size or 20
+	local col, row = cell % 8, floor(cell / 8)
+	return format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", EMBLEM_TEXTURE, size, size, SHEET, SHEET, col * CELL, (col + 1) * CELL, row * CELL, (row + 1) * CELL)
 end
 
 ---Takes in the catch-up's weekly medals (by lower-case name: { b, m, n }) and this week's boards. Unknown boards and
@@ -380,8 +416,8 @@ Achievements.FRAME_COLORS = {
 	gold = { 0.87, 0.70, 0.28 }, silver = { 0.78, 0.80, 0.83 }, bronze = { 0.69, 0.43, 0.25 }, founding = { 0.62, 0.14, 0.16 },
 }
 
----Takes in the catch-up's cosmetics: by lower-case name, { s = signature badge, f = frame, t = stamp }. Unknown
----frames and signatures without art are left out.
+---Takes in the catch-up's cosmetics: by lower-case name, { e = calling-card emblem, s = signature badge, f = frame,
+---t = stamp }. Unknown frames, and emblems and signatures without art, are left out.
 ---@param looks table?
 function Achievements:TakeCosmetics(looks)
 	private.cosmetics = {}
@@ -392,11 +428,12 @@ function Achievements:TakeCosmetics(looks)
 		end
 		if type(name) == "string" and type(c) == "table" then
 			local kept = {
+				emblem = type(c.e) == "string" and EMBLEM_CELLS[c.e] and c.e or nil,
 				signature = type(c.s) == "string" and CELLS[c.s] and c.s or nil,
 				frame = type(c.f) == "string" and Achievements.FRAME_COLORS[c.f] and c.f or nil,
 				stamp = private.Text(c.t, 40),
 			}
-			if kept.signature or kept.frame or kept.stamp then
+			if kept.emblem or kept.signature or kept.frame or kept.stamp then
 				private.cosmetics[strlower(name)] = kept
 				holders = holders + 1
 			end
@@ -404,7 +441,7 @@ function Achievements:TakeCosmetics(looks)
 	end
 end
 
----A player's cosmetics by full name (any case): { signature?, frame?, stamp? }; an empty table for none.
+---A player's cosmetics by full name (any case): { emblem?, signature?, frame?, stamp? }; an empty table for none.
 ---@param name string?
 ---@return table
 function Achievements:CosmeticsOf(name)
@@ -426,18 +463,18 @@ function Achievements:StampText(id)
 	return def and strupper(def.name) or nil
 end
 
----Puts a player's signature badge before what they said, in your own chat windows (the name is the game's link, so
----it stays as it is). On by default (settings.signatureChat).
+---Puts a player's calling-card emblem before what they said, in your own chat windows (the name is the game's link,
+---so it stays as it is). On by default (settings.signatureChat).
 function private.ChatFilter(_, _, message, author, ...)
 	if not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
 		or (issecretvalue and (issecretvalue(message) or issecretvalue(author))) then
 		return false
 	end
-	local signature = Achievements:CosmeticsOf(strmatch(author, "^([^%-]+)") or author).signature
-	if not signature then
+	local emblem = Achievements:CosmeticsOf(strmatch(author, "^([^%-]+)") or author).emblem
+	if not emblem then
 		return false
 	end
-	return false, Achievements:IconText(signature, 14).." "..message, author, ...
+	return false, Achievements:EmblemText(emblem, 14).." "..message, author, ...
 end
 
 -- Chat where a player says something; the badge goes at the start of what they said

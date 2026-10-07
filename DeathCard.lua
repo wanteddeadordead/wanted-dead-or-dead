@@ -116,11 +116,11 @@ function private.Fill(guid, how)
 	local d = Wanted.Enemies:Describe(guid)
 	private.guid, private.name = guid, d.name
 	Theme:SetClassIcon(f.icon, d.class)
-	-- The killer's cosmetics, from the site: their signature badge before the name, their frame's colour on the card's
+	-- The killer's cosmetics, from the site: their calling-card emblem before the name, their frame's colour on the card's
 	-- border and stripe, and their stamp
 	local looks = Wanted.Achievements:CosmeticsOf(d.name)
-	local signature = looks.signature and (Wanted.Achievements:IconText(looks.signature, 20).." ") or ""
-	f.name:SetText(signature..Theme:ClassName(d.name, d.class))
+	local emblem = looks.emblem and (Wanted.Achievements:EmblemText(looks.emblem, 20).." ") or ""
+	f.name:SetText(emblem..Theme:ClassName(d.name, d.class))
 	local frame = looks.frame and Wanted.Achievements.FRAME_COLORS[looks.frame]
 	local edge, stripe = frame or C.borderLight, frame or C.accent
 	Theme:SetBorderColor(f, edge)

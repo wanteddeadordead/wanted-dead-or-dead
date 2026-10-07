@@ -150,11 +150,14 @@ UI:RegisterPage("enemies", {
 	group = "World PvP",
 	title = "Enemies",
 	subtitle = "Every enemy you've met: how often, who won, their guild, and where they were last. Click one for options.",
-	order = 3,
+	order = 2,
 	badge = function()
 		local nearby = Enemies:CountNearby()
 		return nearby > 0 and nearby or nil
 	end,
+	menuLabel = "Enemies",
+	tabLabel = "Enemies",
+	tabs = { "enemies", "hotspots", "guildkos", "activity" },
 	build = function(container, width, height)
 		private.nemesis = {}
 		local tileWidth = floor((width - 24) / 3)

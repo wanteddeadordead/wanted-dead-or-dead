@@ -111,6 +111,8 @@ UI:RegisterPage("hunters", {
 	title = "Leaderboards",
 	subtitle = "Ranked from what happened: witnessed kills, confirmed claims, bounties paid, guild kills and deaths of the last 3 days.",
 	order = 4,
+	under = "challenges",
+	tabLabel = "Leaderboards",
 	build = function(container, width, height)
 		local view = W:Segmented(container, {
 			{ key = "hunters", label = "Bounty hunters" },

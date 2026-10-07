@@ -67,6 +67,8 @@ UI:RegisterPage("activity", {
 	title = "Activity",
 	subtitle = "Kills, deaths and sightings (others' kept 3 days; wanteddeadordead.com has all). Click an enemy to post a bounty.",
 	order = 5,
+	under = "enemies",
+	tabLabel = "Activity",
 	build = function(container, width, height)
 		local filter = W:Segmented(container, {
 			{ key = "all", label = "Everything" },

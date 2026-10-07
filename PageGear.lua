@@ -115,9 +115,10 @@ end
 
 UI:RegisterPage("gear", {
 	title = "Gear",
-	under = "rank", -- a tab of Rank & Gear
+	under = "challenges",
 	subtitle = "The rank vendors' PvP gear for your class: what it costs and what you still need. Click an item to chase it.",
 	order = 7.1,
+	tabLabel = "Gear",
 	build = function(container, width, height)
 		private.rowWidth = width - 12 -- the list keeps 12 for its scroll bar
 		private.summary = Theme:Text(container, "heading", "")

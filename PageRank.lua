@@ -223,9 +223,9 @@ UI:RegisterPage("rank", {
 	group = "Battlegrounds",
 	title = "Rank & Gear",
 	tabLabel = "Rank",
-	tabs = { "rank", "gear" },
 	subtitle = "Your Blizzard PvP rank, what each rank unlocks at the rank vendors, and your honor and marks.",
 	order = 7,
+	under = "challenges",
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.rankTile = W:StatTile(container, "Your rank", C.accent)

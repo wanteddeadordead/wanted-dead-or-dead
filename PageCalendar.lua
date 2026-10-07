@@ -218,9 +218,10 @@ end
 
 UI:RegisterPage("calendar", {
 	title = "Calendar",
-	under = "home", -- a tab of Home
+	under = "challenges",
 	noHeader = true,
 	order = 0.1,
+	tabLabel = "Calendar",
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.blizzTile = W:StatTile(container, "Blizzard PvP season", C.accent)

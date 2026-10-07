@@ -141,7 +141,10 @@ UI:RegisterPage("web", {
 	group = "You",
 	title = "Website & app",
 	subtitle = "Where the leaderboards are, and the app that puts you on them.",
-	order = 5.5,
+	order = 6,
+	menuLabel = "You",
+	tabLabel = "Website & app",
+	tabs = { "web", "settings", "tools" },
 	build = function(container, width)
 		private.BuildSite(container, width)
 		private.BuildApp(container, width)

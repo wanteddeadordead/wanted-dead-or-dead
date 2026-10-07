@@ -458,7 +458,7 @@ UI:RegisterPage("challenges", {
 	title = "Challenges",
 	subtitle = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double.",
 	group = "World PvP",
-	order = 5.2,
+	order = 4,
 	badge = function()
 		local done, total = Challenges:CountDone()
 		if not done then
@@ -466,6 +466,9 @@ UI:RegisterPage("challenges", {
 		end
 		return done.."/"..total, C.gold
 	end,
+	menuLabel = "Progress",
+	tabLabel = "Challenges",
+	tabs = { "challenges", "hunters", "calendar", "rank", "gear" },
 	build = function(container, width, height)
 		private.BuildEmpty(container, width)
 		private.BuildDaily(container)

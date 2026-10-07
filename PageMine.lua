@@ -41,6 +41,8 @@ UI:RegisterPage("mine", {
 	subtitle = "The bounties you posted: what you owe, what's waiting on you, and your record as a poster.",
 	order = 2,
 	badge = function() return Model:GetActionCount() end,
+	under = "board",
+	tabLabel = "Your bounties",
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.oweTile = W:StatTile(container, "You owe", C.red)

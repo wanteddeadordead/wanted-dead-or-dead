@@ -97,6 +97,11 @@ local TAG_ENEMY, TAG_SIGHTINGS = "E", "S"
 local TAG_UPDATE = "U"
 -- Sent privately to a posse's caller: I'm joining (Posse)
 local TAG_POSSE_JOIN = "J"
+-- A world PvP raid's ad (Raids): on the channel, and to realm links, whose clients share it once on theirs (fw = 1).
+-- Passing news like sightings: never stored, never forwarded further. Older versions ignore it.
+local TAG_RAID = "A"
+-- Sent privately to a raid's leader: I'm joining (or signing up for) your raid { r = raid id } (Raids)
+local TAG_RAID_JOIN = "I"
 -- The server's sync channel, or (q) a player asking for the current one: { e = epoch, n = name, a = 1 (the
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
@@ -1515,6 +1520,15 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
+	-- A join for a raid we lead
+	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_RAID_JOIN..":" then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" and Wanted.Raids then
+			Wanted.Raids:OnJoin(sender, tbl)
+		end
+		return
+	end
 	-- A join for a posse we called
 	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_POSSE_JOIN..":" then
 		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
@@ -1672,6 +1686,17 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 	end
 	-- Waiting for an update: take nothing in until this client can read what newer versions write
 	if Wanted:GetRequiredUpdate() then
+		return
+	end
+	if tag == TAG_RAID then
+		if Wanted.Raids then
+			Wanted.Raids:OnAd(tbl, sender)
+		end
+		-- One from a realm link goes on our channel once, so players on this realm name see it too
+		if viaLink and tbl.fw == nil and private.channelId then
+			tbl.fw = 1
+			private.Send(TAG_RAID, tbl)
+		end
 		return
 	end
 	if viaLink then
@@ -2070,6 +2095,22 @@ end
 ---@param guid string the target
 function Sync:SendPosseJoin(caller, guid)
 	return private.Send(TAG_POSSE_JOIN, { g = guid }, nil, caller)
+end
+
+---Shares a raid's ad: on the channel, and to each realm link (whose clients share it on theirs).
+---@param ad table
+function Sync:SendRaidAd(ad)
+	private.Send(TAG_RAID, ad)
+	for name in pairs(private.links) do
+		private.Send(TAG_RAID, ad, nil, name)
+	end
+end
+
+---Asks a raid's leader to invite us, or signs us up for a raid that hasn't started.
+---@param leader string
+---@param raidId string
+function Sync:SendRaidJoin(leader, raidId)
+	return private.Send(TAG_RAID_JOIN, { r = raidId }, nil, leader)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

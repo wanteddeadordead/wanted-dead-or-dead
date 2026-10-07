@@ -4749,18 +4749,12 @@ end)()
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
 	check(not Shown("WORLD PVP") and not Shown("BATTLEGROUNDS") and Shown("Bounties") and Shown("Progress") and Shown("You"),
 		"the menu is one short list, with no group headings")
-	-- Your wanted poster, at the foot of the menu on every page
-	local footPoster
+	-- The calling card and the poster are tabs of You now, not buttons at the menu's foot
+	local footButton = false
 	for _, fs in ipairs(Mock.fontStrings) do
-		if fs._text == "Your wanted poster" and fs._parent._shown and fs._parent.line and fs._parent:GetScript("OnClick") then footPoster = fs._parent end
+		if (fs._text == "Your wanted poster" or fs._text == "Your calling card") and rawget(fs._parent, "line") and fs._parent:GetScript("OnClick") then footButton = true end
 	end
-	check(footPoster, "the menu has Your wanted poster")
-	local posterShown
-	local realPosterShow = ns.Poster.Show
-	ns.Poster.Show = function() posterShown = true end
-	footPoster:GetScript("OnClick")(footPoster)
-	ns.Poster.Show = realPosterShow
-	check(posterShown, "which opens the poster")
+	check(not footButton, "no calling card or poster button at the menu's foot")
 	check(not Shown("ARENAS"), "Arenas has no heading: the game has no arenas")
 end)()
 ;(function()
@@ -5256,7 +5250,7 @@ end)()
 	end
 	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
 	check(calendarTabs == 1 and homeTabs == 1 and Count("Challenges") == 1, "the calendar shows Progress's tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
-	check(Count("Your wanted poster") == 1, "the menu's poster button shows on the calendar")
+	check(Count("Your wanted poster") == 0, "no poster button at the menu's foot on the calendar")
 	ns.UI:Show("home")
 	check(ns.UI:IsShown("home") and not Shown("Calendar"), "Home has no tabs now")
 	ns.UI:Show("challenges")
@@ -6320,7 +6314,7 @@ end)()
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", web = "You", settings = "You", home = "Home" }) do
+		rank = "Progress", gear = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
@@ -6335,10 +6329,48 @@ end)()
 	local showTools = ns.db.settings.showTools
 	ns.db.settings.showTools = false
 	UI:Show("settings")
-	check(table.concat(UI:Tabs().labels, ", ") == "Website & app, Settings", "no Tools tab when it's off: "..table.concat(UI:Tabs().labels, ", "))
+	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app, Settings", "no Tools tab when it's off: "..table.concat(UI:Tabs().labels, ", "))
 	ns.db.settings.showTools = true
 	UI:Refresh(true)
-	check(table.concat(UI:Tabs().labels, ", ") == "Website & app, Settings, Tools", "the Tools tab when it's on")
+	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app, Settings, Tools", "the Tools tab when it's on")
+	-- You opens on your calling card: the sample before the app brings yours, then yours, with the editor a click away
+	local function shows(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if type(f._text) == "string" and f._text:find(text, 1, true) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	ns.CallingCard:TakeMine(nil)
+	UI:Show("card")
+	check(shows("A sample card"), "the sample card before yours has come")
+	local me = ns.Store:GetOrigin():match("^([^%-]+)")
+	ns.CallingCard:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "witness-emblem", background = "witness-bg", stats = { "kills", "honor", "rank" } },
+		unlocked = { "mat-silk", "witness-border", "witness-emblem", "witness-bg" }, stats = { kills = "42" } } })
+	UI:Refresh(true)
+	check(shows("4 of 348 pieces unlocked") and shows("42"), "your card, its stats and how much you've unlocked")
+	local opened
+	local realShow = ns.CallingCard.Show
+	ns.CallingCard.Show = function() opened = true end
+	for _, f in ipairs(Mock.fontStrings) do
+		if f._text == "Change your card" and f._parent._shown then f._parent:Click() end
+	end
+	ns.CallingCard.Show = realShow
+	check(opened, "Change your card opens the editor")
+	ns.CallingCard:TakeMine(nil)
+	-- The poster tab: a small poster with the price on your head, and the full size a click away
+	UI:Show("poster")
+	check(shows("No price on your head yet") or shows("NO PRICE ON YOUR HEAD YET") or shows("bount"), "the small poster shows the price on your head")
+	local posterOpened
+	local realPoster = ns.Poster.Show
+	ns.Poster.Show = function() posterOpened = true end
+	for _, f in ipairs(Mock.fontStrings) do
+		if f._text == "Open full size" and f._parent._shown then f._parent:Click() end
+	end
+	ns.Poster.Show = realPoster
+	check(posterOpened, "Open full size opens the poster")
 	ns.db.settings.showTools = showTools
 	-- Bounties' badge: what's waiting on your bounties plus your hunts
 	local realActions, realHunts = ns.Model.GetActionCount, ns.Model.GetMyHunts

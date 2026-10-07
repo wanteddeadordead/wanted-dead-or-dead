@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Your emblem is now your calling card's (built on wanteddeadordead.com, Characters, Calling card): painted crest art
+  for every badge challenge, zone and class. It goes before what you say in other Wanted players' chat and on the
+  death card of any Wanted player you kill. Until you pick one, it's the best emblem you've unlocked.
+
 ## [1.14.0] - 2026-10-06
 
 - Cosmetics, picked on wanteddeadordead.com (member area, Characters) from what your badges and weekly medals unlock:

@@ -115,29 +115,40 @@ function Raids:AnnounceText()
 		private.GroupSize(), raid.size)
 end
 
----Puts the raid's line in a public chat channel: Looking for Group when we're in it, else the zone's General.
----Needs a click (the game only lets a key press or click post in public channels). Returns why not, or nil.
+---The public chat channel Announce posts in: Looking for Group when we're in it, else the zone's General. Its number
+---and name, or nil when we're in neither.
+---@return number? index
+---@return string? name
+function Raids:AnnounceChannel()
+	for _, name in ipairs({ "LookingForGroup", "General - "..(GetZoneText() or ""), "General" }) do
+		local index = GetChannelName(name)
+		if index and index > 0 then
+			return index, name
+		end
+	end
+end
+
+---Puts a line in the Announce channel (the raid's own line when text is nil). Needs a click: the game only lets a key
+---press or click post in public channels, so it's called from the confirm dialog's button. Returns why not, or nil.
+---@param text string?
 ---@return string?
-function Raids:Announce()
-	local text = Raids:AnnounceText()
-	if not text then
+function Raids:Announce(text)
+	if not private.mine then
 		return "You're not leading a raid."
+	end
+	text = text and strtrim(gsub(text, "|", "")) or Raids:AnnounceText()
+	if text == "" then
+		return "There's nothing to post."
 	end
 	if GetTime() - private.lastAnnounce < ANNOUNCE_SECONDS then
 		return "You announced it less than a minute ago."
 	end
-	local index = GetChannelName("LookingForGroup")
-	if not index or index == 0 then
-		index = GetChannelName("General - "..(GetZoneText() or ""))
-	end
-	if not index or index == 0 then
-		index = GetChannelName("General")
-	end
-	if not index or index == 0 then
+	local index = Raids:AnnounceChannel()
+	if not index then
 		return "You're not in a Looking for Group or General channel."
 	end
 	private.lastAnnounce = GetTime()
-	C_ChatInfo.SendChatMessage(text, "CHANNEL", nil, index)
+	C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "CHANNEL", nil, index)
 	return nil
 end
 

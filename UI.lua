@@ -25,9 +25,9 @@ local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 30
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
--- The sidebar's groups, in order; a page names its group (none: above them all, like Home). A group with no page
--- shown (Battlegrounds until its first page; Arenas, should the game add them) shows no heading.
-local GROUPS = { "World PvP", "Battlegrounds", "You" }
+-- The menu is one short list (Home, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
+-- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
+local GROUPS = {}
 local DEFAULT_PAGE = "home"
 
 
@@ -41,7 +41,7 @@ local DEFAULT_PAGE = "home"
 ---@param def table title, subtitle, order, group (one of GROUPS), noHeader (the page takes the header's room too),
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
----out of the menu itself), tabLabel (its tab's label)
+---out of the menu itself), tabLabel (its tab's label), menuLabel (its menu entry's label, when not its title)
 function UI:RegisterPage(key, def)
 	def.key = key
 	tinsert(private.pages, def)
@@ -237,7 +237,7 @@ function private.Create()
 		nav.bar:SetPoint("BOTTOMLEFT")
 		nav.bar:SetWidth(3)
 		nav.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
-		nav.label = Theme:Text(nav, "body", def.title)
+		nav.label = Theme:Text(nav, "body", def.menuLabel or def.title)
 		nav.label:SetPoint("LEFT", 22, 0)
 		nav.badge = W:Pill(nav)
 		nav.badge:SetPoint("RIGHT", -14, 0)
@@ -299,8 +299,8 @@ function private.Create()
 	private.subtitle:SetPoint("TOPLEFT", 0, -26)
 	private.subtitle:SetPoint("RIGHT", 0, 0)
 	private.subtitle:SetWordWrap(false)
-	-- Tabs for pages that share a menu entry (Home and the calendar): at the right of the title, or along the top of
-	-- a page without a header
+	-- Tabs for pages that share a menu entry: along the top of the header, in place of the title (the tab says which
+	-- page this is); the subtitle sits under them
 	private.tabBars = {}
 	for _, def in ipairs(private.pages) do
 		if def.tabs then
@@ -310,7 +310,7 @@ function private.Create()
 				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key })
 			end
 			local bar = W:Segmented(content, items, function(key) UI:Show(key) end, 110)
-			bar:SetPoint(def.noHeader and "TOPLEFT" or "TOPRIGHT", 0, 0)
+			bar:SetPoint("TOPLEFT", 0, 0)
 			bar:Hide()
 			private.tabBars[def.key] = bar
 		end
@@ -403,38 +403,23 @@ function private.UsablePage(key)
 	return key
 end
 
----Places the sidebar buttons under their groups' labels, leaving out pages that are switched off (e.g. Tools).
+---Places the menu's entries, top to bottom in page order: every page that isn't a tab of another, leaving out pages
+---that are switched off.
 function private.LayoutNav()
 	local y = -12
-	local function Place(group)
-		for _, def in ipairs(private.pages) do
-			local nav = private.navButtons[def.key]
-			if def.group == group or (def.under and group == nil) then
-				nav:ClearAllPoints()
-				if def.under or (def.hidden and def.hidden()) then
-					nav:Hide()
-				else
-					nav:SetPoint("TOPLEFT", 0, y)
-					nav:Show()
-					y = y - NAV_HEIGHT
-				end
-			end
+	for _, def in ipairs(private.pages) do
+		local nav = private.navButtons[def.key]
+		nav:ClearAllPoints()
+		if def.under or (def.hidden and def.hidden()) then
+			nav:Hide()
+		else
+			nav:SetPoint("TOPLEFT", 0, y)
+			nav:Show()
+			y = y - NAV_HEIGHT
 		end
 	end
-	Place(nil)
-	for _, group in ipairs(GROUPS) do
-		local label = private.groupLabels[group]
-		label:ClearAllPoints()
-		local shown = false
-		for _, def in ipairs(private.pages) do
-			shown = shown or (def.group == group and not def.under and not (def.hidden and def.hidden()))
-		end
-		label:SetShown(shown)
-		if shown then
-			label:SetPoint("TOPLEFT", 22, y - 12)
-			y = y - GROUP_HEIGHT
-			Place(group)
-		end
+	for _, label in pairs(private.groupLabels) do
+		label:Hide()
 	end
 end
 
@@ -445,6 +430,37 @@ function UI:Toggle()
 		UI:Show()
 	end
 end
+
+---The menu as shown, top first: { key, label, selected, badge } (for the tests, and anything that needs to know).
+---@return table[]
+function UI:Menu()
+	local out = {}
+	for _, def in ipairs(private.pages) do
+		local nav = private.navButtons and private.navButtons[def.key]
+		if nav and nav:IsShown() then
+			tinsert(out, { key = def.key, label = def.menuLabel or def.title, selected = (private.owner or private.current) == def.key,
+				badge = private.menuBadges and private.menuBadges[def.key] })
+		end
+	end
+	return out
+end
+
+---The current page's tabs: { labels, selected }, or nil for a page without tabs.
+---@return table?
+function UI:Tabs()
+	local bar = private.tabBars and private.tabBars[private.owner]
+	if not bar then
+		return nil
+	end
+	local labels = {}
+	for _, button in ipairs(bar.buttons) do
+		if button:IsShown() then
+			tinsert(labels, button.label and button.label:GetText() or button:GetText() or button.key)
+		end
+	end
+	return { labels = labels, selected = bar.selected }
+end
+
 
 function UI:IsShown(key)
 	return private.frame and private.frame:IsShown() and (not key or private.current == key)
@@ -487,23 +503,39 @@ function UI:Refresh(allBadges)
 		end
 	end
 	local def = private.pageByKey[private.current]
-	private.title:SetText(def.noHeader and "" or def.title)
-	private.subtitle:SetText(def.noHeader and "" or def.subtitle or "")
 	-- The menu entry and tabs the current page belongs to
 	local owner = def.under or def.key
 	private.owner = owner
+	local tabbed = private.tabBars[owner] ~= nil
+	private.title:SetText((def.noHeader or tabbed) and "" or def.title)
+	private.subtitle:SetText(def.noHeader and "" or def.subtitle or "")
+	private.subtitle:ClearAllPoints()
+	private.subtitle:SetPoint("TOPLEFT", 0, tabbed and -32 or -26)
+	private.subtitle:SetPoint("RIGHT", 0, 0)
 	for key, bar in pairs(private.tabBars) do
 		bar:SetShown(key == owner)
-		if key == owner and bar.selected ~= private.current then
-			bar:Select(private.current, true)
+		if key == owner then
+			-- A tab whose page is switched off (Tools) isn't shown
+			for _, button in ipairs(bar.buttons) do
+				local page = private.pageByKey[button.key]
+				button:SetShown(not (page and page.hidden and page.hidden()))
+			end
+			if bar.selected ~= private.current then
+				bar:Select(private.current, true)
+			end
 		end
 	end
-	-- A page kept out of the menu shows its badge on its menu entry, when that has none of its own
+	-- A menu entry's badge adds up its tabs' counts (a text badge, when no tab has a count, shows as it is)
 	local underBadges = {}
 	for _, page in ipairs(private.pages) do
 		if page.under and page.badge then
 			local badge, color = private.Badge(page, allBadges)
-			underBadges[page.under] = underBadges[page.under] or (badge and { badge, color })
+			local sum = underBadges[page.under]
+			if type(badge) == "number" and badge > 0 then
+				underBadges[page.under] = { (sum and type(sum[1]) == "number" and sum[1] or 0) + badge, sum and sum[2] or color }
+			elseif not sum and type(badge) == "string" and badge ~= "" then
+				underBadges[page.under] = { badge, color }
+			end
 		end
 	end
 	for _, page in ipairs(private.pages) do
@@ -516,9 +548,14 @@ function UI:Refresh(allBadges)
 		if page.badge then
 			badge, color = private.Badge(page, allBadges)
 		end
-		if not badge and underBadges[page.key] then
-			badge, color = underBadges[page.key][1], underBadges[page.key][2]
+		local tabs = underBadges[page.key]
+		if tabs and type(tabs[1]) == "number" then
+			badge, color = (type(badge) == "number" and badge or 0) + tabs[1], color or tabs[2]
+		elseif tabs and not badge then
+			badge, color = tabs[1], tabs[2]
 		end
+		private.menuBadges = private.menuBadges or {}
+		private.menuBadges[page.key] = badge
 		if (type(badge) == "number" and badge > 0) or (type(badge) == "string" and badge ~= "") then
 			nav.badge:Set(tostring(badge), color or C.accent)
 		else

@@ -6,6 +6,10 @@ _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
 Wanted.FOLDER = ADDON_NAME
+-- Features built but switched off for now: flip one to true to turn it on
+Wanted.FEATURES = {
+	chatEmblems = false, -- players' calling-card emblems before what they say in chat (Achievements; Settings: Emblems in chat)
+}
 ---Whether a version is a development build: deployed with a "-dev" version (scripts/deploy.sh). A copy
 ---straight from GitHub, which the packager hasn't stamped, is not one.
 function Wanted:IsDevVersion(version)
@@ -149,12 +153,23 @@ function Wanted:NewModule(name)
 	return module
 end
 
+---Calls funcName on every module that has it, each on its own: one module's error goes to the game's error handler
+---(and the dev log) without stopping the modules after it. Without an error handler (the tests) errors stop the load.
 function private.CallModules(funcName)
 	for _, module in ipairs(private.modules) do
 		if module[funcName] then
-			module[funcName](module)
+			if geterrorhandler then
+				xpcall(module[funcName], private.ReportError, module)
+			else
+				module[funcName](module)
+			end
 		end
 	end
+end
+
+---Hands an error to whatever error handler is set at the time (WatchErrors puts its own in front).
+function private.ReportError(err)
+	return geterrorhandler()(err)
 end
 
 

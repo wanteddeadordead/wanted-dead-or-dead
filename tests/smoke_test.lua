@@ -6309,10 +6309,11 @@ end)()
 	ns.Widgets.Dialog = realDialog
 	check(dialog and dialog.text:find("LookingForGroup (channel 6)", 1, true) and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"),
 		"Announce shows the line and the channel first: "..tostring(dialog and dialog.text))
+	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
 	chatSent = {}
 	clock = clock + 61
-	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now, whisper inv")
-	check(chatSent[1] == "CHANNEL: Barrens raid at the Crossroads cffff0000now, whisper inv", "Post sends what's in the box: "..tostring(chatSent[1]))
+	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now,\nwhisper inv")
+	check(chatSent[1] == "CHANNEL: Barrens raid at the Crossroads cffff0000now, whisper inv", "Post sends what's in the box, on one line: "..tostring(chatSent[1]))
 	R:Close()
 	ns.UI:GetFrame():Hide()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast

@@ -47,6 +47,8 @@ UI:RegisterPage("hunts", {
 		local hunts = #Model:GetMyHunts()
 		return hunts > 0 and hunts or nil
 	end,
+	under = "board",
+	tabLabel = "Your hunts",
 	build = function(container, width, height)
 		local tileWidth = floor((width - 24) / 3)
 		private.owedTile = W:StatTile(container, "Owed to you", C.green)

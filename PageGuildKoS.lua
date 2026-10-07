@@ -132,6 +132,8 @@ UI:RegisterPage("guildkos", {
 		local pending = #GuildKoS:Entries("pending")
 		return pending > 0 and pending or nil
 	end,
+	under = "enemies",
+	tabLabel = "Guild KoS",
 	build = function(container, width, height)
 		private.status = Theme:Text(container, "body", "", C.muted)
 		private.status:SetPoint("TOPLEFT", 0, SETTINGS_TOP)

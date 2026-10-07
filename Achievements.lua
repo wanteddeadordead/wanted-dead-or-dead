@@ -125,24 +125,36 @@ local CELLS = {
 -- The calling-card emblems (each player's, picked on the site, else their best unlocked): Media/emblems.tga, cells as
 -- above (made by the private export script)
 local EMBLEM_TEXTURE = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\emblems"
+local EMBLEM_WIDTH, EMBLEM_HEIGHT, EMBLEM_ROW = 1024, 512, 16 -- the sheet, 64 px cells
 local EMBLEM_CELLS = {
 	["killer-emblem"] = 0, ["honor-emblem"] = 1, ["headhunter-emblem"] = 2, ["patron-emblem"] = 3,
 	["defender-emblem"] = 4, ["underdog-emblem"] = 5, ["streak-emblem"] = 6, ["multi-emblem"] = 7,
 	["witness-emblem"] = 8, ["battles-emblem"] = 9, ["champion-emblem"] = 10, ["challenger-emblem"] = 11,
-	["zone-hillsbrad-foothills-emblem"] = 12, ["zone-stranglethorn-vale-emblem"] = 13, ["zone-ashenvale-emblem"] = 14,
-	["zone-the-barrens-emblem"] = 15, ["zone-duskwood-emblem"] = 16, ["zone-redridge-mountains-emblem"] = 17,
-	["zone-westfall-emblem"] = 18, ["zone-elwynn-forest-emblem"] = 19, ["zone-stonetalon-mountains-emblem"] = 20,
-	["zone-arathi-highlands-emblem"] = 21, ["zone-wetlands-emblem"] = 22, ["zone-thousand-needles-emblem"] = 23,
-	["zone-moonglade-emblem"] = 24, ["zone-loch-modan-emblem"] = 25, ["zone-tanaris-emblem"] = 26,
-	["zone-swamp-of-sorrows-emblem"] = 27, ["zone-silverpine-forest-emblem"] = 28,
-	["zone-alterac-mountains-emblem"] = 29, ["zone-badlands-emblem"] = 30, ["zone-desolace-emblem"] = 31,
-	["zone-dustwallow-marsh-emblem"] = 32, ["zone-feralas-emblem"] = 33, ["zone-searing-gorge-emblem"] = 34,
-	["zone-blasted-lands-emblem"] = 35, ["zone-felwood-emblem"] = 36, ["zone-ungoro-crater-emblem"] = 37,
-	["zone-azshara-emblem"] = 38, ["zone-burning-steppes-emblem"] = 39, ["zone-winterspring-emblem"] = 40,
-	["zone-western-plaguelands-emblem"] = 41, ["zone-eastern-plaguelands-emblem"] = 42, ["zone-silithus-emblem"] = 43,
-	["class-warrior-emblem"] = 44, ["class-paladin-emblem"] = 45, ["class-hunter-emblem"] = 46,
-	["class-rogue-emblem"] = 47, ["class-priest-emblem"] = 48, ["class-shaman-emblem"] = 49,
-	["class-mage-emblem"] = 50, ["class-warlock-emblem"] = 51, ["class-druid-emblem"] = 52,
+	["ach-headhunter-emblem"] = 12, ["ach-patron-emblem"] = 13, ["ach-untouchable-emblem"] = 14,
+	["ach-outlaw-catcher-emblem"] = 15, ["ach-witness-emblem"] = 16, ["ach-hot-zone-regular-emblem"] = 17,
+	["ach-bodyguard-emblem"] = 18, ["ach-founding-hunter-emblem"] = 19, ["medal-top-killer-bronze-emblem"] = 20,
+	["medal-top-killer-silver-emblem"] = 21, ["medal-top-killer-gold-emblem"] = 22,
+	["medal-defender-bronze-emblem"] = 23, ["medal-defender-silver-emblem"] = 24, ["medal-defender-gold-emblem"] = 25,
+	["medal-weekly-challenger-bronze-emblem"] = 26, ["medal-weekly-challenger-silver-emblem"] = 27,
+	["medal-weekly-challenger-gold-emblem"] = 28, ["medal-bounty-hunter-bronze-emblem"] = 29,
+	["medal-bounty-hunter-silver-emblem"] = 30, ["medal-bounty-hunter-gold-emblem"] = 31, ["style-bully-emblem"] = 32,
+	["style-underdog-emblem"] = 33, ["style-lone-wolf-emblem"] = 34, ["style-duo-emblem"] = 35,
+	["style-gang-emblem"] = 36, ["style-serial-emblem"] = 37, ["style-camper-emblem"] = 38,
+	["style-field-medic-emblem"] = 39, ["style-all-three-emblem"] = 40, ["zone-hillsbrad-foothills-emblem"] = 41,
+	["zone-stranglethorn-vale-emblem"] = 42, ["zone-ashenvale-emblem"] = 43, ["zone-the-barrens-emblem"] = 44,
+	["zone-duskwood-emblem"] = 45, ["zone-redridge-mountains-emblem"] = 46, ["zone-westfall-emblem"] = 47,
+	["zone-elwynn-forest-emblem"] = 48, ["zone-stonetalon-mountains-emblem"] = 49,
+	["zone-arathi-highlands-emblem"] = 50, ["zone-wetlands-emblem"] = 51, ["zone-thousand-needles-emblem"] = 52,
+	["zone-moonglade-emblem"] = 53, ["zone-loch-modan-emblem"] = 54, ["zone-tanaris-emblem"] = 55,
+	["zone-swamp-of-sorrows-emblem"] = 56, ["zone-silverpine-forest-emblem"] = 57,
+	["zone-alterac-mountains-emblem"] = 58, ["zone-badlands-emblem"] = 59, ["zone-desolace-emblem"] = 60,
+	["zone-dustwallow-marsh-emblem"] = 61, ["zone-feralas-emblem"] = 62, ["zone-searing-gorge-emblem"] = 63,
+	["zone-blasted-lands-emblem"] = 64, ["zone-felwood-emblem"] = 65, ["zone-ungoro-crater-emblem"] = 66,
+	["zone-azshara-emblem"] = 67, ["zone-burning-steppes-emblem"] = 68, ["zone-winterspring-emblem"] = 69,
+	["zone-western-plaguelands-emblem"] = 70, ["zone-eastern-plaguelands-emblem"] = 71, ["zone-silithus-emblem"] = 72,
+	["class-warrior-emblem"] = 73, ["class-paladin-emblem"] = 74, ["class-hunter-emblem"] = 75,
+	["class-rogue-emblem"] = 76, ["class-priest-emblem"] = 77, ["class-shaman-emblem"] = 78,
+	["class-mage-emblem"] = 79, ["class-warlock-emblem"] = 80, ["class-druid-emblem"] = 81,
 }
 -- The weekly boards, in the order they're shown, and the medals' metals by place
 Achievements.BOARDS = {
@@ -204,8 +216,8 @@ function Achievements:EmblemText(id, size)
 		return ""
 	end
 	size = size or 20
-	local col, row = cell % 8, floor(cell / 8)
-	return format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", EMBLEM_TEXTURE, size, size, SHEET, SHEET, col * CELL, (col + 1) * CELL, row * CELL, (row + 1) * CELL)
+	local col, row = cell % EMBLEM_ROW, floor(cell / EMBLEM_ROW)
+	return format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", EMBLEM_TEXTURE, size, size, EMBLEM_WIDTH, EMBLEM_HEIGHT, col * CELL, (col + 1) * CELL, row * CELL, (row + 1) * CELL)
 end
 
 ---Takes in the catch-up's weekly medals (by lower-case name: { b, m, n }) and this week's boards. Unknown boards and
@@ -466,7 +478,7 @@ end
 ---Puts a player's calling-card emblem before what they said, in your own chat windows (the name is the game's link,
 ---so it stays as it is). On by default (settings.signatureChat).
 function private.ChatFilter(_, _, message, author, ...)
-	if not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
+	if not Wanted.FEATURES.chatEmblems or not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
 		or (issecretvalue and (issecretvalue(message) or issecretvalue(author))) then
 		return false
 	end
@@ -485,6 +497,13 @@ local CHAT_EVENTS = {
 }
 
 function Achievements:OnEnable()
+	if Wanted.FEATURES.chatEmblems then
+		self:AddChatFilters()
+	end
+end
+
+---Puts the emblems-in-chat filter on every chat event (behind Wanted.FEATURES.chatEmblems).
+function Achievements:AddChatFilters()
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
 	if addFilter then
 		for _, event in ipairs(CHAT_EVENTS) do

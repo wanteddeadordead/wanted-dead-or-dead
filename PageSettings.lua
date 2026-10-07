@@ -392,7 +392,9 @@ function private.BuildRanks(panel, width)
 	private.Toggle(ranks, RankSettings, "nearby", "In the Nearby window", "R7 beside the level of ranked enemies.", 360, -62, RefreshNearby)
 	private.Toggle(ranks, RankSettings, "who", "In the Who list", "R7 beside ranked players' names.", 360, -86)
 	local function Root() return Wanted.db.settings end
-	private.Toggle(ranks, Root, "signatureChat", "Emblems in chat", "The emblem a Wanted player picked on wanteddeadordead.com, before what they say in your chat windows.", 360, -110)
+	if Wanted.FEATURES.chatEmblems then
+		private.Toggle(ranks, Root, "signatureChat", "Emblems in chat", "The emblem a Wanted player picked on wanteddeadordead.com, before what they say in your chat windows.", 360, -110)
+	end
 	private.Toggle(ranks, Root, "honorScout", "Read players' honorable kills", "When you target or mouse over a player, Wanted reads their lifetime honorable kills from the game (out of combat, a few seconds apart) for wanteddeadordead.com's Honorable Kills board.", 16, -110)
 	local rankHint = Theme:Text(ranks, "tiny", "Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none.")
 	rankHint:SetPoint("TOPLEFT", 16, -134)

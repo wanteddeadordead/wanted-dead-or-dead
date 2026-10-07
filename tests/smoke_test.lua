@@ -61,7 +61,8 @@ end
 function Methods:GetText() return self._text end
 -- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
 -- character (12pt: about 6.7 pixels), colour codes and textures taking none
-function Methods:SetFont(_, size) self._size = size end
+function Methods:SetFont(_, size, flags) self._size, self._flags = size, flags end
+function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } end
 do
 	local function TextWidth(fs)
 		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
@@ -74,6 +75,8 @@ do
 end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
+function Methods:SetTexture(t) self._texture = t end
+function Methods:SetTextColor(r, g, b) self._textColor = { r, g, b } end
 function Methods:GetFontObject() return self._font end
 function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
@@ -5567,14 +5570,24 @@ end)()
 		end
 		return out
 	end
+	-- Behind a feature switch, off for now: no emblem in chat until it's on
+	check(Say("hello", "Stabby Mcstab-Realm") == "hello", "no emblem in chat with the feature off")
+	ns.FEATURES.chatEmblems = true
+	-- (a test above swapped ChatFrameUtil for one that only opens chat)
+	ChatFrameUtil.AddMessageEventFilter = function(event, func)
+		chatFilterLists[event] = chatFilterLists[event] or {}
+		table.insert(chatFilterLists[event], func)
+	end
+	A:AddChatFilters()
 	local said = Say("hello", "Stabby Mcstab-Realm")
-	-- witness-emblem is cell 8: the second row's first
-	check(said and said:find("Media\\emblems:14:14:0:0:512:512:0:64:64:128|t hello", 1, true), "the emblem before what they said: "..tostring(said))
+	-- witness-emblem is cell 8: the first row's ninth, 16 to a row on the 1024x512 sheet
+	check(said and said:find("Media\\emblems:14:14:0:0:1024:512:512:576:0:64|t hello", 1, true), "the emblem before what they said: "..tostring(said))
 	check(Say("hi", "Nobody Special") == "hi", "nothing for a player without one")
 	check(Say("hi", "Old Pick") == "hi", "nor for the old signature badge alone")
 	ns.db.settings.signatureChat = false
 	check(not tostring(Say("hello", "Stabby Mcstab")):find("|T", 1, true), "and nothing with the switch off")
 	ns.db.settings.signatureChat = true
+	ns.FEATURES.chatEmblems = false
 	-- The death card for this killer
 	local card, f = ns.DeathCard, ns.DeathCard:GetFrame()
 	ns.Store:UpdatePlayer("Player-9-COSMETIC", { name = "Stabby Mcstab", class = "ROGUE", level = 20, faction = "Alliance" }, clock)
@@ -5877,3 +5890,94 @@ end)()
 	check(#over == 0, "lines wider than their space:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")
+-- Your own card from the catch-up at login, before the card window has ever opened (it errored on byID)
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	local ok, err = pcall(CC.TakeMine, CC, { [me] = { card = { plate = "mat-silk", border = "witness-border", background = "witness-bg" },
+		unlocked = { "starter-plate", "mat-silk" } } })
+	check(ok, "your card taken before the window opens: "..tostring(err))
+	CC:TakeMine(nil)
+end)()
+-- Your calling card: the catalogue by part, any combination by stepping round each part, and the name ink for light plates
+;(function()
+	local CC = ns.CallingCard
+	check(#ns.CardCatalogue == 348, "the catalogue: "..#ns.CardCatalogue)
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.banner.background._texture:find("Media\\cards\\killer%-legend$"), "starts on the sample card: "..tostring(f.banner.background._texture))
+	check(f.rows.plate.name._text == "Arcanite" and f.rows.background.unlock._text == "Killer V", "each part's piece and what unlocks it")
+	check(f.banner.name._text == ns.Store:GetOrigin():match("^([^%-]+)") and f.banner.name._text:find(" ", 1, true), "your full name on the plate: "..f.banner.name._text)
+	-- Back from the first emblem goes round to the last
+	local emblems = 0
+	for _, item in ipairs(ns.CardCatalogue) do if item.part == "emblem" then emblems = emblems + 1 end end
+	for _ = 1, emblems + 1 do f.rows.emblem.forward:Click() end -- every emblem and "no emblem"
+	check(f.rows.emblem.name._text == "Ring of Skulls", "round the emblems back to the start: "..f.rows.emblem.name._text)
+	f.rows.plate.back:Click()
+	check(f.rows.plate.name._text == "Black Dragonscale" and f.banner.plate._texture:find("mat%-black%-dragonscale$"), "a step back changes the plate")
+	f.shuffle:Click()
+	check(f.banner.border._texture:find("Media\\cards\\"), "a shuffle draws a card")
+	CC:Hide()
+	check(not f._shown, "closed")
+	local banner = CC:Banner(UIParent, 400)
+	CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-mithril" }, "Khal Drogash", { { "Rank", "Mithril" } })
+	check(not banner.emblem._shown and banner.name._text == "Khal Drogash", "no emblem, the name")
+	check(banner.stats[1].value._text == "Mithril" and not banner.stats[2]._shown, "one stat shown, the others hidden")
+	check(banner.name._textColor[1] < 0.5, "a light plate's name is dark ink")
+	-- The game draws an outline in black only, which smears dark ink: a light plate's name has none, and a light shadow
+	check(banner.name._flags == "" and banner.name._shadowColor[1] > 0.5 and banner.name._shadowColor[4] > 0, "dark ink: no outline, a light shadow")
+	CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-silk" }, "Khal Drogash")
+	check(banner.name._flags == "OUTLINE" and banner.name._textColor[1] > 0.5 and banner.name._shadowColor[1] == 0, "light ink: outlined, a dark shadow")
+end)()
+-- Your own card from the site: only catalogue pieces and known stats get in; locked pieces can be tried, not saved;
+-- Save keeps the card for the app
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	CC:TakeMine({
+		[me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+			unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-linen", "mat-silk", "witness-border", "witness-bg", "witness-emblem", "../../evil" },
+			stats = { kills = "13", score = "295|TInterface\\evil:64|t", rank = "Silk", ["|Hevil|h"] = "x" } },
+		["Evil Twin"] = { card = { plate = "../../../Interface/evil", border = "witness-border", background = "witness-bg" } },
+		["No Space"] = { card = { plate = "mat-silk", border = "witness-border", background = "witness-bg" } },
+		[7] = "nope",
+	})
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.banner.plate._texture:find("mat%-silk$") and not f.banner.emblem._shown, "your card: the Silk plate, no emblem")
+	check(f.banner.stats[2].value._text == "295TInterface\\evil:64t", "the game's escape character taken out of a value: "..f.banner.stats[2].value._text)
+	check(f.save._shown and f.save._enabled, "all unlocked: Save on")
+	f.rows.plate.forward:Click()
+	check(f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate: marked, Save off")
+	f.rows.plate.back:Click()
+	f.rows.emblem.forward:Click() -- killer-emblem, the catalogue's first: locked
+	check(not f.save._enabled, "a locked emblem: Save off")
+	for _ = 1, 8 do f.rows.emblem.forward:Click() end -- witness-emblem: cell 8 of the catalogue's emblems, unlocked
+	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled, "an unlocked emblem: Save on: "..f.rows.emblem.name._text)
+	f.banner.stats[1]._scripts.OnMouseUp(f.banner.stats[1])
+	check(f.banner.stats[1].label._text == "HONORABLE KILLS", "a click moves a stat to the next one not shown: "..f.banner.stats[1].label._text)
+	f.save:Click()
+	local pick = ns.db.cardPicks[me]
+	check(pick and pick.p == "mat-silk" and pick.e == "witness-emblem" and pick.g == "witness-bg" and pick.s1 == "honor" and pick.s2 == "score" and pick.t, "Save keeps the card for the app")
+	-- Try anything: the sample, nothing to save
+	f.mode:Click()
+	check(not f.save._shown and f.banner.background._texture:find("killer%-legend$"), "trying anything: the sample, no Save")
+	f.mode:Click()
+	CC:Hide()
+	CC:TakeMine(nil)
+	ns.db.cardPicks = nil
+end)()
+-- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
+-- minimap button). Last, because it loads the addon again.
+;(function()
+	local reported = {}
+	_G.geterrorhandler = function() return function(err) reported[#reported + 1] = tostring(err) end end
+	_G.seterrorhandler = function() end
+	local after = false
+	ns:NewModule("TestBoom").OnLoad = function() error("boom") end
+	ns:NewModule("TestAfter").OnLoad = function() after = true end
+	local ok, err = pcall(Fire, "ADDON_LOADED", "WantedDeadOrDead")
+	check(ok, "a module's error stops the load: "..tostring(err))
+	check(after, "the module after a failing one still loads")
+	check(#reported == 1 and reported[1]:find("boom", 1, true), "the error is reported: "..table.concat(reported, "; "))
+	_G.geterrorhandler, _G.seterrorhandler = nil, nil
+end)()
+print("wanted smoke: module isolation checks pass")

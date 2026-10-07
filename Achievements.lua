@@ -383,8 +383,9 @@ function Achievements:Ordinal(n)
 	return n..suffix
 end
 
----Announces this character's badges that are new since the last catch-up: a banner with the art. The first catch-up
----a character sees only notes what they hold (WantedDB.badgesSeen).
+---Announces this character's badges that are new since the last catch-up, a toast each with the badge's emblem crest,
+---then their new calling-card pieces (CallingCard:CheckNew). The first catch-up a character sees only notes what they
+---hold (WantedDB.badgesSeen).
 function Achievements:CheckNew()
 	local me = Wanted.Store and Wanted.Store:GetOrigin() or UnitName("player")
 	if type(me) ~= "string" then
@@ -406,15 +407,34 @@ function Achievements:CheckNew()
 	end
 	Wanted.db.badgesSeen[me] = seen
 	if first or #new == 0 then
+		Wanted.CallingCard:CheckNew() -- new calling-card pieces, after any badges' own toasts
 		return
 	end
 	local names = {}
 	for _, b in ipairs(new) do
-		tinsert(names, Achievements:IconText(b.key, 24).." "..b.name..(b.count and b.count > 1 and (" x"..b.count) or ""))
+		local name = b.name..(b.count and b.count > 1 and (" x"..b.count) or "")
+		tinsert(names, Achievements:IconText(b.key, 24).." "..name)
+		-- The toast shows the badge's emblem crest, else its icon
+		local art, aspect = Wanted.CallingCard:Art(private.EmblemOf(b.key))
+		local toast = { kind = b.count and "MEDAL WON" or "ACHIEVEMENT EARNED", name = name, detail = "A new emblem for your calling card",
+			art = art, aspect = aspect }
+		if not art then
+			local tex, l, r, t, bottom = Achievements:Icon(b.key)
+			toast.art, toast.coords, toast.detail = tex, tex and { l, r, t, bottom }, nil
+		end
+		Wanted.Toast:Add(toast)
 	end
 	Wanted:Print("New badge%s: %s.", #new == 1 and "" or "s", table.concat(names, ", "))
-	Wanted.Alerts:Warn(#new == 1 and "BADGE EARNED" or format("%d BADGES EARNED", #new), table.concat(names, "   "), Wanted.Theme.C.gold)
-	Wanted.Alerts:Sound("important")
+	Wanted.CallingCard:CheckNew()
+end
+
+---A badge's calling-card emblem id: "ach-witness-emblem" for an achievement, "medal-top-killer-gold-emblem" for a medal.
+function private.EmblemOf(key)
+	local board, metal = strmatch(key, "^(.+):(%a+)$")
+	if board then
+		return "medal-"..board.."-"..metal.."-emblem"
+	end
+	return "ach-"..key.."-emblem"
 end
 
 

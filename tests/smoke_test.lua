@@ -5960,3 +5960,19 @@ end)()
 	CC:TakeMine(nil)
 	ns.db.cardPicks = nil
 end)()
+-- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
+-- minimap button). Last, because it loads the addon again.
+;(function()
+	local reported = {}
+	_G.geterrorhandler = function() return function(err) reported[#reported + 1] = tostring(err) end end
+	_G.seterrorhandler = function() end
+	local after = false
+	ns:NewModule("TestBoom").OnLoad = function() error("boom") end
+	ns:NewModule("TestAfter").OnLoad = function() after = true end
+	local ok, err = pcall(Fire, "ADDON_LOADED", "WantedDeadOrDead")
+	check(ok, "a module's error stops the load: "..tostring(err))
+	check(after, "the module after a failing one still loads")
+	check(#reported == 1 and reported[1]:find("boom", 1, true), "the error is reported: "..table.concat(reported, "; "))
+	_G.geterrorhandler, _G.seterrorhandler = nil, nil
+end)()
+print("wanted smoke: module isolation checks pass")

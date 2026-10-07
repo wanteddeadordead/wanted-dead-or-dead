@@ -153,12 +153,23 @@ function Wanted:NewModule(name)
 	return module
 end
 
+---Calls funcName on every module that has it, each on its own: one module's error goes to the game's error handler
+---(and the dev log) without stopping the modules after it. Without an error handler (the tests) errors stop the load.
 function private.CallModules(funcName)
 	for _, module in ipairs(private.modules) do
 		if module[funcName] then
-			module[funcName](module)
+			if geterrorhandler then
+				xpcall(module[funcName], private.ReportError, module)
+			else
+				module[funcName](module)
+			end
 		end
 	end
+end
+
+---Hands an error to whatever error handler is set at the time (WatchErrors puts its own in front).
+function private.ReportError(err)
+	return geterrorhandler()(err)
 end
 
 

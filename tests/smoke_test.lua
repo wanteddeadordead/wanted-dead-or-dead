@@ -61,7 +61,8 @@ end
 function Methods:GetText() return self._text end
 -- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
 -- character (12pt: about 6.7 pixels), colour codes and textures taking none
-function Methods:SetFont(_, size) self._size = size end
+function Methods:SetFont(_, size, flags) self._size, self._flags = size, flags end
+function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } end
 do
 	local function TextWidth(fs)
 		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
@@ -5922,6 +5923,10 @@ end)()
 	check(not banner.emblem._shown and banner.name._text == "Khal Drogash", "no emblem, the name")
 	check(banner.stats[1].value._text == "Mithril" and not banner.stats[2]._shown, "one stat shown, the others hidden")
 	check(banner.name._textColor[1] < 0.5, "a light plate's name is dark ink")
+	-- The game draws an outline in black only, which smears dark ink: a light plate's name has none, and a light shadow
+	check(banner.name._flags == "" and banner.name._shadowColor[1] > 0.5 and banner.name._shadowColor[4] > 0, "dark ink: no outline, a light shadow")
+	CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-silk" }, "Khal Drogash")
+	check(banner.name._flags == "OUTLINE" and banner.name._textColor[1] > 0.5 and banner.name._shadowColor[1] == 0, "light ink: outlined, a dark shadow")
 end)()
 -- Your own card from the site: only catalogue pieces and known stats get in; locked pieces can be tried, not saved;
 -- Save keeps the card for the app

@@ -211,7 +211,8 @@ function CallingCard:Banner(parent, width)
 	banner.plate:SetPoint("TOPLEFT", PLATE[1] * width, -PLATE[2] * height)
 	banner.plate:SetSize(plateWidth, plateWidth * PLATE_ASPECT)
 	banner.name = art:CreateFontString(nil, "OVERLAY")
-	banner.name:SetFont(NAME_FONT, max(10, floor(NAME_SIZE * width + 0.5)), "OUTLINE")
+	banner.nameSize = max(10, floor(NAME_SIZE * width + 0.5))
+	banner.name:SetFont(NAME_FONT, banner.nameSize, "OUTLINE")
 	banner.name:SetPoint("CENTER", banner.plate)
 	banner.name:SetWidth(plateWidth * 0.72)
 	banner.name:SetWordWrap(false)
@@ -247,10 +248,19 @@ function CallingCard:Draw(banner, card, name, stats)
 		banner.emblem:Hide()
 	end
 	local plate = private.Parts().plate[private.IndexOf("plate", card.plate)]
-	local ink = plate and plate.dark and DARK_NAME or LIGHT_NAME
+	-- The game draws an outline in black only, which smears dark ink: on a light plate the name is dark with a light
+	-- shadow under it, as if engraved; on the rest, light ink outlined in black with a dark shadow
+	local dark = plate and plate.dark
+	local ink = dark and DARK_NAME or LIGHT_NAME
+	banner.name:SetFont(NAME_FONT, banner.nameSize, dark and "" or "OUTLINE")
 	banner.name:SetTextColor(ink[1], ink[2], ink[3])
-	banner.name:SetShadowColor(0, 0, 0, plate and plate.dark and 0 or 0.8)
-	banner.name:SetShadowOffset(1, -2)
+	if dark then
+		banner.name:SetShadowColor(1, 0.97, 0.9, 0.85)
+		banner.name:SetShadowOffset(1, -1)
+	else
+		banner.name:SetShadowColor(0, 0, 0, 0.8)
+		banner.name:SetShadowOffset(1, -2)
+	end
 	banner.name:SetText(name or "")
 	for i, box in ipairs(banner.stats) do
 		local s = stats and stats[i]

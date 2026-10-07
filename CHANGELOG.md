@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- World PvP raids: a Raids page to form a raid, now or at a time, and join the ones other Wanted players of your
+  faction are forming (across realm names). Join and the leader's Wanted invites you, making the group a raid before the
+  sixth; sign up for a planned raid and you're reminded and invited when it starts. Announce posts it in Looking for
+  Group or General for players without Wanted, and anyone who whispers the leader "inv" is invited.
+
 ## [1.17.1] - 2026-10-07
 
 - What's new: after each update, a window with a note from me and a few lines on what changed, once per version, out

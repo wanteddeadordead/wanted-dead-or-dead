@@ -6166,6 +6166,147 @@ end)()
 	check(not N:IsShown(), "not over a dialog")
 	ns.Widgets.IsDialogShown, ns.VERSION = realIsDialogShown, realVersion
 end)()
+-- World PvP raids: forming, ads, joining, invites (a raid before the sixth, never past full, after a fight), "inv"
+-- whispers, Announce, planned raids with sign-ups and reminders, and other players' ads
+;(function()
+	local R = ns.Raids
+	local me = ns.Store:GetOrigin()
+	local ads, joins, invited, converted, toasts = {}, {}, {}, 0, {}
+	local realAd, realJoin, realParty, realToast = ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add
+	ns.Sync.SendRaidAd = function(_, ad) ads[#ads + 1] = ad end
+	ns.Sync.SendRaidJoin = function(_, leader, id) joins[#joins + 1] = leader.." "..id end
+	C_PartyInfo = { InviteUnit = function(name) invited[#invited + 1] = name end, ConvertToRaid = function() converted = converted + 1 end }
+	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t end
+	local realGroup, realInGroup, realInRaid = groupSize, IsInGroup, IsInRaid
+	groupSize = 1
+	-- Forming: a name and a size are needed
+	check(select(2, R:Create({ title = "  ", size = 40 })) == "Give the raid a name.", "a raid needs a name")
+	check(select(2, R:Create({ title = "Southshore", size = 15 })) == "Pick a size: 10, 20 or 40.", "and a real size")
+	local raid = R:Create({ title = "Southshore |cffff0000raid", size = 20, minLevel = 25 })
+	check(raid and R:Mine() == raid and raid.where == "Durotar" and raid.title == "Southshore cffff0000raid" and raid.startAt == clock, "formed now, in our zone, escapes taken out")
+	check(#ads == 1 and ads[1].l == me and ads[1].m == 20 and ads[1].f == "Horde" and ads[1].ml == 25 and not ads[1].c, "its ad goes out")
+	check(select(2, R:Create({ title = "Another", size = 10 })) ~= nil, "one raid at a time")
+	-- Announce: a line in a public channel, at most once a minute
+	chatSent = {}
+	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^CHANNEL: Forming a world PvP raid: Southshore") and chatSent[1]:find('Whisper me "inv"', 1, true),
+		"announced in chat: "..tostring(chatSent[1]))
+	check(R:Announce() == "You announced it less than a minute ago.", "not again at once")
+	-- Joining: invited; a party of five becomes a raid first; never past full
+	R:OnJoin("Joiner One-Realm", { r = raid.id })
+	check(invited[1] == "Joiner One-Realm" and converted == 0, "a joiner is invited (other realm names too)")
+	R:OnJoin("Wrong Raid", { r = "nope" })
+	check(#invited == 1, "a join for another raid does nothing")
+	IsInGroup, IsInRaid, groupSize = function() return true end, function() return false end, 5
+	R:OnJoin("Sixth", { r = raid.id })
+	check(converted == 1 and invited[2] == "Sixth", "the party became a raid before the sixth")
+	groupSize = 20
+	R:OnJoin("Too Many", { r = raid.id })
+	check(#invited == 2, "never past full")
+	groupSize = 6
+	-- "inv" whispers
+	R:OnWhisper(" INV ", "Whisperer")
+	R:OnWhisper("invite me please", "Chatty")
+	check(invited[3] == "Whisperer" and #invited == 3, "a whisper of inv is a join, other whispers aren't")
+	-- In a fight invites wait
+	inCombat = true
+	R:OnJoin("Fighter", { r = raid.id })
+	check(#invited == 3, "no invite in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_DISABLED")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(invited[4] == "Fighter", "invited when it's over")
+	-- Closing: a closed ad, and nothing led
+	R:Close()
+	check(R:Mine() == nil and ads[#ads].c == 1, "closed: the ad says so")
+	R:OnWhisper("inv", "Late")
+	check(#invited == 4, "no invites after closing")
+	-- A planned raid: joins are sign-ups; invited when it starts
+	local planned = R:Create({ title = "Tarren Mill", where = "Hillsbrad", size = 40, startAt = clock + 3600 })
+	R:OnJoin("Early Bird", { r = planned.id })
+	check(planned.signups["Early Bird"] and #invited == 4, "before it starts, a join is a sign-up")
+	clock = clock + 3601
+	R:Tick()
+	check(invited[5] == "Early Bird" and next(planned.signups) == nil, "sign-ups are invited when it starts")
+	clock = clock + 2 * 3600 + 60
+	R:Tick()
+	check(R:Mine() == nil, "a raid closes itself after two hours")
+	-- Other players' raids
+	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
+	R:OnAd(ad({ f = "Alliance", id = "x1" }), "Lead Er-Realm")
+	R:OnAd(ad({ m = 33, id = "x2" }), "Lead Er-Realm")
+	R:OnAd(ad({ l = me, id = "x3" }), me)
+	R:OnAd(ad({ l = "Bad|Hname", id = "x4" }), "x")
+	check(#R:List() == 0 and #toasts == 0, "the other faction's, malformed and our own ads are dropped")
+	R:OnAd(ad(), "Lead Er-Realm")
+	local list = R:List()
+	check(#list == 1 and list[1].title == "Crossroads" and list[1].members == 12 and #toasts == 1 and toasts[1].kind == "RAID FORMING", "an ad: listed, and a toast once")
+	R:OnAd(ad({ n = 13 }), "Lead Er-Realm")
+	check(#toasts == 1 and R:List()[1].members == 13, "refreshed, no second toast")
+	R:OnAd(ad({ id = "later", s = clock + 7200, t = "Southshore" }), "Lead Er-Realm")
+	check(R:List()[1].id == "Lead-R:1:1" and R:List()[2].id == "later" and toasts[2].kind == "RAID PLANNED", "forming ones first, then planned")
+	-- Joining another's raid: level checked; a sign-up for a planned one, with reminders and asks when it starts
+	check(R:Join("Lead-R:1:1") == nil and joins[1] == "Lead Er-Realm Lead-R:1:1" and R:Joined("Lead-R:1:1"), "joining asks the leader")
+	R:OnAd(ad({ id = "high", ml = 50 }), "Lead Er-Realm")
+	check(R:Join("high") == "That raid is for level 50 and up.", "too low a level")
+	check(R:Join("later") == nil and R:Joined("later"), "signed up for a planned raid")
+	clock = clock + 7200 - 10 * 60
+	for i = 1, 3 do R:OnAd(ad({ id = "later", s = clock + 10 * 60, t = "Southshore" }), "Lead Er-Realm") end
+	R:Tick()
+	check(toasts[#toasts].kind == "RAID SOON", "a reminder before it starts")
+	local before = #joins
+	clock = clock + 10 * 60
+	R:Tick()
+	check(toasts[#toasts].kind == "RAID STARTING" and #joins == before + 1 and joins[#joins]:find("later$"), "when it starts: a toast, and the invite asked for again")
+	-- A raid whose ad stops coming has gone; a closed one goes at once
+	R:OnAd(ad({ id = "later", c = 1 }), "Lead Er-Realm")
+	local closedGone = true
+	for _, r in ipairs(R:List()) do if r.id == "later" then closedGone = false end end
+	check(closedGone, "a closed raid leaves the list at once")
+	clock = clock + 4 * 60
+	R:Tick()
+	check(#R:List() == 0, "quiet ads drop off")
+	-- Through the sync channel and realm links (real messages): listed; a link's ad shared once on our channel; a join
+	-- whisper from another realm name invited
+	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realAd, realJoin
+	local function msg(tag, t) t.v = ns.VERSION return OldMessage(tag, t) end
+	local channel = ns.Sync:Status():match("channel (%S+)") -- earlier tests moved it
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "chan", l = "Chan Lead-Realm" })), "CHANNEL", "Chan Lead-Realm", nil, nil, nil, channel)
+	local fromChannel = false
+	for _, r in ipairs(R:List()) do if r.id == "chan" then fromChannel = true end end
+	check(fromChannel, "an ad on the channel is listed")
+	addonSent = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "link", l = "Far Lead-Elsewhere" })), "WHISPER", "Far Lead-Elsewhere")
+	check(#addonSent == 1 and addonSent[1].chatType == "CHANNEL" and addonSent[1].text:find("^A:"), "a realm link's ad is shared on our channel")
+	local fromLink = false
+	for _, r in ipairs(R:List()) do if r.id == "link" then fromLink = true end end
+	check(fromLink, "and listed here")
+	addonSent = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "link2", l = "Far Lead-Elsewhere", fw = 1 })), "WHISPER", "Far Lead-Elsewhere")
+	check(#addonSent == 0, "an ad already shared once isn't shared again")
+	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
+	local led = R:Create({ title = "Linked", size = 10 })
+	invited = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("I", { r = led.id }), "WHISPER", "Other Realm-Elsewhere")
+	check(invited[1] == "Other Realm-Elsewhere", "a join whisper from another realm name is invited")
+	R:Close()
+	-- The page builds and lists them
+	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
+	ns.UI:Show("raids")
+	local function shows(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if type(f._text) == "string" and f._text:find(text, 1, true) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads"), "the Raids page: the form, and the raid with Join")
+	ns.UI:GetFrame():Hide()
+	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast
+	groupSize, IsInGroup, IsInRaid = realGroup, realInGroup, realInRaid
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

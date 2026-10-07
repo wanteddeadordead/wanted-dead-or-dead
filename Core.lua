@@ -47,6 +47,7 @@ local DEFAULTS = {
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
+		raidToasts = true, -- a toast when another Wanted player of your faction forms or plans a world PvP raid (Raids)
 		bridge = true, -- carry bounty notices to and from Battle.net friends on the other faction (Bridge)
 		honorScout = true, -- read players' lifetime honorable kills when you target or mouse over them (HonorScout)
 		signatureChat = true, -- players' signature badges (a cosmetic, from the site) before what they say in chat

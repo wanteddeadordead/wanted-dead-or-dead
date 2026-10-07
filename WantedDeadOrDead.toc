@@ -55,6 +55,7 @@ Alerts.lua
 Toast.lua
 Streaks.lua
 Posse.lua
+Raids.lua
 UI.lua
 Rows.lua
 EnemyMenu.lua
@@ -67,6 +68,7 @@ PageBoard.lua
 TrustPanel.lua
 PageMine.lua
 PageHunts.lua
+PageRaids.lua
 PageHunters.lua
 PageActivity.lua
 PageEnemies.lua

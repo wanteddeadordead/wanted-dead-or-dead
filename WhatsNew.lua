@@ -13,6 +13,19 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.18.0",
+		note = "This one is about getting together and finding things faster. You asked for an easy way to set up world PvP "
+			.."raids, so now there is one, and the menu was getting crowded, so I cut it down.\n\n"
+			.."Form a raid, tell your friends, and go take a town.",
+		lines = {
+			"Raids: form a world PvP raid now or for later, and every Wanted player of your faction sees it, across realms. Click Join and the leader invites you.",
+			"Announce your raid in chat for players without Wanted. Anyone who whispers you \"inv\" gets invited.",
+			"A shorter menu: Home, Bounties, Enemies, Raids, Progress and You, with the rest as tabs.",
+			"You opens on your calling card, with your wanted poster in the next tab.",
+			"Home shows the raids forming now, ready to join.",
+		},
+	},
+	{
 		version = "1.17.1",
 		pinned = true, -- the launch: everyone who hasn't seen it gets it, whatever version they come from
 		art = "ach-founding-hunter-emblem", -- a calling-card piece's art, shown above the note

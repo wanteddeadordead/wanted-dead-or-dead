@@ -8,16 +8,22 @@ local C = Theme.C
 local WhatsNew = Wanted:NewModule("WhatsNew")
 local private = {}
 
--- Each version's note from the author (optional) and short lines for players, newest first
+-- Each version's note from the author (optional), a picture above it (optional: a calling-card piece's id) and short
+-- lines for players, newest first
 Wanted.WHATS_NEW = {
 	{
 		version = "1.17.1",
+		art = "ach-founding-hunter-emblem", -- a calling-card piece's art, shown above the note
 		note = "First, I want to thank all of you for the support you've shown during the beta testing of this addon and system. "
 			.."Every bug report, screenshot and idea you sent made Wanted better, and seeing your kills, bounties and grudges show "
 			.."up on the site has made the long nights worth it.\n\n"
 			.."I'm also sorry for the flood of updates. There were a lot of them, sometimes several in a day, and I know restarting "
 			.."the game again and again got old. Things will settle down from here.\n\n"
 			.."We're not going anywhere, and we'll be here in force for the launch.\n\n"
+			.."When WoW Forever launches on November 4, the beta season is archived and everyone starts fresh in Season 1. "
+			.."You'll still be able to look back at the beta on the website under past seasons, but none of it carries over to "
+			.."the live game. Your website account and your settings do, and everyone who played Wanted in the beta keeps the "
+			.."Founding Hunter badge.\n\n"
 			.."If you're enjoying Wanted, please tell your friends and guildmates about it. The more of us running it, the more "
 			.."every kill counts.\n\n"
 			.."See you out there.",
@@ -55,6 +61,7 @@ local AUTHOR = "Chris (xmadness), who makes Wanted"
 local SETTLE_SECONDS = 4 -- after the loading screen, before the window
 local MOST_VERSIONS = 3 -- versions listed after a long break
 local WIDTH = 460
+local ART_SIZE = 96
 
 
 
@@ -101,7 +108,7 @@ function WhatsNew:Show(welcome)
 		return
 	end
 	local newest = Wanted.WHATS_NEW[1]
-	private.Open("What's new in Wanted "..newest.version, newest.note, { newest })
+	private.Open("What's new in Wanted "..newest.version, newest.note, { newest }, nil, newest.art)
 end
 
 
@@ -132,7 +139,7 @@ function private.Check()
 	end
 	db.whatsNewSeen = current
 	if #entries > 0 then
-		private.Open("What's new in Wanted "..entries[1].version, entries[1].note, entries)
+		private.Open("What's new in Wanted "..entries[1].version, entries[1].note, entries, nil, entries[1].art)
 	end
 end
 
@@ -148,11 +155,21 @@ end
 -- The window
 -- ============================================================================
 
----Opens the window: a title, the author's note if any, then each entry's lines (with its version when there are
----several). After the welcome, OK goes on to the app prompt.
-function private.Open(title, note, entries, welcome)
+---Opens the window: a title, a picture if any (a calling-card piece's id), the author's note if any, then each
+---entry's lines (with its version when there are several). After the welcome, OK goes on to the app prompt.
+function private.Open(title, note, entries, welcome, art)
 	local f = private.frame or private.Create()
 	f.title:SetText(title)
+	local path = art and Wanted.CallingCard:Art(art)
+	f.body:ClearAllPoints()
+	if path then
+		f.art:SetTexture(path)
+		f.art:Show()
+		f.body:SetPoint("TOP", f.art, "BOTTOM", 0, -10)
+	else
+		f.art:Hide()
+		f.body:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -14)
+	end
 	local parts = {}
 	if note then
 		tinsert(parts, note)
@@ -172,7 +189,7 @@ function private.Open(title, note, entries, welcome)
 	end
 	f.body:SetText(table.concat(parts, "\n"))
 	f.welcome = welcome
-	f:SetHeight(64 + ceil(f.body:GetStringHeight() or 0) + 56)
+	f:SetHeight(64 + (path and ART_SIZE + 10 or 0) + ceil(f.body:GetStringHeight() or 0) + 56)
 	f:Show()
 	f:Raise()
 end
@@ -187,8 +204,10 @@ function private.Create()
 	f.title = Theme:Text(f, "title", "", C.gold)
 	f.title:SetPoint("TOPLEFT", 20, -18)
 	f.title:SetWidth(WIDTH - 40)
+	f.art = f:CreateTexture(nil, "ARTWORK")
+	f.art:SetSize(ART_SIZE, ART_SIZE)
+	f.art:SetPoint("TOP", f, "TOP", 0, -52) -- centred, under the title
 	f.body = Theme:Text(f, "body", "")
-	f.body:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -14)
 	f.body:SetWidth(WIDTH - 40)
 	f.body:SetWordWrap(true)
 	f.body:SetSpacing(3)

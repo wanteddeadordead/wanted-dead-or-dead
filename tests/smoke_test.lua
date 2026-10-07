@@ -6103,6 +6103,8 @@ end)()
 	N:Show()
 	check(f.title._text == "What's new in Wanted 1.17.1" and f.body._text:find("^First, I want to thank") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
 		"the note first, signed: "..f.body._text:sub(1, 60))
+	check(f.art._shown and tostring(f.art._texture):find("Media\\cards\\ach%-founding%-hunter%-emblem$") and f.body._text:find("archived", 1, true),
+		"the Founding Hunter crest above the note, and the launch paragraph")
 	f.ok:Click()
 	ns.VERSION = "1.16.0-dev"
 	-- In a fight it waits

@@ -5580,8 +5580,8 @@ end)()
 	end
 	A:AddChatFilters()
 	local said = Say("hello", "Stabby Mcstab-Realm")
-	-- witness-emblem is cell 8: the second row's first
-	check(said and said:find("Media\\emblems:14:14:0:0:512:512:0:64:64:128|t hello", 1, true), "the emblem before what they said: "..tostring(said))
+	-- witness-emblem is cell 8: the first row's ninth, 16 to a row on the 1024x512 sheet
+	check(said and said:find("Media\\emblems:14:14:0:0:1024:512:512:576:0:64|t hello", 1, true), "the emblem before what they said: "..tostring(said))
 	check(Say("hi", "Nobody Special") == "hi", "nothing for a player without one")
 	check(Say("hi", "Old Pick") == "hi", "nor for the old signature badge alone")
 	ns.db.settings.signatureChat = false
@@ -5901,11 +5901,11 @@ end)()
 -- Your calling card: the catalogue by part, any combination by stepping round each part, and the name ink for light plates
 ;(function()
 	local CC = ns.CallingCard
-	check(#ns.CardCatalogue == 319, "the catalogue: "..#ns.CardCatalogue)
+	check(#ns.CardCatalogue == 348, "the catalogue: "..#ns.CardCatalogue)
 	CC:Show()
 	local f = _G.WantedCallingCardFrame
 	check(f.banner.background._texture:find("Media\\cards\\killer%-legend$"), "starts on the sample card: "..tostring(f.banner.background._texture))
-	check(f.rows.plate.name._text == "Arcanite" and f.rows.background.unlock._text == "Killer: Arcanite", "each part's piece and what unlocks it")
+	check(f.rows.plate.name._text == "Arcanite" and f.rows.background.unlock._text == "Killer V", "each part's piece and what unlocks it")
 	check(f.banner.name._text == ns.Store:GetOrigin():match("^([^%-]+)") and f.banner.name._text:find(" ", 1, true), "your full name on the plate: "..f.banner.name._text)
 	-- Back from the first emblem goes round to the last
 	local emblems = 0

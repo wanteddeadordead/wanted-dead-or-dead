@@ -598,6 +598,7 @@ end
 -- ============================================================================
 
 local dialog = nil
+local AREA_HEIGHT = 74 -- a multiline dialog box: about four lines
 
 local function CreateDialog()
 	-- The dialog lives on UIParent so it shows from the Nearby window with the main window closed too. When
@@ -639,7 +640,7 @@ local function CreateDialog()
 	end)
 	frame.confirm:SetScript("OnClick", function()
 		local options = frame.options
-		local value = options.input and frame.input:GetText() or nil
+		local value = options.input and (options.input.multiline and frame.area:GetText() or frame.input:GetText()) or nil
 		if options.validate then
 			local err = options.validate(value)
 			if err then
@@ -655,6 +656,21 @@ local function CreateDialog()
 	frame.input.onEnter = function()
 		frame.confirm:Click()
 	end
+	-- A box for a longer text (input.multiline): the dialog's full width, wrapping over a few lines; Enter still confirms
+	local area = CreateFrame("EditBox", nil, frame)
+	area:SetMultiLine(true)
+	area:SetAutoFocus(false)
+	area:SetFontObject(Theme.Fonts.body)
+	area:SetTextInsets(9, 9, 7, 7)
+	area:SetMaxLetters(255)
+	Theme:Skin(area, C.input, C.border)
+	area:SetScript("OnEnterPressed", function() frame.confirm:Click() end)
+	area:SetScript("OnEscapePressed", function(self)
+		self:ClearFocus()
+		blocker:Hide()
+	end)
+	area:Hide()
+	frame.area = area
 	frame.error = Theme:Text(frame, "small", "", C.red)
 	frame.error:SetPoint("BOTTOMLEFT", 20, 24)
 	-- Escape in the input cancels; keyboard capture on the blocker would be blocked in combat
@@ -667,7 +683,8 @@ local function CreateDialog()
 end
 
 ---Shows a modal dialog over the Wanted window.
----@param options table title, text, input = { placeholder, value }, confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value)
+---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text) }, width
+---(of the dialog, default 400), confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value)
 ---Whether a dialog is up (one at a time).
 function W:IsDialogShown()
 	return dialog ~= nil and dialog:IsShown()
@@ -700,8 +717,19 @@ function W:Dialog(options)
 	frame.confirm:SetText(options.confirmLabel or "OK")
 	frame.cancel:SetText(options.cancelLabel or "Cancel")
 	frame.confirm:SetStyle(options.confirmStyle == "danger" and "danger" or (options.confirmStyle or "primary"))
+	frame:SetWidth(options.width or 400)
 	frame.input:ClearAllPoints()
-	if options.input then
+	frame.area:Hide()
+	local area = options.input and options.input.multiline
+	if area then
+		frame.input:Hide()
+		frame.area:ClearAllPoints()
+		frame.area:SetPoint("BOTTOMLEFT", 20, 56)
+		frame.area:SetPoint("BOTTOMRIGHT", -20, 56)
+		frame.area:SetHeight(AREA_HEIGHT)
+		frame.area:SetText(options.input.value or "")
+		frame.area:Show()
+	elseif options.input then
 		frame.input:SetPoint("BOTTOMLEFT", 20, 56)
 		frame.input.placeholder:SetText(options.input.placeholder or "")
 		-- Typed answers are held to 48 letters; a longer value to copy (a death page's address) fits whole
@@ -713,11 +741,14 @@ function W:Dialog(options)
 	end
 	-- Tall enough for the whole message: title and top margin, the text, the input if any, the buttons
 	local messageHeight = ceil(frame.message:GetStringHeight() or 0)
-	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + (options.input and 52 or 12) + 60))
+	local inputRoom = area and AREA_HEIGHT + 26 or options.input and 52 or 12
+	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + inputRoom + 60))
 	dialog:Show()
 	-- In front of anything else full screen (the wanted poster)
 	dialog:Raise()
-	if options.input then
+	if area then
+		frame.area:SetFocus()
+	elseif options.input then
 		frame.input:SetFocus()
 	end
 end

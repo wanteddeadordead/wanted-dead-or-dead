@@ -150,7 +150,8 @@ function private.ConfirmAnnounce()
 		title = "Announce your raid",
 		text = format("This goes in %s (channel %d), where players without Wanted see it. Anyone who whispers you \"inv\" is invited. Change it if you like:",
 			channel, index),
-		input = { value = Raids:AnnounceText() or "" },
+		input = { value = Raids:AnnounceText() or "", multiline = true },
+		width = 520,
 		confirmLabel = "Post",
 		cancelLabel = "Cancel",
 		onConfirm = function(text)

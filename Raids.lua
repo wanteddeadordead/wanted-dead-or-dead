@@ -136,7 +136,7 @@ function Raids:Announce(text)
 	if not private.mine then
 		return "You're not leading a raid."
 	end
-	text = text and strtrim(gsub(text, "|", "")) or Raids:AnnounceText()
+	text = text and strtrim((gsub(gsub(text, "|", ""), "[\r\n]+", " "))) or Raids:AnnounceText()
 	if text == "" then
 		return "There's nothing to post."
 	end

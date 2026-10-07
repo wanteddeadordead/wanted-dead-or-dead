@@ -1,7 +1,8 @@
--- Wanted: Home, the page the window opens on. Your challenge rank and daily streak, today's challenge and hot
--- zones, this week's three challenges, and a strip of what's going on: your bounty money, enemies nearby, the
--- busiest zone and the latest kill or sighting. Every card opens its page. Challenges come from the Wanted app
--- (Challenges.lua); without it the top shows what the app adds, and the strip still works.
+-- Wanted: Home, the page the window opens on: what's happening now. Your challenge rank and daily streak, today's
+-- challenge and hot zones, world PvP raids (yours, the one you signed up for, the ones forming: click to join), and a
+-- strip of what's going on: your bounty money, enemies nearby, the busiest zone and the latest kill or sighting. Every
+-- card opens its page; this week's challenges are on Progress. Challenges come from the Wanted app (Challenges.lua);
+-- without it the top shows what the app adds, and the raids and the strip still work.
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -14,9 +15,9 @@ local GAP = 12
 local BAND_HEIGHT = 64
 local CARD_TOP = -(BAND_HEIGHT + GAP)
 local CARD_HEIGHT = 124
-local WEEK_TOP = CARD_TOP - CARD_HEIGHT - 16
-local WEEK_HEIGHT = 112
-local STRIP_TOP = WEEK_TOP - 18 - WEEK_HEIGHT - GAP
+local RAIDS_TOP = CARD_TOP - CARD_HEIGHT - 16
+local RAIDS_HEIGHT = 112
+local STRIP_TOP = RAIDS_TOP - 18 - RAIDS_HEIGHT - GAP
 local STRIP_HEIGHT = 68
 local DAILY_WIDTH = 262
 local STREAK_BOXES = 7
@@ -190,22 +191,21 @@ function private.BuildHot(container, width, index)
 	private.hot[index] = card
 end
 
-function private.BuildWeek(container, width)
-	private.weekLabel = W:SectionLabel(container, "This week's challenges")
-	private.weekLabel:SetPoint("TOPLEFT", 0, WEEK_TOP)
-	private.weekEnds = Theme:Text(container, "tiny", "")
-	private.weekEnds:SetPoint("TOPRIGHT", 0, WEEK_TOP)
-	private.weekEnds:SetJustifyH("RIGHT")
+---The raids row: up to three cards (the raid you lead or joined first, then the ones forming).
+function private.BuildRaids(container, width)
+	local label = W:SectionLabel(container, "Raids")
+	label:SetPoint("TOPLEFT", 0, RAIDS_TOP)
+	local note = Theme:Text(container, "tiny", "Form or join one on the Raids page", C.faint)
+	note:SetPoint("TOPRIGHT", 0, RAIDS_TOP)
+	note:SetJustifyH("RIGHT")
 	local cardWidth = floor((width - 2 * GAP) / 3)
-	private.weekly = {}
+	private.raids = {}
 	for i = 1, 3 do
-		local card = W:CardButton(container, function() UI:Show("challenges") end)
-		card:SetPoint("TOPLEFT", (i - 1) * (cardWidth + GAP), WEEK_TOP - 18)
-		card:SetSize(cardWidth, WEEK_HEIGHT)
-		card.points = W:Pill(card)
-		card.points:SetPoint("TOPLEFT", 16, -12)
-		card.hot = W:Pill(card)
-		card.hot:SetPoint("LEFT", card.points, "RIGHT", 8, 0)
+		local card = W:CardButton(container, function(self) private.OnRaid(self.item) end)
+		card:SetPoint("TOPLEFT", (i - 1) * (cardWidth + GAP), RAIDS_TOP - 18)
+		card:SetSize(cardWidth, RAIDS_HEIGHT)
+		card.kind = W:Pill(card)
+		card.kind:SetPoint("TOPLEFT", 16, -12)
 		card.name = Theme:Text(card, "heading", "")
 		card.name:SetPoint("TOPLEFT", 16, -42)
 		card.name:SetWidth(cardWidth - 32)
@@ -214,13 +214,69 @@ function private.BuildWeek(container, width)
 		card.text:SetPoint("TOPLEFT", 16, -60)
 		card.text:SetWidth(cardWidth - 32)
 		card.text.fitWidth = cardWidth - 32
-		card.bar = W:ProgressBar(card, 6)
-		card.bar:SetPoint("TOPLEFT", 16, -90)
-		card.bar:SetWidth(cardWidth - 96)
-		card.progress = Theme:Text(card, "small", "")
-		card.progress:SetPoint("RIGHT", card, "TOPRIGHT", -16, -93)
-		card.progress:SetJustifyH("RIGHT")
-		private.weekly[i] = card
+		card.action = Theme:Text(card, "small", "")
+		card.action:SetPoint("BOTTOMLEFT", 16, 14)
+		private.raids[i] = card
+	end
+end
+
+---A raid card clicked: one you lead or joined (or none) opens the Raids page; any other is joined.
+function private.OnRaid(item)
+	if not item or item.mine or Wanted.Raids:Joined(item.raid.id) then
+		UI:Show("raids")
+		return
+	end
+	local why = Wanted.Raids:Join(item.raid.id)
+	UI:Toast(why or (item.raid.startAt <= GetServerTime() and "Asked to join: the leader invites you." or "Signed up: you'll be invited when it starts."),
+		why and C.red or C.green)
+end
+
+function private.RefreshRaids()
+	local Raids = Wanted.Raids
+	local now = GetServerTime()
+	local items = {}
+	local mine = Raids:Mine()
+	if mine then
+		tinsert(items, { raid = mine, mine = true })
+	end
+	local list = Raids:List()
+	-- The raids we joined first, then the rest
+	sort(list, function(a, b)
+		local aj, bj = Raids:Joined(a.id), Raids:Joined(b.id)
+		if aj ~= bj then
+			return aj
+		end
+		return false
+	end)
+	for _, raid in ipairs(list) do
+		if #items < #private.raids then
+			tinsert(items, { raid = raid })
+		end
+	end
+	for i, card in ipairs(private.raids) do
+		local item = items[i]
+		card.item = item
+		if item then
+			local raid, started = item.raid, item.raid.startAt <= now
+			local joined = not item.mine and Raids:Joined(raid.id)
+			card.kind:Set(item.mine and "YOUR RAID" or joined and (started and "JOINED" or "SIGNED UP") or started and "FORMING" or "PLANNED",
+				item.mine and C.gold or joined and C.green or started and C.red or C.blue)
+			private.Fit(card.name, { raid.title }, "small")
+			local count = item.mine and (IsInGroup() and max(1, GetNumGroupMembers()) or 1) or raid.members
+			local when = started and "now" or date("%a %H:%M", raid.startAt)
+			private.Fit(card.text, { format("%s, %s  %d/%d%s", raid.where, when, count, raid.size, item.mine and "" or ("  led by "..raid.leader)) }, "tiny", true)
+			card.action:SetText(Theme:Colorize((item.mine or joined) and "Open the Raids page" or raid.members >= raid.size and "Full"
+				or started and "Click to join" or "Click to sign up", (item.mine or joined) and C.muted or C.gold))
+			card:Show()
+		elseif i == 1 then
+			card.kind:Set("NONE", C.muted)
+			card.name:SetText("No raids forming")
+			private.Fit(card.text, { "Form one, and every Wanted player of your faction sees it." }, "tiny", true)
+			card.action:SetText(Theme:Colorize("Open the Raids page", C.muted))
+			card:Show()
+		else
+			card:Hide()
+		end
 	end
 end
 
@@ -228,26 +284,26 @@ end
 function private.BuildEmpty(container, width)
 	local panel = W:Card(container)
 	panel:SetPoint("TOPLEFT")
-	panel:SetSize(width, STRIP_TOP * -1 - GAP)
+	panel:SetSize(width, RAIDS_TOP * -1 - GAP)
 	panel.title = Theme:Text(panel, "title", "")
 	panel.title:SetPoint("TOPLEFT", 24, -26)
 	panel.line = Theme:Text(panel, "body", "", C.amber)
 	panel.line:SetPoint("TOPLEFT", 24, -52)
-	panel.line:SetWidth(width - 48)
+	panel.line:SetWidth(width - 48 - 150)
 	local about = Theme:Text(panel, "body", "A daily challenge, three weekly ones, hot zones where kills count double, and a challenge rank for each character that never resets. wanteddeadordead.com works them out from the kills the app sends, and the app brings them here.", C.muted)
 	about:SetPoint("TOPLEFT", 24, -78)
 	about:SetWidth(width - 48)
 	about:SetWordWrap(true)
 	about:SetSpacing(3)
 	local works = W:SectionLabel(panel, "Works without the app")
-	works:SetPoint("TOPLEFT", 24, -146)
+	works:SetPoint("TOPLEFT", 24, -128)
 	local list = Theme:Text(panel, "body", "Bounties on the Board, your hunts and claims, the Nearby window and alerts, Hotspots and the map, Enemies, Leaderboards and Activity: all shared with other Wanted players in game.")
-	list:SetPoint("TOPLEFT", 24, -166)
+	list:SetPoint("TOPLEFT", 24, -146)
 	list:SetWidth(width - 48)
 	list:SetWordWrap(true)
 	list:SetSpacing(3)
 	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)
-	panel.button:SetPoint("BOTTOMLEFT", 24, 24)
+	panel.button:SetPoint("TOPRIGHT", -24, -22)
 	W:AttachTooltip(panel.button, "Website & app", "Where to download the Wanted app for Windows or Mac.")
 	private.empty = panel
 end
@@ -400,39 +456,6 @@ function private.RefreshHot(data, byZone)
 	end
 end
 
-function private.RefreshWeek(data, mine)
-	local weekOver = Challenges:IsWeekOver()
-	if weekOver then
-		private.weekEnds:SetText("this week's challenges come with the app's next update")
-	elseif data.weekEnds then
-		private.weekEnds:SetText("ends Sunday 11:59 PM ET, "..Theme:Left(data.weekEnds - GetServerTime()))
-	else
-		private.weekEnds:SetText("")
-	end
-	for i, card in ipairs(private.weekly) do
-		local challenge = not weekOver and data.weekly[i]
-		local progress = challenge and mine and mine.weekly[i]
-		if challenge then
-			local done = progress and progress.done
-			if done then
-				card.points:Set("DONE", C.green)
-			else
-				card.points:Set("+"..challenge.points.." pts", C.gold)
-			end
-			card.hot:Set(challenge.hot and "HOT" or nil, C.red)
-			private.Fit(card.name, { challenge.name }, "small")
-			local color = done and C.green or C.text
-			card.name:SetTextColor(color[1], color[2], color[3])
-			private.Fit(card.text, { challenge.text or "" }, "tiny", true)
-		else
-			card.points:Hide()
-			card.hot:Hide()
-			card.name:SetText(Theme:Colorize(i == 1 and "None this week yet" or "", C.faint))
-			card.text:SetText("")
-		end
-		private.SetProgress(card.bar, card.progress, challenge, progress)
-	end
-end
 
 function private.RefreshStrip()
 	local summary = Wanted.Model:GetMySummary()
@@ -521,12 +544,7 @@ function private.Refresh()
 	end
 	private.band:SetShown(shown)
 	private.daily:SetShown(shown)
-	private.weekLabel:SetShown(shown)
-	private.weekEnds:SetShown(shown)
 	for _, card in ipairs(private.hot) do
-		card:SetShown(shown)
-	end
-	for _, card in ipairs(private.weekly) do
 		card:SetShown(shown)
 	end
 	if shown then
@@ -534,7 +552,6 @@ function private.Refresh()
 		private.RefreshBand(data, mine)
 		private.RefreshDaily(data, mine)
 		private.RefreshHot(data, private.HotspotsByZone(Wanted.Hotspots:Get()))
-		private.RefreshWeek(data, mine)
 		if Challenges:IsDemo() then
 			private.footer:SetText("Demo challenges, made up to show the page. /wanted demo again to turn them off.")
 		else
@@ -543,6 +560,7 @@ function private.Refresh()
 	else
 		private.footer:SetText("")
 	end
+	private.RefreshRaids()
 	private.RefreshStrip()
 end
 
@@ -557,7 +575,7 @@ UI:RegisterPage("home", {
 		private.BuildDaily(container)
 		private.BuildHot(container, width, 1)
 		private.BuildHot(container, width, 2)
-		private.BuildWeek(container, width)
+		private.BuildRaids(container, width)
 		private.BuildStrip(container, width)
 	end,
 	refresh = private.Refresh,

@@ -2,12 +2,18 @@
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-07
+
 - Your calling card in game: Your calling card in the menu (or /wanted card) shows your card, with your name and
   three stats, and lets you change it with the pieces you've unlocked (locked ones are marked; click a stat to change
   it). Save, and the Wanted app sends it to wanteddeadordead.com after your next /reload or logout. Try anything shows
-  any combination of the 319 pieces. Needs the app 0.2.37 or later.
+  any combination of the 348 pieces. Needs the app 0.2.37 or later.
 - Your emblem is now your calling card's: painted crest art for every badge challenge, zone and class. It shows on
   the death card of any Wanted player you kill. Until you pick one, it's the best emblem you've unlocked.
+- New emblems for every achievement (Founding Hunter included), every weekly medal in bronze, silver and gold, and
+  every playstyle badge. They show only when you pick them.
+- The name sits in the middle of every plate, and on the light plates it's dark and easy to read.
+- If one part of Wanted hits an error while loading, the rest still loads (an error had hidden the minimap button).
 
 ## [1.14.0] - 2026-10-06
 

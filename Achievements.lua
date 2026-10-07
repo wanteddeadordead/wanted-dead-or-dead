@@ -466,7 +466,7 @@ end
 ---Puts a player's calling-card emblem before what they said, in your own chat windows (the name is the game's link,
 ---so it stays as it is). On by default (settings.signatureChat).
 function private.ChatFilter(_, _, message, author, ...)
-	if not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
+	if not Wanted.FEATURES.chatEmblems or not Wanted.db.settings.signatureChat or type(message) ~= "string" or type(author) ~= "string"
 		or (issecretvalue and (issecretvalue(message) or issecretvalue(author))) then
 		return false
 	end
@@ -485,6 +485,13 @@ local CHAT_EVENTS = {
 }
 
 function Achievements:OnEnable()
+	if Wanted.FEATURES.chatEmblems then
+		self:AddChatFilters()
+	end
+end
+
+---Puts the emblems-in-chat filter on every chat event (behind Wanted.FEATURES.chatEmblems).
+function Achievements:AddChatFilters()
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
 	if addFilter then
 		for _, event in ipairs(CHAT_EVENTS) do

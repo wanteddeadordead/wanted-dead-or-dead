@@ -5569,6 +5569,15 @@ end)()
 		end
 		return out
 	end
+	-- Behind a feature switch, off for now: no emblem in chat until it's on
+	check(Say("hello", "Stabby Mcstab-Realm") == "hello", "no emblem in chat with the feature off")
+	ns.FEATURES.chatEmblems = true
+	-- (a test above swapped ChatFrameUtil for one that only opens chat)
+	ChatFrameUtil.AddMessageEventFilter = function(event, func)
+		chatFilterLists[event] = chatFilterLists[event] or {}
+		table.insert(chatFilterLists[event], func)
+	end
+	A:AddChatFilters()
 	local said = Say("hello", "Stabby Mcstab-Realm")
 	-- witness-emblem is cell 8: the second row's first
 	check(said and said:find("Media\\emblems:14:14:0:0:512:512:0:64:64:128|t hello", 1, true), "the emblem before what they said: "..tostring(said))
@@ -5577,6 +5586,7 @@ end)()
 	ns.db.settings.signatureChat = false
 	check(not tostring(Say("hello", "Stabby Mcstab")):find("|T", 1, true), "and nothing with the switch off")
 	ns.db.settings.signatureChat = true
+	ns.FEATURES.chatEmblems = false
 	-- The death card for this killer
 	local card, f = ns.DeathCard, ns.DeathCard:GetFrame()
 	ns.Store:UpdatePlayer("Player-9-COSMETIC", { name = "Stabby Mcstab", class = "ROGUE", level = 20, faction = "Alliance" }, clock)

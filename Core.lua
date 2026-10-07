@@ -6,6 +6,10 @@ _G.Wanted = Wanted
 
 Wanted.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
 Wanted.FOLDER = ADDON_NAME
+-- Features built but switched off for now: flip one to true to turn it on
+Wanted.FEATURES = {
+	chatEmblems = false, -- players' calling-card emblems before what they say in chat (Achievements; Settings: Emblems in chat)
+}
 ---Whether a version is a development build: deployed with a "-dev" version (scripts/deploy.sh). A copy
 ---straight from GitHub, which the packager hasn't stamped, is not one.
 function Wanted:IsDevVersion(version)

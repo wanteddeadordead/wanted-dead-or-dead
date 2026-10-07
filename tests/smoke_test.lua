@@ -6095,6 +6095,29 @@ end)()
 	RunTimers()
 	check(N:IsShown() and f.title._text == "What's new in Wanted 1.16.0" and not f.body._text:find("1.15.0", 1, true), "never seen: the newest only")
 	f.ok:Click()
+	-- A pinned note (1.17.1's, the launch) reaches everyone who hasn't seen it, under the newest notes, once
+	tinsert(ns.WHATS_NEW, 1, { version = "1.18.0", note = "The menu is tidier.", lines = { "A short menu." } })
+	ns.VERSION = "1.18.0"
+	local function open(seen)
+		if N:IsShown() then f.ok:Click() end
+		ns.db.whatsNewSeen = seen
+		Fire("LOADING_SCREEN_DISABLED")
+		RunTimers()
+		return f.body._text or ""
+	end
+	local body = open(nil)
+	check(f.title._text == "What's new in Wanted 1.18.0" and body:find("^The menu is tidier") and body:find("First, I want to thank", 1, true)
+		and body:find("1.17.1", 1, true), "never seen: the newest, then the pinned note under its version")
+	local _, thanks = body:gsub("First, I want to thank", "")
+	check(thanks == 1, "the pinned note once")
+	body = open("1.17.1")
+	check(N:IsShown() and not body:find("First, I want to thank", 1, true), "seen it: not again")
+	body = open("1.16.0")
+	_, thanks = body:gsub("First, I want to thank", "")
+	check(body:find("A short menu.", 1, true) and thanks == 1, "after a gap: both versions, the note once")
+	f.ok:Click()
+	tremove(ns.WHATS_NEW, 1)
+	ns.VERSION = "1.16.0-dev"
 	Fire("LOADING_SCREEN_DISABLED")
 	RunTimers()
 	check(not N:IsShown(), "and once only")

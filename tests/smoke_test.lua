@@ -6315,6 +6315,25 @@ end)()
 	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now,\nwhisper inv")
 	check(chatSent[1] == "CHANNEL: Barrens raid at the Crossroads cffff0000now, whisper inv", "Post sends what's in the box, on one line: "..tostring(chatSent[1]))
 	R:Close()
+	-- Home's raids row: your raid first, then the ones forming (click to join); none, a card to form one
+	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
+	clock = clock + 4 * 60
+	R:Tick()
+	ns.UI:Show("home")
+	check(shows("No raids forming") and shows("RAIDS"), "Home: no raids, a card to form one")
+	R:OnAd(ad({ id = "home1", t = "Stonetalon push" }), "Lead Er-Realm")
+	ns.UI:Refresh(true)
+	check(shows("Stonetalon push") and shows("Click to join") and shows("FORMING"), "Home: a raid forming, with Join")
+	local before = #joins
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Stonetalon push" and fs._parent._shown then fs._parent:Click() end
+	end
+	ns.UI:Refresh(true)
+	check(#joins == before + 1 and R:Joined("home1") and shows("JOINED"), "clicking it joins")
+	R:Create({ title = "My own raid", size = 20 })
+	ns.UI:Refresh(true)
+	check(shows("YOUR RAID") and shows("My own raid"), "Home: your raid first")
+	R:Close()
 	ns.UI:GetFrame():Hide()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast
 	groupSize, IsInGroup, IsInRaid = realGroup, realInGroup, realInRaid

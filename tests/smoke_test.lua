@@ -4747,7 +4747,8 @@ end)()
 	db.settings.showTools = false
 	ns.UI:Show("tools")
 	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
-	check(Shown("WORLD PVP") and Shown("BATTLEGROUNDS") and Shown("YOU"), "the menu's groups are labelled")
+	check(not Shown("WORLD PVP") and not Shown("BATTLEGROUNDS") and Shown("Bounties") and Shown("Progress") and Shown("You"),
+		"the menu is one short list, with no group headings")
 	-- Your wanted poster, at the foot of the menu on every page
 	local footPoster
 	for _, fs in ipairs(Mock.fontStrings) do
@@ -5241,8 +5242,7 @@ end)()
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
 	check(Shown("Darkmoon Faire"), "the holiday is on the grid")
 	check(Shown("Battleground weekends start with launch, Nov 4."), "saying when they start")
-	-- The calendar is a tab of Home: Home | Calendar along the top of both, no menu entry of its own; Challenges has
-	-- its own again; the menu's footer buttons are gone
+	-- The calendar is a tab of Progress (Challenges | Leaderboards | Calendar | Rank | Gear), no menu entry of its own
 	local function Count(text)
 		local n = 0
 		for _, f in ipairs(Mock.fontStrings) do
@@ -5255,12 +5255,12 @@ end)()
 		return n
 	end
 	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
-	check(calendarTabs == 1 and homeTabs == 2, "the calendar shows Home | Calendar tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
+	check(calendarTabs == 1 and homeTabs == 1 and Count("Challenges") == 1, "the calendar shows Progress's tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
 	check(Count("Your wanted poster") == 1, "the menu's poster button shows on the calendar")
 	ns.UI:Show("home")
-	check(ns.UI:IsShown("home") and Shown("Calendar"), "Home shows the Calendar tab")
+	check(ns.UI:IsShown("home") and not Shown("Calendar"), "Home has no tabs now")
 	ns.UI:Show("challenges")
-	check(ns.UI:IsShown("challenges") and not Shown("Calendar"), "Challenges is its own page again, without those tabs")
+	check(ns.UI:IsShown("challenges") and Shown("Calendar"), "Challenges shows the Calendar tab")
 	ns.UI:Show("calendar")
 	-- The beta: no season running
 	ns.db.pvpSeason = { season = 0, week = -1, endsAt = 0, weekMax = 0, seasonMax = 14, at = clock }
@@ -5658,7 +5658,7 @@ end)()
 	GetItemCount = function(id) return id == 20560 and 7 or 0 end
 	ns.UI:Show("rank")
 	check(ns.UI:IsShown("rank"), "Rank & Gear opens")
-	check(Shown("BATTLEGROUNDS"), "the Battlegrounds heading shows with its first page")
+	check(ns.UI:Tabs() and ns.UI:Tabs().selected == "rank", "Rank is a tab of Progress")
 	check(Shown("12,450") and Shown("of 25,000"), "honor, with thousands separators and the cap")
 	check(Shown("Rank 11 of 14") and Shown("week 8"), "this week's cap")
 	check(Shown("10  Lieutenant Commander"), "the ladder names each rank by Blizzard's title")
@@ -6283,6 +6283,50 @@ end)()
 	ns.UI:GetFrame():Hide()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast
 	groupSize, IsInGroup, IsInRaid = realGroup, realInGroup, realInRaid
+end)()
+-- The menu: six entries, each page a tab of one, every old page key still opening its page on the right tab; a menu
+-- entry's badge adds up its tabs'
+;(function()
+	local UI = ns.UI
+	UI:Show("home")
+	local labels = {}
+	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
+	check(table.concat(labels, ", ") == "Home, Bounties, Enemies, Raids, Progress, You", "six menu entries: "..table.concat(labels, ", "))
+	local function selected()
+		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
+	end
+	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
+		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
+		rank = "Progress", gear = "Progress", web = "You", settings = "You", home = "Home" }) do
+		UI:Show(key)
+		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
+		local tabs = UI:Tabs()
+		if entry ~= "Home" and entry ~= "Raids" then
+			check(tabs and tabs.selected == key, key.."'s tab is selected")
+		end
+	end
+	UI:Show("challenges")
+	local tabs = UI:Tabs()
+	check(table.concat(tabs.labels, ", ") == "Challenges, Leaderboards, Calendar, Rank, Gear", "Progress's tabs: "..table.concat(tabs.labels, ", "))
+	-- Tools only when it's switched on
+	local showTools = ns.db.settings.showTools
+	ns.db.settings.showTools = false
+	UI:Show("settings")
+	check(table.concat(UI:Tabs().labels, ", ") == "Website & app, Settings", "no Tools tab when it's off: "..table.concat(UI:Tabs().labels, ", "))
+	ns.db.settings.showTools = true
+	UI:Refresh(true)
+	check(table.concat(UI:Tabs().labels, ", ") == "Website & app, Settings, Tools", "the Tools tab when it's on")
+	ns.db.settings.showTools = showTools
+	-- Bounties' badge: what's waiting on your bounties plus your hunts
+	local realActions, realHunts = ns.Model.GetActionCount, ns.Model.GetMyHunts
+	ns.Model.GetActionCount = function() return 2 end
+	ns.Model.GetMyHunts = function() return { 1, 1, 1 } end
+	UI:Refresh(true)
+	local bounties
+	for _, e in ipairs(UI:Menu()) do if e.label == "Bounties" then bounties = e.badge end end
+	check(bounties == 5, "a menu entry's badge adds up its tabs': "..tostring(bounties))
+	ns.Model.GetActionCount, ns.Model.GetMyHunts = realActions, realHunts
+	ns.UI:GetFrame():Hide()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

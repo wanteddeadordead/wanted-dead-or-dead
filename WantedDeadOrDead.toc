@@ -52,6 +52,7 @@ Theme.lua
 Widgets.lua
 Model.lua
 Alerts.lua
+Toast.lua
 Streaks.lua
 Posse.lua
 UI.lua

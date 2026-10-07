@@ -6049,6 +6049,91 @@ end)()
 	CC:TakeMine(nil)
 	CreateFrame = realCreate
 end)()
+-- What's new: once per version after an update, the welcome on a fresh install, never in combat or over a dialog;
+-- every released version from 1.15.0 has an entry, and none is ahead of the changelog without unreleased notes
+;(function()
+	local N = ns.WhatsNew
+	local changelog = io.open(ADDON.."CHANGELOG.md"):read("*a")
+	local released, unreleased = {}, changelog:match("## %[Unreleased%](.-)\n## %[")
+	for v in changelog:gmatch("\n## %[(%d+%.%d+%.%d+)%]") do released[#released + 1] = v end
+	local entries = {}
+	for _, e in ipairs(ns.WHATS_NEW) do
+		entries[e.version] = true
+		check(#e.lines > 0 and #e.lines <= 5, e.version..": one to five lines")
+	end
+	for _, v in ipairs(released) do
+		local a, b = v:match("^(%d+)%.(%d+)")
+		if tonumber(a) > 1 or tonumber(b) >= 15 then check(entries[v], "no What's new entry for "..v) end
+	end
+	if ns.WHATS_NEW[1].version ~= released[1] then
+		check(unreleased and unreleased:find("%S"), "What's new "..ns.WHATS_NEW[1].version.." is ahead of the changelog ("..released[1]..") with no unreleased notes")
+	end
+	-- Which versions show
+	local since = N:Since("1.14.0", "1.16.0")
+	check(#since == 2 and since[1].version == "1.16.0" and since[2].version == "1.15.0", "the versions since the last seen, newest first")
+	check(#N:Since("1.16.0", "v1.16.0") == 0 and #N:Since("1.0.0", "9.9.9") == 3, "none when seen; at most three")
+	-- Shown once per version, after the loading screen settles
+	local realVersion = ns.VERSION
+	-- (Earlier tests' loading screens may have shown it already)
+	if N:IsShown() then _G.WantedWhatsNewFrame.welcome = nil _G.WantedWhatsNewFrame.ok:Click() end
+	local realIsDialogShown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return false end -- earlier tests left their dialogs up
+	ns.VERSION = "1.16.0-dev"
+	ns.db.whatsNewSeen = "1.14.0"
+	Fire("LOADING_SCREEN_DISABLED")
+	check(not N:IsShown(), "not at once")
+	RunTimers()
+	local f = _G.WantedWhatsNewFrame
+	check(N:IsShown() and f.title._text == "What's new in Wanted 1.16.0" and f.body._text:find("1.15.0", 1, true) and ns.db.whatsNewSeen == "1.16.0",
+		"what's new since the last version seen: "..tostring(f and f.title._text))
+	f.ok:Click()
+	check(not N:IsShown(), "OK closes it")
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(not N:IsShown(), "and once only")
+	-- The author's note leads, signed
+	ns.VERSION = "1.17.0"
+	N:Show()
+	check(f.title._text == "What's new in Wanted 1.17.0" and f.body._text:find("^First, I want to thank") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
+		"the note first, signed: "..f.body._text:sub(1, 60))
+	f.ok:Click()
+	ns.VERSION = "1.16.0-dev"
+	-- In a fight it waits
+	ns.db.whatsNewSeen = "1.15.0"
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(not N:IsShown(), "not in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(N:IsShown() and ns.db.whatsNewSeen == "1.16.0", "after the fight")
+	f.ok:Click()
+	-- A fresh install: the welcome instead
+	ns.db.whatsNewSeen, ns.freshInstall = nil, true
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(N:IsShown() and f.title._text == "Welcome to Wanted" and ns.db.whatsNewSeen == "1.16.0", "a fresh install is welcomed")
+	local prompted = false
+	local realPrompt = ns.PromptForApp
+	ns.PromptForApp = function() prompted = true end
+	f.ok:Click()
+	ns.PromptForApp = realPrompt
+	check(prompted, "then the app prompt")
+	ns.freshInstall, ns.VERSION = nil, realVersion
+	ns:RunCommand("new", "")
+	check(N:IsShown(), "/wanted new shows it again")
+	f.ok:Click()
+	-- Never over another dialog
+	ns.Widgets.IsDialogShown = function() return true end
+	ns.db.whatsNewSeen = "1.15.0"
+	ns.VERSION = "1.16.0"
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(not N:IsShown(), "not over a dialog")
+	ns.Widgets.IsDialogShown, ns.VERSION = realIsDialogShown, realVersion
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

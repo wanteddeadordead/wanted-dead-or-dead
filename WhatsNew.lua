@@ -125,7 +125,11 @@ function private.Check()
 		private.Open("Welcome to Wanted", nil, { { lines = Wanted.WELCOME } }, true)
 		return
 	end
+	-- Never seen it (the update that brought it): the newest version only, whose lines sum up what came before
 	local entries = WhatsNew:Since(db.whatsNewSeen, current)
+	if not db.whatsNewSeen then
+		entries = { entries[1] }
+	end
 	db.whatsNewSeen = current
 	if #entries > 0 then
 		private.Open("What's new in Wanted "..entries[1].version, entries[1].note, entries)

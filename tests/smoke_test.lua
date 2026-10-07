@@ -6079,6 +6079,7 @@ end)()
 	local realIsDialogShown = ns.Widgets.IsDialogShown
 	ns.Widgets.IsDialogShown = function() return false end -- earlier tests left their dialogs up
 	ns.VERSION = "1.16.0-dev"
+	ns.freshInstall = nil -- the harness started with no saved data: an update from here on
 	ns.db.whatsNewSeen = "1.14.0"
 	Fire("LOADING_SCREEN_DISABLED")
 	check(not N:IsShown(), "not at once")
@@ -6088,6 +6089,12 @@ end)()
 		"what's new since the last version seen: "..tostring(f and f.title._text))
 	f.ok:Click()
 	check(not N:IsShown(), "OK closes it")
+	-- A player who never saw the window (the update that brought it) gets the newest version only
+	ns.db.whatsNewSeen = nil
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(N:IsShown() and f.title._text == "What's new in Wanted 1.16.0" and not f.body._text:find("1.15.0", 1, true), "never seen: the newest only")
+	f.ok:Click()
 	Fire("LOADING_SCREEN_DISABLED")
 	RunTimers()
 	check(not N:IsShown(), "and once only")

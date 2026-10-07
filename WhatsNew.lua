@@ -12,10 +12,21 @@ local private = {}
 Wanted.WHATS_NEW = {
 	{
 		version = "1.17.0",
-		note = "First, I want to thank all of you for the support you've shown during the beta testing of this addon and system.",
+		note = "First, I want to thank all of you for the support you've shown during the beta testing of this addon and system. "
+			.."Every bug report, screenshot and idea you sent made Wanted better, and seeing your kills, bounties and grudges show "
+			.."up on the site has made the long nights worth it.\n\n"
+			.."I'm also sorry for the flood of updates. There were a lot of them, sometimes several in a day, and I know restarting "
+			.."the game again and again got old. Things will settle down from here.\n\n"
+			.."We're not going anywhere, and we'll be here in force for the launch.\n\n"
+			.."If you're enjoying Wanted, please tell your friends and guildmates about it. The more of us running it, the more "
+			.."every kill counts.\n\n"
+			.."See you out there.",
 		lines = {
-			"This window: what's new after each update, once.",
-			"Google sign-in is gone from the website: sign in with Battle.net or Discord.",
+			"Your calling card in game: open Your calling card from the menu, or type /wanted card, and build it from the pieces you've unlocked.",
+			"New emblems for every achievement, weekly medal and playstyle badge.",
+			"Your name sits in the middle of every nameplate, and the light plates are easier to read.",
+			"A popup shows when you earn an achievement or medal, or reach a new badge tier or rank.",
+			"This window, after each update. Type /wanted new to see it again.",
 		},
 	},
 	{

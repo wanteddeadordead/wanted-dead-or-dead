@@ -6325,6 +6325,9 @@ end)()
 	UI:Show("challenges")
 	local tabs = UI:Tabs()
 	check(table.concat(tabs.labels, ", ") == "Challenges, Leaderboards, Calendar, Rank, Gear", "Progress's tabs: "..table.concat(tabs.labels, ", "))
+	-- Enemies opens on Hotspots (where they are right now, which its badge counts)
+	UI:Show("enemies")
+	check(table.concat(UI:Tabs().labels, ", ") == "Hotspots, Enemies, Guild KoS, Activity", "Enemies' tabs: "..table.concat(UI:Tabs().labels, ", "))
 	-- Tools only when it's switched on
 	local showTools = ns.db.settings.showTools
 	ns.db.settings.showTools = false

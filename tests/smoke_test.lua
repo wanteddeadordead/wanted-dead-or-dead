@@ -5544,16 +5544,17 @@ end)()
 	A:Take(nil, nil)
 	A:TakeWeekly(nil, nil)
 end)()
--- Cosmetics from the site: a player's signature badge leads their badges and goes before what they say in chat; the
--- death card wears the killer's frame colour, signature and stamp
+-- Cosmetics from the site: a player's signature badge leads their badges; their calling-card emblem goes before what
+-- they say in chat; the death card wears the killer's emblem, frame colour and stamp
 ;(function()
 	local A = ns.Achievements
 	A:Take({ { id = "witness", name = "Witness", text = "See 50." }, { id = "founding-hunter", name = "Founding Hunter", text = "Beta." } },
 		{ ["stabby mcstab"] = { "witness", "founding-hunter" } })
-	A:TakeCosmetics({ ["stabby mcstab"] = { s = "founding-hunter", f = "gold", t = "founding-hunter" }, ["odd one"] = { s = "made-up", f = "plastic" }, [7] = { f = "gold" } })
+	A:TakeCosmetics({ ["stabby mcstab"] = { e = "witness-emblem", s = "founding-hunter", f = "gold", t = "founding-hunter" }, ["odd one"] = { e = "made-up", s = "made-up", f = "plastic" },
+		["old pick"] = { s = "witness" }, [7] = { f = "gold" } })
 	local looks = A:CosmeticsOf("Stabby Mcstab")
-	check(looks.signature == "founding-hunter" and looks.frame == "gold" and looks.stamp == "founding-hunter", "a player's cosmetics")
-	check(next(A:CosmeticsOf("Odd One")) == nil and next(A:CosmeticsOf("Nobody")) == nil, "unknown frames and signatures are dropped")
+	check(looks.emblem == "witness-emblem" and looks.signature == "founding-hunter" and looks.frame == "gold" and looks.stamp == "founding-hunter", "a player's cosmetics")
+	check(next(A:CosmeticsOf("Odd One")) == nil and next(A:CosmeticsOf("Nobody")) == nil, "unknown emblems, frames and signatures are dropped")
 	check(A:StampText("founding-hunter") == "FOUNDING HUNTER" and A:StampText("board-defender") == "DEFENDER" and A:StampText("nope") == nil, "stamp words")
 	check(A:BadgesOf("Stabby Mcstab")[1].key == "founding-hunter", "the signature leads the badges")
 	-- Chat: every filter on the event in turn, as the game runs them
@@ -5567,8 +5568,10 @@ end)()
 		return out
 	end
 	local said = Say("hello", "Stabby Mcstab-Realm")
-	check(said and said:find(":448:512:0:64|t hello", 1, true), "the signature before what they said: "..tostring(said))
+	-- witness-emblem is cell 8: the second row's first
+	check(said and said:find("Media\\emblems:14:14:0:0:512:512:0:64:64:128|t hello", 1, true), "the emblem before what they said: "..tostring(said))
 	check(Say("hi", "Nobody Special") == "hi", "nothing for a player without one")
+	check(Say("hi", "Old Pick") == "hi", "nor for the old signature badge alone")
 	ns.db.settings.signatureChat = false
 	check(not tostring(Say("hello", "Stabby Mcstab")):find("|T", 1, true), "and nothing with the switch off")
 	ns.db.settings.signatureChat = true
@@ -5576,7 +5579,7 @@ end)()
 	local card, f = ns.DeathCard, ns.DeathCard:GetFrame()
 	ns.Store:UpdatePlayer("Player-9-COSMETIC", { name = "Stabby Mcstab", class = "ROGUE", level = 20, faction = "Alliance" }, clock)
 	card:ShowFor("Player-9-COSMETIC")
-	check(f.name._text:find("|T", 1, true) and f.name._text:find("Stabby Mcstab", 1, true), "the death card's name carries the signature: "..tostring(f.name._text))
+	check(f.name._text:find("|T", 1, true) and f.name._text:find("Stabby Mcstab", 1, true), "the death card's name carries the emblem: "..tostring(f.name._text))
 	check(f.stamp._text == "FOUNDING HUNTER", "and the stamp")
 	A:TakeCosmetics(nil)
 	card:ShowFor("Player-9-COSMETIC")

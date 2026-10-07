@@ -5889,6 +5889,14 @@ end)()
 	check(#over == 0, "lines wider than their space:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")
+-- Your own card from the catch-up at login, before the card window has ever opened (it errored on byID)
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	local ok, err = pcall(CC.TakeMine, CC, { [me] = { card = { plate = "mat-silk", border = "witness-border", background = "witness-bg" },
+		unlocked = { "starter-plate", "mat-silk" } } })
+	check(ok, "your card taken before the window opens: "..tostring(err))
+	CC:TakeMine(nil)
+end)()
 -- Your calling card: the catalogue by part, any combination by stepping round each part, and the name ink for light plates
 ;(function()
 	local CC = ns.CallingCard

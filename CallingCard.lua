@@ -128,6 +128,7 @@ end
 ---entries are dropped.
 ---@param cards table?
 function CallingCard:TakeMine(cards)
+	private.Parts() -- the catalogue by id: the catch-up comes at login, before the window has ever built it
 	private.mine = {}
 	for name, c in pairs(type(cards) == "table" and cards or {}) do
 		local card = type(c) == "table" and type(c.card) == "table" and c.card

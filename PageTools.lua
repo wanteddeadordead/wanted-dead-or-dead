@@ -97,6 +97,8 @@ UI:RegisterPage("tools", {
 	subtitle = "The player-to-player network and the log to send when something looks wrong.",
 	hidden = function() return not Wanted.db.settings.showTools end,
 	order = 7,
+	under = "web",
+	tabLabel = "Tools",
 	build = function(container, width, height)
 		private.BuildNetwork(container, width)
 		private.BuildLog(container, width, height)

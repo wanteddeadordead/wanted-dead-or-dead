@@ -280,6 +280,9 @@ UI:RegisterPage("board", {
 	title = "Board",
 	subtitle = "Bounties on enemy players. Kill the target and the claim files itself; the poster pays by mail.",
 	order = 1,
+	menuLabel = "Bounties",
+	tabLabel = "Board",
+	tabs = { "board", "mine", "hunts" },
 	build = function(container, width, height)
 		private.BuildPostCard(container, width)
 		private.BuildFilters(container, width)

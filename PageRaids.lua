@@ -169,7 +169,7 @@ UI:RegisterPage("raids", {
 	group = "World PvP",
 	title = "Raids",
 	subtitle = "Form a world PvP raid, or join one: everyone with Wanted on your faction sees it, and the leader invites you.",
-	order = 2.7,
+	order = 3,
 	build = function(container, width, height)
 		private.form = private.BuildForm(container, width)
 		private.lead = private.BuildLead(container)

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-10-07
+
 - What's new: after each update, a window with a note from me and a few lines on what changed, once per version, out
   of combat once the loading screen has gone. A first install gets a short welcome, then the app prompt. /wanted new
   shows it again.

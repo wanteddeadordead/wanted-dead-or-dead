@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Unlock toasts: when you earn an achievement or a weekly medal, reach a new badge tier or materials rank, or unlock
+  new calling-card pieces, a toast shows the art and what it unlocked. Up to three at a time, never in a fight (they
+  wait until it's over), and a click opens your calling card. They show at your next login or /reload after the app
+  syncs.
+
 ## [1.15.0] - 2026-10-07
 
 - Your calling card in game: Your calling card in the menu (or /wanted card) shows your card, with your name and

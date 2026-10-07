@@ -5511,15 +5511,16 @@ end)()
 	check(#badges == 3 and badges[3].key == "witness", "badges: medals, then achievements")
 	local places = A:MyPlaces()
 	check(places and #places == 4 and places[1].place == 2 and places[1].value == 12 and places[2].place == nil, "my places on this week's boards")
-	-- The banner: the first catch-up only notes what's held; a new medal (or one won again) is announced
-	local realWarn, warned = ns.Alerts.Warn, {}
-	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." / "..sub end
+	-- The toasts: the first catch-up only notes what's held; a new medal (or one won again) is announced
+	local realAdd, warned = ns.Toast.Add, {}
+	ns.Toast.Add = function(_, t) warned[#warned + 1] = t.kind.." / "..t.name.." / "..tostring(t.art) end
 	ns.db.badgesSeen = nil
 	A:CheckNew()
 	check(#warned == 0 and ns.db.badgesSeen[me]["witness"], "the first catch-up notes the badges quietly")
 	A:TakeWeekly({ [me:lower()] = { { b = "defender", m = "silver", n = 3 }, { b = "top-killer", m = "gold", n = 1 } } }, nil)
 	A:CheckNew()
-	check(#warned == 1 and warned[1]:find("BADGE EARNED", 1, true) and warned[1]:find("Defender silver x3", 1, true), "a medal won again is announced: "..tostring(warned[1]))
+	check(#warned == 1 and warned[1]:find("MEDAL WON / Defender silver x3", 1, true) and warned[1]:find("Media\\cards\\medal-defender-silver-emblem", 1, true),
+		"a medal won again gets a toast with its emblem: "..tostring(warned[1]))
 	A:CheckNew()
 	check(#warned == 1, "and only once")
 	check(A:MyPlaces() == nil, "no boards without this week's")
@@ -5531,7 +5532,7 @@ end)()
 	A:CheckNew()
 	check(#warned == 1, "playstyle badges are never announced")
 	A:TakePlaystyle(nil)
-	ns.Alerts.Warn = realWarn
+	ns.Toast.Add = realAdd
 	-- The week card: the places line fits
 	ns.Challenges:SetDemo(nil)
 	A:TakeWeekly(nil, { start = clock - 3600, ends = clock + 86400, boards = { ["weekly-challenger"] = { { n = me, v = 35 } }, ["bounty-hunter"] = { { n = "X", v = 1 }, { n = me, v = 1 } } } })
@@ -5964,6 +5965,69 @@ end)()
 	CC:Hide()
 	CC:TakeMine(nil)
 	ns.db.cardPicks = nil
+end)()
+-- Unlock toasts: up to three at once, the rest summed up; only out of combat; a click opens your calling card
+;(function()
+	local T, CC = ns.Toast, ns.CallingCard
+	local me = ns.Store:GetOrigin():match("^([^%-]+)")
+	-- The toasts' frames, as they're made
+	local made, realCreate = {}, CreateFrame
+	CreateFrame = function(kind, ...) local f = realCreate(kind, ...) if kind == "Button" then made[#made + 1] = f end return f end
+	local function frameOf(toast) for _, f in ipairs(made) do if f.toast == toast and f._shown then return f end end end
+	local function kinds()
+		local out = {}
+		for _, t in ipairs(T:Shown()) do out[#out + 1] = t.kind.." "..t.name end
+		return table.concat(out, " | ")
+	end
+	local card = { plate = "starter-plate", border = "starter-border", background = "starter-bg" }
+	local function take(unlocked) CC:TakeMine({ [me] = { card = card, unlocked = unlocked } }) end
+	local starters = { "starter-plate", "starter-border", "starter-bg" }
+	-- The first sight of a character's pieces is only noted
+	ns.db.cardsSeen = nil
+	take(starters)
+	CC:CheckNew()
+	check(#T:Shown() == 0 and T:Pending() == 0 and ns.db.cardsSeen[me]["starter-bg"], "nothing on the first sight")
+	-- New pieces: a toast for each tier and rank, with its pieces; achievement and playstyle pieces get none here
+	local more = { "killer-plate", "killer-border", "mat-linen", "ach-witness-emblem", "style-duo-emblem" }
+	for _, id in ipairs(starters) do more[#more + 1] = id end
+	take(more)
+	CC:CheckNew()
+	local shown = T:Shown()
+	check(#shown == 3 and kinds() == "NEW RANK Linen | BADGE TIER Killer I | BADGE TIER Killer II", "a toast per rank and tier, in catalogue order: "..kinds())
+	check(shown[2].detail == "Unlocked: Rusted Iron plate" and shown[2].art:find("Media\\cards\\killer%-plate$") and shown[2].aspect > 2, "its pieces and art")
+	CC:CheckNew()
+	check(#T:Shown() == 3 and T:Pending() == 0, "each piece only once")
+	-- A click opens your calling card and frees the place
+	frameOf(shown[1]):Click()
+	check(#T:Shown() == 2 and _G.WantedCallingCardFrame._shown, "a click opens your calling card")
+	CC:Hide()
+	-- Toasts fade in, stay, then go
+	local f = frameOf(T:Shown()[1])
+	f._scripts.OnUpdate(f, 0.15)
+	check(f._alpha and f._alpha > 0 and f._alpha < 1 or f.age == 0.15, "fading in")
+	f._scripts.OnUpdate(f, 10)
+	check(#T:Shown() == 1, "gone after its time")
+	T:Add({ kind = "TEST", name = "Again 1" })
+	T:Add({ kind = "TEST", name = "Again 2" })
+	-- More than three at once: two, and the last place sums up the rest
+	for i = 1, 6 do T:Add({ kind = "TEST", name = "Piece "..i }) end
+	check(#T:Shown() == 3 and T:Pending() == 6, "the places are full: the rest wait")
+	-- In a fight nothing shows, and what's showing goes back in line
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(#T:Shown() == 0 and T:Pending() == 9, "hidden in a fight, back in line: "..T:Pending())
+	T:Add({ kind = "TEST", name = "In the fight" })
+	check(#T:Shown() == 0 and T:Pending() == 10, "nothing shows in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers() -- the fight counts as over a few seconds later
+	shown = T:Shown()
+	check(#shown == 3 and shown[1].name == "Again 1" and shown[2].name == "Again 2" and shown[3].kind == "8 MORE UNLOCKS" and T:Pending() == 0,
+		"after the fight: the first two in order, then the rest summed up: "..kinds())
+	check(shown[3].name == "Killer II, Piece 1, Piece 2 and 5 more", "the summary names a few: "..shown[3].name)
+	ns.db.cardsSeen = nil
+	CC:TakeMine(nil)
+	CreateFrame = realCreate
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

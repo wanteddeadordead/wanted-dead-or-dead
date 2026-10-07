@@ -184,7 +184,8 @@ end
 
 function private.Refresh()
 	local frame, parts = private.frame, private.Parts()
-	local name = UnitName("player") or "Your Name"
+	-- Your full name ("First Last" on Forever), without a realm
+	local name = strmatch(Wanted.Store:GetOrigin() or "", "^([^%-]+)") or "Your Name"
 	CallingCard:Draw(frame.banner, private.Current(), name, SAMPLE_STATS)
 	for _, p in ipairs(PARTS) do
 		local row, item = frame.rows[p.part], parts[p.part][private.at[p.part]]

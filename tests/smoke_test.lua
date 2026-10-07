@@ -5887,6 +5887,7 @@ print("wanted smoke: 1.5.1 checks pass")
 	local f = _G.WantedCallingCardFrame
 	check(f.banner.background._texture:find("Media\\cards\\killer%-legend$"), "starts on the sample card: "..tostring(f.banner.background._texture))
 	check(f.rows.plate.name._text == "Arcanite" and f.rows.background.unlock._text == "Killer: Arcanite", "each part's piece and what unlocks it")
+	check(f.banner.name._text == ns.Store:GetOrigin():match("^([^%-]+)") and f.banner.name._text:find(" ", 1, true), "your full name on the plate: "..f.banner.name._text)
 	-- Back from the first emblem goes round to the last
 	local emblems = 0
 	for _, item in ipairs(ns.CardCatalogue) do if item.part == "emblem" then emblems = emblems + 1 end end

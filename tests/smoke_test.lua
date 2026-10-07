@@ -5981,6 +5981,26 @@ end)()
 	end
 	local card = { plate = "starter-plate", border = "starter-border", background = "starter-bg" }
 	local function take(unlocked) CC:TakeMine({ [me] = { card = card, unlocked = unlocked } }) end
+	-- Nothing shows until the loading screen has gone and the world has had a moment (they'd fade out behind it)
+	Fire("LOADING_SCREEN_ENABLED")
+	T:Add({ kind = "TEST", name = "Behind the loading screen" })
+	check(#T:Shown() == 0 and T:Pending() == 1, "waits for the loading screen")
+	Fire("LOADING_SCREEN_DISABLED")
+	check(#T:Shown() == 0, "and a moment after it")
+	RunTimers()
+	check(#T:Shown() == 1 and T:Shown()[1].name == "Behind the loading screen", "then shows")
+	-- A loading screen puts what's showing back in line
+	Fire("LOADING_SCREEN_ENABLED")
+	check(#T:Shown() == 0 and T:Pending() == 1, "a loading screen hides it")
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	local first = T:Shown()[1]
+	-- One long frame (a hitch) doesn't use up its time
+	local ff = frameOf(first)
+	ff._scripts.OnUpdate(ff, 8)
+	check(#T:Shown() == 1, "a long frame counts as a short one")
+	ff:Click()
+	CC:Hide()
 	local starters = { "starter-plate", "starter-border", "starter-bg" }
 	-- The first sight of a character's pieces is only noted
 	ns.db.cardsSeen = nil
@@ -6003,9 +6023,9 @@ end)()
 	CC:Hide()
 	-- Toasts fade in, stay, then go
 	local f = frameOf(T:Shown()[1])
-	f._scripts.OnUpdate(f, 0.15)
-	check(f._alpha and f._alpha > 0 and f._alpha < 1 or f.age == 0.15, "fading in")
-	f._scripts.OnUpdate(f, 10)
+	f._scripts.OnUpdate(f, 0.1)
+	check(f.age == 0.1, "fading in")
+	for _ = 1, 75 do f._scripts.OnUpdate(f, 0.1) end -- 7.5 seconds of frames
 	check(#T:Shown() == 1, "gone after its time")
 	T:Add({ kind = "TEST", name = "Again 1" })
 	T:Add({ kind = "TEST", name = "Again 2" })

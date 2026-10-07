@@ -1,17 +1,21 @@
 -- Unlock toasts: a framed popup with the art for each achievement, weekly medal, badge tier, rank or calling-card
--- piece you unlock, near the top of the screen. Only ever out of combat: what comes in during a fight waits for it to
--- end, and toasts showing when one starts go back in line. Click one to open your calling card.
+-- piece you unlock, near the top of the screen. Only ever out of combat and in the world: what comes in during a fight
+-- or a loading screen waits (the catch-up's come at login, behind the loading screen), and toasts showing when one
+-- starts go back in line. Click one to open your calling card.
 
 local _, Wanted = ...
 local Theme = Wanted.Theme
 local Toast = Wanted:NewModule("Toast")
-local private = { queue = {}, frames = {} }
+local private = { queue = {}, frames = {}, ready = false, loading = false }
 
 local MAX_SHOWN = 3
 local SHOW_SECONDS, FADE_IN_SECONDS, FADE_OUT_SECONDS = 6, 0.3, 1
 local WIDTH, HEIGHT, GAP, TOP = 360, 76, 6, -190
 local ART_HEIGHT, ART_MAX_WIDTH = 60, 120
 local MORE_NAMES = 3 -- names listed on the "more" toast
+local SETTLE_SECONDS = 3 -- after a loading screen, before the first toast
+local FALLBACK_SECONDS = 15 -- after login, in case no loading screen ever says it's done
+local MAX_FRAME_SECONDS = 0.1 -- a longer frame (a hitch, a loading screen) counts as this long
 
 
 
@@ -23,7 +27,20 @@ function Toast:OnEnable()
 	Wanted:OnCombatEnd(function() private.Pump() end)
 	private.events = private.events or CreateFrame("Frame")
 	private.events:RegisterEvent("PLAYER_REGEN_DISABLED")
-	private.events:SetScript("OnEvent", function() private.Pause() end)
+	private.events:RegisterEvent("LOADING_SCREEN_ENABLED")
+	private.events:RegisterEvent("LOADING_SCREEN_DISABLED")
+	private.events:SetScript("OnEvent", function(_, event)
+		if event == "LOADING_SCREEN_DISABLED" then
+			private.loading = false
+			private.ReadySoon(SETTLE_SECONDS)
+			return
+		end
+		if event == "LOADING_SCREEN_ENABLED" then
+			private.loading, private.ready = true, false
+		end
+		private.Pause()
+	end)
+	private.ReadySoon(FALLBACK_SECONDS)
 end
 
 ---Queues a toast: { kind = "ACHIEVEMENT EARNED", name = "Witness", detail = "...", art = texture path,
@@ -61,7 +78,7 @@ end
 ---Shows what's waiting in the free places, out of combat only. When more wait than there's room for, the last place
 ---sums up the rest.
 function private.Pump()
-	if InCombatLockdown() or #private.queue == 0 then
+	if not private.ready or InCombatLockdown() or #private.queue == 0 then
 		return
 	end
 	local free = MAX_SHOWN - #Toast:Shown()
@@ -86,6 +103,16 @@ function private.Pump()
 		end
 	end
 	Wanted.Alerts:Sound("important")
+end
+
+---Lets toasts show after seconds, unless a loading screen has started by then.
+function private.ReadySoon(seconds)
+	C_Timer.After(seconds, function()
+		if not private.loading then
+			private.ready = true
+			private.Pump()
+		end
+	end)
 end
 
 ---Puts the toasts on screen back at the front of the line, in order, for when the fight is over.
@@ -160,7 +187,7 @@ function private.NewFrame(index)
 		private.Pump()
 	end)
 	frame:SetScript("OnUpdate", function(self, elapsed)
-		self.age = self.age + elapsed
+		self.age = self.age + min(elapsed, MAX_FRAME_SECONDS)
 		if self.age < FADE_IN_SECONDS then
 			self:SetAlpha(self.age / FADE_IN_SECONDS)
 		elseif self.age < SHOW_SECONDS then

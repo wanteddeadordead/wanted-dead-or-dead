@@ -6090,8 +6090,8 @@ end)()
 	check(N:IsShown() and f.title._text == "What's new in Wanted 1.16.0" and not f.body._text:find("1.15.0", 1, true), "never seen: the newest only")
 	f.ok:Click()
 	-- A pinned note (1.17.1's, the launch) reaches everyone who hasn't seen it, under the newest notes, once
-	tinsert(ns.WHATS_NEW, 1, { version = "1.18.0", note = "The menu is tidier.", lines = { "A short menu." } })
-	ns.VERSION = "1.18.0"
+	tinsert(ns.WHATS_NEW, 1, { version = "1.19.0", note = "The menu is tidier.", lines = { "A short menu." } })
+	ns.VERSION = "1.19.0"
 	local function open(seen)
 		if N:IsShown() then f.ok:Click() end
 		ns.db.whatsNewSeen = seen
@@ -6100,15 +6100,15 @@ end)()
 		return f.body._text or ""
 	end
 	local body = open(nil)
-	check(f.title._text == "What's new in Wanted 1.18.0" and body:find("^The menu is tidier") and body:find("First, I want to thank", 1, true)
+	check(f.title._text == "What's new in Wanted 1.19.0" and body:find("^The menu is tidier") and body:find("First, I want to thank", 1, true)
 		and body:find("1.17.1", 1, true), "never seen: the newest, then the pinned note under its version")
 	local _, thanks = body:gsub("First, I want to thank", "")
 	check(thanks == 1, "the pinned note once")
 	body = open("1.17.1")
 	check(N:IsShown() and not body:find("First, I want to thank", 1, true), "seen it: not again")
-	body = open("1.16.0")
+	body = open("1.17.0")
 	_, thanks = body:gsub("First, I want to thank", "")
-	check(body:find("A short menu.", 1, true) and thanks == 1, "after a gap: both versions, the note once")
+	check(body:find("A short menu.", 1, true) and thanks == 1, "after a gap: the versions since, the pinned note once")
 	f.ok:Click()
 	tremove(ns.WHATS_NEW, 1)
 	ns.VERSION = "1.16.0-dev"
@@ -6116,12 +6116,19 @@ end)()
 	RunTimers()
 	check(not N:IsShown(), "and once only")
 	-- The author's note leads, signed
-	ns.VERSION = "1.17.1"
+	ns.VERSION = "1.18.0"
 	N:Show()
-	check(f.title._text == "What's new in Wanted 1.17.1" and f.body._text:find("^First, I want to thank") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
+	check(f.title._text == "What's new in Wanted 1.18.0" and f.body._text:find("^This one is about getting together") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
 		"the note first, signed: "..f.body._text:sub(1, 60))
+	check(not f.art._shown, "no picture when the version has none")
+	f.ok:Click()
+	-- 1.17.1's: the Founding Hunter crest above the note, and the launch paragraph
+	ns.db.whatsNewSeen = "1.17.0"
+	ns.VERSION = "1.17.1"
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
 	check(f.art._shown and tostring(f.art._texture):find("Media\\cards\\ach%-founding%-hunter%-emblem$") and f.body._text:find("archived", 1, true),
-		"the Founding Hunter crest above the note, and the launch paragraph")
+		"the Founding Hunter crest above 1.17.1's note, and the launch paragraph")
 	f.ok:Click()
 	ns.VERSION = "1.16.0-dev"
 	-- In a fight it waits

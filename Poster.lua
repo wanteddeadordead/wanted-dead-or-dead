@@ -127,6 +127,54 @@ local function Place(region, painting, box)
 	region:SetPoint("BOTTOMRIGHT", painting, "TOPLEFT", box[3] * width, -box[4] * height)
 end
 
+---A small poster for a page: the painting, your character in the portrait, your name and the price on your head.
+---It keeps up when its Update is called.
+---@param parent table
+---@param height number
+---@return table
+function Poster:Preview(parent, height)
+	local painting = CreateFrame("Frame", nil, parent)
+	painting:SetSize(height * PAINTING_ASPECT, height)
+	local art = painting:CreateTexture(nil, "BACKGROUND")
+	art:SetAllPoints()
+	art:SetTexture(TEXTURE)
+	art:SetTexCoord(0, 1, 0, PAINTING_HEIGHT)
+	local model = CreateFrame("PlayerModel", nil, painting)
+	Place(model, painting, PORTRAIT)
+	local tint = CreateFrame("Frame", nil, painting)
+	tint:SetFrameLevel(model:GetFrameLevel() + 1)
+	Place(tint, painting, PORTRAIT)
+	local sepia = tint:CreateTexture(nil, "OVERLAY")
+	sepia:SetAllPoints()
+	sepia:SetColorTexture(SEPIA[1], SEPIA[2], SEPIA[3], 1)
+	sepia:SetBlendMode("MOD")
+	local text = CreateFrame("Frame", nil, painting)
+	text:SetFrameLevel(tint:GetFrameLevel() + 1)
+	text:SetAllPoints()
+	local nameBand, rewardBand = CreateFrame("Frame", nil, text), CreateFrame("Frame", nil, text)
+	Place(nameBand, painting, NAME_BAND)
+	Place(rewardBand, painting, REWARD_BAND)
+	local nameFont, nameSmall = PosterFont("WantedFontPosterPreviewName", floor(height * 0.04)), PosterFont("WantedFontPosterPreviewNameSmall", floor(height * 0.028))
+	local rewardFont, rewardSmall = PosterFont("WantedFontPosterPreviewReward", floor(height * 0.045)), PosterFont("WantedFontPosterPreviewRewardSmall", floor(height * 0.03))
+	local name = nameBand:CreateFontString(nil, "OVERLAY")
+	name:SetPoint("CENTER")
+	name:SetTextColor(INK[1], INK[2], INK[3])
+	local reward = rewardBand:CreateFontString(nil, "OVERLAY")
+	reward:SetPoint("CENTER")
+	reward:SetTextColor(INK[1], INK[2], INK[3])
+	local width = (NAME_BAND[3] - NAME_BAND[1]) * painting:GetWidth() - 8
+	function painting:Update()
+		model:SetUnit("player")
+		model:SetPortraitZoom(0.65)
+		local first, last = UnitName("player")
+		FitText(name, strupper(last and last ~= "" and (first.." "..last) or first or "?"), nameFont, nameSmall, width)
+		local total = Wanted.Bridge:GetPriceOnMe()
+		FitText(reward, total > 0 and private.FormatReward(total) or "No price on your head yet", rewardFont, rewardSmall, width)
+	end
+	painting.name, painting.reward = name, reward
+	return painting
+end
+
 function private.GetFrame()
 	if private.frame then
 		return private.frame

@@ -83,6 +83,7 @@ Report.lua
 Poster.lua
 CardCatalogue.lua
 CallingCard.lua
+WhatsNew.lua
 MapPins.lua
 MapPins.xml
 Minimap.lua

@@ -103,7 +103,7 @@ end
 ---At login or /reload, when the desktop app isn't set up on this computer: a popup offering it, with the address
 ---to copy (as TSM does for its app). "Don't remind me" turns it off; the Website & app page turns it back on.
 function Wanted:PromptForApp()
-	if not Wanted.db.settings.appPrompt or Wanted:InCombat() or W:IsDialogShown() then
+	if not Wanted.db.settings.appPrompt or Wanted:InCombat() or W:IsDialogShown() or (Wanted.WhatsNew and Wanted.WhatsNew:IsShown()) then
 		return
 	end
 	local stopReminding = function()

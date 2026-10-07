@@ -216,6 +216,7 @@ local MIGRATIONS = {
 function Wanted:LoadSavedData()
 	if type(WantedDB) ~= "table" then
 		WantedDB = { version = Wanted.DB_VERSION }
+		Wanted.freshInstall = true -- a first install: the welcome, not what's new
 	end
 	-- Tables saved before the layout was numbered are layout 1
 	local version = tonumber(WantedDB.version) or 1

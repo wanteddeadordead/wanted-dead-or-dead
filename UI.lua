@@ -271,6 +271,21 @@ function private.Create()
 	poster:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
 	W:AttachTooltip(poster, "Your wanted poster", "The price the other faction has put on your head, on a poster with your character, to screenshot and share. Also /wanted poster.")
 	private.posterButton = poster
+	-- Your calling card, above the poster
+	local card = CreateFrame("Button", nil, sidebar)
+	card:SetSize(SIDEBAR_WIDTH - 1, 34)
+	card:SetPoint("BOTTOMLEFT", poster, "TOPLEFT", 0, 0)
+	card.bg = Theme:Fill(card, C.transparent)
+	card.line = Theme:Line(card)
+	card.line:SetPoint("TOPLEFT", 16, 0)
+	card.line:SetPoint("TOPRIGHT", -16, 0)
+	card.label = Theme:Text(card, "body", "Your calling card", C.gold)
+	card.label:SetPoint("LEFT", 22, 0)
+	card:SetScript("OnClick", function() Wanted.CallingCard:Show() end)
+	card:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
+	card:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
+	W:AttachTooltip(card, "Your calling card", "The banner you build on wanteddeadordead.com from the art your badges unlock. Try any combination here. Also /wanted card.")
+	private.cardButton = card
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
 

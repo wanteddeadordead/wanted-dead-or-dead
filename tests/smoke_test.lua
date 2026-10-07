@@ -74,6 +74,8 @@ do
 end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
+function Methods:SetTexture(t) self._texture = t end
+function Methods:SetTextColor(r, g, b) self._textColor = { r, g, b } end
 function Methods:GetFontObject() return self._font end
 function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
@@ -5877,3 +5879,28 @@ end)()
 	check(#over == 0, "lines wider than their space:\n  "..table.concat(over, "\n  "))
 end)()
 print("wanted smoke: 1.5.1 checks pass")
+-- Your calling card: the catalogue by part, any combination by stepping round each part, and the name ink for light plates
+;(function()
+	local CC = ns.CallingCard
+	check(#ns.CardCatalogue == 319, "the catalogue: "..#ns.CardCatalogue)
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.banner.background._texture:find("Media\\cards\\killer%-legend$"), "starts on the sample card: "..tostring(f.banner.background._texture))
+	check(f.rows.plate.name._text == "Arcanite" and f.rows.background.unlock._text == "Killer: Arcanite", "each part's piece and what unlocks it")
+	-- Back from the first emblem goes round to the last
+	local emblems = 0
+	for _, item in ipairs(ns.CardCatalogue) do if item.part == "emblem" then emblems = emblems + 1 end end
+	for _ = 1, emblems do f.rows.emblem.forward:Click() end
+	check(f.rows.emblem.name._text == "Ring of Skulls", "round the emblems back to the start: "..f.rows.emblem.name._text)
+	f.rows.plate.back:Click()
+	check(f.rows.plate.name._text == "Black Dragonscale" and f.banner.plate._texture:find("mat%-black%-dragonscale$"), "a step back changes the plate")
+	f.shuffle:Click()
+	check(f.banner.border._texture:find("Media\\cards\\"), "a shuffle draws a card")
+	CC:Hide()
+	check(not f._shown, "closed")
+	local banner = CC:Banner(UIParent, 400)
+	CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-mithril" }, "Khal Drogash", { { "Rank", "Mithril" } })
+	check(not banner.emblem._shown and banner.name._text == "Khal Drogash", "no emblem, the name")
+	check(banner.stats[1].value._text == "Mithril" and not banner.stats[2]._shown, "one stat shown, the others hidden")
+	check(banner.name._textColor[1] < 0.5, "a light plate's name is dark ink")
+end)()

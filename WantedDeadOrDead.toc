@@ -80,6 +80,8 @@ PageSettings.lua
 PageTools.lua
 Report.lua
 Poster.lua
+CardCatalogue.lua
+CallingCard.lua
 MapPins.lua
 MapPins.xml
 Minimap.lua

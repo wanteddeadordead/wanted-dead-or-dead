@@ -157,7 +157,7 @@ UI:RegisterPage("enemies", {
 	end,
 	menuLabel = "Enemies",
 	tabLabel = "Enemies",
-	tabs = { "enemies", "hotspots", "guildkos", "activity" },
+	tabs = { "hotspots", "enemies", "guildkos", "activity" },
 	build = function(container, width, height)
 		private.nemesis = {}
 		local tileWidth = floor((width - 24) / 3)

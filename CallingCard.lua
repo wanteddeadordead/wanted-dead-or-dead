@@ -233,6 +233,36 @@ function CallingCard:CheckNew()
 	end
 end
 
+---Your card as it shows, for the You page: { card, name, stats = { { label, value } x3 }, unlocked, total }, or nil
+---before the app has brought it.
+---@return table?
+function CallingCard:MyCard()
+	local mine = private.Mine()
+	if not mine then
+		return nil
+	end
+	local stats = {}
+	for i = 1, 3 do
+		local id = mine.card.stats and mine.card.stats[i] or DEFAULT_STATS[i]
+		stats[i] = { STAT_LABELS[id] or id, mine.stats[id] or "-" }
+	end
+	local unlocked = 0
+	for _ in pairs(mine.unlocked) do
+		unlocked = unlocked + 1
+	end
+	return { card = mine.card, name = private.MyName(), stats = stats, unlocked = unlocked, total = #(Wanted.CardCatalogue or {}) }
+end
+
+---The sample card the editor starts on, for a preview before your own card has come.
+---@return table card, table stats
+function CallingCard:Sample()
+	local stats = {}
+	for i, id in ipairs(DEFAULT_STATS) do
+		stats[i] = { STAT_LABELS[id], SAMPLE_STATS[id] or "-" }
+	end
+	return SAMPLE, stats
+end
+
 ---Your card from the site, for the character you're playing; nil before the app has brought it.
 function private.Mine()
 	return private.mine[private.MyName()]

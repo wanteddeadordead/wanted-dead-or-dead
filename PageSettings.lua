@@ -540,7 +540,7 @@ UI:RegisterPage("settings", {
 	title = "Settings",
 	subtitle = "Alerts, what the Nearby window shows, and what Wanted shares with other players.",
 	order = 6,
-	under = "web",
+	under = "card",
 	tabLabel = "Settings",
 	build = function(container, width, height)
 		local tabs = W:Segmented(container, {

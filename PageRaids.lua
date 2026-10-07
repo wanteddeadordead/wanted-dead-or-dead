@@ -139,6 +139,27 @@ function private.BuildForm(parent, width)
 	return form
 end
 
+---Announce: shows the line and where it goes first, editable; Post sends it, Cancel sends nothing.
+function private.ConfirmAnnounce()
+	local index, channel = Raids:AnnounceChannel()
+	if not index then
+		UI:Toast("You're not in a Looking for Group or General channel.", C.red)
+		return
+	end
+	W:Dialog({
+		title = "Announce your raid",
+		text = format("This goes in %s (channel %d), where players without Wanted see it. Anyone who whispers you \"inv\" is invited. Change it if you like:",
+			channel, index),
+		input = { value = Raids:AnnounceText() or "" },
+		confirmLabel = "Post",
+		cancelLabel = "Cancel",
+		onConfirm = function(text)
+			local why = Raids:Announce(text)
+			UI:Toast(why or "Posted in "..channel..".", why and C.red or C.green)
+		end,
+	})
+end
+
 function private.BuildLead(parent)
 	local lead = W:Card(parent)
 	lead:SetPoint("TOPLEFT")
@@ -151,10 +172,7 @@ function private.BuildLead(parent)
 	private.leadSub = Theme:Text(lead, "small", "")
 	private.leadSub:SetPoint("TOPLEFT", 14, -58)
 	private.leadSub:SetWidth(560)
-	local announce = W:Button(lead, "Announce", "secondary", 110, 26, function()
-		local why = Raids:Announce()
-		UI:Toast(why or "Announced in chat. Anyone who whispers you \"inv\" is invited.", why and C.red or C.green)
-	end)
+	local announce = W:Button(lead, "Announce", "secondary", 110, 26, private.ConfirmAnnounce)
 	announce:SetPoint("BOTTOMLEFT", 14, 12)
 	W:AttachTooltip(announce, "Announce in chat", "Posts the raid in Looking for Group (or the zone's General) for players without Wanted. Anyone who whispers you \"inv\" is invited.")
 	local close = W:Button(lead, "Close raid", "danger", 110, 26, function()

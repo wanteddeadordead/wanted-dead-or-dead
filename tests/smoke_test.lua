@@ -6099,9 +6099,9 @@ end)()
 	RunTimers()
 	check(not N:IsShown(), "and once only")
 	-- The author's note leads, signed
-	ns.VERSION = "1.17.0"
+	ns.VERSION = "1.17.1"
 	N:Show()
-	check(f.title._text == "What's new in Wanted 1.17.0" and f.body._text:find("^First, I want to thank") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
+	check(f.title._text == "What's new in Wanted 1.17.1" and f.body._text:find("^First, I want to thank") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
 		"the note first, signed: "..f.body._text:sub(1, 60))
 	f.ok:Click()
 	ns.VERSION = "1.16.0-dev"

@@ -11,7 +11,7 @@ local private = {}
 -- Each version's note from the author (optional) and short lines for players, newest first
 Wanted.WHATS_NEW = {
 	{
-		version = "1.17.0",
+		version = "1.17.1",
 		note = "First, I want to thank all of you for the support you've shown during the beta testing of this addon and system. "
 			.."Every bug report, screenshot and idea you sent made Wanted better, and seeing your kills, bounties and grudges show "
 			.."up on the site has made the long nights worth it.\n\n"

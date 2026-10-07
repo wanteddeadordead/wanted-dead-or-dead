@@ -171,6 +171,68 @@ function CallingCard:TakeMine(cards)
 	end
 end
 
+-- Each part's art, width over height, for drawing it whole (the toasts)
+local PART_ASPECT = { emblem = 1, plate = 540 / 200, border = 1040 / 400, background = 3 }
+
+---A catalogue item by id ({ id, part, name, unlock, via }), or nil.
+---@param id string
+---@return table?
+function CallingCard:Item(id)
+	private.Parts()
+	return type(id) == "string" and private.byID[id] or nil
+end
+
+---A catalogue item's art (texture path) and its width over height, or nil for an unknown id.
+---@param id string
+---@return string?, number?
+function CallingCard:Art(id)
+	local item = CallingCard:Item(id)
+	if item then
+		return ART..item.id, PART_ASPECT[item.part]
+	end
+end
+
+---Toasts for the pieces you've unlocked since last time, on the character you're playing: one for each badge tier
+---and each rank, with the art of what it unlocked. Achievement and medal pieces come with their badge's own toast;
+---starters and playstyle pieces (which come and go with the season) never get one. The first time a character's
+---pieces are seen they're only noted (WantedDB.cardsSeen).
+function CallingCard:CheckNew()
+	local me = private.MyName()
+	local mine = private.mine[me]
+	if not mine then
+		return
+	end
+	Wanted.db.cardsSeen = type(Wanted.db.cardsSeen) == "table" and Wanted.db.cardsSeen or {}
+	local seen = Wanted.db.cardsSeen[me]
+	local first = type(seen) ~= "table"
+	seen = first and {} or seen
+	local groups, order = {}, {}
+	for _, item in ipairs(Wanted.CardCatalogue or {}) do
+		if mine.unlocked[item.id] and not seen[item.id] then
+			seen[item.id] = true
+			if not first and (item.via == "tier" or item.via == "rank") then
+				if not groups[item.unlock] then
+					groups[item.unlock] = {}
+					tinsert(order, item.unlock)
+				end
+				tinsert(groups[item.unlock], item)
+			end
+		end
+	end
+	Wanted.db.cardsSeen[me] = seen
+	for _, unlock in ipairs(order) do
+		local items = groups[unlock]
+		local pieces = {}
+		for _, item in ipairs(items) do
+			tinsert(pieces, item.name.." "..item.part)
+		end
+		local rank = items[1].via == "rank"
+		local art, aspect = CallingCard:Art(items[1].id)
+		Wanted.Toast:Add({ kind = rank and "NEW RANK" or "BADGE TIER", name = rank and (gsub(unlock, " rank$", "")) or unlock,
+			detail = "Unlocked: "..table.concat(pieces, ", "), art = art, aspect = aspect })
+	end
+end
+
 ---Your card from the site, for the character you're playing; nil before the app has brought it.
 function private.Mine()
 	return private.mine[private.MyName()]

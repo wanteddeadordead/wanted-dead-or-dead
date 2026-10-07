@@ -108,6 +108,7 @@ function Catchup:Import()
 	Wanted.Achievements:TakeWeekly(entry.medals, entry.weekBoards)
 	Wanted.Achievements:TakePlaystyle(entry.playstyle) -- app 0.2.35
 	Wanted.Achievements:TakeCosmetics(entry.cosmetics) -- app 0.2.36
+	Wanted.CallingCard:TakeMine(entry.myCards) -- your own characters' calling cards (app 0.2.37)
 	Wanted.Achievements:CheckNew()
 	-- Players on other realm names to greet as realm links, also at every login
 	Sync:TakeDirectory(entry.links)

@@ -5901,7 +5901,7 @@ print("wanted smoke: 1.5.1 checks pass")
 	-- Back from the first emblem goes round to the last
 	local emblems = 0
 	for _, item in ipairs(ns.CardCatalogue) do if item.part == "emblem" then emblems = emblems + 1 end end
-	for _ = 1, emblems do f.rows.emblem.forward:Click() end
+	for _ = 1, emblems + 1 do f.rows.emblem.forward:Click() end -- every emblem and "no emblem"
 	check(f.rows.emblem.name._text == "Ring of Skulls", "round the emblems back to the start: "..f.rows.emblem.name._text)
 	f.rows.plate.back:Click()
 	check(f.rows.plate.name._text == "Black Dragonscale" and f.banner.plate._texture:find("mat%-black%-dragonscale$"), "a step back changes the plate")
@@ -5914,4 +5914,41 @@ print("wanted smoke: 1.5.1 checks pass")
 	check(not banner.emblem._shown and banner.name._text == "Khal Drogash", "no emblem, the name")
 	check(banner.stats[1].value._text == "Mithril" and not banner.stats[2]._shown, "one stat shown, the others hidden")
 	check(banner.name._textColor[1] < 0.5, "a light plate's name is dark ink")
+end)()
+-- Your own card from the site: only catalogue pieces and known stats get in; locked pieces can be tried, not saved;
+-- Save keeps the card for the app
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	CC:TakeMine({
+		[me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+			unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-linen", "mat-silk", "witness-border", "witness-bg", "witness-emblem", "../../evil" },
+			stats = { kills = "13", score = "295|TInterface\\evil:64|t", rank = "Silk", ["|Hevil|h"] = "x" } },
+		["Evil Twin"] = { card = { plate = "../../../Interface/evil", border = "witness-border", background = "witness-bg" } },
+		["No Space"] = { card = { plate = "mat-silk", border = "witness-border", background = "witness-bg" } },
+		[7] = "nope",
+	})
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.banner.plate._texture:find("mat%-silk$") and not f.banner.emblem._shown, "your card: the Silk plate, no emblem")
+	check(f.banner.stats[2].value._text == "295TInterface\\evil:64t", "the game's escape character taken out of a value: "..f.banner.stats[2].value._text)
+	check(f.save._shown and f.save._enabled, "all unlocked: Save on")
+	f.rows.plate.forward:Click()
+	check(f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate: marked, Save off")
+	f.rows.plate.back:Click()
+	f.rows.emblem.forward:Click() -- killer-emblem, the catalogue's first: locked
+	check(not f.save._enabled, "a locked emblem: Save off")
+	for _ = 1, 8 do f.rows.emblem.forward:Click() end -- witness-emblem: cell 8 of the catalogue's emblems, unlocked
+	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled, "an unlocked emblem: Save on: "..f.rows.emblem.name._text)
+	f.banner.stats[1]._scripts.OnMouseUp(f.banner.stats[1])
+	check(f.banner.stats[1].label._text == "HONORABLE KILLS", "a click moves a stat to the next one not shown: "..f.banner.stats[1].label._text)
+	f.save:Click()
+	local pick = ns.db.cardPicks[me]
+	check(pick and pick.p == "mat-silk" and pick.e == "witness-emblem" and pick.g == "witness-bg" and pick.s1 == "honor" and pick.s2 == "score" and pick.t, "Save keeps the card for the app")
+	-- Try anything: the sample, nothing to save
+	f.mode:Click()
+	check(not f.save._shown and f.banner.background._texture:find("killer%-legend$"), "trying anything: the sample, no Save")
+	f.mode:Click()
+	CC:Hide()
+	CC:TakeMine(nil)
+	ns.db.cardPicks = nil
 end)()

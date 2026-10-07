@@ -284,7 +284,7 @@ function private.Create()
 	card:SetScript("OnClick", function() Wanted.CallingCard:Show() end)
 	card:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
 	card:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
-	W:AttachTooltip(card, "Your calling card", "The banner you build on wanteddeadordead.com from the art your badges unlock. Try any combination here. Also /wanted card.")
+	W:AttachTooltip(card, "Your calling card", "Your banner: the art your badges unlock, with your name and three stats. Change it here with the pieces you have unlocked (the Wanted app sends it to the site), or try any combination. Also /wanted card.")
 	private.cardButton = card
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)

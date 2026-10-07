@@ -1,7 +1,11 @@
 -- Wanted: your calling card. The banner players build on wanteddeadordead.com from the art their badges unlock: a
 -- background inside a border, an emblem, and a plate with their name, with three stats under it. This window shows
--- one, and steps through every piece of each part (any combination, to see how it would look). The art is
--- Media/cards/<id>.blp; the catalogue (each piece's part, name and what unlocks it) is CardCatalogue.lua.
+-- yours (from the site, through the app's catch-up) and steps through every piece of each part: the ones you haven't
+-- unlocked are marked locked, and Save keeps a card of unlocked pieces for the app to send (WantedDB.cardPicks; the
+-- site checks it again). "Try anything" shows any combination, to see how it would look.
+-- The art is Media/cards/<id>.blp; the catalogue (each piece's part, name and what unlocks it) is CardCatalogue.lua.
+-- Card data only ever comes from the site's catch-up, never from other players, and only ids the catalogue knows are
+-- drawn: anything else is dropped.
 
 local _, Wanted = ...
 local CallingCard = Wanted:NewModule("CallingCard")
@@ -10,7 +14,11 @@ local W = Wanted.Widgets
 local private = {
 	frame = nil,
 	parts = nil, -- the catalogue by part, in its order
-	at = {}, -- the piece shown of each part: an index into private.parts[part]
+	byID = nil, -- the catalogue by id
+	at = {}, -- the piece shown of each part: an index into private.parts[part] (0 for no emblem)
+	stats = {}, -- the three stats shown: ids
+	mine = {}, -- your characters' cards from the site, by name: { card, unlocked = { [id] = true }, stats = { [id] = value } }
+	trying = false, -- "Try anything": any combination, nothing to save
 }
 local ART = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\cards\\"
 -- Rye (SIL Open Font License, see THIRD_PARTY_NOTICES.md), as on the site's plates
@@ -32,7 +40,24 @@ local PARTS = {
 }
 -- What the window starts from: an Arcanite card
 local SAMPLE = { background = "killer-legend", border = "killer-legend-border", emblem = "multi-emblem", plate = "mat-arcanite" }
-local SAMPLE_STATS = { { "Challenge kills", "2,000" }, { "Best streak", "35" }, { "Rank", "Arcanite" } }
+local SAMPLE_STATS = { kills = "2,000", streak = "35", rank = "Arcanite" }
+-- The stats a card can show, in the site's order (stats.CardStats), with their labels
+local STATS = {
+	{ id = "kills", label = "Challenge kills" }, { id = "honor", label = "Honorable kills" }, { id = "score", label = "Badge score" },
+	{ id = "rank", label = "Rank" }, { id = "streak", label = "Best streak" }, { id = "multi", label = "Best multi-kill" },
+	{ id = "bounties", label = "Bounties collected" }, { id = "paid", label = "Bounties paid" }, { id = "battles", label = "Battles won" },
+	{ id = "medals", label = "Weekly medals" }, { id = "challenges", label = "Weekly challenges" }, { id = "defender", label = "Defender kills" },
+	{ id = "underdog", label = "Underdog kills" }, { id = "witness", label = "Deaths witnessed" }, { id = "zone", label = "Best zone" },
+	{ id = "class", label = "Most killed" },
+}
+local STAT_LABELS = {}
+for _, st in ipairs(STATS) do
+	STAT_LABELS[st.id] = st.label
+end
+local DEFAULT_STATS = { "kills", "honor", "rank" }
+local NO_EMBLEM = "none"
+local MAX_UNLOCKED = 400
+local MAX_VALUE = 32
 local BANNER_WIDTH = 720
 
 
@@ -50,24 +75,109 @@ function private.Parts()
 	for _, p in ipairs(PARTS) do
 		parts[p.part] = {}
 	end
+	private.byID = {}
 	for _, item in ipairs(Wanted.CardCatalogue or {}) do
 		local list = parts[item.part]
 		if list then
 			list[#list + 1] = item
+			private.byID[item.id] = item
 		end
 	end
 	private.parts = parts
 	return parts
 end
 
----The index of a piece in its part, or 1.
+---The index of a piece in its part; 0 for no emblem; 1 for one unknown.
 function private.IndexOf(part, id)
+	if part == "emblem" and id == NO_EMBLEM then
+		return 0
+	end
 	for i, item in ipairs(private.Parts()[part]) do
 		if item.id == id then
 			return i
 		end
 	end
 	return 1
+end
+
+---A piece the catalogue knows, of this part; nil for anything else.
+function private.Known(id, part)
+	private.Parts()
+	local item = type(id) == "string" and private.byID[id]
+	return item and item.part == part and item or nil
+end
+
+---Text from the site made safe to show: a string, cut short, with the game's escape character taken out (so it can't
+---draw a texture or make a link).
+function private.Clean(text, max)
+	if type(text) ~= "string" then
+		return nil
+	end
+	text = gsub(text, "|", "")
+	return strsub(text, 1, max)
+end
+
+
+
+-- ============================================================================
+-- Your cards, from the site
+-- ============================================================================
+
+---Takes in the catch-up's cards of your own characters: by name, { card = { plate, border, emblem, background, stats },
+---unlocked = { ids }, stats = { [id] = value } }. Pieces the catalogue doesn't know, unknown stats and malformed
+---entries are dropped.
+---@param cards table?
+function CallingCard:TakeMine(cards)
+	private.mine = {}
+	for name, c in pairs(type(cards) == "table" and cards or {}) do
+		local card = type(c) == "table" and type(c.card) == "table" and c.card
+		if type(name) == "string" and #name <= 40 and strfind(name, " ", 1, true) and not strfind(name, "|", 1, true) and card then
+			local unlocked, count = {}, 0
+			for _, id in ipairs(type(c.unlocked) == "table" and c.unlocked or {}) do
+				if count >= MAX_UNLOCKED then
+					break
+				end
+				if type(id) == "string" and private.byID[id] then
+					unlocked[id], count = true, count + 1
+				end
+			end
+			local values = {}
+			for id, v in pairs(type(c.stats) == "table" and c.stats or {}) do
+				if STAT_LABELS[id] then
+					values[id] = private.Clean(v, MAX_VALUE)
+				end
+			end
+			local picked = {}
+			for i = 1, 3 do
+				local id = type(card.stats) == "table" and card.stats[i]
+				picked[i] = STAT_LABELS[id] and id or DEFAULT_STATS[i]
+			end
+			local mine = {
+				background = private.Known(card.background, "background") and card.background,
+				border = private.Known(card.border, "border") and card.border,
+				plate = private.Known(card.plate, "plate") and card.plate,
+				emblem = private.Known(card.emblem, "emblem") and card.emblem or NO_EMBLEM,
+				stats = picked,
+			}
+			if mine.background and mine.border and mine.plate then
+				private.mine[name] = { card = mine, unlocked = unlocked, stats = values }
+			end
+		end
+	end
+	if private.frame and private.frame:IsShown() then
+		private.Load()
+		private.Refresh()
+	end
+end
+
+---Your card from the site, for the character you're playing; nil before the app has brought it.
+function private.Mine()
+	return private.mine[private.MyName()]
+end
+
+---Your full name ("First Last" on Forever), without a realm.
+function private.MyName()
+	return strmatch(Wanted.Store:GetOrigin() or "", "^([^%-]+)") or "Your Name"
 end
 
 
@@ -129,7 +239,7 @@ function CallingCard:Draw(banner, card, name, stats)
 	banner.background:SetTexture(ART..card.background)
 	banner.border:SetTexture(ART..card.border)
 	banner.plate:SetTexture(ART..card.plate)
-	if card.emblem then
+	if card.emblem and card.emblem ~= NO_EMBLEM then
 		banner.emblem:SetTexture(ART..card.emblem)
 		banner.emblem:Show()
 	else
@@ -155,9 +265,11 @@ end
 -- The window
 -- ============================================================================
 
----Shows the window.
+---Shows the window: your card if the site has sent it, else the sample to try things on.
 function CallingCard:Show()
 	local frame = private.GetFrame()
+	private.trying = private.Mine() == nil
+	private.Load()
 	private.Refresh()
 	frame:Show()
 end
@@ -172,36 +284,97 @@ function CallingCard:Hide()
 	end
 end
 
+---Puts the card to start from in the window: yours, or the sample when trying anything.
+function private.Load()
+	local mine = private.Mine()
+	local card = (not private.trying and mine) and mine.card or SAMPLE
+	for _, p in ipairs(PARTS) do
+		private.at[p.part] = private.IndexOf(p.part, card[p.part])
+	end
+	for i = 1, 3 do
+		private.stats[i] = (not private.trying and mine) and mine.card.stats[i] or DEFAULT_STATS[i]
+	end
+end
+
 ---The card the window shows now.
 function private.Current()
 	local parts, card = private.Parts(), {}
 	for _, p in ipairs(PARTS) do
 		local item = parts[p.part][private.at[p.part]]
-		card[p.part] = item and item.id
+		card[p.part] = item and item.id or NO_EMBLEM
 	end
 	return card
 end
 
+---Whether you may keep a piece: unlocked (no emblem always), in your own card's mode.
+function private.Unlocked(id)
+	local mine = private.Mine()
+	return id == NO_EMBLEM or (mine and mine.unlocked[id]) or false
+end
+
 function private.Refresh()
-	local frame, parts = private.frame, private.Parts()
-	-- Your full name ("First Last" on Forever), without a realm
-	local name = strmatch(Wanted.Store:GetOrigin() or "", "^([^%-]+)") or "Your Name"
-	CallingCard:Draw(frame.banner, private.Current(), name, SAMPLE_STATS)
+	local frame, parts, mine = private.frame, private.Parts(), private.Mine()
+	local card = private.Current()
+	local values = (not private.trying and mine) and mine.stats or SAMPLE_STATS
+	local stats = {}
+	for i, id in ipairs(private.stats) do
+		stats[i] = { STAT_LABELS[id], values[id] or "-" }
+	end
+	CallingCard:Draw(frame.banner, card, private.MyName(), stats)
+	local allUnlocked = true
 	for _, p in ipairs(PARTS) do
 		local row, item = frame.rows[p.part], parts[p.part][private.at[p.part]]
-		row.name:SetText(item and item.name or "")
-		row.unlock:SetText(item and item.unlock or "")
-		row.count:SetText(format("%d of %d", private.at[p.part], #parts[p.part]))
+		local open = private.trying or private.Unlocked(card[p.part])
+		allUnlocked = allUnlocked and open
+		row.name:SetText(item and item.name or "No emblem")
+		row.unlock:SetText(item and (open and item.unlock or "Locked: "..item.unlock) or "")
+		row.unlock:SetTextColor(unpack(open and { 0.6, 0.62, 0.68 } or { 0.95, 0.45, 0.35 }))
+		row.count:SetText(format("%d of %d", max(private.at[p.part], 0), #parts[p.part]))
+	end
+	frame.mode:SetText(private.trying and "Show my card" or "Try anything")
+	frame.mode:SetShown(mine ~= nil)
+	frame.save:SetShown(not private.trying and mine ~= nil)
+	frame.save:SetEnabled(allUnlocked)
+	if private.trying then
+		frame.note:SetText(mine and "Trying anything: step through every piece, or shuffle. Nothing here is saved."
+			or "Try any combination. Your own card shows here once the Wanted app has brought it from wanteddeadordead.com.")
+	else
+		frame.note:SetText(allUnlocked and "Your card. Step through the pieces, click a stat to change it, then Save."
+			or "Locked pieces can be tried but not saved: earn them through their challenges.")
 	end
 end
 
----Steps a part to its next (1) or previous (-1) piece, round the end.
+---Steps a part to its next (1) or previous (-1) piece, round the end; the emblem has "no emblem" before the first.
 function private.Step(part, by)
 	local n = #private.Parts()[part]
 	if n == 0 then
 		return
 	end
-	private.at[part] = (private.at[part] - 1 + by) % n + 1
+	local low = part == "emblem" and 0 or 1
+	local span = n - low + 1
+	private.at[part] = (private.at[part] - low + by) % span + low
+	private.Refresh()
+end
+
+---Moves a stat slot to the next stat not shown in another slot.
+function private.NextStat(slot)
+	local at = 1
+	for i, st in ipairs(STATS) do
+		if st.id == private.stats[slot] then
+			at = i
+		end
+	end
+	for step = 1, #STATS do
+		local id = STATS[(at - 1 + step) % #STATS + 1].id
+		local taken = false
+		for i = 1, 3 do
+			taken = taken or (i ~= slot and private.stats[i] == id)
+		end
+		if not taken then
+			private.stats[slot] = id
+			break
+		end
+	end
 	private.Refresh()
 end
 
@@ -215,12 +388,28 @@ function private.Shuffle()
 	private.Refresh()
 end
 
+---Keeps your card for the app to send to wanteddeadordead.com (which checks it against what you've unlocked).
+function private.Save()
+	local mine, card = private.Mine(), private.Current()
+	if private.trying or not mine then
+		return
+	end
+	for _, p in ipairs(PARTS) do
+		if not private.Unlocked(card[p.part]) then
+			return
+		end
+	end
+	Wanted.db.cardPicks = Wanted.db.cardPicks or {}
+	Wanted.db.cardPicks[private.MyName()] = { t = time(), p = card.plate, b = card.border, e = card.emblem, g = card.background,
+		s1 = private.stats[1], s2 = private.stats[2], s3 = private.stats[3] }
+	mine.card = { plate = card.plate, border = card.border, emblem = card.emblem, background = card.background,
+		stats = { private.stats[1], private.stats[2], private.stats[3] } }
+	private.frame.note:SetText("Saved. The Wanted app sends it to wanteddeadordead.com after your next /reload or logout.")
+end
+
 function private.GetFrame()
 	if private.frame then
 		return private.frame
-	end
-	for _, p in ipairs(PARTS) do
-		private.at[p.part] = private.IndexOf(p.part, SAMPLE[p.part])
 	end
 	local frame = CreateFrame("Frame", "WantedCallingCardFrame", UIParent)
 	frame:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -234,10 +423,16 @@ function private.GetFrame()
 
 	frame.title = Theme:Text(frame, "title", "Your calling card", { 0.95, 0.70, 0.30 })
 	frame.title:SetPoint("TOP", 0, -60)
-	frame.note = Theme:Text(frame, "small", "Try any combination: step through every piece, or shuffle. Build yours on wanteddeadordead.com, Characters.", { 0.6, 0.62, 0.68 })
+	frame.note = Theme:Text(frame, "small", "", { 0.6, 0.62, 0.68 })
 	frame.note:SetPoint("TOP", frame.title, "BOTTOM", 0, -6)
 	frame.banner = CallingCard:Banner(frame, BANNER_WIDTH)
 	frame.banner:SetPoint("TOP", frame.note, "BOTTOM", 0, -18)
+	-- A stat is changed by clicking it
+	for i, box in ipairs(frame.banner.stats) do
+		box:EnableMouse(true)
+		box:SetScript("OnMouseUp", function() private.NextStat(i) end)
+		W:AttachTooltip(box, "Change this stat", "Click for the next stat.")
+	end
 
 	-- A row for each part: back, the piece and what unlocks it, forward
 	frame.rows = {}
@@ -265,17 +460,25 @@ function private.GetFrame()
 	end
 
 	local buttons = CreateFrame("Frame", nil, frame)
-	buttons:SetSize(240, 30)
+	buttons:SetSize(480, 30)
 	buttons:SetPoint("TOP", previous, "BOTTOM", 0, -14)
-	local shuffle = W:Button(buttons, "Shuffle", "primary", 110, 28, private.Shuffle)
-	shuffle:SetPoint("LEFT")
-	frame.shuffle = shuffle
-	local close = W:Button(buttons, "Close", "secondary", 110, 28, function() frame:Hide() end)
+	frame.save = W:Button(buttons, "Save", "primary", 110, 28, private.Save)
+	frame.save:SetPoint("LEFT")
+	W:AttachTooltip(frame.save, "Save your calling card", "The Wanted app sends it to wanteddeadordead.com after your next /reload or logout. Only unlocked pieces can be saved.")
+	frame.mode = W:Button(buttons, "Try anything", "secondary", 130, 28, function()
+		private.trying = not private.trying
+		private.Load()
+		private.Refresh()
+	end)
+	frame.mode:SetPoint("LEFT", frame.save, "RIGHT", 8, 0)
+	frame.shuffle = W:Button(buttons, "Shuffle", "secondary", 100, 28, private.Shuffle)
+	frame.shuffle:SetPoint("LEFT", frame.mode, "RIGHT", 8, 0)
+	local close = W:Button(buttons, "Close", "secondary", 100, 28, function() frame:Hide() end)
 	close:SetPoint("RIGHT")
 	private.frame = frame
 	return frame
 end
 
-Wanted:RegisterCommand("card", "Your calling card: try any combination of backgrounds, borders, emblems and plates.", function()
+Wanted:RegisterCommand("card", "Your calling card: change it (pieces you've unlocked) or try any combination.", function()
 	CallingCard:Show()
 end)

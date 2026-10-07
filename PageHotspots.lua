@@ -149,6 +149,8 @@ UI:RegisterPage("hotspots", {
 		local busy = private.CountBusy(Hotspots:Get())
 		return busy > 0 and busy or nil
 	end,
+	under = "enemies",
+	tabLabel = "Hotspots",
 	build = function(container, width, height)
 		private.count = Theme:Text(container, "small", "")
 		private.count:SetPoint("TOPLEFT", 0, -2)

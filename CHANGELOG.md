@@ -2,10 +2,21 @@
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-10-07
+
 - World PvP raids: a Raids page to form a raid, now or at a time, and join the ones other Wanted players of your
   faction are forming (across realm names). Join and the leader's Wanted invites you, making the group a raid before the
   sixth; sign up for a planned raid and you're reminded and invited when it starts. Announce posts it in Looking for
   Group or General for players without Wanted, and anyone who whispers the leader "inv" is invited.
+- Announce shows the line and the channel it goes to first, in a box you can edit; Post sends it.
+- A shorter menu: Home, Bounties (Board, Your bounties, Your hunts), Enemies (Hotspots, Enemies, Guild Kill on Sight,
+  Activity), Raids, Progress (Challenges, Leaderboards, Calendar, Rank, Gear) and You (Calling card, Wanted poster,
+  Website & app, Settings, Tools). Every /wanted command still opens its page. A menu entry's count adds up its tabs.
+- You opens on your calling card as others see it, with how many pieces you've unlocked; your wanted poster is the
+  next tab, a small one with your character and the price on your head.
+- Home shows world PvP raids (yours, the one you joined, the ones forming: click to join) where this week's challenges
+  were; those are on Progress.
+- What's new: anyone who skipped 1.17.1 still gets its launch note, once.
 
 ## [1.17.1] - 2026-10-07
 

@@ -9,10 +9,12 @@ local WhatsNew = Wanted:NewModule("WhatsNew")
 local private = {}
 
 -- Each version's note from the author (optional), a picture above it (optional: a calling-card piece's id) and short
--- lines for players, newest first
+-- lines for players, newest first. A pinned version reaches everyone who hasn't seen it, under the newest notes, even
+-- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
 		version = "1.17.1",
+		pinned = true, -- the launch: everyone who hasn't seen it gets it, whatever version they come from
 		art = "ach-founding-hunter-emblem", -- a calling-card piece's art, shown above the note
 		note = "First, I want to thank all of you for the support you've shown during the beta testing of this addon and system. "
 			.."Every bug report, screenshot and idea you sent made Wanted better, and seeing your kills, bounties and grudges show "
@@ -132,10 +134,22 @@ function private.Check()
 		private.Open("Welcome to Wanted", nil, { { lines = Wanted.WELCOME } }, true)
 		return
 	end
-	-- Never seen it (the update that brought it): the newest version only, whose lines sum up what came before
+	-- Never seen it (the update that brought it): the newest version only, whose lines sum up what came before; then
+	-- any pinned version not seen yet
 	local entries = WhatsNew:Since(db.whatsNewSeen, current)
 	if not db.whatsNewSeen then
 		entries = { entries[1] }
+	end
+	local last = private.Number(db.whatsNewSeen)
+	for _, entry in ipairs(Wanted.WHATS_NEW) do
+		local n = private.Number(entry.version)
+		local listed = false
+		for _, e in ipairs(entries) do
+			listed = listed or e == entry
+		end
+		if entry.pinned and n and n <= private.Number(current) and (not last or n > last) and not listed then
+			tinsert(entries, entry)
+		end
 	end
 	db.whatsNewSeen = current
 	if #entries > 0 then
@@ -176,9 +190,14 @@ function private.Open(title, note, entries, welcome, art)
 		tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
 		tinsert(parts, "")
 	end
-	for _, entry in ipairs(entries) do
+	for i, entry in ipairs(entries) do
 		if #entries > 1 then
 			tinsert(parts, "|cffffcc52"..entry.version.."|r")
+		end
+		-- The first version's note leads the window; a later one's (a pinned launch note) sits under its version
+		if i > 1 and entry.note then
+			tinsert(parts, entry.note)
+			tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
 		end
 		for _, line in ipairs(entry.lines) do
 			tinsert(parts, "- "..line)

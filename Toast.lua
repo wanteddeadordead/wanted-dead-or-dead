@@ -44,7 +44,8 @@ function Toast:OnEnable()
 end
 
 ---Queues a toast: { kind = "ACHIEVEMENT EARNED", name = "Witness", detail = "...", art = texture path,
----coords = { left, right, top, bottom }?, aspect = width / height of the art (1 for square) }.
+---coords = { left, right, top, bottom }?, aspect = width / height of the art (1 for square), onClick = function? (else a
+---click opens your calling card) }.
 ---@param toast table
 function Toast:Add(toast)
 	tinsert(private.queue, toast)
@@ -183,7 +184,11 @@ function private.NewFrame(index)
 	frame.detail:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -4)
 	frame:SetScript("OnClick", function(self)
 		self:Hide()
-		Wanted.CallingCard:Show()
+		if self.toast.onClick then
+			self.toast.onClick()
+		else
+			Wanted.CallingCard:Show()
+		end
 		private.Pump()
 	end)
 	frame:SetScript("OnUpdate", function(self, elapsed)

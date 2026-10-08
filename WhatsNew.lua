@@ -1,6 +1,7 @@
 -- What's new: after an update, a window with a note from the author and a few short lines on what changed, once per
 -- version, at the first login out of combat once the loading screen has gone. A fresh install gets a welcome instead.
--- /wanted new shows the newest notes again. The newest entry's version must match CHANGELOG.md's newest (the smoke test checks).
+-- /wanted new shows the newest notes again. Only major and minor releases (x.y.0) get an entry, never a patch (x.y.1),
+-- and the newest must match CHANGELOG.md's newest x.y.0 (the smoke test checks both).
 
 local _, Wanted = ...
 local Theme, W = Wanted.Theme, Wanted.Widgets

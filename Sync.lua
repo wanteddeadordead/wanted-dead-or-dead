@@ -100,8 +100,12 @@ local TAG_POSSE_JOIN = "J"
 -- A world PvP raid's ad (Raids): on the channel, and to realm links, whose clients share it once on theirs (fw = 1).
 -- Passing news like sightings: never stored, never forwarded further. Older versions ignore it.
 local TAG_RAID = "A"
+local GUILD_ONLY = "@guild" -- private.Send's target for the guild's addon channel alone
 -- Sent privately to a raid's leader: I'm joining (or signing up for) your raid { r = raid id } (Raids)
 local TAG_RAID_JOIN = "I"
+-- Sent privately to a raid's leader: who's going? { r = raid id }; and the leader's answer: { r, g = going names,
+-- i = interested names (comma separated), m = how many more didn't fit } (Raids)
+local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- The server's sync channel, or (q) a player asking for the current one: { e = epoch, n = name, a = 1 (the
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
@@ -1009,7 +1013,15 @@ end
 ---@param target string? a player to whisper instead of the channel
 ---@return boolean
 function private.Send(tag, tbl, attempt, target)
-	local viaGuild = not target and private.ViaGuild()
+	-- GUILD_ONLY: the guild's addon channel, whether or not we're on the sync channel
+	local guildOnly = target == GUILD_ONLY
+	if guildOnly then
+		if not IsInGuild() then
+			return false
+		end
+		target = nil
+	end
+	local viaGuild = guildOnly or (not target and private.ViaGuild())
 	if not target and not private.channelId and not viaGuild then
 		return false
 	end
@@ -1068,7 +1080,7 @@ function private.Send(tag, tbl, attempt, target)
 			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s to the guild -> %s", part, total, tag, tostring(result))
 			if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
 				private.stats.throttled = private.stats.throttled + 1
-				private.QueueRetry(tag, tbl, attempt, nil)
+				private.QueueRetry(tag, tbl, attempt, guildOnly and GUILD_ONLY or nil)
 				return false
 			end
 			tinsert(private.guildTimes, now)
@@ -1529,6 +1541,19 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
+	-- Who's going to a raid we lead, and a leader's answer
+	if channel == "WHISPER" and (strsub(text, 1, 2) == TAG_RAID_WHO..":" or strsub(text, 1, 2) == TAG_RAID_ROSTER..":") then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" and Wanted.Raids then
+			if strsub(text, 1, 1) == TAG_RAID_WHO then
+				Wanted.Raids:OnWho(sender, tbl)
+			else
+				Wanted.Raids:OnRoster(sender, tbl)
+			end
+		end
+		return
+	end
 	-- A join for a posse we called
 	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_POSSE_JOIN..":" then
 		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
@@ -1690,10 +1715,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 	end
 	if tag == TAG_RAID then
 		if Wanted.Raids then
-			Wanted.Raids:OnAd(tbl, sender)
+			Wanted.Raids:OnAd(tbl, sender, channel)
 		end
 		-- One from a realm link goes on our channel once, so players on this realm name see it too
-		if viaLink and tbl.fw == nil and private.channelId then
+		if viaLink and tbl.fw == nil and not tbl.x and private.channelId then
 			tbl.fw = 1
 			private.Send(TAG_RAID, tbl)
 		end
@@ -2100,17 +2125,38 @@ end
 ---Shares a raid's ad: on the channel, and to each realm link (whose clients share it on theirs).
 ---@param ad table
 function Sync:SendRaidAd(ad)
+	-- A guild-only raid goes to the guild alone
+	if ad.x then
+		private.Send(TAG_RAID, ad, nil, GUILD_ONLY)
+		return
+	end
 	private.Send(TAG_RAID, ad)
 	for name in pairs(private.links) do
 		private.Send(TAG_RAID, ad, nil, name)
 	end
 end
 
----Asks a raid's leader to invite us, or signs us up for a raid that hasn't started.
+---Asks a raid's leader to invite us, or signs us up for a raid that hasn't started: kind "g" going, "i" interested,
+---"x" taken back.
 ---@param leader string
 ---@param raidId string
-function Sync:SendRaidJoin(leader, raidId)
-	return private.Send(TAG_RAID_JOIN, { r = raidId }, nil, leader)
+---@param kind string?
+function Sync:SendRaidJoin(leader, raidId, kind)
+	return private.Send(TAG_RAID_JOIN, { r = raidId, k = kind }, nil, leader)
+end
+
+---Asks a raid's leader who's going.
+---@param leader string
+---@param raidId string
+function Sync:SendRaidWho(leader, raidId)
+	return private.Send(TAG_RAID_WHO, { r = raidId }, nil, leader)
+end
+
+---Answers who's going to the raid we lead: { r, g, i, m }.
+---@param to string
+---@param roster table
+function Sync:SendRaidRoster(to, roster)
+	return private.Send(TAG_RAID_ROSTER, roster, nil, to)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

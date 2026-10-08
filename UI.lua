@@ -546,6 +546,9 @@ function private.UpdateConnection()
 	local function Set(light, color, text, title, tip)
 		light.dot:SetColorTexture(color[1], color[2], color[3], 1)
 		light.text:SetText(text)
+		-- As wide as its text and dot, so a longer label (a development build's counts) pushes the next one along
+		-- rather than running under it
+		light:SetWidth(ceil(light.text:GetStringWidth() or 0) + 16)
 		light.tooltipTitle, light.tooltipText = title, tip
 	end
 	local info = Wanted.Sync and Wanted.Sync:GetInfo()

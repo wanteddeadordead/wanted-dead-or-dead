@@ -227,7 +227,7 @@ function private.OnRaid(item)
 		return
 	end
 	local why = Wanted.Raids:Join(item.raid.id)
-	UI:Toast(why or (item.raid.startAt <= GetServerTime() and "Asked to join: the leader invites you." or "Signed up: you'll be invited when it starts."),
+	UI:Toast(why or (item.raid.startAt <= GetServerTime() and "Asked to join: the leader invites you." or "Going: you'll be asked to join when it starts."),
 		why and C.red or C.green)
 end
 
@@ -259,14 +259,14 @@ function private.RefreshRaids()
 		if item then
 			local raid, started = item.raid, item.raid.startAt <= now
 			local joined = not item.mine and Raids:Joined(raid.id)
-			card.kind:Set(item.mine and "YOUR RAID" or joined and (started and "JOINED" or "SIGNED UP") or started and "FORMING" or "PLANNED",
+			card.kind:Set(item.mine and "YOUR RAID" or joined and (started and "JOINED" or strupper(Raids:Interest(raid.id) or "going")) or started and "FORMING" or "PLANNED",
 				item.mine and C.gold or joined and C.green or started and C.red or C.blue)
-			private.Fit(card.name, { raid.title }, "small")
+			private.Fit(card.name, { Raids:Title(raid) }, "small")
 			local count = item.mine and (IsInGroup() and max(1, GetNumGroupMembers()) or 1) or raid.members
-			local when = started and "now" or date("%a %H:%M", raid.startAt)
+			local when = started and "now" or Raids:When(raid.startAt)
 			private.Fit(card.text, { format("%s, %s  %d/%d%s", raid.where, when, count, raid.size, item.mine and "" or ("  led by "..raid.leader)) }, "tiny", true)
 			card.action:SetText(Theme:Colorize((item.mine or joined) and "Open the Raids page" or raid.members >= raid.size and "Full"
-				or started and "Click to join" or "Click to sign up", (item.mine or joined) and C.muted or C.gold))
+				or started and "Click to join" or "Click if you're going", (item.mine or joined) and C.muted or C.gold))
 			card:Show()
 		elseif i == 1 then
 			card.kind:Set("NONE", C.muted)

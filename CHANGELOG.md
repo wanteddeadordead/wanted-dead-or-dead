@@ -12,6 +12,8 @@
 - Raid names and places are held to 40 letters as you type, instead of being cut short after.
 - A new start time brings the "starts soon" reminder and the join popup back at the new time.
 - A raid can only be listed or closed by its own leader.
+- Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
+  and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
 
 ## [1.18.2] - 2026-10-08
 

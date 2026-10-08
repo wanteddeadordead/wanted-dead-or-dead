@@ -66,7 +66,7 @@ function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } e
 do
 	local function TextWidth(fs)
 		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
-		local size = type(fs._font) == "table" and fs._font._size
+		local size = type(fs._font) == "table" and fs._font._size or fs._size
 		-- Another addon's font, size unknown: 6 pixels a character
 		return #text * (size and size * 0.56 or 6)
 	end
@@ -5947,6 +5947,26 @@ end)()
 	check(banner.name._flags == "" and banner.name._shadowColor[1] > 0.5 and banner.name._shadowColor[4] > 0, "dark ink: no outline, a light shadow")
 	CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-silk" }, "Khal Drogash")
 	check(banner.name._flags == "OUTLINE" and banner.name._textColor[1] > 0.5 and banner.name._shadowColor[1] == 0, "light ink: outlined, a dark shadow")
+	-- The name fits the plate's open centre (the ornaments at its ends stay clear): full size while it fits, a little
+	-- smaller past that, and a long one on two lines, smaller still; one long word shrinks on its line
+	local full = banner.nameSize
+	local function Drawn(name)
+		CC:Draw(banner, { background = "starter-bg", border = "starter-border", plate = "mat-thick-leather" }, name)
+		local fs, lines = banner.name, {}
+		for line in fs._text:gmatch("[^\n]+") do lines[#lines + 1] = line end
+		for _, line in ipairs(lines) do
+			check(#line * fs._size * 0.56 <= banner.nameRoom + 0.5, name..": "..line.." fits the room at size "..fs._size)
+		end
+		return fs._size, lines
+	end
+	local size, lines = Drawn("Jake Hunt")
+	check(size == full and #lines == 1, "a short name at full size: "..size)
+	size, lines = Drawn("Lapdcop Johncop")
+	check(size < full and size >= floor(full * 0.8) and #lines == 1, "a little wide: a little smaller, one line: "..size)
+	size, lines = Drawn("Shadowblades Mangetonpere")
+	check(#lines == 2 and lines[1] == "Shadowblades" and lines[2] == "Mangetonpere" and size <= full * 0.8, "a long name: two lines, smaller: "..size)
+	size, lines = Drawn("Wwwwwwwwwwwwwwwwwwwwwwww")
+	check(#lines == 1 and size < full * 0.8, "one long word shrinks on its line: "..size)
 end)()
 -- Your own card from the site: only catalogue pieces and known stats get in; locked pieces can be tried, not saved;
 -- Save keeps the card for the app

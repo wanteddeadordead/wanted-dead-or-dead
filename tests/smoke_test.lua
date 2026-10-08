@@ -7178,6 +7178,33 @@ end)()
 	local e = shared[#shared]
 	check(e.zone == "Ashenvale" and e.x == 0 and e.y == 100, "a good sighting is kept as it came")
 end)()
+-- A posse call from another player asks to join only when it makes sense: in our zone with a position, not in a
+-- fight, not more than once in a while per caller as well as per target, and its reason held short
+;(function()
+	local realShown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return false end
+	local function Call(guid, caller, extra)
+		local data = { g = guid, n = "Posse Target", z = GetZoneText(), x = 10, y = 20, p = { c = caller, k = "Wanted" } }
+		for k, v in pairs(extra or {}) do data[k] = v end
+		lastDialog = nil
+		ns.Enemies:OnSharedSighting(data, caller)
+		return lastDialog
+	end
+	clock = clock + 3600
+	check(Call("Player-9-0P01", "Caller One", { x = false }) == nil, "a call with no position doesn't ask")
+	check(Call("Player-9-0P02", "Caller One", { z = false }) == nil, "a call with no zone doesn't ask")
+	local d = Call("Player-9-0P03", "Caller One", { p = { c = "Caller One", k = strrep("very long reason |cffff0000", 20) } })
+	check(d and not d.text:find("|", 1, true) and #d.text < 200, "the reason is held short and plain: "..tostring(d and d.text))
+	check(Call("Player-9-0P04", "Caller One") == nil, "the same caller against someone else soon after doesn't ask again")
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(Call("Player-9-0P05", "Caller Two") == nil, "not in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	ns.Widgets.IsDialogShown = realShown
+	lastDialog = nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

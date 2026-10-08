@@ -33,6 +33,8 @@
   game had loaded them.
 - A sighting shared with a broken position or zone no longer causes Lua errors on the map, in Hotspots or in alerts:
   what doesn't make sense is left out.
+- Posse calls from other players never pop up in a fight (a chat line instead), ask at most once every two minutes per
+  caller, need a place to go to, and keep their reason short.
 
 ## [1.18.2] - 2026-10-08
 

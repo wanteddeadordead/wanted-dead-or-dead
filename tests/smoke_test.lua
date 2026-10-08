@@ -6318,11 +6318,17 @@ end)()
 	chatSent = {}
 	R:OnWhisper("inv", "Stuck Waiting")
 	check(chatSent[1] and chatSent[1]:find("can't invite just yet", 1, true), "told the leader can't invite yet: "..tostring(chatSent[1]))
+	-- While we can't invite, the wait doesn't count: still in line minutes on, and invited once we can
 	clock = clock + 181
 	RunTimers()
 	local stillWaiting = false
 	for _, n in ipairs(R:Inviting()) do stillWaiting = stillWaiting or n == "Stuck Waiting" end
-	check(not stillWaiting and times("Stuck Waiting") == 0, "never invited: given up on after a few minutes")
+	check(stillWaiting and times("Stuck Waiting") == 0, "still in line while we can't invite")
+	UnitIsGroupAssistant = function() return true end
+	RunTimers()
+	check(times("Stuck Waiting") == 1, "invited once we can")
+	inGroup["Stuck Waiting"] = true
+	Fire("GROUP_ROSTER_UPDATE")
 	UnitIsGroupLeader, UnitIsGroupAssistant = realLeader, realAssist
 	inGroup["Patient One"], inGroup["Whisperer"], inGroup["Pleaser"], inGroup["Fighter"], inGroup["Sixth"] = true, true, true, true, true
 	Fire("GROUP_ROSTER_UPDATE")
@@ -6403,6 +6409,20 @@ end)()
 	clock = clock + 2 * 3600 + 60
 	R:Tick()
 	check(R:Mine() == nil, "a raid closes itself after two hours")
+	-- One who signed up by whisper for a raid that filled before the start is told once and let go, not re-queued (and
+	-- printed) every minute
+	local small = R:Create({ title = "Small one", size = 10, startAt = clock + 600 })
+	R:OnWhisper("inv", "Too Slow")
+	check(small.whispered and small.whispered["Too Slow"], "signed up by whisper")
+	groupSize = 10
+	chatSent = {}
+	clock = clock + 601
+	R:Tick()
+	check(not small.whispered["Too Slow"] and chatSent[1] and chatSent[1]:find("filled up", 1, true), "full at the start: told so and let go: "..tostring(chatSent[1]))
+	R:Tick()
+	check(#chatSent == 1, "and only once")
+	groupSize = 6
+	R:Close()
 	-- Form raid now: from 15 minutes before a planned raid, the leader can start it early (a toast says so), and with
 	-- Send invites ticked everyone signed up is invited too
 	local early = R:Create({ title = "Early start", size = 40, startAt = clock + 3600 })
@@ -6531,6 +6551,7 @@ end)()
 	for _, x in ipairs(R:List()) do fake = fake or x.id == "Real Leader-Realm:fake" end
 	check(not fake, "a raid ad from someone else than its leader isn't listed")
 	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1 }), "Faker-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 3600, z = "Ashenvale" }), "Lead Er-Realm") -- the leader, just heard
 	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1, fw = 1 }), "Relay Person-Elsewhere")
 	check(R:Joined("Lead Er-Realm:moving"), "nor closed by anyone but its leader")
 	-- Not by naming themselves leader of someone else's raid id either, closing it or taking it over
@@ -6547,6 +6568,19 @@ end)()
 	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore + 7200, z = "Ashenvale", e = 1 }), "Lead Er-Realm")
 	for _, x in ipairs(R:List()) do if x.id == "Lead Er-Realm:moving" then moving = x end end
 	check(moving.startAt == startBefore, "an ad from before the latest edit changes nothing")
+	-- A shared-on copy with a huge edit count can't lock the raid: it doesn't raise the count, and the leader's next ad
+	-- still counts
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore, z = "Ashenvale", e = 1e308, fw = 1 }), "Relay Person-Elsewhere")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore + 600, z = "Ashenvale", e = 3 }), "Lead Er-Realm")
+	for _, x in ipairs(R:List()) do if x.id == "Lead Er-Realm:moving" then moving = x end end
+	check(moving.startAt == startBefore + 600 and moving.edits == 3, "a forged edit count locks nothing: "..tostring(moving.edits))
+	-- A leader not heard for a while (their link dropped): copies shared on can change and close it again, and a lower
+	-- count straight from them (a client that lost its count) is taken up
+	clock = clock + 150
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore + 900, z = "Ashenvale", e = 1 }), "Lead Er-Realm")
+	for _, x in ipairs(R:List()) do if x.id == "Lead Er-Realm:moving" then moving = x end end
+	check(moving.startAt == startBefore + 900, "the leader's lower count is taken a while on")
+	startBefore = moving.startAt
 	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1 }), "Lead Er-Realm")
 	check(toasts[#toasts].kind == "RAID CANCELLED" and not R:Joined("Lead Er-Realm:moving"), "cancelled before it starts")
 	clock = clock + 4 * 60

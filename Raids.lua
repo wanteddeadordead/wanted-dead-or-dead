@@ -47,6 +47,8 @@ local INVITE_ROUND_SECONDS = 2 -- the invite queue looks again this often while 
 local INVITE_AGAIN_SECONDS = 60 -- an invite not taken up by then is sent once more
 local INVITE_GIVE_UP_SECONDS = 180 -- and not taken up by then, dropped
 local REPLY_SECONDS = 60 -- a player whispering "inv" is whispered back at most this often
+local DIRECT_SECONDS = 2 * 60 -- a raid heard from its leader this recently isn't changed by copies others shared on
+local MAX_EDITS = 10000 -- an ad's edit count past this is nonsense
 local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 
@@ -540,6 +542,18 @@ function Raids:OnWhisper(text, sender)
 	private.QueueInvite(sender)
 end
 
+---Puts those who signed up by whisper in line for an invite; one the raid has no room for is told so and let go.
+function private.QueueWhispered(raid)
+	for name in pairs(raid.whispered or {}) do
+		if private.Full(name) then
+			private.Reply(name, format("Sorry, %s filled up before you could be invited.", raid.title))
+			private.Done(name)
+		else
+			private.QueueInvite(name)
+		end
+	end
+end
+
 ---Whispers a player back, at most every REPLY_SECONDS each.
 function private.Reply(name, text)
 	local last = private.replied[name]
@@ -600,7 +614,12 @@ end
 ---sends what the group has room for.
 function private.QueueInvite(name)
 	local raid = private.mine
-	if not raid or type(name) ~= "string" or name == Store:GetOrigin() or private.InGroup(name) then
+	if not raid or type(name) ~= "string" or name == Store:GetOrigin() then
+		return
+	end
+	if private.InGroup(name) then
+		-- Already in (invited some other way): nothing to do, now or at the next re-queue
+		private.Done(name)
 		return
 	end
 	if not private.invites[name] then
@@ -621,6 +640,8 @@ end
 function private.PumpInvites()
 	local raid, now = private.mine, GetTime()
 	local order = private.inviteOrder
+	-- While invites can't go out (a fight, no right to invite), the wait doesn't count towards giving up
+	local blocked = InCombatLockdown() or not Raids:CanInvite()
 	for i = #order, 1, -1 do
 		local name = order[i]
 		local entry = private.invites[name]
@@ -634,6 +655,8 @@ function private.PumpInvites()
 			Wanted:Print("%s didn't join %s.", name, raid.title)
 			private.Done(name)
 			tremove(order, i)
+		elseif not entry.sent and blocked then
+			entry.queued = now
 		elseif not entry.sent and now - entry.queued >= INVITE_GIVE_UP_SECONDS then
 			-- Never sent (in a fight, no right to invite, no room) for as long: given up on too
 			Wanted:Print("%s couldn't be invited to %s in time.", name, raid.title)
@@ -644,7 +667,7 @@ function private.PumpInvites()
 	if #order == 0 then
 		return
 	end
-	if not InCombatLockdown() and Raids:CanInvite() then
+	if not blocked then
 		local members, out = private.GroupSize(), private.Outstanding()
 		local waiting = 0
 		for _, name in ipairs(order) do
@@ -850,9 +873,7 @@ function Raids:FormNow(invite)
 	end
 	raid.startAt = GetServerTime()
 	private.SendAd()
-	for name in pairs(raid.whispered or {}) do
-		private.QueueInvite(name)
-	end
+	private.QueueWhispered(raid)
 	if invite then
 		Raids:InviteSignUps()
 	end
@@ -886,7 +907,8 @@ function private.SendAd(closed)
 	if not raid then
 		return
 	end
-	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, x = raid.exclusive and 1 or nil, e = raid.edits, z = raid.where, s = raid.startAt, m = raid.size,
+	-- The leader as the id names them (our name could be corrected after the raid was formed)
+	Sync:SendRaidAd({ id = raid.id, l = strmatch(raid.id, "^(.*):%d+:%d+$") or Store:GetOrigin(), t = raid.title, g = raid.guild, x = raid.exclusive and 1 or nil, e = raid.edits, z = raid.where, s = raid.startAt, m = raid.size,
 		ml = raid.minLevel, n = private.GroupSize(), u = private.CountKind(raid.signups, "going"), i = private.CountKind(raid.signups, "interested"), f = UnitFactionGroup("player"), c = closed and 1 or nil })
 end
 
@@ -904,9 +926,7 @@ function Raids:Tick()
 			-- At the start, those who signed up by whispering (no Wanted to ask for themselves) are invited
 			-- (kept with the raid until they're in or given up on, so a /reload doesn't lose them)
 			if private.Started(raid) and raid.whispered then
-				for name in pairs(raid.whispered) do
-					private.QueueInvite(name)
-				end
+				private.QueueWhispered(raid)
 			end
 			-- 15 minutes ahead: the leader can form it now
 			if Raids:CanFormNow() and not private.reminded[raid.id..":lead"] then
@@ -962,16 +982,23 @@ function Raids:OnAd(ad, sender, channel)
 	if direct and not private.SameName(sender, ad.l) then
 		return
 	end
-	if not direct and known and known.relayed == false then
+	local now = GetServerTime()
+	local heardDirect = known and known.direct and now - known.direct < DIRECT_SECONDS
+	if not direct and heardDirect then
 		if not ad.c then
-			known.heard = GetServerTime()
+			known.heard = now
 		end
 		return
 	end
-	-- An ad from before the leader's latest edit (delayed, or shared on late) changes nothing; a close always counts
-	local edits = floor(tonumber(ad.e) or 0)
-	if known and not ad.c and edits < (known.raid.edits or 0) then
+	-- An ad from before the leader's latest edit (delayed, or shared on late) changes nothing; a close always counts.
+	-- Only the leader's own ads count edits (a shared-on copy can't raise them), and only while we hear the leader
+	-- (a leader whose client lost its count to a crash is taken up again a couple of minutes on)
+	local edits = max(0, min(MAX_EDITS, floor(tonumber(ad.e) or 0)))
+	if direct and heardDirect and not ad.c and edits < (known.raid.edits or 0) then
 		return
+	end
+	if not direct then
+		edits = known and known.raid.edits or 0
 	end
 	if ad.c then
 		local j = private.joined[ad.id]
@@ -1006,11 +1033,9 @@ function Raids:OnAd(ad, sender, channel)
 		private.seen[ad.id] = entry
 	end
 	entry.heard = GetServerTime()
-	-- Heard only through realm links so far, or straight from the leader at least once
-	if entry.relayed == nil then
-		entry.relayed = not direct
-	elseif direct then
-		entry.relayed = false
+	-- When we last heard it straight from its leader (copies shared on can't change it for a while after)
+	if direct then
+		entry.direct = now
 	end
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,

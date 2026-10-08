@@ -8,13 +8,13 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Raids = Wanted.Raids
-local private = { size = 40, later = false, guild = false, exclusive = false, editing = false }
+local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 120
 local FORM_HEIGHT = 258 -- the form, with how it works under it
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
-	"1.  Name your raid, say where and when, and click Form raid. Every Wanted player of your faction sees it, on every realm.",
+	"1.  Name your raid, say where and when (in your time or server time), and click Form raid. Every Wanted player of your faction sees it, on every realm, in their own time.",
 	"2.  Now: anyone who clicks Join is invited straight away.",
 	"3.  Later: players mark Interested or Going. You see who, and can whisper them all from your raid's card.",
 	"4.  From 15 minutes before, Form raid now starts it, and Send invites invites everyone signed up. Either way they get a popup to join.",
@@ -22,28 +22,6 @@ local HOW_IT_WORKS = table.concat({
 	"6.  Guild only: just your guildmates see it, until you open it to everyone from your raid's card.",
 	"7.  Announce posts it in chat for players without Wanted: they whisper you \"inv\" to be invited.",
 }, "\n")
-
----A time typed as "20:00", "8:30" or "20" as the next such time (server seconds), or nil.
----@param text string
----@return number?
-function private.ParseTime(text)
-	local h, m = strmatch(text or "", "^%s*(%d%d?):(%d%d)%s*$")
-	if not h then
-		h, m = strmatch(text or "", "^%s*(%d%d?)%s*$"), "0"
-	end
-	h, m = tonumber(h), tonumber(m)
-	if not h or h > 23 or m > 59 then
-		return nil
-	end
-	local now = GetServerTime()
-	local t = date("*t", now)
-	t.hour, t.min, t.sec = h, m, 0
-	local at = time(t)
-	if at <= now then
-		at = at + 24 * 3600
-	end
-	return at
-end
 
 function private.CreateRow(row)
 	row.title = Theme:Text(row, "body", "")
@@ -76,7 +54,7 @@ end
 function private.UpdateRow(row, raid)
 	local started = raid.startAt <= GetServerTime()
 	row.title:SetText(Raids:Title(raid)..Theme:Colorize("  "..raid.where, C.muted))
-	local when = started and "Forming now" or ("Starts "..date("%a %H:%M", raid.startAt))
+	local when = started and "Forming now" or ("Starts "..Raids:When(raid.startAt))
 	local count = format("%d/%d", raid.members, raid.size)..(raid.signups > 0 and format(", %d going", raid.signups) or "")
 		..((raid.interested or 0) > 0 and format(", %d interested", raid.interested) or "")
 	row.sub:SetText(format("%s  -  %s  -  led by %s  -  level %d+", when, count, raid.leader, raid.minLevel))
@@ -115,13 +93,14 @@ function private.RefreshCard()
 		private.go:SetText(private.editing and "Save changes" or "Form raid")
 		private.cancelEdit:SetShown(private.editing)
 		private.timeBox:SetShown(private.later)
+		private.zoneChoice:SetShown(private.later)
 		return
 	end
 	local started = mine.startAt <= GetServerTime()
 	private.leadTitle:SetText(Raids:Title(mine)..Theme:Colorize("  "..mine.where, C.muted))
 	local going, interested = Raids:SignUps(mine)
 	local group = IsInGroup() and max(1, GetNumGroupMembers()) or 1
-	private.leadSub:SetText(format("%s  -  %d/%d in your group  -  %d going, %d interested", started and "Forming now" or ("Starts "..date("%a %H:%M", mine.startAt)),
+	private.leadSub:SetText(format("%s  -  %d/%d in your group  -  %d going, %d interested", started and "Forming now" or ("Starts "..Raids:When(mine.startAt)),
 		group, mine.size, #going, #interested))
 	local names = {}
 	if #going > 0 then
@@ -149,7 +128,7 @@ function private.Edit()
 	private.levelBox:SetValue(tostring(mine.minLevel))
 	private.later = mine.startAt > GetServerTime()
 	private.when:Select(private.later and "later" or "now", true)
-	private.timeBox:SetValue(date("%H:%M", mine.startAt))
+	private.timeBox:SetValue(date("%H:%M", mine.startAt + (private.serverTime and Raids:ServerOffset() or 0)))
 	private.size = mine.size
 	private.sizeChoice:SetChoice(mine.size)
 	private.guild = mine.guild ~= nil
@@ -171,7 +150,7 @@ end
 function private.Form()
 	local startAt
 	if private.later then
-		startAt = private.ParseTime(private.timeBox:GetText())
+		startAt = Raids:ParseTime(private.timeBox:GetText(), private.serverTime)
 		if not startAt then
 			UI:Toast("Type a start time like 20:00.", C.red)
 			return
@@ -220,18 +199,33 @@ function private.BuildForm(parent, width)
 	when:SetPoint("TOPLEFT", 14, -74)
 	when:Select("now", true)
 	private.when = when
-	private.timeBox = W:Input(form, 90, "20:00")
+	private.timeBox = W:Input(form, 70, "20:00")
 	private.timeBox:SetPoint("LEFT", when, "RIGHT", 8, 0)
+	-- The time typed: ours, or the realm's
+	private.zoneChoice = W:Choice(form, 116, { { key = false, label = "Your time" }, { key = true, label = "Server time" } }, function(key)
+		private.serverTime = key
+	end)
+	private.zoneChoice:SetChoice(false)
+	private.zoneChoice:SetPoint("LEFT", private.timeBox, "RIGHT", 6, 0)
+	private.zoneChoice:HookScript("OnEnter", function(self)
+		local now = GetServerTime()
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText("Which clock the time is in", 1, 1, 1)
+		GameTooltip:AddLine(format("Your time now: %s. Server time now: %s.", date("%H:%M", now), date("%H:%M", now + Raids:ServerOffset())),
+			C.muted[1], C.muted[2], C.muted[3], true)
+		GameTooltip:AddLine("Everyone sees the raid in their own time, with the server's beside it.", C.muted[1], C.muted[2], C.muted[3], true)
+		GameTooltip:Show()
+	end)
 	local size = W:Choice(form, 90, { { key = 10, label = "10" }, { key = 20, label = "20" }, { key = 40, label = "40" } }, function(key)
 		private.size = key
 	end)
 	size:SetChoice(40)
 	private.sizeChoice = size
-	size:SetPoint("LEFT", private.timeBox, "RIGHT", 8, 0)
+	size:SetPoint("LEFT", private.levelBox, "RIGHT", 8, 0)
 	local guild = W:Toggle(form, "Guild raid", function(checked)
 		private.guild = checked
 	end)
-	guild:SetPoint("LEFT", size, "RIGHT", 12, 0)
+	guild:SetPoint("LEFT", private.zoneChoice, "RIGHT", 12, 0)
 	private.guildToggle = guild
 	local exclusive = W:Toggle(form, "Guild only", function(checked)
 		private.exclusive = checked

@@ -263,7 +263,7 @@ function Raids:AnnounceText()
 	if not raid then
 		return nil
 	end
-	local when = private.Started(raid) and "now" or ("at "..date("%H:%M", raid.startAt))
+	local when = private.Started(raid) and "now" or ("at "..Raids:ServerClock(raid.startAt))
 	return format("Forming a world PvP raid: %s in %s %s (%d/%d). Whisper me \"inv\" to join.", Raids:Title(raid), raid.where, when,
 		private.GroupSize(), raid.size)
 end
@@ -432,7 +432,7 @@ function Raids:WhisperText()
 	if private.Started(raid) then
 		return format("%s has started in %s. Whisper me \"inv\" for an invite.", Raids:Title(raid), raid.where)
 	end
-	return format("%s starts %s in %s. See you there!", Raids:Title(raid), date("%a %H:%M", raid.startAt), raid.where)
+	return format("%s starts at %s in %s. See you there!", Raids:Title(raid), Raids:ServerClock(raid.startAt), raid.where)
 end
 
 ---Whispers everyone signed up for the raid we lead, one at a time a moment apart, at most once a minute. Returns why
@@ -618,7 +618,7 @@ function Raids:Tick()
 			if Raids:CanFormNow() and not private.reminded[raid.id..":lead"] then
 				private.reminded[raid.id..":lead"] = true
 				Wanted.Toast:Add({ kind = "FORM YOUR RAID", name = Raids:Title(raid),
-					detail = "Starts at "..date("%H:%M", raid.startAt)..". Form it now from the Raids page.", onClick = function() Wanted.UI:Show("raids") end })
+					detail = "Starts "..Raids:When(raid.startAt)..". Form it now from the Raids page.", onClick = function() Wanted.UI:Show("raids") end })
 				private.Changed()
 			end
 		end
@@ -698,7 +698,7 @@ function Raids:OnAd(ad, sender, channel)
 		local raid = entry.raid
 		local started = raid.startAt <= GetServerTime()
 		Wanted.Toast:Add({ kind = started and "RAID FORMING" or "RAID PLANNED", name = Raids:Title(raid),
-			detail = format("%s, %s  %d/%d  led by %s", raid.where, started and "now" or date("%a %H:%M", raid.startAt), raid.members, raid.size, raid.leader),
+			detail = format("%s, %s  %d/%d  led by %s", raid.where, started and "now" or Raids:When(raid.startAt), raid.members, raid.size, raid.leader),
 			onClick = function() Wanted.UI:Show("raids") end })
 	end
 end
@@ -767,7 +767,7 @@ function Raids:SignUp(id, kind)
 		details = private.Snapshot(raid) }
 	Sync:SendRaidJoin(raid.leader, id, kind == "interested" and "i" or "g")
 	Wanted:Print("%s for %s at %s. You'll be asked to join when it starts.", kind == "interested" and "Interested" or "Going",
-		raid.title, date("%a %H:%M", raid.startAt))
+		raid.title, Raids:When(raid.startAt))
 	private.Changed()
 	return nil
 end
@@ -817,7 +817,7 @@ function private.TellChanges(raid)
 		tinsert(changes, format("%s (was %s)", now.title, was.title))
 	end
 	if now.startAt ~= was.startAt and now.startAt > GetServerTime() then
-		tinsert(changes, format("%s (was %s)", date("%a %H:%M", now.startAt), date("%a %H:%M", was.startAt)))
+		tinsert(changes, format("%s (was %s)", Raids:When(now.startAt), Raids:When(was.startAt)))
 	end
 	if now.where ~= was.where then
 		tinsert(changes, format("%s (was %s)", now.where, was.where))
@@ -850,7 +850,7 @@ function private.Remind(now)
 			end
 		elseif now >= j.startAt - SOON_SECONDS and not private.reminded[id..":soon"] then
 			private.reminded[id..":soon"] = true
-			Wanted.Toast:Add({ kind = "RAID SOON", name = j.title, detail = "Starts at "..date("%H:%M", j.startAt).." with "..j.leader,
+			Wanted.Toast:Add({ kind = "RAID SOON", name = j.title, detail = "Starts "..Raids:When(j.startAt).." with "..j.leader,
 				onClick = function() Wanted.UI:Show("raids") end })
 		end
 	end
@@ -872,6 +872,76 @@ function private.AskToJoin(id, j)
 			end
 		end,
 	})
+end
+
+-- ============================================================================
+-- Times
+-- ============================================================================
+
+---How far the realm's clock is ahead of ours, in seconds, to the quarter hour: 0 when they agree or the game doesn't
+---say.
+---@return number
+function Raids:ServerOffset()
+	local h, m
+	if GetGameTime then
+		h, m = GetGameTime()
+	end
+	if type(h) ~= "number" or type(m) ~= "number" then
+		return 0
+	end
+	local here = date("*t", GetServerTime())
+	local diff = (h * 60 + m) - (here.hour * 60 + here.min)
+	if diff > 720 then
+		diff = diff - 1440
+	elseif diff < -720 then
+		diff = diff + 1440
+	end
+	return floor(diff / 15 + 0.5) * 15 * 60
+end
+
+---A time typed as "20:00", "8:30" or "20", in our own time or (server) the realm's, as the next such moment (server
+---seconds), or nil.
+---@param text string
+---@param server boolean?
+---@return number?
+function Raids:ParseTime(text, server)
+	local h, m = strmatch(text or "", "^%s*(%d%d?):(%d%d)%s*$")
+	if not h then
+		h, m = strmatch(text or "", "^%s*(%d%d?)%s*$"), "0"
+	end
+	h, m = tonumber(h), tonumber(m)
+	if not h or h > 23 or m > 59 then
+		return nil
+	end
+	local offset = server and Raids:ServerOffset() or 0
+	local now = GetServerTime()
+	local t = date("*t", now + offset)
+	t.hour, t.min, t.sec = h, m, 0
+	local at = time(t) - offset
+	if at <= now then
+		at = at + 24 * 3600
+	end
+	return at
+end
+
+---A raid's start as shown here: our own time ("Thu 20:00"), and the realm's beside it when it differs
+---("Thu 20:00 (server 23:00)").
+---@param t number
+---@return string
+function Raids:When(t)
+	local offset = Raids:ServerOffset()
+	local ours = date("%a %H:%M", t)
+	if offset == 0 then
+		return ours
+	end
+	return format("%s (server %s)", ours, date("%H:%M", t + offset))
+end
+
+---A start in the realm's time, for chat lines, which every reader shares: "23:00 server time".
+---@param t number
+---@return string
+function Raids:ServerClock(t)
+	return date("%H:%M", t + Raids:ServerOffset()).." server time"
 end
 
 -- ============================================================================

@@ -263,7 +263,7 @@ function private.RefreshRaids()
 				item.mine and C.gold or joined and C.green or started and C.red or C.blue)
 			private.Fit(card.name, { Raids:Title(raid) }, "small")
 			local count = item.mine and (IsInGroup() and max(1, GetNumGroupMembers()) or 1) or raid.members
-			local when = started and "now" or date("%a %H:%M", raid.startAt)
+			local when = started and "now" or Raids:When(raid.startAt)
 			private.Fit(card.text, { format("%s, %s  %d/%d%s", raid.where, when, count, raid.size, item.mine and "" or ("  led by "..raid.leader)) }, "tiny", true)
 			card.action:SetText(Theme:Colorize((item.mine or joined) and "Open the Raids page" or raid.members >= raid.size and "Full"
 				or started and "Click to join" or "Click if you're going", (item.mine or joined) and C.muted or C.gold))

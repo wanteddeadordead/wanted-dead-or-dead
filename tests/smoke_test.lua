@@ -6303,6 +6303,20 @@ end)()
 	check(plain.startAt == clock and #invited == 0, "without Send invites, nobody is invited")
 	R:Close()
 	toasts = {}
+	-- Times: typed in our own time or the realm's; shown in ours with the realm's beside it when they differ; chat
+	-- lines use the realm's, which every reader shares
+	local realGameTime = GetGameTime
+	GetGameTime = function() local d = date("*t", clock + 3 * 3600) return d.hour, d.min end
+	check(R:ServerOffset() == 3 * 3600, "the realm is 3 hours ahead: "..R:ServerOffset())
+	local ourAt, realmAt = R:ParseTime("20:00"), R:ParseTime("23:00", true)
+	check(ourAt and ourAt == realmAt and date("%H:%M", ourAt) == "20:00", "20:00 ours is 23:00 the realm's")
+	check(R:When(ourAt) == date("%a ", ourAt).."20:00 (server 23:00)", "shown both ways: "..R:When(ourAt))
+	local timed = R:Create({ title = "Timed", size = 40, startAt = ourAt })
+	check(R:AnnounceText():find("at 23:00 server time", 1, true) and R:WhisperText():find("23:00 server time", 1, true), "chat lines in server time: "..R:AnnounceText())
+	R:Close()
+	GetGameTime = realGameTime
+	check(R:When(ourAt) == date("%a %H:%M", ourAt) and R:ParseTime("25:00") == nil, "no realm clock: ours alone; a bad time is none")
+	toasts = {}
 	-- Other players' raids
 	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
 	R:OnAd(ad({ f = "Alliance", id = "x1" }), "Lead Er-Realm")

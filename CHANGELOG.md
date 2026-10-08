@@ -23,6 +23,8 @@
   they join.
 - Form raid now: from 15 minutes before a planned raid (a popup tells you), start it early, with Send invites ticked to
   invite everyone signed up.
+- Raid times: type the start in your own time or server time. Everyone sees it in their own time, with the server's
+  beside it ("Thu 20:00 (server 23:00)"), and Announce and whispers give it in server time, which every reader shares.
 - The Raids page explains how it works in seven numbered steps.
 
 ## [1.18.0] - 2026-10-07

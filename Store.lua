@@ -29,6 +29,9 @@ local PRUNE_EVERY_SECONDS = 24 * 60 * 60
 -- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
 local UNKNOWN_HASH = "?"
 local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
+-- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
+-- never taken from a peer
+local RESERVED_KINDS = { sighting = true, ["*"] = true }
 
 
 
@@ -589,7 +592,7 @@ end
 ---@param record table
 ---@param sender string The server-stamped sender of the message carrying it
 ---@return boolean isNew
----@return string? why when not new: "already held", "malformed", "not sent by its origin", "test data" or "pruned"
+---@return string? why when not new: "already held", "malformed", "reserved", "not sent by its origin", "test data" or "pruned"
 function Store:Merge(record, sender)
 	if not Store:IsWellFormed(record) then
 		return false, "malformed"
@@ -621,6 +624,9 @@ end
 ---record can't claim to be live.
 function private.Insert(record, live, fromApp)
 	local db = Wanted.db
+	if RESERVED_KINDS[record.kind] then
+		return false, "reserved"
+	end
 	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
 	local existing = db.records[record.id]
 	if existing then

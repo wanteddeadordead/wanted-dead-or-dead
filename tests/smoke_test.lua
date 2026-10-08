@@ -2518,14 +2518,18 @@ end)()
 	ns.db.settings.liveLog = true
 	LiveLog:Update()
 	check(combatLogging, "and back on")
-	-- Instances aren't world PvP: logging Wanted turned on goes off inside, and back on outside
+	-- Instances aren't world PvP, but a raid logger (or the player) may want logging there: Wanted neither turns it on
+	-- nor off inside
 	local outside = IsInInstance
 	IsInInstance = function() return true end
 	LiveLog:Update()
-	check(not combatLogging, "logging goes off in an instance")
+	check(combatLogging, "logging Wanted turned on is left on in an instance, where a raid logger may want it")
+	LoggingCombat(false)
+	LiveLog:Update()
+	check(not combatLogging, "nor turned on inside")
 	IsInInstance = outside
 	LiveLog:Update()
-	check(combatLogging, "and back on outside")
+	check(combatLogging, "and on again outside")
 	-- Logging the player turned on themselves (for Warcraft Logs, say) is theirs: Wanted never turns it off
 	LoggingCombat(false)
 	ns.db.liveLogOn = nil

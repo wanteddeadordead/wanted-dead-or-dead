@@ -35,6 +35,8 @@
   what doesn't make sense is left out.
 - Posse calls from other players never pop up in a fight (a chat line instead), ask at most once every two minutes per
   caller, need a place to go to, and keep their reason short.
+- Live battle reports no longer switch combat logging off when you enter a dungeon or raid, where a raid logger (or
+  you) may want it on.
 
 ## [1.18.2] - 2026-10-08
 

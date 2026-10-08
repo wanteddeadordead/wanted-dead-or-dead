@@ -3,8 +3,9 @@
 -- game writes the log out every five minutes whatever an addon does (switching logging off and on doesn't
 -- make it write sooner), so Wanted only keeps logging on.
 --
--- Logging is on in the open world and off in instances, which aren't world PvP. Wanted only ever turns off
--- logging it turned on itself: logging the player started (for Warcraft Logs, say) stays on.
+-- Logging is turned on in the open world. In an instance, which isn't world PvP, Wanted leaves it as it is: a raid
+-- logger (or the player, for Warcraft Logs, say) may want it there, and can't be told apart from Wanted's own. Wanted
+-- only ever turns off logging it turned on itself, when live reports are switched off.
 
 local _, Wanted = ...
 local LiveLog = Wanted:NewModule("LiveLog")
@@ -19,9 +20,13 @@ end
 
 ---Turns logging on or off for the setting and where the player is.
 function LiveLog:Update()
-	local want = Wanted.db.settings.liveLog and not IsInInstance()
+	local want = Wanted.db.settings.liveLog
 	local logging = LoggingCombat()
-	if want and not logging then
+	if not logging and Wanted.db.liveLogOn then
+		-- Turned off by something else since: whatever turns it on next is theirs, not Wanted's
+		Wanted.db.liveLogOn = nil
+	end
+	if want and not logging and not IsInInstance() then
 		LoggingCombat(true)
 		Wanted.db.liveLogOn = true
 		Wanted:Log("LiveLog: combat logging on")

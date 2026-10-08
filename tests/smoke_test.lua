@@ -7209,6 +7209,19 @@ end)()
 	ns.Widgets.IsDialogShown = realShown
 	lastDialog = nil
 end)()
+-- A player of our own faction the game calls an enemy (a duel, mind control) isn't an enemy player
+;(function()
+	local realEnemy = UnitIsEnemy
+	UnitIsEnemy = function() return true end
+	enemyUnits.nameplate7 = { guid = "Player-1-0DUEL", name = "Duel Partner", class = "WARRIOR", level = 20, faction = "Horde" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	local listed = false
+	for _, d in ipairs(ns.Enemies:GetNearby()) do listed = listed or d.guid == "Player-1-0DUEL" end
+	check(not listed and not ns.Enemies:GetStats("Player-1-0DUEL"), "a duel partner of our faction isn't listed or counted")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
+	enemyUnits.nameplate7 = nil
+	UnitIsEnemy = realEnemy
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

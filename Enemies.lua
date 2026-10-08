@@ -305,6 +305,11 @@ function private.Scan(unit)
 	if not private.Readable(UnitIsEnemy("player", unit)) then
 		return nil
 	end
+	-- Hostile for now but of our own faction (a duel, mind control): not an enemy player
+	local faction = private.Readable(UnitFactionGroup(unit))
+	if faction and faction == private.playerFaction then
+		return nil
+	end
 	local guid = private.Readable(UnitGUID(unit))
 	local name = private.Readable(GetUnitName(unit, true))
 	if not guid or not name then
@@ -362,7 +367,7 @@ function private.Scan(unit)
 			level = entry.level,
 			race = entry.race,
 			guild = entry.guild or false,
-			faction = private.Readable(UnitFactionGroup(unit)) or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
+			faction = faction or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
 			zone = zone,
 			mapId = mapId,
 			x = x,

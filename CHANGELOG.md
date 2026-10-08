@@ -37,6 +37,8 @@
   caller, need a place to go to, and keep their reason short.
 - Live battle reports no longer switch combat logging off when you enter a dungeon or raid, where a raid logger (or
   you) may want it on.
+- A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an
+  enemy.
 
 ## [1.18.2] - 2026-10-08
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.18.4] - 2026-10-08
+
 - Guild Kill on Sight: the list a guildmate sends when you log in only changes the settings or approves names when
   an officer sent it, and changes dated in the future are refused.
 - Guild Kill on Sight: in review mode only officers can take an approved name off the list, and editing an entry

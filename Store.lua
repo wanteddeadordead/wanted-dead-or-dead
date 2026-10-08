@@ -726,14 +726,15 @@ function private.Insert(record, live, fromApp)
 	return true
 end
 
----Takes a relayed record out of the way of its origin's own copy: the chain steps back to before it when it was
----the chain's end, so the real one follows on there.
+---Takes a relayed record out of the way of its origin's own copy: the chain steps back to before it, so the real
+---one follows on there and the chain moves on again over what's held after it.
 function private.Replace(existing, record)
 	local db = Wanted.db
 	db.records[existing.id] = nil
 	local chain = db.chains[existing.origin]
-	if chain and chain.seq == existing.seq and chain.lastHash == existing.hash then
-		chain.seq, chain.lastHash = existing.seq - 1, record.prev
+	if chain and chain.seq >= existing.seq then
+		local before = db.records[existing.origin..":"..format("%d", existing.seq - 1)]
+		chain.seq, chain.lastHash = existing.seq - 1, before and before.hash or record.prev
 	end
 	-- A record held after it was flagged for not following the relayed copy: whether it follows the real one is
 	-- checked again as the chain moves on

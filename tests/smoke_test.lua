@@ -1568,7 +1568,9 @@ ClearBn()
 local crossBounty = ns.Store:NewRecord("bounty", { target = "Player-9-ALLY", targetName = "Ally Target", amount = 50000 })
 RunTimers()
 local sentNotice = #bnSent == 1 and BnDecode(1)
-check(sentNotice and sentNotice.k == "N" and sentNotice.n[1].b == crossBounty.id and sentNotice.n[1].a == 50000 and sentNotice.n[1].p ~= "Test Player", "a new bounty goes across as a notice, poster hashed")
+check(sentNotice and sentNotice.k == "N" and sentNotice.n[1].b and sentNotice.n[1].a == 50000, "a new bounty goes across as a notice")
+-- Without the poster: not their name in the bounty's id, nor a hash of the name anyone could match against a list
+check(not sentNotice.n[1].b:find("Test", 1, true) and sentNotice.n[1].p == nil, "the notice doesn't name the poster: "..tostring(sentNotice.n[1].b))
 ClearBn()
 ns.Store:NewRecord("raise", { bounty = crossBounty.id, amount = 25000 })
 RunTimers()
@@ -8077,6 +8079,43 @@ end)()
 	RunTimers()
 	RunFrames()
 	check(ns.Store:Get("Quiet Fighter:1") ~= nil, "another player's record held back in the fight is still taken in after it")
+end)()
+-- Notices from across the factions: one bridge can't flood a player's price, and amounts stay within what a record holds
+;(function()
+	local function Notices(list)
+		Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "N", n = list }), "WHISPER", 101)
+		RunTimers()
+	end
+	local function Count(guid)
+		local n = 0
+		for notice in ns.Store:Iterator("notice") do if notice.data.target == guid then n = n + 1 end end
+		return n
+	end
+	clock = clock + 3600
+	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 31, t = clock } })
+	check(Count("Player-1-HUGE") == 0, "a notice past what a record holds is refused")
+	local flood = {}
+	for i = 1, 30 do flood[i] = { b = "Far Side:"..(100 + i), g = "Player-1-FLOODED", n = "Flooded", a = 10000, t = clock - i } end
+	Notices(flood)
+	check(Count("Player-1-FLOODED") <= 10, "one player gets only so many new notices an hour: "..Count("Player-1-FLOODED"))
+	for round = 0, 2 do
+		local wide = {}
+		for i = 1, 50 do
+			local n = round * 50 + i
+			wide[i] = { b = "Far Side:"..(200 + n), g = "Player-1-WIDE"..n, n = "Wide "..n, a = 10000, t = clock }
+		end
+		Notices(wide)
+	end
+	local stored = 0
+	for n = 1, 150 do stored = stored + Count("Player-1-WIDE"..n) end
+	check(stored <= 100, "one bridge gets only so many new notices an hour: "..stored)
+	-- The same bounty under an older bridge's id (the poster's) and a newer one's counts once
+	local me = UnitGUID("player")
+	local before = ns.Bridge:GetPriceOnMe()
+	clock = clock + 3600
+	Notices({ { b = "Far Poster:5", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
+	Notices({ { b = "w1234abcd", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
+	check(ns.Bridge:GetPriceOnMe() == before + 7000, "one bounty carried under two ids counts once: "..(ns.Bridge:GetPriceOnMe() - before))
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

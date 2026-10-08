@@ -7724,6 +7724,14 @@ end)()
 	-- And this client never makes one others would refuse
 	check(ns.Bounties:ParseMoney("300000g") == nil and ns.Bounties:ParseMoney("214748g") == 2147480000, "an amount past what the game holds isn't read")
 	check(ns.Bounties:Post("Player-9-NUM2", "Num Two", 2 ^ 40) == nil and ns.Bounties:PostGuild("Num Guild", nil, 2 ^ 40) == nil, "nor posted")
+	-- A record in our own name that another player sends would count as our own word: only the app (restoring lost
+	-- saved data) brings our own records back
+	local me = S:GetOrigin()
+	local mySeq = S:GetChainSeq(me)
+	taken, why = S:MergeRelayed(Signed("confirm", me, mySeq + 5, "0", { claim = "Someone:1" }))
+	check(not taken and why == "own" and not S:Get(me..":"..(mySeq + 5)), "a relayed record in our own name is refused: "..tostring(why))
+	check(S:MergeRelayed(Signed("pass", me, mySeq + 6, "0", { bounty = "x:1" }), true), "the app's catch-up brings our own records back")
+	S:FreshStart()
 	-- Kinds the addon keeps for its own news are never taken from a peer: a "sighting" record reached the listeners
 	-- for our own sightings, and could make a spotted record in our name
 	local fake = Signed("sighting", "Sneaky Peer", 1, "0", {})

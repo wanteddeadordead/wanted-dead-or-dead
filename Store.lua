@@ -609,7 +609,7 @@ end
 ---@param record table
 ---@param sender string The server-stamped sender of the message carrying it
 ---@return boolean isNew
----@return string? why when not new: "already held", "malformed", "reserved", "not sent by its origin", "test data" or "pruned"
+---@return string? why when not new: "already held", "malformed", "reserved", "own", "not sent by its origin", "test data" or "pruned"
 function Store:Merge(record, sender)
 	if not Store:IsWellFormed(record) then
 		return false, "malformed"
@@ -659,6 +659,11 @@ function private.Insert(record, live, fromApp)
 	end
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
 		return false, "test data"
+	end
+	-- Our own records are trusted as our own word (Store:IsTrusted): another player can't add one. Only the app's
+	-- catch-up brings them back (saved data lost and restored from the server).
+	if record.origin == private.origin and not fromApp then
+		return false, "own"
 	end
 	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
 	-- beta build): it never comes in

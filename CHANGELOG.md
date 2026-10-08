@@ -66,6 +66,7 @@
 - Another player can no longer send a record that poses as one of your own sightings.
 - Amounts in shared records are checked: a bounty, raise or payment with a negative, endless or made-up amount is
   refused, and amounts past what the game's money can hold (214,748g) can't be posted.
+- Another player can no longer slip a record into the network in your name (a confirm or payment you never made).
 
 ## [1.18.2] - 2026-10-08
 

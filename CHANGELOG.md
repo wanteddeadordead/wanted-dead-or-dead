@@ -75,6 +75,9 @@
   player's own next record undoes a false one.
 - A whispered sync channel move can't park players on a made-up channel any more: only the next one after the
   current channel is followed, and the channel the Wanted app gives always wins.
+- One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
+  required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
+  lifts when you load this version.
 
 ## [1.18.2] - 2026-10-08
 

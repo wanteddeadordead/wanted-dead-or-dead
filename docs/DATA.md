@@ -298,7 +298,10 @@ unset or that page is switched off. A new setting: no migration.
   newer release (one that looks real: at most one major version ahead), the shared side of Wanted pauses
   until it's updated. Bounties, claims, payments and sync stop; the Nearby window, alerts, hotspots and the
   map keep working. The lock lifts on update, or when nobody on that version has been seen for three days
-  (so a made-up version number can't lock people out for good).
+  (so a made-up version number can't lock people out for good). After 1.18.2 a version locks only once three
+  different players have said they run it (hellos, haves or `U` whispers), and only up to two minor versions ahead
+  (or the next major's x.0 to x.2); `WantedDB.requiredVersion` gains `votes`, and a lock without it (one player's
+  word, from before) or no longer plausible from the running version lifts at load. No migration needed.
 - A newer client ignores what older clients send and tells each of them, by a private addon whisper
   (`U`), at most every 10 minutes, to update. From 1.4.0 it also tells, at login, the players it knows whose last
   message came from an older release: 1.3.x clients pick channels themselves, so 1.4.0 needs them updated.

@@ -1519,7 +1519,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		local tbl = payload and Decode(payload)
 		if type(tbl) == "table" then
 			Wanted:Log("Sync: %s says we must update to %s", tostring(sender), tostring(tbl.v))
-			Wanted:NoteVersion(tbl.v)
+			Wanted:NoteVersion(tbl.v, sender)
 		end
 		return
 	end
@@ -1698,7 +1698,7 @@ end
 function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	-- The newest release wins: a newer one may lock this client (Core); an older one's news is ignored. A
 	-- development build is not a release, so it neither locks others nor turns them away.
-	Wanted:NoteVersion(tbl.v)
+	Wanted:NoteVersion(tbl.v, sender)
 	Store:NoteAddonVersion(sender, tbl.v)
 	-- Their Blizzard PvP rank, in a hello (from 1.10.0)
 	if tbl.b and Wanted.BlizzRank then

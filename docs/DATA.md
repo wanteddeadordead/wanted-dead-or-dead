@@ -295,7 +295,8 @@ unset or that page is switched off. A new setting: no migration.
   until it's updated. Bounties, claims, payments and sync stop; the Nearby window, alerts, hotspots and the
   map keep working. The lock lifts on update, or when nobody on that version has been seen for three days
   (so a made-up version number can't lock people out for good). After 1.18.2 a version locks only once three
-  different players have said they run it (hellos, haves or `U` whispers), and only up to two minor versions ahead
+  different players have said they run it in the last hour (hellos, haves or `U` whispers; counted per minor version,
+  each player's latest word), and only up to two minor versions ahead
   (or the next major's x.0 to x.2); `WantedDB.requiredVersion` gains `votes`, and a lock without it (one player's
   word, from before) or no longer plausible from the running version lifts at load. No migration needed.
 - A newer client ignores what older clients send and tells each of them, by a private addon whisper

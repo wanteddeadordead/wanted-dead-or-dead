@@ -525,10 +525,10 @@ local REQUIRED_KEEP_SECONDS = 3 * 24 * 60 * 60
 
 -- One player can claim any version, so a newer one locks only once this many players have said they run it, and only
 -- a few minor versions ahead (the next major's first few too). A lock from before these rules (one player's word)
--- lifts at the next load. At most this many versions are counted at once.
+-- lifts at the next load. A player's word counts for an hour.
 local VERSION_VOTES = 3
 local MAX_MINOR_AHEAD = 2
-local MAX_VERSIONS_COUNTED = 20
+local VERSION_VOTE_SECONDS = 60 * 60
 
 ---Whether a reported version could be a real release after ours.
 function private.IsPlausibleUpdate(version)
@@ -540,28 +540,39 @@ function private.IsPlausibleUpdate(version)
 		or (theirs[1] == ours[1] + 1 and theirs[2] <= MAX_MINOR_AHEAD)
 end
 
----Counts a player saying they run a version; returns how many different players have said it this session.
+---Counts a player saying they run a version, by minor version (a player's latest word for each counts, for an hour):
+---one player naming many versions holds one vote in each. Returns how many players lately said they run that minor
+---version, and the newest version enough of them (VERSION_VOTES) run at least.
 ---@param text string the version
 ---@param sender string?
----@return number
+---@return number votes
+---@return string version
 function private.VoteVersion(text, sender)
-	local counted = private.versionVotes
-	if not counted or (private.versionsCounted or 0) >= MAX_VERSIONS_COUNTED and not counted[text] then
-		counted = {}
-		private.versionVotes, private.versionsCounted = counted, 0
-	end
-	local entry = counted[text]
+	local parsed = Wanted:ParseVersion(text)
+	local key = parsed[1].."."..parsed[2]
+	private.versionVotes = private.versionVotes or {}
+	local entry = private.versionVotes[key]
 	if not entry then
-		entry = { senders = {}, n = 0 }
-		counted[text] = entry
-		private.versionsCounted = private.versionsCounted + 1
+		entry = {}
+		private.versionVotes[key] = entry
 	end
-	if type(sender) == "string" and not entry.senders[sender] then
-		entry.senders[sender] = true
-		entry.n = entry.n + 1
-		Wanted:Log("Version: %s says they run %s (%d of %d needed)", sender, text, entry.n, VERSION_VOTES)
+	local now = GetServerTime()
+	if type(sender) == "string" then
+		if not entry[sender] then
+			Wanted:Log("Version: %s says they run %s", sender, text)
+		end
+		entry[sender] = { v = text, t = now }
 	end
-	return entry.n
+	local versions = {}
+	for who, said in pairs(entry) do
+		if now - said.t > VERSION_VOTE_SECONDS then
+			entry[who] = nil
+		else
+			versions[#versions + 1] = said.v
+		end
+	end
+	sort(versions, function(a, b) return Wanted:IsNewerVersion(a, b) end)
+	return #versions, versions[min(#versions, VERSION_VOTES)] or text
 end
 
 ---The desktop app's version, if it's set up on this computer: it writes it into !!WantedLink (WantedAppInfo)
@@ -641,7 +652,8 @@ function Wanted:NoteVersion(version, sender)
 		end
 		return
 	end
-	local votes = private.VoteVersion(text, sender)
+	local votes
+	votes, text = private.VoteVersion(text, sender)
 	if votes < VERSION_VOTES then
 		return
 	end

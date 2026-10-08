@@ -101,7 +101,15 @@ function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
 function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[k] = v end
 function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
-function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
+function CreateFrame(kind, name, parent, template)
+	local f = NewMock(kind)
+	f._parent = parent
+	if name then _G[name] = f end
+	-- The game's scroll frame template comes with its scroll bar
+	if template == "UIPanelScrollFrameTemplate" then f.ScrollBar = NewMock("Slider") end
+	Mock.created[#Mock.created + 1] = f
+	return f
+end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
@@ -6346,6 +6354,18 @@ end)()
 	RunTimers()
 	check(not N:IsShown(), "not over a dialog")
 	ns.Widgets.IsDialogShown, ns.VERSION = realIsDialogShown, realVersion
+	-- Never taller than the screen: a long note scrolls inside the window
+	local realHeight = UIParent._h
+	UIParent._h = 600
+	tinsert(ns.WHATS_NEW, 1, { version = "1.99.0", note = strrep("A long note.\n", 80), lines = { "One line." } })
+	N:Show()
+	check(N:IsShown() and f:GetHeight() <= 500 and f.body._text:find("One line.", 1, true), "a long note fits the screen, got "..f:GetHeight())
+	f.ok:Click()
+	tremove(ns.WHATS_NEW, 1)
+	N:Show()
+	check(f:GetHeight() < 500, "a short one is as tall as it needs, got "..f:GetHeight())
+	f.ok:Click()
+	UIParent._h = realHeight
 end)()
 -- World PvP raids: forming, ads, joining, invites (a raid before the sixth, never past full, after a fight), "inv"
 -- whispers, Announce, planned raids with sign-ups and reminders, and other players' ads

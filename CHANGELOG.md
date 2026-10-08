@@ -46,6 +46,7 @@
   from before a /reload no longer counts as the next death's.
 - Fewer false stealth alarms: only a rogue, druid or mage seen fighting in the last half minute counts as stealthed
   when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
+- The What's new window is never taller than your screen: a long note scrolls inside it.
 - The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an
   answer.
 - Skull-level enemies show as level ?? everywhere instead of "level -1", and are no longer saved with that level.

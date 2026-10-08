@@ -2,9 +2,8 @@
 
 ## [Unreleased]
 
-- Hotspots: enemies named in a PvP death count in that zone (unless seen somewhere since), so a zone with deaths no
-  longer shows 0 enemies now and 0 in the hour.
-- The header's App and WantedNet lights no longer overlap on development builds.
+## [1.18.1] - 2026-10-08
+
 - Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover
   with <Your Guild>", on the Raids page, Home, the popups and the Announce line.
 - The raid form's Where box suggests zones as you type; click one or press Tab for the first.
@@ -12,7 +11,7 @@
 - When a raid you marked starts, a popup asks "has started the raid, join now?"; Join and the leader invites you. Never
   in a fight.
 - Whisper sign-ups: the leader can whisper everyone going or interested, with a message they can change first.
-- Edit your raid's name, place, time, size or level; everyone signed up gets a popup saying what changed, or that it
+- Edit your raid's name, place, time, size or level; everyone signed up gets a toast saying what changed, or that it
   was cancelled if you close it before it starts.
 - Raids are saved: your raid, its sign-ups and the raids you marked come back after a reload or logout, and a planned
   raid stays on everyone's list while its leader is offline.
@@ -24,13 +23,16 @@
   chat, a public one on Looking for Group or General.
 - Invite sign-ups on your raid's card sends a group invite to everyone going or interested, making the group a raid as
   they join.
-- Form raid now: from 15 minutes before a planned raid (a popup tells you), start it early, with Send invites ticked to
+- Form raid now: from 15 minutes before a planned raid (a toast tells you), start it early, with Send invites ticked to
   invite everyone signed up.
 - Raid times: type the start in your own time or server time. Everyone sees it in their own time, with the server's
   beside it ("Thu 20:00 EDT (server 23:00)"), and Announce and whispers give it in server time, which every reader shares.
 - See who's going: hover a raid on the Raids page for everyone going and interested (your Wanted asks its leader's),
   or hover your own raid's sign-ups.
 - The Raids page explains how it works in seven numbered steps.
+- Hotspots: enemies named in a PvP death count in that zone (unless seen somewhere since), so a zone with deaths no
+  longer shows 0 enemies now and 0 in the hour.
+- The header's App and WantedNet lights no longer overlap on development builds.
 
 ## [1.18.0] - 2026-10-07
 

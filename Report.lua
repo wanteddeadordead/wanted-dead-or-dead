@@ -8,6 +8,22 @@ local W = Wanted.Widgets
 local C = Theme.C
 local private = { frame = nil }
 local LOG_LINES = 40
+-- A player's name on WoW Forever: a first name and a surname, each a capital (or an accented letter) and letters
+local NAME_WORD = "[%u\195][%a\128-\255']*"
+local NAME = NAME_WORD.." "..NAME_WORD
+
+---A line with other players left out: GUIDs, names ("First Last", with a realm or not) and this realm's name. The
+---log names whoever a message came from or was about; the report shouldn't.
+function private.Scrub(line)
+	line = gsub(line, "Player%-%d+%-%x+", "Player-?")
+	line = gsub(line, NAME.."%-[%w\128-\255']+", "<name>")
+	line = gsub(line, NAME, "<name>")
+	local realm = GetRealmName and GetRealmName()
+	if type(realm) == "string" and realm ~= "" then
+		line = gsub(line, "%f[%w]"..gsub(realm, "%p", "%%%0").."%f[%W]", "<realm>")
+	end
+	return line
+end
 
 ---The report text: versions, settings that matter, network state, problems this session, recent log.
 ---@return string
@@ -41,12 +57,12 @@ function Report:Build()
 		Add("  none recorded")
 	end
 	for _, problem in ipairs(problems) do
-		Add("  %s", problem)
+		Add("  %s", private.Scrub(problem))
 	end
 	Add("")
-	Add("Last %d log lines:", LOG_LINES)
+	Add("Last %d log lines (other players' names left out):", LOG_LINES)
 	for _, line in ipairs(Wanted:GetLogLines(LOG_LINES)) do
-		Add("  %s", line)
+		Add("  %s", private.Scrub(line))
 	end
 	return table.concat(lines, "\n")
 end

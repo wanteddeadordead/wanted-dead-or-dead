@@ -7508,6 +7508,21 @@ end)()
 	def.refresh = realRefresh
 	ns.UI:GetFrame():Hide()
 end)()
+-- A bug report carries no other player's name: names ("First Last", with or without a realm), GUIDs and realm names
+-- in the log it quotes are left out, the rest of each line kept
+;(function()
+	ns:Log("Sync: received B from Caller Guy-Other Realm, 3 records")
+	ns:Log("Posse: Joiner Jane calls one against Player-9-0ABCDEF in Durotar")
+	ns:Log("GuildRank: %s is rank %d on %s", "Élrin Bones", 3, GetRealmName())
+	ns:NoteProblem("error near Stabby Mcstab")
+	local report = ns.Report:Build()
+	for _, leak in ipairs({ "Caller Guy", "Other Realm", "Joiner Jane", "0ABCDEF", "Élrin", "Bones", "Stabby Mcstab", "on Realm" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	check(report:find("Sync: received B from", 1, true) and report:find("3 records", 1, true) and report:find("calls one against", 1, true),
+		"and keeps the rest of the line")
+	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

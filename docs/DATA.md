@@ -359,8 +359,16 @@ can be innocent (a reinstall, lost saved data) and are still listed, but never w
 migration. Records held from before 1.3.3 that came by catch-up have no `app` flag and witness nothing until the
 app or their origin sends them again.
 
+Records made after 1.18.2 carry `prev2`: the strong hash (`Store:Strong`, the first 16 hex digits of a SHA-256 of the
+record before's canonical content and its own `prev2`) of the origin's previous record. It sits beside `prev`, outside
+the canonical string, so older clients check the same Adler-32 and pass the field on untouched. The own chain keeps
+`lastStrong`, the strong hash of its last record. Both are optional new fields: no migration. The desktop app and the
+server should keep `prev2` on the records they carry, or a chain walk can't cross a record that came that way.
+
 A received record's `vouched` flag (after 1.18.2) is local too: set once `Store:IsVouched` has found a trusted record
-of the same origin later in its chain, every record between held and each naming the one before by its hash. Incoming
+of the same origin later in its chain, every record between held and each naming the one before by its strong hash
+(`prev2`; an Adler-32 `prev` can be forged to fit in a fraction of a second). A record already held is only taken as the
+same as an incoming copy when its whole canonical content and `prev2` match, not only its hash. Incoming
 copies drop it. A `confirm`, `raise`, `withdraw` or `payment` counts only when vouched (its maker's own word), and a
 raise or withdrawal only from the bounty's poster. A record in this client's own name is only taken from the app's
 catch-up, and a relayed record (not trusted) is replaced when its origin sends a different one for the same id. An

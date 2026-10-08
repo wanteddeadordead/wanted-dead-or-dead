@@ -528,7 +528,82 @@ function Store:Hash(str)
 	return format("%08x", LibDeflate:Adler32(str))
 end
 
--- The canonical string of a record covers everything but its own hash, with fields in a fixed order
+-- SHA-256 (FIPS 180-4) in plain Lua over the game's 32-bit bit library, whose results may come back signed: every
+-- sum is taken modulo 2^32 and written out as unsigned. Two arguments to each call, as every version of it takes.
+local band, bor, bxor, bnot, rshift, lshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.rshift, bit.lshift
+local TWO32 = 4294967296
+local SHA_K = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+}
+
+local function RotateRight(x, n)
+	return bor(rshift(x, n), lshift(x, 32 - n))
+end
+
+---The SHA-256 of a string, as 64 hex digits. Collision resistant, unlike Store:Hash, and slower: Store:Strong keeps
+---it per record.
+---@param str string
+---@return string
+function Store:StrongHash(str)
+	local length = #str
+	-- Padding: a 1 bit, zeros, then the length in bits as 64 bits
+	str = str.."\128"..strrep("\0", (55 - length) % 64)
+	local bits = length * 8
+	local high = floor(bits / TWO32)
+	local low = bits % TWO32
+	local tail = {}
+	for i = 3, 0, -1 do
+		tail[#tail + 1] = string.char(floor(high / 2 ^ (8 * i)) % 256)
+	end
+	for i = 3, 0, -1 do
+		tail[#tail + 1] = string.char(floor(low / 2 ^ (8 * i)) % 256)
+	end
+	str = str..table.concat(tail)
+	local h0, h1, h2, h3 = 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a
+	local h4, h5, h6, h7 = 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+	local w = {}
+	for chunk = 1, #str, 64 do
+		for i = 0, 15 do
+			local a, b, c, d = string.byte(str, chunk + i * 4, chunk + i * 4 + 3)
+			w[i] = ((a * 256 + b) * 256 + c) * 256 + d
+		end
+		for i = 16, 63 do
+			local x, y = w[i - 15], w[i - 2]
+			local s0 = bxor(bxor(RotateRight(x, 7), RotateRight(x, 18)), rshift(x, 3))
+			local s1 = bxor(bxor(RotateRight(y, 17), RotateRight(y, 19)), rshift(y, 10))
+			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) % TWO32
+		end
+		local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
+		for i = 0, 63 do
+			local s1 = bxor(bxor(RotateRight(e, 6), RotateRight(e, 11)), RotateRight(e, 25))
+			local choose = bxor(band(e, f), band(bnot(e), g))
+			local temp1 = (h + s1 + choose + SHA_K[i + 1] + w[i]) % TWO32
+			local s0 = bxor(bxor(RotateRight(a, 2), RotateRight(a, 13)), RotateRight(a, 22))
+			local majority = bxor(bxor(band(a, b), band(a, c)), band(b, c))
+			local temp2 = (s0 + majority) % TWO32
+			h, g, f, e = g, f, e, (d + temp1) % TWO32
+			d, c, b, a = c, b, a, (temp1 + temp2) % TWO32
+		end
+		h0, h1, h2, h3 = (h0 + a) % TWO32, (h1 + b) % TWO32, (h2 + c) % TWO32, (h3 + d) % TWO32
+		h4, h5, h6, h7 = (h4 + e) % TWO32, (h5 + f) % TWO32, (h6 + g) % TWO32, (h7 + h) % TWO32
+	end
+	-- Written in 16-bit halves: %x of a number past 2^31 isn't the same in every Lua
+	local out = {}
+	for i, h in ipairs({ h0, h1, h2, h3, h4, h5, h6, h7 }) do
+		out[i] = format("%04x%04x", floor(h / 65536), h % 65536)
+	end
+	return table.concat(out)
+end
+
+-- The canonical string of a record covers everything but its own hash and its strong link, with fields in a fixed
+-- order (the same as before strong links, so older clients check the same hash)
 local function Canonical(record)
 	local keys = {}
 	for key in pairs(record.data) do
@@ -540,6 +615,22 @@ local function Canonical(record)
 		tinsert(parts, key.."="..tostring(record.data[key]))
 	end
 	return table.concat(parts, "\n")
+end
+
+-- Strong hashes worked out this session, by record (records never change)
+private.strong = setmetatable({}, { __mode = "k" })
+
+---A record's strong hash: the first 16 hex digits of the SHA-256 of its canonical content and its own strong link, so a
+---record naming it (prev2) commits to it and to everything before it. Worked out once per record.
+---@param record table
+---@return string
+function Store:Strong(record)
+	local strong = private.strong[record]
+	if not strong then
+		strong = strsub(Store:StrongHash(Canonical(record).."\n"..tostring(record.prev2 or "")), 1, 16)
+		private.strong[record] = strong
+	end
+	return strong
 end
 
 
@@ -561,11 +652,14 @@ function Store:NewRecord(kind, data)
 		origin = private.origin,
 		seq = chain.seq,
 		prev = chain.lastHash,
+		-- The strong link to our record before (a SHA-256 older clients pass on without reading)
+		prev2 = private.LastStrong(chain),
 		t = GetServerTime(),
 		data = data,
 	}
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
+	chain.lastStrong = Store:Strong(record)
 	private.NoteFirst(chain, record)
 	Wanted.db.records[record.id] = record
 	private.AddToIndex(record)
@@ -590,7 +684,8 @@ end
 ---@return boolean
 function Store:IsWellFormed(r)
 	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
-		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq)
+		or (r.prev2 ~= nil and (type(r.prev2) ~= "string" or not strfind(r.prev2, "^%x+$") or #r.prev2 ~= 16)) then
 		return false
 	end
 	for key, value in pairs(r.data) do
@@ -621,6 +716,16 @@ function private.HasSoundNumbers(r)
 		return false
 	end
 	return true
+end
+
+---Our chain's last record's strong hash (kept with the chain; worked out from the record held when it isn't yet), or
+---nil before our first record.
+function private.LastStrong(chain)
+	if not chain.lastStrong and chain.seq > Store:SeqBase() then
+		local last = Wanted.db.records[private.origin..":"..format("%d", chain.seq)]
+		chain.lastStrong = last and last.hash == chain.lastHash and Store:Strong(last) or nil
+	end
+	return chain.lastStrong
 end
 
 ---Merges a record received from a peer. Returns whether it was new. The chain check is advisory: a record
@@ -667,7 +772,9 @@ function private.Insert(record, live, fromApp)
 	record.live, record.app, record.tampered, record.brokenChain, record.vouched = nil, nil, nil, nil, nil
 	private.vouchGen = private.vouchGen + 1
 	local existing = db.records[record.id]
-	if existing and existing.hash ~= record.hash and (live or fromApp) and not existing.test and not existing.live
+	-- The whole content is compared, not only the Adler-32, which can be forged to match
+	local same = existing and private.SameContent(existing, record)
+	if existing and not same and (live or fromApp) and not existing.test and not existing.live
 		and not existing.app and not existing.vouched and existing.origin ~= private.origin then
 		-- Someone relayed a record in this place before its origin's own arrived: theirs could be forged (a stalled
 		-- chain, a confirm the poster never made), the origin's word replaces it
@@ -676,7 +783,7 @@ function private.Insert(record, live, fromApp)
 		existing = nil
 	end
 	if existing then
-		if existing.hash == record.hash and not existing.test then
+		if same and not existing.test then
 			if live then
 				existing.live = true
 			end
@@ -758,6 +865,11 @@ function private.Insert(record, live, fromApp)
 	private.AddToIndex(record)
 	private.Notify(record, false)
 	return true
+end
+
+---Whether two copies of a record say the same thing: kind, id, prev, time, data and strong link.
+function private.SameContent(a, b)
+	return a.hash == b.hash and a.prev2 == b.prev2 and type(a.data) == "table" and Canonical(a) == Canonical(b)
 end
 
 ---Takes a relayed record out of the way of its origin's own copy: the chain steps back to before it, so the real
@@ -860,7 +972,7 @@ end
 local VOUCH_WALK = 200
 
 ---Whether a record can be taken as its origin's word: trusted (Store:IsTrusted), or followed in its chain by
----records held, each naming the one before by its hash, up to one that is trusted. A record its origin later built on
+---records held, each naming the one before by its strong hash (prev2, Store:Strong), up to one that is trusted. A record its origin later built on
 ---is theirs, so a confirm or a payment relayed by another player counts once the poster's own word follows it. A yes
 ---is kept on the record (vouched, a local flag); a no is asked again once more records have come in.
 ---@param record table
@@ -879,7 +991,8 @@ function Store:IsVouched(record)
 	local records, current = Wanted.db.records, record
 	for _ = 1, VOUCH_WALK do
 		local after = records[record.origin..":"..format("%d", current.seq + 1)]
-		if not after or after.origin ~= record.origin or after.prev ~= current.hash or after.tampered then
+		-- Only a strong link (prev2, from updated clients) counts: an Adler-32 prev can be forged to fit
+		if not after or after.origin ~= record.origin or type(after.prev2) ~= "string" or after.prev2 ~= Store:Strong(current) then
 			break
 		end
 		if after.vouched or Store:IsTrusted(after) then

@@ -26,7 +26,18 @@ wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 date = os.date
 time = os.time
-bit = { band = function(a, b) local r, p = 0, 1 while a > 0 and b > 0 do if a % 2 == 1 and b % 2 == 1 then r = r + p end a, b, p = a // 2, b // 2, p * 2 end return r end }
+-- The game's bit library (32 bits; the game gives signed results, these unsigned: the addon copes with both)
+do
+	local function u(x) return math.tointeger(x) & 0xFFFFFFFF end
+	bit = {
+		band = function(a, b) return u(a) & u(b) end,
+		bor = function(a, b) return u(a) | u(b) end,
+		bxor = function(a, b) return u(a) ~ u(b) end,
+		bnot = function(a) return u(~u(a)) end,
+		lshift = function(a, n) return u(u(a) << n) end,
+		rshift = function(a, n) return u(a) >> n end,
+	}
+end
 
 -- Frames
 local registry = {}
@@ -7760,11 +7771,12 @@ end)()
 	S:FreshStart()
 end)()
 -- A confirm, withdrawal, raise or payment is the poster's word only when the game vouches for it: heard from them, from
--- the app, or built on by a record of theirs that is. Anyone else's copy could be forged.
+-- the app, or built on by a record of theirs that is (by a strong link). Anyone else's copy could be forged.
 ;(function()
 	local S, B = ns.Store, ns.Bounties
-	local function Signed(kind, origin, seq, prev, data, t)
+	local function Signed(kind, origin, seq, prev, data, t, before)
 		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		r.prev2 = before and S:Strong(before) or nil
 		local keys = {}
 		for k in pairs(r.data) do keys[#keys + 1] = k end
 		table.sort(keys)
@@ -7781,9 +7793,9 @@ end)()
 	S:Merge(claim, "Hank Hunt")
 	claim = S:Get(claim.id)
 	-- Mallory relays a confirm, a raise and a withdrawal "from Alice"
-	local confirm = Signed("confirm", "Alice Post", 2, bounty.hash, { claim = claim.id }, t0 + 100)
-	local raise = Signed("raise", "Alice Post", 3, confirm.hash, { bounty = bounty.id, amount = 990000 }, t0 + 110)
-	local withdraw = Signed("withdraw", "Alice Post", 4, raise.hash, { bounty = bounty.id }, t0 + 120)
+	local confirm = Signed("confirm", "Alice Post", 2, bounty.hash, { claim = claim.id }, t0 + 100, bounty)
+	local raise = Signed("raise", "Alice Post", 3, confirm.hash, { bounty = bounty.id, amount = 990000 }, t0 + 110, confirm)
+	local withdraw = Signed("withdraw", "Alice Post", 4, raise.hash, { bounty = bounty.id }, t0 + 120, raise)
 	S:MergeRelayed(confirm)
 	S:MergeRelayed(raise)
 	S:MergeRelayed(withdraw)
@@ -7793,7 +7805,7 @@ end)()
 	S:Merge(Signed("raise", "Mallory Bad", 1, "0", { bounty = bounty.id, amount = 50000 }, t0 + 130), "Mallory Bad")
 	check(B:GetAmount(bounty) == 10000, "a raise by someone other than the poster doesn't add to the bounty")
 	-- Alice's next record, heard from her, names the one before: her chain vouches for what she made before it
-	S:Merge(Signed("pass", "Alice Post", 5, withdraw.hash, { bounty = "x:1" }, t0 + 140), "Alice Post")
+	S:Merge(Signed("pass", "Alice Post", 5, withdraw.hash, { bounty = "x:1" }, t0 + 140, withdraw), "Alice Post")
 	check(B:GetClaimLevel(claim) == 3 and B:GetAmount(bounty) == 1000000, "records the poster's own later record builds on count")
 	-- A forged record ahead of the poster's real one is replaced when the real one comes from her
 	local fake = Signed("confirm", "Bob Post", 2, "0", { claim = "Someone:1", disputed = true }, t0 + 200)
@@ -8171,6 +8183,116 @@ end)()
 	check(B:GetClaimLevel(claim) == 1, "a witness who didn't see the victim in the guild doesn't witness a guild claim")
 	Live("death", "Guild Witness Two", { victim = "Player-9-GMEMBER", victimGuild = "Gold Guild", zone = "Durotar" }, t0 + 101)
 	check(B:GetClaimLevel(claim) == 2, "one who did, does")
+end)()
+-- Adler-32 can be forged in a fraction of a second, so a chain only vouches for a record through a strong link: updated
+-- clients put a SHA-256 of the record before (prev2) on each record they make
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	check(S:StrongHash("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of abc: "..S:StrongHash("abc"))
+	check(S:StrongHash("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 of nothing")
+	check(S:StrongHash(string.rep("a", 1000)) == "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3", "SHA-256 over many blocks")
+	local function Canon(r)
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = { r.kind, r.id, r.prev, tostring(r.t) }
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		return table.concat(parts, "\n")
+	end
+	local function Signed(kind, origin, seq, prev, data, t, prev2)
+		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", prev2 = prev2, t = t or clock, data = data or {} }
+		r.hash = S:Hash(Canon(r))
+		return r
+	end
+	-- A data value making a record's Adler-32 come out as wanted (what an attacker does in about 0.2 seconds)
+	local function Forge(r, targetHex)
+		local M = 65521
+		r.data["~"] = ""
+		local prefix = Canon(r)
+		local A, Bs = 1, 0
+		for i = 1, #prefix do A = (A + prefix:byte(i)) % M Bs = (Bs + A) % M end
+		local T = tonumber(targetHex, 16)
+		local At, Bt = T % 65536, math.floor(T / 65536)
+		local D = (At - A) % M + M
+		local n = math.floor(D / 80) + 2
+		for _ = 1, 200000 do
+			local rr = math.random(66, 252)
+			local chars, sum = {}, 0
+			for j = 1, n - 2 do chars[j] = math.random(33, 126) sum = sum + chars[j] end
+			local need, j, guard = D - rr - sum, 1, 0
+			while need ~= 0 and guard < 100000 do
+				guard = guard + 1
+				if need > 0 and chars[j] < 126 then chars[j] = chars[j] + 1 need = need - 1
+				elseif need < 0 and chars[j] > 33 then chars[j] = chars[j] - 1 need = need + 1 end
+				j = j % (n - 2) + 1
+			end
+			if need == 0 then
+				local a, b = A, Bs
+				for k = 1, n - 2 do a = (a + chars[k]) % M b = (b + a) % M end
+				local x = ((Bt - b - 2 * a) % M - rr) % M
+				local y = rr - x
+				if x >= 33 and x <= 126 and y >= 33 and y <= 126 then
+					chars[n - 1], chars[n] = x, y
+					local out = {}
+					for k = 1, n do out[k] = string.char(chars[k]) end
+					r.data["~"] = table.concat(out)
+					r.hash = S:Hash(Canon(r))
+					return r
+				end
+			end
+		end
+		error("no forgery found")
+	end
+	local function Setup()
+		S:FreshStart()
+		local t0 = clock - 600
+		local bounty = Signed("bounty", "Alice Strong", 1, "0", { target = "Player-9-STRONG", targetName = "Strong Target", amount = 10000 }, t0)
+		S:Merge(bounty, "Alice Strong")
+		local claim = Signed("claim", "Hank Strong", 1, "0", { bounty = bounty.id, kill = "Hank Strong:0", victim = "Player-9-STRONG", killT = t0 + 60, zone = "Durotar" }, t0 + 61)
+		S:Merge(claim, "Hank Strong")
+		return t0, S:Get(bounty.id), S:Get(claim.id)
+	end
+	-- 1. A forged confirm with the real dispute's Adler-32, and Alice's next record built on the real one
+	local t0, bounty, claim = Setup()
+	local dispute = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id, disputed = true }, t0 + 100, S:Strong(bounty))
+	local forged = Forge(Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty)), dispute.hash)
+	check(forged.hash == dispute.hash, "the forgery has the real record's Adler-32")
+	S:MergeRelayed(forged)
+	S:Merge(Signed("pass", "Alice Strong", 3, dispute.hash, { bounty = "x:1" }, t0 + 140, S:Strong(dispute)), "Alice Strong")
+	check(B:GetClaimLevel(claim) ~= 3, "a forged confirm isn't vouched for by the poster's next record: "..B:GetClaimLevel(claim))
+	-- A record from a client before strong links (no prev2) vouches for nothing before it
+	t0, bounty, claim = Setup()
+	local confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100)
+	S:MergeRelayed(confirm)
+	S:Merge(Signed("pass", "Alice Strong", 3, confirm.hash, { bounty = "x:1" }, t0 + 140), "Alice Strong")
+	check(B:GetClaimLevel(claim) == 1, "an old client's next record vouches for nothing")
+	-- A genuine relayed confirm is vouched for by the poster's next record built on it
+	t0, bounty, claim = Setup()
+	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
+	S:MergeRelayed(confirm)
+	check(B:GetClaimLevel(claim) == 1, "a relayed confirm alone isn't the poster's word")
+	S:Merge(Signed("pass", "Alice Strong", 3, confirm.hash, { bounty = "x:1" }, t0 + 140, S:Strong(confirm)), "Alice Strong")
+	check(B:GetClaimLevel(claim) == 3, "the poster's next record, built on it, vouches for it")
+	-- 2. The real record arriving from the app with the same Adler-32 replaces the forgery instead of blessing it
+	t0, bounty, claim = Setup()
+	dispute = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id, disputed = true }, t0 + 100)
+	S:MergeRelayed(Forge(Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100), dispute.hash))
+	S:MergeRelayed(dispute, true)
+	check(S:Get(dispute.id).data.disputed and S:Get(dispute.id).app and B:GetClaimLevel(claim) == 0, "the app's real record replaces a forgery with the same Adler-32")
+	-- What it costs: the strong hash is worked out once per record and kept
+	local records = {}
+	for i = 1, 200 do
+		records[i] = Signed("death", "Cost Origin", i, "0", { victim = "Player-9-COST"..i, victimName = "Some Long Name Here", zone = "Stranglethorn Vale", x = 41.25, y = 63.5, killer = "Player-9-KILLER", deathId = "abcdef0123456789" }, clock)
+	end
+	local started = os.clock()
+	for i = 1, 200 do S:Strong(records[i]) end
+	local perRecord = (os.clock() - started) / 200 * 1000
+	started = os.clock()
+	for i = 1, 200 do S:Strong(records[i]) end
+	local cached = (os.clock() - started) / 200 * 1000
+	print(format("wanted smoke: strong hash %.3f ms a record (%.4f ms cached), a fill of 8 about %.2f ms", perRecord, cached, perRecord * 8))
+	check(perRecord < 5 and cached < perRecord, "the strong hash is cheap, and kept once worked out")
+	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

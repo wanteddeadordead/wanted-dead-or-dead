@@ -83,7 +83,8 @@
   player's own sync accounts for is crossed at once.
 - A whispered sync channel move can't walk players onto a made-up channel any more: it needs two players saying the
   same one, and whispers can take a player at most four channel moves past the last one the Wanted app gave (three
-  players must agree past the first), climbing no further than one a day. The channel the Wanted app gives wins when
+  players must agree past the first); that limit rises by one a day at most while three players agree on where the
+  player is, so someone who missed a few moves catches up. The channel the Wanted app gives wins when
   its catch-up is newer than the whispered move.
 
 ## [1.18.3] - 2026-10-08

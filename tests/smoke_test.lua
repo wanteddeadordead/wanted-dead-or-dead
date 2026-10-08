@@ -8225,8 +8225,8 @@ end)()
 	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
 	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = 99999, n = "WantedNetHordemallory", a = 1, h = 1 }) end
 	check(ns.Sync:GetPointer().e == e + 3, "three players saying a pointer far ahead move nobody: "..ns.Sync:GetPointer().e)
-	-- Only three agreeing on the very next epoch lift the ceiling (two never do, nor a pointer further on)
-	check(ns.db.trustedEpoch == e, "a pointer three past the ceiling doesn't lift it: "..tostring(ns.db.trustedEpoch))
+	-- Three agreeing lift the ceiling a single step toward their pointer (two never do)
+	check(ns.db.trustedEpoch == e + 1, "a pointer three past the ceiling lifts it one step: "..tostring(ns.db.trustedEpoch))
 	-- A catch-up older than the whisper that moved us (the same one read again at the next login) doesn't pull us back
 	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock - 3600)
 	RunTimers()
@@ -8264,10 +8264,7 @@ end)()
 		local e = (ns.db.trustedEpoch or 0) + 4
 		for _, p in ipairs(alts) do Move(p, { e = e, n = "WantedNetHordeevil", a = 1, h = 1 }) end
 	end
-	check(ns.Sync:GetPointer().e <= top + 4 and ns.db.trustedEpoch == top, "thirty rounds of three alts get no further than three past the ceiling: "..(ns.Sync:GetPointer().e - top))
-	for _, p in ipairs(alts) do Move(p, { e = top + 1, n = "WantedNetHordeone", a = 1, h = 1 }) end
-	for _, p in ipairs(alts) do Move(p, { e = top + 2, n = "WantedNetHordetwo", a = 1, h = 1 }) end
-	check(ns.db.trustedEpoch == top, "nor ones that step it up: the ceiling rises at most once a day: "..tostring(ns.db.trustedEpoch - top))
+	check(ns.Sync:GetPointer().e <= top + 5 and ns.db.trustedEpoch <= top + 1, "thirty rounds of three alts in a day lift the ceiling one step at most: "..(ns.Sync:GetPointer().e - top))
 end)()
 -- A pruned chain end longer than 500 records still crosses, when the origin itself says how far the chain reaches
 ;(function()
@@ -8318,6 +8315,35 @@ end)()
 	check(next(ns.db.versionVotes["1.41"] or {}) == nil, "votes older than an hour go")
 	ns.VERSION = realVersion
 	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
+-- A player who missed a few moves (offline through an incident) catches up: three players re-whispering the pointer
+-- they're on lift the ceiling a step a day until it reaches it, so later real moves are followed
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	local peers = { "App A", "App B", "App C" }
+	local function All(e, n)
+		for _, p in ipairs(peers) do
+			ns.db.recentPeers[p] = clock
+			Move(p, { e = e, n = n, a = 1, h = 1 })
+		end
+	end
+	for _, p in ipairs(peers) do ns.db.recentPeers[p] = clock end
+	local base = ns.Sync:GetPointer().e + 1
+	ns.Sync:AdoptFromApp({ e = base, n = "WantedNetHordegapbase" }, clock + 10)
+	RunTimers()
+	ns.db.appChannelEpoch, ns.db.trustedEpoch, ns.db.trustedRaisedAt = nil, base, nil
+	clock = clock + 5 * 86400
+	All(base + 3, "WantedNetHordegap3")
+	check(ns.Sync:GetPointer().e == base + 3, "three players' pointer a few moves on is followed")
+	for step = 4, 9 do
+		for _ = 1, 2 do
+			clock = clock + 86400
+			All(ns.Sync:GetPointer().e, ns.Sync:GetPointer().n)
+		end
+		All(base + step, "WantedNetHordegap"..step)
+	end
+	check(ns.Sync:GetPointer().e == base + 9, "and later moves, a couple of days apart, are followed too: "..(ns.Sync:GetPointer().e - base))
+	check(ns.db.trustedEpoch <= base + 9, "the ceiling never passes the pointer followed")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

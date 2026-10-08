@@ -317,8 +317,9 @@ unset or that page is switched off. A new setting: no migration.
   only once two players it knows say the same one, at most one epoch past the newest epoch not set by a whisper, or
   once three say the same one at most three further on. `WantedDB.syncChannel` gains `hop` (0: our own app brought it;
   1 or more: whispers), `WantedDB.trustedEpoch` keeps the newest epoch the app set (a pointer saved before `hop`
-  existed counts as one, once). Whispers raise it only by one, to the epoch right after it, once three players agree on
-  that pointer, and at most once a day (`WantedDB.trustedRaisedAt`, when they last did). `WantedDB.appChannelEpoch`
+  existed counts as one, once). Whispers raise it one step at a time, at most once a day (`WantedDB.trustedRaisedAt`, when
+  they last did), while three players agree on the pointer this client follows and it's at or past the ceiling: a
+  client that missed moves catches up a step a day as players re-whisper where they are. `WantedDB.appChannelEpoch`
   keeps the app's last epoch. A client with nothing saved (ceiling 1) can follow the server's channel only while the
   server's epoch is at most 4 (it was 1 for the Horde and 0 for the Alliance on 2026-10-08). The app's pointer is never older than the app's last, and replaces one a whisper brought only when
   it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.

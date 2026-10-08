@@ -2792,17 +2792,18 @@ function private.VoteMove(epoch, name, sender)
 	return n
 end
 
----Three players agreeing on the pointer we're now on, when it's the very next epoch past the ceiling, lift the ceiling to
----it, at most once a day: a player without the app keeps up with real moves (days apart), while alts can't ratchet it
----(two never lift it, nor a pointer further on).
+---Three players agreeing on the pointer we're now on, at or past the ceiling, lift the ceiling one step, at most once a
+---day, until it reaches that pointer: a player without the app keeps up with real moves (days apart), and one who
+---missed a few (offline through an incident) catches up as players re-whisper where they are, while alts can't ratchet
+---it faster than a step a day (two never lift it).
 ---@param epoch number
 ---@param votes number players who said it lately
 function private.LiftCeiling(epoch, votes)
 	local db = Wanted.db
 	local ceiling = max(db.trustedEpoch or 0, db.appChannelEpoch or 0) + 1
-	if votes >= MOVE_VOTES_AHEAD and epoch == ceiling and GetServerTime() - (db.trustedRaisedAt or 0) >= TRUST_RAISE_SECONDS then
-		db.trustedEpoch, db.trustedRaisedAt = epoch, GetServerTime()
-		Wanted:Log("Sync: three players agree on channel epoch %d; whispered moves may go one past it now", epoch)
+	if votes >= MOVE_VOTES_AHEAD and epoch >= ceiling and GetServerTime() - (db.trustedRaisedAt or 0) >= TRUST_RAISE_SECONDS then
+		db.trustedEpoch, db.trustedRaisedAt = ceiling, GetServerTime()
+		Wanted:Log("Sync: three players agree on channel epoch %d; the ceiling for whispered moves rises to %d", epoch, ceiling + 1)
 	end
 end
 

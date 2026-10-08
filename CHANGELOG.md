@@ -60,6 +60,8 @@
   Dispute and Pay.
 - A death record only counts as the victim's own word when the game knows the victim by its maker's name (or the
   Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
+- A guild bounty claim is only witnessed by someone who saw the victim in that guild, and a bounty no longer tells
+  your client which guild its target is in, so a made-up bounty can't turn a kill into a guild bounty claim.
 
 ## [1.18.3] - 2026-10-08
 

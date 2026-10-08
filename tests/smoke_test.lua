@@ -2006,8 +2006,10 @@ local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster",
 	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
 ns.Store:MergeRelayed(farBounty)
 local learnt = ns.Store:GetPlayer("Player-9-UNKNOWN")
-check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.guild == "Some Guild" and learnt.zone == "The Barrens"
+check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone == "The Barrens"
 	and learnt.lastSeen == clock - 3600 and learnt.seenBy == "Far Poster", "a client that never saw the target learns them from the bounty, seen by the poster")
+-- Never their guild: a kill of them would then claim a bounty on that guild on the bounty's word alone
+check(learnt.guild == nil, "the target's guild isn't learned from a bounty")
 ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
 local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
 ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", hash = "x", t = clock, data = {
@@ -7889,6 +7891,25 @@ end)()
 	local ok, owed = pcall(B.GetOwed, B, c9)
 	check(ok and owed == 15000, "a kill time in text is never compared: "..tostring(owed))
 	-- MORE
+end)()
+-- A claim on a guild bounty is witnessed only by a death whose recorder saw the victim in that guild: the hunter's own
+-- word about the victim's guild isn't enough
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local t0 = clock - 600
+	local bounty = Live("bounty", "Guild Poster", { guild = "Gold Guild", targetName = "<Gold Guild>", amount = 5000 }, t0)
+	local claim = Live("claim", "Guild Hunter", { bounty = bounty.id, kill = "Guild Hunter:0", victim = "Player-9-GMEMBER", victimGuild = "Gold Guild", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("death", "Guild Witness One", { victim = "Player-9-GMEMBER", zone = "Durotar" }, t0 + 101)
+	check(B:GetClaimLevel(claim) == 1, "a witness who didn't see the victim in the guild doesn't witness a guild claim")
+	Live("death", "Guild Witness Two", { victim = "Player-9-GMEMBER", victimGuild = "Gold Guild", zone = "Durotar" }, t0 + 101)
+	check(B:GetClaimLevel(claim) == 2, "one who did, does")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

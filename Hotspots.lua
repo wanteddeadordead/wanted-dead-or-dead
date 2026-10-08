@@ -1,5 +1,5 @@
--- Wanted: PvP hotspots. Groups the enemy players seen in the last hour, by you and by other Wanted users,
--- by the zone they were last seen in. Each zone gets its enemy count, their levels, the biggest guild
+-- Wanted: PvP hotspots. Groups the enemy players seen in the last hour, by you and by other Wanted users, or named in
+-- a PvP death there, by the zone they were last known in. Each zone gets its enemy count, their levels, the biggest guild
 -- among them, recent PvP deaths there, and whether it's getting busier. It only knows about enemies a
 -- Wanted user has seen, so the counts are a floor, not a census.
 
@@ -67,34 +67,64 @@ function private.Readable(value)
 	return value
 end
 
----Adds the enemies seen in the last hour to their zones.
-function private.AddPlayers(groups, byName, now, recent)
+---Where each enemy was last known to be in the last hour: guid -> { t, mapId, zone, player }. Seen by a Wanted user,
+---or named in a PvP death (kills and deaths, ours and other Wanted users'), whichever is later.
+function private.Positions(now)
 	local myFaction = UnitFactionGroup("player")
+	local positions = {}
+	local function Wanted_(guid)
+		return type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and not Wanted.db.ignore[guid]
+	end
 	for guid, player in pairs(Wanted.db.players) do
 		local lastSeen = player.lastSeen
-		if lastSeen and now - lastSeen <= HOUR and player.faction and player.faction ~= myFaction
-				and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and (player.mapId or player.zone) then
-			local group = private.GetGroup(groups, byName, player.mapId, player.zone)
-			group.hour = group.hour + 1
-			if now - lastSeen <= recent then
-				group.recent = group.recent + 1
-			end
-			local level = private.Readable(player.level)
-			if type(level) == "number" then
-				if level < 0 then
-					group.skull = true
-				elseif level > 0 then
-					group.minLevel = min(group.minLevel or level, level)
-					group.maxLevel = max(group.maxLevel or level, level)
+		if lastSeen and now - lastSeen <= HOUR and player.faction and player.faction ~= myFaction and Wanted_(guid) and (player.mapId or player.zone) then
+			positions[guid] = { t = lastSeen, mapId = player.mapId, zone = player.zone, player = player }
+		end
+	end
+	for _, kind in ipairs({ "kill", "death" }) do
+		for record in Store:Iterator(kind) do
+			local data = record.data
+			if record.t and now - record.t <= HOUR and data.zone and not Store:IsTest(record) then
+				for _, side in ipairs({ "killer", "victim" }) do
+					local guid = data[side]
+					local known = Wanted_(guid) and Wanted.db.players[guid]
+					local faction = data[side.."Faction"] or (known and known.faction)
+					local at = Wanted_(guid) and positions[guid]
+					if Wanted_(guid) and faction and faction ~= myFaction and (not at or record.t > at.t) then
+						positions[guid] = { t = record.t, zone = data.zone, player = known or {
+							name = data[side.."Name"], class = data[side.."Class"], level = data[side.."Level"], guild = data[side.."Guild"] } }
+					end
 				end
 			end
-			local guild = private.Readable(player.guild)
-			if type(guild) == "string" then
-				group.guilds[guild] = (group.guilds[guild] or 0) + 1
-			end
-			group.lastSeen = max(group.lastSeen or 0, lastSeen)
-			tinsert(group.enemies, { guid = guid, name = player.name, class = player.class, level = level, lastSeen = lastSeen })
 		end
+	end
+	return positions
+end
+
+---Adds the enemies known in the last hour to the zones they were last known in.
+function private.AddPlayers(groups, byName, now, recent)
+	for guid, at in pairs(private.Positions(now)) do
+		local player = at.player
+		local group = private.GetGroup(groups, byName, at.mapId, at.zone)
+		group.hour = group.hour + 1
+		if now - at.t <= recent then
+			group.recent = group.recent + 1
+		end
+		local level = private.Readable(player.level)
+		if type(level) == "number" then
+			if level < 0 then
+				group.skull = true
+			elseif level > 0 then
+				group.minLevel = min(group.minLevel or level, level)
+				group.maxLevel = max(group.maxLevel or level, level)
+			end
+		end
+		local guild = private.Readable(player.guild)
+		if type(guild) == "string" then
+			group.guilds[guild] = (group.guilds[guild] or 0) + 1
+		end
+		group.lastSeen = max(group.lastSeen or 0, at.t)
+		tinsert(group.enemies, { guid = guid, name = player.name, class = player.class, level = level, lastSeen = at.t })
 	end
 end
 

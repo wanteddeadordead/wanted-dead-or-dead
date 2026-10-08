@@ -13,7 +13,7 @@ local WEEK = 7 * 24 * 60 * 60
 local MAX_DAY_EVENTS = 8 -- the game's events read per day, at most
 local MAX_UPCOMING = 10
 -- The order a day's events are listed in: Wanted's and Blizzard's dates before the game's holidays
-local KIND_ORDER = { game = 0, pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
+local KIND_ORDER = { raid = -1, game = 0, pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
 -- WoW Forever's own dates, from Blizzard's beta schedule (forum post, BlizzCon 2026): the beta ends on October 21,
 -- 2026 (no time given: that day everywhere), and the game launches on November 4, 2026 at 3:00 p.m. PST
 local BETA_ENDS = { year = 2026, month = 10, day = 21 }
@@ -184,7 +184,7 @@ function PvPCalendar:Launched()
 end
 
 ---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
----kinds "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box and
+---kinds "raid", "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box and
 ---labels its shorter forms, longest first;
 ---running marks a day between a holiday's first and last; detail is a holiday's { seq, begins, ends, range,
 ---description } from the game.
@@ -246,6 +246,10 @@ function PvPCalendar:GetMonth(year, month)
 			end
 			t = t + WEEK
 		end
+	end
+	-- Our world PvP raid, and the ones we're going to or interested in
+	for _, raid in ipairs(Wanted.Raids:Calendar()) do
+		AddAt(raid.at, raid.text, "raid", raid.short)
 	end
 	private.AddGameEvents(year, month, Add)
 	for _, events in pairs(days) do

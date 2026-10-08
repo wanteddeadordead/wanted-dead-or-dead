@@ -18,10 +18,11 @@ local CELL_LINES = 2 -- events starting or ending written in a day's box; the re
 local WEEKDAYS = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
 local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
 	"November", "December" }
--- Six kinds, six colours that don't pass for each other: battleground weekends are purple, as amber sat too close to
--- the Wanted season's gold
+-- Seven kinds, seven colours that don't pass for each other: battleground weekends are purple, as amber sat too close
+-- to the Wanted season's gold; world PvP raids are teal
 local BATTLEGROUND_PURPLE = { 0.74, 0.52, 1 }
-local KIND_COLORS = { game = C.green, pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue,
+local RAID_TEAL = { 0.3, 0.85, 0.8 }
+local KIND_COLORS = { raid = RAID_TEAL, game = C.green, pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue,
 	pvpholiday = BATTLEGROUND_PURPLE, holiday = C.muted }
 
 

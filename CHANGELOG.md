@@ -50,6 +50,7 @@
   lifts when you load this version.
 - Only the poster can raise a bounty, and only the poster's own record of paying settles it: another player's raise
   or payment record no longer changes someone else's bounty.
+- When a poster both confirms and disputes a claim, their latest decision stands on every client.
 
 ## [1.18.3] - 2026-10-08
 

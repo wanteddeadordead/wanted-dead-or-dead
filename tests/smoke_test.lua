@@ -7809,6 +7809,28 @@ end)()
 	check(B:GetAmount(bounty) == 15000, "the poster's raise does")
 	S:FreshStart()
 end)()
+-- A bounty's state: every client reaches the same answer, and a poster never owes one bounty twice
+;(function()
+	local S, B, P, M = ns.Store, ns.Bounties, ns.Payments, ns.Model
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local function Witness(claim)
+		Live("death", "Witness "..claim.origin, { victim = claim.data.victim, zone = claim.data.zone, deathId = "w"..claim.id }, claim.data.killT + 1)
+	end
+	local t0 = clock - 3 * 86400
+	-- The poster changed their mind: their latest word stands, whatever order the records came in
+	local b1 = Live("bounty", "State Poster", { target = "Player-9-ST1", targetName = "St One", amount = 5000 }, t0)
+	local c1 = Live("claim", "State Hunter", { bounty = b1.id, kill = "State Hunter:0", victim = "Player-9-ST1", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("confirm", "State Poster", { claim = c1.id }, t0 + 200)
+	Live("confirm", "State Poster", { claim = c1.id, disputed = true }, t0 + 300)
+	check(B:GetClaimLevel(c1) == 0, "the poster's latest decision on a claim stands: "..B:GetClaimLevel(c1))
+	-- MORE
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

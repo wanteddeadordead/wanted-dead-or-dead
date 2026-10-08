@@ -866,10 +866,16 @@ end
 ---@return number
 function Bounties:GetClaimLevel(claim)
 	local bounty = Store:Get(claim.data.bounty)
+	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in
+	local decision
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
-			return confirm.data.disputed and 0 or 3
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin
+			and (not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq)) then
+			decision = confirm
 		end
+	end
+	if decision then
+		return decision.data.disputed and 0 or 3
 	end
 	if #Bounties:GetWitnesses(claim) > 0 then
 		return 2

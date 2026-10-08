@@ -7704,6 +7704,7 @@ end)()
 	check(ranks[0] and count == 1 and known == false, "only the guild master's rank counts when permissions can't be read")
 	check(said == 1, "said once in the log, got "..said)
 	C_GuildInfo, GuildControlGetNumRanks = realInfo, realRanks
+end)()
 -- The shared record network: what a record says about who made it is only believed when the game vouches for it
 ;(function()
 	local S = ns.Store

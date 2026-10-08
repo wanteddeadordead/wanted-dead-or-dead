@@ -327,7 +327,8 @@ unset or that page is switched off. A new setting: no migration.
   readers take the highest amount per `bounty`. `WantedDB.seenNotices` (bounty id -> amount) remembers which
   bounties on this player have been announced. After 1.18.2 a bridge sends `b` as `"w"` plus the bounty record's
   hash (the same on every client of that side, and no name in it) and no `p`, so new notices carry no `poster`;
-  readers tell bounties apart by `target` and `postedAt`, so one carried under both ids counts once. A bridge's new
+  notices whose ids are of different forms are the same bounty when `target` and `postedAt` match, so one carried
+  under both ids counts once, while two posted in the same second under ids of one form stay two. A bridge's new
   notices are capped at 100 an hour, 10 an hour about one player, and amounts at 2^31 - 1 copper.
 
 `link` records (from 1.1.0) tie a character to a Wanted desktop app key: `code` (the code the app showed) and

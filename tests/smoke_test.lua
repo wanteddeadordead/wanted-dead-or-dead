@@ -8202,6 +8202,10 @@ end)()
 	Notices({ { b = "Far Poster:5", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
 	Notices({ { b = "w1234abcd", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
 	check(ns.Bridge:GetPriceOnMe() == before + 7000, "one bounty carried under two ids counts once: "..(ns.Bridge:GetPriceOnMe() - before))
+	-- Two bounties posted in the same second on the same player, both under new ids, are two
+	clock = clock + 3600
+	Notices({ { b = "waaaa0001", g = me, n = "Test Player", a = 3000, t = clock - 10 }, { b = "wbbbb0002", g = me, n = "Test Player", a = 4000, t = clock - 10 } })
+	check(ns.Bridge:GetPriceOnMe() == before + 14000, "two bounties in the same second both count: "..(ns.Bridge:GetPriceOnMe() - before))
 end)()
 -- A claim on a guild bounty is witnessed only by a death whose recorder saw the victim in that guild: the hunter's own
 -- word about the victim's guild isn't enough

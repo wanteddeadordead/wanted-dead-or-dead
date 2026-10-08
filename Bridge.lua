@@ -636,9 +636,9 @@ function private.Receive(notice, senderID)
 	local amount = floor(notice.a)
 	-- Someone on this side may have carried it across already, at this amount or higher (an older bridge sends the
 	-- bounty's own id, a newer one its hash: the same bounty is the same target and posting time either way)
-	local key = private.NoticeKey(notice.g, notice.t, notice.b)
 	for known in Store:Iterator("notice") do
-		if private.NoticeKey(known.data.target, known.data.postedAt, known.data.bounty) == key and (known.data.amount or 0) >= amount then
+		if private.SameBounty(known.data.target, known.data.postedAt, known.data.bounty, notice.g, notice.t, notice.b)
+			and (known.data.amount or 0) >= amount then
 			return
 		end
 	end
@@ -658,13 +658,23 @@ function private.Receive(notice, senderID)
 	})
 end
 
----What tells one bounty from another across bridges of every version: its target and when it was posted (its id
----differs between them).
-function private.NoticeKey(target, postedAt, bounty)
-	if type(target) == "string" and type(postedAt) == "number" then
-		return target..":"..format("%d", postedAt)
+---Whether two notices are of the same bounty. Its id differs between bridges of different versions (an older one
+---sends the bounty's own id, a newer one "w" and its hash), so notices with ids of different forms are the same bounty
+---when they name the same target and posting time; with ids of the same form, only when the ids match (two bounties
+---can be posted on one player in the same second).
+function private.SameBounty(targetA, postedA, idA, targetB, postedB, idB)
+	if idA == idB then
+		return true
 	end
-	return tostring(bounty)
+	if targetA ~= targetB or type(postedA) ~= "number" or postedA ~= postedB then
+		return false
+	end
+	return private.IsHashId(idA) ~= private.IsHashId(idB)
+end
+
+---Whether a notice's bounty id is the newer form: "w" and the bounty record's hash.
+function private.IsHashId(id)
+	return type(id) == "string" and strfind(id, "^w%x+$") ~= nil
 end
 
 ---Whether one more new notice from a bridge, about a player, fits this hour's caps; counts it if so.
@@ -747,20 +757,31 @@ end
 ---@return number posters distinct players who posted them
 function Bridge:GetPriceOnMe()
 	local me = UnitGUID("player")
-	local byBounty, posters = {}, {}
+	-- Each bounty once, at its highest amount: notices of the same bounty (SameBounty) go together
+	local bounties, posters = {}, {}
 	for notice in Store:Iterator("notice") do
 		local data = notice.data
 		if data.target == me and not Store:IsTest(notice) and type(data.amount) == "number" then
-			local key = private.NoticeKey(data.target, data.postedAt, data.bounty)
-			byBounty[key] = max(byBounty[key] or 0, data.amount)
+			local found
+			for _, bounty in ipairs(bounties) do
+				if private.SameBounty(bounty.target, bounty.postedAt, bounty.id, data.target, data.postedAt, data.bounty) then
+					found = bounty
+					break
+				end
+			end
+			if found then
+				found.amount = max(found.amount, data.amount)
+			else
+				tinsert(bounties, { target = data.target, postedAt = data.postedAt, id = data.bounty, amount = data.amount })
+			end
 			if data.poster then
 				posters[data.poster] = true
 			end
 		end
 	end
 	local total, count, numPosters = 0, 0, 0
-	for _, amount in pairs(byBounty) do
-		total, count = total + amount, count + 1
+	for _, bounty in ipairs(bounties) do
+		total, count = total + bounty.amount, count + 1
 	end
 	for _ in pairs(posters) do
 		numPosters = numPosters + 1

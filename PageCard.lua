@@ -32,6 +32,8 @@ UI:RegisterPage("card", {
 	order = 6,
 	menuLabel = "You",
 	tabLabel = "Calling card",
+	-- Pieces unlocked and not looked at yet
+	news = { kind = "card", ids = function() return CallingCard:UnlockedIds() end },
 	tabs = { "card", "poster", "web", "settings", "tools" },
 	build = function(container, width)
 		private.banner = CallingCard:Banner(container, min(width, BANNER_WIDTH))

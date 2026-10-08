@@ -42,8 +42,16 @@ local DEFAULT_PAGE = "home"
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
 ---out of the menu itself), tabLabel (its tab's label), menuLabel (its menu entry's label, when not its title)
+---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
+---that count, in blue, unless it has its own.
 function UI:RegisterPage(key, def)
 	def.key = key
+	if def.news and not def.badge then
+		def.badge = function()
+			local new = UI:NewCount(def.news.kind, def.news.ids())
+			return new > 0 and new or nil, C.blue
+		end
+	end
 	tinsert(private.pages, def)
 	private.pageByKey[key] = def
 	sort(private.pages, function(a, b) return a.order < b.order end)
@@ -409,7 +417,7 @@ function UI:Menu()
 		local nav = private.navButtons and private.navButtons[def.key]
 		if nav and nav:IsShown() then
 			tinsert(out, { key = def.key, label = def.menuLabel or def.title, selected = (private.owner or private.current) == def.key,
-				badge = private.menuBadges and private.menuBadges[def.key] })
+				badge = private.menuBadges and private.menuBadges[def.key], color = private.menuColors and private.menuColors[def.key] })
 		end
 	end
 	return out
@@ -455,6 +463,63 @@ function private.Badge(page, all)
 	return private.badges[page.key], private.badgeColors[page.key]
 end
 
+-- ============================================================================
+-- New since you looked
+-- ============================================================================
+
+---This character's record of what each page last showed: kind -> { [id] = true } (WantedDB.viewed[character]).
+function private.ViewedStore()
+	local db = Wanted.db
+	db.viewed = type(db.viewed) == "table" and db.viewed or {}
+	local me = Wanted.Store:GetOrigin() or "?"
+	db.viewed[me] = type(db.viewed[me]) == "table" and db.viewed[me] or {}
+	return db.viewed[me]
+end
+
+---What a page last showed; the first time, everything there is now (so nothing old counts as new).
+function private.Viewed(kind, ids)
+	local store = private.ViewedStore()
+	if type(store[kind]) ~= "table" then
+		local set = {}
+		for _, id in ipairs(ids) do
+			set[id] = true
+		end
+		store[kind] = set
+	end
+	return store[kind]
+end
+
+---How many of a page's items (ids: bounty ids, zone keys, badges...) it hasn't shown this character yet.
+---@param kind string
+---@param ids table
+---@return number
+function UI:NewCount(kind, ids)
+	local seen = private.Viewed(kind, ids)
+	local n = 0
+	for _, id in ipairs(ids) do
+		if not seen[id] then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---A page has shown its items: they're what it last showed (anything gone drops out, and is new if it comes back).
+---Returns whether any were new.
+---@param kind string
+---@param ids table
+---@return boolean
+function UI:MarkViewed(kind, ids)
+	local seen = private.Viewed(kind, ids)
+	local set, changed = {}, false
+	for _, id in ipairs(ids) do
+		changed = changed or not seen[id]
+		set[id] = true
+	end
+	private.ViewedStore()[kind] = set
+	return changed
+end
+
 ---Redraws the window. allBadges: work every menu badge out afresh (opening the window, changing page).
 ---@param allBadges boolean?
 function UI:Refresh(allBadges)
@@ -495,14 +560,26 @@ function UI:Refresh(allBadges)
 			end
 		end
 	end
-	-- A menu entry's badge adds up its tabs' counts (a text badge, when no tab has a count, shows as it is)
+	-- The page shown, with the window open: what it shows isn't new any more, so every count is worked out again
+	if def.news and private.frame:IsShown() and UI:MarkViewed(def.news.kind, def.news.ids()) then
+		allBadges = true
+	end
+	-- A menu entry's badge adds up its tabs' counts (a text badge, when no tab has a count, shows as it is), in a to-do's
+	-- colour over the blue of what's new
+	local function Merge(a, b)
+		if a == C.blue then
+			return b
+		end
+		return a
+	end
 	local underBadges = {}
 	for _, page in ipairs(private.pages) do
 		if page.under and page.badge then
 			local badge, color = private.Badge(page, allBadges)
 			local sum = underBadges[page.under]
 			if type(badge) == "number" and badge > 0 then
-				underBadges[page.under] = { (sum and type(sum[1]) == "number" and sum[1] or 0) + badge, sum and sum[2] or color }
+				local counted = sum and type(sum[1]) == "number"
+				underBadges[page.under] = { (counted and sum[1] or 0) + badge, counted and Merge(sum[2], color) or color }
 			elseif not sum and type(badge) == "string" and badge ~= "" then
 				underBadges[page.under] = { badge, color }
 			end
@@ -520,12 +597,15 @@ function UI:Refresh(allBadges)
 		end
 		local tabs = underBadges[page.key]
 		if tabs and type(tabs[1]) == "number" then
-			badge, color = (type(badge) == "number" and badge or 0) + tabs[1], color or tabs[2]
+			local own = type(badge) == "number" and badge > 0
+			badge, color = (own and badge or 0) + tabs[1], own and Merge(color, tabs[2]) or tabs[2]
 		elseif tabs and not badge then
 			badge, color = tabs[1], tabs[2]
 		end
 		private.menuBadges = private.menuBadges or {}
 		private.menuBadges[page.key] = badge
+		private.menuColors = private.menuColors or {}
+		private.menuColors[page.key] = color
 		if (type(badge) == "number" and badge > 0) or (type(badge) == "string" and badge ~= "") then
 			nav.badge:Set(tostring(badge), color or C.accent)
 		else

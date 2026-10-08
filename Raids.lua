@@ -20,6 +20,7 @@ local private = {
 	pending = {}, -- names waiting for an invite until combat ends
 	inviteQueue = {}, -- names Invite sign-ups still has to invite
 	answered = {}, -- name -> when we last told them who's going (GetTime)
+	viewed = {}, -- raid id -> true once the Raids page has shown it
 	rosters = {}, -- raid id -> { going, interested, more, at, asked } who's going to others' raids, as their leaders said
 	inviteTries = 0,
 	soloInvites = 0, -- invites out while we're still alone (a party holds four)
@@ -72,7 +73,8 @@ function Raids:Load()
 	db.raids[origin] = saved
 	saved.joined = type(saved.joined) == "table" and saved.joined or {}
 	saved.seen = type(saved.seen) == "table" and saved.seen or {}
-	private.saved, private.joined, private.seen = saved, saved.joined, saved.seen
+	saved.viewed = type(saved.viewed) == "table" and saved.viewed or {}
+	private.saved, private.joined, private.seen, private.viewed = saved, saved.joined, saved.seen, saved.viewed
 	local now = GetServerTime()
 	local mine = saved.mine
 	if type(mine) ~= "table" or type(mine.startAt) ~= "number" or type(mine.signups) ~= "table" or now > mine.startAt + OPEN_HOURS * 3600 then
@@ -89,6 +91,11 @@ function Raids:Load()
 			private.seen[id] = nil
 		else
 			private.toasted[id] = true
+		end
+	end
+	for id in pairs(private.viewed) do
+		if not private.seen[id] then
+			private.viewed[id] = nil
 		end
 	end
 	if mine then
@@ -794,6 +801,31 @@ function Raids:OnAd(ad, sender, channel)
 			detail = format("%s, %s  %d/%d  led by %s", raid.where, started and "now" or Raids:When(raid.startAt), raid.members, raid.size, raid.leader),
 			onClick = function() Wanted.UI:Show("raids") end })
 	end
+end
+
+---How many of the raids we can see haven't been shown on the Raids page yet (the menu's count).
+---@return number
+function Raids:Unseen()
+	local n = 0
+	for id in pairs(private.seen) do
+		if not private.viewed[id] then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---The Raids page is showing them all: none are new now. Returns whether any were.
+---@return boolean
+function Raids:MarkSeen()
+	local any = false
+	for id in pairs(private.seen) do
+		if not private.viewed[id] then
+			private.viewed[id] = true
+			any = true
+		end
+	end
+	return any
 end
 
 ---Other players' raids we can see: started ones first, then by start time.

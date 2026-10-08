@@ -145,10 +145,16 @@ UI:RegisterPage("hotspots", {
 	title = "Hotspots",
 	subtitle = "Where enemy players are right now, from what you and other Wanted users have seen. Busiest first.",
 	order = 2.9,
-	badge = function()
-		local busy = private.CountBusy(Hotspots:Get())
-		return busy > 0 and busy or nil
-	end,
+	-- Zones that have become busy since you last looked
+	news = { kind = "hotspots", ids = function()
+		local ids = {}
+		for _, group in ipairs(Hotspots:Get()) do
+			if group.recent > 0 then
+				tinsert(ids, tostring(group.key))
+			end
+		end
+		return ids
+	end },
 	under = "enemies",
 	tabLabel = "Hotspots",
 	build = function(container, width, height)

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-10-08
+
+- New things show as a blue count on the menu until you open the page that shows them: raids on Raids, other players'
+  bounties on Bounties (the Board), zones that have become busy on Enemies (Hotspots), new achievements and medals on
+  Progress (Challenges), and new calling-card pieces on You. Counts of things to do keep their colour.
+
 ## [1.18.1] - 2026-10-08
 
 - Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover

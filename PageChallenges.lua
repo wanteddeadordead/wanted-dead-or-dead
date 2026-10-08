@@ -454,12 +454,30 @@ function private.Refresh()
 	private.RefreshRules(data)
 end
 
+---Your badges as marks: an achievement's key, a medal's key and count (a medal won again is new again). Playstyle badges
+---come and go with the season's play, so they're left out.
+function private.BadgeMarks()
+	local marks = {}
+	for _, b in ipairs(Wanted.Achievements:BadgesOf(Wanted.Store:GetOrigin())) do
+		if not b.playstyle then
+			tinsert(marks, b.count and (b.key..":"..b.count) or b.key)
+		end
+	end
+	return marks
+end
+
 UI:RegisterPage("challenges", {
 	title = "Challenges",
 	subtitle = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double.",
 	group = "World PvP",
 	order = 4,
+	-- Badges (achievements and medals) not looked at yet; their count shows over this week's challenges
+	news = { kind = "badges", ids = function() return private.BadgeMarks() end },
 	badge = function()
+		local new = UI:NewCount("badges", private.BadgeMarks())
+		if new > 0 then
+			return new, C.blue
+		end
 		local done, total = Challenges:CountDone()
 		if not done then
 			return nil

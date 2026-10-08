@@ -233,6 +233,20 @@ function CallingCard:CheckNew()
 	end
 end
 
+---The pieces you've unlocked on the character you're playing, but for starters and playstyle pieces (which come and go
+---with the season): their ids, for the You menu's count of new ones.
+---@return string[]
+function CallingCard:UnlockedIds()
+	local mine = private.Mine()
+	local ids = {}
+	for _, item in ipairs(mine and Wanted.CardCatalogue or {}) do
+		if mine.unlocked[item.id] and item.via ~= "starter" and item.via ~= "playstyle" then
+			tinsert(ids, item.id)
+		end
+	end
+	return ids
+end
+
 ---Your card as it shows, for the You page: { card, name, stats = { { label, value } x3 }, unlocked, total }, or nil
 ---before the app has brought it.
 ---@return table?

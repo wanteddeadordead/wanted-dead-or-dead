@@ -849,17 +849,20 @@ check(hills and hills.deaths == 3 and hills.hour == 2 and hills.recent == 2 and 
 	"the fights' enemies count in Hillsbrad: "..tostring(hills and hills.hour).." "..table.concat(hillNames, ","))
 check(FindZone(spots, "The Barrens").hour == 3, "one seen in the Barrens since stays there")
 end
-ns.UI:Show("hotspots")
+-- New since you looked: Hotspots counts zones that have become busy since it was last open (the first look takes in
+-- what's busy); opening it clears them. The Enemies menu entry adds it to its own count, in the to-do colour if any.
 ;(function()
-	local function NavBadge(title)
-		for _, f in ipairs(Mock.created) do
-			local label = rawget(f, "label")
-			if type(label) == "table" and label._text == title and rawget(f, "badge") then
-				return f.badge._shown and f.badge.text._text or nil
-			end
-		end
+	local function EnemiesBadge()
+		for _, item in ipairs(ns.UI:Menu()) do if item.key == "enemies" then return tonumber(item.badge) or 0 end end
 	end
-	check(NavBadge("Hotspots") == "3", "the Hotspots menu item counts the busy zones (Hillsbrad too now), got "..tostring(NavBadge("Hotspots")))
+	ns.UI:Show("hotspots")
+	ns.UI:Show("home")
+	local before = EnemiesBadge()
+	ns.Store:UpdatePlayer("Player-9-ASHEN1", { name = "Ashen Rogue", class = "ROGUE", level = 30, faction = "Alliance", zone = "Ashenvale" })
+	ns.UI:Refresh(true)
+	check(EnemiesBadge() == before + 1, "a zone newly busy counts on Enemies: "..before.." -> "..EnemiesBadge())
+	ns.UI:Show("hotspots")
+	check(EnemiesBadge() == before, "opening Hotspots clears it: "..EnemiesBadge())
 end)()
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 -- The world map: markers come through the map's own pin system, in their own layer under group members
@@ -6563,7 +6566,22 @@ end)()
 	-- The page builds and lists them
 	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
 	R:OnAd(ad({ id = "page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
+	-- New raids show as a count on the Raids menu entry until the Raids page is opened
+	ns.UI:Show("home")
+	local unseenBefore = R:Unseen()
+	local raidsEntry
+	for _, item in ipairs(ns.UI:Menu()) do if item.key == "raids" then raidsEntry = item end end
+	check(unseenBefore >= 2 and raidsEntry and raidsEntry.badge == unseenBefore, "new raids counted on the menu: "..unseenBefore.." "..tostring(raidsEntry and raidsEntry.badge))
 	ns.UI:Show("raids")
+	check(R:Unseen() == 0, "opening the Raids page clears it")
+	R:OnAd(ad({ id = "page3", t = "Late one", s = clock + 7200 }), "Lead Er-Realm")
+	check(R:Unseen() == 0, "a raid that comes in with the page open is seen")
+	R:OnAd(ad({ id = "page3", c = 1 }), "Lead Er-Realm")
+	ns.UI:GetFrame():Hide()
+	R:OnAd(ad({ id = "page4", t = "While away", s = clock + 7200 }), "Lead Er-Realm")
+	check(R:Unseen() == 1, "with the window closed, a new raid stays new, even with Raids the last page")
+	ns.UI:Show("raids")
+	R:OnAd(ad({ id = "page4", c = 1 }), "Lead Er-Realm")
 	local function shows(text)
 		for _, f in ipairs(Mock.fontStrings) do
 			if type(f._text) == "string" and f._text:find(text, 1, true) then
@@ -6658,6 +6676,54 @@ end)()
 	ns.UI:GetFrame():Hide()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast
 	groupSize, IsInGroup, IsInRaid, GetChannelList = realGroup, realInGroup, realInRaid, realChannels
+end)()
+-- New since you looked, on the other menus: other players' bounties on the Board, badges on Progress, calling-card
+-- pieces on You. Each counts until its page is opened (with the window open), and a to-do's colour wins over new's blue.
+;(function()
+	local function MenuBadge(key)
+		for _, item in ipairs(ns.UI:Menu()) do if item.key == key then return item.badge, item.color end end
+	end
+	-- The Board
+	ns.UI:Show("board")
+	ns.UI:Show("home")
+	local before = tonumber(MenuBadge("board")) or 0
+	local fresh = ns.Store:NewRecord("bounty", { target = "Player-9-NEWBOUNTY", targetName = "Fresh Target", amount = 7000, zone = "Durotar" })
+	fresh.origin = "Newer Poster" -- another player's
+	ns.UI:Refresh(true)
+	local count, color = MenuBadge("board")
+	check(tonumber(count) == before + 1, "a new bounty counts on Bounties: "..before.." -> "..tostring(count))
+	check(before == 0 or color ~= ns.Theme.C.blue, "with your to-dos in it, in their colour, not new's blue")
+	ns.UI:Show("board")
+	check((tonumber(MenuBadge("board")) or 0) == before, "opening the Board clears it")
+	-- Progress: a new badge shows over this week's challenges, blue, until the Challenges tab is opened
+	local A, CC = ns.Achievements, ns.CallingCard
+	local realBadges, realPieces = A.BadgesOf, CC.UnlockedIds
+	local badges, pieces = {}, {}
+	A.BadgesOf = function() return badges end
+	CC.UnlockedIds = function() return pieces end
+	ns.UI:Show("challenges")
+	ns.UI:Show("card")
+	ns.UI:Show("home")
+	badges[1] = { key = "witness" }
+	badges[2] = { key = "night-owl", playstyle = true }
+	pieces[1], pieces[2] = "ach-witness-emblem", "zone-duskwood-plate"
+	ns.UI:Refresh(true)
+	check(MenuBadge("challenges") == 1, "a new badge counts on Progress (not a playstyle one): "..tostring(MenuBadge("challenges")))
+	check(MenuBadge("card") == 2 and select(2, MenuBadge("card")) == ns.Theme.C.blue, "new pieces count on You, in blue: "..tostring(MenuBadge("card")))
+	ns.UI:Show("challenges")
+	check(MenuBadge("challenges") ~= 1, "opening Challenges clears it")
+	badges[#badges + 1] = { key = "headhunter" }
+	ns.UI:Refresh(true)
+	check(MenuBadge("challenges") ~= 1, "and a badge that comes in while it's open is seen")
+	ns.UI:Show("home")
+	badges[#badges + 1] = { key = "top-killer:gold", count = 2 }
+	ns.UI:Refresh(true)
+	check(MenuBadge("challenges") == 1, "a medal won counts too")
+	ns.UI:Show("challenges")
+	ns.UI:Show("card")
+	check(MenuBadge("card") == nil, "opening your calling card clears it")
+	A.BadgesOf, CC.UnlockedIds = realBadges, realPieces
+	ns.UI:GetFrame():Hide()
 end)()
 -- The menu: six entries, each page a tab of one, every old page key still opening its page on the right tab; a menu
 -- entry's badge adds up its tabs'

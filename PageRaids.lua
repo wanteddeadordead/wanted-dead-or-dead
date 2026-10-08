@@ -256,26 +256,28 @@ end
 
 ---Announce: shows the line and where it goes first, editable; Post sends it, Cancel sends nothing.
 function private.ConfirmAnnounce()
-	local index, channel = Raids:AnnounceChannel()
-	local guildOnly = Raids:Mine() and Raids:Mine().exclusive
-	if guildOnly then
-		channel = "guild chat"
-	elseif not index then
-		UI:Toast("You're not in a Looking for Group or General channel.", C.red)
+	local targets = Raids:AnnounceTargets()
+	if #targets == 0 then
+		UI:Toast("You're not in a guild or any chat channel.", C.red)
 		return
+	end
+	local guildOnly = Raids:Mine() and Raids:Mine().exclusive
+	local labels = {}
+	for _, t in ipairs(targets) do
+		labels[t.key] = t.label
 	end
 	W:Dialog({
 		title = "Announce your raid",
-		text = guildOnly and "This goes in guild chat, as the raid is guild only. Guildmates who whisper you \"inv\" are invited. Change it if you like:"
-			or format("This goes in %s (channel %d), where players without Wanted see it. Anyone who whispers you \"inv\" is invited. Change it if you like:",
-			channel, index),
+		text = guildOnly and "Pick where it goes, and change the line if you like. The raid is guild only: only guildmates who whisper you \"inv\" are invited until you open it to everyone."
+			or "Pick where it goes, and change the line if you like. Anyone who whispers you \"inv\" is invited.",
+		choice = { label = "Post in", items = targets, selected = labels[Raids:AnnounceTarget()] and Raids:AnnounceTarget() or targets[1].key },
 		input = { value = Raids:AnnounceText() or "", multiline = true },
 		width = 520,
 		confirmLabel = "Post",
 		cancelLabel = "Cancel",
-		onConfirm = function(text)
-			local why = Raids:Announce(text)
-			UI:Toast(why or "Posted in "..channel..".", why and C.red or C.green)
+		onConfirm = function(text, target)
+			local why = Raids:Announce(text, target)
+			UI:Toast(why or "Posted in "..(labels[target] or "chat")..".", why and C.red or C.green)
 		end,
 	})
 end

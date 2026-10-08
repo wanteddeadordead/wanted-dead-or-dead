@@ -6186,6 +6186,8 @@ end)()
 	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t end
 	local realGroup, realInGroup, realInRaid = groupSize, IsInGroup, IsInRaid
 	groupSize = 1
+	local realChannels = GetChannelList
+	GetChannelList = function() return 6, "LookingForGroup", false end
 	-- Forming: a name and a size are needed
 	check(select(2, R:Create({ title = "  ", size = 40 })) == "Give the raid a name.", "a raid needs a name")
 	check(select(2, R:Create({ title = "Southshore", size = 15 })) == "Pick a size: 10, 20 or 40.", "and a real size")
@@ -6388,7 +6390,7 @@ end)()
 	IsInGuild = function() return true end
 	chatSent = {}
 	clock = clock + 61
-	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^GUILD: Forming a world PvP raid: Officers' night"), "announced in guild chat: "..tostring(chatSent[1]))
+	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^GUILD: Forming a world PvP raid: Officers' night"), "announced in guild chat by default: "..tostring(chatSent[1]))
 	local invitedBefore = #invited
 	R:OnWhisper("inv", "Stranger-Elsewhere")
 	R:OnWhisper("inv", "Guildie")
@@ -6495,14 +6497,19 @@ end)()
 	local dialog
 	local realDialog = ns.Widgets.Dialog
 	ns.Widgets.Dialog = function(_, o) dialog = o end
+	local realList, realGuild = GetChannelList, IsInGuild
+	GetChannelList = function() return 1, "General - Durotar", false, 5, ns.Sync:GetInfo().channelName, false, 6, "LookingForGroup", false end
+	IsInGuild = function() return true end
 	local leading = R:Create({ title = "Barrens raid", size = 40 })
 	ns.UI:Refresh(true)
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Announce" and fs._parent._shown then fs._parent:Click() end
 	end
 	ns.Widgets.Dialog = realDialog
-	check(dialog and dialog.text:find("LookingForGroup (channel 6)", 1, true) and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"),
-		"Announce shows the line and the channel first: "..tostring(dialog and dialog.text))
+	local choices = {}
+	for _, item in ipairs(dialog and dialog.choice and dialog.choice.items or {}) do choices[#choices + 1] = item.label end
+	check(dialog and dialog.choice.selected == 6 and table.concat(choices, ",") == "Guild chat,1. General - Durotar,6. LookingForGroup"
+		and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"), "Announce shows the line and where it goes, any channel we're in but Wanted's: "..table.concat(choices, ","))
 	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
 	check(shows("Whisper sign-ups") and shows("Edit"), "the leader's card: Whisper sign-ups and Edit")
 	for _, fs in ipairs(Mock.fontStrings) do
@@ -6513,6 +6520,12 @@ end)()
 	clock = clock + 61
 	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now,\nwhisper inv")
 	check(chatSent[1] == "CHANNEL: Barrens raid at the Crossroads cffff0000now, whisper inv", "Post sends what's in the box, on one line: "..tostring(chatSent[1]))
+	clock = clock + 61
+	dialog.onConfirm("To the guild", "guild")
+	check(chatSent[2] == "GUILD: To the guild", "or wherever was picked: "..tostring(chatSent[2]))
+	clock = clock + 61
+	check(R:Announce("Nowhere", 42) == "Pick where to post it.", "never a channel we're not in")
+	GetChannelList, IsInGuild = realList, realGuild
 	R:Close()
 	-- Home's raids row: your raid first, then the ones forming (click to join); none, a card to form one
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
@@ -6536,7 +6549,7 @@ end)()
 	R:Close()
 	ns.UI:GetFrame():Hide()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add = realAd, realJoin, realParty, realToast
-	groupSize, IsInGroup, IsInRaid = realGroup, realInGroup, realInRaid
+	groupSize, IsInGroup, IsInRaid, GetChannelList = realGroup, realInGroup, realInRaid, realChannels
 end)()
 -- The menu: six entries, each page a tab of one, every old page key still opening its page on the right tab; a menu
 -- entry's badge adds up its tabs'

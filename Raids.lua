@@ -276,11 +276,41 @@ function Raids:AnnounceChannel()
 	end
 end
 
----Puts a line in the Announce channel (the raid's own line when text is nil). Needs a click: the game only lets a key
----press or click post in public channels, so it's called from the confirm dialog's button. Returns why not, or nil.
+---Where Announce can post: guild chat (in a guild), then each chat channel we're in but Wanted's own: { key, label },
+---key "guild" or the channel's number.
+---@return table[]
+function Raids:AnnounceTargets()
+	local out = {}
+	if IsInGuild() then
+		tinsert(out, { key = "guild", label = "Guild chat" })
+	end
+	local own = Sync:GetInfo().channelName
+	local list = GetChannelList and { GetChannelList() } or {}
+	for i = 1, #list, 3 do
+		local id, name, disabled = list[i], list[i + 1], list[i + 2]
+		if type(id) == "number" and type(name) == "string" and not disabled and not (own and strlower(name) == strlower(own)) then
+			tinsert(out, { key = id, label = format("%d. %s", id, name) })
+		end
+	end
+	return out
+end
+
+---Where Announce posts unless told otherwise: guild chat for a guild-only raid, else Looking for Group or General.
+---@return string|number|nil
+function Raids:AnnounceTarget()
+	if private.mine and private.mine.exclusive and IsInGuild() then
+		return "guild"
+	end
+	return (Raids:AnnounceChannel())
+end
+
+---Puts a line in guild chat or a chat channel (target: "guild" or a channel number from AnnounceTargets; nil for
+---AnnounceTarget), the raid's own line when text is nil. Needs a click: the game only lets a key press or click post
+---in public channels, so it's called from the confirm dialog's button. Returns why not, or nil.
 ---@param text string?
+---@param target string|number|nil
 ---@return string?
-function Raids:Announce(text)
+function Raids:Announce(text, target)
 	if not private.mine then
 		return "You're not leading a raid."
 	end
@@ -291,17 +321,20 @@ function Raids:Announce(text)
 	if GetTime() - private.lastAnnounce < ANNOUNCE_SECONDS then
 		return "You announced it less than a minute ago."
 	end
-	if private.mine.exclusive then
-		private.lastAnnounce = GetTime()
-		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "GUILD")
-		return nil
+	target = target or Raids:AnnounceTarget()
+	local known = false
+	for _, t in ipairs(Raids:AnnounceTargets()) do
+		known = known or t.key == target
 	end
-	local index = Raids:AnnounceChannel()
-	if not index then
-		return "You're not in a Looking for Group or General channel."
+	if not target or not known then
+		return "Pick where to post it."
 	end
 	private.lastAnnounce = GetTime()
-	C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "CHANNEL", nil, index)
+	if target == "guild" then
+		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "GUILD")
+	else
+		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "CHANNEL", nil, target)
+	end
 	return nil
 end
 

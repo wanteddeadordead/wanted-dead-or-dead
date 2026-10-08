@@ -17,6 +17,8 @@
 - Guild only raids: only your guildmates with Wanted see them, Announce posts in guild chat, and only guildmates are
   invited. Open to everyone, on your raid's card, shows it to every Wanted player of your faction once the guild has
   filled what it will.
+- Announce lets you pick where it goes: guild chat or any chat channel you're in. A guild only raid starts on guild
+  chat, a public one on Looking for Group or General.
 - The Raids page explains how it works in seven numbered steps.
 
 ## [1.18.0] - 2026-10-07

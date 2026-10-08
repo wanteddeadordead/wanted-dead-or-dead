@@ -265,6 +265,10 @@ end
 ---@param choices table[] { key, label }
 function W:Choice(parent, width, choices, onSelect)
 	local button = W:Button(parent, "", "secondary", width, 24)
+	---Changes what can be chosen.
+	function button:SetChoices(list)
+		choices = list
+	end
 	function button:SetChoice(key)
 		self.key = key
 		for _, choice in ipairs(choices) do
@@ -650,7 +654,7 @@ local function CreateDialog()
 		end
 		blocker:Hide()
 		if options.onConfirm then
-			options.onConfirm(value)
+			options.onConfirm(value, options.choice and frame.choiceKey or nil)
 		end
 	end)
 	frame.input.onEnter = function()
@@ -671,6 +675,12 @@ local function CreateDialog()
 	end)
 	area:Hide()
 	frame.area = area
+	-- A choice above the input (options.choice): a label and a dropdown
+	frame.choiceLabel = Theme:Text(frame, "small", "", C.muted)
+	frame.choice = W:Choice(frame, 260, {}, function(key)
+		frame.choiceKey = key
+	end)
+	frame.choice:SetPoint("LEFT", frame.choiceLabel, "RIGHT", 10, 0)
 	frame.error = Theme:Text(frame, "small", "", C.red)
 	frame.error:SetPoint("BOTTOMLEFT", 20, 24)
 	-- Escape in the input cancels; keyboard capture on the blocker would be blocked in combat
@@ -684,7 +694,8 @@ end
 
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text) }, width
----(of the dialog, default 400), confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value)
+---(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
+---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key)
 ---Whether a dialog is up (one at a time).
 function W:IsDialogShown()
 	return dialog ~= nil and dialog:IsShown()
@@ -739,9 +750,20 @@ function W:Dialog(options)
 	else
 		frame.input:Hide()
 	end
-	-- Tall enough for the whole message: title and top margin, the text, the input if any, the buttons
+	local choice = options.choice
+	frame.choiceLabel:SetShown(choice ~= nil)
+	frame.choice:SetShown(choice ~= nil)
+	if choice then
+		frame.choiceLabel:ClearAllPoints()
+		frame.choiceLabel:SetPoint("BOTTOMLEFT", 20, 56 + (area and AREA_HEIGHT or 26) + 16)
+		frame.choiceLabel:SetText(choice.label or "")
+		frame.choice:SetChoices(choice.items)
+		frame.choice:SetChoice(choice.selected)
+		frame.choiceKey = choice.selected
+	end
+	-- Tall enough for the whole message: title and top margin, the text, the choice and input if any, the buttons
 	local messageHeight = ceil(frame.message:GetStringHeight() or 0)
-	local inputRoom = area and AREA_HEIGHT + 26 or options.input and 52 or 12
+	local inputRoom = (area and AREA_HEIGHT + 26 or options.input and 52 or 12) + (choice and 36 or 0)
 	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + inputRoom + 60))
 	dialog:Show()
 	-- In front of anything else full screen (the wanted poster)

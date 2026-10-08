@@ -8053,6 +8053,24 @@ end)()
 	check(fills == 0, "nor for a chain we don't hold, or from a seq that isn't one: "..fills)
 	S:FreshStart()
 end)()
+-- Messages in parts whose other parts never come are let go after a while, and one player can't hold many open
+;(function()
+	local channel = ns.Sync:GetPointer().n
+	local function Part(id, part, total, chunk)
+		Fire("CHAT_MSG_ADDON", "WNTD", "S:"..id..":"..part.."/"..total..":"..chunk, "CHANNEL", "Part Spammer", nil, nil, nil, channel)
+	end
+	local payload = ns.Sync:Encode({ s = { { g = "Player-9-PARTS", n = "Parts Pat", z = "Durotar", m = 1, x = 1, y = 1 } } })
+	local half = math.floor(#payload / 2)
+	clock = clock + 61
+	for i = 1, 6 do Part("g"..i, 1, 2, "garbage") end
+	Part("rr", 1, 2, payload:sub(1, half))
+	Part("rr", 2, 2, payload:sub(half + 1))
+	check(ns.Store:GetPlayer("Player-9-PARTS") == nil, "a player holding many messages open can't start another")
+	clock = clock + 61 -- the open ones are let go
+	Part("ok", 1, 2, payload:sub(1, half))
+	Part("ok", 2, 2, payload:sub(half + 1))
+	check(ns.Store:GetPlayer("Player-9-PARTS") ~= nil, "once they're let go, a whole message comes through")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -962,16 +962,19 @@ SlashCmdList.WANTED("synctest")
 ns.VERSION = "0.1.0"
 check(#addonSent == 1 and addonSent[1].text:find("^H:"), "the sync test sends a hello")
 local hello = addonSent[1].text:gsub("^H:%w+:", "H:zz9:")
-Fire("CHAT_MSG_ADDON", "WNTD", hello, "CHANNEL", "Other Player", nil, nil, nil, "WantedNetHorde")
+-- (Three players have to say it: one player's word locks nothing)
+for _, who in ipairs({ "Other Player", "Other Player Two", "Other Player Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", hello, "CHANNEL", who, nil, nil, nil, "WantedNetHorde")
+end
 check(ns.newerVersion == "0.3.0", "a newer peer's version is noticed, got "..tostring(ns.newerVersion))
 ns:NoteVersion("0.2.5")
 check(ns.newerVersion == "0.3.0", "an older one doesn't replace it")
-ns:NoteVersion("0.4.0|cffff0000evil")
-check(ns.newerVersion == "0.4.0", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
+for _, who in ipairs({ "Voter A", "Voter B", "Voter C" }) do ns:NoteVersion("0.3.1|cffff0000evil", who) end
+check(ns.newerVersion == "0.3.1", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
-check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
+check(ns.Report:Build():find("newer version seen: 0.3.1", 1, true), "the bug report names the newer version")
 -- The newest version wins: that newer peer locked the shared side until this client updates
-check(ns:GetRequiredUpdate() == "0.4.0", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
+check(ns:GetRequiredUpdate() == "0.3.1", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
 ;(function()
 	local function Told(from)
 		for i = from + 1, #printed do
@@ -999,12 +1002,12 @@ ns.db.requiredVersion = nil
 ns:NoteVersion("99.0.0")
 check(ns:GetRequiredUpdate() == nil, "an implausible version is ignored")
 -- Updating lifts the lock at load; so does nobody on that version being seen for three days
-ns:NoteVersion("0.4.0")
-ns.VERSION = "0.4.0"
+ns:NoteVersion("0.3.1") -- three players said it this session
+ns.VERSION = "0.3.1"
 ns:LoadSavedData()
 check(ns:GetRequiredUpdate() == nil, "on the new version the lock is gone")
 ns.VERSION = "0.1.0"
-ns:NoteVersion("0.4.0")
+ns:NoteVersion("0.3.1")
 clock = clock + 4 * 86400
 ns:LoadSavedData()
 check(ns:GetRequiredUpdate() == nil, "a version nobody has shown for days stops locking")
@@ -1021,13 +1024,17 @@ check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Old 
 	"the 'not online' for someone just told to update is hidden")
 check(ns.db.addonVersions["Old Timer"] and ns.db.addonVersions["Old Timer"].v == "0.0.5", "the version book notes the older player's version")
 -- And an update notice whispered to us locks us
-Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")
-check(ns:GetRequiredUpdate() == "0.2.0", "an update notice locks this client")
+for _, who in ipairs({ "New Timer", "New Timer Two", "New Timer Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", who)
+end
+check(ns:GetRequiredUpdate() == "0.2.0", "update notices from three players lock this client")
 ns.db.requiredVersion, ns.newerVersion = nil, nil
 -- 1.4.0 needs everyone on it (older versions pick channels themselves): a 1.3.x client hearing a 1.4.0 message locks
 -- its shared side, and is told to update at once and at each login
 ns.VERSION = "1.3.4"
-Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("H", { v = "1.4.0", c = {} }), "WHISPER", "New Hand")
+for _, who in ipairs({ "New Hand", "New Hand Two", "New Hand Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("H", { v = "1.4.0", c = {} }), "WHISPER", who)
+end
 check(ns:GetRequiredUpdate() == "1.4.0" and printed[#printed]:find("Wanted 1.4.0 is out", 1, true), "a 1.3.x client hearing 1.4.0 is told to update, and its sharing pauses")
 ns.db.requiredVersion, ns.newerVersion = nil, nil
 ns.VERSION = "0.1.0"
@@ -7741,6 +7748,32 @@ end)()
 	taken, why = S:MergeRelayed(fake)
 	check(not taken and why == "reserved" and #(ns.Tracks:Get("Player-9-SNEAK") or {}) == 0, "a peer's record of a reserved kind is refused: "..tostring(why))
 	S:FreshStart()
+end)()
+-- One player can't lock everyone's sharing with a made-up version: a newer one locks only once three players have said
+-- they run it, only a couple of minor versions ahead, and a lock from before that rule lifts at the next load
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.18.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	for _, who in ipairs({ "Voter A", "Voter B", "Voter C" }) do ns:NoteVersion("1.99.0", who) end
+	check(ns:GetRequiredUpdate() == nil, "a version far ahead locks nobody, however many say it")
+	for _ = 1, 5 do ns:NoteVersion("1.19.0", "Mallory Bad") end
+	Fire("CHAT_MSG_ADDON", "WNTD", "U:1:1/1:"..ns.Sync:Encode({ v = "1.19.0" }), "WHISPER", "Mallory Bad")
+	check(ns:GetRequiredUpdate() == nil, "one player saying it, again and again, locks nothing")
+	ns:NoteVersion("1.19.0", "Voter B")
+	ns:NoteVersion("1.19.0", "Voter C")
+	check(ns:GetRequiredUpdate() == "1.19.0", "three players saying it lock sharing until the update")
+	-- A lock from before the rule (one player's word) lifts at the next load
+	ns.db.requiredVersion = { version = "1.20.0", seen = clock }
+	ns:LoadSavedData()
+	check(ns:GetRequiredUpdate() == nil, "an older, unconfirmed lock lifts at load")
+	-- Updating past what a lock could plausibly be lifts it too
+	ns.db.requiredVersion = { version = "1.20.0", seen = clock, votes = 3 }
+	ns.VERSION = "1.17.0"
+	ns:LoadSavedData()
+	check(ns:GetRequiredUpdate() == nil, "a lock too far ahead of the running version lifts")
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

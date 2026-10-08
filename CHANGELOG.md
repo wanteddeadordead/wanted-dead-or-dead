@@ -45,6 +45,9 @@
 - Numbers in shared records are checked: a record with a negative, endless or made-up amount, or text where a time
   or place goes, is never counted, and amounts past what the game's money can hold (214,748g) can't be posted. A
   bounty for more than that from an older version still shows, at 214,748g.
+- One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
+  required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
+  lifts when you load this version.
 
 ## [1.18.3] - 2026-10-08
 

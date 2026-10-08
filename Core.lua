@@ -519,14 +519,49 @@ end
 -- The newest version wins: once another player's client reports a newer release, the shared side of Wanted
 -- (bounties, claims, payments, sync) pauses until this client is updated, so old and new never write
 -- different things to the same network. What only reads the game (Nearby window, alerts, hotspots, map)
--- keeps working. Anyone can claim any version number, so a claim has to look like a real release (at most
--- one major version ahead), and a lock lifts when nobody on that version has been seen for three days.
+-- keeps working. Anyone can claim any version number, so a claim has to look like a real release and come from
+-- several players (VERSION_VOTES), and a lock lifts when nobody on that version has been seen for three days.
 local REQUIRED_KEEP_SECONDS = 3 * 24 * 60 * 60
+
+-- One player can claim any version, so a newer one locks only once this many players have said they run it, and only
+-- a few minor versions ahead (the next major's first few too). A lock from before these rules (one player's word)
+-- lifts at the next load. At most this many versions are counted at once.
+local VERSION_VOTES = 3
+local MAX_MINOR_AHEAD = 2
+local MAX_VERSIONS_COUNTED = 20
 
 ---Whether a reported version could be a real release after ours.
 function private.IsPlausibleUpdate(version)
 	local theirs, ours = Wanted:ParseVersion(version), Wanted:ParseVersion(Wanted.VERSION)
-	return theirs ~= nil and ours ~= nil and theirs[1] <= ours[1] + 1
+	if not theirs or not ours then
+		return false
+	end
+	return (theirs[1] == ours[1] and theirs[2] <= ours[2] + MAX_MINOR_AHEAD)
+		or (theirs[1] == ours[1] + 1 and theirs[2] <= MAX_MINOR_AHEAD)
+end
+
+---Counts a player saying they run a version; returns how many different players have said it this session.
+---@param text string the version
+---@param sender string?
+---@return number
+function private.VoteVersion(text, sender)
+	local counted = private.versionVotes
+	if not counted or (private.versionsCounted or 0) >= MAX_VERSIONS_COUNTED and not counted[text] then
+		counted = {}
+		private.versionVotes, private.versionsCounted = counted, 0
+	end
+	local entry = counted[text]
+	if not entry then
+		entry = { senders = {}, n = 0 }
+		counted[text] = entry
+		private.versionsCounted = private.versionsCounted + 1
+	end
+	if type(sender) == "string" and not entry.senders[sender] then
+		entry.senders[sender] = true
+		entry.n = entry.n + 1
+		Wanted:Log("Version: %s says they run %s (%d of %d needed)", sender, text, entry.n, VERSION_VOTES)
+	end
+	return entry.n
 end
 
 ---The desktop app's version, if it's set up on this computer: it writes it into !!WantedLink (WantedAppInfo)
@@ -586,9 +621,11 @@ function Wanted:CheckAppVersion()
 	return true
 end
 
----Another player's client reported its version. A newer, plausible one means this client must update.
+---Another player's client reported its version. A newer, plausible one that enough players report means this client
+---must update.
 ---@param version any
-function Wanted:NoteVersion(version)
+---@param sender string? who said it; nobody's word alone locks anything
+function Wanted:NoteVersion(version, sender)
 	if not Wanted:IsRelease(version) or not Wanted:IsNewerVersion(version, Wanted.VERSION) or not Wanted.db then
 		return
 	end
@@ -604,7 +641,11 @@ function Wanted:NoteVersion(version)
 		end
 		return
 	end
-	Wanted.db.requiredVersion = { version = text, seen = GetServerTime() }
+	local votes = private.VoteVersion(text, sender)
+	if votes < VERSION_VOTES then
+		return
+	end
+	Wanted.db.requiredVersion = { version = text, seen = GetServerTime(), votes = votes }
 	Wanted:Log("!! Version: %s is newer than ours; shared features wait for the update", text)
 	Wanted.newerVersion = text
 	private.TellUpdate()
@@ -639,13 +680,15 @@ function Wanted:GetRequiredUpdate()
 	return required and required.version or nil
 end
 
----Lifts the update lock once this client is on that version, or when nobody on it has been seen for a while.
+---Lifts the update lock once this client is on that version, or when nobody on it has been seen for a while; also one
+---no longer plausible from the version running, or one from before locks needed several players.
 function private.CheckRequiredUpdate(db)
 	local required = db.requiredVersion
 	if not required then
 		return
 	end
-	if not Wanted:IsNewerVersion(required.version, Wanted.VERSION) or GetServerTime() - (required.seen or 0) > REQUIRED_KEEP_SECONDS then
+	if not Wanted:IsNewerVersion(required.version, Wanted.VERSION) or GetServerTime() - (required.seen or 0) > REQUIRED_KEEP_SECONDS
+		or not private.IsPlausibleUpdate(required.version) or (tonumber(required.votes) or 0) < VERSION_VOTES then
 		db.requiredVersion = nil
 		return
 	end

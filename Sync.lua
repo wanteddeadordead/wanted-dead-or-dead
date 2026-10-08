@@ -87,6 +87,7 @@ local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
 -- Players who must say the same whispered pointer: for the next epoch, and for one further on; how long a player's
 -- word is counted
 local MOVE_VOTES, MOVE_VOTES_AHEAD = 2, 3
+local MOVE_MAX_AHEAD = 3 -- how far past the next epoch agreeing players may take us
 local MOVE_VOTE_SECONDS = 30 * 60
 local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
@@ -2735,7 +2736,8 @@ end
 
 ---Counts a player saying the channel moved to a pointer; returns how many different players say it now. Each player's
 ---latest pointer is the one counted for them, so one player naming many pointers holds only one vote.
-function private.VoteMove(epoch, name, sender)
+---Also returns how many of them had it straight from their own app (hops 1).
+function private.VoteMove(epoch, name, sender, hops)
 	local votes, now = private.moveVotes or {}, GetTime()
 	private.moveVotes = votes
 	private.moveVoteOf = private.moveVoteOf or {}
@@ -2755,18 +2757,20 @@ function private.VoteMove(epoch, name, sender)
 		votes[key] = entry
 	end
 	if not entry.senders[sender] then
-		entry.senders[sender] = now
 		entry.n = entry.n + 1
 	end
-	entry.senders[sender] = now
+	entry.senders[sender] = { t = now, hops = hops or MOVE_MAX_HOPS }
 	-- A player's word counts for a while
-	local n = 0
-	for _, t in pairs(entry.senders) do
-		if now - t <= MOVE_VOTE_SECONDS then
+	local n, direct = 0, 0
+	for _, said in pairs(entry.senders) do
+		if now - said.t <= MOVE_VOTE_SECONDS then
 			n = n + 1
+			if said.hops <= 1 then
+				direct = direct + 1
+			end
 		end
 	end
-	return n
+	return n, direct
 end
 
 ---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
@@ -2803,14 +2807,24 @@ function private.OnMove(tbl, sender)
 	-- we logged in on; never what a whisper set, or one player could walk us along a step at a time), three for one
 	-- further on (someone without the app who missed a few moves). The server moves one epoch at a time, and a made-up
 	-- pointer far ahead could never be outbid by its real one.
-	local votes = private.VoteMove(tbl.e, tbl.n, sender)
+	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS
 	local ceiling = max(private.loginEpoch or 0, Wanted.db.appChannelEpoch or 0) + 1
+	-- Never far ahead, however many say so: a few alts could otherwise pin everyone at an epoch the server never outbids
+	if tbl.e > ceiling + MOVE_MAX_AHEAD then
+		Wanted:Log("!! Sync: a channel move from %s to epoch %d, far past the next one (%d); ignored", tostring(sender), tbl.e, ceiling)
+		return
+	end
+	local votes, direct = private.VoteMove(tbl.e, tbl.n, sender, hops)
+	-- Past the next one, only players whose own app brought it (one whisper away) count: those passing on what a
+	-- whisper brought them repeat one word (the hop count is theirs to say, so this only keeps honest clients apart)
 	local needed = tbl.e <= ceiling and MOVE_VOTES or MOVE_VOTES_AHEAD
+	if tbl.e > ceiling then
+		votes = direct
+	end
 	if votes < needed then
 		Wanted:Log("Sync: %s says the channel moved to %s (%d); %d of %d players needed", tostring(sender), tbl.n, tbl.e, votes, needed)
 		return
 	end
-	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS
 	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
 	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
 end

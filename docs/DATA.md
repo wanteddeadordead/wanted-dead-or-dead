@@ -313,7 +313,8 @@ unset or that page is switched off. A new setting: no migration.
   the channel or linked with, and passes it on only while `h` is under 2 (each client spreads a pointer once). The
   1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored. After 1.18.2 a whispered pointer is followed
   only once two players it knows say the same one, at most one epoch past the app's last pointer or the one it logged
-  in on (never what a whisper set), or once three say the same one further on. The app's pointer replaces whatever a
+  in on (never what a whisper set), or once three say the same one further on (at most three epochs further, and only
+  players who say their own app brought it, `h` of 1, count for that). The app's pointer replaces whatever a
   whisper brought, unless it's older than the last one the app gave: `WantedDB.appChannelEpoch` keeps that epoch. A
   new field: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,

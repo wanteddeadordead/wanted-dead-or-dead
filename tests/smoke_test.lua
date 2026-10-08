@@ -3682,8 +3682,9 @@ end)()
 	for _, m in ipairs(Sent("WHISPER", "Peer Two")) do if m.tag == "M" then move = m end end
 	check(move and move.tbl.h == 2 and move.tbl.a == 1 and move.tbl.e == e + 1, "and passed on once more, a whisper further")
 	ClearSent()
-	-- (Two steps past the app's last: three players must say it)
-	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 }) end
+	-- (The app has caught up with e + 1 meanwhile, so e + 2 is the next one: two players saying it are enough)
+	ns.Sync:AdoptFromApp({ e = e + 1, n = "WantedNetHordesrvtwo" })
+	for _, peer in ipairs({ "Peer One", "Peer Two" }) do Move(peer, { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 }) end
 	RunTimers()
 	local spread = 0
 	for _, m in ipairs(Sent("WHISPER")) do if m.tag == "M" then spread = spread + 1 end end
@@ -7922,6 +7923,12 @@ end)()
 	check(ns.Sync:GetPointer().e == e + 1, "two players can't take us past the next one")
 	Move("Peer Three", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
 	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
+	-- But not far ahead, however many say so: three alts can't pin everyone at an epoch the server never outbids
+	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = 99999, n = "WantedNetHordemallory", a = 1, h = 1 }) end
+	check(ns.Sync:GetPointer().e == e + 3, "three players saying a pointer far ahead move nobody: "..ns.Sync:GetPointer().e)
+	-- Nor do players passing on what a whisper brought them (h past 1) count as three independent words
+	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = e + 4, n = "WantedNetHordepassed", a = 1, h = 2 }) end
+	check(ns.Sync:GetPointer().e == e + 3, "pointers passed on by whisper don't take us further ahead")
 	-- The app's pointer overrides whatever whispers brought, even at a lower epoch
 	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
 	RunTimers()

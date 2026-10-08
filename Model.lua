@@ -49,24 +49,15 @@ function Model:GetBountyInfo(bounty)
 		t = bounty.t,
 	}
 	-- A paid or confirmed claim is the poster's decision and stands; otherwise the earliest kill is the claim
-	local paidClaim, owedClaim = nil, nil
-	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id then
-			if Payments:GetForClaim(claim.id) then
-				paidClaim = claim
-			elseif Bounties:GetClaimLevel(claim) == 3 then
-				owedClaim = claim
-			end
-		end
-	end
-	local winner = not paidClaim and not owedClaim and Bounties:GetWinningClaim(bounty) or nil
+	local winner = Bounties:GetWinningClaim(bounty)
+	local level = winner and Bounties:GetClaimLevel(winner)
 	if Bounties:IsWithdrawn(bounty) then
 		info.state = STATE.WITHDRAWN
-	elseif paidClaim then
-		info.state, info.claim = STATE.PAID, paidClaim
-	elseif owedClaim then
-		info.state, info.claim = STATE.OWED, owedClaim
-	elseif winner and Bounties:GetClaimLevel(winner) == 2 then
+	elseif winner and Payments:GetForClaim(winner.id) then
+		info.state, info.claim = STATE.PAID, winner
+	elseif level == 3 then
+		info.state, info.claim = STATE.OWED, winner
+	elseif level == 2 then
 		info.state, info.claim = STATE.CLAIMED, winner
 	elseif winner then
 		info.state, info.claim = STATE.UNVERIFIED, winner
@@ -429,7 +420,7 @@ function Model:GetMyClaims()
 				local winner = Bounties:GetWinningClaim(bounty)
 				if payment then
 					item.label, item.color, item.order, item.finished = "Paid", C.green, 3, true
-				elseif level > 0 and level < 3 and winner and winner.id ~= claim.id then
+				elseif level > 0 and winner and winner.id ~= claim.id then
 					item.label, item.color, item.order, item.finished = "Beaten", C.faint, 2, true
 				elseif level == 0 then
 					item.label, item.color, item.order, item.finished = "Disputed", C.red, 2, true

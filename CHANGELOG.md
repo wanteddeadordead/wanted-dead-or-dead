@@ -82,6 +82,9 @@
   with at least the bounty, never cash on delivery, and only for your own claim. A failed send no longer counts the
   next mail you send. A payment sent through another mail addon (TSM) is now recorded when the hunter receives it.
 - When a poster both confirms and disputes a claim, their latest decision stands on every client.
+- A bounty is only ever owed once: once the poster confirms or pays a claim, no other claim on that bounty is owed.
+  A claim nobody witnessed no longer beats a witnessed one with a later kill, and a kill from before the bounty was
+  posted (or after it ended) wins nothing.
 
 ## [1.18.2] - 2026-10-08
 

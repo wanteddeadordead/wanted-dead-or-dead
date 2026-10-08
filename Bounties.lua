@@ -838,21 +838,54 @@ function Bounties:DeathPageURL(claim)
 	return format("https://wanteddeadordead.com/death/%s/%d", claim.data.victim or "", claim.data.killT or claim.t)
 end
 
----The claim that gets the bounty: the earliest kill among claims that aren't disputed. Every hunter can
----chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
+---The claim that gets the bounty. Once the poster has paid or confirmed one, that one: their decision stands, and
+---nobody else is owed for the same bounty. Otherwise the earliest kill among witnessed claims whose kill fell while
+---the bounty was open (IsInWindow), and failing those (shown as unverified, owed nothing yet) among the rest. Every
+---hunter can chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
 ---@param bounty table
 ---@return table? claim
 function Bounties:GetWinningClaim(bounty)
-	local best, bestT = nil, nil
+	local paid, confirmed, witnessed, lone
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id and Bounties:GetClaimLevel(claim) > 0 then
-			local t = claim.data.killT or claim.t
-			if not best or t < bestT or (t == bestT and claim.id < best.id) then
-				best, bestT = claim, t
+		if claim.data.bounty == bounty.id then
+			local level = Bounties:GetClaimLevel(claim)
+			if Wanted.Payments:GetForClaim(claim.id) then
+				paid = private.EarlierKill(paid, claim)
+			elseif level == 3 then
+				confirmed = private.EarlierKill(confirmed, claim)
+			elseif level > 0 and Bounties:IsInWindow(claim, bounty) then
+				if level == 2 then
+					witnessed = private.EarlierKill(witnessed, claim)
+				else
+					lone = private.EarlierKill(lone, claim)
+				end
 			end
 		end
 	end
+	return paid or confirmed or witnessed or lone
+end
+
+---Whichever of two claims (the first may be nil) has the earlier kill, the lower id on a tie.
+function private.EarlierKill(best, claim)
+	if not best then
+		return claim
+	end
+	local t, bestT = claim.data.killT or claim.t, best.data.killT or best.t
+	if t < bestT or (t == bestT and claim.id < best.id) then
+		return claim
+	end
 	return best
+end
+
+---Whether a claim's kill fell while its bounty was open: at or after it was posted, before it expired or was
+---withdrawn, and no later than the claim itself.
+---@param claim table
+---@param bounty table
+---@return boolean
+function Bounties:IsInWindow(claim, bounty)
+	local killT = claim.data.killT or claim.t
+	return type(killT) == "number" and killT >= bounty.t and killT <= claim.t and killT < Bounties:GetExpiry(bounty)
+		and killT < (private.WithdrawnAt(bounty) or math.huge)
 end
 
 ---The claim's level: 1 own client, 2 witnessed (a trusted witness, the victim's own record included), 3 confirmed

@@ -62,6 +62,11 @@
   Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
 - A guild bounty claim is only witnessed by someone who saw the victim in that guild, and a bounty no longer tells
   your client which guild its target is in, so a made-up bounty can't turn a kill into a guild bounty claim.
+- Payments are checked: a mail only counts as a bounty payment when it goes from the bounty's poster to the hunter
+  with at least what the claim is owed, never cash on delivery, and only for your own claim. A failed send no longer
+  counts the next mail you send, and a send still counts when you close the mailbox while it's going out. A payment
+  sent through another mail addon (TSM) is now recorded when the hunter receives it. A hunter's own record of being
+  paid never decides which claim a bounty goes to.
 
 ## [1.18.3] - 2026-10-08
 

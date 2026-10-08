@@ -14,7 +14,10 @@
 - Raids are saved: your raid, its sign-ups and the raids you marked come back after a reload or logout, and a planned
   raid stays on everyone's list while its leader is offline.
 - Your raid, and the raids you're going to or interested in, show on the calendar.
-- The Raids page explains how it works in six numbered steps.
+- Guild only raids: only your guildmates with Wanted see them, Announce posts in guild chat, and only guildmates are
+  invited. Open to everyone, on your raid's card, shows it to every Wanted player of your faction once the guild has
+  filled what it will.
+- The Raids page explains how it works in seven numbered steps.
 
 ## [1.18.0] - 2026-10-07
 

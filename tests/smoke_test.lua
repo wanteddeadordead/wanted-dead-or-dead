@@ -6378,6 +6378,41 @@ end)()
 	R:Close()
 	check(R:Title(R:Create({ title = "Just us", size = 10 })) == "Just us" and ads[#ads].g == nil, "not a guild raid: no guild")
 	R:Close()
+	-- Guild only: under our guild's name, its ad marked for the guild, Announce in guild chat, and only guildmates
+	-- invited when they whisper "inv"
+	local exclusive = R:Create({ title = "Officers' night", size = 20, exclusive = true })
+	check(exclusive and exclusive.exclusive and R:Title(exclusive) == "Officers' night with <Blood Oath>" and ads[#ads].x == 1 and ads[#ads].g == "Blood Oath",
+		"a guild-only raid: our guild's, marked in its ad")
+	local realGuildApi, realInGuild = C_GuildInfo, IsInGuild
+	C_GuildInfo = { MemberExistsByName = function(name) return name == "Guildie" end }
+	IsInGuild = function() return true end
+	chatSent = {}
+	clock = clock + 61
+	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^GUILD: Forming a world PvP raid: Officers' night"), "announced in guild chat: "..tostring(chatSent[1]))
+	local invitedBefore = #invited
+	R:OnWhisper("inv", "Stranger-Elsewhere")
+	R:OnWhisper("inv", "Guildie")
+	check(#invited == invitedBefore + 1 and invited[#invited] == "Guildie", "only guildmates are invited")
+	-- The ad goes to the guild only, never the channel or a realm link
+	addonSent = {}
+	realAd(ns.Sync, { id = "g1", l = me, t = "Officers' night", g = "Blood Oath", x = 1, s = clock, m = 20, ml = 1, n = 1, u = 0, f = "Horde" })
+	local onlyGuild = #addonSent > 0
+	for _, m in ipairs(addonSent) do onlyGuild = onlyGuild and m.chatType == "GUILD" end
+	check(onlyGuild, "a guild-only ad goes to the guild only")
+	-- Open to everyone: the ad goes out unmarked, and anyone may join
+	R:OpenToEveryone()
+	R:OnWhisper("inv", "Stranger-Elsewhere")
+	check(not exclusive.exclusive and ads[#ads].x == nil and invited[#invited] == "Stranger-Elsewhere", "opened to everyone: out to all, anyone invited")
+	R:Close()
+	C_GuildInfo, IsInGuild = realGuildApi, realInGuild
+	-- Another's guild-only raid: listed only from our guild's own chat, and only when it's our guild
+	R:OnAd(ad({ id = "gx1", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "CHANNEL")
+	R:OnAd(ad({ id = "gx2", g = "Other Guild", x = 1 }), "Lead Er-Realm", "GUILD")
+	R:OnAd(ad({ id = "gx3", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "GUILD")
+	local guildIds = {}
+	for _, raid in ipairs(R:List()) do guildIds[#guildIds + 1] = raid.id end
+	check(table.concat(guildIds, ",") == "gx3", "guild-only: from our guild's chat, our guild only: "..table.concat(guildIds, ","))
+	R:OnAd(ad({ id = "gx3", c = 1 }), "Lead Er-Realm", "GUILD")
 	GetGuildInfo = realGuildInfo
 	R:OnAd(ad({ id = "guild", g = "Blood|HOath" }), "Lead Er-Realm")
 	check(R:Title(R:List()[1]) == "Crossroads with <BloodHOath>", "another's guild raid, escapes taken out: "..R:Title(R:List()[1]))
@@ -6436,7 +6471,7 @@ end)()
 			end
 		end
 	end
-	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("HOW IT WORKS"), "the Raids page: the form, how it works, and the raid with Join")
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("Guild only") and shows("HOW IT WORKS"), "the Raids page: the form, how it works, and the raid with Join")
 	check(shows("Planned push") and shows("Interested") and shows("Going"), "a planned raid: Interested and Going")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end

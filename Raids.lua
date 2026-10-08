@@ -159,7 +159,7 @@ function Raids:Update(o)
 	for key, value in pairs(raid) do
 		mine[key] = value
 	end
-	mine.guild = raid.guild
+	mine.guild, mine.exclusive = raid.guild, raid.exclusive
 	private.SendAd()
 	private.Changed()
 	return nil
@@ -176,8 +176,9 @@ function private.Details(o, keep)
 	if not SIZES[size] then
 		return nil, "Pick a size: 10, 20 or 40."
 	end
-	local guild = o.guild and GetGuildInfo("player") or nil
-	if o.guild and not guild then
+	-- Guild only is a guild raid too
+	local guild = (o.guild or o.exclusive) and GetGuildInfo("player") or nil
+	if (o.guild or o.exclusive) and not guild then
 		return nil, "You're not in a guild."
 	end
 	local now = GetServerTime()
@@ -191,6 +192,7 @@ function private.Details(o, keep)
 	return {
 		title = title,
 		guild = guild,
+		exclusive = o.exclusive and true or nil,
 		where = private.Clean(o.where) ~= "" and private.Clean(o.where) or (GetZoneText() or ""),
 		startAt = startAt,
 		size = size,
@@ -289,6 +291,11 @@ function Raids:Announce(text)
 	if GetTime() - private.lastAnnounce < ANNOUNCE_SECONDS then
 		return "You announced it less than a minute ago."
 	end
+	if private.mine.exclusive then
+		private.lastAnnounce = GetTime()
+		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "GUILD")
+		return nil
+	end
 	local index = Raids:AnnounceChannel()
 	if not index then
 		return "You're not in a Looking for Group or General channel."
@@ -298,6 +305,40 @@ function Raids:Announce(text)
 	return nil
 end
 
+---Opens the guild-only raid we lead to everyone: its ad goes out to every Wanted player of our faction from now on.
+function Raids:OpenToEveryone()
+	local mine = private.mine
+	if not mine or not mine.exclusive then
+		return
+	end
+	mine.exclusive = nil
+	private.SendAd()
+	private.Changed()
+end
+
+---Whether a player may join the raid we lead: anyone, or for a guild-only raid, our guildmates. A client without the
+---game's guild check lets them in.
+function private.MayJoin(name)
+	local mine = private.mine
+	if not mine or not mine.exclusive or not (C_GuildInfo and C_GuildInfo.MemberExistsByName) then
+		return true
+	end
+	local ok, exists = pcall(C_GuildInfo.MemberExistsByName, name)
+	if ok and exists then
+		return true
+	end
+	-- The guild may know them without their realm
+	local short = strmatch(name, "^([^%-]+)%-")
+	if short then
+		ok, exists = pcall(C_GuildInfo.MemberExistsByName, short)
+		if ok and exists then
+			return true
+		end
+	end
+	Wanted:Print("%s isn't in your guild: not invited to %s, which is guild only.", name, mine.title)
+	return false
+end
+
 ---Someone asks to join the raid we lead, or, before it starts, signs up for it: k = "g" going (and an older client's
 ---join, which has no k), "i" interested, "x" taken back.
 ---@param sender string
@@ -305,6 +346,9 @@ end
 function Raids:OnJoin(sender, tbl)
 	local raid = private.mine
 	if not raid or type(tbl) ~= "table" or tbl.r ~= raid.id or type(sender) ~= "string" then
+		return
+	end
+	if tbl.k ~= "x" and not private.MayJoin(sender) then
 		return
 	end
 	if tbl.k == "x" then
@@ -391,7 +435,7 @@ end
 ---@param sender string
 function Raids:OnWhisper(text, sender)
 	local raid = private.mine
-	if raid and private.Started(raid) and type(text) == "string" and strmatch(strlower(text), "^%s*inv[ite]*%s*$") then
+	if raid and private.Started(raid) and type(text) == "string" and strmatch(strlower(text), "^%s*inv[ite]*%s*$") and private.MayJoin(sender) then
 		private.Invite(sender)
 	end
 end
@@ -435,7 +479,7 @@ function private.SendAd(closed)
 	if not raid then
 		return
 	end
-	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, z = raid.where, s = raid.startAt, m = raid.size,
+	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, x = raid.exclusive and 1 or nil, z = raid.where, s = raid.startAt, m = raid.size,
 		ml = raid.minLevel, n = private.GroupSize(), u = private.CountKind(raid.signups, "going"), i = private.CountKind(raid.signups, "interested"), f = UnitFactionGroup("player"), c = closed and 1 or nil })
 end
 
@@ -471,9 +515,11 @@ end
 
 ---Another player's raid ad (from the channel or a realm link): kept while it keeps coming, shown on the Raids page,
 ---and a toast the first time. Ads that don't make sense, from the other faction or already closed are dropped.
+---A guild-only raid's ad counts only from our guild's own chat, and only when it's our guild.
 ---@param ad table
 ---@param sender string
-function Raids:OnAd(ad, sender)
+---@param channel string? "GUILD", "CHANNEL" or "WHISPER"
+function Raids:OnAd(ad, sender, channel)
 	if type(ad) ~= "table" or type(ad.id) ~= "string" or #ad.id > 80 or type(ad.l) ~= "string" or #ad.l > 60 then
 		return
 	end
@@ -494,6 +540,9 @@ function Raids:OnAd(ad, sender)
 			private.seen[ad.id] = nil
 			private.Changed()
 		end
+		return
+	end
+	if ad.x and (channel ~= "GUILD" or ad.g ~= GetGuildInfo("player")) then
 		return
 	end
 	local faction = UnitFactionGroup("player")

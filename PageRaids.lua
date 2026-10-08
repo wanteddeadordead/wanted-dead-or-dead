@@ -8,10 +8,10 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Raids = Wanted.Raids
-local private = { size = 40, later = false, guild = false, editing = false }
+local private = { size = 40, later = false, guild = false, exclusive = false, editing = false }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 120
-local FORM_HEIGHT = 240 -- the form, with how it works under it
+local FORM_HEIGHT = 258 -- the form, with how it works under it
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
 	"1.  Name your raid, say where and when, and click Form raid. Every Wanted player of your faction sees it, on every realm.",
@@ -19,7 +19,8 @@ local HOW_IT_WORKS = table.concat({
 	"3.  Later: players mark Interested or Going. You see who, and can whisper them all from your raid's card.",
 	"4.  When it starts, everyone signed up gets a popup asking them to join.",
 	"5.  Edit or close it, and everyone signed up is told what changed. It's on their calendar and yours.",
-	"6.  Announce posts it in chat for players without Wanted: they whisper you \"inv\" to be invited.",
+	"6.  Guild only: just your guildmates see it, until you open it to everyone from your raid's card.",
+	"7.  Announce posts it in chat for players without Wanted: they whisper you \"inv\" to be invited.",
 }, "\n")
 
 ---A time typed as "20:00", "8:30" or "20" as the next such time (server seconds), or nil.
@@ -130,6 +131,7 @@ function private.RefreshCard()
 		tinsert(names, "Interested: "..table.concat(interested, ", "))
 	end
 	private.leadNames:SetText(table.concat(names, "   "))
+	private.openButton:SetShown(mine.exclusive == true)
 end
 
 ---Edit: the form, filled in with the raid we lead.
@@ -149,6 +151,8 @@ function private.Edit()
 	private.sizeChoice:SetChoice(mine.size)
 	private.guild = mine.guild ~= nil
 	private.guildToggle:SetChecked(private.guild)
+	private.exclusive = mine.exclusive == true
+	private.exclusiveToggle:SetChecked(private.exclusive)
 	private.Refresh()
 end
 
@@ -171,7 +175,7 @@ function private.Form()
 		end
 	end
 	local o = { title = private.titleBox:GetText(), where = private.whereBox:GetText(), startAt = startAt,
-		size = private.size, minLevel = private.levelBox:GetText(), guild = private.guild }
+		size = private.size, minLevel = private.levelBox:GetText(), guild = private.guild, exclusive = private.exclusive }
 	if private.editing then
 		local why = Raids:Update(o)
 		if why then
@@ -226,6 +230,13 @@ function private.BuildForm(parent, width)
 	end)
 	guild:SetPoint("LEFT", size, "RIGHT", 12, 0)
 	private.guildToggle = guild
+	local exclusive = W:Toggle(form, "Guild only", function(checked)
+		private.exclusive = checked
+	end)
+	exclusive:SetPoint("LEFT", guild, "RIGHT", 12, 0)
+	exclusive.tooltipTitle, exclusive.tooltipText = "Guild only", "Only your guildmates with Wanted see it, Announce posts in guild "
+		.."chat, and only guildmates are invited. Open it to everyone later from your raid's card."
+	private.exclusiveToggle = exclusive
 	guild.tooltipTitle, guild.tooltipText = "Guild raid", "Shows the raid with your guild's name: The Duskwood Takeover with <Your Guild>."
 	local go = W:Button(form, "Form raid", "primary", 120, 26, private.Form)
 	go:SetPoint("TOPRIGHT", -14, -74)
@@ -246,13 +257,17 @@ end
 ---Announce: shows the line and where it goes first, editable; Post sends it, Cancel sends nothing.
 function private.ConfirmAnnounce()
 	local index, channel = Raids:AnnounceChannel()
-	if not index then
+	local guildOnly = Raids:Mine() and Raids:Mine().exclusive
+	if guildOnly then
+		channel = "guild chat"
+	elseif not index then
 		UI:Toast("You're not in a Looking for Group or General channel.", C.red)
 		return
 	end
 	W:Dialog({
 		title = "Announce your raid",
-		text = format("This goes in %s (channel %d), where players without Wanted see it. Anyone who whispers you \"inv\" is invited. Change it if you like:",
+		text = guildOnly and "This goes in guild chat, as the raid is guild only. Guildmates who whisper you \"inv\" are invited. Change it if you like:"
+			or format("This goes in %s (channel %d), where players without Wanted see it. Anyone who whispers you \"inv\" is invited. Change it if you like:",
 			channel, index),
 		input = { value = Raids:AnnounceText() or "", multiline = true },
 		width = 520,
@@ -323,6 +338,14 @@ function private.BuildLead(parent)
 	edit:SetPoint("LEFT", whisper, "RIGHT", 8, 0)
 	W:AttachTooltip(edit, "Edit the raid", "Change its name, place, time, size or level. Everyone signed up is told what changed.")
 	close:SetPoint("LEFT", edit, "RIGHT", 8, 0)
+	-- A guild-only raid: open it to everyone once the guild has filled what it will
+	private.openButton = W:Button(lead, "Open to everyone", "primary", 140, 26, function()
+		Raids:OpenToEveryone()
+		UI:Toast("Your raid is open to everyone: every Wanted player of your faction sees it now.", C.green)
+		private.Refresh()
+	end)
+	private.openButton:SetPoint("BOTTOMRIGHT", -14, 10)
+	W:AttachTooltip(private.openButton, "Open to everyone", "Shows your guild-only raid to every Wanted player of your faction, so others can fill the spots left.")
 	return lead
 end
 

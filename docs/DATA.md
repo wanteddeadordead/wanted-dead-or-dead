@@ -40,7 +40,7 @@ one out. When the app is behind, the addon says so in chat once a login.
 from it. Nothing reads it back; a missing or malformed one changes nothing.
 
 `WantedDB.raids` (from 1.18.1) is `{ [character] = { mine, joined, seen } }`, by `Name-Realm`: the world PvP raid the
-character leads (`{ id, title, guild, where, startAt, size, minLevel, created, signups = { [name] = "going" or
+character leads (`{ id, title, guild, exclusive, where, startAt, size, minLevel, created, signups = { [name] = "going" or
 "interested" } }`), the raids it marked (`joined[id] = { leader, startAt, title, kind, asked, details }`) and other
 players' raids it has heard of (`seen[id] = { raid, heard }`, server times). `Raids:Load()` drops anything past at
 login: a led raid two hours after its start, a marked one ten minutes after, a heard one three minutes after its start

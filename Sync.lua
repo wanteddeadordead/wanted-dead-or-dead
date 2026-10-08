@@ -100,6 +100,7 @@ local TAG_POSSE_JOIN = "J"
 -- A world PvP raid's ad (Raids): on the channel, and to realm links, whose clients share it once on theirs (fw = 1).
 -- Passing news like sightings: never stored, never forwarded further. Older versions ignore it.
 local TAG_RAID = "A"
+local GUILD_ONLY = "@guild" -- private.Send's target for the guild's addon channel alone
 -- Sent privately to a raid's leader: I'm joining (or signing up for) your raid { r = raid id } (Raids)
 local TAG_RAID_JOIN = "I"
 -- The server's sync channel, or (q) a player asking for the current one: { e = epoch, n = name, a = 1 (the
@@ -1009,7 +1010,15 @@ end
 ---@param target string? a player to whisper instead of the channel
 ---@return boolean
 function private.Send(tag, tbl, attempt, target)
-	local viaGuild = not target and private.ViaGuild()
+	-- GUILD_ONLY: the guild's addon channel, whether or not we're on the sync channel
+	local guildOnly = target == GUILD_ONLY
+	if guildOnly then
+		if not IsInGuild() then
+			return false
+		end
+		target = nil
+	end
+	local viaGuild = guildOnly or (not target and private.ViaGuild())
 	if not target and not private.channelId and not viaGuild then
 		return false
 	end
@@ -1068,7 +1077,7 @@ function private.Send(tag, tbl, attempt, target)
 			Wanted:Log("Sync: SendAddonMessage part %d/%d of %s to the guild -> %s", part, total, tag, tostring(result))
 			if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
 				private.stats.throttled = private.stats.throttled + 1
-				private.QueueRetry(tag, tbl, attempt, nil)
+				private.QueueRetry(tag, tbl, attempt, guildOnly and GUILD_ONLY or nil)
 				return false
 			end
 			tinsert(private.guildTimes, now)
@@ -1690,10 +1699,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 	end
 	if tag == TAG_RAID then
 		if Wanted.Raids then
-			Wanted.Raids:OnAd(tbl, sender)
+			Wanted.Raids:OnAd(tbl, sender, channel)
 		end
 		-- One from a realm link goes on our channel once, so players on this realm name see it too
-		if viaLink and tbl.fw == nil and private.channelId then
+		if viaLink and tbl.fw == nil and not tbl.x and private.channelId then
 			tbl.fw = 1
 			private.Send(TAG_RAID, tbl)
 		end
@@ -2100,6 +2109,11 @@ end
 ---Shares a raid's ad: on the channel, and to each realm link (whose clients share it on theirs).
 ---@param ad table
 function Sync:SendRaidAd(ad)
+	-- A guild-only raid goes to the guild alone
+	if ad.x then
+		private.Send(TAG_RAID, ad, nil, GUILD_ONLY)
+		return
+	end
 	private.Send(TAG_RAID, ad)
 	for name in pairs(private.links) do
 		private.Send(TAG_RAID, ad, nil, name)

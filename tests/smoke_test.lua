@@ -6390,7 +6390,7 @@ end)()
 			end
 		end
 	end
-	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid"), "the Raids page: the form, and the raid with Join")
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("How it works"), "the Raids page: the form, how it works, and the raid with Join")
 	check(shows("Planned push") and shows("Interested") and shows("Going"), "a planned raid: Interested and Going")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end

@@ -11,6 +11,11 @@ local Raids = Wanted.Raids
 local private = { size = 40, later = false, guild = false, editing = false }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 120
+local FORM_HEIGHT = 172 -- the form, with how it works under it
+local HOW_IT_WORKS = "How it works: every Wanted player of your faction sees your raid, on every realm. Form it Now and "
+	.."anyone who clicks Join is invited straight away. Form it for Later and players mark Interested or Going: you see "
+	.."who, you can whisper them all, and when it starts they get a popup asking them to join. If you edit or close it, "
+	.."they're told what changed. Announce posts it in chat for players without Wanted, who whisper you \"inv\" to be invited."
 
 ---A time typed as "20:00", "8:30" or "20" as the next such time (server seconds), or nil.
 ---@param text string
@@ -95,6 +100,10 @@ function private.RefreshCard()
 	local formShown = not mine or private.editing
 	private.form:SetShown(formShown)
 	private.lead:SetShown(not formShown)
+	-- The list sits under whichever card shows
+	private.list:ClearAllPoints()
+	private.list:SetPoint("TOPLEFT", formShown and private.form or private.lead, "BOTTOMLEFT", 0, -12)
+	private.list:SetPoint("TOPRIGHT", formShown and private.form or private.lead, "BOTTOMRIGHT", 0, -12)
 	if formShown then
 		private.formLabel:SetText(private.editing and "EDIT YOUR RAID" or "FORM A RAID")
 		private.go:SetText(private.editing and "Save changes" or "Form raid")
@@ -182,7 +191,7 @@ function private.BuildForm(parent, width)
 	local form = W:Card(parent)
 	form:SetPoint("TOPLEFT")
 	form:SetPoint("TOPRIGHT")
-	form:SetHeight(CARD_HEIGHT)
+	form:SetHeight(FORM_HEIGHT)
 	private.formLabel = W:SectionLabel(form, "Form a raid")
 	private.formLabel:SetPoint("TOPLEFT", 14, -10)
 	private.titleBox = W:Input(form, 200, "Name, e.g. Southshore raid")
@@ -221,6 +230,10 @@ function private.BuildForm(parent, width)
 		private.Refresh()
 	end)
 	private.cancelEdit:SetPoint("TOPRIGHT", -14, -10)
+	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.muted)
+	how:SetPoint("TOPLEFT", 14, -112)
+	how:SetWidth(width - 28)
+	how:SetWordWrap(true)
 	return form
 end
 
@@ -315,10 +328,8 @@ UI:RegisterPage("raids", {
 	build = function(container, width, height)
 		private.form = private.BuildForm(container, width)
 		private.lead = private.BuildLead(container)
-		local listTop = CARD_HEIGHT + 12
+		local listTop = FORM_HEIGHT + 12
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
-		list:SetPoint("TOPLEFT", 0, -listTop)
-		list:SetPoint("TOPRIGHT", 0, -listTop)
 		list.onClick = function(raid)
 			-- A planned raid has its Interested and Going buttons
 			if Raids:Joined(raid.id) or raid.startAt > GetServerTime() then

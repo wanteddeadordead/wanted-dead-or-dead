@@ -160,9 +160,10 @@ function private.Members()
 			local byName, lower, first = {}, {}, {}
 			for _, m in ipairs(list) do
 				if m.name then
+					-- A name two guildmates share (once the realm is gone, or in any case) is neither's: false
 					local name = Ambiguate(m.name, "none")
-					byName[name] = m.ri
-					lower[strlower(name)] = m.ri
+					byName[name] = byName[name] == nil and m.ri or false
+					lower[strlower(name)] = lower[strlower(name)] == nil and m.ri or false
 					local firstName = strmatch(strlower(name), "^(%S+) ")
 					if firstName then
 						first[firstName] = first[firstName] == nil and m.ri or false
@@ -184,17 +185,20 @@ function GuildKoS:RankOf(name)
 	end
 	name = Ambiguate(name, "none")
 	local rank = private.Members()[name]
+	if rank == false then
+		return nil -- two guildmates have this name
+	end
 	if rank or not private.lowerNames then
 		return rank
 	end
 	local lower = strlower(name)
 	local firstName = strmatch(lower, "^(%S+) ")
 	if private.lowerNames[lower] ~= nil then
-		rank = private.lowerNames[lower]
+		rank = private.lowerNames[lower] or nil
 	elseif not firstName then
 		rank = private.firstNames[lower] or nil
 	else
-		rank = private.lowerNames[firstName]
+		rank = private.lowerNames[firstName] or nil
 	end
 	if rank then
 		Wanted:Log("GuildKoS: %s matched the roster only loosely", name)

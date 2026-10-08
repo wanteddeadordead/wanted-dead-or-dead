@@ -4357,6 +4357,15 @@ end)()
 	check(G:RankOf("Office") == 2 and G:RankOf("Solo Person") == 3, "a first name alone matches a guildmate's full name, and the other way round")
 	check(G:RankOf("Twin") == nil and G:RankOf("Nobody Here") == nil, "a first name two guildmates share matches neither; a stranger matches nobody")
 	roster[#roster], roster[#roster - 1], roster[#roster - 2] = nil, nil, nil
+	-- Two guildmates whose names only differ by realm or case: neither's rank is taken for the other's
+	roster[#roster + 1] = { guid = "Player-1-11", order = 2, name = "Dup Name-RealmA" }
+	roster[#roster + 1] = { guid = "Player-2-12", order = 7, name = "Dup Name-RealmB" }
+	roster[#roster + 1] = { guid = "Player-1-13", order = 2, name = "Mixed Case" }
+	roster[#roster + 1] = { guid = "Player-1-14", order = 7, name = "mixed case" }
+	clock = clock + 31
+	check(G:RankOf("Dup Name-RealmB") == nil and G:RankOf("Dup Name") == nil, "a name two guildmates share (by realm) matches neither")
+	check(G:RankOf("MIXED CASE") == nil, "a name two guildmates share (by case) matches neither")
+	for _ = 1, 4 do roster[#roster] = nil end
 	clock = clock + 31
 
 	-- An officer here removes an entry; it's no longer Kill on Sight

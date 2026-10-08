@@ -5,6 +5,12 @@
 - Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover
   with <Your Guild>", on the Raids page, Home, the popups and the Announce line.
 - The raid form's Where box suggests zones as you type; click one or press Tab for the first.
+- Interested and Going on planned raids: the leader sees how many of each, and who.
+- When a raid you marked starts, a popup asks "has started the raid, join now?"; Join and the leader invites you. Never
+  in a fight.
+- Whisper sign-ups: the leader can whisper everyone going or interested, with a message they can change first.
+- Edit your raid's name, place, time, size or level; everyone signed up gets a popup saying what changed, or that it
+  was cancelled if you close it before it starts.
 
 ## [1.18.0] - 2026-10-07
 

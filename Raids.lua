@@ -1,7 +1,8 @@
 -- Wanted: world PvP raids. A leader forms one, now or for later; its ad goes to every Wanted player of their faction
 -- (the sync channel, and realm links, which share it on theirs), who see it on the Raids page and in a toast. Join
--- whispers the leader's client, which invites them (turning the group into a raid before the sixth); for a raid that
--- hasn't started, Join signs them up, and their client asks again when it starts. Announce puts a line in a public
+-- whispers the leader's client, which invites them (turning the group into a raid before the sixth); a raid that
+-- hasn't started they mark Interested or Going (the leader sees who, and can whisper them all), and when it starts
+-- their client asks them to join. Edits reach those signed up as a toast saying what changed, or that it was cancelled. Announce puts a line in a public
 -- chat channel for players without Wanted, and the leader's client invites anyone who whispers "inv". Ads are passing
 -- news, never stored: a raid whose ad stops coming has gone.
 
@@ -13,11 +14,12 @@ local private = {
 	mine = nil, -- the raid we lead: { id, title, guild?, where, startAt, size, minLevel, created, signups = { name = true } }
 	seen = {}, -- id -> { ad, sender, heard } other players' raids
 	toasted = {}, -- id -> true once its toast has shown
-	joined = {}, -- id -> { leader, startAt, asked } raids we joined or signed up for
+	joined = {}, -- id -> { leader, startAt, title, kind ("going" or "interested"), asked, details } raids we joined or signed up for
 	reminded = {}, -- id..":"..kind -> true
 	pending = {}, -- names waiting for an invite until combat ends
 	counter = 0,
 	lastAnnounce = -math.huge,
+	lastWhisper = -math.huge,
 }
 
 local SIZES = { [10] = true, [20] = true, [40] = true }
@@ -28,6 +30,7 @@ local OPEN_HOURS = 2 -- a raid closes itself this long after it starts
 local SOON_SECONDS = 15 * 60 -- the reminder before a planned raid
 local ASK_MINUTES = 10 -- a planned raid's members ask for their invite for this long after it starts
 local ANNOUNCE_SECONDS = 60
+local WHISPER_GAP_SECONDS = 0.5 -- between Whisper sign-ups' whispers, so the game doesn't hold them back
 local MAX_SEEN = 30
 local PARTY_SIZE = 5
 local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
@@ -57,6 +60,49 @@ function Raids:Create(o)
 	if private.mine then
 		return nil, "You're already leading a raid. Close it first."
 	end
+	local raid, why = private.Details(o)
+	if not raid then
+		return nil, why
+	end
+	local now = GetServerTime()
+	private.counter = private.counter + 1
+	raid.id = Store:GetOrigin()..":"..now..":"..private.counter
+	raid.created = now
+	raid.signups = {} -- name -> "going" or "interested"
+	private.mine = raid
+	private.SendAd()
+	private.Changed()
+	return private.mine
+end
+
+---Changes the raid we lead (the same fields as Create; a started raid without a new time keeps its start). Its ad
+---goes out at once, so those signed up are told what changed. Returns why not, or nil.
+---@param o table
+---@return string?
+function Raids:Update(o)
+	local mine = private.mine
+	if not mine then
+		return "You're not leading a raid."
+	end
+	if not o.startAt and private.Started(mine) then
+		o.startAt = mine.startAt
+	end
+	local raid, why = private.Details(o, mine.startAt)
+	if not raid then
+		return why
+	end
+	for key, value in pairs(raid) do
+		mine[key] = value
+	end
+	mine.guild = raid.guild
+	private.SendAd()
+	private.Changed()
+	return nil
+end
+
+---A raid's details from the form, checked: { title, guild, where, startAt, size, minLevel }, or nil and why not. A
+---start before now is now, except keep (the start a raid already had).
+function private.Details(o, keep)
 	local title = private.Clean(o.title)
 	if title == "" then
 		return nil, "Give the raid a name."
@@ -71,27 +117,20 @@ function Raids:Create(o)
 	end
 	local now = GetServerTime()
 	local startAt = tonumber(o.startAt)
-	if not startAt or startAt < now then
+	if not startAt or (startAt < now and startAt ~= keep) then
 		startAt = now
 	end
 	if startAt > now + 7 * 24 * 3600 then
 		return nil, "A raid can be planned up to a week ahead."
 	end
-	private.counter = private.counter + 1
-	private.mine = {
-		id = Store:GetOrigin()..":"..now..":"..private.counter,
+	return {
 		title = title,
 		guild = guild,
 		where = private.Clean(o.where) ~= "" and private.Clean(o.where) or (GetZoneText() or ""),
 		startAt = startAt,
 		size = size,
 		minLevel = max(1, min(60, floor(tonumber(o.minLevel) or 1))),
-		created = now,
-		signups = {},
 	}
-	private.SendAd()
-	private.Changed()
-	return private.mine
 end
 
 ---A raid's name as shown: with its guild, if it's a guild raid.
@@ -194,23 +233,92 @@ function Raids:Announce(text)
 	return nil
 end
 
----Someone asks to join (or sign up for) the raid we lead.
+---Someone asks to join the raid we lead, or, before it starts, signs up for it: k = "g" going (and an older client's
+---join, which has no k), "i" interested, "x" taken back.
 ---@param sender string
----@param tbl table { r = raid id }
+---@param tbl table { r = raid id, k = kind? }
 function Raids:OnJoin(sender, tbl)
 	local raid = private.mine
 	if not raid or type(tbl) ~= "table" or tbl.r ~= raid.id or type(sender) ~= "string" then
 		return
 	end
+	if tbl.k == "x" then
+		if raid.signups[sender] then
+			raid.signups[sender] = nil
+			private.Changed()
+		end
+		return
+	end
 	if not private.Started(raid) then
-		if not raid.signups[sender] then
-			raid.signups[sender] = true
-			Wanted:Print("%s signed up for %s.", sender, raid.title)
+		local kind = tbl.k == "i" and "interested" or "going"
+		if raid.signups[sender] ~= kind then
+			raid.signups[sender] = kind
+			Wanted:Print("%s is %s for %s.", sender, kind, raid.title)
 			private.Changed()
 		end
 		return
 	end
 	private.Invite(sender)
+end
+
+---Who signed up for a raid we lead: those going and those interested, each sorted.
+---@param raid table
+---@return string[] going
+---@return string[] interested
+function Raids:SignUps(raid)
+	local going, interested = {}, {}
+	for name, kind in pairs(raid.signups) do
+		tinsert(kind == "interested" and interested or going, name)
+	end
+	sort(going)
+	sort(interested)
+	return going, interested
+end
+
+---The whisper Whisper sign-ups starts with.
+---@return string?
+function Raids:WhisperText()
+	local raid = private.mine
+	if not raid then
+		return nil
+	end
+	if private.Started(raid) then
+		return format("%s has started in %s. Whisper me \"inv\" for an invite.", Raids:Title(raid), raid.where)
+	end
+	return format("%s starts %s in %s. See you there!", Raids:Title(raid), date("%a %H:%M", raid.startAt), raid.where)
+end
+
+---Whispers everyone signed up for the raid we lead, one at a time a moment apart, at most once a minute. Returns why
+---not, or nil.
+---@param text string
+---@return string?
+function Raids:WhisperSignUps(text)
+	local raid = private.mine
+	if not raid then
+		return "You're not leading a raid."
+	end
+	text = strsub(strtrim((gsub(gsub(text or "", "|", ""), "[\r\n]+", " "))), 1, 255)
+	if text == "" then
+		return "There's nothing to send."
+	end
+	if not next(raid.signups) then
+		return "Nobody has signed up yet."
+	end
+	if GetTime() - private.lastWhisper < ANNOUNCE_SECONDS then
+		return "You whispered them less than a minute ago."
+	end
+	private.lastWhisper = GetTime()
+	local going, interested = Raids:SignUps(raid)
+	local i = 0
+	for _, list in ipairs({ going, interested }) do
+		for _, name in ipairs(list) do
+			C_Timer.After(i * WHISPER_GAP_SECONDS, function()
+				C_ChatInfo.SendChatMessage(text, "WHISPER", nil, name)
+			end)
+			i = i + 1
+		end
+	end
+	return nil
 end
 
 ---A whisper: "inv" to the leader of an open raid that has started is a join.
@@ -263,7 +371,7 @@ function private.SendAd(closed)
 		return
 	end
 	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, z = raid.where, s = raid.startAt, m = raid.size,
-		ml = raid.minLevel, n = private.GroupSize(), u = private.Count(raid.signups), f = UnitFactionGroup("player"), c = closed and 1 or nil })
+		ml = raid.minLevel, n = private.GroupSize(), u = private.CountKind(raid.signups, "going"), i = private.CountKind(raid.signups, "interested"), f = UnitFactionGroup("player"), c = closed and 1 or nil })
 end
 
 ---Every minute: the ad again, a raid past its time closed, others' raids gone quiet dropped, reminders and asks for
@@ -276,13 +384,6 @@ function Raids:Tick()
 			Wanted:Print("%s has been open %d hours: closed.", raid.title, OPEN_HOURS)
 			Raids:Close()
 		else
-			-- Members who signed up are invited when it starts
-			if private.Started(raid) and next(raid.signups) then
-				for name in pairs(raid.signups) do
-					raid.signups[name] = nil
-					private.Invite(name)
-				end
-			end
 			private.SendAd()
 		end
 	end
@@ -315,6 +416,15 @@ function Raids:OnAd(ad, sender)
 		return
 	end
 	if ad.c then
+		local j = private.joined[ad.id]
+		if j then
+			-- Closed before it started: cancelled
+			private.joined[ad.id] = nil
+			if j.startAt > GetServerTime() then
+				Wanted.Toast:Add({ kind = "RAID CANCELLED", name = j.title, detail = j.leader.." cancelled it",
+					onClick = function() Wanted.UI:Show("raids") end })
+			end
+		end
 		if private.seen[ad.id] then
 			private.seen[ad.id] = nil
 			private.Changed()
@@ -338,8 +448,9 @@ function Raids:OnAd(ad, sender)
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
 		minLevel = max(1, min(60, floor(tonumber(ad.ml) or 1))), members = max(0, min(size, floor(tonumber(ad.n) or 0))),
-		signups = max(0, min(99, floor(tonumber(ad.u) or 0))),
+		signups = max(0, min(99, floor(tonumber(ad.u) or 0))), interested = max(0, min(99, floor(tonumber(ad.i) or 0))),
 	}
+	private.TellChanges(entry.raid)
 	private.Changed()
 	if not private.toasted[ad.id] and Wanted.db.settings.raidToasts and Wanted.Toast then
 		private.toasted[ad.id] = true
@@ -369,11 +480,59 @@ function Raids:List()
 	return out
 end
 
----Joins a raid we can see (or signs up for it, before it starts). Returns why not, or nil.
+---Joins a raid we can see: the leader invites us. Before it starts, signs up as going. Returns why not, or nil.
 ---@param id string
 ---@return string?
 function Raids:Join(id)
 	local entry = private.seen[id]
+	if entry and entry.raid.startAt > GetServerTime() then
+		return Raids:SignUp(id, "going")
+	end
+	local why = private.CanJoin(entry)
+	if why then
+		return why
+	end
+	local raid = entry.raid
+	private.joined[id] = { leader = raid.leader, startAt = raid.startAt, title = Raids:Title(raid), kind = "going", asked = true,
+		details = private.Snapshot(raid) }
+	Sync:SendRaidJoin(raid.leader, id)
+	Wanted:Print("Joining %s: %s will invite you.", raid.title, raid.leader)
+	private.Changed()
+	return nil
+end
+
+---Signs up for a raid that hasn't started, as "going" or "interested", or takes it back (nil). The leader sees the
+---count; when it starts we're asked to join. Returns why not, or nil.
+---@param id string
+---@param kind string?
+---@return string?
+function Raids:SignUp(id, kind)
+	local entry = private.seen[id]
+	if not kind then
+		local j = private.joined[id]
+		if j then
+			private.joined[id] = nil
+			Sync:SendRaidJoin(j.leader, id, "x")
+			private.Changed()
+		end
+		return nil
+	end
+	local why = private.CanJoin(entry)
+	if why then
+		return why
+	end
+	local raid = entry.raid
+	private.joined[id] = { leader = raid.leader, startAt = raid.startAt, title = Raids:Title(raid), kind = kind,
+		details = private.Snapshot(raid) }
+	Sync:SendRaidJoin(raid.leader, id, kind == "interested" and "i" or "g")
+	Wanted:Print("%s for %s at %s. You'll be asked to join when it starts.", kind == "interested" and "Interested" or "Going",
+		raid.title, date("%a %H:%M", raid.startAt))
+	private.Changed()
+	return nil
+end
+
+---Why we can't join or sign up for a raid we can see, or nil.
+function private.CanJoin(entry)
 	if not entry then
 		return "That raid has gone."
 	end
@@ -384,15 +543,6 @@ function Raids:Join(id)
 	if raid.members >= raid.size then
 		return "That raid is full."
 	end
-	private.joined[id] = { leader = raid.leader, startAt = raid.startAt, title = Raids:Title(raid) }
-	Sync:SendRaidJoin(raid.leader, id)
-	if raid.startAt <= GetServerTime() then
-		Wanted:Print("Joining %s: %s will invite you.", raid.title, raid.leader)
-	else
-		Wanted:Print("Signed up for %s at %s. You'll be invited when it starts.", raid.title, date("%a %H:%M", raid.startAt))
-	end
-	private.Changed()
-	return nil
 end
 
 ---Whether we joined or signed up for a raid.
@@ -402,24 +552,85 @@ function Raids:Joined(id)
 	return private.joined[id] ~= nil
 end
 
----For the raids we signed up for: a reminder before they start, then asking for the invite when they do (in case the
----leader's client missed the sign-up), every minute for a while.
+---How we signed up for a raid: "going", "interested", or nil.
+---@param id string
+---@return string?
+function Raids:Interest(id)
+	return private.joined[id] and private.joined[id].kind
+end
+
+---The details a change alert compares: { title, where, startAt, size, minLevel }.
+function private.Snapshot(raid)
+	return { title = Raids:Title(raid), where = raid.where, startAt = raid.startAt, size = raid.size, minLevel = raid.minLevel }
+end
+
+---A raid we signed up for, from a new ad: a toast with what changed (what it is now, and was), if anything did.
+function private.TellChanges(raid)
+	local j = private.joined[raid.id]
+	if not j then
+		return
+	end
+	local was, now = j.details, private.Snapshot(raid)
+	local changes = {}
+	if now.title ~= was.title then
+		tinsert(changes, format("%s (was %s)", now.title, was.title))
+	end
+	if now.startAt ~= was.startAt then
+		tinsert(changes, format("%s (was %s)", date("%a %H:%M", now.startAt), date("%a %H:%M", was.startAt)))
+	end
+	if now.where ~= was.where then
+		tinsert(changes, format("%s (was %s)", now.where, was.where))
+	end
+	if now.size ~= was.size then
+		tinsert(changes, format("%d players (was %d)", now.size, was.size))
+	end
+	if now.minLevel ~= was.minLevel then
+		tinsert(changes, format("level %d+ (was %d+)", now.minLevel, was.minLevel))
+	end
+	j.details, j.title, j.startAt = now, now.title, now.startAt
+	if #changes > 0 then
+		Wanted.Toast:Add({ kind = "RAID CHANGED", name = now.title, detail = table.concat(changes, ", "),
+			onClick = function() Wanted.UI:Show("raids") end })
+	end
+end
+
+---For the raids we signed up for: a reminder before they start; when they do, a popup asking to join (out of a fight,
+---once), and once we say Join, asking the leader for the invite every minute for a while (in case one was missed).
 function private.Remind(now)
 	for id, j in pairs(private.joined) do
 		if now > j.startAt + ASK_MINUTES * 60 then
 			private.joined[id] = nil
 		elseif now >= j.startAt then
-			if not private.reminded[id..":start"] then
+			if j.asked then
+				Sync:SendRaidJoin(j.leader, id)
+			elseif not private.reminded[id..":start"] and not InCombatLockdown() and not Wanted.Widgets:IsDialogShown() then
 				private.reminded[id..":start"] = true
-				Wanted.Toast:Add({ kind = "RAID STARTING", name = j.title, detail = j.leader.." is inviting", onClick = function() Wanted.UI:Show("raids") end })
+				private.AskToJoin(id, j)
 			end
-			Sync:SendRaidJoin(j.leader, id)
 		elseif now >= j.startAt - SOON_SECONDS and not private.reminded[id..":soon"] then
 			private.reminded[id..":soon"] = true
 			Wanted.Toast:Add({ kind = "RAID SOON", name = j.title, detail = "Starts at "..date("%H:%M", j.startAt).." with "..j.leader,
 				onClick = function() Wanted.UI:Show("raids") end })
 		end
 	end
+end
+
+---The popup when a raid we signed up for starts: Join asks the leader for the invite.
+function private.AskToJoin(id, j)
+	Wanted.Alerts:Sound("important")
+	Wanted.Widgets:Dialog({
+		title = "Raid starting",
+		text = format("%s has started %s. Join now?", j.leader, j.title),
+		confirmLabel = "Join",
+		cancelLabel = "Not now",
+		onConfirm = function()
+			if private.joined[id] then
+				j.asked = true
+				Sync:SendRaidJoin(j.leader, id)
+				Wanted:Print("Joining %s: %s will invite you.", j.title, j.leader)
+			end
+		end,
+	})
 end
 
 -- ============================================================================
@@ -440,6 +651,16 @@ end
 ---How many are in our group, ourselves included.
 function private.GroupSize()
 	return IsInGroup() and max(1, GetNumGroupMembers()) or 1
+end
+
+function private.CountKind(signups, kind)
+	local n = 0
+	for _, k in pairs(signups) do
+		if k == kind then
+			n = n + 1
+		end
+	end
+	return n
 end
 
 function private.Count(t)

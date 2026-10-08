@@ -2106,11 +2106,13 @@ function Sync:SendRaidAd(ad)
 	end
 end
 
----Asks a raid's leader to invite us, or signs us up for a raid that hasn't started.
+---Asks a raid's leader to invite us, or signs us up for a raid that hasn't started: kind "g" going, "i" interested,
+---"x" taken back.
 ---@param leader string
 ---@param raidId string
-function Sync:SendRaidJoin(leader, raidId)
-	return private.Send(TAG_RAID_JOIN, { r = raidId }, nil, leader)
+---@param kind string?
+function Sync:SendRaidJoin(leader, raidId, kind)
+	return private.Send(TAG_RAID_JOIN, { r = raidId, k = kind }, nil, leader)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

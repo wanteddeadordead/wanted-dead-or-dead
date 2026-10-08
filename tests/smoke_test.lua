@@ -353,7 +353,7 @@ C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMe
 	elseif throttleNext and throttleNext > 0 then throttleNext = throttleNext - 1 return 3
 	elseif lockdownNext and lockdownNext > 0 then lockdownNext = lockdownNext - 1 return 11 end
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target } return 0
-end, SendChatMessage = function(msg, channel) chatSent[#chatSent + 1] = channel..": "..msg end }
+end, SendChatMessage = function(msg, channel, _, target) chatSent[#chatSent + 1] = channel..": "..msg..(channel == "WHISPER" and target and " >"..target or "") end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
@@ -6175,7 +6175,7 @@ end)()
 	local ads, joins, invited, converted, toasts = {}, {}, {}, 0, {}
 	local realAd, realJoin, realParty, realToast = ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin, C_PartyInfo, ns.Toast.Add
 	ns.Sync.SendRaidAd = function(_, ad) ads[#ads + 1] = ad end
-	ns.Sync.SendRaidJoin = function(_, leader, id) joins[#joins + 1] = leader.." "..id end
+	ns.Sync.SendRaidJoin = function(_, leader, id, kind) joins[#joins + 1] = leader.." "..id..(kind and " "..kind or "") end
 	C_PartyInfo = { InviteUnit = function(name) invited[#invited + 1] = name end, ConvertToRaid = function() converted = converted + 1 end }
 	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t end
 	local realGroup, realInGroup, realInRaid = groupSize, IsInGroup, IsInRaid
@@ -6222,13 +6222,36 @@ end)()
 	check(R:Mine() == nil and ads[#ads].c == 1, "closed: the ad says so")
 	R:OnWhisper("inv", "Late")
 	check(#invited == 4, "no invites after closing")
-	-- A planned raid: joins are sign-ups; invited when it starts
+	-- A planned raid: joins are sign-ups, going or interested (an old client's join is going), and can be taken back
 	local planned = R:Create({ title = "Tarren Mill", where = "Hillsbrad", size = 40, startAt = clock + 3600 })
 	R:OnJoin("Early Bird", { r = planned.id })
-	check(planned.signups["Early Bird"] and #invited == 4, "before it starts, a join is a sign-up")
+	R:OnJoin("Maybe Later", { r = planned.id, k = "i" })
+	R:OnJoin("Changed Mind", { r = planned.id, k = "g" })
+	R:OnJoin("Changed Mind", { r = planned.id, k = "x" })
+	check(planned.signups["Early Bird"] == "going" and planned.signups["Maybe Later"] == "interested" and not planned.signups["Changed Mind"] and #invited == 4,
+		"before it starts: going, interested, and taken back")
+	R:Tick()
+	check(ads[#ads].u == 1 and ads[#ads].i == 1, "the ad counts going and interested")
+	local going, interested = R:SignUps(planned)
+	check(#going == 1 and going[1] == "Early Bird" and #interested == 1 and interested[1] == "Maybe Later", "the leader sees who")
+	-- Whispering the sign-ups: one whisper each, a moment apart, at most once a minute
+	check(R:WhisperText():find("Tarren Mill", 1, true), "a whisper ready to send: "..tostring(R:WhisperText()))
+	chatSent = {}
+	check(R:WhisperSignUps("See you at the mill |cffff0000now") == nil, "whispered")
+	RunTimers()
+	table.sort(chatSent)
+	check(#chatSent == 2 and chatSent[1] == "WHISPER: See you at the mill cffff0000now >Early Bird" and chatSent[2] == "WHISPER: See you at the mill cffff0000now >Maybe Later",
+		"each sign-up whispered: "..table.concat(chatSent, "; "))
+	check(R:WhisperSignUps("Again") == "You whispered them less than a minute ago.", "not again at once")
+	-- Editing it: checked like a new one, and the ad goes out at once
+	check(R:Update({ title = " ", size = 40 }) == "Give the raid a name.", "an edit is checked")
+	local adsBefore = #ads
+	check(R:Update({ title = "Tarren Mill", where = "Southshore", size = 40, startAt = clock + 3600 }) == nil and #ads == adsBefore + 1 and ads[#ads].z == "Southshore",
+		"an edit goes out at once")
+	-- When it starts the leader doesn't invite the sign-ups: their Wanted asks them, and asks for the invite on Join
 	clock = clock + 3601
 	R:Tick()
-	check(invited[5] == "Early Bird" and next(planned.signups) == nil, "sign-ups are invited when it starts")
+	check(#invited == 4 and planned.signups["Early Bird"], "sign-ups aren't invited without saying Join")
 	clock = clock + 2 * 3600 + 60
 	R:Tick()
 	check(R:Mine() == nil, "a raid closes itself after two hours")
@@ -6250,20 +6273,51 @@ end)()
 	check(R:Join("Lead-R:1:1") == nil and joins[1] == "Lead Er-Realm Lead-R:1:1" and R:Joined("Lead-R:1:1"), "joining asks the leader")
 	R:OnAd(ad({ id = "high", ml = 50 }), "Lead Er-Realm")
 	check(R:Join("high") == "That raid is for level 50 and up.", "too low a level")
-	check(R:Join("later") == nil and R:Joined("later"), "signed up for a planned raid")
+	check(R:Join("later") == nil and R:Joined("later") and R:Interest("later") == "going" and joins[#joins] == "Lead Er-Realm later g", "Join on a planned raid: going")
+	check(R:SignUp("later", "interested") == nil and R:Interest("later") == "interested" and joins[#joins] == "Lead Er-Realm later i", "switched to interested")
+	check(R:SignUp("later", nil) == nil and not R:Joined("later") and joins[#joins] == "Lead Er-Realm later x", "taken back")
+	R:SignUp("later", "interested")
 	clock = clock + 7200 - 10 * 60
 	for i = 1, 3 do R:OnAd(ad({ id = "later", s = clock + 10 * 60, t = "Southshore" }), "Lead Er-Realm") end
 	R:Tick()
 	check(toasts[#toasts].kind == "RAID SOON", "a reminder before it starts")
+	-- When it starts: a popup asks to join (interested too), never in a fight; Join asks the leader for the invite,
+	-- and again for a while in case it was missed
 	local before = #joins
 	clock = clock + 10 * 60
+	local realDialog, realShown, popup = ns.Widgets.Dialog, ns.Widgets.IsDialogShown, nil
+	ns.Widgets.Dialog = function(_, o) popup = o end
+	ns.Widgets.IsDialogShown = function() return false end
+	inCombat = true
 	R:Tick()
-	check(toasts[#toasts].kind == "RAID STARTING" and #joins == before + 1 and joins[#joins]:find("later$"), "when it starts: a toast, and the invite asked for again")
+	check(popup == nil, "no popup in a fight")
+	inCombat = false
+	R:Tick()
+	check(popup and popup.text:find("Lead Er-Realm has started Southshore", 1, true) and popup.confirmLabel == "Join" and #joins == before,
+		"a popup asks to join, nothing asked yet: "..tostring(popup and popup.text))
+	popup.onConfirm()
+	check(#joins == before + 1 and joins[#joins] == "Lead Er-Realm later", "Join asks the leader for the invite")
+	popup = nil
+	R:Tick()
+	check(popup == nil and #joins == before + 2, "asked again, no second popup")
+	ns.Widgets.Dialog, ns.Widgets.IsDialogShown = realDialog, realShown
 	-- A raid whose ad stops coming has gone; a closed one goes at once
 	R:OnAd(ad({ id = "later", c = 1 }), "Lead Er-Realm")
 	local closedGone = true
 	for _, r in ipairs(R:List()) do if r.id == "later" then closedGone = false end end
 	check(closedGone, "a closed raid leaves the list at once")
+	-- A raid we signed up for changing: a toast with what it is now and was; cancelled before it starts, a toast too
+	R:OnAd(ad({ id = "moving", s = clock + 3600, z = "Barrens" }), "Lead Er-Realm")
+	R:SignUp("moving", "going")
+	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale" }), "Lead Er-Realm")
+	local changed = toasts[#toasts]
+	check(changed.kind == "RAID CHANGED" and changed.detail:find("Ashenvale (was Barrens)", 1, true)
+		and changed.detail:find(date("%a %H:%M", clock + 7200).." (was "..date("%a %H:%M", clock + 3600)..")", 1, true), "what changed: "..tostring(changed.detail))
+	local toastsBefore = #toasts
+	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale", n = 20 }), "Lead Er-Realm")
+	check(#toasts == toastsBefore, "more members isn't a change to tell")
+	R:OnAd(ad({ id = "moving", c = 1 }), "Lead Er-Realm")
+	check(toasts[#toasts].kind == "RAID CANCELLED" and not R:Joined("moving"), "cancelled before it starts")
 	clock = clock + 4 * 60
 	R:Tick()
 	check(#R:List() == 0, "quiet ads drop off")
@@ -6325,6 +6379,7 @@ end)()
 	R:Close()
 	-- The page builds and lists them
 	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
 	ns.UI:Show("raids")
 	local function shows(text)
 		for _, f in ipairs(Mock.fontStrings) do
@@ -6336,6 +6391,11 @@ end)()
 		end
 	end
 	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid"), "the Raids page: the form, and the raid with Join")
+	check(shows("Planned push") and shows("Interested") and shows("Going"), "a planned raid: Interested and Going")
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end
+	end
+	check(R:Interest("page2") == "interested", "Interested signs up as interested")
 	-- Typing in Where suggests zones under it; Tab takes the first
 	local where
 	for _, fs in ipairs(Mock.fontStrings) do
@@ -6363,6 +6423,11 @@ end)()
 	check(dialog and dialog.text:find("LookingForGroup (channel 6)", 1, true) and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"),
 		"Announce shows the line and the channel first: "..tostring(dialog and dialog.text))
 	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
+	check(shows("Whisper sign-ups") and shows("Edit"), "the leader's card: Whisper sign-ups and Edit")
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Edit" and fs._parent._shown then fs._parent:Click() end
+	end
+	check(shows("Save changes") and shows("EDIT YOUR RAID"), "Edit opens the form on the raid")
 	chatSent = {}
 	clock = clock + 61
 	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now,\nwhisper inv")

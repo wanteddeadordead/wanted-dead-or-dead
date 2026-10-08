@@ -29,6 +29,8 @@
   keeps who added it.
 - Guild Kill on Sight: a long list (past about 70 names) reaches guildmates logging in again; they're sent only what
   changed since they last heard.
+- Guild Kill on Sight: the rank choice for rank mode lists your guild's ranks even when the page opened before the
+  game had loaded them.
 
 ## [1.18.2] - 2026-10-08
 

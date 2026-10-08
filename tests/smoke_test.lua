@@ -4244,6 +4244,10 @@ end)()
 	ns.UI:Show("guildkos")
 	ns.UI:Refresh()
 	check(#G:Entries("approved") >= 2, "the page lists the guild's entries")
+	-- The rank choice reads the guild's ranks again each time (the page may be built before the roster loads)
+	local rankChoice
+	for _, f in ipairs(Mock.created) do if f.SetChoices and f.key == 4 then rankChoice = f end end
+	check(rankChoice and rankChoice:GetText():find("Rank 5", 1, true), "the rank choice names the guild's ranks, got "..tostring(rankChoice and rankChoice:GetText()))
 	local pendingAdd = { kind = "player", guid = "Player-9-0ABC", name = "Waiting One", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock + 20 }
 	From("Office Rman", "S", { s = { enabled = true, mode = "review", rank = 4, t = clock + 19, by = "Office Rman" } })
 	From("Plain Member", "E", { e = pendingAdd })

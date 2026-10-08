@@ -53,6 +53,8 @@ function private.Refresh()
 	private.enabled:SetChecked(s.enabled)
 	private.discord:SetChecked(s.discord)
 	private.mode:SetChoice(s.mode)
+	-- The guild's ranks, read again: the page can be built before the game has the guild's details
+	private.rank:SetChoices(private.Ranks())
 	private.rank:SetChoice(s.rank)
 	for _, control in ipairs({ private.enabled, private.discord, private.mode, private.rank }) do
 		control:SetEnabled(officer)

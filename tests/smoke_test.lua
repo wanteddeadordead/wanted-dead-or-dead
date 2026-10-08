@@ -4315,10 +4315,20 @@ end)()
 		entries[G.EntryId("player", guid)] = { kind = "player", guid = guid, name = "Long "..Words(10), reason = Words(110),
 			state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 40 + i }
 	end
+	local listBase = clock + 40
+	-- At the game's pace (about ten parts at once, then one every two seconds), with the game refusing a part now and
+	-- then: each refused part goes again
 	local function Answer(n)
 		addonSent = {}
 		From("Plain Member", "Q", { n = n })
-		for _ = 1, 400 do RunTimers() end
+		local burst = 0
+		for _ = 1, 600 do
+			throttleNext = (#addonSent == 3 and burst == 0) and 2 or throttleNext
+			if #addonSent == 3 then burst = 1 end
+			clock = clock + 2
+			RunTimers()
+		end
+		throttleNext = 0
 		local byId, got, most = {}, {}, 0
 		for _, m in ipairs(addonSent) do
 			local tag, id, part, total, chunk = m.text:match("^(%u):(%x+):(%d+)/(%d+):(.*)$")
@@ -4336,8 +4346,8 @@ end)()
 	local got, most = Answer(0)
 	local count = 0
 	for _ in pairs(got) do count = count + 1 end
-	check(count >= 200 and most <= 60, "a list of 200 goes whole, no message past 60 parts: "..count.." entries, "..most.." parts at most")
-	got = Answer(clock + 40 + 190)
+	check(count >= 200 and most <= 12, "a list of 200 goes whole, in messages short enough to finish at the game's pace: "..count.." entries, "..most.." parts at most")
+	got = Answer(listBase + 190)
 	count = 0
 	for _ in pairs(got) do count = count + 1 end
 	check(count == 10 and got[format("Player-9-%08X", 200 * 7919)], "only what's newer than the asker holds goes, got "..count)

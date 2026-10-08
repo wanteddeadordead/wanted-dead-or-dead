@@ -20,6 +20,8 @@ local private = {
 	partial = {}, -- sender..":"..msgId -> { parts = {}, total, t }
 	queue = {}, -- messages waiting to go: texts
 	sending = false,
+	tokens = 10, -- parts the game will take at once now (Pump)
+	tokensAt = 0,
 	answerAt = nil, -- when we'll answer a member's request for the list, unless someone answers first
 	answerSince = nil, -- the oldest "newest change" among the asks we'll answer: the list sends what's newer
 	askedAt = nil, -- when we asked for the list: a list is only taken in answer to our own ask
@@ -42,6 +44,14 @@ local MAX_PARTS = 60
 local PART_TIMEOUT = 30
 local MAX_PARTIAL = 4 -- unfinished messages held per sender; past it their oldest goes
 local SEND_SPACING = 0.3
+-- The game's pace for addon messages (measured in Sync): about ten parts at once, then one every two seconds. A
+-- message we send has at most SEND_PARTS, so it finishes well inside PART_TIMEOUT at that pace; a longer list goes
+-- in several. (MAX_PARTS is what's taken in, for older clients' longer messages.)
+local BURST_PARTS, PART_SECONDS = 10, 2
+local SEND_PARTS = 12
+local RESULT_THROTTLED = { [3] = true, [8] = true } -- Enum.SendAddonMessageResult AddonMessageThrottle, ChannelThrottle
+local RESULT_LOCKDOWN = 11 -- AddOnMessageLockdown
+local RETRY_SECONDS, MAX_RETRIES, LOCKDOWN_SECONDS = 5, 3, 30
 local MEMBERS_SECONDS = 30
 local ASK_DELAY = 12 -- after login, once the guild roster has come
 local ANSWER_DELAY_MAX = 4 -- the members asked wait a moment, so usually only one answers
@@ -596,24 +606,54 @@ function private.Broadcast(tag, tbl)
 	private.msgCounter = private.msgCounter + 1
 	local id = format("%x", private.msgCounter % 0xffff)
 	local total = ceil(#payload / PART_LEN)
-	if total > MAX_PARTS then
+	if total > SEND_PARTS then
 		Wanted:Log("!! GuildKoS: a %s message of %d bytes is too big to send", tag, #payload)
 		return
 	end
 	for i = 1, total do
-		tinsert(private.queue, format("%s:%s:%d/%d:%s", tag, id, i, total, strsub(payload, (i - 1) * PART_LEN + 1, i * PART_LEN)))
+		tinsert(private.queue, { id = id, refusals = 0,
+			text = format("%s:%s:%d/%d:%s", tag, id, i, total, strsub(payload, (i - 1) * PART_LEN + 1, i * PART_LEN)) })
 	end
 	private.Pump()
 end
 
+---Sends the next part at the game's pace: a few at once, then one every PART_SECONDS. A part the game refuses
+---(throttled) goes again a little later, each time later; refused too often, the rest of its message is dropped.
 function private.Pump()
 	if private.sending or #private.queue == 0 then
 		return
 	end
+	local now = GetTime()
+	private.tokens = min(BURST_PARTS, private.tokens + (now - private.tokensAt) / PART_SECONDS)
+	private.tokensAt = now
+	local wait = SEND_SPACING
+	if private.tokens < 1 then
+		wait = (1 - private.tokens) * PART_SECONDS
+	else
+		local item = private.queue[1]
+		local result = C_ChatInfo.SendAddonMessage(PREFIX, item.text, "GUILD")
+		if RESULT_THROTTLED[result] then
+			item.refusals = item.refusals + 1
+			private.tokens = 0
+			wait = RETRY_SECONDS * 2 ^ (item.refusals - 1)
+			Wanted:Log("!! GuildKoS: throttled by the game (%s), part sent again in %ds", tostring(result), wait)
+			if item.refusals > MAX_RETRIES then
+				for i = #private.queue, 1, -1 do
+					if private.queue[i].id == item.id then
+						tremove(private.queue, i)
+					end
+				end
+				Wanted:Log("!! GuildKoS: throttled too often; a message dropped")
+			end
+		elseif result == RESULT_LOCKDOWN then
+			wait = LOCKDOWN_SECONDS -- addon messages are refused for now (a PvP match)
+		else
+			tremove(private.queue, 1)
+			private.tokens = private.tokens - 1
+		end
+	end
 	private.sending = true
-	local text = tremove(private.queue, 1)
-	C_ChatInfo.SendAddonMessage(PREFIX, text, "GUILD")
-	C_Timer.After(SEND_SPACING, function()
+	C_Timer.After(wait, function()
 		private.sending = false
 		private.Pump()
 	end)
@@ -736,7 +776,7 @@ function private.Handle(tag, tbl, sender)
 end
 
 ---Answers an ask with the settings and the entries changed after since (the asker's newest), oldest first, in as many
----messages as it takes: one message holds at most MAX_PARTS parts.
+---messages as it takes: one message holds at most SEND_PARTS parts.
 function private.SendList(book, since)
 	local list = {}
 	for _, e in pairs(book.entries) do
@@ -754,7 +794,7 @@ function private.SendListPart(settings, list, first, last)
 		tinsert(part, list[i])
 	end
 	local tbl = { s = settings, l = part }
-	if last > first and ceil(#Sync:Encode(tbl) / PART_LEN) > MAX_PARTS then
+	if last > first and ceil(#Sync:Encode(tbl) / PART_LEN) > SEND_PARTS then
 		local middle = floor((first + last) / 2)
 		private.SendListPart(settings, list, first, middle)
 		private.SendListPart(settings, list, middle + 1, last)

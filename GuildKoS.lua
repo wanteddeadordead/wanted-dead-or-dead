@@ -257,6 +257,11 @@ function private.ActionOf(book, held, e, rank, officers)
 		-- mode; a member in review mode can't
 		return GuildKoS.NewState(book.settings, rank, officers) == "approved" and "add" or "approve"
 	end
+	-- Pending: an approved entry sent back as pending takes it off the list (officers only in review mode), or a
+	-- member could resend it as their own and then take that back
+	if held and held.state == "approved" then
+		return "remove"
+	end
 	return "add"
 end
 
@@ -286,6 +291,10 @@ function GuildKoS:TakeEntry(book, raw, sender, officers, relayed)
 	end
 	if not held and private.Count(book.entries) >= MAX_ENTRIES then
 		return false
+	end
+	if held and (held.state == "approved" or held.state == "pending") then
+		-- An edit of a name on the list: who added it and when stay as they were
+		e.by, e.at = held.by, held.at
 	end
 	book.entries[id] = e
 	return true

@@ -4216,6 +4216,28 @@ end)()
 	From("Office Rman", "L", { s = { enabled = true, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" }, l = { listed, farAhead } })
 	check(G:Current().settings.mode == "review" and G:Match("Player-9-0FA2") == nil, "a change dated far ahead is refused, even from an officer")
 	check(G:Match("Player-9-0F00D"), "an officer's list is taken")
+	-- Review mode: a member can't take an approved name off in two steps (send it back as their own pending entry,
+	-- then take that back), and an edit never changes who added an entry or when
+	local asPending = {}
+	for k, v in pairs(listed) do asPending[k] = v end
+	asPending.state, asPending.by, asPending.at, asPending.dby, asPending.eby, asPending.t = "pending", "Plain Member", clock + 1, nil, "Plain Member", clock + 9.2
+	From("Plain Member", "E", { e = asPending })
+	local held = G:Current().entries[G.EntryId("player", "Player-9-0F00D")]
+	check(held.state == "approved" and held.by == "Office Rman", "a member's pending copy of an approved entry is a removal, which they can't make")
+	local second = {}
+	for k, v in pairs(memberPending) do second[k] = v end
+	second.guid, second.name, second.t = "Player-9-0BEE2", "Second Pick", clock + 9.55
+	From("Plain Member", "E", { e = second })
+	local reworded = {}
+	for k, v in pairs(second) do reworded[k] = v end
+	reworded.state, reworded.by, reworded.at, reworded.eby, reworded.reason, reworded.t = "pending", "New Recruit", clock + 2, "New Recruit", "reworded", clock + 9.6
+	From("New Recruit", "E", { e = reworded })
+	held = G:Current().entries[G.EntryId("player", "Player-9-0BEE2")]
+	check(held.state == "pending" and held.reason == "reworded" and held.by == "Plain Member" and held.at == clock, "an edit keeps who added the entry and when, got "..tostring(held.by))
+	local offTake = {}
+	for k, v in pairs(held) do offTake[k] = v end
+	offTake.state, offTake.eby, offTake.t = "removed", "Office Rman", clock + 9.7
+	From("Office Rman", "E", { e = offTake })
 	From("Office Rman", "S", { s = { enabled = true, mode = "rank", rank = 4, t = clock + 10, by = "Office Rman" } })
 
 	-- The page shows the list, and what waits for an officer

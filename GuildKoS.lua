@@ -38,6 +38,7 @@ local MAX_NAME = 48
 local PART_LEN = 230 -- a guild addon message holds 255 bytes; the rest is the "id:part/total:" header
 local MAX_PARTS = 60
 local PART_TIMEOUT = 30
+local MAX_PARTIAL = 4 -- unfinished messages held per sender; past it their oldest goes
 local SEND_SPACING = 0.3
 local MEMBERS_SECONDS = 30
 local ASK_DELAY = 12 -- after login, once the guild roster has come
@@ -575,8 +576,24 @@ function private.OnMessage(text, sender)
 			private.partial[k] = nil
 		end
 	end
-	local p = private.partial[key] or { parts = {}, total = total, t = now }
-	private.partial[key] = p
+	local p = private.partial[key]
+	if not p then
+		-- A new message: a sender's unfinished ones are held a few at a time, so a flood of first parts can't pile up
+		local prefix, count, oldest = sender..":", 0, nil
+		for k, held in pairs(private.partial) do
+			if strsub(k, 1, #prefix) == prefix then
+				count = count + 1
+				if not oldest or held.t < private.partial[oldest].t then
+					oldest = k
+				end
+			end
+		end
+		if count >= MAX_PARTIAL then
+			private.partial[oldest] = nil
+		end
+		p = { parts = {}, total = total, t = now }
+		private.partial[key] = p
+	end
 	p.parts[part] = chunk
 	for i = 1, total do
 		if not p.parts[i] then

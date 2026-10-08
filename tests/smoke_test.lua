@@ -4310,6 +4310,17 @@ end)()
 	check(count == 10 and got[format("Player-9-%08X", 200 * 7919)], "only what's newer than the asker holds goes, got "..count)
 	for i = 1, 200 do entries[G.EntryId("player", format("Player-9-%08X", i * 7919))] = nil end
 
+	-- A guildmate's unfinished messages are held a few at a time: a flood of first parts can't pile up
+	local partial
+	for i = 1, 10 do
+		local name, value = debug.getupvalue(G.Ask, i)
+		if name == "private" then partial = value.partial end
+	end
+	for i = 1, 50 do Fire("CHAT_MSG_ADDON", "WNTDK", format("E:%x:1/2:xx", i), "GUILD", "Plain Member-Realm") end
+	local held = 0
+	for key in pairs(partial) do if key:find("^Plain Member") then held = held + 1 end end
+	check(held <= 4, "a sender's unfinished messages are capped, got "..held)
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()

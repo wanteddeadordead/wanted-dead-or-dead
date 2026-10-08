@@ -46,6 +46,12 @@ players' raids it has heard of (`seen[id] = { raid, heard }`, server times). `Ra
 login: a led raid two hours after its start, a marked one ten minutes after, a heard one three minutes after its start
 or its last ad, whichever is later. A malformed entry is dropped.
 
+`WantedDB.viewed` (from 1.18.2) is `{ [character] = { [kind] = { [id] = true } } }`: what each page last showed the
+character, for the menu's counts of new things (`UI:NewCount`, `UI:MarkViewed`). Kinds: `board` (bounty ids),
+`hotspots` (zone keys), `badges` (achievement keys, medal keys with their count) and `card` (calling-card piece ids).
+A kind's first count takes in everything there, so nothing old shows as new. Raids keep their own in
+`WantedDB.raids[character].viewed`.
+
 `WantedDB.pvpSeason` (from 1.9.0) is `{ season, week, endsAt, weekMax, seasonMax, at }`: Blizzard's PvP season as the
 game tells it (`GetCurrentArenaSeason()`, the PvP rank track's `weekNumber`, `currentWeekProgressiveMaxLevel` and
 `maxLevel`), `endsAt` the game-server time it ends (0 when the game doesn't know yet) and `at` when it was read.

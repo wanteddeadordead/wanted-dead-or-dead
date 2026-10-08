@@ -102,9 +102,18 @@ function Bounties:ParseMoney(str)
 	if str == "" then
 		return nil
 	end
+	local copper
 	if strmatch(str, "^%d+%.?%d*$") then
-		return floor(tonumber(str) * 10000 + 0.5)
+		copper = floor(tonumber(str) * 10000 + 0.5)
+	else
+		copper = private.ParseUnits(str)
 	end
+	-- More than the game's money holds would be refused by everyone else (Store:IsWellFormed)
+	return copper and copper <= Store.MAX_COPPER and copper or nil
+end
+
+---"1g 20s", "50s" or "150c" in copper, or nil.
+function private.ParseUnits(str)
 	local copper, matched = 0, false
 	for amount, unit in gmatch(str, "(%d+%.?%d*)%s*([gsc])") do
 		matched = true
@@ -427,6 +436,8 @@ end
 function Bounties:PostGuild(guild, faction, amount)
 	if amount < MIN_BOUNTY then
 		return nil, "the minimum bounty is "..Bounties:FormatMoney(MIN_BOUNTY)
+	elseif amount > Store.MAX_COPPER then
+		return nil, "that's more than the game's money holds"
 	end
 	if Bounties:GetMyOpenGuild(guild) then
 		return nil, "you already have a bounty on <"..guild..">, raise it instead"
@@ -452,6 +463,8 @@ end
 function Bounties:Post(guid, name, amount)
 	if amount < MIN_BOUNTY then
 		return nil, "the minimum bounty is "..Bounties:FormatMoney(MIN_BOUNTY)
+	elseif amount > Store.MAX_COPPER then
+		return nil, "that's more than the game's money holds"
 	end
 	if Bounties:GetMyOpen(guid) then
 		-- One bounty per poster per target; more gold goes onto the existing one
@@ -488,8 +501,11 @@ end
 ---Adds to a bounty.
 ---@param bounty table
 ---@param amount number copper
----@return table raise
+---@return table? raise nil when the amount isn't one others would take
 function Bounties:Raise(bounty, amount)
+	if type(amount) ~= "number" or amount <= 0 or amount ~= floor(amount) or amount > Store.MAX_COPPER then
+		return nil
+	end
 	Wanted:Log("Bounties: raised %s by %s", bounty.id, Bounties:FormatMoney(amount))
 	return Store:NewRecord("raise", { bounty = bounty.id, amount = amount })
 end

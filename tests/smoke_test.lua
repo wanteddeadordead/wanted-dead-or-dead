@@ -6260,9 +6260,49 @@ end)()
 	clock = clock + 3601
 	R:Tick()
 	check(#invited == 4 and planned.signups["Early Bird"], "sign-ups aren't invited without saying Join")
+	-- Invite sign-ups: everyone going or interested gets an invite: solo, the four a party holds first; once someone is
+	-- in, the group becomes a raid and the rest are invited; never in a fight
+	for _, name in ipairs({ "P3", "P4", "P5", "P6" }) do planned.signups[name] = "going" end
+	invited = {}
+	IsInGroup, IsInRaid, groupSize = function() return false end, function() return false end, 1
+	inCombat = true
+	check(R:InviteSignUps() == nil and #invited == 0, "in a fight, the invites wait")
+	inCombat = false
+	RunTimers()
+	check(#invited == 4 and invited[1] == "Early Bird", "solo: the four a party holds: "..table.concat(invited, ","))
+	IsInGroup, groupSize = function() return true end, 2
+	local convertedBefore = converted
+	RunTimers()
+	check(converted > convertedBefore and #invited == 4, "someone joined: the group becomes a raid first")
+	IsInRaid = function() return true end
+	RunTimers()
+	check(#invited == 6, "then the rest are invited: "..table.concat(invited, ","))
 	clock = clock + 2 * 3600 + 60
 	R:Tick()
 	check(R:Mine() == nil, "a raid closes itself after two hours")
+	-- Form raid now: from 15 minutes before a planned raid, the leader can start it early (a toast says so), and with
+	-- Send invites ticked everyone signed up is invited too
+	local early = R:Create({ title = "Early start", size = 40, startAt = clock + 3600 })
+	early.signups["Keen One"] = "going"
+	check(not R:CanFormNow(), "not an hour ahead")
+	local toastsBeforeSoon = #toasts
+	clock = clock + 46 * 60
+	R:Tick()
+	check(R:CanFormNow() and #toasts == toastsBeforeSoon + 1 and toasts[#toasts].kind == "FORM YOUR RAID", "15 minutes ahead: Form raid now, and a toast")
+	R:Tick()
+	check(#toasts == toastsBeforeSoon + 1, "the toast once")
+	invited = {}
+	IsInGroup, IsInRaid = function() return false end, function() return false end
+	R:FormNow(true)
+	check(early.startAt == clock and ads[#ads].s == clock and invited[1] == "Keen One" and not R:CanFormNow(), "formed now: started, its ad says so, sign-ups invited")
+	R:Close()
+	local plain = R:Create({ title = "No invites", size = 40, startAt = clock + 10 * 60 })
+	plain.signups["Keen One"] = "going"
+	invited = {}
+	R:FormNow(false)
+	check(plain.startAt == clock and #invited == 0, "without Send invites, nobody is invited")
+	R:Close()
+	toasts = {}
 	-- Other players' raids
 	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
 	R:OnAd(ad({ f = "Alliance", id = "x1" }), "Lead Er-Realm")
@@ -6511,7 +6551,7 @@ end)()
 	check(dialog and dialog.choice.selected == 6 and table.concat(choices, ",") == "Guild chat,1. General - Durotar,6. LookingForGroup"
 		and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"), "Announce shows the line and where it goes, any channel we're in but Wanted's: "..table.concat(choices, ","))
 	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
-	check(shows("Whisper sign-ups") and shows("Edit"), "the leader's card: Whisper sign-ups and Edit")
+	check(shows("Whisper sign-ups") and shows("Invite sign-ups") and shows("Edit") and not shows("Form raid now"), "the leader's card: Invite and Whisper sign-ups, Edit; a raid already started has no Form raid now")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Edit" and fs._parent._shown then fs._parent:Click() end
 	end

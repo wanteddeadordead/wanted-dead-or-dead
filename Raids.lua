@@ -18,6 +18,9 @@ local private = {
 	joined = {}, -- id -> { leader, startAt, title, kind ("going" or "interested"), asked, details } raids we joined or signed up for
 	reminded = {}, -- id..":"..kind -> true
 	pending = {}, -- names waiting for an invite until combat ends
+	inviteQueue = {}, -- names Invite sign-ups still has to invite
+	inviteTries = 0,
+	soloInvites = 0, -- invites out while we're still alone (a party holds four)
 	counter = 0,
 	lastAnnounce = -math.huge,
 	lastWhisper = -math.huge,
@@ -34,6 +37,8 @@ local ANNOUNCE_SECONDS = 60
 local WHISPER_GAP_SECONDS = 0.5 -- between Whisper sign-ups' whispers, so the game doesn't hold them back
 local MAX_SEEN = 30
 local PARTY_SIZE = 5
+local INVITE_RETRY_SECONDS = 2 -- Invite sign-ups waits this long between rounds (for someone to join, or a fight to end)
+local INVITE_TRIES = 60 -- rounds before it gives up on the rest
 local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 
@@ -498,6 +503,88 @@ function private.Invite(name)
 	end
 end
 
+---Whether the planned raid we lead can be formed now: from SOON_SECONDS before it starts.
+---@return boolean
+function Raids:CanFormNow()
+	local raid = private.mine
+	return raid ~= nil and not private.Started(raid) and raid.startAt - GetServerTime() <= SOON_SECONDS
+end
+
+---Forms the planned raid we lead now: it starts (its ad says so, and those signed up get the popup asking them to
+---join), and with invite, everyone signed up is invited too.
+---@param invite boolean
+function Raids:FormNow(invite)
+	local raid = private.mine
+	if not raid or private.Started(raid) then
+		return
+	end
+	raid.startAt = GetServerTime()
+	private.SendAd()
+	if invite then
+		Raids:InviteSignUps()
+	end
+	private.Changed()
+end
+
+---Invites everyone signed up for the raid we lead, going and interested, whether or not it has started. Solo, a party
+---holds four invites: the rest wait until someone joins and the group becomes a raid. Never in a fight. Returns why
+---not, or nil.
+---@return string?
+function Raids:InviteSignUps()
+	local raid = private.mine
+	if not raid then
+		return "You're not leading a raid."
+	end
+	local going, interested = Raids:SignUps(raid)
+	if #going + #interested == 0 then
+		return "Nobody has signed up yet."
+	end
+	wipe(private.inviteQueue)
+	for _, list in ipairs({ going, interested }) do
+		for _, name in ipairs(list) do
+			tinsert(private.inviteQueue, name)
+		end
+	end
+	private.inviteTries, private.soloInvites = 0, 0
+	private.PumpInvites()
+	return nil
+end
+
+---A round of Invite sign-ups: what the group has room for now, then another round in a moment while any are left.
+function private.PumpInvites()
+	local queue = private.inviteQueue
+	if #queue == 0 or not private.mine then
+		wipe(queue)
+		return
+	end
+	private.inviteTries = private.inviteTries + 1
+	if not InCombatLockdown() then
+		if not IsInGroup() then
+			-- A party holds four besides us: no more until someone joins
+			for _ = 1, min(PARTY_SIZE - 1 - private.soloInvites, #queue) do
+				private.Invite(tremove(queue, 1))
+				private.soloInvites = private.soloInvites + 1
+			end
+		elseif not IsInRaid() then
+			if C_PartyInfo and C_PartyInfo.ConvertToRaid then
+				C_PartyInfo.ConvertToRaid()
+			end
+		else
+			while #queue > 0 do
+				private.Invite(tremove(queue, 1))
+			end
+		end
+	end
+	if #queue > 0 then
+		if private.inviteTries >= INVITE_TRIES then
+			Wanted:Print("Invite sign-ups stopped: nobody joined, so %d weren't invited. Try again once someone is in your group.", #queue)
+			wipe(queue)
+			return
+		end
+		C_Timer.After(INVITE_RETRY_SECONDS, private.PumpInvites)
+	end
+end
+
 ---After a fight: the invites that waited for it.
 function private.InvitePending()
 	for name in pairs(private.pending) do
@@ -527,6 +614,13 @@ function Raids:Tick()
 			Raids:Close()
 		else
 			private.SendAd()
+			-- 15 minutes ahead: the leader can form it now
+			if Raids:CanFormNow() and not private.reminded[raid.id..":lead"] then
+				private.reminded[raid.id..":lead"] = true
+				Wanted.Toast:Add({ kind = "FORM YOUR RAID", name = Raids:Title(raid),
+					detail = "Starts at "..date("%H:%M", raid.startAt)..". Form it now from the Raids page.", onClick = function() Wanted.UI:Show("raids") end })
+				private.Changed()
+			end
 		end
 	end
 	local changed = false
@@ -722,7 +816,7 @@ function private.TellChanges(raid)
 	if now.title ~= was.title then
 		tinsert(changes, format("%s (was %s)", now.title, was.title))
 	end
-	if now.startAt ~= was.startAt then
+	if now.startAt ~= was.startAt and now.startAt > GetServerTime() then
 		tinsert(changes, format("%s (was %s)", date("%a %H:%M", now.startAt), date("%a %H:%M", was.startAt)))
 	end
 	if now.where ~= was.where then

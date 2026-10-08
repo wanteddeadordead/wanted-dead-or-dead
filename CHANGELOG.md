@@ -19,6 +19,10 @@
   filled what it will.
 - Announce lets you pick where it goes: guild chat or any chat channel you're in. A guild only raid starts on guild
   chat, a public one on Looking for Group or General.
+- Invite sign-ups on your raid's card sends a group invite to everyone going or interested, making the group a raid as
+  they join.
+- Form raid now: from 15 minutes before a planned raid (a popup tells you), start it early, with Send invites ticked to
+  invite everyone signed up.
 - The Raids page explains how it works in seven numbered steps.
 
 ## [1.18.0] - 2026-10-07

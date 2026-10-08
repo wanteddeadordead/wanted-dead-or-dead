@@ -11,11 +11,16 @@ local Raids = Wanted.Raids
 local private = { size = 40, later = false, guild = false, editing = false }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 120
-local FORM_HEIGHT = 172 -- the form, with how it works under it
-local HOW_IT_WORKS = "How it works: every Wanted player of your faction sees your raid, on every realm. Form it Now and "
-	.."anyone who clicks Join is invited straight away. Form it for Later and players mark Interested or Going: you see "
-	.."who, you can whisper them all, and when it starts they get a popup asking them to join. If you edit or close it, "
-	.."they're told what changed. Announce posts it in chat for players without Wanted, who whisper you \"inv\" to be invited."
+local FORM_HEIGHT = 240 -- the form, with how it works under it
+local HOW_IT_WORKS = table.concat({
+	"HOW IT WORKS",
+	"1.  Name your raid, say where and when, and click Form raid. Every Wanted player of your faction sees it, on every realm.",
+	"2.  Now: anyone who clicks Join is invited straight away.",
+	"3.  Later: players mark Interested or Going. You see who, and can whisper them all from your raid's card.",
+	"4.  When it starts, everyone signed up gets a popup asking them to join.",
+	"5.  Edit or close it, and everyone signed up is told what changed. It's on their calendar and yours.",
+	"6.  Announce posts it in chat for players without Wanted: they whisper you \"inv\" to be invited.",
+}, "\n")
 
 ---A time typed as "20:00", "8:30" or "20" as the next such time (server seconds), or nil.
 ---@param text string
@@ -230,10 +235,11 @@ function private.BuildForm(parent, width)
 		private.Refresh()
 	end)
 	private.cancelEdit:SetPoint("TOPRIGHT", -14, -10)
-	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.muted)
+	local how = Theme:Text(form, "small", HOW_IT_WORKS, C.muted)
 	how:SetPoint("TOPLEFT", 14, -112)
 	how:SetWidth(width - 28)
 	how:SetWordWrap(true)
+	how:SetSpacing(3)
 	return form
 end
 

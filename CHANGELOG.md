@@ -11,6 +11,10 @@
 - Whisper sign-ups: the leader can whisper everyone going or interested, with a message they can change first.
 - Edit your raid's name, place, time, size or level; everyone signed up gets a popup saying what changed, or that it
   was cancelled if you close it before it starts.
+- Raids are saved: your raid, its sign-ups and the raids you marked come back after a reload or logout, and a planned
+  raid stays on everyone's list while its leader is offline.
+- Your raid, and the raids you're going to or interested in, show on the calendar.
+- The Raids page explains how it works in six numbered steps.
 
 ## [1.18.0] - 2026-10-07
 

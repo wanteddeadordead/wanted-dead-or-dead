@@ -3,8 +3,9 @@
 -- whispers the leader's client, which invites them (turning the group into a raid before the sixth); a raid that
 -- hasn't started they mark Interested or Going (the leader sees who, and can whisper them all), and when it starts
 -- their client asks them to join. Edits reach those signed up as a toast saying what changed, or that it was cancelled. Announce puts a line in a public
--- chat channel for players without Wanted, and the leader's client invites anyone who whispers "inv". Ads are passing
--- news, never stored: a raid whose ad stops coming has gone.
+-- chat channel for players without Wanted, and the leader's client invites anyone who whispers "inv". Each character's
+-- raid, sign-ups and the planned raids it has heard of are saved (WantedDB.raids), so a reload or logout loses
+-- nothing; a raid that has started is gone once its ad stops coming, a planned one stays until it should have started.
 
 local _, Wanted = ...
 local Raids = Wanted:NewModule("Raids")
@@ -12,7 +13,7 @@ local Sync = Wanted.Sync
 local Store = Wanted.Store
 local private = {
 	mine = nil, -- the raid we lead: { id, title, guild?, where, startAt, size, minLevel, created, signups = { name = true } }
-	seen = {}, -- id -> { ad, sender, heard } other players' raids
+	seen = {}, -- id -> { raid, heard (server time) } other players' raids
 	toasted = {}, -- id -> true once its toast has shown
 	joined = {}, -- id -> { leader, startAt, title, kind ("going" or "interested"), asked, details } raids we joined or signed up for
 	reminded = {}, -- id..":"..kind -> true
@@ -48,6 +49,70 @@ function Raids:OnEnable()
 	end)
 	Wanted:OnCombatEnd(private.InvitePending)
 	private.ticker = private.ticker or C_Timer.NewTicker(AD_SECONDS, function() Raids:Tick() end)
+	Raids:Load()
+end
+
+---Takes up this character's saved raids (WantedDB.raids[character]), dropping what's past, and sends our raid's ad
+---again. The saved tables are the ones used from then on, so every change is saved as it happens.
+function Raids:Load()
+	local db = Wanted.db
+	db.raids = type(db.raids) == "table" and db.raids or {}
+	local origin = Store:GetOrigin()
+	local saved = type(db.raids[origin]) == "table" and db.raids[origin] or {}
+	db.raids[origin] = saved
+	saved.joined = type(saved.joined) == "table" and saved.joined or {}
+	saved.seen = type(saved.seen) == "table" and saved.seen or {}
+	private.saved, private.joined, private.seen = saved, saved.joined, saved.seen
+	local now = GetServerTime()
+	local mine = saved.mine
+	if type(mine) ~= "table" or type(mine.startAt) ~= "number" or type(mine.signups) ~= "table" or now > mine.startAt + OPEN_HOURS * 3600 then
+		mine = nil
+	end
+	private.SetMine(mine)
+	for id, j in pairs(private.joined) do
+		if type(j) ~= "table" or type(j.startAt) ~= "number" or now > j.startAt + ASK_MINUTES * 60 then
+			private.joined[id] = nil
+		end
+	end
+	for id, entry in pairs(private.seen) do
+		if type(entry) ~= "table" or type(entry.raid) ~= "table" or type(entry.heard) ~= "number" or private.Gone(entry, now) then
+			private.seen[id] = nil
+		else
+			private.toasted[id] = true
+		end
+	end
+	if mine then
+		private.SendAd()
+	end
+	private.Changed()
+end
+
+---The raid we lead, saved with it.
+function private.SetMine(raid)
+	private.mine = raid
+	if private.saved then
+		private.saved.mine = raid
+	end
+end
+
+---Whether another player's raid has gone: no ad for a while since it started (a planned raid stays until then, as its
+---leader may be offline).
+function private.Gone(entry, now)
+	return now - max(entry.heard, entry.raid.startAt) > GONE_SECONDS
+end
+
+---The raids for the calendar: ours, and those we're going to or interested in: { at, text, short }.
+---@return table[]
+function Raids:Calendar()
+	local out = {}
+	local mine = private.mine
+	if mine then
+		tinsert(out, { at = mine.startAt, text = format("%s %s (your raid)", date("%H:%M", mine.startAt), Raids:Title(mine)), short = mine.title })
+	end
+	for _, j in pairs(private.joined) do
+		tinsert(out, { at = j.startAt, text = format("%s %s (%s)", date("%H:%M", j.startAt), j.title, j.kind or "going"), short = j.title })
+	end
+	return out
 end
 
 ---Forms a raid: { title, where, startAt (server seconds; nil or past for now), size (10, 20 or 40), minLevel, guild
@@ -69,7 +134,7 @@ function Raids:Create(o)
 	raid.id = Store:GetOrigin()..":"..now..":"..private.counter
 	raid.created = now
 	raid.signups = {} -- name -> "going" or "interested"
-	private.mine = raid
+	private.SetMine(raid)
 	private.SendAd()
 	private.Changed()
 	return private.mine
@@ -179,7 +244,7 @@ function Raids:Close()
 		return
 	end
 	private.SendAd(true)
-	private.mine = nil
+	private.SetMine(nil)
 	wipe(private.pending)
 	private.Changed()
 end
@@ -389,7 +454,7 @@ function Raids:Tick()
 	end
 	local changed = false
 	for id, entry in pairs(private.seen) do
-		if GetTime() - entry.heard > GONE_SECONDS then
+		if private.Gone(entry, now) then
 			private.seen[id] = nil
 			changed = true
 		end
@@ -444,7 +509,7 @@ function Raids:OnAd(ad, sender)
 		entry = {}
 		private.seen[ad.id] = entry
 	end
-	entry.heard = GetTime()
+	entry.heard = GetServerTime()
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
 		minLevel = max(1, min(60, floor(tonumber(ad.ml) or 1))), members = max(0, min(size, floor(tonumber(ad.n) or 0))),

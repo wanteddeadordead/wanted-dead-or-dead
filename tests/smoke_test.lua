@@ -6327,6 +6327,46 @@ end)()
 	clock = clock + 4 * 60
 	R:Tick()
 	check(#R:List() == 0, "quiet ads drop off")
+	-- Saved: the raid we lead with its sign-ups, the raids we signed up for and others' planned raids come back after a
+	-- reload (the saved data written out and read back in); a planned raid stays while its leader is offline, until
+	-- it should have started
+	local kept = R:Create({ title = "Saturday push", where = "Ashenvale", size = 40, startAt = clock + 2 * 3600 })
+	R:OnJoin("Loyal One", { r = kept.id, k = "g" })
+	R:OnAd(ad({ id = "sat", t = "Their Saturday", s = clock + 3 * 3600 }), "Lead Er-Realm")
+	R:SignUp("sat", "interested")
+	local function roundTrip(t)
+		if type(t) ~= "table" then return t end
+		local c = {}
+		for k, v in pairs(t) do c[k] = roundTrip(v) end
+		return c
+	end
+	ns.db.raids = roundTrip(ns.db.raids)
+	local toastsBeforeLoad = #toasts
+	R:Load()
+	check(R:Mine() and R:Mine().title == "Saturday push" and R:Mine().signups["Loyal One"] == "going", "our raid and its sign-ups come back")
+	check(R:Interest("sat") == "interested" and R:List()[1] and R:List()[1].id == "sat" and #toasts == toastsBeforeLoad,
+		"the raid we're interested in comes back, listed, no second toast")
+	-- On the calendar: our raid, and the ones we're going to or interested in
+	local function calendarDay(t)
+		local d = date("*t", t)
+		local out = {}
+		for _, e in ipairs(ns.PvPCalendar:GetMonth(d.year, d.month)[d.day] or {}) do
+			if e.kind == "raid" then out[#out + 1] = e.text end
+		end
+		return table.concat(out, " | ")
+	end
+	local ourDay, theirDay = calendarDay(kept.startAt), calendarDay(clock + 3 * 3600)
+	check(ourDay:find(date("%H:%M", kept.startAt).." Saturday push (your raid)", 1, true), "our raid on the calendar: "..ourDay)
+	check(theirDay:find("Their Saturday (interested)", 1, true), "and the one we're interested in: "..theirDay)
+	R:SignUp("sat", nil)
+	check(not calendarDay(clock + 3 * 3600):find("Their Saturday", 1, true), "taken back: off the calendar")
+	clock = clock + 3600
+	R:Tick()
+	check(R:List()[1] and R:List()[1].id == "sat", "a planned raid stays while its leader is offline")
+	clock = clock + 2 * 3600 + 4 * 60
+	R:Tick()
+	check(#R:List() == 0, "gone once it should have started and no ad came")
+	R:Close()
 	-- A guild raid: under our own guild's name, which its ad carries; not in a guild, no guild raid
 	local realGuildInfo = GetGuildInfo
 	GetGuildInfo = function() end
@@ -6396,7 +6436,7 @@ end)()
 			end
 		end
 	end
-	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("How it works"), "the Raids page: the form, how it works, and the raid with Join")
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("HOW IT WORKS"), "the Raids page: the form, how it works, and the raid with Join")
 	check(shows("Planned push") and shows("Interested") and shows("Going"), "a planned raid: Interested and Going")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end
@@ -6442,6 +6482,7 @@ end)()
 	-- Home's raids row: your raid first, then the ones forming (click to join); none, a card to form one
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
 	clock = clock + 4 * 60
+	R:OnAd(ad({ id = "page2", c = 1 }), "Lead Er-Realm") -- a planned raid stays until it's closed or should have started
 	R:Tick()
 	ns.UI:Show("home")
 	check(shows("No raids forming") and shows("RAIDS"), "Home: no raids, a card to form one")

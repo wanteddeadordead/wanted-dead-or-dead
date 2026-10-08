@@ -7702,6 +7702,29 @@ end)()
 		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
 		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
 	end
+	-- Numbers others add up are checked on the way in: amounts are whole copper the game can hold, and nothing is
+	-- infinite or not a number (a string amount threw; a negative or infinite one passed)
+	local seq = 0
+	for _, case in ipairs({
+		{ "bounty", { target = "Player-9-NUM", amount = "lots" } },
+		{ "bounty", { target = "Player-9-NUM", amount = -5000 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 1 / 0 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 0 / 0 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 2 ^ 40 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 1000.5 } },
+		{ "bounty", { target = "Player-9-NUM" } },
+		{ "raise", { bounty = "Numbers Guy:1" } },
+		{ "payment", { claim = "x:1", amount = -1 } },
+		{ "claim", { bounty = "x:1", killT = 1 / 0 } },
+	}) do
+		seq = seq + 1
+		local ok, isNew, reason = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
+		check(ok and not isNew and reason == "malformed", "a "..case[1].." with a bad number is refused ("..seq.."): "..tostring(isNew).." "..tostring(reason))
+	end
+	check(S:MergeRelayed(Signed("bounty", "Numbers Guy", 20, "0", { target = "Player-9-NUM", amount = 5000 })), "a sound bounty still comes in")
+	-- And this client never makes one others would refuse
+	check(ns.Bounties:ParseMoney("300000g") == nil and ns.Bounties:ParseMoney("214748g") == 2147480000, "an amount past what the game holds isn't read")
+	check(ns.Bounties:Post("Player-9-NUM2", "Num Two", 2 ^ 40) == nil and ns.Bounties:PostGuild("Num Guild", nil, 2 ^ 40) == nil, "nor posted")
 	-- Kinds the addon keeps for its own news are never taken from a peer: a "sighting" record reached the listeners
 	-- for our own sightings, and could make a spotted record in our name
 	local fake = Signed("sighting", "Sneaky Peer", 1, "0", {})

@@ -64,6 +64,8 @@
 - A shared record has to be the one its id names: a player can no longer pass off a record as someone else's, or
   send a broken one that stopped your sync with an error.
 - Another player can no longer send a record that poses as one of your own sightings.
+- Amounts in shared records are checked: a bounty, raise or payment with a negative, endless or made-up amount is
+  refused, and amounts past what the game's money can hold (214,748g) can't be posted.
 
 ## [1.18.2] - 2026-10-08
 

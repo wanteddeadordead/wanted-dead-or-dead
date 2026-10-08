@@ -29,6 +29,10 @@ local PRUNE_EVERY_SECONDS = 24 * 60 * 60
 -- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
 local UNKNOWN_HASH = "?"
 local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
+-- The most copper a record's amount may be (the game's own money is a 32-bit number), and the kinds that must have one
+local MAX_COPPER = 2 ^ 31 - 1
+Store.MAX_COPPER = MAX_COPPER
+local AMOUNT_REQUIRED = { bounty = true, raise = true }
 -- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
 -- never taken from a peer
 local RESERVED_KINDS = { sighting = true, ["*"] = true }
@@ -582,6 +586,19 @@ function Store:IsWellFormed(r)
 		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
 			return false
 		end
+		-- Nothing infinite or not a number (NaN is the one value not equal to itself)
+		if kind == "number" and (value ~= value or value == math.huge or value == -math.huge) then
+			return false
+		end
+	end
+	if r.t ~= r.t or r.t == math.huge or r.t == -math.huge then
+		return false
+	end
+	-- Money is whole copper the game can hold, and a bounty or a raise always says how much
+	local amount = r.data.amount
+	if (amount == nil and AMOUNT_REQUIRED[r.kind])
+		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0 or amount > MAX_COPPER)) then
+		return false
 	end
 	return true
 end

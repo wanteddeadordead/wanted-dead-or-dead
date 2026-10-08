@@ -7347,6 +7347,44 @@ end)()
 	local d = ns.Enemies:Describe("Player-9-0SKUL")
 	check(d.level == nil and d.skull, "a level -1 saved before is a skull")
 end)()
+-- The honor scout's comparison running out of time lets go only of its own: not one the achievement window (or
+-- another addon) started meanwhile
+;(function()
+	local cleared = 0
+	local real = { SetAchievementComparisonUnit = SetAchievementComparisonUnit, GetComparisonStatistic = GetComparisonStatistic,
+		ClearAchievementComparisonUnit = ClearAchievementComparisonUnit, UnitIsPlayer = UnitIsPlayer, UnitName = UnitName, UnitGUID = UnitGUID,
+		UnitFactionGroup = UnitFactionGroup }
+	local units = { target = { guid = "Player-9-0HS1", first = "Honor", last = "One" }, mouseover = { guid = "Player-9-0HS2", first = "Honor", last = "Two" } }
+	SetAchievementComparisonUnit = function() return 1 end
+	GetComparisonStatistic = function() return "5" end
+	ClearAchievementComparisonUnit = function() cleared = cleared + 1 end
+	UnitIsPlayer = function(u) return units[u] ~= nil or real.UnitIsPlayer(u) end
+	UnitName = function(u) if units[u] then return units[u].first, units[u].last end return real.UnitName(u) end
+	UnitGUID = function(u) if units[u] then return units[u].guid end return real.UnitGUID(u) end
+	UnitFactionGroup = function(u) if units[u] then return "Alliance" end return real.UnitFactionGroup(u) end
+	ns.db.hkBook = {}
+	-- The player opens the achievement window's comparison while ours waits
+	clock = clock + 60
+	Fire("PLAYER_TARGET_CHANGED")
+	AchievementFrame = CreateFrame("Frame")
+	RunTimers()
+	check(cleared == 0, "a comparison the achievement window shows isn't let go under it")
+	AchievementFrame = nil
+	-- Another addon starts one while ours waits
+	clock = clock + 60
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	for _, hook in ipairs(globalHooks.SetAchievementComparisonUnit or {}) do hook("target") end
+	RunTimers()
+	check(cleared == 0, "nor one another addon started")
+	-- Nothing else: ours is let go when it runs out
+	clock = clock + 60
+	ns.db.hkBook = {}
+	Fire("PLAYER_TARGET_CHANGED")
+	RunTimers()
+	check(cleared == 1, "our own unanswered comparison is let go, got "..cleared)
+	for k, v in pairs(real) do _G[k] = v end
+	ns.db.hkBook = {}
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

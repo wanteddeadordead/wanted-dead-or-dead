@@ -7,7 +7,9 @@
 local _, Wanted = ...
 local HonorScout = Wanted:NewModule("HonorScout")
 local private = {
-	pending = nil, -- { guid, name, faction, at }: the comparison asked for and not answered yet
+	pending = nil, -- { guid, name, faction, at, taken }: the comparison asked for and not answered yet (taken: someone
+	-- else started one since, so ours is no longer the game's to let go)
+	asking = false, -- while our own SetAchievementComparisonUnit runs
 	lastAt = -math.huge, -- GetTime() of the last comparison asked for
 }
 local HK_STATISTIC = 588 -- "Total Honorable Kills"
@@ -33,6 +35,12 @@ function HonorScout:OnEnable()
 			private.OnReady(arg1)
 		else
 			private.Consider(event == "PLAYER_TARGET_CHANGED" and "target" or "mouseover")
+		end
+	end)
+	-- A comparison someone else starts (the achievement window, another addon) replaces ours: it's theirs to let go
+	pcall(hooksecurefunc, "SetAchievementComparisonUnit", function()
+		if private.pending and not private.asking then
+			private.pending.taken = true
 		end
 	end)
 end
@@ -79,7 +87,10 @@ function private.Consider(unit)
 	if not private.Readable(name) or not private.Readable(surname) or not private.Readable(faction) or type(name) ~= "string" then
 		return
 	end
-	if not pcall(SetAchievementComparisonUnit, unit) then
+	private.asking = true
+	local asked = pcall(SetAchievementComparisonUnit, unit)
+	private.asking = false
+	if not asked then
 		return
 	end
 	local pending = { guid = guid, name = (type(surname) == "string" and surname ~= "") and (name.." "..surname) or name,
@@ -106,9 +117,14 @@ function private.OnReady(guid)
 	private.Done()
 end
 
----Done with the comparison: let it go.
+---Done with the comparison: let it go, unless it isn't ours any more (another was started since, or the achievement
+---window is showing one).
 function private.Done()
+	local pending = private.pending
 	private.pending = nil
+	if pending and pending.taken or (AchievementFrame and AchievementFrame:IsShown()) then
+		return
+	end
 	if ClearAchievementComparisonUnit then
 		pcall(ClearAchievementComparisonUnit)
 	end

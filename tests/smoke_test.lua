@@ -8281,6 +8281,28 @@ end)()
 	check(S:GetHighestHeld("Long Timer") == 1, "an altered record isn't counted as held")
 	S:FreshStart()
 end)()
+-- Version votes are kept in saved data with their age, so a /reload doesn't lose them; a player on a newer patch of the
+-- locked version keeps the lock fresh
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.40.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	ns:NoteVersion("1.41.0", "Saved Voter A")
+	ns:NoteVersion("1.41.0", "Saved Voter B")
+	local saved = ns.db.versionVotes and ns.db.versionVotes["1.41"]
+	check(saved and saved["Saved Voter A"] and saved["Saved Voter A"].t == clock, "votes are kept in saved data, with when")
+	ns:LoadSavedData()
+	ns:NoteVersion("1.41.0", "Saved Voter C")
+	check(ns:GetRequiredUpdate() == "1.41.0", "a third vote after a reload still locks")
+	ns.db.requiredVersion.seen = clock - 2 * 86400
+	ns:NoteVersion("1.41.3", "Patch Player")
+	check(ns:GetRequiredUpdate() == "1.41.0" and ns.db.requiredVersion.seen == clock, "a player on a newer patch keeps the lock fresh")
+	clock = clock + 2 * 3600
+	ns:LoadSavedData()
+	check(next(ns.db.versionVotes["1.41"] or {}) == nil, "votes older than an hour go")
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

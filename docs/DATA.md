@@ -303,7 +303,9 @@ unset or that page is switched off. A new setting: no migration.
   different players have said they run it in the last hour (hellos, haves or `U` whispers; counted per minor version,
   each player's latest word), and only up to two minor versions ahead
   (or the next major's x.0 to x.2); `WantedDB.requiredVersion` gains `votes`, and a lock without it (one player's
-  word, from before) or no longer plausible from the running version lifts at load. No migration needed.
+  word, from before) or no longer plausible from the running version lifts at load. No migration needed. Votes are kept in `WantedDB.versionVotes`
+  (`{ ["major.minor"] = { [player] = { v, t } } }`, each for an hour, tidied at load), so a /reload doesn't lose them,
+  and a player on the locked version or a newer patch of it keeps the lock's `seen` fresh. A new field: no migration.
 - A newer client ignores what older clients send and tells each of them, by a private addon whisper
   (`U`), at most every 10 minutes, to update. From 1.4.0 it also tells, at login, the players it knows whose last
   message came from an older release: 1.3.x clients pick channels themselves, so 1.4.0 needs them updated.

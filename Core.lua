@@ -550,11 +550,12 @@ end
 function private.VoteVersion(text, sender)
 	local parsed = Wanted:ParseVersion(text)
 	local key = parsed[1].."."..parsed[2]
-	private.versionVotes = private.versionVotes or {}
-	local entry = private.versionVotes[key]
+	-- In saved data, so a /reload doesn't lose them (CheckRequiredUpdate tidies them at load)
+	local votes = Wanted.db.versionVotes
+	local entry = votes[key]
 	if not entry then
 		entry = {}
-		private.versionVotes[key] = entry
+		votes[key] = entry
 	end
 	local now = GetServerTime()
 	if type(sender) == "string" then
@@ -646,10 +647,13 @@ function Wanted:NoteVersion(version, sender)
 	end
 	local text = private.VersionText(Wanted:ParseVersion(version))
 	local required = Wanted.db.requiredVersion
+	-- Anyone on the locked version, or a newer patch of it, keeps the lock fresh (it lapses when nobody on it is seen)
+	local lockedAt = required and Wanted:ParseVersion(required.version)
+	local parsed = Wanted:ParseVersion(text)
+	if lockedAt and parsed[1] == lockedAt[1] and parsed[2] == lockedAt[2] and not Wanted:IsNewerVersion(required.version, text) then
+		required.seen = GetServerTime()
+	end
 	if required and not Wanted:IsNewerVersion(text, required.version) then
-		if text == required.version then
-			required.seen = GetServerTime()
-		end
 		return
 	end
 	local votes
@@ -692,9 +696,33 @@ function Wanted:GetRequiredUpdate()
 	return required and required.version or nil
 end
 
+---Keeps the saved version votes sound: { ["major.minor"] = { [player] = { v, t } } }, each vote for an hour.
+function private.TidyVersionVotes(db)
+	if type(db.versionVotes) ~= "table" then
+		db.versionVotes = {}
+	end
+	local now = GetServerTime()
+	for key, entry in pairs(db.versionVotes) do
+		if type(key) ~= "string" or type(entry) ~= "table" then
+			db.versionVotes[key] = nil
+		else
+			for who, said in pairs(entry) do
+				if type(who) ~= "string" or type(said) ~= "table" or type(said.v) ~= "string" or type(said.t) ~= "number"
+					or now - said.t > VERSION_VOTE_SECONDS or said.t > now + 3600 then
+					entry[who] = nil
+				end
+			end
+			if not next(entry) then
+				db.versionVotes[key] = nil
+			end
+		end
+	end
+end
+
 ---Lifts the update lock once this client is on that version, or when nobody on it has been seen for a while; also one
 ---no longer plausible from the version running, or one from before locks needed several players.
 function private.CheckRequiredUpdate(db)
+	private.TidyVersionVotes(db)
 	local required = db.requiredVersion
 	if not required then
 		return

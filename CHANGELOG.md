@@ -56,7 +56,8 @@
 - The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an
   answer.
 - Skull-level enemies show as level ?? everywhere instead of "level -1", and are no longer saved with that level.
-- Bug reports leave other players' names, character ids and realm names out of the log lines they include.
+- Bug reports leave other players' names (the ones Wanted knows, and any Name-Realm), character ids and realm names out
+  of the log lines they include; zones, races and spells stay.
 - Less work in busy fights: the main window is no longer redrawn while it's closed.
 - Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
 

@@ -7615,20 +7615,29 @@ end)()
 	def.refresh = realRefresh
 	ns.UI:GetFrame():Hide()
 end)()
--- A bug report carries no other player's name: names ("First Last", with or without a realm), GUIDs and realm names
--- in the log it quotes are left out, the rest of each line kept
+-- A bug report carries no other player's name: the names Wanted knows (players seen, record origins, the guild
+-- roster, lists), with a realm or not, GUIDs in any case and realm names are left out of the log it quotes; zones,
+-- races and spells stay
 ;(function()
-	ns:Log("Sync: received B from Caller Guy-Other Realm, 3 records")
-	ns:Log("Posse: Joiner Jane calls one against Player-9-0ABCDEF in Durotar")
-	ns:Log("GuildRank: %s is rank %d on %s", "Élrin Bones", 3, GetRealmName())
+	ns.db.players["Player-9-0C1"] = { name = "Łukasz Nowak", faction = "Alliance" }
+	ns.db.players["Player-9-0C2"] = { name = "Bob", faction = "Alliance" }
+	ns.db.chains["Caller Guy"] = ns.db.chains["Caller Guy"] or { seq = 1 }
+	ns.db.chains["Joiner Jane"] = ns.db.chains["Joiner Jane"] or { seq = 1 }
+	ns.db.players["Player-9-ENEMY"].name = "Stabby Mcstab"
+	ns:Log("Sync: received B from Caller Guy-OtherRealm, 3 records")
+	ns:Log("Posse: Joiner Jane calls one against player-9-0abcdef in Stranglethorn Vale")
+	ns:Log("Enemies: Łukasz Nowak (Night Elf) cast Lesser Healing; Bob-Forever whispered")
+	ns:Log("Realm links: greeted %s on %s", "Bob", GetRealmName())
 	ns:NoteProblem("error near Stabby Mcstab")
 	local report = ns.Report:Build()
-	for _, leak in ipairs({ "Caller Guy", "Other Realm", "Joiner Jane", "0ABCDEF", "Élrin", "Bones", "Stabby Mcstab", "on Realm" }) do
+	for _, leak in ipairs({ "Caller Guy", "OtherRealm", "Joiner Jane", "0abcdef", "Łukasz", "Nowak", "Bob", "Stabby Mcstab", "on Realm" }) do
 		check(not report:find(leak, 1, true), "the report leaves out "..leak)
 	end
-	check(report:find("Sync: received B from", 1, true) and report:find("3 records", 1, true) and report:find("calls one against", 1, true),
-		"and keeps the rest of the line")
+	for _, kept in ipairs({ "Sync: received B from", "3 records", "calls one against", "Stranglethorn Vale", "Night Elf", "Lesser Healing", "whispered" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
 	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
+	ns.db.players["Player-9-0C1"], ns.db.players["Player-9-0C2"] = nil, nil
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

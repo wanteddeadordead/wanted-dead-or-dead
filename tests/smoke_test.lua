@@ -6221,6 +6221,23 @@ end)()
 	check(#shown == 3 and shown[1].name == "Again 1" and shown[2].name == "Again 2" and shown[3].kind == "8 MORE UNLOCKS" and T:Pending() == 0,
 		"after the fight: the first two in order, then the rest summed up: "..kinds())
 	check(shown[3].name == "Killer II, Piece 1, Piece 2 and 5 more", "the summary names a few: "..shown[3].name)
+	-- Only unlocks are summed up: a raid's toast (it opens the Raids page) keeps its place in line
+	for _, t in ipairs(T:Shown()) do local tf = frameOf(t) for _ = 1, 80 do tf._scripts.OnUpdate(tf, 0.1) end end
+	check(#T:Shown() == 0, "the places are free")
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	local function Raid(name) return { kind = "RAID FORMING", name = name, onClick = function() end } end
+	T:Add(Raid("Raid One"))
+	for i = 1, 4 do T:Add({ kind = "TEST", name = "Unlock "..i }) end
+	T:Add(Raid("Raid Two"))
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	shown = T:Shown()
+	check(#shown == 3 and shown[1].name == "Raid One" and shown[2].name == "Unlock 1" and shown[3].kind == "3 MORE UNLOCKS" and T:Pending() == 1,
+		"the unlocks are summed up, the second raid waits its turn: "..kinds())
+	for _, t in ipairs(T:Shown()) do local tf = frameOf(t) for _ = 1, 80 do tf._scripts.OnUpdate(tf, 0.1) end end
+	check(T:Shown()[1] and T:Shown()[1].name == "Raid Two", "then shows")
 	ns.db.cardsSeen = nil
 	CC:TakeMine(nil)
 	CreateFrame = realCreate

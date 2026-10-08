@@ -1463,7 +1463,8 @@ function private.GetHaveTable()
 	end)
 	local chains = {}
 	for i = 1, min(#active, MAX_HAVE_ORIGINS) do
-		chains[active[i]] = Wanted.db.chains[active[i]].seq
+		-- What we hold, not where a skip took the chain (another player's word, which our hello mustn't spread)
+		chains[active[i]] = Store:GetHeldSeq(active[i])
 	end
 	return chains
 end
@@ -1968,6 +1969,8 @@ end
 -- before the list starts over, and this many players for each.
 local MAX_ADVERTISED = 5000
 local MAX_ADVERTISERS = 6
+-- How far one skip may take a chain past what's held (a longer pruned stretch takes a few resyncs)
+local MAX_SKIP = 500
 
 ---Notes how far a player says an origin's chain reaches.
 function private.NoteAdvertised(origin, seq, sender)
@@ -2033,7 +2036,9 @@ function private.SkipTarget(origin, seq, tbl, sender)
 	if sender == origin then
 		return seq
 	end
-	return min(seq, floor(max(private.Advertised(origin), Store:GetChainSeq(origin))) + 1)
+	-- And never more than a little way past what's held: two alts could advertise anything for an origin that's offline
+	local cap = min(floor(max(private.Advertised(origin), Store:GetChainSeq(origin))) + 1, Store:GetHeldSeq(origin) + MAX_SKIP)
+	return min(seq, cap)
 end
 
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what

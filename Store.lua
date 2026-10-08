@@ -1295,6 +1295,18 @@ function Store:GetFirstSeen(origin)
 	return chain and chain.first
 end
 
+---How far an origin's chain reaches by records actually held: where it stood before a skip still outstanding (a skip
+---is another player's word that the records between were pruned), else its seq. What hellos advertise.
+---@param origin string
+---@return number
+function Store:GetHeldSeq(origin)
+	local chain = Wanted.db.chains[origin]
+	if chain and type(chain.skip) == "table" and type(chain.skip.from) == "number" then
+		return chain.skip.from
+	end
+	return Store:GetChainSeq(origin)
+end
+
 ---The highest seq held for an origin (for gap requests).
 ---@param origin string
 ---@return number

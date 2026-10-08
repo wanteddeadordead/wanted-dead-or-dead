@@ -124,7 +124,8 @@ chain past the first record (the seq held before it and the one after it, or the
 end); a receiver whose chain has reached `held` moves on to `next - 1` the same way. Older clients ignore `g` and keep
 asking for interior holes, as before. After 1.18.2 a skip from `p` or `g` goes no further than one past the highest seq
 this client holds, the origin's own hello or have said, or at least two other players' did (the origin may skip its
-own chain as it likes), and odd numbers are ignored. A chain moved by a skip keeps `skip = { from, hash }`, where it stood
+own chain as it likes), and no more than 500 past where the chain stood before any skip still outstanding; odd
+numbers are ignored. While a skip is outstanding, hellos and haves advertise where the chain stood before it. A chain moved by a skip keeps `skip = { from, hash }`, where it stood
 before: a recent record (younger than the 3 days records are kept) arriving inside the skipped range, heard from its
 origin or brought by the app, shows the skip was false, and the chain goes back there and on from that record. The
 origin's own record carrying the chain on past the skip clears `skip`. An optional new field: no migration.

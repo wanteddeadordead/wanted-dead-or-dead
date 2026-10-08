@@ -7887,13 +7887,13 @@ end)()
 	RunFrames()
 	check(S:GetChainSeq("Alice Chain") == 3, "nor an endless number")
 	-- One player saying the chain reaches that far, or a forged record that far in the fill itself, isn't enough
-	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 999999 } })
-	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = { Signed("pass", "Alice Chain", 1000000, "x", {}) } })
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 300 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 301 }, r = { Signed("pass", "Alice Chain", 301, "x", {}) } })
 	check(S:GetChainSeq("Alice Chain") == 3, "one player's word moves no chain: "..S:GetChainSeq("Alice Chain"))
-	-- Two players saying so is; and then a recent record of Alice's inside the skip undoes it
-	From("Mallory Two", "V", { c = { ["Alice Chain"] = 999999 } })
-	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
-	check(S:GetChainSeq("Alice Chain") >= 999999, "a skip to what two players said the chain reaches goes through")
+	-- Two players saying so is (within a skip's reach); and then a recent record of Alice's inside the skip undoes it
+	From("Mallory Two", "V", { c = { ["Alice Chain"] = 300 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 301 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") >= 300, "a skip to what two players said the chain reaches goes through")
 	local four = Signed("pass", "Alice Chain", 4, prev, { bounty = "b4" })
 	check(S:Merge(four, "Alice Chain") and S:GetChainSeq("Alice Chain") == 4 and not S:Get(four.id).brokenChain, "her next real record undoes the skip: "..S:GetChainSeq("Alice Chain"))
 	S:FreshStart()
@@ -8481,6 +8481,36 @@ end)()
 	S:MergeRelayed(oldDeath)
 	S:Prune(clock)
 	check(S:Get(oldDeath.id) == nil, "after a confirm no walk can vouch for (an old client's), nothing is kept")
+	S:FreshStart()
+end)()
+-- One skip moves a chain only a little way past what's held, however many say it reaches further, and a chain moved by a
+-- skip is advertised at what's held, so a poisoned skip doesn't spread through our hellos
+;(function()
+	local S = ns.Store
+	S:FreshStart()
+	local r1 = Sealed({ kind = "bounty", id = "Skip Origin:1", origin = "Skip Origin", seq = 1, prev = "0", t = clock - 600, data = { target = "Player-9-B5", targetName = "B5", amount = 100 } })
+	S:Merge(r1, "Skip Origin")
+	local big = 2 ^ 31 - 2
+	local channel = ns.Sync:GetInfo().channelName
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Skip Origin"] = big } }), "CHANNEL", "Alt One", nil, nil, nil, channel)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Skip Origin"] = big } }), "CHANNEL", "Alt Two", nil, nil, nil, channel)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = {}, p = { ["Skip Origin"] = big } }), "CHANNEL", "Alt One", nil, nil, nil, channel)
+	RunTimers()
+	RunFrames()
+	check(S:GetChainSeq("Skip Origin") <= 501, "one skip moves a chain only a little past what's held: "..S:GetChainSeq("Skip Origin"))
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = {}, p = { ["Skip Origin"] = big } }), "CHANNEL", "Alt Two", nil, nil, nil, channel)
+	RunTimers()
+	RunFrames()
+	check(S:GetChainSeq("Skip Origin") <= 501, "nor do skips add up while one is outstanding: "..S:GetChainSeq("Skip Origin"))
+	ClearSent()
+	clock = clock + 61
+	SlashCmdList.WANTED("synctest")
+	RunTimers()
+	local said
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then said = m.tbl.c["Skip Origin"] end end
+	check(said == 1, "our hello says the chain reaches what we hold, not the skip: "..tostring(said))
 	S:FreshStart()
 end)()
 -- A skip is undone only by the origin's own word (heard from them, or from the app), and forgotten once the chain moves

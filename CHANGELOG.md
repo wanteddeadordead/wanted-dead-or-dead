@@ -85,6 +85,8 @@
 - A bounty is only ever owed once: once the poster confirms or pays a claim, no other claim on that bounty is owed.
   A claim nobody witnessed no longer beats a witnessed one with a later kill, and a kill from before the bounty was
   posted (or after it ended) wins nothing.
+- Withdrawing a bounty no longer hides a claim on a kill made before the withdrawal: it still shows, with Confirm,
+  Dispute and Pay.
 
 ## [1.18.2] - 2026-10-08
 

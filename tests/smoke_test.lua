@@ -7984,6 +7984,17 @@ end)()
 	Witness(early)
 	Witness(future)
 	check(B:GetWinningClaim(b4) == nil and not P:IsUnpaid(early) and not P:IsUnpaid(future), "kills outside the bounty's time win nothing")
+	-- A withdrawal only ends the bounty for kills after it: a kill before it is still owed, and shows so
+	local b5 = Live("bounty", "State Poster", { target = "Player-9-ST5", targetName = "St Five", amount = 5000 }, t0)
+	local before = Live("claim", "Hunter Gee", { bounty = b5.id, kill = "Hunter Gee:0", victim = "Player-9-ST5", zone = "Durotar", killT = t0 + 100 }, t0 + 400)
+	Witness(before)
+	Live("withdraw", "State Poster", { bounty = b5.id }, t0 + 200)
+	check(B:IsWithdrawn(b5) and M:GetBountyInfo(b5).state == "claimed" and P:IsUnpaid(before), "a kill before the withdrawal still shows as claimed and owed: "..M:GetBountyInfo(b5).state)
+	local b6 = Live("bounty", "State Poster", { target = "Player-9-ST6", targetName = "St Six", amount = 5000 }, t0)
+	Live("withdraw", "State Poster", { bounty = b6.id }, t0 + 200)
+	local after = Live("claim", "Hunter Aitch", { bounty = b6.id, kill = "Hunter Aitch:0", victim = "Player-9-ST6", zone = "Durotar", killT = t0 + 300 }, t0 + 301)
+	Witness(after)
+	check(M:GetBountyInfo(b6).state == "withdrawn" and not P:IsUnpaid(after), "a kill after it is owed nothing")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

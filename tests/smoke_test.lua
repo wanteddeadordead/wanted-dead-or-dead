@@ -7249,6 +7249,27 @@ end)()
 	detect.onlyWhenExposed = savedExposed
 	ns.Alerts.PlayRaw = realPlay
 end)()
+-- The once-a-second scan reads no unit in an instance either, and nameplates that went inside are forgotten
+;(function()
+	local enemiesPrivate
+	for i = 1, 20 do
+		local name, value = debug.getupvalue(ns.Enemies.Status, i)
+		if name == "private" then enemiesPrivate = value end
+	end
+	enemyUnits.nameplate8 = { guid = "Player-9-0BEF0", name = "Before Inside", class = "MAGE", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate8")
+	check(enemiesPrivate.plates.nameplate8, "a nameplate outside is watched")
+	local outside, realExists, asked = IsInInstance, UnitExists, 0
+	IsInInstance = function() return true, "party" end
+	UnitExists = function(unit) if unit ~= "player" then asked = asked + 1 error("Secret values are only allowed during untainted execution for this argument.") end return realExists(unit) end
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate8")
+	enemyUnits.nameplate8 = nil
+	local ok, err = pcall(enemiesPrivate.Tick)
+	UnitExists, IsInInstance = realExists, outside
+	check(ok and asked == 0, "the scan reads no unit in an instance: "..tostring(err))
+	check(not enemiesPrivate.plates.nameplate8, "a nameplate that went inside isn't watched any more")
+	ns.Enemies:ClearNearby()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

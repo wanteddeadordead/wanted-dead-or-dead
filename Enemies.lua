@@ -172,6 +172,10 @@ end
 -- ============================================================================
 
 function private.OnEvent(_, event, arg1, _, arg3)
+	if event == "NAME_PLATE_UNIT_REMOVED" then
+		-- Forgotten wherever it goes (no unit is read for that), so the scan never asks about a token that went inside
+		private.plates[arg1] = nil
+	end
 	if Wanted:InInstance() and event ~= "PLAYER_DEAD" then
 		-- No unit in an instance is read: their identity is secret there, and nothing there is world PvP (a
 		-- battleground's enemies, a mind-controlled party member)
@@ -184,7 +188,6 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.plates[arg1] = true
 		private.Scan(arg1)
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
-		private.plates[arg1] = nil
 		private.OnPlateRemoved(arg1)
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		private.Scan("target")
@@ -263,6 +266,11 @@ end
 
 function private.Tick()
 	if not private.Settings().enabled then
+		return
+	end
+	if Wanted:InInstance() then
+		-- No unit is read in an instance (see OnEvent); the nameplates seen before are gone by the time we're out
+		wipe(private.plates)
 		return
 	end
 	for unit in pairs(private.plates) do

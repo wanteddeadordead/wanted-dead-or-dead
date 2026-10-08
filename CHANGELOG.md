@@ -40,6 +40,8 @@
 - A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an
   enemy.
 - The targeted sound plays once when several enemies target you at the same moment, not once for each.
+- Enemy detection's once-a-second check rests in dungeons, raids and battlegrounds, where it could hit the game's
+  hidden values.
 
 ## [1.18.2] - 2026-10-08
 

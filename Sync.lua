@@ -1835,12 +1835,12 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 	local numNeed = 0
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, seq in pairs(chains) do
-		if type(origin) == "string" and type(seq) == "number" and seq == floor(seq) then
+		if type(origin) == "string" and Store:IsSeq(seq) then
 			private.NoteAdvertised(origin, seq)
 		end
 	end
 	for origin, seq in pairs(chains) do
-		if type(origin) == "string" and type(seq) == "number" and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
+		if type(origin) == "string" and Store:IsSeq(seq) and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
 			need[origin] = Store:GetChainSeq(origin) + 1
 			numNeed = numNeed + 1
 			if numNeed >= maxNeed then
@@ -1882,8 +1882,7 @@ function private.HandleNeed(need, sender, viaLink)
 	local wanted, asked = {}, {}
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, fromSeq in pairs(need) do
-		if type(origin) == "string" and type(fromSeq) == "number" and fromSeq == floor(fromSeq) and fromSeq >= 1
-			and Wanted.db.chains[origin] and Store:GetChainSeq(origin) >= fromSeq then
+		if type(origin) == "string" and Store:IsSeq(fromSeq) and Wanted.db.chains[origin] and Store:GetChainSeq(origin) >= fromSeq then
 			wanted[origin] = floor(fromSeq)
 			tinsert(asked, origin.." from "..fromSeq)
 			if #asked >= maxNeed then
@@ -1980,7 +1979,7 @@ end
 ---its own chain.
 ---@return number? seq nil when it's no seq at all
 function private.SkipTarget(origin, seq, tbl, sender)
-	if type(seq) ~= "number" or seq ~= floor(seq) or seq < 1 then
+	if not Store:IsSeq(seq) then
 		return nil
 	end
 	seq = floor(seq)
@@ -1989,7 +1988,7 @@ function private.SkipTarget(origin, seq, tbl, sender)
 	end
 	local highest = max((private.advertised or {})[origin] or 0, Store:GetChainSeq(origin))
 	for _, record in ipairs(type(tbl.r) == "table" and tbl.r or {}) do
-		if type(record) == "table" and record.origin == origin and type(record.seq) == "number" then
+		if type(record) == "table" and record.origin == origin and Store:IsSeq(record.seq) then
 			highest = max(highest, record.seq)
 		end
 	end
@@ -2009,7 +2008,7 @@ function private.SkipPruned(tbl, sender)
 			for i = 1, min(#gaps, 2 * MAX_FILL_PER_REQUEST) - 1, 2 do
 				local from, to = gaps[i], gaps[i + 1]
 				-- Whole numbers only (floor also gives Lua 5.4's integers, as the record ids need)
-				from = type(from) == "number" and from == floor(from) and floor(from) or nil
+				from = Store:IsSeq(from) and floor(from) or nil
 				to = private.SkipTarget(origin, to, tbl, sender)
 				if from and to and Store:GetChainSeq(origin) >= from then
 					local prev

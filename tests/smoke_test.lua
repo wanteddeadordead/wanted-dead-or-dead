@@ -7710,13 +7710,16 @@ end)()
 		{ kind = "pass", id = "Str Seq:2", origin = "Str Seq", seq = "2", prev = "0", t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "No Prev:1", origin = "No Prev", seq = 1, t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "Half Seq:1.5", origin = "Half Seq", seq = 1.5, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Inf Seq:inf", origin = "Inf Seq", seq = 1 / 0, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Huge Seq:1e300", origin = "Huge Seq", seq = 1e300, prev = "0", t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "Nested:1", origin = "Nested", seq = 1, prev = "0", t = clock, hash = "x", data = { x = {} } },
 	}) do
 		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
 		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
 	end
 	-- Numbers others add up are checked on the way in: amounts are whole copper the game can hold, and nothing is
-	-- infinite or not a number (a string amount threw; a negative or infinite one passed)
+	-- infinite or not a number (a string amount threw; a negative or infinite one passed). Such a record is held, so
+	-- its chain moves on (a client before these checks may have made one), but never read.
 	local seq = 0
 	for _, case in ipairs({
 		{ "bounty", { target = "Player-9-NUM", amount = "lots" } },
@@ -7731,8 +7734,10 @@ end)()
 		{ "claim", { bounty = "x:1", killT = 1 / 0 } },
 	}) do
 		seq = seq + 1
-		local ok, isNew, reason = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
-		check(ok and not isNew and reason == "malformed", "a "..case[1].." with a bad number is refused ("..seq.."): "..tostring(isNew).." "..tostring(reason))
+		local ok = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
+		local listed = false
+		for r in S:Iterator(case[1]) do if r.id == "Numbers Guy:"..seq then listed = true end end
+		check(ok and not listed and S:GetChainSeq("Numbers Guy") == seq, "a "..case[1].." with a bad number is never read ("..seq..")")
 	end
 	check(S:MergeRelayed(Signed("bounty", "Numbers Guy", 20, "0", { target = "Player-9-NUM", amount = 5000 })), "a sound bounty still comes in")
 	-- And this client never makes one others would refuse
@@ -7848,6 +7853,12 @@ end)()
 	check(S:GetChainSeq("Alice Chain") == 3, "a skip past anything anyone said the chain reaches doesn't move it: "..S:GetChainSeq("Alice Chain"))
 	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 2.5 }, r = {}, g = { ["Alice Chain"] = { 3, 1e9, "x", 7 } } })
 	check(S:GetChainSeq("Alice Chain") == 3, "nor do odd numbers or holes past what anyone said")
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 1 / 0 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1 / 0 }, r = {} })
+	From("Mallory Bad", "N", { n = { ["Alice Chain"] = 1 / 0 } })
+	RunTimers()
+	RunFrames()
+	check(S:GetChainSeq("Alice Chain") == 3, "nor an endless number")
 	-- Even when someone says it reaches that far, a recent record of Alice's inside the skip undoes it
 	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 999999 } })
 	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })

@@ -573,14 +573,23 @@ function Store:NewRecord(kind, data)
 	return record
 end
 
+-- No chain gets anywhere near this many records; anything past it is made up (and too big to write as a whole number)
+local MAX_SEQ = 2 ^ 31 - 1
+
+---Whether a value is a seq a chain can have: a whole number from 1 to MAX_SEQ.
+---@param n any
+---@return boolean
+function Store:IsSeq(n)
+	return type(n) == "number" and n >= 1 and n <= MAX_SEQ and n == floor(n)
+end
+
 ---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
 ---record whose id names someone else (Mallory's record as "Carol:1") would take the place of theirs, and a missing
 ---origin, seq or prev would break the chain code.
 ---@param r any
 ---@return boolean
 function Store:IsWellFormed(r)
-	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or type(r.seq) ~= "number"
-		or r.seq ~= floor(r.seq) or r.seq < 1 or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
+	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
 		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
 		return false
 	end
@@ -589,15 +598,23 @@ function Store:IsWellFormed(r)
 		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
 			return false
 		end
-		-- Nothing infinite or not a number (NaN is the one value not equal to itself)
-		if kind == "number" and (value ~= value or value == math.huge or value == -math.huge) then
+	end
+	return private.IsFinite(r.t)
+end
+
+---Whether a number is one (not NaN, the one value not equal to itself) and not infinite.
+function private.IsFinite(value)
+	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+---Whether a well formed record's numbers are ones a client makes: nothing infinite or not a number, and money whole
+---copper the game can hold, which a bounty or a raise always gives. Others add these up and compare them.
+function private.HasSoundNumbers(r)
+	for _, value in pairs(r.data) do
+		if type(value) == "number" and not private.IsFinite(value) then
 			return false
 		end
 	end
-	if r.t ~= r.t or r.t == math.huge or r.t == -math.huge then
-		return false
-	end
-	-- Money is whole copper the game can hold, and a bounty or a raise always says how much
 	local amount = r.data.amount
 	if (amount == nil and AMOUNT_REQUIRED[r.kind])
 		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0 or amount > MAX_COPPER)) then
@@ -688,6 +705,11 @@ function private.Insert(record, live, fromApp)
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s doesn't match its hash (altered)", tostring(record.kind), tostring(record.id))
+	elseif not private.HasSoundNumbers(record) then
+		-- An amount no client makes (made up, or from before amounts were checked): held, so its chain moves on, but
+		-- never read, like an altered one
+		record.tampered = true
+		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
 	local chain = db.chains[record.origin]
 	if not chain then

@@ -43,6 +43,7 @@ local ASK_DELAY = 12 -- after login, once the guild roster has come
 local ANSWER_DELAY_MAX = 4 -- the members asked wait a moment, so usually only one answers
 local ASK_ANSWER_SECONDS = 60 -- how long after asking a list is taken
 local KEEP_SECONDS = 30 * 24 * 60 * 60 -- denied and removed entries are forgotten after this, so a late copy can't return them
+local MAX_AHEAD = 5 * 60 -- a change dated further ahead of the server's clock is refused: no real change after it could replace it
 
 -- ============================================================================
 -- Data
@@ -208,6 +209,11 @@ local function cleanText(value, maxLen)
 	return strsub(text, 1, maxLen)
 end
 
+---Whether a change's time is a number no further ahead of the server's clock than MAX_AHEAD.
+function private.Dated(t)
+	return type(t) == "number" and t <= GetServerTime() + MAX_AHEAD
+end
+
 ---An entry from a message, cleaned, or nil if it's malformed.
 function GuildKoS.CleanEntry(e)
 	if type(e) ~= "table" then
@@ -217,7 +223,7 @@ function GuildKoS.CleanEntry(e)
 	local name = cleanText(e.name, MAX_NAME)
 	local by = cleanText(e.by, MAX_NAME)
 	local eby = cleanText(e.eby, MAX_NAME)
-	if not kind or not name or not by or not eby or not STATES[e.state] or type(e.t) ~= "number" or type(e.at) ~= "number" then
+	if not kind or not name or not by or not eby or not STATES[e.state] or not private.Dated(e.t) or not private.Dated(e.at) then
 		return nil
 	end
 	local guid = kind == "player" and type(e.guid) == "string" and strfind(e.guid, "^Player%-%d+%-%x+$") and e.guid or nil
@@ -254,15 +260,17 @@ function private.ActionOf(book, held, e, rank, officers)
 	return "add"
 end
 
----Takes an entry change, if it's newer than what we hold and its editor (eby, who made this change) may make it.
----Returns whether it was taken.
+---Takes an entry change, if it's newer than what we hold and the guildmate it's judged by may make it. Returns
+---whether it was taken.
 ---@param book table
 ---@param raw table the entry as it came
----@param sender string? for a live change, who sent it: it must be the editor; nil for an entry in a list
+---@param sender string who sent it: for a live change it must be the editor (eby, who made this change)
 ---@param officers table rank index -> true
-function GuildKoS:TakeEntry(book, raw, sender, officers)
+---@param relayed boolean? an entry in a list: judged by its sender's own rank, not by the editor it names (a name the
+---sender writes), so a member's list can't approve or remove in an officer's name
+function GuildKoS:TakeEntry(book, raw, sender, officers, relayed)
 	local e = GuildKoS.CleanEntry(raw)
-	if not e or (sender and e.eby ~= sender) then
+	if not e or type(sender) ~= "string" or (not relayed and e.eby ~= sender) then
 		return false
 	end
 	local id = private.IdOf(e)
@@ -270,10 +278,10 @@ function GuildKoS:TakeEntry(book, raw, sender, officers)
 	if held and held.t >= e.t then
 		return false
 	end
-	local rank = GuildKoS:RankOf(e.eby)
+	local rank = GuildKoS:RankOf(sender)
 	local action = private.ActionOf(book, held, e, rank, officers)
-	if not GuildKoS.Allowed(action, book.settings, rank, officers, held, e.eby) then
-		Wanted:Log("!! GuildKoS: %s may not %s %s; ignored", e.eby, action, e.name)
+	if not GuildKoS.Allowed(action, book.settings, rank, officers, held, sender) then
+		Wanted:Log("!! GuildKoS: %s may not %s %s; ignored", sender, action, e.name)
 		return false
 	end
 	if not held and private.Count(book.entries) >= MAX_ENTRIES then
@@ -285,7 +293,7 @@ end
 
 ---Takes settings from a guildmate, if they're newer and the guildmate is an officer.
 function GuildKoS:TakeSettings(book, raw, actor, officers)
-	if type(raw) ~= "table" or type(raw.t) ~= "number" or raw.t <= (book.settings.t or 0) then
+	if type(raw) ~= "table" or not private.Dated(raw.t) or raw.t <= (book.settings.t or 0) then
 		return false
 	end
 	if not GuildKoS.Allowed("settings", book.settings, GuildKoS:RankOf(actor), officers) then
@@ -323,7 +331,7 @@ function GuildKoS:TakeServer(list)
 		if guild then
 			local book = private.Book(guild, faction)
 			local s = raw.settings
-			if type(s) == "table" and type(s.t) == "number" and s.t > (book.settings.t or 0) then
+			if type(s) == "table" and private.Dated(s.t) and s.t > (book.settings.t or 0) then
 				book.settings = {
 					enabled = s.enabled == true, mode = MODE_OK[s.mode] and s.mode or "review",
 					rank = type(s.rank) == "number" and max(0, min(floor(s.rank), 20)) or 1, discord = s.discord == true,
@@ -602,10 +610,12 @@ function private.Handle(tag, tbl, sender)
 		if not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS then
 			return -- a list nobody here asked for
 		end
-		-- Settings and entries in a list are judged by who last changed them, not by who sent the list
-		local changed = type(tbl.s) == "table" and GuildKoS:TakeSettings(book, tbl.s, cleanText(tbl.s.by, MAX_NAME), officers) or false
+		-- A list is judged by who sent it, as the roster ranks them, never by the names it carries: an officer's
+		-- settings and decisions are taken; from anyone else only what they may change themselves (in review mode,
+		-- pending entries)
+		local changed = GuildKoS:TakeSettings(book, tbl.s, sender, officers)
 		for _, raw in ipairs(type(tbl.l) == "table" and tbl.l or {}) do
-			if GuildKoS:TakeEntry(book, raw, nil, officers) then
+			if GuildKoS:TakeEntry(book, raw, sender, officers, true) then
 				changed = true
 			end
 		end

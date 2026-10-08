@@ -4190,8 +4190,33 @@ end)()
 	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
 	check(G:Match("Player-9-0F00D") == nil, "a list nobody asked for is ignored")
 	G:Ask()
-	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
-	check(G:Match("Player-9-0F00D"), "a list in answer to our ask is taken, each entry judged by who made it")
+	-- A member answering first can't pass on what only an officer may do, whoever the list says did it: settings,
+	-- approvals, or a time far ahead that no later change could beat
+	From("Office Rman", "S", { s = { enabled = true, mode = "review", rank = 4, t = clock + 8.5, by = "Office Rman" } })
+	local forged = {}
+	for k, v in pairs(G:Current().settings) do forged[k] = v end
+	forged.mode, forged.enabled, forged.t, forged.by = "open", false, clock + 10, "Office Rman"
+	From("Plain Member", "L", { s = forged, l = { listed } })
+	check(G:Current().settings.mode == "review" and G:Current().settings.enabled, "a member's list can't change the settings in an officer's name")
+	check(G:Match("Player-9-0F00D") == nil, "a member's list can't approve in an officer's name")
+	local memberPending = { kind = "player", guid = "Player-9-0BEAD", name = "Member Pick", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock + 9 }
+	From("Plain Member", "L", { s = G:Current().settings, l = { memberPending } })
+	check(#G:Entries("pending") == 1 and G:Entries("pending")[1].name == "Member Pick", "a member's list still brings a pending entry")
+	local takeBack = {}
+	for k, v in pairs(memberPending) do takeBack[k] = v end
+	takeBack.state, takeBack.t = "removed", clock + 9.5
+	From("Plain Member", "E", { e = takeBack })
+	check(#G:Entries("pending") == 0, "a member takes back their own pending entry")
+	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" },
+		entries = { farAhead } } })
+	check(G:Current().settings.enabled and G:Match("Player-9-0FA2") == nil, "the server's copy dated far ahead is refused too")
+	local farAhead = {}
+	for k, v in pairs(listed) do farAhead[k] = v end
+	farAhead.guid, farAhead.name, farAhead.t = "Player-9-0FA2", "Far Ahead", clock + 2 ^ 53
+	From("Office Rman", "L", { s = { enabled = true, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" }, l = { listed, farAhead } })
+	check(G:Current().settings.mode == "review" and G:Match("Player-9-0FA2") == nil, "a change dated far ahead is refused, even from an officer")
+	check(G:Match("Player-9-0F00D"), "an officer's list is taken")
+	From("Office Rman", "S", { s = { enabled = true, mode = "rank", rank = 4, t = clock + 10, by = "Office Rman" } })
 
 	-- The page shows the list, and what waits for an officer
 	ns.UI:Show("guildkos")

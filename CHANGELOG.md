@@ -23,6 +23,8 @@
   you're typing in.
 - Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
   and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
+- Guild Kill on Sight: the list a guildmate sends when you log in only changes the settings or approves names when
+  an officer sent it, and changes dated in the future are refused.
 
 ## [1.18.2] - 2026-10-08
 

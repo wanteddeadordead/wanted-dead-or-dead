@@ -96,6 +96,7 @@ function Store:Prune(now)
 		end
 	end
 	private.BuildOwn()
+	local unvouched = private.UnvouchedFrom()
 	local pruned, kept, left = 0, 0, 0
 	local pastGap = {} -- origin -> the newest old record held past a gap in its chain
 	for id, record in pairs(records) do
@@ -109,6 +110,7 @@ function Store:Prune(now)
 					and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
 					pastGap[record.origin] = record
 				end
+				private.KeepStub(chain, record, unvouched[record.origin])
 				records[id] = nil
 				pruned = pruned + 1
 			end
@@ -116,6 +118,7 @@ function Store:Prune(now)
 			left = left + 1
 		end
 	end
+	private.DropStubs(unvouched)
 	-- A gap still open behind a record this old won't be filled with anything worth keeping (what's in it is older
 	-- still): the chain moves past the pruned record, so it isn't asked for again
 	for origin, record in pairs(pastGap) do
@@ -128,6 +131,62 @@ function Store:Prune(now)
 		pruned, KEEP_SECONDS / 86400, kept, left)
 	private.PrunePlayers(now, targets)
 	return pruned
+end
+
+-- What another player may vouch for later (Store:IsVouched): a pruned record after one of these keeps its strong link
+local AUTHORITY_KINDS = { confirm = true, raise = true, withdraw = true, payment = true }
+
+---For each origin, the lowest seq of a record of theirs held that its later records may yet vouch for: one of the
+---AUTHORITY_KINDS, not ours, not vouched for yet.
+---@return table origin -> seq
+function private.UnvouchedFrom()
+	local lowest = {}
+	for kind in pairs(AUTHORITY_KINDS) do
+		for record in Store:Iterator(kind) do
+			local origin = record.origin
+			if origin ~= private.origin and not Store:IsTest(record) and not Store:IsVouched(record)
+				and (not lowest[origin] or record.seq < lowest[origin]) then
+				lowest[origin] = record.seq
+			end
+		end
+	end
+	return lowest
+end
+
+---Keeps what a chain walk needs of a record being pruned after an unvouched one: its strong hash and the strong link
+---it carries (chain.stubs[seq], 32 hex digits). The record itself goes.
+function private.KeepStub(chain, record, from)
+	if chain and from and type(record.seq) == "number" and record.seq > from and type(record.prev2) == "string" then
+		chain.stubs = chain.stubs or {}
+		chain.stubs[record.seq] = Store:Strong(record)..record.prev2
+	end
+end
+
+---A record too old to keep that arrives right after an unvouched one (or after a stub) keeps a stub too.
+function private.StubOnArrival(chain, record)
+	local seq = record.seq
+	local before = Wanted.db.records[record.origin..":"..format("%d", seq - 1)]
+	if (type(chain.stubs) == "table" and chain.stubs[seq - 1])
+		or (before and AUTHORITY_KINDS[before.kind] and before.origin ~= private.origin and not Store:IsVouched(before)) then
+		private.KeepStub(chain, record, seq - 1)
+	end
+end
+
+---Lets go of the stubs no unvouched record comes before any more.
+function private.DropStubs(unvouched)
+	for origin, chain in pairs(Wanted.db.chains) do
+		if type(chain.stubs) == "table" then
+			local from = unvouched[origin]
+			for seq in pairs(chain.stubs) do
+				if not from or seq <= from then
+					chain.stubs[seq] = nil
+				end
+			end
+			if not next(chain.stubs) then
+				chain.stubs = nil
+			end
+		end
+	end
 end
 
 -- Players the addon knows (enemies seen, bounty targets) are kept while seen lately, then at most PLAYERS_MAX, the
@@ -846,6 +905,7 @@ function private.Insert(record, live, fromApp)
 		if private.IsPrunable(record) then
 			-- Already too old to keep (the app's catch-up, or a fill, of old records): the chain moves on over it, so
 			-- it's neither asked for nor sent again, but it isn't stored only to be pruned at the next login
+			private.StubOnArrival(chain, record)
 			return false, "pruned"
 		end
 	elseif record.seq <= chain.seq then
@@ -853,6 +913,7 @@ function private.Insert(record, live, fromApp)
 		-- comes back whenever a peer fills someone else's gap on the channel: it isn't taken in again.
 		local old = type(record.t) == "number" and record.t < GetServerTime() - KEEP_SECONDS
 		if private.IsPrunable(record) then
+			private.StubOnArrival(chain, record)
 			return false, "pruned"
 		elseif old then
 			Wanted:Log("Store: record %s is from before %s's chain was pruned or skipped; kept", tostring(record.id), tostring(record.origin))
@@ -990,18 +1051,31 @@ function Store:IsVouched(record)
 	if private.unvouched[record] == private.vouchGen then
 		return false
 	end
-	local records, current = Wanted.db.records, record
+	local records, origin = Wanted.db.records, record.origin
+	local chain = Wanted.db.chains[origin]
+	local stubs = chain and type(chain.stubs) == "table" and chain.stubs
+	local seq, strong = record.seq, Store:Strong(record)
 	for _ = 1, VOUCH_WALK do
-		local after = records[record.origin..":"..format("%d", current.seq + 1)]
-		-- Only a strong link (prev2, from updated clients) counts: an Adler-32 prev can be forged to fit
-		if not after or after.origin ~= record.origin or type(after.prev2) ~= "string" or after.prev2 ~= Store:Strong(current) then
-			break
+		seq = seq + 1
+		local after = records[origin..":"..format("%d", seq)]
+		if after then
+			-- Only a strong link (prev2, from updated clients) counts: an Adler-32 prev can be forged to fit
+			if after.origin ~= origin or after.prev2 ~= strong then
+				break
+			end
+			if after.vouched or Store:IsTrusted(after) then
+				record.vouched = true
+				return true
+			end
+			strong = Store:Strong(after)
+		else
+			-- A record pruned here: its stub keeps its strong hash and the link it carried (KeepStub)
+			local stub = stubs and stubs[seq]
+			if type(stub) ~= "string" or strsub(stub, 17) ~= strong then
+				break
+			end
+			strong = strsub(stub, 1, 16)
 		end
-		if after.vouched or Store:IsTrusted(after) then
-			record.vouched = true
-			return true
-		end
-		current = after
 	end
 	private.unvouched[record] = private.vouchGen
 	return false

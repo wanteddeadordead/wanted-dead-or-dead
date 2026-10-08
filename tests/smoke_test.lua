@@ -8348,6 +8348,31 @@ end)()
 	check(not listed, "and the claim itself is never read")
 	S:FreshStart()
 end)()
+-- A relayed confirm stays vouchable after a record after it is pruned: pruning keeps the strong hashes the walk needs
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Signed(kind, origin, seq, prev, data, t, before)
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev, t = t, data = data })
+		r.prev2 = before and S:Strong(before) or nil
+		return r
+	end
+	S:FreshStart()
+	local old = clock - 5 * 86400
+	local bounty = Signed("bounty", "Prune Poster", 1, "0", { target = "Player-9-PRUNEB", targetName = "Prune Target", amount = 5000 }, old)
+	S:Merge(bounty, "Prune Poster")
+	local claim = Sealed({ kind = "claim", id = "Prune Hunter:1", origin = "Prune Hunter", seq = 1, prev = "0", t = old + 61, data = { bounty = bounty.id, kill = "Prune Hunter:0", victim = "Player-9-PRUNEB", killT = old + 60, zone = "Durotar" } })
+	S:Merge(claim, "Prune Hunter")
+	claim = S:Get(claim.id)
+	local confirm = Signed("confirm", "Prune Poster", 2, bounty.hash, { claim = claim.id }, old + 100, bounty)
+	local death = Signed("death", "Prune Poster", 3, confirm.hash, { victim = "Player-9-ELSEWHERE", zone = "Barrens" }, old + 110, confirm)
+	S:MergeRelayed(confirm)
+	S:MergeRelayed(death)
+	S:Prune(clock)
+	check(S:Get(death.id) == nil, "the old death is pruned")
+	S:Merge(Signed("pass", "Prune Poster", 4, death.hash, { bounty = "x:1" }, clock, death), "Prune Poster")
+	check(B:GetClaimLevel(claim) == 3, "the poster's later record still vouches for the confirm across the pruned death: "..B:GetClaimLevel(claim))
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -362,7 +362,9 @@ app or their origin sends them again.
 Records made after 1.18.2 carry `prev2`: the strong hash (`Store:Strong`, the first 16 hex digits of a SHA-256 of the
 record before's canonical content and its own `prev2`) of the origin's previous record. It sits beside `prev`, outside
 the canonical string, so older clients check the same Adler-32 and pass the field on untouched. The own chain keeps
-`lastStrong`, the strong hash of its last record. Both are optional new fields: no migration. The desktop app and the
+`lastStrong`, the strong hash of its last record. A chain may keep `stubs = { [seq] = strong..prev2 }` (32 hex
+digits) for records pruned after one of its origin's confirms, raises, withdrawals or payments that nothing has vouched
+for yet, so a chain walk can still cross the hole; they go once no such record comes before them. Both are optional new fields: no migration. The desktop app and the
 server should keep `prev2` on the records they carry, or a chain walk can't cross a record that came that way.
 
 A received record's `vouched` flag (after 1.18.2) is local too: set once `Store:IsVouched` has found a trusted record

@@ -8,10 +8,10 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Raids = Wanted.Raids
-local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false }
+local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false, day = 0 }
 local ROW_HEIGHT = 42
-local CARD_HEIGHT = 120
-local FORM_HEIGHT = 258 -- the form, with how it works under it
+local CARD_HEIGHT = 140
+local FORM_HEIGHT = 288 -- the form, with how it works under it
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
 	"1.  Name your raid, say where and when (in your time or server time), and click Form raid. Every Wanted player of your faction sees it, on every realm, in their own time.",
@@ -122,6 +122,7 @@ function private.RefreshCard()
 		private.cancelEdit:SetShown(private.editing)
 		private.timeBox:SetShown(private.later)
 		private.zoneChoice:SetShown(private.later)
+		private.dayChoice:SetShown(private.later)
 		return
 	end
 	local started = mine.startAt <= GetServerTime()
@@ -139,6 +140,8 @@ function private.RefreshCard()
 	end
 	private.leadNames:SetText(table.concat(names, "   "))
 	private.openButton:SetShown(mine.exclusive == true)
+	-- In someone else's group without assist: invites wait until we can send them
+	private.cantInvite:SetShown(not Raids:CanInvite())
 	local formNow = Raids:CanFormNow()
 	private.formNow:SetShown(formNow)
 	private.sendInvites:SetShown(formNow)
@@ -156,7 +159,15 @@ function private.Edit()
 	private.levelBox:SetValue(tostring(mine.minLevel))
 	private.later = mine.startAt > GetServerTime()
 	private.when:Select(private.later and "later" or "now", true)
-	private.timeBox:SetValue(date("%H:%M", mine.startAt + (private.serverTime and Raids:ServerOffset() or 0)))
+	local offset = private.serverTime and Raids:ServerOffset() or 0
+	private.timeBox:SetValue(date("%H:%M", mine.startAt + offset))
+	-- Its day, counted in the calendar from today
+	local function DayNumber(t)
+		local d = date("*t", t + offset)
+		return floor(time({ year = d.year, month = d.month, day = d.day, hour = 12 }) / 86400)
+	end
+	private.day = max(0, min(6, DayNumber(mine.startAt) - DayNumber(GetServerTime())))
+	private.dayChoice:SetChoice(private.day)
 	private.size = mine.size
 	private.sizeChoice:SetChoice(mine.size)
 	private.guild = mine.guild ~= nil
@@ -183,7 +194,7 @@ end
 function private.Form()
 	local startAt
 	if private.later then
-		startAt = Raids:ParseTime(private.timeBox:GetText(), private.serverTime)
+		startAt = Raids:ParseTime(private.timeBox:GetText(), private.serverTime, private.day)
 		if not startAt then
 			UI:Toast("Type a start time like 20:00.", C.red)
 			return
@@ -220,8 +231,10 @@ function private.BuildForm(parent, width)
 	private.formLabel:SetPoint("TOPLEFT", 14, -10)
 	private.titleBox = W:Input(form, 200, "Name, e.g. Southshore raid")
 	private.titleBox:SetPoint("TOPLEFT", 14, -36)
+	private.titleBox:SetMaxLetters(Raids.MAX_TEXT)
 	private.whereBox = W:Input(form, 170, "Where (your zone)")
 	private.whereBox:SetPoint("LEFT", private.titleBox, "RIGHT", 8, 0)
+	private.whereBox:SetMaxLetters(Raids.MAX_TEXT)
 	W:Suggest(private.whereBox, function() return Raids:Zones() end)
 	private.levelBox = W:Input(form, 90, "Min. level")
 	private.levelBox:SetPoint("LEFT", private.whereBox, "RIGHT", 8, 0)
@@ -232,8 +245,18 @@ function private.BuildForm(parent, width)
 	when:SetPoint("TOPLEFT", 14, -74)
 	when:Select("now", true)
 	private.when = when
+	-- Later: which day (today and the six after), then the time
+	local days = {}
+	for d = 0, 6 do
+		tinsert(days, { key = d, label = d == 0 and "Today" or d == 1 and "Tomorrow" or date("%a %d", GetServerTime() + d * 86400) })
+	end
+	private.dayChoice = W:Choice(form, 100, days, function(key)
+		private.day = key
+	end)
+	private.dayChoice:SetChoice(0)
+	private.dayChoice:SetPoint("LEFT", when, "RIGHT", 8, 0)
 	private.timeBox = W:Input(form, 70, "20:00")
-	private.timeBox:SetPoint("LEFT", when, "RIGHT", 8, 0)
+	private.timeBox:SetPoint("LEFT", private.dayChoice, "RIGHT", 6, 0)
 	-- The time typed: ours, or the realm's
 	private.zoneChoice = W:Choice(form, 130, { { key = false, label = "Your time "..Raids:ZoneName() }, { key = true, label = "Server time" } }, function(key)
 		private.serverTime = key
@@ -258,7 +281,7 @@ function private.BuildForm(parent, width)
 	local guild = W:Toggle(form, "Guild raid", function(checked)
 		private.guild = checked
 	end)
-	guild:SetPoint("LEFT", private.zoneChoice, "RIGHT", 12, 0)
+	guild:SetPoint("TOPLEFT", 14, -114)
 	private.guildToggle = guild
 	local exclusive = W:Toggle(form, "Guild only", function(checked)
 		private.exclusive = checked
@@ -277,7 +300,7 @@ function private.BuildForm(parent, width)
 	end)
 	private.cancelEdit:SetPoint("TOPRIGHT", -14, -10)
 	local how = Theme:Text(form, "small", HOW_IT_WORKS, C.muted)
-	how:SetPoint("TOPLEFT", 14, -112)
+	how:SetPoint("TOPLEFT", 14, -144)
 	how:SetWidth(width - 28)
 	how:SetWordWrap(true)
 	how:SetSpacing(3)
@@ -382,6 +405,11 @@ function private.BuildLead(parent, width)
 	private.leadNames:SetPoint("TOPLEFT", 14, -76)
 	private.leadNames:SetWidth(width - 28)
 	private.leadNames:SetWordWrap(false)
+	private.cantInvite = Theme:Text(lead, "small", "You can't invite: you're in a group without being its leader or an assistant. Invites wait until you are.", C.red)
+	private.cantInvite:SetPoint("TOPLEFT", 14, -94)
+	private.cantInvite:SetWidth(width - 28)
+	private.cantInvite:SetWordWrap(false)
+	private.cantInvite:Hide()
 	-- Hovering the sign-ups: everyone, going and interested
 	local signups = CreateFrame("Frame", nil, lead)
 	signups:SetPoint("TOPLEFT", private.leadSub, "TOPLEFT")

@@ -17,13 +17,12 @@ local private = {
 	toasted = {}, -- id -> true once its toast has shown
 	joined = {}, -- id -> { leader, startAt, title, kind ("going" or "interested"), asked, details } raids we joined or signed up for
 	reminded = {}, -- id..":"..kind -> true
-	pending = {}, -- names waiting for an invite until combat ends
-	inviteQueue = {}, -- names Invite sign-ups still has to invite
+	invites = {}, -- name -> { sent (GetTime, nil until invited), tries } players to invite to the raid we lead, until they're in
+	inviteOrder = {}, -- the names in invites, first asked first
+	replied = {}, -- name -> when we last whispered them back (GetTime)
 	answered = {}, -- name -> when we last told them who's going (GetTime)
 	viewed = {}, -- raid id -> true once the Raids page has shown it
 	rosters = {}, -- raid id -> { going, interested, more, at, asked } who's going to others' raids, as their leaders said
-	inviteTries = 0,
-	soloInvites = 0, -- invites out while we're still alone (a party holds four)
 	counter = 0,
 	lastAnnounce = -math.huge,
 	lastWhisper = -math.huge,
@@ -31,6 +30,7 @@ local private = {
 
 local SIZES = { [10] = true, [20] = true, [40] = true }
 local MAX_TEXT = 40
+Raids.MAX_TEXT = MAX_TEXT -- the longest a raid's name or place may be (the form's boxes take no more)
 local AD_SECONDS = 60 -- an open raid's ad goes out this often
 local GONE_SECONDS = 3 * 60 -- a raid whose ad hasn't come for this long has gone
 local OPEN_HOURS = 2 -- a raid closes itself this long after it starts
@@ -43,8 +43,10 @@ local PARTY_SIZE = 5
 local WHO_SECONDS = 10 -- a player is told who's going at most this often
 local ROSTER_SECONDS = 30 -- a leader is asked who's going at most this often per raid
 local ROSTER_ROOM = 180 -- letters of names an answer holds (one addon message)
-local INVITE_RETRY_SECONDS = 2 -- Invite sign-ups waits this long between rounds (for someone to join, or a fight to end)
-local INVITE_TRIES = 60 -- rounds before it gives up on the rest
+local INVITE_ROUND_SECONDS = 2 -- the invite queue looks again this often while anyone waits
+local INVITE_AGAIN_SECONDS = 60 -- an invite not taken up by then is sent once more
+local INVITE_GIVE_UP_SECONDS = 180 -- and not taken up by then, dropped
+local REPLY_SECONDS = 60 -- a player whispering "inv" is whispered back at most this often
 local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 
@@ -55,10 +57,16 @@ local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 function Raids:OnEnable()
 	private.frame = private.frame or CreateFrame("Frame")
 	private.frame:RegisterEvent("CHAT_MSG_WHISPER")
-	private.frame:SetScript("OnEvent", function(_, _, text, sender)
-		Raids:OnWhisper(text, sender)
+	private.frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+	private.frame:SetScript("OnEvent", function(_, event, text, sender)
+		if event == "CHAT_MSG_WHISPER" then
+			Raids:OnWhisper(text, sender)
+		else
+			private.PumpInvites()
+			private.Changed()
+		end
 	end)
-	Wanted:OnCombatEnd(private.InvitePending)
+	Wanted:OnCombatEnd(function() private.PumpInvites() end)
 	private.ticker = private.ticker or C_Timer.NewTicker(AD_SECONDS, function() Raids:Tick() end)
 	Raids:Load()
 end
@@ -264,7 +272,8 @@ function Raids:Close()
 	end
 	private.SendAd(true)
 	private.SetMine(nil)
-	wipe(private.pending)
+	wipe(private.invites)
+	wipe(private.inviteOrder)
 	private.Changed()
 end
 
@@ -275,9 +284,12 @@ function Raids:AnnounceText()
 	if not raid then
 		return nil
 	end
-	local when = private.Started(raid) and "now" or ("at "..Raids:ServerClock(raid.startAt))
-	return format("Forming a world PvP raid: %s in %s %s (%d/%d). Whisper me \"inv\" to join.", Raids:Title(raid), raid.where, when,
-		private.GroupSize(), raid.size)
+	if private.Started(raid) then
+		return format("Forming a world PvP raid: %s in %s now (%d/%d). Whisper me \"inv\" to join.", Raids:Title(raid), raid.where,
+			private.GroupSize(), raid.size)
+	end
+	return format("World PvP raid: %s in %s, %s. Whisper me \"inv\" to sign up, and you'll be invited when it starts.",
+		Raids:Title(raid), raid.where, Raids:ServerWhen(raid.startAt))
 end
 
 ---The public chat channel Announce posts in: Looking for Group when we're in it, else the zone's General. Its number
@@ -419,7 +431,7 @@ function Raids:OnJoin(sender, tbl)
 		end
 		return
 	end
-	private.Invite(sender)
+	private.QueueInvite(sender)
 end
 
 ---Who signed up for a raid we lead: those going and those interested, each sorted.
@@ -446,7 +458,7 @@ function Raids:WhisperText()
 	if private.Started(raid) then
 		return format("%s has started in %s. Whisper me \"inv\" for an invite.", Raids:Title(raid), raid.where)
 	end
-	return format("%s starts at %s in %s. See you there!", Raids:Title(raid), Raids:ServerClock(raid.startAt), raid.where)
+	return format("%s starts %s in %s. See you there!", Raids:Title(raid), Raids:ServerWhen(raid.startAt), raid.where)
 end
 
 ---Whispers everyone signed up for the raid we lead, one at a time a moment apart, at most once a minute. Returns why
@@ -482,39 +494,189 @@ function Raids:WhisperSignUps(text)
 	return nil
 end
 
----A whisper: "inv" to the leader of an open raid that has started is a join.
+---A whisper asking for an invite ("inv", "inv pls", "invite me") to the leader of an open raid: after the start a join;
+---before it a sign-up as going, whispered back the start time, and invited when it starts. A full raid says so. A
+---guild-only raid's outsiders get nothing.
 ---@param text string
 ---@param sender string
 function Raids:OnWhisper(text, sender)
 	local raid = private.mine
-	if raid and private.Started(raid) and type(text) == "string" and strmatch(strlower(text), "^%s*inv[ite]*%s*$") and private.MayJoin(sender) then
-		private.Invite(sender)
+	if not raid or type(text) ~= "string" or type(sender) ~= "string" then
+		return
+	end
+	local word = strmatch(strlower(text), "^%s*(%a+)")
+	if (word ~= "inv" and word ~= "invite") or not private.MayJoin(sender) then
+		return
+	end
+	if private.Full(sender) then
+		private.Reply(sender, format("Sorry, %s is full (%d).", raid.title, raid.size))
+		return
+	end
+	if not private.Started(raid) then
+		if not raid.signups[sender] then
+			raid.signups[sender] = "going"
+			Wanted:Print("%s is going to %s (whispered).", sender, raid.title)
+			private.Changed()
+		end
+		raid.whispered = raid.whispered or {}
+		raid.whispered[sender] = true
+		private.Reply(sender, format("You're signed up for %s: it starts %s in %s, and you'll be invited then.", Raids:Title(raid),
+			Raids:ServerWhen(raid.startAt), raid.where))
+		return
+	end
+	private.QueueInvite(sender)
+end
+
+---Whispers a player back, at most every REPLY_SECONDS each.
+function private.Reply(name, text)
+	local last = private.replied[name]
+	if last and GetTime() - last < REPLY_SECONDS then
+		return
+	end
+	private.replied[name] = GetTime()
+	C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "WHISPER", nil, name)
+end
+
+-- ============================================================================
+-- Inviting
+-- ============================================================================
+
+---Whether a player is in our group, by their name as it reached us ("Name-Realm" or "Name").
+function private.InGroup(name)
+	if not (UnitInRaid or UnitInParty) then
+		return false
+	end
+	local short = strmatch(name, "^([^%-]+)%-")
+	for _, n in ipairs({ name, short }) do
+		if n and ((UnitInRaid and UnitInRaid(n)) or (UnitInParty and UnitInParty(n))) then
+			return true
+		end
+	end
+	return false
+end
+
+---Whether we may invite: alone, or the group's leader or an assistant. A client without the game's checks may.
+function Raids:CanInvite()
+	if not IsInGroup() or not UnitIsGroupLeader then
+		return true
+	end
+	return UnitIsGroupLeader("player") or (UnitIsGroupAssistant and UnitIsGroupAssistant("player")) or false
+end
+
+---How many invites are out and not yet taken up.
+function private.Outstanding()
+	local n, now = 0, GetTime()
+	for _, entry in pairs(private.invites) do
+		if entry.sent and now - entry.sent < INVITE_AGAIN_SECONDS then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---Whether the raid we lead has no room for someone not yet in it: its members and the invites out fill it.
+function private.Full(name)
+	local raid = private.mine
+	if not raid or private.InGroup(name) or private.invites[name] then
+		return false
+	end
+	return private.GroupSize() + private.Outstanding() >= raid.size
+end
+
+---Puts a player in line for an invite to the raid we lead (never ourselves, nor anyone already in the group), and
+---sends what the group has room for.
+function private.QueueInvite(name)
+	local raid = private.mine
+	if not raid or type(name) ~= "string" or name == Store:GetOrigin() or private.InGroup(name) then
+		return
+	end
+	if not private.invites[name] then
+		if private.Full(name) then
+			Wanted:Print("%s wants to join %s, but it's full (%d).", name, raid.title, raid.size)
+			return
+		end
+		private.invites[name] = { tries = 0 }
+		tinsert(private.inviteOrder, name)
+	end
+	private.PumpInvites()
+end
+
+---Sends the invites the group has room for: never in a fight, never without the right to invite; four while we're
+---alone (a party holds five), and once a party would overflow it becomes a raid, the rest going out once it is one.
+---Anyone in the group leaves the line ("joined"); an invite not taken up goes once more after INVITE_AGAIN_SECONDS,
+---and is dropped after INVITE_GIVE_UP_SECONDS. Looks again every INVITE_ROUND_SECONDS while anyone waits.
+function private.PumpInvites()
+	local raid, now = private.mine, GetTime()
+	local order = private.inviteOrder
+	for i = #order, 1, -1 do
+		local name = order[i]
+		local entry = private.invites[name]
+		if not raid or private.InGroup(name) then
+			if raid then
+				Wanted:Print("%s joined %s.", name, raid.title)
+			end
+			private.invites[name] = nil
+			tremove(order, i)
+		elseif entry.sent and now - entry.sent >= INVITE_GIVE_UP_SECONDS then
+			Wanted:Print("%s didn't join %s.", name, raid.title)
+			private.invites[name] = nil
+			tremove(order, i)
+		end
+	end
+	if #order == 0 then
+		return
+	end
+	if not InCombatLockdown() and Raids:CanInvite() then
+		local members, out = private.GroupSize(), private.Outstanding()
+		local waiting = 0
+		for _, name in ipairs(order) do
+			local entry = private.invites[name]
+			if not entry.sent or (now - entry.sent >= INVITE_AGAIN_SECONDS and entry.tries < 2) then
+				waiting = waiting + 1
+			end
+		end
+		local room = raid.size - members - out
+		if not IsInGroup() then
+			room = min(room, PARTY_SIZE - 1 - out)
+		elseif not IsInRaid() then
+			if members + out + waiting > PARTY_SIZE and C_PartyInfo and C_PartyInfo.ConvertToRaid then
+				C_PartyInfo.ConvertToRaid()
+			end
+			room = min(room, PARTY_SIZE - members - out)
+		end
+		local invite = (C_PartyInfo and C_PartyInfo.InviteUnit) or InviteUnit
+		for _, name in ipairs(order) do
+			if room <= 0 or not invite then
+				break
+			end
+			local entry = private.invites[name]
+			if not entry.sent or (now - entry.sent >= INVITE_AGAIN_SECONDS and entry.tries < 2) then
+				invite(name)
+				if entry.tries == 0 then
+					Wanted:Print("Inviting %s to %s.", name, raid.title)
+				end
+				entry.sent, entry.tries = now, entry.tries + 1
+				room = room - 1
+			end
+		end
+	end
+	if not private.pumpScheduled then
+		private.pumpScheduled = true
+		C_Timer.After(INVITE_ROUND_SECONDS, function()
+			private.pumpScheduled = false
+			private.PumpInvites()
+		end)
 	end
 end
 
----Invites a player to the raid we lead: never past its size, never in combat (they wait for it to end), turning the
----group into a raid before it would pass a party.
-function private.Invite(name)
-	local raid = private.mine
-	if not raid or type(name) ~= "string" or name == Store:GetOrigin() then
-		return
+---The players waiting for an invite to the raid we lead, or already invited and not in yet: their names, in order.
+---@return string[]
+function Raids:Inviting()
+	local out = {}
+	for _, name in ipairs(private.inviteOrder) do
+		tinsert(out, name)
 	end
-	if private.GroupSize() >= raid.size then
-		Wanted:Print("%s wants to join %s, but it's full (%d).", name, raid.title, raid.size)
-		return
-	end
-	if InCombatLockdown() then
-		private.pending[name] = true
-		return
-	end
-	if IsInGroup() and not IsInRaid() and GetNumGroupMembers() >= PARTY_SIZE and C_PartyInfo and C_PartyInfo.ConvertToRaid then
-		C_PartyInfo.ConvertToRaid()
-	end
-	local invite = (C_PartyInfo and C_PartyInfo.InviteUnit) or InviteUnit
-	if invite then
-		invite(name)
-		Wanted:Print("%s joins %s: invited.", name, raid.title)
-	end
+	return out
 end
 
 ---Someone asks who's going to the raid we lead: the names, going and interested, as many as fit one message. Not for a
@@ -620,6 +782,10 @@ function Raids:FormNow(invite)
 	end
 	raid.startAt = GetServerTime()
 	private.SendAd()
+	for name in pairs(raid.whispered or {}) do
+		raid.whispered[name] = nil
+		private.QueueInvite(name)
+	end
 	if invite then
 		Raids:InviteSignUps()
 	end
@@ -639,58 +805,12 @@ function Raids:InviteSignUps()
 	if #going + #interested == 0 then
 		return "Nobody has signed up yet."
 	end
-	wipe(private.inviteQueue)
 	for _, list in ipairs({ going, interested }) do
 		for _, name in ipairs(list) do
-			tinsert(private.inviteQueue, name)
+			private.QueueInvite(name)
 		end
 	end
-	private.inviteTries, private.soloInvites = 0, 0
-	private.PumpInvites()
 	return nil
-end
-
----A round of Invite sign-ups: what the group has room for now, then another round in a moment while any are left.
-function private.PumpInvites()
-	local queue = private.inviteQueue
-	if #queue == 0 or not private.mine then
-		wipe(queue)
-		return
-	end
-	private.inviteTries = private.inviteTries + 1
-	if not InCombatLockdown() then
-		if not IsInGroup() then
-			-- A party holds four besides us: no more until someone joins
-			for _ = 1, min(PARTY_SIZE - 1 - private.soloInvites, #queue) do
-				private.Invite(tremove(queue, 1))
-				private.soloInvites = private.soloInvites + 1
-			end
-		elseif not IsInRaid() then
-			if C_PartyInfo and C_PartyInfo.ConvertToRaid then
-				C_PartyInfo.ConvertToRaid()
-			end
-		else
-			while #queue > 0 do
-				private.Invite(tremove(queue, 1))
-			end
-		end
-	end
-	if #queue > 0 then
-		if private.inviteTries >= INVITE_TRIES then
-			Wanted:Print("Invite sign-ups stopped: nobody joined, so %d weren't invited. Try again once someone is in your group.", #queue)
-			wipe(queue)
-			return
-		end
-		C_Timer.After(INVITE_RETRY_SECONDS, private.PumpInvites)
-	end
-end
-
----After a fight: the invites that waited for it.
-function private.InvitePending()
-	for name in pairs(private.pending) do
-		private.pending[name] = nil
-		private.Invite(name)
-	end
 end
 
 ---The raid's ad, shared with every Wanted player of our faction.
@@ -714,6 +834,13 @@ function Raids:Tick()
 			Raids:Close()
 		else
 			private.SendAd()
+			-- At the start, those who signed up by whispering (no Wanted to ask for themselves) are invited
+			if private.Started(raid) and raid.whispered and next(raid.whispered) then
+				for name in pairs(raid.whispered) do
+					raid.whispered[name] = nil
+					private.QueueInvite(name)
+				end
+			end
 			-- 15 minutes ahead: the leader can form it now
 			if Raids:CanFormNow() and not private.reminded[raid.id..":lead"] then
 				private.reminded[raid.id..":lead"] = true
@@ -753,6 +880,15 @@ function Raids:OnAd(ad, sender, channel)
 	if ad.l == Store:GetOrigin() or strfind(ad.l, "|", 1, true) then
 		return
 	end
+	-- Straight from a player, an ad must be their own raid's; one shared on by a realm link (fw) can only be listed,
+	-- and can close only a raid we've heard of only that way
+	local direct = not ad.fw
+	if direct and not private.SameName(sender, ad.l) then
+		return
+	end
+	if ad.c and not direct and private.seen[ad.id] and not private.seen[ad.id].relayed then
+		return
+	end
 	if ad.c then
 		local j = private.joined[ad.id]
 		if j then
@@ -786,6 +922,12 @@ function Raids:OnAd(ad, sender, channel)
 		private.seen[ad.id] = entry
 	end
 	entry.heard = GetServerTime()
+	-- Heard only through realm links so far, or straight from the leader at least once
+	if entry.relayed == nil then
+		entry.relayed = not direct
+	elseif direct then
+		entry.relayed = false
+	end
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
 		minLevel = max(1, min(60, floor(tonumber(ad.ml) or 1))), members = max(0, min(size, floor(tonumber(ad.n) or 0))),
@@ -953,6 +1095,10 @@ function private.TellChanges(raid)
 	if now.minLevel ~= was.minLevel then
 		tinsert(changes, format("level %d+ (was %d+)", now.minLevel, was.minLevel))
 	end
+	if now.startAt ~= was.startAt then
+		-- A new time: the reminder and the popup come again at it
+		private.reminded[raid.id..":soon"], private.reminded[raid.id..":start"] = nil, nil
+	end
 	j.details, j.title, j.startAt = now, now.title, now.startAt
 	if #changes > 0 then
 		Wanted.Toast:Add({ kind = "RAID CHANGED", name = now.title, detail = table.concat(changes, ", "),
@@ -968,7 +1114,10 @@ function private.Remind(now)
 			private.joined[id] = nil
 		elseif now >= j.startAt then
 			if j.asked then
-				Sync:SendRaidJoin(j.leader, id)
+				-- Until we're in the leader's group
+				if not private.InGroup(j.leader) then
+					Sync:SendRaidJoin(j.leader, id)
+				end
 			elseif not private.reminded[id..":start"] and not InCombatLockdown() and not Wanted.Widgets:IsDialogShown() then
 				private.reminded[id..":start"] = true
 				private.AskToJoin(id, j)
@@ -1025,11 +1174,11 @@ function Raids:ServerOffset()
 end
 
 ---A time typed as "20:00", "8:30" or "20", in our own time or (server) the realm's, as the next such moment (server
----seconds), or nil.
+---seconds), or nil; with day (1 to 6), that many days from today at that time.
 ---@param text string
 ---@param server boolean?
 ---@return number?
-function Raids:ParseTime(text, server)
+function Raids:ParseTime(text, server, day)
 	local h, m = strmatch(text or "", "^%s*(%d%d?):(%d%d)%s*$")
 	if not h then
 		h, m = strmatch(text or "", "^%s*(%d%d?)%s*$"), "0"
@@ -1042,6 +1191,11 @@ function Raids:ParseTime(text, server)
 	local now = GetServerTime()
 	local t = date("*t", now + offset)
 	t.hour, t.min, t.sec = h, m, 0
+	if day and day > 0 then
+		-- That many days on, at that time (a whole day in the calendar, whatever the clocks do)
+		t.day = t.day + day
+		return time(t) - offset
+	end
 	local at = time(t) - offset
 	if at <= now then
 		at = at + 24 * 3600
@@ -1093,6 +1247,16 @@ function Raids:When(t)
 	return format("%s (server %s)", ours, date("%H:%M", t + offset))
 end
 
+---A start in the realm's time for chat lines, which every reader shares, with its day unless it's today on the realm:
+---"at 23:00 server time", "Thu at 23:00 server time".
+---@param t number
+---@return string
+function Raids:ServerWhen(t)
+	local offset = Raids:ServerOffset()
+	local today = date("%Y%m%d", GetServerTime() + offset) == date("%Y%m%d", t + offset)
+	return (today and "" or date("%a ", t + offset)).."at "..Raids:ServerClock(t)
+end
+
 ---A start in the realm's time, for chat lines, which every reader shares: "23:00 server time".
 ---@param t number
 ---@return string
@@ -1103,6 +1267,19 @@ end
 -- ============================================================================
 -- Helpers
 -- ============================================================================
+
+---Whether two names are the same player: the same, or the same first part when one has no realm.
+function private.SameName(a, b)
+	if type(a) ~= "string" or type(b) ~= "string" then
+		return false
+	end
+	if a == b then
+		return true
+	end
+	local aName, aRealm = strmatch(a, "^([^%-]+)%-?(.*)$")
+	local bName, bRealm = strmatch(b, "^([^%-]+)%-?(.*)$")
+	return aName == bName and (aRealm == "" or bRealm == "")
+end
 
 ---Text from a form or another client: a string, no escape codes, at most MAX_TEXT letters.
 function private.Clean(text)

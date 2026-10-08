@@ -6225,43 +6225,86 @@ end)()
 	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^CHANNEL: Forming a world PvP raid: Southshore") and chatSent[1]:find('Whisper me "inv"', 1, true),
 		"announced in chat: "..tostring(chatSent[1]))
 	check(R:Announce() == "You announced it less than a minute ago.", "not again at once")
-	-- Joining: invited; a party of five becomes a raid first; never past full
+	-- Joining goes through one invite queue: invited (other realm names too); four at most while we're alone; a party
+	-- that would overflow becomes a raid, and the rest go once it is one; never past full; whoever joins leaves the line
+	local inGroup = {}
+	local realUnitInParty, realUnitInRaid = UnitInParty, UnitInRaid
+	UnitInParty = function(n) return inGroup[n] or nil end
+	UnitInRaid = function(n) return inGroup[n] and IsInRaid() and 1 or nil end
+	local function times(name) local n = 0 for _, v in ipairs(invited) do if v == name then n = n + 1 end end return n end
 	R:OnJoin("Joiner One-Realm", { r = raid.id })
 	check(invited[1] == "Joiner One-Realm" and converted == 0, "a joiner is invited (other realm names too)")
 	R:OnJoin("Wrong Raid", { r = "nope" })
 	check(#invited == 1, "a join for another raid does nothing")
-	IsInGroup, IsInRaid, groupSize = function() return true end, function() return false end, 5
+	R:OnJoin("Joiner One-Realm", { r = raid.id })
+	check(#invited == 1, "asked again before taking it up: not invited twice")
+	inGroup["Joiner One-Realm"] = true
+	IsInGroup, IsInRaid, groupSize = function() return true end, function() return false end, 2
+	Fire("GROUP_ROSTER_UPDATE")
+	check(#R:Inviting() == 0, "in the group: off the line")
+	R:OnJoin("Joiner One-Realm", { r = raid.id })
+	check(#invited == 1, "already in the group: never invited again")
+	groupSize = 5
 	R:OnJoin("Sixth", { r = raid.id })
-	check(converted == 1 and invited[2] == "Sixth", "the party became a raid before the sixth")
+	check(converted == 1 and #invited == 1, "a full party becomes a raid before the sixth is invited")
+	IsInRaid = function() return true end
+	Fire("GROUP_ROSTER_UPDATE")
+	check(invited[2] == "Sixth", "and once it's a raid, the sixth is")
 	groupSize = 20
 	R:OnJoin("Too Many", { r = raid.id })
 	check(#invited == 2, "never past full")
 	groupSize = 6
-	-- "inv" whispers
+	-- "inv" whispers: "inv", "inv pls", "invite me"; nothing else
 	R:OnWhisper(" INV ", "Whisperer")
-	R:OnWhisper("invite me please", "Chatty")
-	check(invited[3] == "Whisperer" and #invited == 3, "a whisper of inv is a join, other whispers aren't")
+	R:OnWhisper("inv pls", "Pleaser")
+	R:OnWhisper("where's the raid?", "Chatty")
+	check(invited[3] == "Whisperer" and invited[4] == "Pleaser" and #invited == 4, "inv, inv pls are joins; other whispers aren't")
 	-- In a fight invites wait
 	inCombat = true
 	R:OnJoin("Fighter", { r = raid.id })
-	check(#invited == 3, "no invite in a fight")
+	check(#invited == 4, "no invite in a fight")
 	inCombat = false
 	Fire("PLAYER_REGEN_DISABLED")
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
-	check(invited[4] == "Fighter", "invited when it's over")
+	check(invited[5] == "Fighter", "invited when it's over")
+	-- Not taken up: invited once more after a minute, then dropped
+	clock = clock + 61
+	RunTimers()
+	check(times("Fighter") == 2 and times("Whisperer") == 2, "invites not taken up go once more")
+	clock = clock + 180
+	RunTimers()
+	check(times("Fighter") == 2 and #R:Inviting() == 0, "then they're dropped")
+	-- In someone else's group without lead or assist we can't invite: it waits until we can
+	local realLeader, realAssist = UnitIsGroupLeader, UnitIsGroupAssistant
+	UnitIsGroupLeader, UnitIsGroupAssistant = function() return false end, function() return false end
+	R:OnJoin("Patient One", { r = raid.id })
+	check(not R:CanInvite() and times("Patient One") == 0, "no right to invite: it waits")
+	UnitIsGroupAssistant = function() return true end
+	RunTimers()
+	check(times("Patient One") == 1, "an assistant may invite")
+	UnitIsGroupLeader, UnitIsGroupAssistant = realLeader, realAssist
+	inGroup["Patient One"], inGroup["Whisperer"], inGroup["Pleaser"], inGroup["Fighter"], inGroup["Sixth"] = true, true, true, true, true
+	Fire("GROUP_ROSTER_UPDATE")
+	-- A full raid says so to a player who whispered
+	groupSize = 20
+	chatSent = {}
+	R:OnWhisper("inv", "Too Late")
+	check(chatSent[1] and chatSent[1]:find("^WHISPER: Sorry, .* is full %(20%)%. >Too Late"), "a full raid whispers back: "..tostring(chatSent[1]))
+	groupSize = 6
 	-- Closing: a closed ad, and nothing led
+	local invitedBefore = #invited
 	R:Close()
 	check(R:Mine() == nil and ads[#ads].c == 1, "closed: the ad says so")
 	R:OnWhisper("inv", "Late")
-	check(#invited == 4, "no invites after closing")
+	check(#invited == invitedBefore, "no invites after closing")
 	-- A planned raid: joins are sign-ups, going or interested (an old client's join is going), and can be taken back
 	local planned = R:Create({ title = "Tarren Mill", where = "Hillsbrad", size = 40, startAt = clock + 3600 })
 	R:OnJoin("Early Bird", { r = planned.id })
 	R:OnJoin("Maybe Later", { r = planned.id, k = "i" })
 	R:OnJoin("Changed Mind", { r = planned.id, k = "g" })
 	R:OnJoin("Changed Mind", { r = planned.id, k = "x" })
-	check(planned.signups["Early Bird"] == "going" and planned.signups["Maybe Later"] == "interested" and not planned.signups["Changed Mind"] and #invited == 4,
+	check(planned.signups["Early Bird"] == "going" and planned.signups["Maybe Later"] == "interested" and not planned.signups["Changed Mind"] and #invited == invitedBefore,
 		"before it starts: going, interested, and taken back")
 	R:Tick()
 	check(ads[#ads].u == 1 and ads[#ads].i == 1, "the ad counts going and interested")
@@ -6276,6 +6319,15 @@ end)()
 	check(#chatSent == 2 and chatSent[1] == "WHISPER: See you at the mill cffff0000now >Early Bird" and chatSent[2] == "WHISPER: See you at the mill cffff0000now >Maybe Later",
 		"each sign-up whispered: "..table.concat(chatSent, "; "))
 	check(R:WhisperSignUps("Again") == "You whispered them less than a minute ago.", "not again at once")
+	-- "inv" before it starts: signed up as going, told when it starts (with its day, in server time), invited at the start
+	check(R:AnnounceText():find("Whisper me \"inv\" to sign up", 1, true), "a planned raid's announce asks for sign-ups: "..R:AnnounceText())
+	chatSent = {}
+	R:OnWhisper("inv", "Early Whisperer")
+	check(planned.signups["Early Whisperer"] == "going" and #invited == invitedBefore and chatSent[1]
+		and chatSent[1]:find("^WHISPER: You're signed up for Tarren Mill: it starts .*server time") and chatSent[1]:find(">Early Whisperer$"),
+		"an early inv signs them up and says when: "..tostring(chatSent[1]))
+	R:OnWhisper("inv", "Early Whisperer")
+	check(#chatSent == 1, "and isn't whispered back again at once")
 	-- Editing it: checked like a new one, and the ad goes out at once
 	check(R:Update({ title = " ", size = 40 }) == "Give the raid a name.", "an edit is checked")
 	local adsBefore = #ads
@@ -6284,9 +6336,13 @@ end)()
 	-- When it starts the leader doesn't invite the sign-ups: their Wanted asks them, and asks for the invite on Join
 	clock = clock + 3601
 	R:Tick()
-	check(#invited == 4 and planned.signups["Early Bird"], "sign-ups aren't invited without saying Join")
+	check(times("Early Bird") == 0 and planned.signups["Early Bird"], "sign-ups with Wanted aren't invited without saying Join")
+	check(times("Early Whisperer") == 1, "one who signed up by whisper is invited at the start")
 	-- Invite sign-ups: everyone going or interested gets an invite: solo, the four a party holds first; once someone is
 	-- in, the group becomes a raid and the rest are invited; never in a fight
+	inGroup["Early Whisperer"] = true -- took up the invite at the start
+	Fire("GROUP_ROSTER_UPDATE")
+	planned.signups["Early Whisperer"] = nil
 	for _, name in ipairs({ "P3", "P4", "P5", "P6" }) do planned.signups[name] = "going" end
 	invited = {}
 	IsInGroup, IsInRaid, groupSize = function() return false end, function() return false end, 1
@@ -6344,6 +6400,11 @@ end)()
 	R:Close()
 	GetGameTime = realGameTime
 	check(R:When(ourAt) == date("%a %H:%M", ourAt).." "..zone and R:ParseTime("25:00") == nil, "no realm clock: ours alone; a bad time is none")
+	-- A day ahead: that many days on at that time, up to the six after today
+	local inThree = R:ParseTime("20:00", false, 3)
+	local want = date("*t", clock)
+	want.day, want.hour, want.min, want.sec = want.day + 3, 20, 0, 0
+	check(inThree == time(want), "three days on at 20:00")
 	toasts = {}
 	-- Other players' raids
 	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
@@ -6390,6 +6451,10 @@ end)()
 	popup = nil
 	R:Tick()
 	check(popup == nil and #joins == before + 2, "asked again, no second popup")
+	inGroup["Lead Er-Realm"] = true
+	R:Tick()
+	check(#joins == before + 2, "in the leader's group: no more asking")
+	inGroup["Lead Er-Realm"] = nil
 	ns.Widgets.Dialog, ns.Widgets.IsDialogShown = realDialog, realShown
 	-- A raid whose ad stops coming has gone; a closed one goes at once
 	R:OnAd(ad({ id = "later", c = 1 }), "Lead Er-Realm")
@@ -6406,6 +6471,26 @@ end)()
 	local toastsBefore = #toasts
 	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale", n = 20 }), "Lead Er-Realm")
 	check(#toasts == toastsBefore, "more members isn't a change to tell")
+	-- A new time brings the reminder back at it
+	clock = clock + 6600
+	R:Tick()
+	local soonCount = 0
+	for _, t in ipairs(toasts) do if t.kind == "RAID SOON" and t.name == "Crossroads" then soonCount = soonCount + 1 end end
+	R:OnAd(ad({ id = "moving", s = clock + 3600, z = "Ashenvale" }), "Lead Er-Realm")
+	clock = clock + 3000
+	R:Tick()
+	local soonAfter = 0
+	for _, t in ipairs(toasts) do if t.kind == "RAID SOON" and t.name == "Crossroads" then soonAfter = soonAfter + 1 end end
+	check(soonCount == 1 and soonAfter == 2, "moved later: reminded again before the new time ("..soonCount..", "..soonAfter..")")
+	-- Nobody can list or close a raid as someone else: straight from a player an ad must be their own raid; one shared
+	-- on by a realm link can't close a raid heard straight from its leader
+	R:OnAd(ad({ id = "fake", l = "Real Leader-Realm", t = "Fake raid" }), "Faker-Realm")
+	local fake = false
+	for _, x in ipairs(R:List()) do fake = fake or x.id == "fake" end
+	check(not fake, "a raid ad from someone else than its leader isn't listed")
+	R:OnAd(ad({ id = "moving", c = 1 }), "Faker-Realm")
+	R:OnAd(ad({ id = "moving", c = 1, fw = 1 }), "Relay Person-Elsewhere")
+	check(R:Joined("moving"), "nor closed by anyone but its leader")
 	R:OnAd(ad({ id = "moving", c = 1 }), "Lead Er-Realm")
 	check(toasts[#toasts].kind == "RAID CANCELLED" and not R:Joined("moving"), "cancelled before it starts")
 	clock = clock + 4 * 60
@@ -6563,7 +6648,10 @@ end)()
 	check(roster and table.concat(roster.going, ",") == "Ann,Bob" and table.concat(roster.interested, ",") == "Cat", "the leader's answer: who's going and interested")
 	R:OnAd(ad({ id = "who", c = 1 }), "Lead Er-Realm")
 	R:Close()
-	-- The page builds and lists them
+	-- The page builds and lists them (the realm-link and channel raids above closed by their leaders first)
+	R:OnAd(ad({ id = "link", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
+	R:OnAd(ad({ id = "link2", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
+	R:OnAd(ad({ id = "chan", l = "Chan Lead-Realm", c = 1 }), "Chan Lead-Realm")
 	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
 	R:OnAd(ad({ id = "page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
 	-- New raids show as a count on the Raids menu entry until the Raids page is opened

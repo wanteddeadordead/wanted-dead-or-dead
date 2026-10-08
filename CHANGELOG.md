@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Raid invites go through one queue: four while you're alone, then the group becomes a raid and the rest follow;
+  invites out count against the room, anyone not in after a minute is invited once more, and "joined" or "didn't
+  join" says how it went. Nobody already in your group is invited again, and members stop asking once they're in.
+- Whispering "inv" before a planned raid starts signs you up and tells you when it starts; you're invited at the
+  start. "inv pls" and "invite" work too, and a full raid whispers back that it's full.
+- Your raid's card warns when you can't invite (in a group without lead or assist); invites wait until you can.
+- Later raids can be set up to six days ahead, and Announce gives the day ("Thu at 23:00 server time").
+- Raid names and places are held to 40 letters as you type, instead of being cut short after.
+- A new start time brings the "starts soon" reminder and the join popup back at the new time.
+- A raid can only be listed or closed by its own leader.
+
 ## [1.18.2] - 2026-10-08
 
 - New things show as a blue count on the menu until you open the page that shows them: raids on Raids, other players'

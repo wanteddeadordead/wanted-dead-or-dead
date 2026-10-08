@@ -79,7 +79,7 @@ function Rows:UpdateBounty(row, info)
 		row.name:SetText(Theme:Colorize("<"..info.guild..">", C.amber).."  "..Theme:Colorize(format("any member, %d seen", members), C.muted))
 	else
 		local who = Theme:ClassName(info.targetName, player and player.class)
-		local level = player and player.level and ("Level "..player.level) or "Level ?"
+		local level = player and player.level and ("Level "..(player.level > 0 and player.level or "??")) or "Level ?"
 		local class = player and Theme:ClassLabel(player.class) or ""
 		local guild = player and player.guild and ("  <"..player.guild..">") or ""
 		row.name:SetText(who.."  "..Theme:Colorize(strtrim(level.." "..class)..guild, C.muted))
@@ -120,7 +120,7 @@ function Rows:UpdateClaim(row, item)
 	row.money:SetText(Theme:Money(item.amount))
 	local who = Theme:ClassName(item.targetName, player and player.class)
 	local guildBounty = item.bounty.data.guild and ("  for the <"..item.bounty.data.guild.."> bounty") or ""
-	row.name:SetText(who.."  "..Theme:Colorize((player and player.level and ("Level "..player.level) or "")..guildBounty, C.muted))
+	row.name:SetText(who.."  "..Theme:Colorize((player and player.level and ("Level "..(player.level > 0 and player.level or "??")) or "")..guildBounty, C.muted))
 	local parts = {}
 	if item.test then
 		tinsert(parts, "Test data")

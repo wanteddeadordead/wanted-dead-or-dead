@@ -58,8 +58,8 @@ end
 local function Announce(channel, d, channelNumber)
 	-- Plain text only: a chat message with colour codes or links is dropped
 	local parts = { "Enemy: "..d.name }
-	if d.level then
-		tinsert(parts, "level "..d.level)
+	if d.level or d.skull then
+		tinsert(parts, "level "..(d.level or "??"))
 	end
 	if d.class then
 		tinsert(parts, Theme:ClassLabel(d.class))
@@ -103,8 +103,8 @@ function EnemyMenu:BuildHelpText()
 	local text = format("Need help %s - %d enem%s:", where, #nearby, #nearby == 1 and "y" or "ies")
 	for i, d in ipairs(nearby) do
 		local part = " "..d.name
-		if d.level then
-			part = part.." "..d.level
+		if d.level or d.skull then
+			part = part.." "..(d.level or "??")
 		end
 		if d.class then
 			part = part.." "..Theme:ClassLabel(d.class)

@@ -428,10 +428,12 @@ function private.Track(unit)
 	private.lastSighting[guid] = now
 	local zone, x, y, mapId = Recorder:GetPosition()
 	local _, class = UnitClass(unit)
+	-- A skull (-1: far above us) isn't a level: the last one known stays
+	local level = private.Readable(UnitLevel(unit))
 	Store:UpdatePlayer(guid, {
 		name = GetUnitName(unit, true),
 		class = class,
-		level = UnitLevel(unit),
+		level = type(level) == "number" and level > 0 and level or nil,
 		faction = faction,
 		guild = Recorder:GetUnitGuild(unit) or false, -- false = seen without a guild
 		race = UnitRace(unit),
@@ -910,7 +912,7 @@ Wanted:RegisterCommand("seen", "Lists recently sighted enemy players, or one by 
 		local player = Store:GetPlayer(sighting.guid)
 		local name = player and player.name or sighting.guid
 		if wanted == "" or strfind(strlower(name), strlower(wanted), 1, true) then
-			Wanted:Print("%s: %s (%s %s) in %s%s", Ago(sighting.t), name, player and player.level or "?", player and player.class or "?", sighting.zone, sighting.x and format(" (%.1f, %.1f)", sighting.x, sighting.y) or "")
+			Wanted:Print("%s: %s (%s %s) in %s%s", Ago(sighting.t), name, player and player.level and (player.level > 0 and player.level or "??") or "?", player and player.class or "?", sighting.zone, sighting.x and format(" (%.1f, %.1f)", sighting.x, sighting.y) or "")
 			shown = shown + 1
 			if shown >= MAX_LOG_LINES then
 				break

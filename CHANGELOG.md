@@ -46,6 +46,7 @@
   from before a /reload no longer counts as the next death's.
 - Fewer false stealth alarms: only a rogue, druid or mage seen fighting in the last half minute counts as stealthed
   when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
+- Skull-level enemies show as level ?? everywhere instead of "level -1", and are no longer saved with that level.
 - Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
 
 ## [1.18.2] - 2026-10-08

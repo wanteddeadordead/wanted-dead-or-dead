@@ -101,7 +101,7 @@ function PinMixin:OnMouseEnter()
 			end
 			local d = member.info
 			local tag = d.kos and Theme:Colorize("  KoS", C.red) or (d.bounty > 0 and Theme:Colorize("  bounty", C.gold)) or ""
-			GameTooltip:AddDoubleLine(Theme:ClassName(d.name, d.class).."  "..(d.level or "?").." "..Theme:ClassLabel(d.class)..tag, Theme:Ago(now - member.sighting.t), 1, 1, 1, C.muted[1], C.muted[2], C.muted[3])
+			GameTooltip:AddDoubleLine(Theme:ClassName(d.name, d.class).."  "..(d.level or (d.skull and "??") or "?").." "..Theme:ClassLabel(d.class)..tag, Theme:Ago(now - member.sighting.t), 1, 1, 1, C.muted[1], C.muted[2], C.muted[3])
 		end
 	end
 	-- Today's hot zones (from the Wanted app): kills there count double

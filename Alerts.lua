@@ -386,8 +386,8 @@ end
 function private.Describe(d)
 	local parts = { Theme:ClassName(d.name, d.class) }
 	local extra = {}
-	if d.level then
-		tinsert(extra, tostring(d.level))
+	if d.level or d.skull then
+		tinsert(extra, d.level and tostring(d.level) or "??")
 	end
 	if d.class then
 		tinsert(extra, Theme:ClassLabel(d.class))

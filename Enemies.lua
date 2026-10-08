@@ -834,8 +834,10 @@ function private.Fill(d, guid)
 	d.guid = guid
 	d.name = entry and entry.name or player.name or stats.name or (kos and kos.name) or "?"
 	d.class = entry and entry.class or player.class
-	d.level = entry and entry.level or player.level
-	d.skull = entry and entry.skull
+	-- A skull was once saved as level -1
+	local savedLevel = type(player.level) == "number" and player.level > 0 and player.level or nil
+	d.level = entry and entry.level or savedLevel
+	d.skull = (entry and entry.skull) or (not d.level and player.level == -1) or nil
 	d.race = entry and entry.race or player.race
 	d.guild = guild or nil
 	d.zone = entry and entry.zone or player.zone

@@ -7332,6 +7332,21 @@ end)()
 	ns.Streaks:OnKill("New Victim")
 	check(not sp.recentVictims["Old Victim"] and sp.recentVictims["New Victim"], "streaks let old victims go")
 end)()
+-- A skull-level enemy (the game says level -1) is saved with no level and shown as "??", never as level -1
+;(function()
+	clock = clock + 60
+	enemyUnits.target = { guid = "Player-9-0SKUL", name = "Skull Face", class = "WARRIOR", level = -1 }
+	Fire("PLAYER_TARGET_CHANGED")
+	local p = ns.Store:GetPlayer("Player-9-0SKUL")
+	check(p and p.level == nil, "a skull's level isn't saved, got "..tostring(p and p.level))
+	enemyUnits.target = nil
+	Fire("PLAYER_TARGET_CHANGED")
+	ns.Enemies:ClearNearby()
+	-- Saved before this fix
+	ns.db.players["Player-9-0SKUL"].level = -1
+	local d = ns.Enemies:Describe("Player-9-0SKUL")
+	check(d.level == nil and d.skull, "a level -1 saved before is a skull")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

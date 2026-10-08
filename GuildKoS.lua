@@ -58,6 +58,9 @@ function GuildKoS:OnLoad()
 	Wanted.db.guildKos = type(Wanted.db.guildKos) == "table" and Wanted.db.guildKos or {}
 	local now = GetServerTime()
 	for _, book in pairs(Wanted.db.guildKos) do
+		if type(book) == "table" and type(book.heard) ~= "number" then
+			book.heard = nil
+		end
 		if type(book) == "table" and type(book.entries) == "table" then
 			for id, e in pairs(book.entries) do
 				if type(e) ~= "table" or ((e.state == "denied" or e.state == "removed") and now - (e.t or 0) > KEEP_SECONDS) then
@@ -330,7 +333,26 @@ function GuildKoS:TakeEntry(book, raw, sender, officers, relayed)
 		e.by, e.at = held.by, held.at
 	end
 	book.entries[id] = e
+	if officers[rank] then
+		private.Heard(book, e.t)
+	end
 	return true
+end
+
+---Notes the time of our own change, when we're an officer (see Heard).
+function private.HeardOwn(book, t)
+	if Wanted.GuildRank:OfficerRanks()[private.OwnRank()] then
+		private.Heard(book, t)
+	end
+end
+
+---Notes the time of a change heard from an officer (or the server). Asking for the list asks for what's newer than the
+---newest of these, not the newest change held: a member's answer can't carry an officer's changes (they're refused),
+---so asking past them would never ask for them again.
+function private.Heard(book, t)
+	if type(t) == "number" and t > (book.heard or 0) then
+		book.heard = t
+	end
 end
 
 ---Takes settings from a guildmate, if they're newer and the guildmate is an officer.
@@ -347,6 +369,7 @@ function GuildKoS:TakeSettings(book, raw, actor, officers)
 		rank = type(raw.rank) == "number" and max(0, min(floor(raw.rank), 20)) or 1, discord = raw.discord == true,
 		t = raw.t, by = cleanText(raw.by, MAX_NAME) or actor,
 	}
+	private.Heard(book, raw.t)
 	return true
 end
 
@@ -381,9 +404,11 @@ function GuildKoS:TakeServer(list)
 				}
 				changed = changed + 1
 			end
+			private.Heard(book, type(s) == "table" and private.Dated(s.t) and s.t)
 			for _, e in ipairs(type(raw.entries) == "table" and raw.entries or {}) do
 				local clean = GuildKoS.CleanEntry(e)
 				if clean then
+					private.Heard(book, clean.t)
 					local id = private.IdOf(clean)
 					local held = book.entries[id]
 					if (not held or clean.t > held.t) and (held or private.Count(book.entries) < MAX_ENTRIES) then
@@ -427,6 +452,7 @@ function GuildKoS:Add(kind, name, guid, reason)
 		return nil, "That isn't a player or guild Wanted can add."
 	end
 	book.entries[private.IdOf(e)] = e
+	private.HeardOwn(book, e.t)
 	private.Broadcast(TAG_EDIT, { e = e })
 	private.Changed()
 	return e
@@ -457,6 +483,7 @@ function GuildKoS:Decide(id, action)
 	e.id = nil
 	e.t = max(now, held.t + 1)
 	book.entries[id] = e
+	private.HeardOwn(book, e.t)
 	private.Broadcast(TAG_EDIT, { e = e })
 	private.Changed()
 	return true
@@ -477,6 +504,7 @@ function GuildKoS:SetSettings(changes)
 	new.t, new.by = max(GetServerTime(), (s.t or 0) + 1), private.Me()
 	new.mode = MODE_OK[new.mode] and new.mode or "review"
 	book.settings = new
+	private.HeardOwn(book, new.t)
 	private.Broadcast(TAG_SETTINGS, { s = new })
 	private.Changed()
 	return true
@@ -547,7 +575,7 @@ function GuildKoS:Ask()
 	local book = GuildKoS:Current()
 	if book then
 		private.askedAt = GetTime()
-		private.Broadcast(TAG_ASK, { n = private.Newest(book) })
+		private.Broadcast(TAG_ASK, { n = book.heard or 0 })
 	end
 end
 
@@ -653,6 +681,11 @@ function private.Handle(tag, tbl, sender)
 			private.Changed()
 		end
 	elseif tag == TAG_ASK then
+		-- An officer logging in holds officer changes newer than any we've heard: ask for them too
+		if type(tbl.n) == "number" and tbl.n > (book.heard or 0) and officers[GuildKoS:RankOf(sender)]
+			and (not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS) then
+			C_Timer.After(random() * ANSWER_DELAY_MAX, function() GuildKoS:Ask() end)
+		end
 		-- Someone logged in: if we hold something newer, answer after a moment unless another member does first
 		if type(tbl.n) == "number" and private.Newest(book) > tbl.n then
 			private.answerSince = min(private.answerSince or tbl.n, tbl.n)
@@ -668,7 +701,12 @@ function private.Handle(tag, tbl, sender)
 			end)
 		end
 	elseif tag == TAG_LIST then
-		private.answerAt, private.answerSince = nil, nil -- someone answered; we needn't
+		-- Someone answered, so we needn't: unless we're an officer and they aren't (only an officer's answer carries
+		-- the settings and decisions)
+		local fromOfficer = officers[GuildKoS:RankOf(sender)] == true
+		if fromOfficer or not officers[private.OwnRank()] then
+			private.answerAt, private.answerSince = nil, nil
+		end
 		if not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS then
 			return -- a list nobody here asked for
 		end
@@ -682,6 +720,14 @@ function private.Handle(tag, tbl, sender)
 			if GuildKoS:TakeEntry(book, raw, sender, officers, true) then
 				changed = true
 			end
+			-- All an officer sent is heard, taken or not (we may hold it already)
+			local clean = fromOfficer and GuildKoS.CleanEntry(raw)
+			if clean then
+				private.Heard(book, clean.t)
+			end
+		end
+		if fromOfficer and type(tbl.s) == "table" and private.Dated(tbl.s.t) then
+			private.Heard(book, tbl.s.t)
 		end
 		if changed then
 			private.Changed()

@@ -28,7 +28,8 @@
 - Guild Kill on Sight: in review mode only officers can take an approved name off the list, and editing an entry
   keeps who added it.
 - Guild Kill on Sight: a long list (past about 70 names) reaches guildmates logging in again; they're sent only what
-  changed since they last heard.
+  changed since they last heard from an officer, and a member answering first no longer keeps an officer's settings
+  and decisions from reaching them.
 - Guild Kill on Sight: the rank choice for rank mode lists your guild's ranks even when the page opened before the
   game had loaded them.
 - A sighting shared with a broken position or zone no longer causes Lua errors on the map, in Hotspots or in alerts:

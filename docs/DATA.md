@@ -88,7 +88,10 @@ boards; the site takes them only for the account's own characters.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is
 `{ kind = "player"|"guild", guid?, name, reason?, state = "pending"|"approved"|"denied"|"removed", by, at, dby?,
 eby, t }` (by: who added it; dby: who approved or denied it; eby: who made its last change; t: when). Denied and
-removed entries are dropped 30 days after their last change. A missing or malformed table starts empty.
+removed entries are dropped 30 days after their last change. A missing or malformed table starts empty. A book's
+optional `heard` (added after 1.18.2) is the time of the newest change taken from an officer (or the server, or made here as
+an officer): logging in asks guildmates for what's newer than it. No migration: a book without it asks for everything
+once.
 
 `WantedDB.faction` (from 1.2.7) is the account's side ("Horde" or "Alliance"), saved at login for the desktop app.
 `WantedDB.catchupT` (from 1.2.7) is the server time of the last catch-up taken in. The app sends the server the

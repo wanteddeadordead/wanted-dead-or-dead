@@ -4373,6 +4373,61 @@ end)()
 	ns.GuildRank:NoteOwn()
 	check(G:Decide(G.EntryId("player", "Player-9-0BAD"), "remove") and G:Match("Player-9-0BAD") == nil, "an officer removes an entry")
 
+	-- A member's answer can't hold back an officer's data: a member logging in (here, us) with nothing hears first from
+	-- another member, who passes on an officer's approval of X and settings (refused: not theirs) and their own pending
+	-- Y (taken). Asking again still asks for everything an officer has; an officer's answer brings X and the settings.
+	own.rankIndex = 4
+	ns.GuildRank:NoteOwn()
+	ns.db.guildKos = {}
+	clock = clock + 100
+	local base = clock
+	local X = { kind = "player", guid = "Player-9-0A1", name = "Officer Pick", state = "approved", by = "Office Rman", at = base, dby = "Office Rman", eby = "Office Rman", t = base }
+	local Y = { kind = "player", guid = "Player-9-0A2", name = "Member Pick", state = "pending", by = "Plain Member", at = base, eby = "Plain Member", t = base + 100 }
+	local offSettings = { enabled = true, mode = "review", rank = 4, t = base - 10, by = "Office Rman" }
+	local function Asked()
+		addonSent = {}
+		G:Ask()
+		RunTimers()
+		for _, m in ipairs(addonSent) do
+			local chunk = m.text:match("^Q:%x+:1/1:(.*)$")
+			if chunk then return ns.Sync:Decode(chunk).n end
+		end
+	end
+	check(Asked() == 0, "a member with nothing asks for everything")
+	From("Plain Member", "L", { s = offSettings, l = { X, Y } })
+	check(not G:Current().settings.enabled and G:Match("Player-9-0A1") == nil and #G:Entries("pending") == 1, "a member's answer brings only the pending entry")
+	check(Asked() == 0, "asking again still asks for what only an officer can bring, got "..tostring(Asked()))
+	From("Office Rman", "L", { s = offSettings, l = { X, Y } })
+	check(G:Current().settings.enabled and G:Match("Player-9-0A1"), "an officer's answer brings the settings and the approval")
+	check(Asked() == base + 100, "then only what's newer than the officer's answer is asked for")
+	-- A member's answer doesn't stop an officer's (here, ours) from going; an officer's does
+	own.rankIndex = 1
+	ns.GuildRank:NoteOwn()
+	addonSent = {}
+	From("Plain Member", "Q", { n = 0 })
+	From("New Recruit", "L", { s = offSettings, l = {} })
+	for _ = 1, 20 do RunTimers() end
+	local answered = false
+	for _, m in ipairs(addonSent) do answered = answered or m.text:find("^L:") ~= nil end
+	check(answered, "an officer still answers after a member did")
+	addonSent = {}
+	From("Plain Member", "Q", { n = 0 })
+	From("Office Rman", "L", { s = offSettings, l = {} })
+	for _ = 1, 20 do RunTimers() end
+	answered = false
+	for _, m in ipairs(addonSent) do answered = answered or m.text:find("^L:") ~= nil end
+	check(not answered, "another officer's answer is enough")
+	-- An officer logging in with newer officer data than we've heard: we ask too
+	own.rankIndex = 4
+	ns.GuildRank:NoteOwn()
+	clock = clock + 120
+	addonSent = {}
+	From("Office Rman", "Q", { n = base + 200 })
+	RunTimers()
+	local asked = false
+	for _, m in ipairs(addonSent) do asked = asked or m.text:find("^Q:") ~= nil end
+	check(asked, "an officer holding officer data newer than ours makes us ask")
+
 	GetGuildInfo, IsInGuild, IsGuildLeader, C_GuildInfo, C_Club, GuildControlGetNumRanks = real.GetGuildInfo, real.IsInGuild, real.IsGuildLeader, real.C_GuildInfo, real.C_Club, real.GuildControlGetNumRanks
 	ns.db.guildRanks[me] = nil
 	ns.db.guildKos = {}

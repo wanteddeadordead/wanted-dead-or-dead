@@ -111,7 +111,7 @@ function private.OnFormChanged()
 	else
 		local seen = player and player.lastSeen and (", seen "..Theme:Ago(GetServerTime() - player.lastSeen).." in "..(player.zone or "?")) or ""
 		local guildText = player and player.guild and ("  <"..player.guild..">") or ""
-		private.preview:SetText(Theme:ClassName(name, player and player.class)..Theme:Colorize(format("  level %s %s%s%s", player and player.level or "?", Theme:ClassLabel(player and player.class), guildText, seen), C.muted))
+		private.preview:SetText(Theme:ClassName(name, player and player.class)..Theme:Colorize(format("  level %s %s%s%s", player and player.level and (player.level > 0 and player.level or "??") or "?", Theme:ClassLabel(player and player.class), guildText, seen), C.muted))
 	end
 	private.rate:SetText(player and Model:GetGoingRate(player.level, amount) or "")
 	-- A target you already have a bounty on gets a raise instead of a second bounty

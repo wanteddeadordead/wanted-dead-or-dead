@@ -523,7 +523,8 @@ end
 ---Redraws the window. allBadges: work every menu badge out afresh (opening the window, changing page).
 ---@param allBadges boolean?
 function UI:Refresh(allBadges)
-	if not private.frame then
+	-- A closed window isn't drawn: opening it refreshes it, every badge worked out afresh (OnShow)
+	if not private.frame or not private.frame:IsShown() then
 		return
 	end
 	private.badgeDone = false

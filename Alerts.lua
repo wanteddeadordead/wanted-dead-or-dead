@@ -386,8 +386,8 @@ end
 function private.Describe(d)
 	local parts = { Theme:ClassName(d.name, d.class) }
 	local extra = {}
-	if d.level then
-		tinsert(extra, tostring(d.level))
+	if d.level or d.skull then
+		tinsert(extra, d.level and tostring(d.level) or "??")
 	end
 	if d.class then
 		tinsert(extra, Theme:ClassLabel(d.class))
@@ -444,8 +444,11 @@ end
 
 function private.OnTargeting(event, entry)
 	local settings = private.Settings()
-	if event == "newTargeter" and Wanted.Enemies:ShouldAlert() and settings.targetWarn and settings.targetSound and not Alerts:IsMuted() then
-		-- Its own sound, not held back by the spacing of the other alerts
+	if event == "newTargeter" and Wanted.Enemies:ShouldAlert() and settings.targetWarn and settings.targetSound and not Alerts:IsMuted()
+		and GetTime() - (private.targetedSoundAt or -SOUND_GAP) >= SOUND_GAP then
+		-- Its own sound, not held back by the spacing of the other alerts, but spaced itself: several enemies picking
+		-- you at once sound once
+		private.targetedSoundAt = GetTime()
 		Alerts:PlayRaw("targeted")
 	end
 	if event == "newTargeter" or event == "targeted" then

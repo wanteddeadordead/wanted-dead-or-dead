@@ -78,7 +78,7 @@ function private.UpdateRow(row, d)
 	-- Race and class always lead the second line
 	tinsert(sub, 1, strtrim((d.race or "").." "..Theme:ClassLabel(d.class)))
 	row.sub:SetText(table.concat(sub, "  "))
-	row.level:SetText(d.level and tostring(d.level) or "?")
+	row.level:SetText(d.level and tostring(d.level) or (d.skull and "??" or "?"))
 	row.guild:SetText(d.guild and ("<"..d.guild..">") or Theme:Colorize("none", C.faint))
 	row.wins:SetText(d.wins > 0 and Theme:Colorize(tostring(d.wins), C.green) or Theme:Colorize("0", C.faint))
 	row.losses:SetText(d.losses > 0 and Theme:Colorize(tostring(d.losses), C.red) or Theme:Colorize("0", C.faint))

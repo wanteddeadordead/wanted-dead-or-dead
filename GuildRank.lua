@@ -168,25 +168,38 @@ end
 
 ---The guild's officer ranks as the game sets them: rank index -> true for the ranks that can listen to officer chat,
 ---the guild window's own test. The guild master's rank always counts, and this character's own rank when the game
----says it's an officer's (also all that's known if the game won't give the ranks' permissions).
----@return table
+---says it's an officer's (also all that's known if the game won't give the ranks' permissions: then other officers'
+---changes aren't taken, never anyone else's, and the log says so once). The reference UI only reads the permissions
+---in the guild master's rank editor, so whether a plain member's client gets them is to be checked in game.
+---@return table ranks
+---@return boolean known whether the ranks' permissions could be read
 function GuildRank:OfficerRanks()
 	local ranks = { [0] = true }
 	local own = Wanted.db.guildRanks[UnitGUID("player")]
 	if own and own.o and type(own.ri) == "number" then
 		ranks[own.ri] = true
 	end
+	local known = false
 	local numRanks = GuildControlGetNumRanks and select(2, pcall(GuildControlGetNumRanks))
 	if C_GuildInfo and C_GuildInfo.GuildControlGetRankFlags and type(numRanks) == "number" and not secret(numRanks) then
 		for order = 1, min(numRanks, 20) do
 			local ok, flags = pcall(C_GuildInfo.GuildControlGetRankFlags, order)
-			-- The third permission is listening to officer chat
-			if ok and type(flags) == "table" and not (issecrettable and issecrettable(flags)) and flags[3] == true then
-				ranks[order - 1] = true
+			if ok and type(flags) == "table" and not (issecrettable and issecrettable(flags)) then
+				known = true
+				-- The third permission is listening to officer chat
+				if flags[3] == true then
+					ranks[order - 1] = true
+				end
 			end
 		end
 	end
-	return ranks
+	if known then
+		private.toldUnknown = nil
+	elseif not private.toldUnknown then
+		private.toldUnknown = true
+		Wanted:Log("!! GuildRank: the game won't show the guild's rank permissions here; only the guild master's rank%s counts as an officer's", own and own.o and " and ours" or "")
+	end
+	return ranks, known
 end
 
 ---Drops officers books not read for KEEP_SECONDS.

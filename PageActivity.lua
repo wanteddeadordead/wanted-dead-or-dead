@@ -39,7 +39,7 @@ function private.UpdateRow(row, item)
 	elseif item.kind == "death" then
 		row.text:SetText(format("%s died", name)..Theme:Colorize("  witnessed by "..item.who, C.muted))
 	else
-		row.text:SetText(name..Theme:Colorize(format("  level %s %s", player and player.level or "?", Theme:ClassLabel(player and player.class)), C.muted))
+		row.text:SetText(name..Theme:Colorize(format("  level %s %s", player and player.level and (player.level > 0 and player.level or "??") or "?", Theme:ClassLabel(player and player.class)), C.muted))
 	end
 	local where = item.zone or "?"
 	if item.x then

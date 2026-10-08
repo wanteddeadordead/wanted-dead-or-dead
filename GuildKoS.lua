@@ -20,9 +20,14 @@ local private = {
 	partial = {}, -- sender..":"..msgId -> { parts = {}, total, t }
 	queue = {}, -- messages waiting to go: texts
 	sending = false,
+	tokens = 10, -- parts the game will take at once now (Pump)
+	tokensAt = 0,
 	answerAt = nil, -- when we'll answer a member's request for the list, unless someone answers first
+	answerSince = nil, -- the oldest "newest change" among the asks we'll answer: the list sends what's newer
 	askedAt = nil, -- when we asked for the list: a list is only taken in answer to our own ask
 	members = nil, -- name -> rank index, from the roster, read at most every MEMBERS_SECONDS
+	lowerNames = nil, -- lower(name) -> rank index, from the same roster
+	firstNames = nil, -- lower(first name) -> rank index for a full name in the roster, false when guildmates share it
 	membersAt = 0,
 }
 
@@ -37,12 +42,22 @@ local MAX_NAME = 48
 local PART_LEN = 230 -- a guild addon message holds 255 bytes; the rest is the "id:part/total:" header
 local MAX_PARTS = 60
 local PART_TIMEOUT = 30
+local MAX_PARTIAL = 4 -- unfinished messages held per sender; past it their oldest goes
 local SEND_SPACING = 0.3
+-- The game's pace for addon messages (measured in Sync): about ten parts at once, then one every two seconds. A
+-- message we send has at most SEND_PARTS, so it finishes well inside PART_TIMEOUT at that pace; a longer list goes
+-- in several. (MAX_PARTS is what's taken in, for older clients' longer messages.)
+local BURST_PARTS, PART_SECONDS = 10, 2
+local SEND_PARTS = 12
+local RESULT_THROTTLED = { [3] = true, [8] = true } -- Enum.SendAddonMessageResult AddonMessageThrottle, ChannelThrottle
+local RESULT_LOCKDOWN = 11 -- AddOnMessageLockdown
+local RETRY_SECONDS, MAX_RETRIES, LOCKDOWN_SECONDS = 5, 3, 30
 local MEMBERS_SECONDS = 30
 local ASK_DELAY = 12 -- after login, once the guild roster has come
 local ANSWER_DELAY_MAX = 4 -- the members asked wait a moment, so usually only one answers
 local ASK_ANSWER_SECONDS = 60 -- how long after asking a list is taken
 local KEEP_SECONDS = 30 * 24 * 60 * 60 -- denied and removed entries are forgotten after this, so a late copy can't return them
+local MAX_AHEAD = 5 * 60 -- a change dated further ahead of the server's clock is refused: no real change after it could replace it
 
 -- ============================================================================
 -- Data
@@ -53,6 +68,9 @@ function GuildKoS:OnLoad()
 	Wanted.db.guildKos = type(Wanted.db.guildKos) == "table" and Wanted.db.guildKos or {}
 	local now = GetServerTime()
 	for _, book in pairs(Wanted.db.guildKos) do
+		if type(book) == "table" and type(book.heard) ~= "number" then
+			book.heard = nil
+		end
 		if type(book) == "table" and type(book.entries) == "table" then
 			for id, e in pairs(book.entries) do
 				if type(e) ~= "table" or ((e.state == "denied" or e.state == "removed") and now - (e.t or 0) > KEEP_SECONDS) then
@@ -152,24 +170,53 @@ function private.Members()
 	if not private.members or GetTime() - private.membersAt >= MEMBERS_SECONDS then
 		local list = Wanted.GuildRank and Wanted.GuildRank:Members()
 		if list then
-			local byName = {}
+			local byName, lower, first = {}, {}, {}
 			for _, m in ipairs(list) do
 				if m.name then
-					byName[Ambiguate(m.name, "none")] = m.ri
+					-- A name two guildmates share (once the realm is gone, or in any case) is neither's: false
+					local name = Ambiguate(m.name, "none")
+					byName[name] = byName[name] == nil and m.ri or false
+					lower[strlower(name)] = lower[strlower(name)] == nil and m.ri or false
+					local firstName = strmatch(strlower(name), "^(%S+) ")
+					if firstName then
+						first[firstName] = first[firstName] == nil and m.ri or false
+					end
 				end
 			end
-			private.members, private.membersAt = byName, GetTime()
+			private.members, private.lowerNames, private.firstNames, private.membersAt = byName, lower, first, GetTime()
 		end
 	end
 	return private.members or {}
 end
 
----A guildmate's rank index by name, or nil if the roster doesn't have them.
+---A guildmate's rank index by name, or nil if the roster doesn't have them. The guild channel's sender names and the
+---roster's names may not be written alike (to be checked in game): failing an exact match, any case, then a first
+---name alone against a full name (or the other way round) when only one guildmate has it.
 function GuildKoS:RankOf(name)
 	if type(name) ~= "string" then
 		return nil
 	end
-	return private.Members()[Ambiguate(name, "none")]
+	name = Ambiguate(name, "none")
+	local rank = private.Members()[name]
+	if rank == false then
+		return nil -- two guildmates have this name
+	end
+	if rank or not private.lowerNames then
+		return rank
+	end
+	local lower = strlower(name)
+	local firstName = strmatch(lower, "^(%S+) ")
+	if private.lowerNames[lower] ~= nil then
+		rank = private.lowerNames[lower] or nil
+	elseif not firstName then
+		rank = private.firstNames[lower] or nil
+	else
+		rank = private.lowerNames[firstName] or nil
+	end
+	if rank then
+		Wanted:Log("GuildKoS: %s matched the roster only loosely", name)
+	end
+	return rank
 end
 
 ---This character's rank index in its guild.
@@ -208,6 +255,11 @@ local function cleanText(value, maxLen)
 	return strsub(text, 1, maxLen)
 end
 
+---Whether a change's time is a number no further ahead of the server's clock than MAX_AHEAD.
+function private.Dated(t)
+	return type(t) == "number" and t <= GetServerTime() + MAX_AHEAD
+end
+
 ---An entry from a message, cleaned, or nil if it's malformed.
 function GuildKoS.CleanEntry(e)
 	if type(e) ~= "table" then
@@ -217,7 +269,7 @@ function GuildKoS.CleanEntry(e)
 	local name = cleanText(e.name, MAX_NAME)
 	local by = cleanText(e.by, MAX_NAME)
 	local eby = cleanText(e.eby, MAX_NAME)
-	if not kind or not name or not by or not eby or not STATES[e.state] or type(e.t) ~= "number" or type(e.at) ~= "number" then
+	if not kind or not name or not by or not eby or not STATES[e.state] or not private.Dated(e.t) or not private.Dated(e.at) then
 		return nil
 	end
 	local guid = kind == "player" and type(e.guid) == "string" and strfind(e.guid, "^Player%-%d+%-%x+$") and e.guid or nil
@@ -251,18 +303,25 @@ function private.ActionOf(book, held, e, rank, officers)
 		-- mode; a member in review mode can't
 		return GuildKoS.NewState(book.settings, rank, officers) == "approved" and "add" or "approve"
 	end
+	-- Pending: an approved entry sent back as pending takes it off the list (officers only in review mode), or a
+	-- member could resend it as their own and then take that back
+	if held and held.state == "approved" then
+		return "remove"
+	end
 	return "add"
 end
 
----Takes an entry change, if it's newer than what we hold and its editor (eby, who made this change) may make it.
----Returns whether it was taken.
+---Takes an entry change, if it's newer than what we hold and the guildmate it's judged by may make it. Returns
+---whether it was taken.
 ---@param book table
 ---@param raw table the entry as it came
----@param sender string? for a live change, who sent it: it must be the editor; nil for an entry in a list
+---@param sender string who sent it: for a live change it must be the editor (eby, who made this change)
 ---@param officers table rank index -> true
-function GuildKoS:TakeEntry(book, raw, sender, officers)
+---@param relayed boolean? an entry in a list: judged by its sender's own rank, not by the editor it names (a name the
+---sender writes), so a member's list can't approve or remove in an officer's name
+function GuildKoS:TakeEntry(book, raw, sender, officers, relayed)
 	local e = GuildKoS.CleanEntry(raw)
-	if not e or (sender and e.eby ~= sender) then
+	if not e or type(sender) ~= "string" or (not relayed and e.eby ~= sender) then
 		return false
 	end
 	local id = private.IdOf(e)
@@ -270,22 +329,45 @@ function GuildKoS:TakeEntry(book, raw, sender, officers)
 	if held and held.t >= e.t then
 		return false
 	end
-	local rank = GuildKoS:RankOf(e.eby)
+	local rank = GuildKoS:RankOf(sender)
 	local action = private.ActionOf(book, held, e, rank, officers)
-	if not GuildKoS.Allowed(action, book.settings, rank, officers, held, e.eby) then
-		Wanted:Log("!! GuildKoS: %s may not %s %s; ignored", e.eby, action, e.name)
+	if not GuildKoS.Allowed(action, book.settings, rank, officers, held, sender) then
+		Wanted:Log("!! GuildKoS: %s may not %s %s; ignored", sender, action, e.name)
 		return false
 	end
 	if not held and private.Count(book.entries) >= MAX_ENTRIES then
 		return false
 	end
+	if held and (held.state == "approved" or held.state == "pending") then
+		-- An edit of a name on the list: who added it and when stay as they were
+		e.by, e.at = held.by, held.at
+	end
 	book.entries[id] = e
+	if officers[rank] then
+		private.Heard(book, e.t)
+	end
 	return true
+end
+
+---Notes the time of our own change, when we're an officer (see Heard).
+function private.HeardOwn(book, t)
+	if Wanted.GuildRank:OfficerRanks()[private.OwnRank()] then
+		private.Heard(book, t)
+	end
+end
+
+---Notes the time of a change heard from an officer (or the server). Asking for the list asks for what's newer than the
+---newest of these, not the newest change held: a member's answer can't carry an officer's changes (they're refused),
+---so asking past them would never ask for them again.
+function private.Heard(book, t)
+	if type(t) == "number" and t > (book.heard or 0) then
+		book.heard = t
+	end
 end
 
 ---Takes settings from a guildmate, if they're newer and the guildmate is an officer.
 function GuildKoS:TakeSettings(book, raw, actor, officers)
-	if type(raw) ~= "table" or type(raw.t) ~= "number" or raw.t <= (book.settings.t or 0) then
+	if type(raw) ~= "table" or not private.Dated(raw.t) or raw.t <= (book.settings.t or 0) then
 		return false
 	end
 	if not GuildKoS.Allowed("settings", book.settings, GuildKoS:RankOf(actor), officers) then
@@ -297,6 +379,7 @@ function GuildKoS:TakeSettings(book, raw, actor, officers)
 		rank = type(raw.rank) == "number" and max(0, min(floor(raw.rank), 20)) or 1, discord = raw.discord == true,
 		t = raw.t, by = cleanText(raw.by, MAX_NAME) or actor,
 	}
+	private.Heard(book, raw.t)
 	return true
 end
 
@@ -323,7 +406,7 @@ function GuildKoS:TakeServer(list)
 		if guild then
 			local book = private.Book(guild, faction)
 			local s = raw.settings
-			if type(s) == "table" and type(s.t) == "number" and s.t > (book.settings.t or 0) then
+			if type(s) == "table" and private.Dated(s.t) and s.t > (book.settings.t or 0) then
 				book.settings = {
 					enabled = s.enabled == true, mode = MODE_OK[s.mode] and s.mode or "review",
 					rank = type(s.rank) == "number" and max(0, min(floor(s.rank), 20)) or 1, discord = s.discord == true,
@@ -331,9 +414,11 @@ function GuildKoS:TakeServer(list)
 				}
 				changed = changed + 1
 			end
+			private.Heard(book, type(s) == "table" and private.Dated(s.t) and s.t)
 			for _, e in ipairs(type(raw.entries) == "table" and raw.entries or {}) do
 				local clean = GuildKoS.CleanEntry(e)
 				if clean then
+					private.Heard(book, clean.t)
 					local id = private.IdOf(clean)
 					local held = book.entries[id]
 					if (not held or clean.t > held.t) and (held or private.Count(book.entries) < MAX_ENTRIES) then
@@ -377,6 +462,7 @@ function GuildKoS:Add(kind, name, guid, reason)
 		return nil, "That isn't a player or guild Wanted can add."
 	end
 	book.entries[private.IdOf(e)] = e
+	private.HeardOwn(book, e.t)
 	private.Broadcast(TAG_EDIT, { e = e })
 	private.Changed()
 	return e
@@ -407,6 +493,7 @@ function GuildKoS:Decide(id, action)
 	e.id = nil
 	e.t = max(now, held.t + 1)
 	book.entries[id] = e
+	private.HeardOwn(book, e.t)
 	private.Broadcast(TAG_EDIT, { e = e })
 	private.Changed()
 	return true
@@ -427,6 +514,7 @@ function GuildKoS:SetSettings(changes)
 	new.t, new.by = max(GetServerTime(), (s.t or 0) + 1), private.Me()
 	new.mode = MODE_OK[new.mode] and new.mode or "review"
 	book.settings = new
+	private.HeardOwn(book, new.t)
 	private.Broadcast(TAG_SETTINGS, { s = new })
 	private.Changed()
 	return true
@@ -497,7 +585,7 @@ function GuildKoS:Ask()
 	local book = GuildKoS:Current()
 	if book then
 		private.askedAt = GetTime()
-		private.Broadcast(TAG_ASK, { n = private.Newest(book) })
+		private.Broadcast(TAG_ASK, { n = book.heard or 0 })
 	end
 end
 
@@ -518,24 +606,54 @@ function private.Broadcast(tag, tbl)
 	private.msgCounter = private.msgCounter + 1
 	local id = format("%x", private.msgCounter % 0xffff)
 	local total = ceil(#payload / PART_LEN)
-	if total > MAX_PARTS then
+	if total > SEND_PARTS then
 		Wanted:Log("!! GuildKoS: a %s message of %d bytes is too big to send", tag, #payload)
 		return
 	end
 	for i = 1, total do
-		tinsert(private.queue, format("%s:%s:%d/%d:%s", tag, id, i, total, strsub(payload, (i - 1) * PART_LEN + 1, i * PART_LEN)))
+		tinsert(private.queue, { id = id, refusals = 0,
+			text = format("%s:%s:%d/%d:%s", tag, id, i, total, strsub(payload, (i - 1) * PART_LEN + 1, i * PART_LEN)) })
 	end
 	private.Pump()
 end
 
+---Sends the next part at the game's pace: a few at once, then one every PART_SECONDS. A part the game refuses
+---(throttled) goes again a little later, each time later; refused too often, the rest of its message is dropped.
 function private.Pump()
 	if private.sending or #private.queue == 0 then
 		return
 	end
+	local now = GetTime()
+	private.tokens = min(BURST_PARTS, private.tokens + (now - private.tokensAt) / PART_SECONDS)
+	private.tokensAt = now
+	local wait = SEND_SPACING
+	if private.tokens < 1 then
+		wait = (1 - private.tokens) * PART_SECONDS
+	else
+		local item = private.queue[1]
+		local result = C_ChatInfo.SendAddonMessage(PREFIX, item.text, "GUILD")
+		if RESULT_THROTTLED[result] then
+			item.refusals = item.refusals + 1
+			private.tokens = 0
+			wait = RETRY_SECONDS * 2 ^ (item.refusals - 1)
+			Wanted:Log("!! GuildKoS: throttled by the game (%s), part sent again in %ds", tostring(result), wait)
+			if item.refusals > MAX_RETRIES then
+				for i = #private.queue, 1, -1 do
+					if private.queue[i].id == item.id then
+						tremove(private.queue, i)
+					end
+				end
+				Wanted:Log("!! GuildKoS: throttled too often; a message dropped")
+			end
+		elseif result == RESULT_LOCKDOWN then
+			wait = LOCKDOWN_SECONDS -- addon messages are refused for now (a PvP match)
+		else
+			tremove(private.queue, 1)
+			private.tokens = private.tokens - 1
+		end
+	end
 	private.sending = true
-	local text = tremove(private.queue, 1)
-	C_ChatInfo.SendAddonMessage(PREFIX, text, "GUILD")
-	C_Timer.After(SEND_SPACING, function()
+	C_Timer.After(wait, function()
 		private.sending = false
 		private.Pump()
 	end)
@@ -557,8 +675,24 @@ function private.OnMessage(text, sender)
 			private.partial[k] = nil
 		end
 	end
-	local p = private.partial[key] or { parts = {}, total = total, t = now }
-	private.partial[key] = p
+	local p = private.partial[key]
+	if not p then
+		-- A new message: a sender's unfinished ones are held a few at a time, so a flood of first parts can't pile up
+		local prefix, count, oldest = sender..":", 0, nil
+		for k, held in pairs(private.partial) do
+			if strsub(k, 1, #prefix) == prefix then
+				count = count + 1
+				if not oldest or held.t < private.partial[oldest].t then
+					oldest = k
+				end
+			end
+		end
+		if count >= MAX_PARTIAL then
+			private.partial[oldest] = nil
+		end
+		p = { parts = {}, total = total, t = now }
+		private.partial[key] = p
+	end
 	p.parts[part] = chunk
 	for i = 1, total do
 		if not p.parts[i] then
@@ -587,27 +721,53 @@ function private.Handle(tag, tbl, sender)
 			private.Changed()
 		end
 	elseif tag == TAG_ASK then
+		-- An officer logging in holds officer changes newer than any we've heard: ask for them too
+		if type(tbl.n) == "number" and tbl.n > (book.heard or 0) and officers[GuildKoS:RankOf(sender)]
+			and (not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS) then
+			C_Timer.After(random() * ANSWER_DELAY_MAX, function() GuildKoS:Ask() end)
+		end
 		-- Someone logged in: if we hold something newer, answer after a moment unless another member does first
+		if type(tbl.n) == "number" and private.Newest(book) > tbl.n then
+			private.answerSince = min(private.answerSince or tbl.n, tbl.n)
+		end
 		if type(tbl.n) == "number" and private.Newest(book) > tbl.n and not private.answerAt then
 			private.answerAt = GetTime() + random() * ANSWER_DELAY_MAX
 			C_Timer.After(private.answerAt - GetTime(), function()
 				if private.answerAt then
 					private.answerAt = nil
-					private.SendList(book)
+					private.SendList(book, private.answerSince or 0)
+					private.answerSince = nil
 				end
 			end)
 		end
 	elseif tag == TAG_LIST then
-		private.answerAt = nil -- someone answered; we needn't
+		-- Someone answered, so we needn't: unless we're an officer and they aren't (only an officer's answer carries
+		-- the settings and decisions)
+		local fromOfficer = officers[GuildKoS:RankOf(sender)] == true
+		if fromOfficer or not officers[private.OwnRank()] then
+			private.answerAt, private.answerSince = nil, nil
+		end
 		if not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS then
 			return -- a list nobody here asked for
 		end
-		-- Settings and entries in a list are judged by who last changed them, not by who sent the list
-		local changed = type(tbl.s) == "table" and GuildKoS:TakeSettings(book, tbl.s, cleanText(tbl.s.by, MAX_NAME), officers) or false
+		-- A long list comes in several messages: each one keeps the door open for the next
+		private.askedAt = GetTime()
+		-- A list is judged by who sent it, as the roster ranks them, never by the names it carries: an officer's
+		-- settings and decisions are taken; from anyone else only what they may change themselves (in review mode,
+		-- pending entries)
+		local changed = GuildKoS:TakeSettings(book, tbl.s, sender, officers)
 		for _, raw in ipairs(type(tbl.l) == "table" and tbl.l or {}) do
-			if GuildKoS:TakeEntry(book, raw, nil, officers) then
+			if GuildKoS:TakeEntry(book, raw, sender, officers, true) then
 				changed = true
 			end
+			-- All an officer sent is heard, taken or not (we may hold it already)
+			local clean = fromOfficer and GuildKoS.CleanEntry(raw)
+			if clean then
+				private.Heard(book, clean.t)
+			end
+		end
+		if fromOfficer and type(tbl.s) == "table" and private.Dated(tbl.s.t) then
+			private.Heard(book, tbl.s.t)
 		end
 		if changed then
 			private.Changed()
@@ -615,12 +775,32 @@ function private.Handle(tag, tbl, sender)
 	end
 end
 
-function private.SendList(book)
+---Answers an ask with the settings and the entries changed after since (the asker's newest), oldest first, in as many
+---messages as it takes: one message holds at most SEND_PARTS parts.
+function private.SendList(book, since)
 	local list = {}
 	for _, e in pairs(book.entries) do
-		tinsert(list, e)
+		if e.t > since then
+			tinsert(list, e)
+		end
 	end
-	private.Broadcast(TAG_LIST, { s = book.settings, l = list })
+	sort(list, function(a, b) return a.t < b.t end)
+	private.SendListPart(book.settings, list, 1, #list)
+end
+
+function private.SendListPart(settings, list, first, last)
+	local part = {}
+	for i = first, last do
+		tinsert(part, list[i])
+	end
+	local tbl = { s = settings, l = part }
+	if last > first and ceil(#Sync:Encode(tbl) / PART_LEN) > SEND_PARTS then
+		local middle = floor((first + last) / 2)
+		private.SendListPart(settings, list, first, middle)
+		private.SendListPart(settings, list, middle + 1, last)
+		return
+	end
+	private.Broadcast(TAG_LIST, tbl)
 end
 
 function private.Changed()

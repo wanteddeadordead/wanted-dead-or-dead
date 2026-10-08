@@ -40,7 +40,11 @@ local CLOSE_FRESH_SECONDS = 1.5 -- "within 28 yards" from the last scan still co
 local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen, your own teleport) aren't stealth
 local MASS_REMOVAL = 3
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
+local CAST_REPEAT_SECONDS = 1 -- one cast is reported once for every token pointing at the caster, within this long
 local CAST_BAR_GRACE_SECONDS = 1.5 -- a cast bar that just ended (Hearthstone, a teleport) explains a vanish
+-- Only someone seen acting (casting, or targeting us) this recently is guessed to have stealthed: anyone else going
+-- from view close by more likely logged off, zoned or phased
+local STEALTH_ACTIVE_SECONDS = 30
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -54,6 +58,7 @@ local TARGETER_SECONDS = 2.2 -- seen targeting us within this long counts as tar
 local LAST_HOUR = 3600
 local TARGETING_WINDOW = 6 -- had us targeted within this long before we died
 local SHARE_EVERY = 120 -- seconds between shared sightings of the same enemy
+local MAX_ZONE_BYTES = 64 -- a shared sighting's zone name longer than this isn't one
 local STORE_EVERY = 5 -- seconds between updates of a nearby enemy's saved record
 local RECAP_DELAYS = { 0.5, 2 }
 -- Stealth-type abilities by spell id (all ranks); names catch anything the client renumbered
@@ -123,6 +128,8 @@ function Enemies:OnEnable()
 		private.frame:RegisterEvent(event)
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Enemies events", private.OnEvent))
+	-- A recap from before a /reload is an old death's, not the next one's
+	private.lastRecapId = private.RecapId()
 	C_Timer.NewTicker(SCAN_SECONDS, Wanted:Timed("Enemies scan", private.Tick))
 end
 
@@ -171,6 +178,10 @@ end
 -- ============================================================================
 
 function private.OnEvent(_, event, arg1, _, arg3)
+	if event == "NAME_PLATE_UNIT_REMOVED" then
+		-- Forgotten wherever it goes (no unit is read for that), so the scan never asks about a token that went inside
+		private.plates[arg1] = nil
+	end
 	if Wanted:InInstance() and event ~= "PLAYER_DEAD" then
 		-- No unit in an instance is read: their identity is secret there, and nothing there is world PvP (a
 		-- battleground's enemies, a mind-controlled party member)
@@ -183,7 +194,6 @@ function private.OnEvent(_, event, arg1, _, arg3)
 		private.plates[arg1] = true
 		private.Scan(arg1)
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
-		private.plates[arg1] = nil
 		private.OnPlateRemoved(arg1)
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		private.Scan("target")
@@ -261,7 +271,13 @@ function Enemies:GetTargeters()
 end
 
 function private.Tick()
+	private.Prune(GetTime())
 	if not private.Settings().enabled then
+		return
+	end
+	if Wanted:InInstance() then
+		-- No unit is read in an instance (see OnEvent); the nameplates seen before are gone by the time we're out
+		wipe(private.plates)
 		return
 	end
 	for unit in pairs(private.plates) do
@@ -296,12 +312,42 @@ end
 -- Seeing enemies
 -- ============================================================================
 
+---Lets go of what's only kept for a moment: casts already reported, when each enemy was last shared, nameplate
+---removals. A long session would otherwise keep everyone ever seen.
+function private.Prune(now)
+	for key, t in pairs(private.recentCasts) do
+		if now - t >= CAST_REPEAT_SECONDS then
+			private.recentCasts[key] = nil
+		end
+	end
+	for guid, t in pairs(private.lastShared) do
+		if now - t > SHARE_EVERY then
+			private.lastShared[guid] = nil
+		end
+	end
+	private.PruneRemovals(now)
+end
+
+---Drops nameplate removals too old to be part of one going together (OnPlateRemoved).
+function private.PruneRemovals(now)
+	for i = #private.removals, 1, -1 do
+		if now - private.removals[i] > VANISH_SETTLE_SECONDS * 2 then
+			tremove(private.removals, i)
+		end
+	end
+end
+
 ---Looks at a unit; if it's an enemy player, updates the Nearby list and returns its entry.
 function private.Scan(unit)
 	if not unit or not private.Readable(UnitExists(unit)) or not private.Readable(UnitIsPlayer(unit)) then
 		return nil
 	end
 	if not private.Readable(UnitIsEnemy("player", unit)) then
+		return nil
+	end
+	-- Hostile for now but of our own faction (a duel, mind control): not an enemy player
+	local faction = private.Readable(UnitFactionGroup(unit))
+	if faction and faction == private.playerFaction then
 		return nil
 	end
 	local guid = private.Readable(UnitGUID(unit))
@@ -348,8 +394,8 @@ function private.Scan(unit)
 	if ok and private.Readable(targetsMe) then
 		private.targetingMe[guid] = now
 		entry.targetingMe = now
-	elseif ok and targetsMe == false then
-		-- Seen targeting someone else: they've stopped targeting us
+	elseif ok and not (issecretvalue and issecretvalue(targetsMe)) and targetsMe == false then
+		-- Seen targeting someone else: they've stopped targeting us (a secret answer is never compared)
 		entry.targetingMe = nil
 	end
 	-- Keep the saved player current (the Last hour list and the map read it), at most every few seconds
@@ -361,7 +407,7 @@ function private.Scan(unit)
 			level = entry.level,
 			race = entry.race,
 			guild = entry.guild or false,
-			faction = private.Readable(UnitFactionGroup(unit)) or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
+			faction = faction or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
 			zone = zone,
 			mapId = mapId,
 			x = x,
@@ -416,6 +462,7 @@ end
 function private.OnPlateRemoved(unit)
 	local known = private.tokens[unit]
 	local now = GetTime()
+	private.PruneRemovals(now)
 	tinsert(private.removals, now)
 	if not known then
 		return
@@ -449,13 +496,17 @@ function private.OnPlateRemoved(unit)
 	end)
 end
 
----Raises the stealth alarm for an enemy who vanished close by, named for what they could have used; nothing
----for a class and race without a stealth ability.
+---Raises the stealth alarm for an enemy who vanished close by after being seen acting, named for what their class
+---could have used; nothing for a class without a stealth ability (a night elf's Shadowmeld alone is too weak a sign).
 function private.GuessStealth(entry)
 	local kind = entry.class == "ROGUE" and "Stealth" or entry.class == "DRUID" and "Prowl"
-		or entry.class == "MAGE" and "Invisibility" or entry.raceFile == "NightElf" and "Shadowmeld" or nil
+		or entry.class == "MAGE" and "Invisibility" or nil
 	local now = GetTime()
 	if not kind or (entry.stealthed and now - entry.stealthed < STEALTH_REPEAT_SECONDS) then
+		return
+	end
+	local active = max(entry.lastActive or -math.huge, entry.targetingMe or -math.huge)
+	if now - active > STEALTH_ACTIVE_SECONDS then
 		return
 	end
 	if entry.castBarEndAt and now - entry.castBarEndAt <= CAST_BAR_GRACE_SECONDS then
@@ -505,7 +556,7 @@ function private.OnCast(unit, spellID)
 	local key = entry.guid..":"..spellID
 	local now = GetTime()
 	-- One cast is reported once for every token pointing at the caster
-	if private.recentCasts[key] and now - private.recentCasts[key] < 1 then
+	if private.recentCasts[key] and now - private.recentCasts[key] < CAST_REPEAT_SECONDS then
 		return
 	end
 	private.recentCasts[key] = now
@@ -560,17 +611,22 @@ function private.OnPlayerDead()
 	C_Timer.After(RECAP_DELAYS[1], function() private.ResolveDeath(suspects, 1) end)
 end
 
+---The id of the latest death recap, from its link, or nil.
+function private.RecapId()
+	if not (C_DeathRecap and C_DeathRecap.GetRecapLink) then
+		return nil
+	end
+	local ok, link = pcall(C_DeathRecap.GetRecapLink)
+	link = ok and private.Readable(link)
+	return type(link) == "string" and tonumber(strmatch(link, "death:(%d+)")) or nil
+end
+
 ---The killing blow of the latest death recap, as a GUID and name, if it names a player.
 function private.KillerFromRecap()
 	if not (C_DeathRecap and C_DeathRecap.GetRecapEvents) then
 		return nil, "unavailable"
 	end
-	local id = nil
-	if C_DeathRecap.GetRecapLink then
-		local ok, link = pcall(C_DeathRecap.GetRecapLink)
-		link = ok and private.Readable(link)
-		id = type(link) == "string" and tonumber(strmatch(link, "death:(%d+)")) or nil
-	end
+	local id = private.RecapId()
 	if id and id == private.lastRecapId then
 		return nil, "stale"
 	end
@@ -639,8 +695,9 @@ function private.ResolveDeath(suspects, attempt)
 		C_Timer.After(RECAP_DELAYS[attempt + 1] - RECAP_DELAYS[attempt], function() private.ResolveDeath(suspects, attempt + 1) end)
 		return
 	end
-	if not killer and how ~= "not a player" and #suspects == 1 then
-		-- The recap couldn't say (or names a pet out of view): the one enemy who had us targeted is the likely killer
+	if not killer and how ~= "not a player" and how ~= "stale" and #suspects == 1 then
+		-- The recap couldn't say (or names a pet out of view): the one enemy who had us targeted is the likely killer.
+		-- Not when it still shows an earlier death: then it hasn't caught up, and may yet name someone else.
 		killer, how = suspects[1], how == "pet out of view" and "pet guess" or "targeting"
 	end
 	Wanted:Log("Enemies: death, killer %s (%s)", tostring(killer), how)
@@ -777,8 +834,10 @@ function private.Fill(d, guid)
 	d.guid = guid
 	d.name = entry and entry.name or player.name or stats.name or (kos and kos.name) or "?"
 	d.class = entry and entry.class or player.class
-	d.level = entry and entry.level or player.level
-	d.skull = entry and entry.skull
+	-- A skull was once saved as level -1
+	local savedLevel = type(player.level) == "number" and player.level > 0 and player.level or nil
+	d.level = entry and entry.level or savedLevel
+	d.skull = (entry and entry.skull) or (not d.level and player.level == -1) or nil
 	d.race = entry and entry.race or player.race
 	d.guild = guild or nil
 	d.zone = entry and entry.zone or player.zone
@@ -1049,6 +1108,14 @@ function Enemies:OnSharedSighting(data, sender)
 	if player and player.faction == private.playerFaction then
 		return
 	end
+	-- Where, as only numbers and a short name: a peer can send anything, and the map, Hotspots and the alerts use it.
+	-- A position is both coordinates (0 to 100) or neither.
+	local zone = type(data.z) == "string" and data.z ~= "" and #data.z <= MAX_ZONE_BYTES and data.z or nil
+	local mapId = type(data.m) == "number" and data.m == data.m and data.m or nil
+	local x, y = data.x, data.y
+	if not (private.Percent(x) and private.Percent(y)) then
+		x, y = nil, nil
+	end
 	Store:UpdatePlayer(data.g, {
 		name = name,
 		class = type(data.c) == "string" and data.c or nil,
@@ -1056,14 +1123,19 @@ function Enemies:OnSharedSighting(data, sender)
 		race = type(data.r) == "string" and data.r or nil,
 		guild = type(data.u) == "string" and data.u or nil,
 		faction = player and player.faction or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
-		zone = type(data.z) == "string" and data.z or nil,
-		mapId = type(data.m) == "number" and data.m or nil,
-		x = type(data.x) == "number" and data.x or nil,
-		y = type(data.y) == "number" and data.y or nil,
+		zone = zone,
+		mapId = mapId,
+		x = x,
+		y = y,
 		seenBy = sender,
 	})
-	Store:AddSighting(data.g, data.z, data.x, data.y, data.m, sender)
+	Store:AddSighting(data.g, zone, x, y, mapId, sender)
 	-- p: the sender is calling a posse against them (Posse); the caller is the sender, whom the game names
 	local posse = type(data.p) == "table" and { why = type(data.p.k) == "string" and data.p.k or "wanted" } or nil
-	Fire("shared", { guid = data.g, name = name, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s, posse = posse })
+	Fire("shared", { guid = data.g, name = name, by = sender, zone = zone, x = x, y = y, stealthed = data.s == true or nil, posse = posse })
+end
+
+---Whether a value is a map coordinate: a number from 0 to 100.
+function private.Percent(value)
+	return type(value) == "number" and value >= 0 and value <= 100
 end

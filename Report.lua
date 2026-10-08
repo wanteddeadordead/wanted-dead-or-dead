@@ -8,6 +8,96 @@ local W = Wanted.Widgets
 local C = Theme.C
 local private = { frame = nil }
 local LOG_LINES = 40
+local MIN_NAME = 2 -- shorter names aren't looked for
+
+---Whether a byte can be part of a name: a letter, an apostrophe, or part of an accented letter.
+local function NameByte(byte)
+	return byte ~= nil and (byte >= 128 or byte == 39 or (byte >= 65 and byte <= 90) or (byte >= 97 and byte <= 122))
+end
+
+---The names Wanted knows, longest first: players seen, every record's origin, the guild roster, the lists, this
+---character's own. Each with its realm cut off as well.
+function private.KnownNames()
+	local set = {}
+	local function Add(name)
+		if type(name) == "string" and not (issecretvalue and issecretvalue(name)) then
+			set[name] = true
+			local bare = strmatch(name, "^([^%-]+)%-")
+			if bare then
+				set[bare] = true
+			end
+		end
+	end
+	local db = Wanted.db or {}
+	for _, player in pairs(type(db.players) == "table" and db.players or {}) do
+		Add(type(player) == "table" and player.name)
+	end
+	for origin in pairs(type(db.chains) == "table" and db.chains or {}) do
+		Add(origin)
+	end
+	for _, list in ipairs({ db.kos, db.ignore }) do
+		for _, entry in pairs(type(list) == "table" and list or {}) do
+			Add(type(entry) == "table" and entry.name)
+		end
+	end
+	for _, entry in pairs(type(db.hkBook) == "table" and db.hkBook or {}) do
+		Add(type(entry) == "table" and entry.n)
+	end
+	for _, book in pairs(type(db.guildKos) == "table" and db.guildKos or {}) do
+		for _, e in pairs(type(book) == "table" and type(book.entries) == "table" and book.entries or {}) do
+			if type(e) == "table" then
+				Add(e.kind == "player" and e.name)
+				Add(e.by)
+				Add(e.dby)
+				Add(e.eby)
+			end
+		end
+	end
+	local ok, members = pcall(function() return Wanted.GuildRank and Wanted.GuildRank:Members() end)
+	for _, m in ipairs(ok and type(members) == "table" and members or {}) do
+		Add(m.name)
+	end
+	Add(Wanted.Store and Wanted.Store:GetOrigin())
+	local names = {}
+	for name in pairs(set) do
+		if #name >= MIN_NAME then
+			tinsert(names, name)
+		end
+	end
+	sort(names, function(a, b) return #a > #b end)
+	return names
+end
+
+---A line with other players left out: GUIDs (any case), the names Wanted knows (with a realm or not), any other
+---"Name-Realm", and this realm's name. The log names whoever a message came from or was about; the report shouldn't.
+function private.Scrub(line, names)
+	line = gsub(line, "[Pp][Ll][Aa][Yy][Ee][Rr]%-%d+%-%x+", "Player-?")
+	for _, name in ipairs(names) do
+		local from = 1
+		while true do
+			local first, last = strfind(line, name, from, true)
+			if not first then
+				break
+			end
+			if NameByte(line:byte(first - 1)) or NameByte(line:byte(last + 1)) then
+				from = last + 1 -- part of a longer word
+			else
+				line = strsub(line, 1, first - 1).."<name>"..strsub(line, last + 1)
+				from = first + 6
+			end
+		end
+	end
+	-- A name with a realm, known or not, and a realm after a name left out
+	line = gsub(line, "<name>%-[%w\128-\255']+", "<name>")
+	line = gsub(line, "[%w\128-\255']+%-[%u\128-\255][%w\128-\255']*", function(token)
+		return strfind(token, "^Player%-") and token or "<name>"
+	end)
+	local realm = GetRealmName and GetRealmName()
+	if type(realm) == "string" and realm ~= "" then
+		line = gsub(line, "%f[%w]"..gsub(realm, "%p", "%%%0").."%f[%W]", "<realm>")
+	end
+	return line
+end
 
 ---The report text: versions, settings that matter, network state, problems this session, recent log.
 ---@return string
@@ -40,13 +130,14 @@ function Report:Build()
 	if #problems == 0 then
 		Add("  none recorded")
 	end
+	local names = private.KnownNames()
 	for _, problem in ipairs(problems) do
-		Add("  %s", problem)
+		Add("  %s", private.Scrub(problem, names))
 	end
 	Add("")
-	Add("Last %d log lines:", LOG_LINES)
+	Add("Last %d log lines (other players' names left out):", LOG_LINES)
 	for _, line in ipairs(Wanted:GetLogLines(LOG_LINES)) do
-		Add("  %s", line)
+		Add("  %s", private.Scrub(line, names))
 	end
 	return table.concat(lines, "\n")
 end
@@ -149,14 +240,18 @@ end)
 -- Beta welcome
 -- ============================================================================
 
----Shown once per version the first time the main window opens.
+---Shown once per version the first time the main window opens with no other dialog up.
 function Report:MaybeWelcome()
 	local db = Wanted.db
-	if not Wanted.BETA or db.welcomed == Wanted.VERSION then
+	if not Wanted.BETA or db.welcomed == Wanted.VERSION or W:IsDialogShown() then
 		return
 	end
 	db.welcomed = Wanted.VERSION
 	C_Timer.After(0.2, function()
+		if W:IsDialogShown() then
+			db.welcomed = nil -- another came up meanwhile: next time
+			return
+		end
 		W:Dialog({
 			title = "Welcome, bounty hunter",
 			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) puts together the details and shows where to send them.",

@@ -603,11 +603,15 @@ end
 
 local dialog = nil
 local AREA_HEIGHT = 74 -- a multiline dialog box: about four lines
+local hookedHosts = {} -- windows whose closing closes the dialog over them
+local waiting = {} -- { options, host } dialogs asked for while another was up: shown in turn, so none loses its answer
+local waitingForCombat = false -- the next waits for the fight to end
+local ShowNext -- below
 
 local function CreateDialog()
 	-- The dialog lives on UIParent so it shows from the Nearby window with the main window closed too. When
 	-- the main window is open, a dim layer over it keeps its buttons from being clicked meanwhile.
-	local blocker = CreateFrame("Frame", nil, UIParent)
+	local blocker = CreateFrame("Frame", "WantedDialog", UIParent)
 	blocker:SetFrameStrata("FULLSCREEN_DIALOG")
 	blocker:EnableMouse(true)
 	blocker:EnableMouseWheel(true)
@@ -636,13 +640,42 @@ local function CreateDialog()
 	frame.cancel:SetPoint("BOTTOMRIGHT", -118, 16)
 	frame.confirm = W:Button(frame, "OK", "primary", 100, 28)
 	frame.confirm:SetPoint("BOTTOMRIGHT", -16, 16)
+	-- Only the Cancel button is Cancel. Closed any other way (Escape, the game closing every window when control is
+	-- lost to a fear or a flight, the main window closing under it) it's dismissed with no answer: onClose, if any.
 	frame.cancel:SetScript("OnClick", function()
+		if frame.decided then
+			return
+		end
+		frame.decided = true
+		local options = frame.options
 		blocker:Hide()
-		if frame.options and frame.options.onCancel then
-			frame.options.onCancel()
+		if options.onCancel then
+			options.onCancel()
 		end
 	end)
+	blocker:SetScript("OnHide", function()
+		if blocker:IsShown() then
+			return -- only out of sight with the whole interface (Alt+Z): still up, still waiting for an answer
+		end
+		if not frame.decided then
+			frame.decided = true
+			if frame.options and frame.options.onClose then
+				frame.options.onClose()
+			end
+		end
+		-- The next dialog waiting, a moment after this one closes (its answer may have opened another first)
+		if #waiting > 0 then
+			C_Timer.After(0, function() ShowNext() end)
+		end
+	end)
+	-- Escape closes it (the game's list of windows Escape closes: keyboard capture would be blocked in combat)
+	if UISpecialFrames then
+		tinsert(UISpecialFrames, "WantedDialog")
+	end
 	frame.confirm:SetScript("OnClick", function()
+		if frame.decided then
+			return
+		end
 		local options = frame.options
 		local value = options.input and (options.input.multiline and frame.area:GetText() or frame.input:GetText()) or nil
 		if options.validate then
@@ -652,6 +685,7 @@ local function CreateDialog()
 				return
 			end
 		end
+		frame.decided = true
 		blocker:Hide()
 		if options.onConfirm then
 			options.onConfirm(value, options.choice and frame.choiceKey or nil)
@@ -683,7 +717,7 @@ local function CreateDialog()
 	frame.choice:SetPoint("LEFT", frame.choiceLabel, "RIGHT", 10, 0)
 	frame.error = Theme:Text(frame, "small", "", C.red)
 	frame.error:SetPoint("BOTTOMLEFT", 20, 24)
-	-- Escape in the input cancels; keyboard capture on the blocker would be blocked in combat
+	-- Escape in the input closes it with no answer; keyboard capture on the blocker would be blocked in combat
 	frame.input:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 		blocker:Hide()
@@ -692,10 +726,32 @@ local function CreateDialog()
 	return blocker
 end
 
+---Shows the next dialog waiting, unless one is up, a fight is on (it waits for the end), or the window it was
+---asked for over has closed since (it's dropped).
+ShowNext = function()
+	if (dialog and dialog:IsShown()) or #waiting == 0 then
+		return
+	end
+	if InCombatLockdown() or Wanted:InCombat() then
+		if not waitingForCombat then
+			waitingForCombat = true
+			Wanted:OnCombatEnd(function() ShowNext() end)
+		end
+		return
+	end
+	local next = tremove(waiting, 1)
+	if next.host and not next.host:IsShown() then
+		ShowNext()
+		return
+	end
+	W:Dialog(next.options)
+end
+
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text) }, width
 ---(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
----confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key)
+---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
+---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
 ---Whether a dialog is up (one at a time).
 function W:IsDialogShown()
 	return dialog ~= nil and dialog:IsShown()
@@ -703,23 +759,46 @@ end
 
 function W:Dialog(options)
 	dialog = dialog or CreateDialog()
-	local frame = dialog.frame
 	-- Dim the main window if it's open, and centre the dialog on it; otherwise centre on the screen with
 	-- nothing dimmed (the blocker shrinks to nothing so the game stays clickable)
 	local host = Wanted.UI and Wanted.UI:IsShown() and Wanted.UI:GetFrame() or nil
+	if dialog:IsShown() then
+		-- One at a time: this one waits its turn rather than take the open one's place (and its answer)
+		tinsert(waiting, { options = options, host = host })
+		return
+	end
+	local frame = dialog.frame
 	dialog:ClearAllPoints()
 	frame:ClearAllPoints()
 	if host then
 		dialog:SetAllPoints(host)
 		dialog._bg:SetShown(true)
 		frame:SetPoint("CENTER", host, "CENTER", 0, 20)
+		-- The window closing takes its dialog with it, rather than leave the dim layer over nothing
+		if not hookedHosts[host] then
+			hookedHosts[host] = true
+			host:HookScript("OnHide", function()
+				if host:IsShown() then
+					return -- only out of sight with the whole interface (Alt+Z)
+				end
+				-- Dialogs waiting to show over it go with it
+				for i = #waiting, 1, -1 do
+					if waiting[i].host == host then
+						tremove(waiting, i)
+					end
+				end
+				if dialog:IsShown() and dialog.host == host then
+					dialog:Hide()
+				end
+			end)
+		end
 	else
 		dialog:SetPoint("CENTER", UIParent, "CENTER")
 		dialog:SetSize(1, 1)
 		dialog._bg:SetShown(false)
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
 	end
-	frame.options = options
+	frame.options, frame.decided, dialog.host = options, false, host
 	local accent = options.confirmStyle == "danger" and C.red or C.accent
 	frame.bar:SetColorTexture(accent[1], accent[2], accent[3], 1)
 	frame.title:SetText(options.title or "")

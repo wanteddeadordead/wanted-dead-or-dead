@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+- Guild Kill on Sight: the list a guildmate sends when you log in only changes the settings or approves names when
+  an officer sent it, and changes dated in the future are refused.
+- Guild Kill on Sight: in review mode only officers can take an approved name off the list, and editing an entry
+  keeps who added it.
+- Guild Kill on Sight: a long list (past about 70 names) reaches guildmates logging in again; they're sent only what
+  changed since they last heard from an officer, and a member answering first no longer keeps an officer's settings
+  and decisions from reaching them.
+- Guild Kill on Sight: the rank choice for rank mode lists your guild's ranks even when the page opened before the
+  game had loaded them.
+- A sighting shared with a broken position or zone no longer causes Lua errors on the map, in Hotspots or in alerts:
+  what doesn't make sense is left out.
+- Posse calls from other players never pop up in a fight (a chat line instead), ask at most once every two minutes per
+  caller, and keep their reason short; a call with no position on the map is a chat line.
+- Live battle reports only switch off combat logging they switched on: once a raid logger (or /combatlog) switches
+  it, it's left as it is in dungeons and raids.
+- A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an
+  enemy.
+- The targeted sound plays once when several enemies target you at the same moment, not once for each.
+- Enemy detection's once-a-second check rests in dungeons, raids and battlegrounds, where it could hit the game's
+  hidden values.
+- A death the game's death recap hasn't caught up with is no longer blamed on whoever had you targeted, and a recap
+  from before a /reload no longer counts as the next death's.
+- Fewer false stealth alarms: only a rogue, druid or mage seen fighting in the last half minute counts as stealthed
+  when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
+- Escape closes any Wanted dialog without answering it (only its own button says no), and closing the main window
+  takes its dialog with it instead of leaving a dark layer behind. Hiding the interface (Alt+Z) leaves it up.
+- A Wanted dialog that comes up while another is open waits its turn instead of replacing it, so no question is lost
+  unanswered; it waits for a fight to end, and goes if the window it was for is closed.
+- A raid's popup is no longer folded into the "more unlocks" summary when many popups come at once: it waits its turn.
+- The What's new window is never taller than your screen: a long note scrolls inside it.
+- The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an
+  answer.
+- Skull-level enemies show as level ?? everywhere instead of "level -1", and are no longer saved with that level.
+- Bug reports leave other players' names (the ones Wanted knows, and any Name-Realm), character ids and realm names out
+  of the log lines they include; zones, races and spells stay.
+- Less work in busy fights: the main window is no longer redrawn while it's closed.
+- Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
+
 ## [1.18.3] - 2026-10-08
 
 - The minimap button and the addon list show the wax seal, as on the website and CurseForge, centred in the minimap ring.

@@ -127,8 +127,8 @@ function private.Fill(guid, how)
 	f.stripe:SetColorTexture(stripe[1], stripe[2], stripe[3], 1)
 	f.stamp:SetText(Wanted.Achievements:StampText(looks.stamp) or "")
 	local who = {}
-	if d.level then
-		tinsert(who, "Level "..d.level)
+	if d.level or d.skull then
+		tinsert(who, "Level "..(d.level or "??"))
 	end
 	if d.race then
 		tinsert(who, d.race)

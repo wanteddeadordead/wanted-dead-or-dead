@@ -123,6 +123,9 @@ function private.RefreshCard()
 		private.timeBox:SetShown(private.later)
 		private.zoneChoice:SetShown(private.later)
 		private.dayChoice:SetShown(private.later)
+		-- Named by the clock the time is in, afresh (the window may stay open past midnight)
+		private.dayChoice:SetChoices(private.Days())
+		private.dayChoice:SetChoice(private.day)
 		return
 	end
 	local started = mine.startAt <= GetServerTime()
@@ -145,6 +148,19 @@ function private.RefreshCard()
 	local formNow = Raids:CanFormNow()
 	private.formNow:SetShown(formNow)
 	private.sendInvites:SetShown(formNow)
+end
+
+---The day picker's days: today and the six after, on the calendar of the clock the time is typed in (as ParseTime
+---counts them).
+function private.Days()
+	local offset = private.serverTime and Raids:ServerOffset() or 0
+	local base = date("*t", GetServerTime() + offset)
+	local days = {}
+	for d = 0, 6 do
+		local t = { year = base.year, month = base.month, day = base.day + d, hour = 12 }
+		tinsert(days, { key = d, label = d == 0 and "Today" or d == 1 and "Tomorrow" or date("%a %d", time(t)) })
+	end
+	return days
 end
 
 ---Edit: the form, filled in with the raid we lead.
@@ -246,11 +262,7 @@ function private.BuildForm(parent, width)
 	when:Select("now", true)
 	private.when = when
 	-- Later: which day (today and the six after), then the time
-	local days = {}
-	for d = 0, 6 do
-		tinsert(days, { key = d, label = d == 0 and "Today" or d == 1 and "Tomorrow" or date("%a %d", GetServerTime() + d * 86400) })
-	end
-	private.dayChoice = W:Choice(form, 100, days, function(key)
+	private.dayChoice = W:Choice(form, 100, private.Days(), function(key)
 		private.day = key
 	end)
 	private.dayChoice:SetChoice(0)
@@ -260,6 +272,7 @@ function private.BuildForm(parent, width)
 	-- The time typed: ours, or the realm's
 	private.zoneChoice = W:Choice(form, 130, { { key = false, label = "Your time "..Raids:ZoneName() }, { key = true, label = "Server time" } }, function(key)
 		private.serverTime = key
+		private.RefreshCard()
 	end)
 	private.zoneChoice:SetChoice(false)
 	private.zoneChoice:SetPoint("LEFT", private.timeBox, "RIGHT", 6, 0)

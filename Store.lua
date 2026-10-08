@@ -257,7 +257,6 @@ function private.Witnesses(record, claimTimes)
 	return false
 end
 
----A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
 -- The live world numbers every chain from LIVE_SEQ_BASE: the server keeps the beta's records, and a character that
 -- keeps its beta name would otherwise make records with the same ids as its beta ones, which the server refuses
 local LIVE_SEQ_BASE = 1000000
@@ -274,6 +273,7 @@ function private.NewChain()
 	return { seq = Store:SeqBase(), lastHash = "0" }
 end
 
+---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
 ---moves on to there, so this client stops asking for records nobody has, and continues from prev (the first
 ---record's predecessor) or from an unknown one.
 ---@param origin string
@@ -617,6 +617,11 @@ function private.Insert(record, live, fromApp)
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
 		return false, "test data"
 	end
+	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
+	-- beta build): it never comes in
+	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
+		return false, "beta"
+	end
 	record.live = live or nil
 	record.app = fromApp or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then
@@ -909,12 +914,12 @@ end
 ---Keeps the time of an origin's first record (seq 1) with its chain (first): the record itself may be pruned, and
 ---how long someone has been around is still asked (Bounties, a claim's witnesses).
 function private.NoteFirst(chain, record)
-	if chain and record.seq == 1 and type(record.t) == "number" then
+	if chain and record.seq == Store:SeqBase() + 1 and type(record.t) == "number" then
 		chain.first = record.t
 	end
 end
 
----When an origin's first record (seq 1) was made, or nil if it was never seen.
+---When an origin's first record (seq 1, or the live world's base + 1) was made, or nil if it was never seen.
 ---@param origin string
 ---@return number?
 function Store:GetFirstSeen(origin)

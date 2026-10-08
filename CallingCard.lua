@@ -296,19 +296,18 @@ end
 -- The banner
 -- ============================================================================
 
----A calling-card banner of a width: its parts' textures, the name on the plate and three stats under it.
----@param parent Frame
----@param width number
 ---Draws a name on a banner's plate, fitted to its open centre: full size while it fits, smaller down to ONE_LINE_LEAST
 ---on one line, then (a name with a space) on two lines at TWO_LINES_MOST or less. Each line is measured on its own.
 function private.FitName(banner, name)
 	local fs, full, room = banner.name, banner.nameSize, banner.nameRoom
+	-- Measured unwrapped and unbounded: the string's set width would otherwise cap what it reports
+	fs:SetWordWrap(false)
 	local function Widest(size, lines)
 		fs:SetFont(NAME_FONT, size, banner.nameFlags)
 		local widest = 0
 		for _, line in ipairs(lines) do
 			fs:SetText(line)
-			widest = max(widest, fs:GetStringWidth() or 0)
+			widest = max(widest, (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth()) or fs:GetStringWidth() or 0)
 		end
 		return widest
 	end
@@ -329,6 +328,9 @@ function private.FitName(banner, name)
 	fs:SetText(table.concat(lines, "\n"))
 end
 
+---A calling-card banner of a width: its parts' textures, the name on the plate and three stats under it.
+---@param parent Frame
+---@param width number
 ---@return Frame
 function CallingCard:Banner(parent, width)
 	local height = width * ASPECT

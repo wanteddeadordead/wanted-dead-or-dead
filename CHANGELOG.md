@@ -11,7 +11,13 @@
 - Later raids can be set up to six days ahead, and Announce gives the day ("Thu at 23:00 server time").
 - Raid names and places are held to 40 letters as you type, instead of being cut short after.
 - A new start time brings the "starts soon" reminder and the join popup back at the new time.
-- A raid can only be listed or closed by its own leader.
+- A raid can only be listed, changed or closed by its own leader: nobody else can post as them, close their raid or
+  take it over, and a copy shared across realms or sent before an edit can't undo the edit.
+- Guild only raids now show for your guildmates (they were dropped on the way in).
+- A declined invite leaves the line at once; a player who couldn't be invited is let go after a few minutes; anyone
+  who whispers "inv" while you can't invite is told why; players who signed up by whisper survive a /reload.
+- Raid days ahead land on the hour you typed even across a clock change, and the day picker names days by the clock
+  you're typing in.
 - Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
   and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
 

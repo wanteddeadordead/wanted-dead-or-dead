@@ -58,10 +58,13 @@ function Raids:OnEnable()
 	private.frame = private.frame or CreateFrame("Frame")
 	private.frame:RegisterEvent("CHAT_MSG_WHISPER")
 	private.frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+	private.frame:RegisterEvent("CHAT_MSG_SYSTEM")
 	private.frame:SetScript("OnEvent", function(_, event, text, sender)
 		if event == "CHAT_MSG_WHISPER" then
 			Raids:OnWhisper(text, sender)
-		else
+		elseif event == "CHAT_MSG_SYSTEM" then
+			Raids:OnSystem(text)
+		elseif private.mine then
 			private.PumpInvites()
 			private.Changed()
 		end
@@ -184,6 +187,7 @@ function Raids:Update(o)
 	for key, value in pairs(raid) do
 		mine[key] = value
 	end
+	mine.edits = (mine.edits or 0) + 1
 	mine.guild, mine.exclusive = raid.guild, raid.exclusive
 	private.SendAd()
 	private.Changed()
@@ -274,6 +278,9 @@ function Raids:Close()
 	private.SetMine(nil)
 	wipe(private.invites)
 	wipe(private.inviteOrder)
+	wipe(private.replied)
+	wipe(private.answered)
+	private.refused = nil
 	private.Changed()
 end
 
@@ -397,7 +404,10 @@ function private.MayJoin(name, quiet)
 			return true
 		end
 	end
-	if not quiet then
+	-- Said once per player, however often they whisper
+	private.refused = private.refused or {}
+	if not quiet and not private.refused[name] then
+		private.refused[name] = true
 		Wanted:Print("%s isn't in your guild: not invited to %s, which is guild only.", name, mine.title)
 	end
 	return false
@@ -524,6 +534,9 @@ function Raids:OnWhisper(text, sender)
 			Raids:ServerWhen(raid.startAt), raid.where))
 		return
 	end
+	if not Raids:CanInvite() then
+		private.Reply(sender, "Got it: I can't invite just yet, you're in line and will be invited as soon as I can.")
+	end
 	private.QueueInvite(sender)
 end
 
@@ -595,7 +608,7 @@ function private.QueueInvite(name)
 			Wanted:Print("%s wants to join %s, but it's full (%d).", name, raid.title, raid.size)
 			return
 		end
-		private.invites[name] = { tries = 0 }
+		private.invites[name] = { tries = 0, queued = GetTime() }
 		tinsert(private.inviteOrder, name)
 	end
 	private.PumpInvites()
@@ -615,11 +628,16 @@ function private.PumpInvites()
 			if raid then
 				Wanted:Print("%s joined %s.", name, raid.title)
 			end
-			private.invites[name] = nil
+			private.Done(name)
 			tremove(order, i)
 		elseif entry.sent and now - entry.sent >= INVITE_GIVE_UP_SECONDS then
 			Wanted:Print("%s didn't join %s.", name, raid.title)
-			private.invites[name] = nil
+			private.Done(name)
+			tremove(order, i)
+		elseif not entry.sent and now - entry.queued >= INVITE_GIVE_UP_SECONDS then
+			-- Never sent (in a fight, no right to invite, no room) for as long: given up on too
+			Wanted:Print("%s couldn't be invited to %s in time.", name, raid.title)
+			private.Done(name)
 			tremove(order, i)
 		end
 	end
@@ -666,6 +684,56 @@ function private.PumpInvites()
 			private.pumpScheduled = false
 			private.PumpInvites()
 		end)
+	end
+end
+
+---The game's line for a declined invite, or one to a player already in a group, as a pattern catching the name: nil
+---when this client hasn't the string.
+function private.SystemPattern(global)
+	local text = _G[global]
+	if type(text) ~= "string" then
+		return nil
+	end
+	local before, after = strmatch(text, "^(.-)%%s(.*)$")
+	if not before then
+		return nil
+	end
+	local function Plain(part)
+		return (gsub(part, "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"))
+	end
+	return "^"..Plain(before).."(.+)"..Plain(after).."$"
+end
+
+---A system message: a player declined our invite, or is in another group. They leave the invite line at once
+---instead of holding a place for a minute and being invited again.
+---@param text string
+function Raids:OnSystem(text)
+	if type(text) ~= "string" or not next(private.invites) then
+		return
+	end
+	for _, global in ipairs({ "ERR_DECLINE_GROUP_S", "ERR_ALREADY_IN_GROUP_S" }) do
+		local pattern = private.SystemPattern(global)
+		local name = pattern and strmatch(text, pattern)
+		if name then
+			for i, queued in ipairs(private.inviteOrder) do
+				if private.SameName(queued, name) then
+					Wanted:Print("%s %s.", queued, global == "ERR_DECLINE_GROUP_S" and "declined the invite" or "is in another group")
+					private.Done(queued)
+					tremove(private.inviteOrder, i)
+					private.PumpInvites()
+					return
+				end
+			end
+		end
+	end
+end
+
+---A player's done with the invite line (in, or given up on): off it, and off the raid's whispered sign-ups.
+function private.Done(name)
+	private.invites[name] = nil
+	local raid = private.mine
+	if raid and raid.whispered then
+		raid.whispered[name] = nil
 	end
 end
 
@@ -783,7 +851,6 @@ function Raids:FormNow(invite)
 	raid.startAt = GetServerTime()
 	private.SendAd()
 	for name in pairs(raid.whispered or {}) do
-		raid.whispered[name] = nil
 		private.QueueInvite(name)
 	end
 	if invite then
@@ -819,7 +886,7 @@ function private.SendAd(closed)
 	if not raid then
 		return
 	end
-	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, x = raid.exclusive and 1 or nil, z = raid.where, s = raid.startAt, m = raid.size,
+	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, x = raid.exclusive and 1 or nil, e = raid.edits, z = raid.where, s = raid.startAt, m = raid.size,
 		ml = raid.minLevel, n = private.GroupSize(), u = private.CountKind(raid.signups, "going"), i = private.CountKind(raid.signups, "interested"), f = UnitFactionGroup("player"), c = closed and 1 or nil })
 end
 
@@ -835,9 +902,9 @@ function Raids:Tick()
 		else
 			private.SendAd()
 			-- At the start, those who signed up by whispering (no Wanted to ask for themselves) are invited
-			if private.Started(raid) and raid.whispered and next(raid.whispered) then
+			-- (kept with the raid until they're in or given up on, so a /reload doesn't lose them)
+			if private.Started(raid) and raid.whispered then
 				for name in pairs(raid.whispered) do
-					raid.whispered[name] = nil
 					private.QueueInvite(name)
 				end
 			end
@@ -869,6 +936,7 @@ end
 
 ---Another player's raid ad (from the channel or a realm link): kept while it keeps coming, shown on the Raids page,
 ---and a toast the first time. Ads that don't make sense, from the other faction or already closed are dropped.
+---Returns true when it was taken (a closed one too), for Sync to share it on.
 ---A guild-only raid's ad counts only from our guild's own chat, and only when it's our guild.
 ---@param ad table
 ---@param sender string
@@ -880,13 +948,29 @@ function Raids:OnAd(ad, sender, channel)
 	if ad.l == Store:GetOrigin() or strfind(ad.l, "|", 1, true) then
 		return
 	end
-	-- Straight from a player, an ad must be their own raid's; one shared on by a realm link (fw) can only be listed,
-	-- and can close only a raid we've heard of only that way
+	-- A raid's id starts with its leader's name, and a raid keeps its leader: nobody else's ad can stand for it
+	if strsub(ad.id, 1, #ad.l + 1) ~= ad.l..":" then
+		return
+	end
+	local known = private.seen[ad.id]
+	if known and known.raid.leader ~= ad.l then
+		return
+	end
+	-- Straight from a player, an ad must be their own raid's. One shared on by a realm link (fw) can list a raid, but
+	-- for one heard straight from its leader it only says it's still about: it can't change or close it
 	local direct = not ad.fw
 	if direct and not private.SameName(sender, ad.l) then
 		return
 	end
-	if ad.c and not direct and private.seen[ad.id] and not private.seen[ad.id].relayed then
+	if not direct and known and known.relayed == false then
+		if not ad.c then
+			known.heard = GetServerTime()
+		end
+		return
+	end
+	-- An ad from before the leader's latest edit (delayed, or shared on late) changes nothing; a close always counts
+	local edits = floor(tonumber(ad.e) or 0)
+	if known and not ad.c and edits < (known.raid.edits or 0) then
 		return
 	end
 	if ad.c then
@@ -903,7 +987,7 @@ function Raids:OnAd(ad, sender, channel)
 			private.seen[ad.id] = nil
 			private.Changed()
 		end
-		return
+		return true
 	end
 	if ad.x and (channel ~= "GUILD" or ad.g ~= GetGuildInfo("player")) then
 		return
@@ -932,6 +1016,7 @@ function Raids:OnAd(ad, sender, channel)
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
 		minLevel = max(1, min(60, floor(tonumber(ad.ml) or 1))), members = max(0, min(size, floor(tonumber(ad.n) or 0))),
 		signups = max(0, min(99, floor(tonumber(ad.u) or 0))), interested = max(0, min(99, floor(tonumber(ad.i) or 0))),
+		edits = edits,
 	}
 	private.TellChanges(entry.raid)
 	private.Changed()
@@ -943,6 +1028,7 @@ function Raids:OnAd(ad, sender, channel)
 			detail = format("%s, %s  %d/%d  led by %s", raid.where, started and "now" or Raids:When(raid.startAt), raid.members, raid.size, raid.leader),
 			onClick = function() Wanted.UI:Show("raids") end })
 	end
+	return true
 end
 
 ---How many of the raids we can see haven't been shown on the Raids page yet (the menu's count).
@@ -1190,15 +1276,18 @@ function Raids:ParseTime(text, server, day)
 	local offset = server and Raids:ServerOffset() or 0
 	local now = GetServerTime()
 	local t = date("*t", now + offset)
-	t.hour, t.min, t.sec = h, m, 0
+	-- isdst left to the calendar: a day across a clock change still lands on the hour typed
+	t.hour, t.min, t.sec, t.isdst = h, m, 0, nil
 	if day and day > 0 then
-		-- That many days on, at that time (a whole day in the calendar, whatever the clocks do)
+		-- That many days on, at that time
 		t.day = t.day + day
 		return time(t) - offset
 	end
 	local at = time(t) - offset
 	if at <= now then
-		at = at + 24 * 3600
+		-- Tomorrow at that time, by the calendar rather than 24 hours on
+		t.day = t.day + 1
+		at = time(t) - offset
 	end
 	return at
 end

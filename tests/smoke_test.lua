@@ -6288,6 +6288,16 @@ end)()
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
 	check(invited[5] == "Fighter", "invited when it's over")
+	-- A declined invite leaves the line at once (the game's system line names who)
+	local realDecline = ERR_DECLINE_GROUP_S
+	ERR_DECLINE_GROUP_S = "%s declines your group invitation."
+	R:OnJoin("Says No", { r = raid.id })
+	check(times("Says No") == 1, "invited")
+	Fire("CHAT_MSG_SYSTEM", "Says No declines your group invitation.")
+	local stillThere = false
+	for _, n in ipairs(R:Inviting()) do stillThere = stillThere or n == "Says No" end
+	check(not stillThere, "declined: off the line")
+	ERR_DECLINE_GROUP_S = realDecline
 	-- Not taken up: invited once more after a minute, then dropped
 	clock = clock + 61
 	RunTimers()
@@ -6303,6 +6313,16 @@ end)()
 	UnitIsGroupAssistant = function() return true end
 	RunTimers()
 	check(times("Patient One") == 1, "an assistant may invite")
+	-- Without the right, a whisper is told why, and a player never invited is given up on after a few minutes
+	UnitIsGroupAssistant = function() return false end
+	chatSent = {}
+	R:OnWhisper("inv", "Stuck Waiting")
+	check(chatSent[1] and chatSent[1]:find("can't invite just yet", 1, true), "told the leader can't invite yet: "..tostring(chatSent[1]))
+	clock = clock + 181
+	RunTimers()
+	local stillWaiting = false
+	for _, n in ipairs(R:Inviting()) do stillWaiting = stillWaiting or n == "Stuck Waiting" end
+	check(not stillWaiting and times("Stuck Waiting") == 0, "never invited: given up on after a few minutes")
 	UnitIsGroupLeader, UnitIsGroupAssistant = realLeader, realAssist
 	inGroup["Patient One"], inGroup["Whisperer"], inGroup["Pleaser"], inGroup["Fighter"], inGroup["Sixth"] = true, true, true, true, true
 	Fire("GROUP_ROSTER_UPDATE")
@@ -6358,10 +6378,12 @@ end)()
 	R:Tick()
 	check(times("Early Bird") == 0 and planned.signups["Early Bird"], "sign-ups with Wanted aren't invited without saying Join")
 	check(times("Early Whisperer") == 1, "one who signed up by whisper is invited at the start")
+	check(planned.whispered and planned.whispered["Early Whisperer"], "and kept with the raid until they're in (a /reload doesn't lose them)")
 	-- Invite sign-ups: everyone going or interested gets an invite: solo, the four a party holds first; once someone is
 	-- in, the group becomes a raid and the rest are invited; never in a fight
 	inGroup["Early Whisperer"] = true -- took up the invite at the start
 	Fire("GROUP_ROSTER_UPDATE")
+	check(not planned.whispered["Early Whisperer"], "in: off the whispered list")
 	planned.signups["Early Whisperer"] = nil
 	for _, name in ipairs({ "P3", "P4", "P5", "P6" }) do planned.signups[name] = "going" end
 	invited = {}
@@ -6427,29 +6449,29 @@ end)()
 	check(inThree == time(want), "three days on at 20:00")
 	toasts = {}
 	-- Other players' raids
-	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
-	R:OnAd(ad({ f = "Alliance", id = "x1" }), "Lead Er-Realm")
-	R:OnAd(ad({ m = 33, id = "x2" }), "Lead Er-Realm")
+	local function ad(t) local a = { id = "Lead Er-Realm:Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
+	R:OnAd(ad({ f = "Alliance", id = "Lead Er-Realm:x1" }), "Lead Er-Realm")
+	R:OnAd(ad({ m = 33, id = "Lead Er-Realm:x2" }), "Lead Er-Realm")
 	R:OnAd(ad({ l = me, id = "x3" }), me)
-	R:OnAd(ad({ l = "Bad|Hname", id = "x4" }), "x")
+	R:OnAd(ad({ l = "Bad|Hname", id = "Bad|Hname:x4" }), "x")
 	check(#R:List() == 0 and #toasts == 0, "the other faction's, malformed and our own ads are dropped")
 	R:OnAd(ad(), "Lead Er-Realm")
 	local list = R:List()
 	check(#list == 1 and list[1].title == "Crossroads" and list[1].members == 12 and #toasts == 1 and toasts[1].kind == "RAID FORMING", "an ad: listed, and a toast once")
 	R:OnAd(ad({ n = 13 }), "Lead Er-Realm")
 	check(#toasts == 1 and R:List()[1].members == 13, "refreshed, no second toast")
-	R:OnAd(ad({ id = "later", s = clock + 7200, t = "Southshore" }), "Lead Er-Realm")
-	check(R:List()[1].id == "Lead-R:1:1" and R:List()[2].id == "later" and toasts[2].kind == "RAID PLANNED", "forming ones first, then planned")
+	R:OnAd(ad({ id = "Lead Er-Realm:later", s = clock + 7200, t = "Southshore" }), "Lead Er-Realm")
+	check(R:List()[1].id == "Lead Er-Realm:Lead-R:1:1" and R:List()[2].id == "Lead Er-Realm:later" and toasts[2].kind == "RAID PLANNED", "forming ones first, then planned")
 	-- Joining another's raid: level checked; a sign-up for a planned one, with reminders and asks when it starts
-	check(R:Join("Lead-R:1:1") == nil and joins[1] == "Lead Er-Realm Lead-R:1:1" and R:Joined("Lead-R:1:1"), "joining asks the leader")
-	R:OnAd(ad({ id = "high", ml = 50 }), "Lead Er-Realm")
-	check(R:Join("high") == "That raid is for level 50 and up.", "too low a level")
-	check(R:Join("later") == nil and R:Joined("later") and R:Interest("later") == "going" and joins[#joins] == "Lead Er-Realm later g", "Join on a planned raid: going")
-	check(R:SignUp("later", "interested") == nil and R:Interest("later") == "interested" and joins[#joins] == "Lead Er-Realm later i", "switched to interested")
-	check(R:SignUp("later", nil) == nil and not R:Joined("later") and joins[#joins] == "Lead Er-Realm later x", "taken back")
-	R:SignUp("later", "interested")
+	check(R:Join("Lead Er-Realm:Lead-R:1:1") == nil and joins[1] == "Lead Er-Realm Lead Er-Realm:Lead-R:1:1" and R:Joined("Lead Er-Realm:Lead-R:1:1"), "joining asks the leader")
+	R:OnAd(ad({ id = "Lead Er-Realm:high", ml = 50 }), "Lead Er-Realm")
+	check(R:Join("Lead Er-Realm:high") == "That raid is for level 50 and up.", "too low a level")
+	check(R:Join("Lead Er-Realm:later") == nil and R:Joined("Lead Er-Realm:later") and R:Interest("Lead Er-Realm:later") == "going" and joins[#joins] == "Lead Er-Realm Lead Er-Realm:later g", "Join on a planned raid: going")
+	check(R:SignUp("Lead Er-Realm:later", "interested") == nil and R:Interest("Lead Er-Realm:later") == "interested" and joins[#joins] == "Lead Er-Realm Lead Er-Realm:later i", "switched to interested")
+	check(R:SignUp("Lead Er-Realm:later", nil) == nil and not R:Joined("Lead Er-Realm:later") and joins[#joins] == "Lead Er-Realm Lead Er-Realm:later x", "taken back")
+	R:SignUp("Lead Er-Realm:later", "interested")
 	clock = clock + 7200 - 10 * 60
-	for i = 1, 3 do R:OnAd(ad({ id = "later", s = clock + 10 * 60, t = "Southshore" }), "Lead Er-Realm") end
+	for i = 1, 3 do R:OnAd(ad({ id = "Lead Er-Realm:later", s = clock + 10 * 60, t = "Southshore" }), "Lead Er-Realm") end
 	R:Tick()
 	check(toasts[#toasts].kind == "RAID SOON", "a reminder before it starts")
 	-- When it starts: a popup asks to join (interested too), never in a fight; Join asks the leader for the invite,
@@ -6467,7 +6489,7 @@ end)()
 	check(popup and popup.text:find("Lead Er-Realm has started Southshore", 1, true) and popup.confirmLabel == "Join" and #joins == before,
 		"a popup asks to join, nothing asked yet: "..tostring(popup and popup.text))
 	popup.onConfirm()
-	check(#joins == before + 1 and joins[#joins] == "Lead Er-Realm later", "Join asks the leader for the invite")
+	check(#joins == before + 1 and joins[#joins] == "Lead Er-Realm Lead Er-Realm:later", "Join asks the leader for the invite")
 	popup = nil
 	R:Tick()
 	check(popup == nil and #joins == before + 2, "asked again, no second popup")
@@ -6477,26 +6499,26 @@ end)()
 	inGroup["Lead Er-Realm"] = nil
 	ns.Widgets.Dialog, ns.Widgets.IsDialogShown = realDialog, realShown
 	-- A raid whose ad stops coming has gone; a closed one goes at once
-	R:OnAd(ad({ id = "later", c = 1 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:later", c = 1 }), "Lead Er-Realm")
 	local closedGone = true
-	for _, r in ipairs(R:List()) do if r.id == "later" then closedGone = false end end
+	for _, r in ipairs(R:List()) do if r.id == "Lead Er-Realm:later" then closedGone = false end end
 	check(closedGone, "a closed raid leaves the list at once")
 	-- A raid we signed up for changing: a toast with what it is now and was; cancelled before it starts, a toast too
-	R:OnAd(ad({ id = "moving", s = clock + 3600, z = "Barrens" }), "Lead Er-Realm")
-	R:SignUp("moving", "going")
-	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 3600, z = "Barrens" }), "Lead Er-Realm")
+	R:SignUp("Lead Er-Realm:moving", "going")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 7200, z = "Ashenvale" }), "Lead Er-Realm")
 	local changed = toasts[#toasts]
 	check(changed.kind == "RAID CHANGED" and changed.detail:find("Ashenvale (was Barrens)", 1, true)
 		and changed.detail:find(R:When(clock + 7200).." (was "..R:When(clock + 3600)..")", 1, true), "what changed: "..tostring(changed.detail))
 	local toastsBefore = #toasts
-	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale", n = 20 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 7200, z = "Ashenvale", n = 20 }), "Lead Er-Realm")
 	check(#toasts == toastsBefore, "more members isn't a change to tell")
 	-- A new time brings the reminder back at it
 	clock = clock + 6600
 	R:Tick()
 	local soonCount = 0
 	for _, t in ipairs(toasts) do if t.kind == "RAID SOON" and t.name == "Crossroads" then soonCount = soonCount + 1 end end
-	R:OnAd(ad({ id = "moving", s = clock + 3600, z = "Ashenvale" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 3600, z = "Ashenvale" }), "Lead Er-Realm")
 	clock = clock + 3000
 	R:Tick()
 	local soonAfter = 0
@@ -6504,15 +6526,29 @@ end)()
 	check(soonCount == 1 and soonAfter == 2, "moved later: reminded again before the new time ("..soonCount..", "..soonAfter..")")
 	-- Nobody can list or close a raid as someone else: straight from a player an ad must be their own raid; one shared
 	-- on by a realm link can't close a raid heard straight from its leader
-	R:OnAd(ad({ id = "fake", l = "Real Leader-Realm", t = "Fake raid" }), "Faker-Realm")
+	R:OnAd(ad({ id = "Real Leader-Realm:fake", l = "Real Leader-Realm", t = "Fake raid" }), "Faker-Realm")
 	local fake = false
-	for _, x in ipairs(R:List()) do fake = fake or x.id == "fake" end
+	for _, x in ipairs(R:List()) do fake = fake or x.id == "Real Leader-Realm:fake" end
 	check(not fake, "a raid ad from someone else than its leader isn't listed")
-	R:OnAd(ad({ id = "moving", c = 1 }), "Faker-Realm")
-	R:OnAd(ad({ id = "moving", c = 1, fw = 1 }), "Relay Person-Elsewhere")
-	check(R:Joined("moving"), "nor closed by anyone but its leader")
-	R:OnAd(ad({ id = "moving", c = 1 }), "Lead Er-Realm")
-	check(toasts[#toasts].kind == "RAID CANCELLED" and not R:Joined("moving"), "cancelled before it starts")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1 }), "Faker-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1, fw = 1 }), "Relay Person-Elsewhere")
+	check(R:Joined("Lead Er-Realm:moving"), "nor closed by anyone but its leader")
+	-- Not by naming themselves leader of someone else's raid id either, closing it or taking it over
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", l = "Mallory Bad-Realm", c = 1 }), "Mallory Bad-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", l = "Mallory Bad-Realm", t = "Mine now" }), "Mallory Bad-Realm")
+	local moving
+	for _, x in ipairs(R:List()) do if x.id == "Lead Er-Realm:moving" then moving = x end end
+	check(R:Joined("Lead Er-Realm:moving") and moving and moving.leader == "Lead Er-Realm" and moving.title == "Crossroads", "someone else's raid id can't be closed or taken over")
+	-- A copy shared on by a realm link can't change a raid heard straight from its leader, nor can an ad from before an edit
+	local startBefore = moving.startAt
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = clock + 99999, z = "Ashenvale", fw = 1 }), "Relay Person-Elsewhere")
+	check(moving.startAt == startBefore, "a shared-on copy doesn't change it")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore, z = "Ashenvale", e = 2 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", s = startBefore + 7200, z = "Ashenvale", e = 1 }), "Lead Er-Realm")
+	for _, x in ipairs(R:List()) do if x.id == "Lead Er-Realm:moving" then moving = x end end
+	check(moving.startAt == startBefore, "an ad from before the latest edit changes nothing")
+	R:OnAd(ad({ id = "Lead Er-Realm:moving", c = 1 }), "Lead Er-Realm")
+	check(toasts[#toasts].kind == "RAID CANCELLED" and not R:Joined("Lead Er-Realm:moving"), "cancelled before it starts")
 	clock = clock + 4 * 60
 	R:Tick()
 	check(#R:List() == 0, "quiet ads drop off")
@@ -6521,8 +6557,8 @@ end)()
 	-- it should have started
 	local kept = R:Create({ title = "Saturday push", where = "Ashenvale", size = 40, startAt = clock + 2 * 3600 })
 	R:OnJoin("Loyal One", { r = kept.id, k = "g" })
-	R:OnAd(ad({ id = "sat", t = "Their Saturday", s = clock + 3 * 3600 }), "Lead Er-Realm")
-	R:SignUp("sat", "interested")
+	R:OnAd(ad({ id = "Lead Er-Realm:sat", t = "Their Saturday", s = clock + 3 * 3600 }), "Lead Er-Realm")
+	R:SignUp("Lead Er-Realm:sat", "interested")
 	local function roundTrip(t)
 		if type(t) ~= "table" then return t end
 		local c = {}
@@ -6533,7 +6569,7 @@ end)()
 	local toastsBeforeLoad = #toasts
 	R:Load()
 	check(R:Mine() and R:Mine().title == "Saturday push" and R:Mine().signups["Loyal One"] == "going", "our raid and its sign-ups come back")
-	check(R:Interest("sat") == "interested" and R:List()[1] and R:List()[1].id == "sat" and #toasts == toastsBeforeLoad,
+	check(R:Interest("Lead Er-Realm:sat") == "interested" and R:List()[1] and R:List()[1].id == "Lead Er-Realm:sat" and #toasts == toastsBeforeLoad,
 		"the raid we're interested in comes back, listed, no second toast")
 	-- On the calendar: our raid, and the ones we're going to or interested in
 	local function calendarDay(t)
@@ -6547,11 +6583,11 @@ end)()
 	local ourDay, theirDay = calendarDay(kept.startAt), calendarDay(clock + 3 * 3600)
 	check(ourDay:find(date("%H:%M", kept.startAt).." Saturday push (your raid)", 1, true), "our raid on the calendar: "..ourDay)
 	check(theirDay:find("Their Saturday (interested)", 1, true), "and the one we're interested in: "..theirDay)
-	R:SignUp("sat", nil)
+	R:SignUp("Lead Er-Realm:sat", nil)
 	check(not calendarDay(clock + 3 * 3600):find("Their Saturday", 1, true), "taken back: off the calendar")
 	clock = clock + 3600
 	R:Tick()
-	check(R:List()[1] and R:List()[1].id == "sat", "a planned raid stays while its leader is offline")
+	check(R:List()[1] and R:List()[1].id == "Lead Er-Realm:sat", "a planned raid stays while its leader is offline")
 	clock = clock + 2 * 3600 + 4 * 60
 	R:Tick()
 	check(#R:List() == 0, "gone once it should have started and no ad came")
@@ -6595,17 +6631,17 @@ end)()
 	R:Close()
 	C_GuildInfo, IsInGuild = realGuildApi, realInGuild
 	-- Another's guild-only raid: listed only from our guild's own chat, and only when it's our guild
-	R:OnAd(ad({ id = "gx1", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "CHANNEL")
-	R:OnAd(ad({ id = "gx2", g = "Other Guild", x = 1 }), "Lead Er-Realm", "GUILD")
-	R:OnAd(ad({ id = "gx3", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "GUILD")
+	R:OnAd(ad({ id = "Lead Er-Realm:gx1", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "CHANNEL")
+	R:OnAd(ad({ id = "Lead Er-Realm:gx2", g = "Other Guild", x = 1 }), "Lead Er-Realm", "GUILD")
+	R:OnAd(ad({ id = "Lead Er-Realm:gx3", g = "Blood Oath", x = 1 }), "Lead Er-Realm", "GUILD")
 	local guildIds = {}
 	for _, raid in ipairs(R:List()) do guildIds[#guildIds + 1] = raid.id end
-	check(table.concat(guildIds, ",") == "gx3", "guild-only: from our guild's chat, our guild only: "..table.concat(guildIds, ","))
-	R:OnAd(ad({ id = "gx3", c = 1 }), "Lead Er-Realm", "GUILD")
+	check(table.concat(guildIds, ",") == "Lead Er-Realm:gx3", "guild-only: from our guild's chat, our guild only: "..table.concat(guildIds, ","))
+	R:OnAd(ad({ id = "Lead Er-Realm:gx3", c = 1 }), "Lead Er-Realm", "GUILD")
 	GetGuildInfo = realGuildInfo
-	R:OnAd(ad({ id = "guild", g = "Blood|HOath" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:guild", g = "Blood|HOath" }), "Lead Er-Realm")
 	check(R:Title(R:List()[1]) == "Crossroads with <BloodHOath>", "another's guild raid, escapes taken out: "..R:Title(R:List()[1]))
-	R:OnAd(ad({ id = "guild", c = 1 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:guild", c = 1 }), "Lead Er-Realm")
 	-- Zones for the Where box: the game's outdoor zones from the world map down, sorted, each once; what's typed
 	-- matches the start of a name first, then anywhere in it
 	local realMap = C_Map
@@ -6628,18 +6664,32 @@ end)()
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realAd, realJoin
 	local function msg(tag, t) t.v = ns.VERSION return OldMessage(tag, t) end
 	local channel = ns.Sync:Status():match("channel (%S+)") -- earlier tests moved it
-	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "chan", l = "Chan Lead-Realm" })), "CHANNEL", "Chan Lead-Realm", nil, nil, nil, channel)
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "Chan Lead-Realm:chan", l = "Chan Lead-Realm" })), "CHANNEL", "Chan Lead-Realm", nil, nil, nil, channel)
 	local fromChannel = false
-	for _, r in ipairs(R:List()) do if r.id == "chan" then fromChannel = true end end
+	for _, r in ipairs(R:List()) do if r.id == "Chan Lead-Realm:chan" then fromChannel = true end end
 	check(fromChannel, "an ad on the channel is listed")
+	-- A guild-only raid's ad through the guild's addon channel, as the game delivers it, is listed for a guildmate
+	local realGuildInfoA = GetGuildInfo
+	GetGuildInfo = function(unit) if unit == "player" then return "Blood Oath" end end
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "Guild Leader-Realm:g1", l = "Guild Leader-Realm", g = "Blood Oath", x = 1 })), "GUILD", "Guild Leader-Realm")
+	local guildListed = false
+	for _, x in ipairs(R:List()) do guildListed = guildListed or x.id == "Guild Leader-Realm:g1" end
+	check(guildListed, "a guild-only ad from the guild channel is listed")
+	R:OnAd(ad({ id = "Guild Leader-Realm:g1", l = "Guild Leader-Realm", c = 1 }), "Guild Leader-Realm")
+	GetGuildInfo = realGuildInfoA
+	-- A realm link first (their hello from another realm name); only a link's own raid is shared on
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("H", { c = {}, r = "Elsewhere" }), "WHISPER", "Far Lead-Elsewhere")
 	addonSent = {}
-	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "link", l = "Far Lead-Elsewhere" })), "WHISPER", "Far Lead-Elsewhere")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "Stranger-Nowhere:sneak", l = "Stranger-Nowhere" })), "WHISPER", "Stranger-Nowhere")
+	check(#addonSent == 0, "a stranger's whispered ad isn't shared on")
+	addonSent = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "Far Lead-Elsewhere:link", l = "Far Lead-Elsewhere" })), "WHISPER", "Far Lead-Elsewhere")
 	check(#addonSent == 1 and addonSent[1].chatType == "CHANNEL" and addonSent[1].text:find("^A:"), "a realm link's ad is shared on our channel")
 	local fromLink = false
-	for _, r in ipairs(R:List()) do if r.id == "link" then fromLink = true end end
+	for _, r in ipairs(R:List()) do if r.id == "Far Lead-Elsewhere:link" then fromLink = true end end
 	check(fromLink, "and listed here")
 	addonSent = {}
-	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "link2", l = "Far Lead-Elsewhere", fw = 1 })), "WHISPER", "Far Lead-Elsewhere")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("A", ad({ id = "Far Lead-Elsewhere:link2", l = "Far Lead-Elsewhere", fw = 1 })), "WHISPER", "Far Lead-Elsewhere")
 	check(#addonSent == 0, "an ad already shared once isn't shared again")
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
 	local led = R:Create({ title = "Linked", size = 10 })
@@ -6656,24 +6706,24 @@ end)()
 	check(#addonSent == 1 and addonSent[1].target == "Curious-Elsewhere" and addonSent[1].text:find("^Y:") and answer
 		and answer.g == "Goer One" and answer.i == "Maybe Two", "asked who's going: the names, once")
 	-- Asking: once in a while per raid; the answer counts only from that raid's leader
-	R:OnAd(ad({ id = "who" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:who" }), "Lead Er-Realm")
 	addonSent = {}
-	check(R:Roster("who") == nil and #addonSent == 1 and addonSent[1].target == "Lead Er-Realm" and addonSent[1].text:find("^W:"), "first look: the leader is asked")
-	R:Roster("who")
+	check(R:Roster("Lead Er-Realm:who") == nil and #addonSent == 1 and addonSent[1].target == "Lead Er-Realm" and addonSent[1].text:find("^W:"), "first look: the leader is asked")
+	R:Roster("Lead Er-Realm:who")
 	check(#addonSent == 1, "not again at once")
-	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Someone Else-Realm")
-	check(R:Roster("who") == nil, "an answer from anyone but the leader is ignored")
-	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Lead Er-Realm")
-	local roster = R:Roster("who")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "Lead Er-Realm:who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Someone Else-Realm")
+	check(R:Roster("Lead Er-Realm:who") == nil, "an answer from anyone but the leader is ignored")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "Lead Er-Realm:who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Lead Er-Realm")
+	local roster = R:Roster("Lead Er-Realm:who")
 	check(roster and table.concat(roster.going, ",") == "Ann,Bob" and table.concat(roster.interested, ",") == "Cat", "the leader's answer: who's going and interested")
-	R:OnAd(ad({ id = "who", c = 1 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:who", c = 1 }), "Lead Er-Realm")
 	R:Close()
 	-- The page builds and lists them (the realm-link and channel raids above closed by their leaders first)
-	R:OnAd(ad({ id = "link", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
-	R:OnAd(ad({ id = "link2", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
-	R:OnAd(ad({ id = "chan", l = "Chan Lead-Realm", c = 1 }), "Chan Lead-Realm")
-	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
-	R:OnAd(ad({ id = "page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Far Lead-Elsewhere:link", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
+	R:OnAd(ad({ id = "Far Lead-Elsewhere:link2", l = "Far Lead-Elsewhere", c = 1 }), "Far Lead-Elsewhere")
+	R:OnAd(ad({ id = "Chan Lead-Realm:chan", l = "Chan Lead-Realm", c = 1 }), "Chan Lead-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
 	-- New raids show as a count on the Raids menu entry until the Raids page is opened
 	ns.UI:Show("home")
 	local unseenBefore = R:Unseen()
@@ -6682,14 +6732,14 @@ end)()
 	check(unseenBefore >= 2 and raidsEntry and raidsEntry.badge == unseenBefore, "new raids counted on the menu: "..unseenBefore.." "..tostring(raidsEntry and raidsEntry.badge))
 	ns.UI:Show("raids")
 	check(R:Unseen() == 0, "opening the Raids page clears it")
-	R:OnAd(ad({ id = "page3", t = "Late one", s = clock + 7200 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page3", t = "Late one", s = clock + 7200 }), "Lead Er-Realm")
 	check(R:Unseen() == 0, "a raid that comes in with the page open is seen")
-	R:OnAd(ad({ id = "page3", c = 1 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page3", c = 1 }), "Lead Er-Realm")
 	ns.UI:GetFrame():Hide()
-	R:OnAd(ad({ id = "page4", t = "While away", s = clock + 7200 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page4", t = "While away", s = clock + 7200 }), "Lead Er-Realm")
 	check(R:Unseen() == 1, "with the window closed, a new raid stays new, even with Raids the last page")
 	ns.UI:Show("raids")
-	R:OnAd(ad({ id = "page4", c = 1 }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:page4", c = 1 }), "Lead Er-Realm")
 	local function shows(text)
 		for _, f in ipairs(Mock.fontStrings) do
 			if type(f._text) == "string" and f._text:find(text, 1, true) then
@@ -6704,7 +6754,7 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end
 	end
-	check(R:Interest("page2") == "interested", "Interested signs up as interested")
+	check(R:Interest("Lead Er-Realm:page2") == "interested", "Interested signs up as interested")
 	-- Hovering a raid asks its leader who's going (and the tooltip shows without an error)
 	addonSent = {}
 	for _, fs in ipairs(Mock.fontStrings) do
@@ -6764,11 +6814,11 @@ end)()
 	-- Home's raids row: your raid first, then the ones forming (click to join); none, a card to form one
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function(_, a) ads[#ads + 1] = a end, function(_, leader, id) joins[#joins + 1] = leader.." "..id end
 	clock = clock + 4 * 60
-	R:OnAd(ad({ id = "page2", c = 1 }), "Lead Er-Realm") -- a planned raid stays until it's closed or should have started
+	R:OnAd(ad({ id = "Lead Er-Realm:page2", c = 1 }), "Lead Er-Realm") -- a planned raid stays until it's closed or should have started
 	R:Tick()
 	ns.UI:Show("home")
 	check(shows("No raids forming") and shows("RAIDS"), "Home: no raids, a card to form one")
-	R:OnAd(ad({ id = "home1", t = "Stonetalon push" }), "Lead Er-Realm")
+	R:OnAd(ad({ id = "Lead Er-Realm:home1", t = "Stonetalon push" }), "Lead Er-Realm")
 	ns.UI:Refresh(true)
 	check(shows("Stonetalon push") and shows("Click to join") and shows("FORMING"), "Home: a raid forming, with Join")
 	local before = #joins
@@ -6776,7 +6826,7 @@ end)()
 		if fs._text == "Stonetalon push" and fs._parent._shown then fs._parent:Click() end
 	end
 	ns.UI:Refresh(true)
-	check(#joins == before + 1 and R:Joined("home1") and shows("JOINED"), "clicking it joins")
+	check(#joins == before + 1 and R:Joined("Lead Er-Realm:home1") and shows("JOINED"), "clicking it joins")
 	R:Create({ title = "My own raid", size = 20 })
 	ns.UI:Refresh(true)
 	check(shows("YOUR RAID") and shows("My own raid"), "Home: your raid first")
@@ -6933,6 +6983,22 @@ end)()
 	local theirs = { kind = "mark", id = "Livey Person:1000001", origin = "Livey Person", seq = 1000001, prev = "0", t = clock, data = { target = "Player-9-LIVE2" } }
 	theirs.hash = S:Hash(table.concat({ theirs.kind, theirs.id, theirs.prev, tostring(theirs.t), "target=Player-9-LIVE2" }, "\n"))
 	check(S:Merge(theirs, "Livey Person") and S:GetChainSeq("Livey Person") == 1000001 and not S:Get(theirs.id).brokenChain, "another's first live record follows on, nothing missing")
+	check(S:GetFirstSeen("Livey Person") == clock, "and their first live record is when they were first seen")
+	-- The beta's records never come back in: not numbered under the base, and not from a catch-up written before launch
+	local beta = { kind = "mark", id = "Livey Person:7", origin = "Livey Person", seq = 7, prev = "x", t = clock, data = { target = "Player-9-OLD" } }
+	beta.hash = S:Hash(table.concat({ beta.kind, beta.id, beta.prev, tostring(beta.t), "target=Player-9-OLD" }, "\n"))
+	local taken, why = S:MergeRelayed(beta)
+	check(not taken and why == "beta" and not S:Get(beta.id), "a beta-numbered record is refused in the live world: "..tostring(why))
+	local realLaunch = ns.LAUNCH_AT
+	ns.LAUNCH_AT = clock + 3600
+	local oldCatchup = { kind = "mark", id = "Old Timer:1000001", origin = "Old Timer", seq = 1000001, prev = "0", t = clock, data = { target = "Player-9-OLD2" } }
+	oldCatchup.hash = S:Hash(table.concat({ oldCatchup.kind, oldCatchup.id, oldCatchup.prev, tostring(oldCatchup.t), "target=Player-9-OLD2" }, "\n"))
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = { oldCatchup } } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(not S:Get(oldCatchup.id), "a catch-up written before launch brings nothing in")
+	ns.LAUNCH_AT = realLaunch
+	WantedAppCatchup = nil
 	ns.WORLD = "beta"
 	S:FreshStart()
 end)()

@@ -17,7 +17,7 @@ local KIND_ORDER = { raid = -1, game = 0, pvpseason = 1, wanted = 2, weekly = 3,
 -- WoW Forever's own dates, from Blizzard's beta schedule (forum post, BlizzCon 2026): the beta ends on October 21,
 -- 2026 (no time given: that day everywhere), and the game launches on November 4, 2026 at 3:00 p.m. PST
 local BETA_ENDS = { year = 2026, month = 10, day = 21 }
-local LAUNCH_AT = 1793833200 -- 2026-11-04 23:00 UTC
+local LAUNCH_AT = Wanted.LAUNCH_AT -- 2026-11-04 23:00 UTC
 -- The game marks no holiday as PvP (every one is event type Other on Forever, build 70205); its battleground
 -- weekends are titled "Call to Arms: <battleground>"
 local BATTLEGROUND_WEEKEND = "^Call to Arms: "

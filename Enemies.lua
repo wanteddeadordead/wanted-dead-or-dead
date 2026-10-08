@@ -367,8 +367,8 @@ function private.Scan(unit)
 	if ok and private.Readable(targetsMe) then
 		private.targetingMe[guid] = now
 		entry.targetingMe = now
-	elseif ok and targetsMe == false then
-		-- Seen targeting someone else: they've stopped targeting us
+	elseif ok and not (issecretvalue and issecretvalue(targetsMe)) and targetsMe == false then
+		-- Seen targeting someone else: they've stopped targeting us (a secret answer is never compared)
 		entry.targetingMe = nil
 	end
 	-- Keep the saved player current (the Last hour list and the map read it), at most every few seconds

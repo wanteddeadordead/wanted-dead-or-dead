@@ -8002,6 +8002,20 @@ end)()
 	Fire("MAIL_FAILED")
 	Fire("MAIL_SEND_SUCCESS")
 	check(not P:GetForClaim(hisClaim.id), "a send that failed leaves nothing waiting for the next mail to count")
+	-- Closing the mailbox while the send is on its way, or failing to take an item, doesn't lose it
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_FAILED", 12345)
+	Fire("MAIL_CLOSED")
+	clock = clock + 2
+	Fire("MAIL_SEND_SUCCESS")
+	check(P:GetForClaim(hisClaim.id), "a send that goes through just after the mailbox closes still counts")
+	ns.db.records[P:GetForClaim(hisClaim.id).id] = nil
+	-- But long after the close, a success is some other mail's
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_CLOSED")
+	clock = clock + 60
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a success long after the mailbox closed isn't this send's")
 	-- A stranger's payment record, or one for less than owed, doesn't pay it either
 	Signed("payment", "Random Stranger", 1, { claim = hisClaim.id, bounty = mine.id, to = "Hal Hunter", amount = 5000, side = "payer" })
 	Signed("payment", "Hal Hunter", 2, { claim = hisClaim.id, bounty = mine.id, from = me, amount = 10, side = "payee" })

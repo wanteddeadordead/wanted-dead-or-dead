@@ -12,11 +12,14 @@ local Store = Wanted.Store
 local Bounties = Wanted.Bounties
 local private = {
 	frame = CreateFrame("Frame"),
-	pendingSend = nil, -- { claimId, recipient, amount } between SendMail and MAIL_SEND_SUCCESS (or MAIL_FAILED)
+	pendingSend = nil, -- { claimId, recipient, amount, at, closedAt } between SendMail and MAIL_SEND_SUCCESS (or MAIL_FAILED)
 	seenInbox = {}, -- claim id -> true once recorded from the inbox
 }
 local SUBJECT_PREFIX = "Wanted bounty "
 local UNPAID_AFTER_SECONDS = 48 * 60 * 60
+-- How long the game may take to say our send went through (or failed), and to say so after the mailbox closed
+local SEND_ANSWER_SECONDS = 30
+local CLOSE_GRACE_SECONDS = 10
 
 
 
@@ -47,12 +50,22 @@ function Payments:Status()
 	return format("Payments: %d claims paid, %d overdue.", paid, unpaid)
 end
 
-function private.OnEvent(_, event)
+function private.OnEvent(_, event, ...)
 	if event == "MAIL_SEND_SUCCESS" then
 		private.OnSendSuccess()
-	elseif event == "MAIL_FAILED" or event == "MAIL_CLOSED" then
-		-- What was waiting to go didn't: the next mail sent is another one
-		private.pendingSend = nil
+	elseif event == "MAIL_FAILED" then
+		-- The game says this for taking an item from a mail too (it names the item): only a failure of our send, soon
+		-- after it, clears what was waiting to go
+		local itemID = ...
+		local pending = private.pendingSend
+		if pending and itemID == nil and GetTime() - pending.at <= SEND_ANSWER_SECONDS then
+			private.pendingSend = nil
+		end
+	elseif event == "MAIL_CLOSED" then
+		-- A send can still be on its way when the mailbox closes: it counts if the game says so soon after
+		if private.pendingSend then
+			private.pendingSend.closedAt = private.pendingSend.closedAt or GetTime()
+		end
 	elseif event == "MAIL_INBOX_UPDATE" then
 		private.ScanInbox()
 	end
@@ -228,14 +241,16 @@ function private.OnSendMail(recipient, subject)
 	if not claimId then
 		return
 	end
-	private.pendingSend = { claimId = claimId, recipient = recipient, amount = amount }
+	private.pendingSend = { claimId = claimId, recipient = recipient, amount = amount, at = GetTime() }
 	Wanted:Log("Payments: sending %s to %s for claim %s", Bounties:FormatMoney(amount), tostring(recipient), claimId)
 end
 
 function private.OnSendSuccess()
 	local pending = private.pendingSend
 	private.pendingSend = nil
-	if not pending or Payments:GetForClaim(pending.claimId) then
+	-- A success long after our send, or after the mailbox closed, is some other mail's
+	if not pending or GetTime() - pending.at > SEND_ANSWER_SECONDS
+		or (pending.closedAt and GetTime() - pending.closedAt > CLOSE_GRACE_SECONDS) or Payments:GetForClaim(pending.claimId) then
 		return
 	end
 	local claim = Store:Get(pending.claimId)

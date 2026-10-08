@@ -109,6 +109,8 @@
   a player who missed a few moves follows once three players agree.
 - Playing the same character from a second PC (or after restoring old saved data) no longer forks your record chain:
   your next record follows the ones other players already hold.
+- A bounty payment still counts when you close the mailbox while it's sending, or when taking an item from another
+  mail fails meanwhile.
 
 ## [1.18.2] - 2026-10-08
 

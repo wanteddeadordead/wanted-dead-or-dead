@@ -7422,6 +7422,39 @@ end)()
 	for k, v in pairs(real) do _G[k] = v end
 	ns.db.hkBook = {}
 end)()
+-- Dialogs and Escape: any dialog closes on Escape (the game's list of windows Escape closes), and closing it any way
+-- but its OK button counts as Cancel
+;(function()
+	local W = ns.Widgets
+	local function Escape()
+		for _, name in ipairs(UISpecialFrames) do
+			local frame = _G[name]
+			if frame and frame:IsShown() then frame:Hide() end
+		end
+	end
+	Escape() -- whatever earlier tests left up
+	local cancelled, confirmed = 0, 0
+	W:Dialog({ title = "No input", text = "Escape closes me", onCancel = function() cancelled = cancelled + 1 end, onConfirm = function() confirmed = confirmed + 1 end })
+	check(W:IsDialogShown(), "the dialog is up")
+	Escape()
+	check(not W:IsDialogShown() and cancelled == 1, "Escape closes a dialog with no input, as Cancel")
+	W:Dialog({ title = "Input", text = "Escape in the box", input = { placeholder = "x" }, onCancel = function() cancelled = cancelled + 1 end })
+	local frame = _G.WantedDialog.frame
+	frame.input._scripts.OnEscapePressed(frame.input)
+	check(not W:IsDialogShown() and cancelled == 2, "Escape in its box closes it as Cancel")
+	W:Dialog({ title = "OK", text = "Confirm me", onCancel = function() cancelled = cancelled + 1 end, onConfirm = function() confirmed = confirmed + 1 end })
+	frame.confirm:Click()
+	check(not W:IsDialogShown() and cancelled == 2 and confirmed == 1, "OK is never also Cancel")
+	W:Dialog({ title = "Cancel", text = "Cancel me", onCancel = function() cancelled = cancelled + 1 end })
+	frame.cancel:Click()
+	check(cancelled == 3, "Cancel once")
+	-- Over the main window: closing the window takes the dialog with it
+	ns.UI:Show("home")
+	W:Dialog({ title = "Over the window", text = "x", onCancel = function() cancelled = cancelled + 1 end })
+	ns.UI:GetFrame():Hide()
+	check(not W:IsDialogShown() and cancelled == 4, "closing the main window closes its dialog, as Cancel")
+	lastDialog = nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -46,6 +46,8 @@
   from before a /reload no longer counts as the next death's.
 - Fewer false stealth alarms: only a rogue, druid or mage seen fighting in the last half minute counts as stealthed
   when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
+- Escape closes any Wanted dialog, as Cancel, and closing the main window takes its dialog with it instead of leaving
+  a dark layer behind.
 - A raid's popup is no longer folded into the "more unlocks" summary when many popups come at once: it waits its turn.
 - The What's new window is never taller than your screen: a long note scrolls inside it.
 - The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an

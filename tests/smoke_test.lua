@@ -8436,6 +8436,20 @@ end)()
 	check(S:GetChainSeq(me) == before + 2, "but a record far past ours doesn't throw our chain forward")
 	S:FreshStart()
 end)()
+-- One player naming many versions can't wipe out what other players said
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.30.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	ns:NoteVersion("1.31.0", "Wipe Voter A")
+	ns:NoteVersion("1.31.0", "Wipe Voter B")
+	for i = 1, 25 do ns:NoteVersion("1.32."..i, "Wipe Mallory") end
+	check(ns:GetRequiredUpdate() == nil, "one player naming many versions locks nothing")
+	ns:NoteVersion("1.31.0", "Wipe Voter C")
+	check(ns:GetRequiredUpdate() == "1.31.0", "the three who said 1.31.0 still lock: "..tostring(ns:GetRequiredUpdate()))
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

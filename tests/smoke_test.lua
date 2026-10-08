@@ -7487,6 +7487,27 @@ end)()
 	ns.BETA, ns.db.welcomed = realBeta, realWelcomed
 	lastDialog = nil
 end)()
+-- A closed window isn't redrawn (data changes ask for a redraw often, in a fight several a second); opening it redraws
+-- it with every badge worked out afresh
+;(function()
+	local up
+	for i = 1, 30 do
+		local name, value = debug.getupvalue(ns.UI.Refresh, i)
+		if name == "private" then up = value end
+	end
+	ns.UI:Show("board")
+	local def = up.pageByKey[up.current]
+	local realRefresh, drawn = def.refresh, 0
+	def.refresh = function(...) drawn = drawn + 1 if realRefresh then return realRefresh(...) end end
+	ns.UI:GetFrame():Hide()
+	ns.UI:Refresh()
+	ns.UI:Refresh(true)
+	check(drawn == 0, "a closed window isn't redrawn, got "..drawn)
+	ns.UI:Show()
+	check(drawn == 1, "opening it redraws it once, got "..drawn)
+	def.refresh = realRefresh
+	ns.UI:GetFrame():Hide()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

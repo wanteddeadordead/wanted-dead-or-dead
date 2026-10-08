@@ -55,6 +55,7 @@
 - The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an
   answer.
 - Skull-level enemies show as level ?? everywhere instead of "level -1", and are no longer saved with that level.
+- Less work in busy fights: the main window is no longer redrawn while it's closed.
 - Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
 
 ## [1.18.2] - 2026-10-08

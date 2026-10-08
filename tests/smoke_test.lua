@@ -8116,6 +8116,10 @@ end)()
 	Notices({ { b = "Far Poster:5", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
 	Notices({ { b = "w1234abcd", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
 	check(ns.Bridge:GetPriceOnMe() == before + 7000, "one bounty carried under two ids counts once: "..(ns.Bridge:GetPriceOnMe() - before))
+	-- Two bounties posted in the same second on the same player, both under new ids, are two
+	clock = clock + 3600
+	Notices({ { b = "waaaa0001", g = me, n = "Test Player", a = 3000, t = clock - 10 }, { b = "wbbbb0002", g = me, n = "Test Player", a = 4000, t = clock - 10 } })
+	check(ns.Bridge:GetPriceOnMe() == before + 14000, "two bounties in the same second both count: "..(ns.Bridge:GetPriceOnMe() - before))
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

@@ -2757,9 +2757,13 @@ end)()
 	ns.Store:MergeRelayed(own)
 	check(B:GetClaimLevel(victimsClaim) == 1, "the victim's own death relayed by another player is not a witness")
 	ns.Store:Merge(Own(2, link.hash, t0 + 601), "Trust Victim")
+	-- (The game knows the victim's GUID by that name: a link only names a GUID, which anyone could write)
+	local realInfo = GetPlayerInfoByGUID
+	GetPlayerInfoByGUID = function(guid) if guid == victim then return "Rogue", "ROGUE", "Human", "Human", 2, "Trust Victim", "" end return realInfo(guid) end
 	local witnesses, victimsOwn = B:GetWitnesses(victimsClaim)
 	check(#witnesses == 1 and victimsOwn and B:GetClaimLevel(victimsClaim) == 2, "the victim's own death heard live gives the witnessed level alone")
 	check(#B:GetClaimWarnings(victimsClaim) == 0, "and no warnings, though the victim is new to the network, got "..table.concat(B:GetClaimWarnings(victimsClaim), " / "))
+	GetPlayerInfoByGUID = realInfo
 end)()
 ;(function()
 	-- In a dungeon or raid the Nearby window closes, and comes back outside if it was open; battlegrounds keep it
@@ -7995,6 +7999,15 @@ end)()
 	local after = Live("claim", "Hunter Aitch", { bounty = b6.id, kill = "Hunter Aitch:0", victim = "Player-9-ST6", zone = "Durotar", killT = t0 + 300 }, t0 + 301)
 	Witness(after)
 	check(M:GetBountyInfo(b6).state == "withdrawn" and not P:IsUnpaid(after), "a kill after it is owed nothing")
+	-- The victim's own record only counts when the GUID it claims is really theirs: the game names that GUID so, or the
+	-- app vouched for the link. Anyone can write a link naming someone else's GUID.
+	local hunterKill = Live("kill", "Hunter Eye", { killer = "Player-9-EYE", victim = "Player-9-ST7", zone = "Durotar" }, t0 + 99)
+	local b7 = Live("bounty", "State Poster", { target = "Player-9-ST7", targetName = "St Seven", amount = 5000 }, t0)
+	local c7 = Live("claim", "Hunter Eye", { bounty = b7.id, kill = hunterKill.id, victim = "Player-9-ST7", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("link", "Sock Puppet", { code = "SOCK2345", guid = "Player-9-ST7" }, t0)
+	Live("death", "Sock Puppet", { victim = "Player-9-ST7", killer = "Player-9-EYE", zone = "Durotar" }, t0 + 100)
+	local _, victimsOwn = B:GetWitnesses(c7)
+	check(not victimsOwn, "a link naming someone else's GUID doesn't make its maker the victim")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

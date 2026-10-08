@@ -753,12 +753,34 @@ function private.IsVictimsOwn(death, claim)
 	if character and character.n == death.origin then
 		return true
 	end
+	-- A link only names a GUID, which anyone could write: it counts when the app vouched for it, or the game knows that
+	-- GUID by the link's maker's name
 	for link in Store:Iterator("link") do
-		if link.origin == death.origin and link.data.guid == victim and Store:IsTrusted(link) then
+		if link.origin == death.origin and link.data.guid == victim and Store:IsTrusted(link)
+			and (link.app or private.GameNames(victim, death.origin)) then
 			return true
 		end
 	end
 	return false
+end
+
+---Whether the game knows a player's GUID by an origin's name ("First Last", or "Name-Realm" elsewhere).
+---@param guid string
+---@param origin string
+---@return boolean
+function private.GameNames(guid, origin)
+	local _, _, _, _, _, name, realm = GetPlayerInfoByGUID(guid)
+	if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then
+		return false
+	end
+	if name == origin then
+		return true
+	end
+	-- Elsewhere an origin carries the realm, without spaces or dashes; the game gives none for our own realm
+	if type(realm) ~= "string" or realm == "" or (issecretvalue and issecretvalue(realm)) then
+		realm = GetNormalizedRealmName() or GetRealmName() or ""
+	end
+	return origin == name.."-"..gsub(realm, "[%s%-]", "")
 end
 
 -- A witness whose records started less than this long before the kill is new to the network

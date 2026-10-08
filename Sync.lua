@@ -1849,35 +1849,42 @@ end
 ---A peer asked for records. Answer after a random delay unless someone else already filled that range (over a
 ---realm link nobody else can: answer that player straight away).
 function private.HandleNeed(need, sender, viaLink)
-	local asked = {}
+	-- Only chains we hold, from a whole seq, and no more chains than a request asks for (HandleHave): every answer
+	-- walks an origin's records and sends them
+	local wanted, asked = {}, {}
+	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, fromSeq in pairs(need) do
-		tinsert(asked, tostring(origin).." from "..tostring(fromSeq))
+		if type(origin) == "string" and type(fromSeq) == "number" and fromSeq == floor(fromSeq) and fromSeq >= 1
+			and Wanted.db.chains[origin] and Store:GetChainSeq(origin) >= fromSeq then
+			wanted[origin] = floor(fromSeq)
+			tinsert(asked, origin.." from "..fromSeq)
+			if #asked >= maxNeed then
+				break
+			end
+		end
 	end
 	Wanted:Log("Sync: %s asks for %s", sender, table.concat(asked, ", "))
+	need = wanted
 	if viaLink then
 		for origin, fromSeq in pairs(need) do
-			if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
-				private.SendFill(origin, fromSeq, sender)
-			end
+			private.SendFill(origin, fromSeq, sender)
 		end
 		return
 	end
 	for origin, fromSeq in pairs(need) do
-		if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
-			private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
-			C_Timer.After(0.5 + math.random() * 2.5, function()
-				local pending = private.pendingNeedAnswers[origin]
-				if not pending or pending.from ~= fromSeq then
-					return
-				end
-				private.pendingNeedAnswers[origin] = nil
-				if (private.recentFills[origin] or 0) >= fromSeq and GetTime() - pending.t < 10 then
-					-- Someone answered first
-					return
-				end
-				private.SendFill(origin, fromSeq)
-			end)
-		end
+		private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
+		C_Timer.After(0.5 + math.random() * 2.5, function()
+			local pending = private.pendingNeedAnswers[origin]
+			if not pending or pending.from ~= fromSeq then
+				return
+			end
+			private.pendingNeedAnswers[origin] = nil
+			if (private.recentFills[origin] or 0) >= fromSeq and GetTime() - pending.t < 10 then
+				-- Someone answered first
+				return
+			end
+			private.SendFill(origin, fromSeq)
+		end)
 	end
 end
 
@@ -1886,8 +1893,8 @@ end
 function private.SendFill(origin, fromSeq, target)
 	local records = {}
 	local lowest = Store:GetChainSeq(origin) + 1
-	for _, record in pairs(Wanted.db.records) do
-		if record.origin == origin and type(record.seq) == "number" and not Store:IsTest(record) then
+	for record in Store:OriginIterator(origin) do
+		if type(record.seq) == "number" and not Store:IsTest(record) then
 			lowest = min(lowest, record.seq)
 			if record.seq >= fromSeq then
 				tinsert(records, record)

@@ -3255,6 +3255,10 @@ end)()
 		return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "h"..(seq - 1), t = clock - 60, data = { victim = "Player-9-V" }, hash = "h"..seq }
 	end
 	for _, s in ipairs({ 1, 2, 5, 6, 20 }) do ns.db.records["Holey:"..s] = Holey("Holey", s) end
+	-- (Written straight in, so the store's index is built again: as when the records table is replaced)
+	local copy = {}
+	for id, r in pairs(ns.db.records) do copy[id] = r end
+	ns.db.records = copy
 	ns.db.chains.Holey = { seq = 30, lastHash = "h30" }
 	ClearSent()
 	clock = clock + 11
@@ -8017,6 +8021,37 @@ end)()
 	check(B:GetAmount(b8) == 15000 and B:GetOwed(c8) == 5000, "owed is the bounty at the kill: "..tostring(B.GetOwed and B:GetOwed(c8)))
 	Live("payment", "State Poster", { claim = c8.id, bounty = b8.id, to = "Hunter Jay", amount = 5000, side = "payer" }, t0 + 400)
 	check(P:GetForClaim(c8.id), "and paying that settles it")
+end)()
+-- A request for records (N) can't make this client walk and send everything it holds: at most a few chains per request,
+-- each from a real seq, and only chains it holds
+;(function()
+	local S = ns.Store
+	S:FreshStart()
+	local asked = {}
+	for i = 1, 30 do
+		local origin = "Need Origin "..i
+		S:Merge(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "n"..i } }), origin)
+		asked[origin] = 1
+	end
+	asked["Never Heard"] = -5
+	RunFrames()
+	local realQueue, fills = ns.QueueWork, 0
+	ns.QueueWork = function(self, f) fills = fills + 1 return realQueue(self, f) end
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = asked }), "CHANNEL", "Greedy Asker", nil, nil, nil, ns.Sync:GetPointer().n)
+	RunTimers()
+	ns.QueueWork = realQueue
+	RunFrames()
+	check(fills > 0 and fills <= 5, "a request is answered for a few chains at most: "..fills)
+	ns.QueueWork = function(self, f) fills = fills + 1 return realQueue(self, f) end
+	fills = 0
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { ["Never Heard"] = -5, ["Need Origin 1"] = 0.5 } }), "CHANNEL", "Greedy Asker", nil, nil, nil, ns.Sync:GetPointer().n)
+	RunTimers()
+	ns.QueueWork = realQueue
+	RunFrames()
+	check(fills == 0, "nor for a chain we don't hold, or from a seq that isn't one: "..fills)
+	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

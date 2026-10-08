@@ -939,7 +939,7 @@ function Store:Get(id)
 end
 
 -- Record ids by kind, so walking the handful of raises or payments doesn't mean walking every record (the
--- bounty code does that many times over), and each origin's newest record time, so the sync can tell which
+-- bounty code does that many times over), by origin (a gap fill sends one origin's), and each origin's newest record time, so the sync can tell which
 -- chains are active. Built on first use and kept as records arrive; built again whenever the records table is
 -- replaced (a fresh start, the launch reset) or pruned. Each kind's ids are a list that only grows, so a walk
 -- reads it in place (copying it for every walk made most of the addon's garbage); a record removed some other way
@@ -947,7 +947,7 @@ end
 function private.Index()
 	local records = Wanted.db.records
 	if private.indexFor ~= records then
-		private.byKind, private.indexed, private.lastActive, private.indexFor = {}, {}, {}, records
+		private.byKind, private.byOrigin, private.indexed, private.lastActive, private.indexFor = {}, {}, {}, {}, records
 		for _, record in pairs(records) do
 			private.AddId(record)
 			private.NoteActive(record)
@@ -967,6 +967,14 @@ function private.AddId(record)
 		private.byKind[record.kind] = ids
 	end
 	ids[#ids + 1] = record.id
+	if type(record.origin) == "string" then
+		ids = private.byOrigin[record.origin]
+		if not ids then
+			ids = {}
+			private.byOrigin[record.origin] = ids
+		end
+		ids[#ids + 1] = record.id
+	end
 end
 
 function private.NoteActive(record)
@@ -1001,6 +1009,28 @@ function Store:Iterator(kind)
 			-- An altered record is kept (and synced) but never read. One with a broken chain can be innocent (a
 			-- reinstall, lost saved data): it's listed, but never witnesses a claim (Store:IsTrusted)
 			if record and record.kind == kind and not record.tampered then
+				return record
+			end
+		end
+		return nil
+	end
+end
+
+---Iterates one origin's records, unordered, tampered ones too (a gap fill sends what it holds). Records added meanwhile
+---are left for the next walk.
+---@param origin string
+---@return fun(): table?
+function Store:OriginIterator(origin)
+	local records = Wanted.db.records
+	private.Index()
+	local list = private.byOrigin[origin]
+	local n = list and #list or 0
+	local i = 0
+	return function()
+		while i < n do
+			i = i + 1
+			local record = records[list[i]]
+			if record and record.origin == origin then
 				return record
 			end
 		end

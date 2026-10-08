@@ -91,6 +91,8 @@
   Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
 - A claim is owed the bounty as it stood at the kill: a raise made after the kill doesn't add to what the hunter is
   owed (Pay fills in that amount).
+- A request for records is answered for a few chains at a time, and only for chains you hold, so one player can't
+  make everyone resend everything they have.
 
 ## [1.18.2] - 2026-10-08
 

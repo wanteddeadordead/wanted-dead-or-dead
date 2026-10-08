@@ -1836,7 +1836,7 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, seq in pairs(chains) do
 		if type(origin) == "string" and Store:IsSeq(seq) then
-			private.NoteAdvertised(origin, seq)
+			private.NoteAdvertised(origin, seq, sender)
 		end
 	end
 	for origin, seq in pairs(chains) do
@@ -1956,27 +1956,67 @@ function private.SendFill(origin, fromSeq, target)
 	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras)
 end
 
--- The highest seq any player said each origin's chain reaches (hellos and haves), so a fill can't skip a chain past
--- it; at most this many origins are remembered before the list starts over
+-- How far players said each origin's chain reaches (hellos and haves), so a fill can't skip a chain past it: the
+-- origin's own word, and the highest seq from each of a few other players. At most this many origins are remembered
+-- before the list starts over, and this many players for each.
 local MAX_ADVERTISED = 5000
+local MAX_ADVERTISERS = 6
 
----Notes how far a peer says an origin's chain reaches.
-function private.NoteAdvertised(origin, seq)
+---Notes how far a player says an origin's chain reaches.
+function private.NoteAdvertised(origin, seq, sender)
 	local advertised = private.advertised
 	if not advertised or (private.advertisedCount or 0) >= MAX_ADVERTISED then
 		advertised = {}
 		private.advertised, private.advertisedCount = advertised, 0
 	end
-	if not advertised[origin] then
+	local entry = advertised[origin]
+	if not entry then
+		entry = { own = 0, by = {}, count = 0 }
+		advertised[origin] = entry
 		private.advertisedCount = private.advertisedCount + 1
 	end
-	advertised[origin] = max(advertised[origin] or 0, seq)
+	if sender == origin then
+		entry.own = max(entry.own, seq)
+		return
+	end
+	if not entry.by[sender] then
+		if entry.count >= MAX_ADVERTISERS then
+			-- Room for this one: the player who said the least goes
+			local lowest
+			for other, said in pairs(entry.by) do
+				if not lowest or said < entry.by[lowest] then
+					lowest = other
+				end
+			end
+			entry.by[lowest], entry.count = nil, entry.count - 1
+		end
+		entry.count = entry.count + 1
+	end
+	entry.by[sender] = max(entry.by[sender] or 0, seq)
+end
+
+---How far an origin's chain reaches by a word that isn't one player's alone: the origin's own, or the highest seq at
+---least two other players said.
+function private.Advertised(origin)
+	local entry = private.advertised and private.advertised[origin]
+	if not entry then
+		return 0
+	end
+	local first, second = 0, 0
+	for _, said in pairs(entry.by) do
+		if said > first then
+			first, second = said, first
+		elseif said > second then
+			second = said
+		end
+	end
+	return max(entry.own, second)
 end
 
 ---Where a fill may move an origin's chain to (a skip over records pruned at its sender): a whole seq, and no further
----than one past the highest seq of that origin anyone said they hold, we hold, or the fill carries. A false skip
----would leave the origin's real records looking like a rewritten history. The origin itself may say anything about
----its own chain.
+---than one past what we hold or what the origin, or two players, said the chain reaches (Advertised). Not what the
+---fill carries: its sender could have made that up. A false skip would leave the origin's real records looking like a
+---rewritten history. The origin itself may say anything about its own chain.
 ---@return number? seq nil when it's no seq at all
 function private.SkipTarget(origin, seq, tbl, sender)
 	if not Store:IsSeq(seq) then
@@ -1986,13 +2026,7 @@ function private.SkipTarget(origin, seq, tbl, sender)
 	if sender == origin then
 		return seq
 	end
-	local highest = max((private.advertised or {})[origin] or 0, Store:GetChainSeq(origin))
-	for _, record in ipairs(type(tbl.r) == "table" and tbl.r or {}) do
-		if type(record) == "table" and record.origin == origin and Store:IsSeq(record.seq) then
-			highest = max(highest, record.seq)
-		end
-	end
-	return min(seq, floor(highest) + 1)
+	return min(seq, floor(max(private.Advertised(origin), Store:GetChainSeq(origin))) + 1)
 end
 
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what

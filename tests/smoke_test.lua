@@ -3250,7 +3250,11 @@ end)()
 	local function Rec(seq, prev, hash)
 		return { kind = "death", id = "Old Timer:"..seq, origin = "Old Timer", seq = seq, prev = prev, t = clock - 60, data = { victim = "Player-9-V" }, hash = hash }
 	end
-	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on
+	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on (two players
+	-- said the chain reaches 51: a skip goes no further than that)
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Old Timer"] = 51 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	ClearSent()
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { p = { ["Old Timer"] = 50 }, r = { Rec(50, "abc", "h50"), Rec(51, "h50", "h51") } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Old Timer") == 51, "the chain moved on past the pruned start, got "..ns.Store:GetChainSeq("Old Timer"))
@@ -3291,10 +3295,12 @@ end)()
 	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
 	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
 	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
-	-- (A skip goes no further than someone said a chain reaches: here the peer's hello said 30)
+	-- (A skip goes no further than two players said a chain reaches: here their haves said 30)
 	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
 	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
-	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { Holey2 = 30 } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { Holey2 = 30 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
 	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
@@ -7871,10 +7877,14 @@ end)()
 	RunTimers()
 	RunFrames()
 	check(S:GetChainSeq("Alice Chain") == 3, "nor an endless number")
-	-- Even when someone says it reaches that far, a recent record of Alice's inside the skip undoes it
+	-- One player saying the chain reaches that far, or a forged record that far in the fill itself, isn't enough
 	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 999999 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = { Signed("pass", "Alice Chain", 1000000, "x", {}) } })
+	check(S:GetChainSeq("Alice Chain") == 3, "one player's word moves no chain: "..S:GetChainSeq("Alice Chain"))
+	-- Two players saying so is; and then a recent record of Alice's inside the skip undoes it
+	From("Mallory Two", "V", { c = { ["Alice Chain"] = 999999 } })
 	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
-	check(S:GetChainSeq("Alice Chain") == 999999, "a skip to what someone said the chain reaches goes through")
+	check(S:GetChainSeq("Alice Chain") >= 999999, "a skip to what two players said the chain reaches goes through")
 	local four = Signed("pass", "Alice Chain", 4, prev, { bounty = "b4" })
 	check(S:Merge(four, "Alice Chain") and S:GetChainSeq("Alice Chain") == 4 and not S:Get(four.id).brokenChain, "her next real record undoes the skip: "..S:GetChainSeq("Alice Chain"))
 	S:FreshStart()

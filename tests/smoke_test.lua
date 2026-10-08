@@ -6516,6 +6516,27 @@ end)()
 	invited = {}
 	Fire("CHAT_MSG_ADDON", "WNTD", msg("I", { r = led.id }), "WHISPER", "Other Realm-Elsewhere")
 	check(invited[1] == "Other Realm-Elsewhere", "a join whisper from another realm name is invited")
+	-- Who's going: another player asks (an addon whisper), the leader's Wanted answers with the names, at most every
+	-- few seconds per player
+	led.signups["Goer One"], led.signups["Maybe Two"] = "going", "interested"
+	addonSent = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("W", { r = led.id }), "WHISPER", "Curious-Elsewhere")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("W", { r = led.id }), "WHISPER", "Curious-Elsewhere")
+	local answer = addonSent[1] and ns.Sync:Decode(addonSent[1].text:match("^%u:%w+:%d+/%d+:(.*)$"))
+	check(#addonSent == 1 and addonSent[1].target == "Curious-Elsewhere" and addonSent[1].text:find("^Y:") and answer
+		and answer.g == "Goer One" and answer.i == "Maybe Two", "asked who's going: the names, once")
+	-- Asking: once in a while per raid; the answer counts only from that raid's leader
+	R:OnAd(ad({ id = "who" }), "Lead Er-Realm")
+	addonSent = {}
+	check(R:Roster("who") == nil and #addonSent == 1 and addonSent[1].target == "Lead Er-Realm" and addonSent[1].text:find("^W:"), "first look: the leader is asked")
+	R:Roster("who")
+	check(#addonSent == 1, "not again at once")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Someone Else-Realm")
+	check(R:Roster("who") == nil, "an answer from anyone but the leader is ignored")
+	Fire("CHAT_MSG_ADDON", "WNTD", msg("Y", { r = "who", g = "Ann,Bob", i = "Cat" }), "WHISPER", "Lead Er-Realm")
+	local roster = R:Roster("who")
+	check(roster and table.concat(roster.going, ",") == "Ann,Bob" and table.concat(roster.interested, ",") == "Cat", "the leader's answer: who's going and interested")
+	R:OnAd(ad({ id = "who", c = 1 }), "Lead Er-Realm")
 	R:Close()
 	-- The page builds and lists them
 	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
@@ -6536,6 +6557,14 @@ end)()
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end
 	end
 	check(R:Interest("page2") == "interested", "Interested signs up as interested")
+	-- Hovering a raid asks its leader who's going (and the tooltip shows without an error)
+	addonSent = {}
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text and type(fs._text) == "string" and fs._text:find("^Planned push") and fs._parent._shown then fs._parent:GetScript("OnEnter")(fs._parent) end
+	end
+	local asked = false
+	for _, m in ipairs(addonSent) do asked = asked or (m.text:find("^W:") and m.target == "Lead Er-Realm") end
+	check(asked, "hovering a raid asks its leader who's going")
 	-- Typing in Where suggests zones under it; Tab takes the first
 	local where
 	for _, fs in ipairs(Mock.fontStrings) do

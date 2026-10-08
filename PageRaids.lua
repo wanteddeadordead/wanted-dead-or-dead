@@ -16,7 +16,7 @@ local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
 	"1.  Name your raid, say where and when (in your time or server time), and click Form raid. Every Wanted player of your faction sees it, on every realm, in their own time.",
 	"2.  Now: anyone who clicks Join is invited straight away.",
-	"3.  Later: players mark Interested or Going. You see who, and can whisper them all from your raid's card.",
+	"3.  Later: players mark Interested or Going. Hover any raid to see who; invite or whisper them all from your raid's card.",
 	"4.  From 15 minutes before, Form raid now starts it, and Send invites invites everyone signed up. Either way they get a popup to join.",
 	"5.  Edit or close it, and everyone signed up is told what changed. It's on their calendar and yours.",
 	"6.  Guild only: just your guildmates see it, until you open it to everyone from your raid's card.",
@@ -73,6 +73,34 @@ function private.UpdateRow(row, raid)
 	else
 		row.action:SetText(Theme:Colorize("Click to join", C.gold))
 	end
+end
+
+---A tooltip listing who's going and who's interested (asking says the leader hasn't answered yet).
+function private.ShowRoster(owner, title, going, interested, more, asking)
+	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+	GameTooltip:SetText(title, 1, 1, 1)
+	if asking then
+		GameTooltip:AddLine("Asking the leader who's going...", C.muted[1], C.muted[2], C.muted[3], true)
+	else
+		local function Add(label, names, color)
+			GameTooltip:AddLine(format("%s (%d)", label, #names), color[1], color[2], color[3])
+			GameTooltip:AddLine(#names > 0 and table.concat(names, ", ") or "Nobody yet", C.text[1], C.text[2], C.text[3], true)
+		end
+		Add("Going", going, C.green)
+		Add("Interested", interested, C.gold)
+		if more and more > 0 then
+			GameTooltip:AddLine(format("and %d more", more), C.muted[1], C.muted[2], C.muted[3])
+		end
+	end
+	GameTooltip:Show()
+end
+
+---Hovering another player's raid: who's going, asking its leader the first time.
+function private.ShowRaidRoster(row, raid)
+	private.hovered = { row = row, raid = raid }
+	local roster = Raids:Roster(raid.id)
+	private.ShowRoster(row, Raids:Title(raid), roster and roster.going or {}, roster and roster.interested or {}, roster and roster.more,
+		roster == nil)
 end
 
 ---The form, or the raid we lead.
@@ -349,6 +377,21 @@ function private.BuildLead(parent, width)
 	private.leadNames:SetPoint("TOPLEFT", 14, -76)
 	private.leadNames:SetWidth(width - 28)
 	private.leadNames:SetWordWrap(false)
+	-- Hovering the sign-ups: everyone, going and interested
+	local signups = CreateFrame("Frame", nil, lead)
+	signups:SetPoint("TOPLEFT", private.leadSub, "TOPLEFT")
+	signups:SetPoint("BOTTOMRIGHT", private.leadNames, "BOTTOMRIGHT")
+	signups:EnableMouse(true)
+	signups:SetScript("OnEnter", function(self)
+		local mine = Raids:Mine()
+		if mine then
+			local going, interested = Raids:SignUps(mine)
+			private.ShowRoster(self, "Signed up for "..Raids:Title(mine), going, interested)
+		end
+	end)
+	signups:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
 	local announce = W:Button(lead, "Announce", "secondary", 100, 26, private.ConfirmAnnounce)
 	announce:SetPoint("BOTTOMLEFT", 14, 10)
 	W:AttachTooltip(announce, "Announce in chat", "Posts the raid in Looking for Group (or the zone's General) for players without Wanted. Anyone who whispers you \"inv\" is invited.")
@@ -398,6 +441,14 @@ UI:RegisterPage("raids", {
 		private.lead = private.BuildLead(container, width)
 		local listTop = FORM_HEIGHT + 12
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
+		list.onEnter = private.ShowRaidRoster
+		-- The leader's answer came while the raid is hovered: show it
+		Raids:OnRosterUpdate(function(id)
+			local h = private.hovered
+			if h and h.raid.id == id and h.row.item == h.raid and h.row:IsMouseOver() then
+				private.ShowRaidRoster(h.row, h.raid)
+			end
+		end)
 		list.onClick = function(raid)
 			-- A planned raid has its Interested and Going buttons
 			if Raids:Joined(raid.id) or raid.startAt > GetServerTime() then

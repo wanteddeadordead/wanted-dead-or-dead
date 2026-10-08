@@ -103,6 +103,9 @@ local TAG_RAID = "A"
 local GUILD_ONLY = "@guild" -- private.Send's target for the guild's addon channel alone
 -- Sent privately to a raid's leader: I'm joining (or signing up for) your raid { r = raid id } (Raids)
 local TAG_RAID_JOIN = "I"
+-- Sent privately to a raid's leader: who's going? { r = raid id }; and the leader's answer: { r, g = going names,
+-- i = interested names (comma separated), m = how many more didn't fit } (Raids)
+local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- The server's sync channel, or (q) a player asking for the current one: { e = epoch, n = name, a = 1 (the
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
@@ -1538,6 +1541,19 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
+	-- Who's going to a raid we lead, and a leader's answer
+	if channel == "WHISPER" and (strsub(text, 1, 2) == TAG_RAID_WHO..":" or strsub(text, 1, 2) == TAG_RAID_ROSTER..":") then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" and Wanted.Raids then
+			if strsub(text, 1, 1) == TAG_RAID_WHO then
+				Wanted.Raids:OnWho(sender, tbl)
+			else
+				Wanted.Raids:OnRoster(sender, tbl)
+			end
+		end
+		return
+	end
 	-- A join for a posse we called
 	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_POSSE_JOIN..":" then
 		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
@@ -2127,6 +2143,20 @@ end
 ---@param kind string?
 function Sync:SendRaidJoin(leader, raidId, kind)
 	return private.Send(TAG_RAID_JOIN, { r = raidId, k = kind }, nil, leader)
+end
+
+---Asks a raid's leader who's going.
+---@param leader string
+---@param raidId string
+function Sync:SendRaidWho(leader, raidId)
+	return private.Send(TAG_RAID_WHO, { r = raidId }, nil, leader)
+end
+
+---Answers who's going to the raid we lead: { r, g, i, m }.
+---@param to string
+---@param roster table
+function Sync:SendRaidRoster(to, roster)
+	return private.Send(TAG_RAID_ROSTER, roster, nil, to)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

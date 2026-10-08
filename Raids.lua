@@ -19,6 +19,8 @@ local private = {
 	reminded = {}, -- id..":"..kind -> true
 	pending = {}, -- names waiting for an invite until combat ends
 	inviteQueue = {}, -- names Invite sign-ups still has to invite
+	answered = {}, -- name -> when we last told them who's going (GetTime)
+	rosters = {}, -- raid id -> { going, interested, more, at, asked } who's going to others' raids, as their leaders said
 	inviteTries = 0,
 	soloInvites = 0, -- invites out while we're still alone (a party holds four)
 	counter = 0,
@@ -37,6 +39,9 @@ local ANNOUNCE_SECONDS = 60
 local WHISPER_GAP_SECONDS = 0.5 -- between Whisper sign-ups' whispers, so the game doesn't hold them back
 local MAX_SEEN = 30
 local PARTY_SIZE = 5
+local WHO_SECONDS = 10 -- a player is told who's going at most this often
+local ROSTER_SECONDS = 30 -- a leader is asked who's going at most this often per raid
+local ROSTER_ROOM = 180 -- letters of names an answer holds (one addon message)
 local INVITE_RETRY_SECONDS = 2 -- Invite sign-ups waits this long between rounds (for someone to join, or a fight to end)
 local INVITE_TRIES = 60 -- rounds before it gives up on the rest
 local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
@@ -356,7 +361,7 @@ end
 
 ---Whether a player may join the raid we lead: anyone, or for a guild-only raid, our guildmates. A client without the
 ---game's guild check lets them in.
-function private.MayJoin(name)
+function private.MayJoin(name, quiet)
 	local mine = private.mine
 	if not mine or not mine.exclusive or not (C_GuildInfo and C_GuildInfo.MemberExistsByName) then
 		return true
@@ -373,7 +378,9 @@ function private.MayJoin(name)
 			return true
 		end
 	end
-	Wanted:Print("%s isn't in your guild: not invited to %s, which is guild only.", name, mine.title)
+	if not quiet then
+		Wanted:Print("%s isn't in your guild: not invited to %s, which is guild only.", name, mine.title)
+	end
 	return false
 end
 
@@ -501,6 +508,92 @@ function private.Invite(name)
 		invite(name)
 		Wanted:Print("%s joins %s: invited.", name, raid.title)
 	end
+end
+
+---Someone asks who's going to the raid we lead: the names, going and interested, as many as fit one message. Not for a
+---guild-only raid's outsiders; at most every WHO_SECONDS per player.
+---@param sender string
+---@param tbl table { r = raid id }
+function Raids:OnWho(sender, tbl)
+	local raid = private.mine
+	if not raid or type(tbl) ~= "table" or tbl.r ~= raid.id or type(sender) ~= "string" then
+		return
+	end
+	if raid.exclusive and not private.MayJoin(sender, true) then
+		return
+	end
+	local last = private.answered[sender]
+	if last and GetTime() - last < WHO_SECONDS then
+		return
+	end
+	private.answered[sender] = GetTime()
+	local going, interested = Raids:SignUps(raid)
+	local room, more = ROSTER_ROOM, 0
+	local function Fit(names)
+		local out = {}
+		for _, name in ipairs(names) do
+			if #name + 1 <= room then
+				tinsert(out, name)
+				room = room - #name - 1
+			else
+				more = more + 1
+			end
+		end
+		return table.concat(out, ",")
+	end
+	Sync:SendRaidRoster(sender, { r = raid.id, g = Fit(going), i = Fit(interested), m = more > 0 and more or nil })
+end
+
+---A leader's answer to who's going: kept for their raid, from them only.
+---@param sender string
+---@param tbl table { r, g, i, m }
+function Raids:OnRoster(sender, tbl)
+	local entry = type(tbl) == "table" and type(tbl.r) == "string" and private.seen[tbl.r]
+	if not entry or entry.raid.leader ~= sender then
+		return
+	end
+	local function Names(text)
+		local out = {}
+		for name in gmatch(type(text) == "string" and text or "", "[^,|]+") do
+			if #out < 40 then
+				tinsert(out, strsub(name, 1, 60))
+			end
+		end
+		return out
+	end
+	local roster = private.rosters[tbl.r] or {}
+	roster.going, roster.interested = Names(tbl.g), Names(tbl.i)
+	roster.more = max(0, min(99, floor(tonumber(tbl.m) or 0)))
+	roster.at = GetTime()
+	private.rosters[tbl.r] = roster
+	private.Changed()
+	if private.onRoster then
+		private.onRoster(tbl.r)
+	end
+end
+
+---Who's going to another player's raid, as its leader last said ({ going, interested, more }), or nil before they
+---have; looking asks them again, at most every ROSTER_SECONDS.
+---@param id string
+---@return table?
+function Raids:Roster(id)
+	local entry = private.seen[id]
+	if not entry then
+		return nil
+	end
+	local roster = private.rosters[id] or {}
+	private.rosters[id] = roster
+	if not roster.asked or GetTime() - roster.asked >= ROSTER_SECONDS then
+		roster.asked = GetTime()
+		Sync:SendRaidWho(entry.raid.leader, id)
+	end
+	return roster.at and roster or nil
+end
+
+---Calls func(raid id) when a leader's answer comes in (the Raids page, to redraw a tooltip).
+---@param func function
+function Raids:OnRosterUpdate(func)
+	private.onRoster = func
 end
 
 ---Whether the planned raid we lead can be formed now: from SOON_SECONDS before it starts.

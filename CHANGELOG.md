@@ -25,6 +25,8 @@
   invite everyone signed up.
 - Raid times: type the start in your own time or server time. Everyone sees it in their own time, with the server's
   beside it ("Thu 20:00 EDT (server 23:00)"), and Announce and whispers give it in server time, which every reader shares.
+- See who's going: hover a raid on the Raids page for everyone going and interested (your Wanted asks its leader's),
+  or hover your own raid's sign-ups.
 - The Raids page explains how it works in seven numbered steps.
 
 ## [1.18.0] - 2026-10-07

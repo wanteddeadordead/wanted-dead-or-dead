@@ -864,6 +864,11 @@ function private.Insert(record, live, fromApp)
 	end
 	if existing then
 		if same and not existing.test then
+			if (live or fromApp) and record.prev2 and existing.prev2 ~= record.prev2 then
+				-- The origin's own strong link replaces whatever a relayed copy carried
+				existing.prev2 = record.prev2
+				private.strong[existing] = nil
+			end
 			if live then
 				existing.live = true
 			end
@@ -954,9 +959,11 @@ function private.Insert(record, live, fromApp)
 	return true
 end
 
----Whether two copies of a record say the same thing: kind, id, prev, time, data and strong link.
+---Whether two copies of a record say the same thing: kind, id, prev, time and data. The strong link (prev2) isn't part
+---of it: the app or the server may carry a record without it, and a relayed copy's could be made up (Insert takes the
+---origin's own).
 function private.SameContent(a, b)
-	return a.hash == b.hash and a.prev2 == b.prev2 and type(a.data) == "table" and Canonical(a) == Canonical(b)
+	return a.hash == b.hash and type(a.data) == "table" and Canonical(a) == Canonical(b)
 end
 
 ---Takes a relayed record out of the way of its origin's own copy: the chain steps back to before it, so the real

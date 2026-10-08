@@ -8327,6 +8327,20 @@ end)()
 	S:MergeRelayed(Forge(Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100), dispute.hash))
 	S:MergeRelayed(dispute, true)
 	check(S:Get(dispute.id).data.disputed and S:Get(dispute.id).app and B:GetClaimLevel(claim) == 0, "the app's real record replaces a forgery with the same Adler-32")
+	-- The app (or the server) may carry a record without its strong link: it's still the same record, and keeps the link
+	t0, bounty, claim = Setup()
+	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
+	S:MergeRelayed(confirm)
+	local stripped = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100)
+	S:MergeRelayed(stripped, true)
+	check(S:Get(confirm.id).app and S:Get(confirm.id).prev2 == confirm.prev2, "a copy without the strong link is the same record, and the link stays")
+	-- A relayed copy with a made-up strong link takes the origin's own link when that arrives
+	t0, bounty, claim = Setup()
+	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
+	local badLink = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, "0123456789abcdef")
+	S:MergeRelayed(badLink)
+	S:Merge(confirm, "Alice Strong")
+	check(S:Get(confirm.id).live and S:Get(confirm.id).prev2 == confirm.prev2, "the origin's strong link replaces a made-up one")
 	-- What it costs: the strong hash is worked out once per record and kept
 	local records = {}
 	for i = 1, 200 do

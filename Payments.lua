@@ -106,20 +106,13 @@ function private.SubjectClaim(subject)
 	return claimId ~= "" and claimId or nil
 end
 
----Whether a claim is the one its bounty is paid to and not paid yet: witnessed or confirmed, and the poster's
----confirmed claim or the earliest kill.
+---Whether a claim is the one its bounty is paid to and not paid yet: witnessed or confirmed, and the bounty's claim
+---(Bounties:GetWinningClaim: the poster's paid or confirmed claim, else the earliest witnessed kill).
 ---@param claim table
 ---@return boolean
 function private.Payable(claim)
-	if Payments:GetForClaim(claim.id) then
+	if Payments:GetForClaim(claim.id) or Bounties:GetClaimLevel(claim) < 2 then
 		return false
-	end
-	local level = Bounties:GetClaimLevel(claim)
-	if level < 2 then
-		return false
-	end
-	if level == 3 then
-		return true
 	end
 	local bounty = Store:Get(claim.data.bounty)
 	local winner = bounty and Bounties:GetWinningClaim(bounty)
@@ -154,22 +147,8 @@ end
 ---@param claim table
 ---@return boolean
 function Payments:IsUnpaid(claim)
-	if Payments:GetForClaim(claim.id) then
-		return false
-	end
-	local level = Bounties:GetClaimLevel(claim)
-	if level < 2 then
-		return false
-	end
-	-- Only the claim the bounty goes to can be owed: one the poster confirmed, or the earliest kill
-	if level ~= 3 then
-		local bounty = Store:Get(claim.data.bounty)
-		local winner = bounty and Bounties:GetWinningClaim(bounty)
-		if not winner or winner.id ~= claim.id then
-			return false
-		end
-	end
-	return GetServerTime() - claim.t > UNPAID_AFTER_SECONDS
+	-- Only the claim the bounty goes to can be owed (Payable), so a bounty is never owed twice
+	return private.Payable(claim) and GetServerTime() - claim.t > UNPAID_AFTER_SECONDS
 end
 
 

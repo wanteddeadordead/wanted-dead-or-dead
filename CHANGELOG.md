@@ -53,6 +53,9 @@
 - When a poster both confirms and disputes a claim, their latest decision stands on every client.
 - A claim is owed the bounty as it stood at the kill: a raise made after the kill doesn't add to what the hunter is
   owed (Pay fills in that amount).
+- A bounty is only ever owed once: once the poster confirms or pays a claim, no other claim on that bounty is owed.
+  A claim nobody witnessed no longer beats a witnessed one with a later kill, and a kill from before the bounty was
+  posted (or after it ended) wins nothing.
 
 ## [1.18.3] - 2026-10-08
 

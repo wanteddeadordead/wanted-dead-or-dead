@@ -210,7 +210,11 @@ Both are new keys with defaults, so no migration.
 missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for. The first time a release for
 the live game loads beta data, it keeps `settings` (and `welcomed`) and drops everything else: records,
 bounties, players, Kill on Sight, Ignore, chains, sightings and the rest belong to beta characters that no
-longer exist. The website and network are reset at the same time. Live data is never dropped this way.
+longer exist. Live data is never dropped this way. The network keeps the beta's records (the beta season stays
+browsable on the website), so in the live world every record chain counts from 1,000,000 (`Store:SeqBase()`):
+a character's first live record is `Name:1000001`, never the id of one of its beta records, which the server
+would refuse as a conflict when a player keeps their beta name. Other players' chains start at the same base, so
+their first live record follows on with nothing to ask for.
 
 `bounty` records (from 0.1.0-beta.8) can also carry the poster's notes on the target: `class`, `race`,
 `faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target

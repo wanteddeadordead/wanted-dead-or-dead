@@ -27,6 +27,8 @@ Wanted.DB_VERSION = 2
 -- Which game world the saved data belongs to. The first time a release for the live game loads beta data,
 -- it keeps the settings and drops the rest (docs/DATA.md). The launch release sets this to "live".
 Wanted.WORLD = "beta"
+-- WoW Forever's launch (2026-11-04 15:00 PST): the live world's data starts then
+Wanted.LAUNCH_AT = 1793833200
 
 local DEFAULTS = {
 	version = Wanted.DB_VERSION,

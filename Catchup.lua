@@ -120,6 +120,12 @@ function Catchup:Import()
 		Wanted:Log("Catch-up: already taken in")
 		return
 	end
+	-- In the live world, one the app wrote before launch holds the beta's records and notices: none of them come in
+	if Wanted.WORLD == "live" and entry.t < Wanted.LAUNCH_AT then
+		Wanted:Log("Catch-up: written before launch, so its records and notices are the beta's; left out")
+		Wanted.db.catchupT = entry.t
+		return
+	end
 	local records = type(entry.records) == "table" and entry.records or {}
 	local notices = type(entry.notices) == "table" and entry.notices or {}
 	local counts = { new = 0, held = 0, skipped = 0, pruned = 0 }

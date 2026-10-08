@@ -1436,7 +1436,7 @@ function private.GetHaveTable()
 	local cutoff = GetServerTime() - HAVE_ACTIVE_SECONDS
 	local active = {}
 	for origin, chain in pairs(Wanted.db.chains) do
-		if chain.seq > 0 and (origin == own or Store:GetLastActive(origin) >= cutoff) then
+		if chain.seq > Store:SeqBase() and (origin == own or Store:GetLastActive(origin) >= cutoff) then
 			tinsert(active, origin)
 		end
 	end
@@ -1662,14 +1662,14 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 			private.Drop("busy in combat", 1)
 			return
 		end
-		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink) end)
+		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink, channel) end)
 		return
 	end
-	private.Process(tag, payload, sender, viaLink)
+	private.Process(tag, payload, sender, viaLink, channel)
 end
 
 ---Decodes and handles one whole message.
-function private.Process(tag, payload, sender, viaLink)
+function private.Process(tag, payload, sender, viaLink, channel)
 	local tbl = Decode(payload)
 	if type(tbl) ~= "table" then
 		private.stats.invalid = private.stats.invalid + 1
@@ -1677,7 +1677,7 @@ function private.Process(tag, payload, sender, viaLink)
 		return
 	end
 	Wanted:Log("Sync: handling %s from %s%s", tag, sender, viaLink and " (realm link)" or "")
-	private.HandleMessage(tag, tbl, sender, viaLink)
+	private.HandleMessage(tag, tbl, sender, viaLink, channel)
 end
 
 ---Tells a player on an older version, privately and at most every few minutes, to update.
@@ -1694,7 +1694,8 @@ function private.TellOutdated(sender)
 	Wanted:Log("Sync: told %s to update", tostring(sender))
 end
 
-function private.HandleMessage(tag, tbl, sender, viaLink)
+---channel is how it came: "CHANNEL", "GUILD" or "WHISPER" (a realm link).
+function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	-- The newest release wins: a newer one may lock this client (Core); an older one's news is ignored. A
 	-- development build is not a release, so it neither locks others nor turns them away.
 	Wanted:NoteVersion(tbl.v)
@@ -1714,11 +1715,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink)
 		return
 	end
 	if tag == TAG_RAID then
-		if Wanted.Raids then
-			Wanted.Raids:OnAd(tbl, sender, channel)
-		end
-		-- One from a realm link goes on our channel once, so players on this realm name see it too
-		if viaLink and tbl.fw == nil and not tbl.x and private.channelId then
+		local taken = Wanted.Raids and Wanted.Raids:OnAd(tbl, sender, channel)
+		-- One a realm link sent of its own raid goes on our channel once, so players on this realm name see it too:
+		-- never one from a stranger, one already shared on, or one the raids didn't take
+		if taken and viaLink and private.links[sender] and tbl.fw == nil and not tbl.x and private.channelId then
 			tbl.fw = 1
 			private.Send(TAG_RAID, tbl)
 		end

@@ -94,6 +94,8 @@
 - A request for records is answered for a few chains at a time, and only for chains you hold, so one player can't
   make everyone resend everything they have.
 - Half-received sync messages are let go after 30 seconds, and one player can only have a few open at once.
+- In a fight, one player flooding the sync channel can no longer push out everyone else's news waiting for the fight
+  to end.
 
 ## [1.18.2] - 2026-10-08
 

@@ -8071,6 +8071,27 @@ end)()
 	Part("ok", 2, 2, payload:sub(half + 1))
 	check(ns.Store:GetPlayer("Player-9-PARTS") ~= nil, "once they're let go, a whole message comes through")
 end)()
+-- Messages held back by a fight: one player flooding can't use up the room everyone else's need
+;(function()
+	local channel = ns.Sync:GetPointer().n
+	RunTimers()
+	RunFrames()
+	Fire("PLAYER_REGEN_DISABLED")
+	check(ns:InCombat(), "a fight starts")
+	for _ = 1, 6 do
+		clock = clock + 61
+		for _ = 1, 55 do
+			Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { r = {} }), "CHANNEL", "Fight Flooder", nil, nil, nil, channel)
+		end
+	end
+	local quiet = Sealed({ kind = "pass", id = "Quiet Fighter:1", origin = "Quiet Fighter", seq = 1, prev = "0", t = clock, data = { bounty = "q" } })
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { r = { quiet } }), "CHANNEL", "Quiet Fighter", nil, nil, nil, channel)
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	RunFrames()
+	check(ns.Store:Get("Quiet Fighter:1") ~= nil, "another player's record held back in the fight is still taken in after it")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

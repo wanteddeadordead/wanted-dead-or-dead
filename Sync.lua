@@ -23,7 +23,7 @@ local private = {
 	channelId = nil,
 	joinAttempts = 0,
 	msgCounter = 0,
-	partial = {}, -- sender..msgId -> { parts = {}, total, t }
+	partial = {}, -- sender..msgId -> { sender, parts = {}, total, count, t }
 	outbox = {}, -- channel messages waiting to go: { tag, parts, next, priority, queued, refusals }
 	outboxParts = 0, -- parts still to send in outbox
 	tokens = 0, -- channel parts we may send now (refilled with time; starts full, below)
@@ -88,6 +88,7 @@ local CHANNEL_NAME_MAX = 31
 local MAX_MESSAGE_LEN = 255
 local CHUNK_LEN = 240
 local PARTIAL_TIMEOUT = 30
+local MAX_PARTIALS_PER_SENDER = 4
 -- Tags
 local TAG_HELLO, TAG_HAVE, TAG_NEED, TAG_LIVE, TAG_FILL = "H", "V", "N", "R", "F"
 -- Enemy sightings are passing news, not records: never stored in a chain, never re-sent. They go out in
@@ -1637,7 +1638,12 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		local key = sender..":"..msgId
 		local partial = private.partial[key]
 		if not partial or now - partial.t > PARTIAL_TIMEOUT then
-			partial = { parts = {}, total = total, t = now, count = 0 }
+			-- One player holds only a few messages open at once (ours interleave two at most)
+			if private.OpenPartials(sender, now) >= MAX_PARTIALS_PER_SENDER then
+				private.Drop("too many open messages", 1)
+				return
+			end
+			partial = { sender = sender, parts = {}, total = total, t = now, count = 0 }
 			private.partial[key] = partial
 		elseif partial.total ~= total then
 			-- Parts of one message all carry its total; a mismatch is a crafted or garbled message
@@ -1666,6 +1672,19 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		return
 	end
 	private.Process(tag, payload, sender, viaLink, channel)
+end
+
+---How many messages a sender has part sent, letting go of every message whose parts stopped coming.
+function private.OpenPartials(sender, now)
+	local open = 0
+	for key, partial in pairs(private.partial) do
+		if now - partial.t > PARTIAL_TIMEOUT then
+			private.partial[key] = nil
+		elseif partial.sender == sender then
+			open = open + 1
+		end
+	end
+	return open
 end
 
 ---Decodes and handles one whole message.

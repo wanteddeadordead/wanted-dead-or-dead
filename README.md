@@ -6,83 +6,72 @@
 > Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type `/wanted bug`)
 > and [open a report](https://github.com/wanteddeadordead/wanted-dead-or-dead/issues/new/choose).
 
-**The world PvP war on WoW Forever, as it's fought.** Which side holds each zone this week, the battles
-going on right now, who won the last one, and the price on every ganker's head. Counted from deaths other
-players saw.
+**The world PvP addon for WoW Forever.** See who's around and who's on you, find out who killed you, put a price
+on a ganker's head, and rally your faction for a raid on Southshore. Every fight goes on the record at
+[wanteddeadordead.com](https://wanteddeadordead.com).
 
-Every copy of the addon records the world PvP it sees and shares it with the others on your faction. The
-free desktop app sends it to [wanteddeadordead.com](https://wanteddeadordead.com), where the whole server's
-fighting becomes a war you can follow. In game, the addon runs the bounty board and keeps you aware of who
-is around and who is on you.
+The addon works on its own. The optional desktop app puts your fights on the website and brings back
+challenges, achievements and calling cards.
 
-## The war, on wanteddeadordead.com
+## Know who's around
 
-- **Battle reports** for every fight: who died, who killed, the top killers, healers and damage, the
-  guilds, the biggest moments, and a written report of how it went. Every name links to that player's or
-  guild's page.
-- **The front line.** In contested zones like Hillsbrad, the site tracks where the fighting is between the
-  two bases every five minutes and draws it as a tug of war.
-- **Rounds and victories.** Hold the enemy at their doorstep for 20 minutes and your side wins a round; the
-  side with more rounds wins the battle. Fights are sized as skirmishes, battles and major battles.
-- **Front-page news.** The week's major battle leads the home page, with the latest victories under it and a
-  live ticker of the fighting going on now.
-- **The war this week.** Which side holds each zone, with heat maps of where players die.
-- **Leaderboards** for killing blows, streaks and multi-kills, healers, damage, guilds and Notoriety, a
-  season rank from Greenhorn to Legend.
-- **Only what someone else saw counts.** A kill ranks once another player's records back it up, so nobody
-  can pad their numbers from one computer.
-
-The addon works on its own. The app is optional: it puts your fights on the site and fills in the war.
-
-## In game
-
-**Bounty board**
-- Post a bounty on an enemy player, or on **a whole guild** (the first kill of any one member claims it). One per target; posting again adds
-  to it.
-- Bounty hunters mark a bounty they're chasing, for a day at a time (renew to keep going). While anyone is
-  hunting it, the poster can't pull it.
-- Sort the board by amount, newest, name, the zone a target was last seen in, or who was seen most recently.
-- **The file on every target:** click a bounty for where they were last seen, the zones they keep to, the
-  hours they're usually about, every sighting by you and other Wanted users, and their deaths. Sightings of
-  wanted players are kept for a month.
-- Kill the target and the claim files itself from your honorable kill. Another player's client that saw
-  the death **witnesses** it. The earliest kill wins.
-- The poster confirms or disputes, then pays by mail in one click. Both sides' clients record the
-  payment, so paid and unpaid are facts, not claims.
-- **Kill proof:** when your kill claims a bounty, a stamp with who, where, when and the kill id goes on
-  screen and the game saves a screenshot. Posters see you have proof; if a kill is disputed, post it in
-  [#pvp-salt on the Forever PvP Discord](https://discord.com/invite/wow-forever-pvp).
-
-**Your wanted poster**
-- **The price on your head:** every bounty the other faction has ever posted on you, paid or not, adds up.
-  You get an alert when someone puts a price on you.
-- Open **Your wanted poster** from the menu (or `/wanted poster`): your own character on a painted poster
-  with your name and that total. **Take screenshot** saves it to share anywhere.
-- **Set amount** shows any reward you like, just for fun. The poster marks it "(allegedly)".
-
-**Reputation from the record**
-- Bounty hunters get a level and a reliability rating from witnessed and confirmed kills.
-- Posters are known by what they posted and paid. Unpaid bounties show on their record.
-- Leaderboards for bounty hunters, posters and guilds (kills, deaths, bounty gold on them).
-
-**Enemy awareness**
-- A small **Nearby** window: who's around, who's acting, who's out of sight, with class icons, guilds,
-  levels, health and bounty gold. Click to target, right-click for options.
-- **Last hour**, **Kill on Sight** (with reasons) and **Ignore** lists.
-- Alerts and beeps for new enemies, louder for Kill on Sight and bounty targets, a **stealth alarm** when
-  the enemy you have targeted vanishes into Stealth, Prowl, Invisibility or Shadowmeld, and a
-  **TARGETED** warning that stays up while enemies have you targeted and grows to list everyone on you.
-- **Quiet mode** (optional): alerts and the Nearby window stay silent until you're PvP flagged. The Nearby
-  window also hides itself after a few minutes with nobody around.
+- **Nearby window:** every enemy player near you, with class, level, guild, health and any bounty on them.
+  Click to target, right-click for options. **Last hour**, **Kill on Sight** (with reasons) and **Ignore** lists.
+- **TARGETED warning** that stays up while enemies have you targeted, and names them.
+- **Stealth alarm** when the enemy you had targeted vanishes into Stealth, Prowl, Invisibility or Shadowmeld.
+- **Death card:** when a player kills you, a card says who it was, your record against them and the bounty on
+  them. One click puts them on Kill on Sight, posts a bounty or opens their file.
+- **Hotspots:** the zones where the enemy is right now, busiest first, with their levels, the biggest guild there
+  and whether it's getting busier. Recent sightings, yours and other players', on the world map.
+- **Guild Kill on Sight:** a list your guild keeps together, changed only by the ranks your officers allow.
 - **Call for help** tells Local Defense, your party or raid, or your guild where you are in words ("Need help
   west of Razor Hill, Durotar 47,40") and who's on you.
-- **Emote buttons**: your favourite emotes along the bottom of the Nearby window and a **...** button with all
-  46 (taunts, after a kill, losing, mid-fight). They emote at your target and work mid-fight. Pick favourites
-  or turn them off in Settings > Emotes.
-- Wins and losses against every enemy, and a sortable, searchable enemies list.
-- Recent sightings, yours and other players', on the world map.
-- **Hotspots**: the zones where enemy players are right now, busiest first, with their levels, the biggest
-  guild there, PvP deaths and whether it's getting busier. Click a zone to open its map.
+- **Quiet mode** (optional): alerts and the Nearby window stay silent until you're PvP flagged.
+- **Emote buttons** along the bottom of the Nearby window: taunts, after a kill, losing, mid-fight.
+
+## Form world PvP raids
+
+- **Form a raid** now or for later. Every Wanted player on your faction sees it, across realm names, and joins
+  with one click; your addon invites them, making the group a raid before the sixth.
+- **Interested or Going** sign-ups, with who's going on hover, a popup when the raid starts, and **Invite
+  sign-ups** and **Whisper sign-ups** for the leader.
+- **Guild only** raids for your guild first, opened to everyone when you need more.
+- **Announce** it in guild chat or any channel you're in, and anyone who whispers you "inv" is invited.
+- Times in your own time zone and server time, changes and cancellations sent to everyone signed up, and raids
+  on your calendar.
+
+## Put a price on their head
+
+- **Bounties** on an enemy player, or on a whole guild (the first kill of any member claims it). Hunters mark the
+  bounties they're chasing; while anyone is hunting one, the poster can't pull it.
+- **The file on every target:** where they were last seen, the zones and hours they keep to, and every sighting.
+- Kill the target and the claim files itself. Another player's addon that saw the death **witnesses** it. The
+  poster confirms and pays by mail in one click, and both sides record the payment.
+- **Kill proof:** a stamped screenshot when your kill claims a bounty.
+- **Your wanted poster:** every bounty the other faction has put on you, on a poster to screenshot and share
+  (`/wanted poster`).
+- **Reputation from the record:** hunters are rated on confirmed kills, posters on what they paid. Unpaid
+  bounties show.
+
+## Earn your calling card
+
+- **Achievements, weekly medals and badges** for what you do in world PvP, with a popup the moment you earn one.
+- **Your calling card:** a banner built from the backgrounds, borders, plates and emblems you unlock, shown on
+  your player page and on the death card of everyone you kill. Build it in game with `/wanted card`.
+- **Kill streak callouts:** Killing spree, Unstoppable, Double kill and the rest.
+- **Daily and weekly challenges** for both factions, with hot zones where kills count double.
+
+## Every fight on the record
+
+- **Battle reports** for every big fight on [wanteddeadordead.com](https://wanteddeadordead.com): who died, who
+  killed, the top killers, healers and damage, the guilds, and a written report of how it went.
+- **The war this week:** which side holds each zone, the front line in contested zones, and the week's major
+  battle on the front page.
+- **Leaderboards** for killing blows, streaks, healers, damage, guilds and zones.
+- **Confirmed, not claimed:** a kill only counts once another player's records back it up, so nobody can pad
+  their numbers from one computer.
+- **Your nemesis:** who has killed you most, and who you've killed most, with wins and losses against every enemy.
+- **Players' Blizzard PvP ranks** on nameplates, tooltips and your target, for anyone running Wanted.
 
 ## Install
 
@@ -117,8 +106,8 @@ Open it with `/wanted` or the minimap button. Right-click the minimap button for
 - **Trust.** A claim needs the killer's own client; a second client that saw the death makes it witnessed.
   The game stamps who sent each message, so nobody can speak for someone else. Reports weigh by the
   reporter's own record.
-- **Chat only when you click.** The addon never posts in General or Trade. The only chat it sends is when
-  you press "Call for help" or "Tell ..." yourself: to Local Defense, your party or raid, or your guild.
+- **Chat only when you click.** The addon never posts in public chat on its own. It only sends chat when you
+  press a button that says so: Call for help, "Tell ...", or a raid's Announce and Whisper sign-ups.
 
 ## Good to know
 

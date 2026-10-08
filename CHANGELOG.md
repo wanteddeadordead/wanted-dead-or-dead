@@ -61,6 +61,8 @@
   you're typing in.
 - Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
   and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
+- A shared record has to be the one its id names: a player can no longer pass off a record as someone else's, or
+  send a broken one that stopped your sync with an error.
 
 ## [1.18.2] - 2026-10-08
 

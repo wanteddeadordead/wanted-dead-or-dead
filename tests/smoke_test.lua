@@ -1765,7 +1765,7 @@ local function Sent(chatType, target)
 	return out
 end
 local function ClearSent() for i = #addonSent, 1, -1 do addonSent[i] = nil end end
-local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", t = clock, data = { bounty = "far-"..seq } } end
+local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "far-"..seq } } end
 ClearSent()
 clock = clock + 700
 ns.Sync:Greet("Far Friend", "Other Realm")
@@ -1885,7 +1885,7 @@ RunFrames()
 local fills = Sent("WHISPER", "Far Friend")
 check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them back over the next frames")
 ClearSent()
-Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", t = clock, data = {} } } }), "WHISPER", "Stranger")
+Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", hash = "x", t = clock, data = {} } } }), "WHISPER", "Stranger")
 check(ns.Store:Get("Stranger:1") == nil, "records whispered by someone who isn't a link are ignored")
 Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm" }), "WHISPER", "Same Realmer")
 check(ns.Sync:GetLinks()["Same Realmer"] == nil and #Sent("WHISPER", "Same Realmer") == 0, "a whispered hello from our own realm isn't a link (the channel covers them)")
@@ -1994,7 +1994,7 @@ ns.Store:GetPlayer("Player-9-SNAP").lastSeen = snapSeen
 local snapBounty = ns.Bounties:Post("Player-9-SNAP", "Snap Shot", 5000)
 local sd = snapBounty.data
 check(sd.class == "HUNTER" and sd.race == "NightElf" and sd.level == 20 and sd.targetGuild == "Polarity Check" and sd.seenAt == snapSeen and sd.x == 21.8 and sd.mapId == 1434, "a bounty records what the poster knew about the target")
-local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", t = clock, data = {
+local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", hash = "x", t = clock, data = {
 	target = "Player-9-UNKNOWN", targetName = "Never Seen", targetGuild = "Some Guild", amount = 5000, level = 22, zone = "The Barrens",
 	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
 ns.Store:MergeRelayed(farBounty)
@@ -2003,7 +2003,7 @@ check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.guild
 	and learnt.lastSeen == clock - 3600 and learnt.seenBy == "Far Poster", "a client that never saw the target learns them from the bounty, seen by the poster")
 ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
 local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
-ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", t = clock, data = {
+ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", hash = "x", t = clock, data = {
 	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
 local known = ns.Store:GetPlayer("Player-9-KNOWN")
 check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
@@ -2025,15 +2025,15 @@ ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 24, 71, 1434)
 check(SpottedCount("Player-9-SNAP") == 2, "again after five minutes")
 ns.Store:AddSighting("Player-9-NOTWANTED", "Durotar", 50, 50, 1411)
 check(SpottedCount("Player-9-NOTWANTED") == 0, "someone without a bounty isn't shared (sightings stay passing news)")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", t = clock - 7200,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", hash = "x", t = clock - 7200,
 	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } })
 local farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 1 and farTrack[1].zone == "Ashenvale" and farTrack[1].by == "Spotter Far" and farTrack[1].t == clock - 7200, "someone else's sighting lands in the history by them, even before the bounty arrives")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", t = clock - 9000,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", hash = "x", t = clock - 9000,
 	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } })
 farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 2 and farTrack[1].zone == "Ashenvale" and farTrack[2].zone == "Darkshore", "an older sighting arriving later still sorts into place")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", t = clock - 40 * 86400,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", hash = "x", t = clock - 40 * 86400,
 	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } })
 ns.Tracks:PruneSpotted()
 check(ns.Store:Get("Spotter Far:3") == nil and ns.Store:Get("Spotter Far:1") ~= nil, "shared sightings over a month old are pruned")
@@ -2147,7 +2147,7 @@ end)()
 end)()
 -- Records straight from their origin are marked live; relayed ones aren't, whatever flags they arrive with
 local function Rec(origin, seq, extra)
-	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock, data = { bounty = "b"..seq } }
+	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "b"..seq } }
 	for k, v in pairs(extra or {}) do r[k] = v end
 	return r
 end
@@ -2691,7 +2691,7 @@ end)()
 	end
 	check(Has(B:GetClaimWarnings(loyal), "only ever backs up Sly Hunter"), "a witness who only backs one hunter is flagged")
 	-- An established witness who backs up others too: no warnings
-	ns.Store:Merge({ kind = "death", id = "Old Hand:1", origin = "Old Hand", seq = 1, prev = "0", t = clock - 30 * 86400,
+	ns.Store:Merge({ kind = "death", id = "Old Hand:1", origin = "Old Hand", seq = 1, prev = "0", hash = "x", t = clock - 30 * 86400,
 		data = { victim = "Player-9-SOMEONE", zone = "Durotar" } }, "Old Hand")
 	local fair = Claim("Honest Hunter", t0 + 5000)
 	Death("Old Hand", t0 + 5001)
@@ -3158,7 +3158,7 @@ end)()
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then asked = m.tbl.n.Pruner end end
 	check(asked == db.chains.Pruner.seq + 1, "only what's past our chain is asked for, got "..tostring(asked))
 	-- And one a peer sends again (answering someone else) isn't taken back in
-	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", t = old, data = { victim = "Player-9-V" } }
+	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", hash = "x", t = old, data = { victim = "Player-9-V" } }
 	check(select(2, ns.Store:MergeRelayed(back)) == "pruned" and not db.records[gone[2]], "a pruned record sent again isn't stored")
 	-- Players not seen for a month go with it, unless a page still needs them; then the book keeps its cap
 	local savedPlayers, savedStats, savedKos = db.players, db.enemyStats, db.kos
@@ -7668,6 +7668,40 @@ end)()
 	check(ranks[0] and count == 1 and known == false, "only the guild master's rank counts when permissions can't be read")
 	check(said == 1, "said once in the log, got "..said)
 	C_GuildInfo, GuildControlGetNumRanks = realInfo, realRanks
+-- The shared record network: what a record says about who made it is only believed when the game vouches for it
+;(function()
+	local S = ns.Store
+	-- A record as a client makes it, hashed the way the store checks it (id may be given to forge one)
+	local function Signed(kind, origin, seq, prev, data, t, id)
+		local r = { kind = kind, id = id or (origin..":"..tostring(seq)), origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = { r.kind, r.id, tostring(r.prev), tostring(r.t) }
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		r.hash = S:Hash(table.concat(parts, "\n"))
+		return r
+	end
+	S:FreshStart()
+	-- A relayed record must be the one its id names: Mallory can't slip a record in as Carol's first
+	local forged = Signed("pass", "Mallory Bad", 1, "0", { bounty = "x" }, nil, "Carol Real:1")
+	local taken, why = S:MergeRelayed(forged)
+	check(not taken and why == "malformed" and not S:Get("Carol Real:1"), "a record whose id isn't origin:seq is refused: "..tostring(why))
+	taken, why = S:Merge(forged, "Mallory Bad")
+	check(not taken and why == "malformed", "even sent live by the origin it names: "..tostring(why))
+	check(S:Merge(Signed("pass", "Carol Real", 1, "0", { bounty = "x" }), "Carol Real") and S:GetChainSeq("Carol Real") == 1, "Carol's real first record still comes in")
+	-- Malformed records are refused, never a Lua error
+	for _, bad in ipairs({
+		{ kind = "pass", id = "Nil Origin:1", seq = 1, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Str Seq:2", origin = "Str Seq", seq = "2", prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "No Prev:1", origin = "No Prev", seq = 1, t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Half Seq:1.5", origin = "Half Seq", seq = 1.5, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Nested:1", origin = "Nested", seq = 1, prev = "0", t = clock, hash = "x", data = { x = {} } },
+	}) do
+		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
+		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
+	end
+	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

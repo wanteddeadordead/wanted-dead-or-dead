@@ -7472,6 +7472,19 @@ end)()
 	check(W:IsDialogShown() and frame.title._text == "Second", "then the next one shows")
 	frame.confirm:Click()
 	check(answers[1] == "first cancelled" and answers[2] == "second confirmed" and #answers == 2, "each gets its own answer: "..table.concat(answers, ", "))
+	-- The beta welcome waits for a window opening with no dialog up
+	local realBeta, realWelcomed = ns.BETA, ns.db.welcomed
+	ns.BETA, ns.db.welcomed = true, nil
+	origDialog(W, { title = "Busy", text = "x" })
+	ns.Report:MaybeWelcome()
+	RunTimers()
+	check(ns.db.welcomed == nil and frame.title._text == "Busy", "no welcome over another dialog")
+	frame.confirm:Click()
+	ns.Report:MaybeWelcome()
+	RunTimers()
+	check(ns.db.welcomed == ns.VERSION and frame.title._text == "Welcome, bounty hunter", "welcomed the next time")
+	frame.confirm:Click()
+	ns.BETA, ns.db.welcomed = realBeta, realWelcomed
 	lastDialog = nil
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

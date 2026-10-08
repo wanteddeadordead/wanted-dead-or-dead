@@ -149,14 +149,18 @@ end)
 -- Beta welcome
 -- ============================================================================
 
----Shown once per version the first time the main window opens.
+---Shown once per version the first time the main window opens with no other dialog up.
 function Report:MaybeWelcome()
 	local db = Wanted.db
-	if not Wanted.BETA or db.welcomed == Wanted.VERSION then
+	if not Wanted.BETA or db.welcomed == Wanted.VERSION or W:IsDialogShown() then
 		return
 	end
 	db.welcomed = Wanted.VERSION
 	C_Timer.After(0.2, function()
+		if W:IsDialogShown() then
+			db.welcomed = nil -- another came up meanwhile: next time
+			return
+		end
 		W:Dialog({
 			title = "Welcome, bounty hunter",
 			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) puts together the details and shows where to send them.",

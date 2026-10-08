@@ -1792,8 +1792,8 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		-- The sender's copy of a chain starts later than we asked: the earlier records were pruned. Move on to
 		-- where it starts, continuing from the first record's predecessor when it's in this message.
 		if tag == TAG_FILL and type(tbl.p) == "table" then
-			for origin, seq in pairs(tbl.p) do
-				seq = type(origin) == "string" and private.SkipTarget(origin, seq, tbl, sender)
+			for origin, first in pairs(tbl.p) do
+				local seq = type(origin) == "string" and private.SkipTarget(origin, first, tbl, sender)
 				if seq then
 					local prev
 					for _, record in ipairs(tbl.r) do

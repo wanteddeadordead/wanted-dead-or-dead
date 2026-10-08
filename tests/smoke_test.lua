@@ -3239,7 +3239,11 @@ end)()
 	local function Rec(seq, prev, hash)
 		return { kind = "death", id = "Old Timer:"..seq, origin = "Old Timer", seq = seq, prev = prev, t = clock - 60, data = { victim = "Player-9-V" }, hash = hash }
 	end
-	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on
+	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on (two players
+	-- said the chain reaches 51: a skip goes no further than that)
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Old Timer"] = 51 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	ClearSent()
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { p = { ["Old Timer"] = 50 }, r = { Rec(50, "abc", "h50"), Rec(51, "h50", "h51") } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Old Timer") == 51, "the chain moved on past the pruned start, got "..ns.Store:GetChainSeq("Old Timer"))
@@ -3280,8 +3284,12 @@ end)()
 	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
 	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
 	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
+	-- (A skip goes no further than two players said a chain reaches: here their haves said 30)
 	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
 	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { Holey2 = 30 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
 	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
@@ -8122,6 +8130,68 @@ end)()
 	clock = clock + 3600
 	Notices({ { b = "waaaa0001", g = me, n = "Test Player", a = 3000, t = clock - 10 }, { b = "wbbbb0002", g = me, n = "Test Player", a = 4000, t = clock - 10 } })
 	check(ns.Bridge:GetPriceOnMe() == before + 14000, "two bounties in the same second both count: "..(ns.Bridge:GetPriceOnMe() - before))
+end)()
+-- A fill's "pruned before here" (p) and "holes" (g) can't move someone's chain far ahead of their real records: never
+-- past what the origin, or two other players, said it reaches, never our own, and no more than 500 past what we hold
+-- unless the fill carries the record it skips to
+;(function()
+	local S = ns.Store
+	local function Signed(seq, prev, data)
+		return Sealed({ kind = "pass", id = "Alice Chain:"..seq, origin = "Alice Chain", seq = seq, prev = prev, t = clock, data = data or {} })
+	end
+	local channel = ns.Sync:GetPointer().n
+	local function From(sender, tag, tbl)
+		clock = clock + 61 -- clear of the per-sender cap
+		Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channel)
+		RunTimers()
+		RunFrames()
+	end
+	S:FreshStart()
+	local prev = "0"
+	for seq = 1, 3 do
+		local r = Signed(seq, prev, { bounty = "b"..seq })
+		S:Merge(r, "Alice Chain")
+		prev = r.hash
+	end
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 3, "a skip past anything anyone said the chain reaches doesn't move it: "..S:GetChainSeq("Alice Chain"))
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 2.5 }, r = {}, g = { ["Alice Chain"] = { 3, 1e9, "x", 7 } } })
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 1 / 0 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1 / 0 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 3, "nor do odd numbers, endless ones or holes past what anyone said")
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 300 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 301 }, r = { Signed(301, "x") } })
+	check(S:GetChainSeq("Alice Chain") == 3, "one player's word moves no chain, nor a record the fill carries: "..S:GetChainSeq("Alice Chain"))
+	-- Two players far ahead: one skip goes no more than 500 past what we hold, and skips don't add up
+	local big = 2 ^ 31 - 2
+	From("Alt One", "V", { c = { ["Alice Chain"] = big } })
+	From("Alt Two", "V", { c = { ["Alice Chain"] = big } })
+	From("Alt One", "F", { r = {}, p = { ["Alice Chain"] = big } })
+	local once = S:GetChainSeq("Alice Chain")
+	From("Alt Two", "F", { r = {}, p = { ["Alice Chain"] = big } })
+	check(once <= 302 + 500 and S:GetChainSeq("Alice Chain") == once, "two players' word moves a chain at most 500 past what's held, once: "..S:GetChainSeq("Alice Chain"))
+	-- Our own chain is never skipped
+	local me = S:GetOrigin()
+	local mine = S:GetChainSeq(me)
+	From("Alt One", "V", { c = { [me] = mine + 300 } })
+	From("Alt Two", "V", { c = { [me] = mine + 300 } })
+	From("Alt One", "F", { r = {}, p = { [me] = mine + 300 } })
+	check(S:GetChainSeq(me) == mine, "our own chain is never skipped")
+	-- A long honest gap: each fill that carries the record it skips to moves on from where the chain stands, so it
+	-- doesn't stall at 500 past what's held
+	S:FreshStart()
+	local function Bob(seq, p)
+		return Sealed({ kind = "pass", id = "Bob Long:"..seq, origin = "Bob Long", seq = seq, prev = p or "?", t = clock, data = {} })
+	end
+	S:Merge(Bob(1, "0"), "Bob Long")
+	From("Peer One", "V", { c = { ["Bob Long"] = 2000 } })
+	From("Peer Two", "V", { c = { ["Bob Long"] = 2000 } })
+	From("Peer One", "F", { p = { ["Bob Long"] = 450 }, r = { Bob(450) } })
+	check(S:GetChainSeq("Bob Long") == 450, "a fill carrying the record it skips to moves the chain there: "..S:GetChainSeq("Bob Long"))
+	From("Peer One", "F", { p = { ["Bob Long"] = 900 }, r = { Bob(900) } })
+	From("Peer One", "F", { p = { ["Bob Long"] = 1350 }, r = { Bob(1350) } })
+	check(S:GetChainSeq("Bob Long") == 1350, "and on, past 500 from what was held at first: "..S:GetChainSeq("Bob Long"))
+	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

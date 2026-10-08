@@ -1792,8 +1792,9 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		-- The sender's copy of a chain starts later than we asked: the earlier records were pruned. Move on to
 		-- where it starts, continuing from the first record's predecessor when it's in this message.
 		if tag == TAG_FILL and type(tbl.p) == "table" then
-			for origin, seq in pairs(tbl.p) do
-				if type(origin) == "string" and type(seq) == "number" then
+			for origin, first in pairs(tbl.p) do
+				local seq = type(origin) == "string" and private.SkipTarget(origin, first, tbl, sender)
+				if seq then
 					local prev
 					for _, record in ipairs(tbl.r) do
 						if type(record) == "table" and record.origin == origin and record.seq == seq then
@@ -1822,7 +1823,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			end
 		end
 		if tag == TAG_FILL then
-			private.SkipPruned(tbl)
+			private.SkipPruned(tbl, sender)
 		end
 	end
 end
@@ -1834,7 +1835,12 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 	local numNeed = 0
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, seq in pairs(chains) do
-		if type(origin) == "string" and type(seq) == "number" and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
+		if type(origin) == "string" and Store:IsSeq(seq) then
+			private.NoteAdvertised(origin, seq, sender)
+		end
+	end
+	for origin, seq in pairs(chains) do
+		if type(origin) == "string" and Store:IsSeq(seq) and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
 			need[origin] = Store:GetChainSeq(origin) + 1
 			numNeed = numNeed + 1
 			if numNeed >= maxNeed then
@@ -1951,10 +1957,95 @@ function private.SendFill(origin, fromSeq, target)
 	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras)
 end
 
+-- How far players said each origin's chain reaches (hellos and haves), so a fill can't skip a chain past it: the
+-- origin's own word, and the highest seq from each of a few other players. At most this many origins are remembered
+-- before the list starts over, and this many players for each.
+local MAX_ADVERTISED = 5000
+local MAX_ADVERTISERS = 6
+
+---Notes how far a player says an origin's chain reaches.
+function private.NoteAdvertised(origin, seq, sender)
+	local advertised = private.advertised
+	if not advertised or (private.advertisedCount or 0) >= MAX_ADVERTISED then
+		advertised = {}
+		private.advertised, private.advertisedCount = advertised, 0
+	end
+	local entry = advertised[origin]
+	if not entry then
+		entry = { own = 0, by = {}, count = 0 }
+		advertised[origin] = entry
+		private.advertisedCount = private.advertisedCount + 1
+	end
+	if sender == origin then
+		entry.own = max(entry.own, seq)
+		return
+	end
+	if not entry.by[sender] then
+		if entry.count >= MAX_ADVERTISERS then
+			-- Room for this one: the player who said the least goes
+			local lowest
+			for other, said in pairs(entry.by) do
+				if not lowest or said < entry.by[lowest] then
+					lowest = other
+				end
+			end
+			entry.by[lowest], entry.count = nil, entry.count - 1
+		end
+		entry.count = entry.count + 1
+	end
+	entry.by[sender] = max(entry.by[sender] or 0, seq)
+end
+
+---How far an origin's chain reaches by a word that isn't one player's alone: the origin's own, or the highest seq at
+---least two other players said.
+function private.Advertised(origin)
+	local entry = private.advertised and private.advertised[origin]
+	if not entry then
+		return 0
+	end
+	local first, second = 0, 0
+	for _, said in pairs(entry.by) do
+		if said > first then
+			first, second = said, first
+		elseif said > second then
+			second = said
+		end
+	end
+	return max(entry.own, second)
+end
+
+-- How far one skip may take a chain past the records held, unless the fill carries the record it skips to
+local MAX_SKIP = 500
+
+---Where a fill may move an origin's chain to (a skip over records pruned at its sender): a whole seq, never our own
+---chain, and no further than one past what the origin, or two other players, said the chain reaches (Advertised) or
+---what we hold. Nor more than MAX_SKIP past the highest record held, or, when the fill carries a record at the seq it
+---skips to whose hash checks, past where the chain stands (a long pruned stretch is crossed a fill at a time). A false
+---skip would leave the origin's real records looking like a rewritten history. The origin itself may say anything
+---about its own chain.
+---@return number? seq nil when it's no seq at all, or our own chain
+function private.SkipTarget(origin, seq, tbl, sender)
+	if not Store:IsSeq(seq) or origin == Store:GetOrigin() then
+		return nil
+	end
+	seq = floor(seq)
+	if sender == origin then
+		return seq
+	end
+	local base = Store:GetHighestHeld(origin)
+	for _, record in ipairs(type(tbl.r) == "table" and tbl.r or {}) do
+		if type(record) == "table" and record.origin == origin and record.seq == seq and Store:HashChecks(record) then
+			base = max(base, Store:GetChainSeq(origin))
+		end
+	end
+	return min(seq, floor(max(private.Advertised(origin), Store:GetChainSeq(origin))) + 1, base + MAX_SKIP)
+end
+
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what
 ---comes before each: the records between were pruned everywhere it could ask, and would be asked for forever.
 ---@param tbl table the fill
-function private.SkipPruned(tbl)
+---@param sender string who sent it
+function private.SkipPruned(tbl, sender)
 	if type(tbl.g) ~= "table" then
 		return
 	end
@@ -1963,8 +2054,8 @@ function private.SkipPruned(tbl)
 			for i = 1, min(#gaps, 2 * MAX_FILL_PER_REQUEST) - 1, 2 do
 				local from, to = gaps[i], gaps[i + 1]
 				-- Whole numbers only (floor also gives Lua 5.4's integers, as the record ids need)
-				from = type(from) == "number" and from == floor(from) and floor(from) or nil
-				to = type(to) == "number" and to == floor(to) and floor(to) or nil
+				from = Store:IsSeq(from) and floor(from) or nil
+				to = private.SkipTarget(origin, to, tbl, sender)
 				if from and to and Store:GetChainSeq(origin) >= from then
 					local prev
 					for _, record in ipairs(tbl.r) do
@@ -2142,7 +2233,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 			end
 		end
 		if tag == TAG_FILL then
-			private.SkipPruned(tbl)
+			private.SkipPruned(tbl, sender)
 		end
 		private.currentSource = nil
 	end

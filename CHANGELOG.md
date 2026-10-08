@@ -76,6 +76,9 @@
   sender and per player each hour, so nobody can flood your price on your head, and the same bounty carried by old
   and new versions counts once, while two posted in the same second stay two. A notice for more than the game's
   money can hold is kept at 214,748g.
+- One player (or two) can no longer push someone's record chain far ahead of their real records, which then looked
+  forged to everyone: a skip over pruned records goes no further than the player's own sync, or two other players',
+  says the chain reaches, and only a little way at a time.
 
 ## [1.18.3] - 2026-10-08
 

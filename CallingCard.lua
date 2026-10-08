@@ -30,6 +30,9 @@ local EMBLEM = { 0.065, 0.19, 0.21 } -- left, top, width (square)
 local PLATE = { 0.29, 0.47, 0.45 } -- left, top, width (540:200)
 local PLATE_ASPECT = 200 / 540
 local NAME_SIZE = 0.029 -- of the banner's width
+-- The name fits the plate's open centre, this share of its width (the ornaments at its ends take the rest): full size
+-- while it fits, smaller down to ONE_LINE_LEAST on one line, then on two lines at TWO_LINES_MOST or less (as the site)
+local NAME_ROOM, ONE_LINE_LEAST, TWO_LINES_MOST = 0.52, 0.8, 0.8
 local LIGHT_NAME, DARK_NAME = { 0.97, 0.93, 0.82 }, { 0.16, 0.09, 0.05 }
 -- The parts in the order the window lists them, with their titles
 local PARTS = {
@@ -296,6 +299,36 @@ end
 ---A calling-card banner of a width: its parts' textures, the name on the plate and three stats under it.
 ---@param parent Frame
 ---@param width number
+---Draws a name on a banner's plate, fitted to its open centre: full size while it fits, smaller down to ONE_LINE_LEAST
+---on one line, then (a name with a space) on two lines at TWO_LINES_MOST or less. Each line is measured on its own.
+function private.FitName(banner, name)
+	local fs, full, room = banner.name, banner.nameSize, banner.nameRoom
+	local function Widest(size, lines)
+		fs:SetFont(NAME_FONT, size, banner.nameFlags)
+		local widest = 0
+		for _, line in ipairs(lines) do
+			fs:SetText(line)
+			widest = max(widest, fs:GetStringWidth() or 0)
+		end
+		return widest
+	end
+	local function Scale(lines)
+		local widest = Widest(full, lines)
+		return widest > room and room / widest or 1
+	end
+	local first, rest = strmatch(name, "^(%S+)%s+(.+)$")
+	local lines, scale = { name }, Scale({ name })
+	if scale < ONE_LINE_LEAST and first then
+		lines = { first, rest }
+		scale = min(TWO_LINES_MOST, Scale(lines))
+	end
+	-- Whole sizes only, rounded down so it never comes out wider than measured
+	local size = max(6, floor(full * scale))
+	fs:SetFont(NAME_FONT, size, banner.nameFlags)
+	fs:SetWordWrap(#lines > 1)
+	fs:SetText(table.concat(lines, "\n"))
+end
+
 ---@return Frame
 function CallingCard:Banner(parent, width)
 	local height = width * ASPECT
@@ -322,6 +355,7 @@ function CallingCard:Banner(parent, width)
 	banner.name:SetPoint("CENTER", banner.plate)
 	banner.name:SetWidth(plateWidth * 0.72)
 	banner.name:SetWordWrap(false)
+	banner.nameRoom = plateWidth * NAME_ROOM
 	banner.stats = {}
 	local statWidth = (width - 2 * BACKGROUND[1] * width - 8) / 3
 	for i = 1, 3 do
@@ -358,7 +392,7 @@ function CallingCard:Draw(banner, card, name, stats)
 	-- shadow under it, as if engraved; on the rest, light ink outlined in black with a dark shadow
 	local dark = plate and plate.dark
 	local ink = dark and DARK_NAME or LIGHT_NAME
-	banner.name:SetFont(NAME_FONT, banner.nameSize, dark and "" or "OUTLINE")
+	banner.nameFlags = dark and "" or "OUTLINE"
 	banner.name:SetTextColor(ink[1], ink[2], ink[3])
 	if dark then
 		banner.name:SetShadowColor(1, 0.97, 0.9, 0.85)
@@ -367,7 +401,7 @@ function CallingCard:Draw(banner, card, name, stats)
 		banner.name:SetShadowColor(0, 0, 0, 0.8)
 		banner.name:SetShadowOffset(1, -2)
 	end
-	banner.name:SetText(name or "")
+	private.FitName(banner, name or "")
 	for i, box in ipairs(banner.stats) do
 		local s = stats and stats[i]
 		box.label:SetText(s and strupper(s[1]) or "")

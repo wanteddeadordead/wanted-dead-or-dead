@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
+  and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
+
 ## [1.18.2] - 2026-10-08
 
 - New things show as a blue count on the menu until you open the page that shows them: raids on Raids, other players'

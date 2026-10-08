@@ -6563,7 +6563,22 @@ end)()
 	-- The page builds and lists them
 	R:OnAd(ad({ id = "page" }), "Lead Er-Realm")
 	R:OnAd(ad({ id = "page2", t = "Planned push", s = clock + 3600 }), "Lead Er-Realm")
+	-- New raids show as a count on the Raids menu entry until the Raids page is opened
+	ns.UI:Show("home")
+	local unseenBefore = R:Unseen()
+	local raidsEntry
+	for _, item in ipairs(ns.UI:Menu()) do if item.key == "raids" then raidsEntry = item end end
+	check(unseenBefore >= 2 and raidsEntry and raidsEntry.badge == unseenBefore, "new raids counted on the menu: "..unseenBefore.." "..tostring(raidsEntry and raidsEntry.badge))
 	ns.UI:Show("raids")
+	check(R:Unseen() == 0, "opening the Raids page clears it")
+	R:OnAd(ad({ id = "page3", t = "Late one", s = clock + 7200 }), "Lead Er-Realm")
+	check(R:Unseen() == 0, "a raid that comes in with the page open is seen")
+	R:OnAd(ad({ id = "page3", c = 1 }), "Lead Er-Realm")
+	ns.UI:GetFrame():Hide()
+	R:OnAd(ad({ id = "page4", t = "While away", s = clock + 7200 }), "Lead Er-Realm")
+	check(R:Unseen() == 1, "with the window closed, a new raid stays new, even with Raids the last page")
+	ns.UI:Show("raids")
+	R:OnAd(ad({ id = "page4", c = 1 }), "Lead Er-Realm")
 	local function shows(text)
 		for _, f in ipairs(Mock.fontStrings) do
 			if type(f._text) == "string" and f._text:find(text, 1, true) then

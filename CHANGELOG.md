@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Raids menu entry counts raids you haven't looked at yet, until you open the Raids page.
+
 ## [1.18.1] - 2026-10-08
 
 - Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover

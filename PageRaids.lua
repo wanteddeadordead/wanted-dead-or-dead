@@ -170,6 +170,11 @@ function private.Refresh()
 	if not private.list then
 		return
 	end
+	-- Shown here (with the window open, not just the last page): no longer new, so the menu's count goes
+	if UI:IsShown() and Raids:MarkSeen() then
+		UI:Refresh(true)
+		return
+	end
 	private.RefreshCard()
 	private.list:SetItems(Raids:List(), "No raids forming right now.",
 		"Raids other Wanted players of your faction form show here. Form one above, and everyone with Wanted sees it.")
@@ -436,6 +441,11 @@ UI:RegisterPage("raids", {
 	title = "Raids",
 	subtitle = "Form a world PvP raid, or join one: everyone with Wanted on your faction sees it, and the leader invites you.",
 	order = 3,
+	-- Raids not looked at yet
+	badge = function()
+		local unseen = Raids:Unseen()
+		return unseen > 0 and unseen or nil, C.blue
+	end,
 	build = function(container, width, height)
 		private.form = private.BuildForm(container, width)
 		private.lead = private.BuildLead(container, width)

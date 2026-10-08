@@ -7836,6 +7836,27 @@ end)()
 	check(S:Merge(four, "Alice Chain") and S:GetChainSeq("Alice Chain") == 4 and not S:Get(four.id).brokenChain, "her next real record undoes the skip: "..S:GetChainSeq("Alice Chain"))
 	S:FreshStart()
 end)()
+-- A channel pointer by whisper can only be one step past the newest one we've had (the server moves one epoch at a
+-- time), so nobody can park players on a made-up channel the server can never outbid; the app's pointer always wins
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) end
+	RunTimers()
+	local e = ns.Sync:GetPointer().e
+	Move("Peer One", { e = 99999, n = "WantedNetHordehijack", a = 1, h = 1 })
+	RunTimers()
+	check(ns.Sync:GetPointer().e == e and ns.Sync:GetPointer().n ~= "WantedNetHordehijack", "a whispered pointer far ahead isn't followed")
+	Move("Peer One", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
+	RunTimers()
+	check(ns.Sync:GetPointer().e == e + 1 and ns.Sync:GetPointer().n == "WantedNetHordenext", "one step ahead is")
+	-- The app's pointer overrides whatever a whisper brought, even at a lower epoch
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "the app's pointer wins over a whispered one")
+	-- But never an older one than the app itself gave before
+	ns.Sync:AdoptFromApp({ e = e - 1, n = "WantedNetHordestale" })
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal", "an app pointer older than the app's last is ignored")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -2475,15 +2475,19 @@ function private.ValidPointer(p)
 end
 
 ---Moves to the server's channel (or back to the main one): leaves the old one, joins the new, and tells the players
----we know unless the pointer has already gone as far by whisper as it may. Followed when its epoch is newer than ours;
----from our own app, also at the same epoch with another name (the server's word).
+---we know unless the pointer has already gone as far by whisper as it may. By whisper, followed when its epoch is
+---newer than ours; from our own app, whenever it's another channel (the server's word).
 ---@param pointer table { e, n }
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
 function private.Adopt(pointer, why, hop)
-	if not private.ValidPointer(pointer) or pointer.e < private.epoch
-		or (pointer.e == private.epoch and (hop > 0 or pointer.n == private.channelName)) then
+	if not private.ValidPointer(pointer) or (pointer.e == private.epoch and pointer.n == private.channelName) then
+		return false
+	end
+	-- By whisper only a newer one; from our own app any other (AdoptFromApp keeps it from going back in time): the
+	-- app's word replaces whatever a whisper brought
+	if hop > 0 and pointer.e <= private.epoch then
 		return false
 	end
 	local old = private.channelName
@@ -2681,6 +2685,13 @@ function private.OnMove(tbl, sender)
 	if tbl.e <= private.epoch then
 		return
 	end
+	-- At most one step past the newest pointer we've had, ours or our app's: the server moves one epoch at a time, and
+	-- a made-up pointer far ahead (99999) could never be outbid by the server's real one
+	local ceiling = max(private.epoch, Wanted.db.appChannelEpoch or 0) + 1
+	if tbl.e > ceiling then
+		Wanted:Log("!! Sync: a channel move from %s to epoch %d, past the next one (%d); ignored", tostring(sender), tbl.e, ceiling)
+		return
+	end
 	if not private.KnownPeers()[sender] then
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
 		return
@@ -2690,10 +2701,16 @@ function private.OnMove(tbl, sender)
 	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
 end
 
----The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed when newer than ours.
+---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed unless older than the app's last,
+---whatever a whisper brought meanwhile.
 ---@param pointer table { e, n }
 function Sync:AdoptFromApp(pointer)
-	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so", 0) then
+	-- Never one older than the app gave before (an old catch-up read again)
+	if type(pointer) ~= "table" or not private.ValidPointer(pointer) or pointer.e < (Wanted.db.appChannelEpoch or 0) then
+		return
+	end
+	Wanted.db.appChannelEpoch = pointer.e
+	if private.Adopt(pointer, "the Wanted app says so", 0) then
 		Wanted:Log("Sync: moved to the app's channel %s (%d)", pointer.n, pointer.e)
 	end
 end

@@ -73,6 +73,8 @@
 - One player can no longer push someone's record chain far ahead of their real records (which then looked forged
   to everyone): a skip over pruned records goes no further than anyone's sync says the chain reaches, and the
   player's own next record undoes a false one.
+- A whispered sync channel move can't park players on a made-up channel any more: only the next one after the
+  current channel is followed, and the channel the Wanted app gives always wins.
 
 ## [1.18.2] - 2026-10-08
 

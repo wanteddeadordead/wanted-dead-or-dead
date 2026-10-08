@@ -41,6 +41,9 @@ local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen
 local MASS_REMOVAL = 3
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
 local CAST_BAR_GRACE_SECONDS = 1.5 -- a cast bar that just ended (Hearthstone, a teleport) explains a vanish
+-- Only someone seen acting (casting, or targeting us) this recently is guessed to have stealthed: anyone else going
+-- from view close by more likely logged off, zoned or phased
+local STEALTH_ACTIVE_SECONDS = 30
 local ACTIVE_SECONDS = 10 -- seen acting this recently counts as active
 -- Nameplates only exist while a player is on screen, so turning the camera away or stepping behind a wall
 -- hides someone who is still around: they count as in sight for a while after the last sighting (settings:
@@ -465,13 +468,17 @@ function private.OnPlateRemoved(unit)
 	end)
 end
 
----Raises the stealth alarm for an enemy who vanished close by, named for what they could have used; nothing
----for a class and race without a stealth ability.
+---Raises the stealth alarm for an enemy who vanished close by after being seen acting, named for what their class
+---could have used; nothing for a class without a stealth ability (a night elf's Shadowmeld alone is too weak a sign).
 function private.GuessStealth(entry)
 	local kind = entry.class == "ROGUE" and "Stealth" or entry.class == "DRUID" and "Prowl"
-		or entry.class == "MAGE" and "Invisibility" or entry.raceFile == "NightElf" and "Shadowmeld" or nil
+		or entry.class == "MAGE" and "Invisibility" or nil
 	local now = GetTime()
 	if not kind or (entry.stealthed and now - entry.stealthed < STEALTH_REPEAT_SECONDS) then
+		return
+	end
+	local active = max(entry.lastActive or -math.huge, entry.targetingMe or -math.huge)
+	if now - active > STEALTH_ACTIVE_SECONDS then
 		return
 	end
 	if entry.castBarEndAt and now - entry.castBarEndAt <= CAST_BAR_GRACE_SECONDS then

@@ -44,6 +44,8 @@
   hidden values.
 - A death the game's death recap hasn't caught up with is no longer blamed on whoever had you targeted, and a recap
   from before a /reload no longer counts as the next death's.
+- Fewer false stealth alarms: only a rogue, druid or mage seen fighting in the last half minute counts as stealthed
+  when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
 
 ## [1.18.2] - 2026-10-08
 

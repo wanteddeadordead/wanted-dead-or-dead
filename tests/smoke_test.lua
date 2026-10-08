@@ -667,12 +667,19 @@ check(#stealthEvents == 2, "every nameplate going at once (a loading screen) is 
 Appear("nameplate60", warrior)
 Vanish("nameplate60")
 check(#stealthEvents == 2, "a warrior can't stealth")
+-- Only someone who's been fighting: a mage standing by who goes from view (logged off, zoned, phased) is no alarm
 Appear("nameplate62", mage)
 Vanish("nameplate62")
-check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Invisibility", "a mage close by is Invisibility")
+check(#stealthEvents == 2, "an idle mage gone from view is not stealth")
+Appear("nameplate62", mage)
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate62", "cast", SECRET_SPELL)
+Vanish("nameplate62")
+check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Invisibility", "a mage close by who was casting is Invisibility")
+-- A night elf's race alone (Shadowmeld) is too weak a sign: hunters and warriors go from view for all sorts of reasons
 Appear("nameplate61", elf)
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate61", "cast", SECRET_SPELL)
 Vanish("nameplate61")
-check(#stealthEvents == 4 and stealthEvents[4].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
+check(#stealthEvents == 3, "a night elf hunter is not guessed to Shadowmeld")
 stabUnit.close = nil
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")

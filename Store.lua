@@ -764,16 +764,17 @@ function private.IsFinite(value)
 end
 
 ---Whether a well formed record's numbers are ones a client makes: nothing infinite or not a number, and money whole
----copper the game can hold, which a bounty or a raise always gives. Others add these up and compare them.
+---copper, which a bounty or a raise always gives. Others add these up and compare them.
 function private.HasSoundNumbers(r)
 	for key, value in pairs(r.data) do
 		if (type(value) == "number" and not private.IsFinite(value)) or (NUMBER_FIELDS[key] and type(value) ~= "number") then
 			return false
 		end
 	end
+	-- More than the game's money holds (a client before the cap) is kept: readers count it at MAX_COPPER
 	local amount = r.data.amount
 	if (amount == nil and AMOUNT_REQUIRED[r.kind])
-		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0 or amount > MAX_COPPER)) then
+		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0)) then
 		return false
 	end
 	return true

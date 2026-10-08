@@ -625,7 +625,7 @@ end
 ---@param senderID number? the bridge that sent it; nil for the app's catch-up (the server's word)
 function private.Receive(notice, senderID)
 	if type(notice) ~= "table" or not ValidText(notice.b, 80) or not ValidText(notice.g, 64) or not strmatch(notice.g, "^Player%-")
-		or not ValidText(notice.n, 48) or type(notice.a) ~= "number" or notice.a <= 0 or notice.a > Store.MAX_COPPER
+		or not ValidText(notice.n, 48) or type(notice.a) ~= "number" or notice.a <= 0 or notice.a == math.huge
 		or notice.a ~= notice.a or type(notice.t) ~= "number" or notice.t ~= notice.t or notice.t == math.huge or notice.t == -math.huge
 		or (notice.p ~= nil and not ValidText(notice.p, 16)) then
 		private.stats.skipped = private.stats.skipped + 1
@@ -633,7 +633,8 @@ function private.Receive(notice, senderID)
 		return
 	end
 	private.stats.noticesReceived = private.stats.noticesReceived + 1
-	local amount = floor(notice.a)
+	-- At most what the game's money holds (an older bridge may send more)
+	local amount = min(floor(notice.a), Store.MAX_COPPER)
 	-- Someone on this side may have carried it across already, at this amount or higher (an older bridge sends the
 	-- bounty's own id, a newer one its hash: the same bounty is the same target and posting time either way)
 	for known in Store:Iterator("notice") do

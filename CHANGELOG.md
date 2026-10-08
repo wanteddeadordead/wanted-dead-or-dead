@@ -111,6 +111,8 @@
   your next record follows the ones other players already hold.
 - A bounty payment still counts when you close the mailbox while it's sending, or when taking an item from another
   mail fails meanwhile.
+- A bounty or notice for more than the game's money can hold (posted by an older version) still shows, at 214,748g,
+  instead of disappearing.
 
 ## [1.18.2] - 2026-10-08
 

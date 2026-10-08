@@ -7745,7 +7745,6 @@ end)()
 		{ "bounty", { target = "Player-9-NUM", amount = -5000 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 1 / 0 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 0 / 0 } },
-		{ "bounty", { target = "Player-9-NUM", amount = 2 ^ 40 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 1000.5 } },
 		{ "bounty", { target = "Player-9-NUM" } },
 		{ "raise", { bounty = "Numbers Guy:1" } },
@@ -7759,6 +7758,11 @@ end)()
 		check(ok and not listed and S:GetChainSeq("Numbers Guy") == seq, "a "..case[1].." with a bad number is never read ("..seq..")")
 	end
 	check(S:MergeRelayed(Signed("bounty", "Numbers Guy", 20, "0", { target = "Player-9-NUM", amount = 5000 })), "a sound bounty still comes in")
+	-- One past what the game's money holds (from a client before the cap) is kept, and counted at the most it can be
+	S:MergeRelayed(Signed("bounty", "Numbers Guy", 21, "0", { target = "Player-9-NUMBIG", amount = 2 ^ 40 }))
+	local big
+	for r in S:Iterator("bounty") do if r.id == "Numbers Guy:21" then big = r end end
+	check(big and ns.Bounties:GetAmount(big) == 2 ^ 31 - 1, "a bounty past what money holds is shown at the most it can be")
 	-- And this client never makes one others would refuse
 	check(ns.Bounties:ParseMoney("300000g") == nil and ns.Bounties:ParseMoney("214748g") == 2147480000, "an amount past what the game holds isn't read")
 	check(ns.Bounties:Post("Player-9-NUM2", "Num Two", 2 ^ 40) == nil and ns.Bounties:PostGuild("Num Guild", nil, 2 ^ 40) == nil, "nor posted")
@@ -8178,8 +8182,10 @@ end)()
 		return n
 	end
 	clock = clock + 3600
-	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 31, t = clock } })
-	check(Count("Player-1-HUGE") == 0, "a notice past what a record holds is refused")
+	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 40, t = clock } })
+	local huge
+	for notice in ns.Store:Iterator("notice") do if notice.data.target == "Player-1-HUGE" then huge = notice end end
+	check(huge and huge.data.amount == 2 ^ 31 - 1, "a notice past what a record holds is kept at the most it can be")
 	local flood = {}
 	for i = 1, 30 do flood[i] = { b = "Far Side:"..(100 + i), g = "Player-1-FLOODED", n = "Flooded", a = 10000, t = clock - i } end
 	Notices(flood)

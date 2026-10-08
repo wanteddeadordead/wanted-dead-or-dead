@@ -76,7 +76,7 @@ function Catchup:Import()
 	private.LookUpUnnamed(entry.unnamed)
 	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over
 	if type(entry.channel) == "table" then
-		Sync:AdoptFromApp(entry.channel)
+		Sync:AdoptFromApp(entry.channel, entry.t)
 	end
 	-- Bounty requests are kept by id, so taking in the same ones again changes nothing
 	private.TakeRequests(entry.requests)

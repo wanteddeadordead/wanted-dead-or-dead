@@ -8222,17 +8222,33 @@ end)()
 	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
 	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = 99999, n = "WantedNetHordemallory", a = 1, h = 1 }) end
 	check(ns.Sync:GetPointer().e == e + 3, "three players saying a pointer far ahead move nobody: "..ns.Sync:GetPointer().e)
-	-- What whispers set never raises the ceiling, this session or the next: it rests on the newest epoch not set by one
-	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = e + 5, n = "WantedNetHordeclimb", a = 1, h = 1 }) end
-	check(ns.Sync:GetPointer().e == e + 3, "a pointer set by whispers doesn't lift the ceiling for the next: "..ns.Sync:GetPointer().e)
-	check(ns.db.trustedEpoch == e, "the newest epoch not set by a whisper is kept: "..tostring(ns.db.trustedEpoch))
-	-- The app's pointer overrides whatever whispers brought, even at a lower epoch
-	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
+	-- Three agreeing lift the ceiling (two never do), so a player without the app keeps up with real moves
+	check(ns.db.trustedEpoch == e + 3, "a pointer three players agreed on lifts the ceiling: "..tostring(ns.db.trustedEpoch))
+	-- A catch-up older than the whisper that moved us (the same one read again at the next login) doesn't pull us back
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock - 3600)
 	RunTimers()
-	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "the app's pointer wins over whispered ones")
+	check(ns.Sync:GetPointer().e == e + 3, "an older catch-up doesn't take us back from where whispers moved us")
+	-- A newer one overrides whatever whispers brought, even at a lower epoch
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock + 10)
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "a newer app pointer wins over whispered ones")
 	ns.Sync:AdoptFromApp({ e = e - 1, n = "WantedNetHordestale" })
 	RunTimers()
 	check(ns.Sync:GetPointer().n == "WantedNetHordereal", "an app pointer older than the app's last is ignored")
+end)()
+-- A player without the app follows real server moves, each whispered by three app players, however many there are
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	for _, p in ipairs({ "App A", "App B", "App C" }) do ns.db.recentPeers[p] = clock end
+	local base = ns.Sync:GetPointer().e + 1
+	ns.Sync:AdoptFromApp({ e = base, n = "WantedNetHordebase" }, clock + 1)
+	RunTimers()
+	ns.db.appChannelEpoch = nil
+	ns.db.trustedEpoch = base
+	for step = 1, 8 do
+		for _, p in ipairs({ "App A", "App B", "App C" }) do Move(p, { e = base + step, n = "WantedNetHordereal"..step, a = 1, h = 1 }) end
+	end
+	check(ns.Sync:GetPointer().e == base + 8, "a player without the app keeps up with eight real moves: "..(ns.Sync:GetPointer().e - base))
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

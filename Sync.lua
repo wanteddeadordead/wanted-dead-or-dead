@@ -2570,7 +2570,8 @@ end
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
-function private.Adopt(pointer, why, hop)
+---@param trusted boolean? three players agreed on it: it lifts the ceiling as the app's word does
+function private.Adopt(pointer, why, hop, trusted)
 	if not private.ValidPointer(pointer) or (pointer.e == private.epoch and pointer.n == private.channelName) then
 		return false
 	end
@@ -2583,7 +2584,7 @@ function private.Adopt(pointer, why, hop)
 	private.channelName, private.epoch, private.hop = pointer.n, pointer.e, hop
 	-- Where it came from is kept (hop 0: our own app): what a whisper set never raises the next whispered pointer's ceiling
 	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime(), hop = hop }
-	if hop == 0 then
+	if hop == 0 or trusted then
 		Wanted.db.trustedEpoch = pointer.e
 	end
 	if old ~= pointer.n then
@@ -2835,15 +2836,26 @@ function private.OnMove(tbl, sender)
 		return
 	end
 	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
-	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
+	-- Three agreeing are as good as the app's word for the ceiling: a player without the app keeps up with real moves
+	-- (two never lift it, or two alts could walk us along)
+	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops, votes >= MOVE_VOTES_AHEAD)
 end
 
 ---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed unless older than the app's last,
----whatever a whisper brought meanwhile.
+---and over one a whisper brought only when it's no older or the catch-up came after that whisper.
 ---@param pointer table { e, n }
-function Sync:AdoptFromApp(pointer)
+---@param at number? when the app wrote the catch-up that carried it
+function Sync:AdoptFromApp(pointer, at)
 	-- Never one older than the app gave before (an old catch-up read again)
 	if type(pointer) ~= "table" or not private.ValidPointer(pointer) or pointer.e < (Wanted.db.appChannelEpoch or 0) then
+		return
+	end
+	-- Back from where whispers moved us only when the catch-up is newer than that move: a catch-up read again at the
+	-- next login, from before the server moved, mustn't pull us back to the old channel
+	local saved = Wanted.db.syncChannel
+	if pointer.e < private.epoch and type(saved) == "table" and (saved.hop or 0) > 0
+		and not (type(at) == "number" and type(saved.t) == "number" and at > saved.t) then
+		Wanted:Log("Sync: the app's channel %s (%d) is older than the whispered move to %s; staying", pointer.n, pointer.e, tostring(private.channelName))
 		return
 	end
 	Wanted.db.appChannelEpoch = pointer.e

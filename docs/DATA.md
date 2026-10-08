@@ -312,9 +312,10 @@ unset or that page is switched off. A new setting: no migration.
   1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored. After 1.18.3 a whispered pointer is followed
   only once two players it knows say the same one, at most one epoch past the newest epoch not set by a whisper, or
   once three say the same one at most three further on. `WantedDB.syncChannel` gains `hop` (0: our own app brought it;
-  1 or more: whispers), `WantedDB.trustedEpoch` keeps the newest epoch not set by a whisper (a pointer saved before
-  `hop` existed counts as one, once), and `WantedDB.appChannelEpoch` the app's last epoch. The app's pointer replaces
-  whatever a whisper brought unless it's older than the app's last. New fields: no migration.
+  1 or more: whispers), `WantedDB.trustedEpoch` keeps the newest epoch not set by a whisper, or set by one three
+  players agreed on (a pointer saved before `hop` existed counts as one, once), and `WantedDB.appChannelEpoch` the
+  app's last epoch. The app's pointer is never older than the app's last, and replaces one a whisper brought only when
+  it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

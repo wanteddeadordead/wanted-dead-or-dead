@@ -39,6 +39,7 @@
   you) may want it on.
 - A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an
   enemy.
+- The targeted sound plays once when several enemies target you at the same moment, not once for each.
 
 ## [1.18.2] - 2026-10-08
 

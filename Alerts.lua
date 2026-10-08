@@ -444,8 +444,11 @@ end
 
 function private.OnTargeting(event, entry)
 	local settings = private.Settings()
-	if event == "newTargeter" and Wanted.Enemies:ShouldAlert() and settings.targetWarn and settings.targetSound and not Alerts:IsMuted() then
-		-- Its own sound, not held back by the spacing of the other alerts
+	if event == "newTargeter" and Wanted.Enemies:ShouldAlert() and settings.targetWarn and settings.targetSound and not Alerts:IsMuted()
+		and GetTime() - (private.targetedSoundAt or -SOUND_GAP) >= SOUND_GAP then
+		-- Its own sound, not held back by the spacing of the other alerts, but spaced itself: several enemies picking
+		-- you at once sound once
+		private.targetedSoundAt = GetTime()
 		Alerts:PlayRaw("targeted")
 	end
 	if event == "newTargeter" or event == "targeted" then

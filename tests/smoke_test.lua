@@ -7222,6 +7222,33 @@ end)()
 	enemyUnits.nameplate7 = nil
 	UnitIsEnemy = realEnemy
 end)()
+-- The targeted sound: several enemies picking you at once sound once, not once each
+;(function()
+	local realPlay, played = ns.Alerts.PlayRaw, 0
+	ns.Alerts.PlayRaw = function(self, kind) if kind == "targeted" then played = played + 1 end end
+	local detect = ns.db.settings.detect
+	local savedExposed = detect.onlyWhenExposed
+	detect.onlyWhenExposed = false
+	clock = clock + 120
+	for i = 1, 3 do
+		enemyUnits["nameplate"..(20 + i)] = { guid = "Player-9-0AA"..i, name = "Picker "..i, class = "ROGUE", level = 20, targetsMe = true }
+		Fire("NAME_PLATE_UNIT_ADDED", "nameplate"..(20 + i))
+		Fire("UNIT_TARGET", "nameplate"..(20 + i))
+	end
+	check(played == 1, "three at once sound once, got "..played)
+	clock = clock + 2
+	enemyUnits.nameplate24 = { guid = "Player-9-0AA4", name = "Picker 4", class = "ROGUE", level = 20, targetsMe = true }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate24")
+	Fire("UNIT_TARGET", "nameplate24")
+	check(played == 2, "a moment later, another sounds, got "..played)
+	for i = 1, 4 do
+		enemyUnits["nameplate"..(20 + i)] = nil
+		Fire("NAME_PLATE_UNIT_REMOVED", "nameplate"..(20 + i))
+	end
+	ns.Enemies:ClearNearby()
+	detect.onlyWhenExposed = savedExposed
+	ns.Alerts.PlayRaw = realPlay
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

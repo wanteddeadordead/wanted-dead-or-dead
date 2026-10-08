@@ -81,6 +81,7 @@
 - Payments are checked: a mail only counts as a bounty payment when it goes from the bounty's poster to the hunter
   with at least the bounty, never cash on delivery, and only for your own claim. A failed send no longer counts the
   next mail you send. A payment sent through another mail addon (TSM) is now recorded when the hunter receives it.
+- When a poster both confirms and disputes a claim, their latest decision stands on every client.
 
 ## [1.18.2] - 2026-10-08
 

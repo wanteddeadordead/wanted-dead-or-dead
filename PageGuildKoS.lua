@@ -50,6 +50,9 @@ function private.Refresh()
 	else
 		private.status:SetText(format("<%s> hasn't switched on Guild Kill on Sight.%s", book.guild, officer and " Switch it on below." or " An officer can switch it on here."))
 	end
+	if not select(2, Wanted.GuildRank:OfficerRanks()) then
+		private.status:SetText(private.status:GetText().." The game won't show your guild's rank permissions here, so only the guild master's changes are taken.")
+	end
 	private.enabled:SetChecked(s.enabled)
 	private.discord:SetChecked(s.discord)
 	private.mode:SetChoice(s.mode)

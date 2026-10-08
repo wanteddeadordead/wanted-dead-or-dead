@@ -7641,6 +7641,24 @@ end)()
 	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
 	ns.db.players["Player-9-0C1"], ns.db.players["Player-9-0C2"] = nil, nil
 end)()
+-- Officer ranks when the game won't show a rank's permissions: only the guild master's rank counts (never every
+-- rank), it's said once in the log, and the Guild Kill on Sight page says so
+;(function()
+	local realInfo, realRanks = C_GuildInfo, GuildControlGetNumRanks
+	local readable = true
+	C_GuildInfo = { GuildControlGetRankFlags = function() if not readable then error("not allowed") end return {} end }
+	GuildControlGetNumRanks = function() return 7 end
+	check(select(2, ns.GuildRank:OfficerRanks()) == true, "permissions read")
+	readable = false
+	local ranks, known = ns.GuildRank:OfficerRanks()
+	ns.GuildRank:OfficerRanks()
+	local count, said = 0, 0
+	for _ in pairs(ranks) do count = count + 1 end
+	for _, line in ipairs(ns:GetLogLines(10)) do if line:find("rank permissions", 1, true) then said = said + 1 end end
+	check(ranks[0] and count == 1 and known == false, "only the guild master's rank counts when permissions can't be read")
+	check(said == 1, "said once in the log, got "..said)
+	C_GuildInfo, GuildControlGetNumRanks = realInfo, realRanks
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

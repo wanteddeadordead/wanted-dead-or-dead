@@ -26,9 +26,11 @@ wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 date = os.date
 time = os.time
--- The game's bit library (32 bits; the game gives signed results, these unsigned: the addon copes with both)
+-- The game's bit library as the Forever client has it (2026-10-08, /run print(bit.bor(0x80000000,1),
+-- bit.rshift(0xFFFFFFFF,28), bit.lshift(0xFFFFFFFF,4)) gave 2147483649 15 4294967280): inputs taken modulo 2^32, results
+-- unsigned 32-bit
 do
-	local function u(x) return math.tointeger(x) & 0xFFFFFFFF end
+	local function u(x) return math.tointeger(x % 4294967296) end
 	bit = {
 		band = function(a, b) return u(a) & u(b) end,
 		bor = function(a, b) return u(a) | u(b) end,
@@ -8236,6 +8238,8 @@ end)()
 -- clients put a SHA-256 of the record before (data.p2) on each record they make
 ;(function()
 	local S, B = ns.Store, ns.Bounties
+	check(bit.bor(0x80000000, 1) == 2147483649 and bit.rshift(0xFFFFFFFF, 28) == 15 and bit.lshift(0xFFFFFFFF, 4) == 4294967280,
+		"the bit library behaves as the game's does")
 	check(S:StrongHash("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of abc: "..S:StrongHash("abc"))
 	check(S:StrongHash("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 of nothing")
 	check(S:StrongHash(string.rep("a", 1000)) == "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3", "SHA-256 over many blocks")

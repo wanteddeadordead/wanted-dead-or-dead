@@ -71,10 +71,8 @@
   from them, brought by the Wanted app, or followed by their own later records. Only the poster can raise a bounty.
   Another player can no longer confirm, take down or raise someone else's bounty, or mark it paid.
 - One player can no longer push someone's record chain far ahead of their real records (which then looked forged
-  to everyone): a skip over pruned records goes no further than anyone's sync says the chain reaches, and the
-  player's own next record undoes a false one.
-- A whispered sync channel move can't park players on a made-up channel any more: only the next one after the
-  current channel is followed, and the channel the Wanted app gives always wins.
+  to everyone): a skip over pruned records goes no further than the player's own sync, or two other players', says
+  the chain reaches, and the player's own next record undoes a false one.
 - One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
   required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
   lifts when you load this version.
@@ -105,8 +103,9 @@
   vouch for an earlier one another player passed on: the old hash could be forged to fit.
 - A hunter's own record of being paid no longer makes their claim the one a bounty goes to; only the poster's record
   of paying does.
-- A whispered sync channel move needs two players saying the same one, and can't be walked along a step at a time;
-  a player who missed a few moves follows once three players agree.
+- A whispered sync channel move can't park players on a made-up channel any more: it needs two players saying the
+  same one and can't be walked along a step at a time, a player who missed a few moves follows once three agree, and
+  the channel the Wanted app gives always wins.
 - Playing the same character from a second PC (or after restoring old saved data) no longer forks your record chain:
   your next record follows the ones other players already hold.
 - A bounty payment still counts when you close the mailbox while it's sending, or when taking an item from another

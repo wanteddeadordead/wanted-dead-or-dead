@@ -924,13 +924,44 @@ function Raids:ParseTime(text, server)
 	return at
 end
 
----A raid's start as shown here: our own time ("Thu 20:00"), and the realm's beside it when it differs
----("Thu 20:00 (server 23:00)").
+---A time zone's short name: as given when it's short ("EDT"), its initials when it's spelled out ("Eastern Daylight
+---Time", as Windows gives it), else its offset from UTC ("UTC-4", "UTC+5:30").
+---@param name string?
+---@param utcOffset number seconds ahead of UTC
+---@return string
+function Raids:ShortZone(name, utcOffset)
+	name = type(name) == "string" and strtrim(name) or ""
+	if name ~= "" and not strfind(name, " ") and #name <= 5 then
+		return name
+	end
+	if strfind(name, " ") then
+		local initials = gsub(name, "(%a)%a*%.?%s*", "%1")
+		if #initials >= 2 and #initials <= 5 then
+			return strupper(initials)
+		end
+	end
+	local minutes = floor(math.abs(utcOffset) / 60 + 0.5)
+	local h, m = floor(minutes / 60), minutes % 60
+	return format("UTC%s%d%s", utcOffset < 0 and "-" or "+", h, m > 0 and format(":%02d", m) or "")
+end
+
+---Our time zone's short name: "EDT".
+---@return string
+function Raids:ZoneName()
+	local now = GetServerTime()
+	local here, utc = date("*t", now), date("!*t", now)
+	utc.isdst = here.isdst
+	local ok, name = pcall(date, "%Z", now)
+	return Raids:ShortZone(ok and name or nil, time(here) - time(utc))
+end
+
+---A raid's start as shown here: our own time with our time zone ("Thu 20:00 EDT"), and the realm's beside it when it
+---differs ("Thu 20:00 EDT (server 23:00)").
 ---@param t number
 ---@return string
 function Raids:When(t)
 	local offset = Raids:ServerOffset()
-	local ours = date("%a %H:%M", t)
+	local ours = date("%a %H:%M", t).." "..Raids:ZoneName()
 	if offset == 0 then
 		return ours
 	end

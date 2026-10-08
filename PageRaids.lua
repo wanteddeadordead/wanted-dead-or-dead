@@ -202,7 +202,7 @@ function private.BuildForm(parent, width)
 	private.timeBox = W:Input(form, 70, "20:00")
 	private.timeBox:SetPoint("LEFT", when, "RIGHT", 8, 0)
 	-- The time typed: ours, or the realm's
-	private.zoneChoice = W:Choice(form, 116, { { key = false, label = "Your time" }, { key = true, label = "Server time" } }, function(key)
+	private.zoneChoice = W:Choice(form, 130, { { key = false, label = "Your time "..Raids:ZoneName() }, { key = true, label = "Server time" } }, function(key)
 		private.serverTime = key
 	end)
 	private.zoneChoice:SetChoice(false)
@@ -211,7 +211,7 @@ function private.BuildForm(parent, width)
 		local now = GetServerTime()
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
 		GameTooltip:SetText("Which clock the time is in", 1, 1, 1)
-		GameTooltip:AddLine(format("Your time now: %s. Server time now: %s.", date("%H:%M", now), date("%H:%M", now + Raids:ServerOffset())),
+		GameTooltip:AddLine(format("Your time now: %s %s. Server time now: %s.", date("%H:%M", now), Raids:ZoneName(), date("%H:%M", now + Raids:ServerOffset())),
 			C.muted[1], C.muted[2], C.muted[3], true)
 		GameTooltip:AddLine("Everyone sees the raid in their own time, with the server's beside it.", C.muted[1], C.muted[2], C.muted[3], true)
 		GameTooltip:Show()

@@ -6310,12 +6310,15 @@ end)()
 	check(R:ServerOffset() == 3 * 3600, "the realm is 3 hours ahead: "..R:ServerOffset())
 	local ourAt, realmAt = R:ParseTime("20:00"), R:ParseTime("23:00", true)
 	check(ourAt and ourAt == realmAt and date("%H:%M", ourAt) == "20:00", "20:00 ours is 23:00 the realm's")
-	check(R:When(ourAt) == date("%a ", ourAt).."20:00 (server 23:00)", "shown both ways: "..R:When(ourAt))
+	local zone = R:ZoneName()
+	check(R:When(ourAt) == date("%a ", ourAt).."20:00 "..zone.." (server 23:00)", "shown both ways, with our time zone: "..R:When(ourAt))
+	check(R:ShortZone("Eastern Daylight Time", -4 * 3600) == "EDT" and R:ShortZone("EDT", -4 * 3600) == "EDT"
+		and R:ShortZone("", -4 * 3600) == "UTC-4" and R:ShortZone(nil, 5.5 * 3600) == "UTC+5:30", "time zone names, short")
 	local timed = R:Create({ title = "Timed", size = 40, startAt = ourAt })
 	check(R:AnnounceText():find("at 23:00 server time", 1, true) and R:WhisperText():find("23:00 server time", 1, true), "chat lines in server time: "..R:AnnounceText())
 	R:Close()
 	GetGameTime = realGameTime
-	check(R:When(ourAt) == date("%a %H:%M", ourAt) and R:ParseTime("25:00") == nil, "no realm clock: ours alone; a bad time is none")
+	check(R:When(ourAt) == date("%a %H:%M", ourAt).." "..zone and R:ParseTime("25:00") == nil, "no realm clock: ours alone; a bad time is none")
 	toasts = {}
 	-- Other players' raids
 	local function ad(t) local a = { id = "Lead-R:1:1", l = "Lead Er-Realm", t = "Crossroads", z = "Barrens", s = clock, m = 40, ml = 10, n = 12, u = 0, f = "Horde" } for k, v in pairs(t or {}) do a[k] = v end return a end
@@ -6374,7 +6377,7 @@ end)()
 	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale" }), "Lead Er-Realm")
 	local changed = toasts[#toasts]
 	check(changed.kind == "RAID CHANGED" and changed.detail:find("Ashenvale (was Barrens)", 1, true)
-		and changed.detail:find(date("%a %H:%M", clock + 7200).." (was "..date("%a %H:%M", clock + 3600)..")", 1, true), "what changed: "..tostring(changed.detail))
+		and changed.detail:find(R:When(clock + 7200).." (was "..R:When(clock + 3600)..")", 1, true), "what changed: "..tostring(changed.detail))
 	local toastsBefore = #toasts
 	R:OnAd(ad({ id = "moving", s = clock + 7200, z = "Ashenvale", n = 20 }), "Lead Er-Realm")
 	check(#toasts == toastsBefore, "more members isn't a change to tell")

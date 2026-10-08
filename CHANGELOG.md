@@ -39,6 +39,12 @@
   of the log lines they include; zones, races and spells stay.
 - Less work in busy fights: the main window is no longer redrawn while it's closed.
 - Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
+- A shared record has to be the one its id names: a player can no longer pass off a record as someone else's, or
+  send a broken one that stopped your sync with an error.
+- Another player can no longer send a record that poses as one of your own sightings.
+- Numbers in shared records are checked: a record with a negative, endless or made-up amount, or text where a time
+  or place goes, is never counted, and amounts past what the game's money can hold (214,748g) can't be posted. A
+  bounty for more than that from an older version still shows, at 214,748g.
 
 ## [1.18.3] - 2026-10-08
 
@@ -61,12 +67,6 @@
   you're typing in.
 - Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
   and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
-- A shared record has to be the one its id names: a player can no longer pass off a record as someone else's, or
-  send a broken one that stopped your sync with an error.
-- Another player can no longer send a record that poses as one of your own sightings.
-- Numbers in shared records are checked: a record with a negative, endless or made-up amount, or text where a time
-  or place goes, is never counted, and amounts past what the game's money can hold (214,748g) can't be posted. A
-  bounty for more than that from an older version still shows, at 214,748g.
 
 ## [1.18.2] - 2026-10-08
 

@@ -42,6 +42,8 @@
 - The targeted sound plays once when several enemies target you at the same moment, not once for each.
 - Enemy detection's once-a-second check rests in dungeons, raids and battlegrounds, where it could hit the game's
   hidden values.
+- A death the game's death recap hasn't caught up with is no longer blamed on whoever had you targeted, and a recap
+  from before a /reload no longer counts as the next death's.
 
 ## [1.18.2] - 2026-10-08
 

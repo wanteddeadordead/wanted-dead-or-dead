@@ -124,6 +124,8 @@ function Enemies:OnEnable()
 		private.frame:RegisterEvent(event)
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Enemies events", private.OnEvent))
+	-- A recap from before a /reload is an old death's, not the next one's
+	private.lastRecapId = private.RecapId()
 	C_Timer.NewTicker(SCAN_SECONDS, Wanted:Timed("Enemies scan", private.Tick))
 end
 
@@ -574,17 +576,22 @@ function private.OnPlayerDead()
 	C_Timer.After(RECAP_DELAYS[1], function() private.ResolveDeath(suspects, 1) end)
 end
 
+---The id of the latest death recap, from its link, or nil.
+function private.RecapId()
+	if not (C_DeathRecap and C_DeathRecap.GetRecapLink) then
+		return nil
+	end
+	local ok, link = pcall(C_DeathRecap.GetRecapLink)
+	link = ok and private.Readable(link)
+	return type(link) == "string" and tonumber(strmatch(link, "death:(%d+)")) or nil
+end
+
 ---The killing blow of the latest death recap, as a GUID and name, if it names a player.
 function private.KillerFromRecap()
 	if not (C_DeathRecap and C_DeathRecap.GetRecapEvents) then
 		return nil, "unavailable"
 	end
-	local id = nil
-	if C_DeathRecap.GetRecapLink then
-		local ok, link = pcall(C_DeathRecap.GetRecapLink)
-		link = ok and private.Readable(link)
-		id = type(link) == "string" and tonumber(strmatch(link, "death:(%d+)")) or nil
-	end
+	local id = private.RecapId()
 	if id and id == private.lastRecapId then
 		return nil, "stale"
 	end
@@ -653,8 +660,9 @@ function private.ResolveDeath(suspects, attempt)
 		C_Timer.After(RECAP_DELAYS[attempt + 1] - RECAP_DELAYS[attempt], function() private.ResolveDeath(suspects, attempt + 1) end)
 		return
 	end
-	if not killer and how ~= "not a player" and #suspects == 1 then
-		-- The recap couldn't say (or names a pet out of view): the one enemy who had us targeted is the likely killer
+	if not killer and how ~= "not a player" and how ~= "stale" and #suspects == 1 then
+		-- The recap couldn't say (or names a pet out of view): the one enemy who had us targeted is the likely killer.
+		-- Not when it still shows an earlier death: then it hasn't caught up, and may yet name someone else.
 		killer, how = suspects[1], how == "pet out of view" and "pet guess" or "targeting"
 	end
 	Wanted:Log("Enemies: death, killer %s (%s)", tostring(killer), how)

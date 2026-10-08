@@ -7270,6 +7270,35 @@ end)()
 	check(not enemiesPrivate.plates.nameplate8, "a nameplate that went inside isn't watched any more")
 	ns.Enemies:ClearNearby()
 end)()
+-- A death the recap hasn't caught up with (it still shows the last one) isn't blamed on whoever had us targeted
+;(function()
+	clock = clock + 300
+	RunTimers()
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:8888|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-9-0RCP" } } end,
+	}
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(ns.Enemies:GetStats("Player-9-0RCP") and ns.Enemies:GetStats("Player-9-0RCP").losses == 1, "a fresh recap names the killer")
+	Fire("PLAYER_ALIVE")
+	clock = clock + 300
+	RunTimers()
+	enemyUnits.nameplate44 = { guid = "Player-9-0TGT", name = "Just Looking", class = "ROGUE", level = 20, targetsMe = true }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate44")
+	Fire("UNIT_TARGET", "nameplate44")
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	local stats = ns.Enemies:GetStats("Player-9-0TGT")
+	check(not stats or (stats.losses or 0) == 0, "a stale recap blames nobody, not even the one who had us targeted")
+	Fire("PLAYER_ALIVE")
+	enemyUnits.nameplate44 = nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate44")
+	ns.Enemies:ClearNearby()
+	C_DeathRecap = nil
+	clock = clock + 300
+	RunTimers()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

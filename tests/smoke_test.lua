@@ -7429,8 +7429,9 @@ end)()
 	for k, v in pairs(real) do _G[k] = v end
 	ns.db.hkBook = {}
 end)()
--- Dialogs and Escape: any dialog closes on Escape (the game's list of windows Escape closes), and closing it any way
--- but its OK button counts as Cancel
+-- Dialogs and Escape: any dialog closes on Escape (the game's list of windows Escape closes). Only the Cancel button is
+-- Cancel: closed any other way (Escape, the game closing every window on a fear or a flight, the main window closing)
+-- it's dismissed with no answer. Hidden with the whole interface (Alt+Z) it's still up.
 ;(function()
 	local W = ns.Widgets
 	local function Escape()
@@ -7440,26 +7441,41 @@ end)()
 		end
 	end
 	Escape() -- whatever earlier tests left up
-	local cancelled, confirmed = 0, 0
-	W:Dialog({ title = "No input", text = "Escape closes me", onCancel = function() cancelled = cancelled + 1 end, onConfirm = function() confirmed = confirmed + 1 end })
+	RunTimers()
+	local cancelled, confirmed, closed = 0, 0, 0
+	local function Options(title, extra)
+		local o = { title = title, text = "x", onCancel = function() cancelled = cancelled + 1 end,
+			onConfirm = function() confirmed = confirmed + 1 end, onClose = function() closed = closed + 1 end }
+		for k, v in pairs(extra or {}) do o[k] = v end
+		return o
+	end
+	W:Dialog(Options("No input"))
 	check(W:IsDialogShown(), "the dialog is up")
 	Escape()
-	check(not W:IsDialogShown() and cancelled == 1, "Escape closes a dialog with no input, as Cancel")
-	W:Dialog({ title = "Input", text = "Escape in the box", input = { placeholder = "x" }, onCancel = function() cancelled = cancelled + 1 end })
+	check(not W:IsDialogShown() and cancelled == 0 and closed == 1, "Escape closes a dialog with no input, with no answer")
+	W:Dialog(Options("Input", { input = { placeholder = "x" } }))
 	local frame = _G.WantedDialog.frame
 	frame.input._scripts.OnEscapePressed(frame.input)
-	check(not W:IsDialogShown() and cancelled == 2, "Escape in its box closes it as Cancel")
-	W:Dialog({ title = "OK", text = "Confirm me", onCancel = function() cancelled = cancelled + 1 end, onConfirm = function() confirmed = confirmed + 1 end })
+	check(not W:IsDialogShown() and cancelled == 0 and closed == 2, "Escape in its box closes it with no answer")
+	W:Dialog(Options("OK"))
 	frame.confirm:Click()
-	check(not W:IsDialogShown() and cancelled == 2 and confirmed == 1, "OK is never also Cancel")
-	W:Dialog({ title = "Cancel", text = "Cancel me", onCancel = function() cancelled = cancelled + 1 end })
+	check(not W:IsDialogShown() and cancelled == 0 and confirmed == 1 and closed == 2, "OK is only OK")
+	W:Dialog(Options("Cancel"))
 	frame.cancel:Click()
-	check(cancelled == 3, "Cancel once")
-	-- Over the main window: closing the window takes the dialog with it
+	check(cancelled == 1 and closed == 2, "Cancel is Cancel")
+	-- Alt+Z: the dialog goes out of sight with its parent, but is still up; its buttons still answer it once
+	W:Dialog(Options("Alt Z"))
+	local blocker = _G.WantedDialog
+	blocker._scripts.OnHide(blocker)
+	check(W:IsDialogShown() and closed == 2 and cancelled == 1, "hidden with the interface, it's still waiting")
+	frame.confirm:Click()
+	frame.cancel:Click()
+	check(confirmed == 2 and cancelled == 1, "then OK answers it, and only once")
+	-- Over the main window: closing the window takes the dialog with it, unanswered
 	ns.UI:Show("home")
-	W:Dialog({ title = "Over the window", text = "x", onCancel = function() cancelled = cancelled + 1 end })
+	W:Dialog(Options("Over the window"))
 	ns.UI:GetFrame():Hide()
-	check(not W:IsDialogShown() and cancelled == 4, "closing the main window closes its dialog, as Cancel")
+	check(not W:IsDialogShown() and cancelled == 1 and closed == 3, "closing the main window closes its dialog, with no answer")
 	-- A dialog asked for while another is up waits its turn (the harness's W.Dialog closes the last one; the real one
 	-- is used here)
 	local answers = {}
@@ -7472,6 +7488,26 @@ end)()
 	check(W:IsDialogShown() and frame.title._text == "Second", "then the next one shows")
 	frame.confirm:Click()
 	check(answers[1] == "first cancelled" and answers[2] == "second confirmed" and #answers == 2, "each gets its own answer: "..table.concat(answers, ", "))
+	-- Waiting in a fight: shown once it's over
+	origDialog(W, { title = "Up", text = "x" })
+	origDialog(W, { title = "After the fight", text = "x" })
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	frame.confirm:Click()
+	RunTimers()
+	check(not W:IsDialogShown(), "nothing new pops up in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(W:IsDialogShown() and frame.title._text == "After the fight", "it shows once the fight is over")
+	frame.confirm:Click()
+	-- Waiting over the main window: dropped when the window closes
+	ns.UI:Show("home")
+	origDialog(W, { title = "Up over the window", text = "x" })
+	origDialog(W, { title = "Waiting over the window", text = "x" })
+	ns.UI:GetFrame():Hide()
+	RunTimers()
+	check(not W:IsDialogShown(), "a dialog waiting over a window that closed is dropped")
 	-- The beta welcome waits for a window opening with no dialog up
 	local realBeta, realWelcomed = ns.BETA, ns.db.welcomed
 	ns.BETA, ns.db.welcomed = true, nil

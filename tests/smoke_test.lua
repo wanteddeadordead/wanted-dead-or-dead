@@ -6044,7 +6044,8 @@ end)()
 	CreateFrame = realCreate
 end)()
 -- What's new: once per version after an update, the welcome on a fresh install, never in combat or over a dialog;
--- every released version from 1.15.0 has an entry, and none is ahead of the changelog without unreleased notes
+-- every major or minor release (x.y.0) from 1.15.0 has an entry; a patch release has none (unless pinned, like the
+-- launch note); none is ahead of the changelog without unreleased notes
 ;(function()
 	local N = ns.WhatsNew
 	local changelog = io.open(ADDON.."CHANGELOG.md"):read("*a")
@@ -6054,13 +6055,18 @@ end)()
 	for _, e in ipairs(ns.WHATS_NEW) do
 		entries[e.version] = true
 		check(#e.lines > 0 and #e.lines <= 5, e.version..": one to five lines")
+		check(e.version:match("%.0$") or e.pinned, e.version..": a patch release gets no What's new")
 	end
+	local newestMinor
 	for _, v in ipairs(released) do
-		local a, b = v:match("^(%d+)%.(%d+)")
-		if tonumber(a) > 1 or tonumber(b) >= 15 then check(entries[v], "no What's new entry for "..v) end
+		local a, b, c = v:match("^(%d+)%.(%d+)%.(%d+)")
+		if c == "0" then
+			newestMinor = newestMinor or v
+			if tonumber(a) > 1 or tonumber(b) >= 15 then check(entries[v], "no What's new entry for "..v) end
+		end
 	end
-	if ns.WHATS_NEW[1].version ~= released[1] then
-		check(unreleased and unreleased:find("%S"), "What's new "..ns.WHATS_NEW[1].version.." is ahead of the changelog ("..released[1]..") with no unreleased notes")
+	if ns.WHATS_NEW[1].version ~= newestMinor then
+		check(unreleased and unreleased:find("%S"), "What's new "..ns.WHATS_NEW[1].version.." is ahead of the changelog ("..newestMinor..") with no unreleased notes")
 	end
 	-- Which versions show
 	local since = N:Since("1.14.0", "1.16.0")

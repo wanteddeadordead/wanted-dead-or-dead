@@ -8092,8 +8092,10 @@ end)()
 		return n
 	end
 	clock = clock + 3600
-	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 31, t = clock } })
-	check(Count("Player-1-HUGE") == 0, "a notice past what a record holds is refused")
+	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 40, t = clock } })
+	local huge
+	for notice in ns.Store:Iterator("notice") do if notice.data.target == "Player-1-HUGE" then huge = notice end end
+	check(huge and huge.data.amount == 2 ^ 31 - 1, "a notice past what a record holds is kept at the most it can be")
 	local flood = {}
 	for i = 1, 30 do flood[i] = { b = "Far Side:"..(100 + i), g = "Player-1-FLOODED", n = "Flooded", a = 10000, t = clock - i } end
 	Notices(flood)

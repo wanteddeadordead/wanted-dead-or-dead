@@ -48,33 +48,27 @@ function Model:GetBountyInfo(bounty)
 		passed = Bounties:IsPassed(bounty),
 		t = bounty.t,
 	}
-	-- A paid or confirmed claim is the poster's decision and stands; otherwise the earliest kill is the claim
-	local paidClaim, owedClaim = nil, nil
-	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id then
-			if Payments:GetForClaim(claim.id) then
-				paidClaim = claim
-			elseif Bounties:GetClaimLevel(claim) == 3 then
-				owedClaim = claim
-			end
-		end
-	end
-	local winner = not paidClaim and not owedClaim and Bounties:GetWinningClaim(bounty) or nil
-	if Bounties:IsWithdrawn(bounty) then
-		info.state = STATE.WITHDRAWN
-	elseif paidClaim then
-		info.state, info.claim = STATE.PAID, paidClaim
-	elseif owedClaim then
-		info.state, info.claim = STATE.OWED, owedClaim
-	elseif winner and Bounties:GetClaimLevel(winner) == 2 then
+	-- A paid or confirmed claim is the poster's decision and stands; otherwise the earliest kill is the claim. A
+	-- withdrawal only ends the bounty for kills after it: a claim on one before it is still shown, and still owed.
+	local winner = Bounties:GetWinningClaim(bounty)
+	local level = winner and Bounties:GetClaimLevel(winner)
+	if winner and Payments:GetForClaim(winner.id) then
+		info.state, info.claim = STATE.PAID, winner
+	elseif level == 3 then
+		info.state, info.claim = STATE.OWED, winner
+	elseif level == 2 then
 		info.state, info.claim = STATE.CLAIMED, winner
 	elseif winner then
 		info.state, info.claim = STATE.UNVERIFIED, winner
+	elseif Bounties:IsWithdrawn(bounty) then
+		info.state = STATE.WITHDRAWN
 	elseif info.expiry <= now then
 		info.state = STATE.EXPIRED
 	else
 		info.state = STATE.OPEN
 	end
+	-- What the claim is owed: the bounty as it stood at the kill
+	info.owed = info.claim and Bounties:GetOwed(info.claim)
 	info.hunter = info.claim and info.claim.origin
 	info.myClaim = info.claim and info.claim.origin == me
 	info.hunters = (info.state == STATE.OPEN or info.state == STATE.UNVERIFIED) and Bounties:GetActiveHunters(bounty) or {}
@@ -419,7 +413,7 @@ function Model:GetMyClaims()
 				local item = {
 					claim = claim,
 					bounty = bounty,
-					amount = Bounties:GetAmount(bounty),
+					amount = Bounties:GetOwed(claim),
 					poster = bounty.origin,
 					targetName = claim.data.victimName or bounty.data.targetName or "?",
 					player = Store:GetPlayer(bounty.data.target),
@@ -429,7 +423,7 @@ function Model:GetMyClaims()
 				local winner = Bounties:GetWinningClaim(bounty)
 				if payment then
 					item.label, item.color, item.order, item.finished = "Paid", C.green, 3, true
-				elseif level > 0 and level < 3 and winner and winner.id ~= claim.id then
+				elseif level > 0 and winner and winner.id ~= claim.id then
 					item.label, item.color, item.order, item.finished = "Beaten", C.faint, 2, true
 				elseif level == 0 then
 					item.label, item.color, item.order, item.finished = "Disputed", C.red, 2, true
@@ -465,7 +459,7 @@ function Model:GetMySummary()
 	local me = Store:GetOrigin()
 	for _, info in ipairs(Model:GetMyBounties()) do
 		if info.state == STATE.OWED then
-			summary.owe = summary.owe + info.amount
+			summary.owe = summary.owe + info.owed
 			summary.oweCount = summary.oweCount + 1
 		elseif info.state == STATE.OPEN then
 			summary.open = summary.open + info.amount

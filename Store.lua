@@ -29,6 +29,15 @@ local PRUNE_EVERY_SECONDS = 24 * 60 * 60
 -- A chain whose earlier records were pruned everywhere continues from a record whose predecessor is unknown
 local UNKNOWN_HASH = "?"
 local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
+-- The most copper a record's amount may be (the game's own money is a 32-bit number), and the kinds that must have one
+local MAX_COPPER = 2 ^ 31 - 1
+Store.MAX_COPPER = MAX_COPPER
+local AMOUNT_REQUIRED = { bounty = true, raise = true }
+-- Fields that are numbers in every kind that has them (times, levels, places): the code compares and adds them
+local NUMBER_FIELDS = { killT = true, seenAt = true, postedAt = true, level = true, x = true, y = true, mapId = true }
+-- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
+-- never taken from a peer
+local RESERVED_KINDS = { sighting = true, ["*"] = true }
 
 
 
@@ -563,15 +572,66 @@ function Store:NewRecord(kind, data)
 	return record
 end
 
+---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
+---record whose id names someone else (Mallory's record as "Carol:1") would take the place of theirs, and a missing
+---origin, seq or prev would break the chain code.
+---@param r any
+---@return boolean
+function Store:IsWellFormed(r)
+	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number"
+		or type(r.prev) ~= "string" or type(r.hash) ~= "string" or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+		return false
+	end
+	for key, value in pairs(r.data) do
+		local kind = type(value)
+		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
+			return false
+		end
+	end
+	return private.IsFinite(r.t)
+end
+
+-- No chain gets anywhere near this many records; anything past it is made up (and too big to write as a whole number)
+local MAX_SEQ = 2 ^ 31 - 1
+
+---Whether a value is a seq a chain can have: a whole number from 1 to MAX_SEQ.
+---@param n any
+---@return boolean
+function Store:IsSeq(n)
+	return type(n) == "number" and n >= 1 and n <= MAX_SEQ and n == floor(n)
+end
+
+---Whether a number is one (not NaN, the one value not equal to itself) and not infinite.
+function private.IsFinite(value)
+	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+---Whether a well formed record's numbers are ones a client makes: nothing infinite or not a number, times, levels and
+---places as numbers, and money whole copper, which a bounty or a raise always gives. Others add these up and compare
+---them. More than the game's money holds (a client before the cap) is kept: readers count it at MAX_COPPER.
+function private.HasSoundNumbers(r)
+	for key, value in pairs(r.data) do
+		if (type(value) == "number" and not private.IsFinite(value)) or (NUMBER_FIELDS[key] and type(value) ~= "number") then
+			return false
+		end
+	end
+	local amount = r.data.amount
+	if (amount == nil and AMOUNT_REQUIRED[r.kind])
+		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0)) then
+		return false
+	end
+	return true
+end
+
 ---Merges a record received from a peer. Returns whether it was new. The chain check is advisory: a record
 ---whose prev does not match what we hold for that origin is stored but flagged, never dropped, since we
 ---may simply be missing the records between.
 ---@param record table
 ---@param sender string The server-stamped sender of the message carrying it
 ---@return boolean isNew
----@return string? why when not new: "already held", "malformed", "not sent by its origin", "test data" or "pruned"
+---@return string? why when not new: "already held", "malformed", "reserved", "not sent by its origin", "test data" or "pruned"
 function Store:Merge(record, sender)
-	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
+	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
 	if record.origin ~= sender then
@@ -589,7 +649,7 @@ end
 ---@return boolean isNew
 ---@return string? why when not new, as for Merge
 function Store:MergeRelayed(record, fromApp)
-	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
+	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
 	return private.Insert(record, false, fromApp)
@@ -601,6 +661,9 @@ end
 ---record can't claim to be live.
 function private.Insert(record, live, fromApp)
 	local db = Wanted.db
+	if RESERVED_KINDS[record.kind] then
+		return false, "reserved"
+	end
 	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
 	local existing = db.records[record.id]
 	if existing then
@@ -628,6 +691,11 @@ function private.Insert(record, live, fromApp)
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s doesn't match its hash (altered)", tostring(record.kind), tostring(record.id))
+	elseif not private.HasSoundNumbers(record) then
+		-- A number no client makes (made up, or text where a number goes): held, so its chain moves on, but never read,
+		-- like an altered one
+		record.tampered = true
+		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
 	local chain = db.chains[record.origin]
 	if not chain then
@@ -817,7 +885,7 @@ function Store:Get(id)
 end
 
 -- Record ids by kind, so walking the handful of raises or payments doesn't mean walking every record (the
--- bounty code does that many times over), and each origin's newest record time, so the sync can tell which
+-- bounty code does that many times over), by origin (a gap fill sends one origin's), and each origin's newest record time, so the sync can tell which
 -- chains are active. Built on first use and kept as records arrive; built again whenever the records table is
 -- replaced (a fresh start, the launch reset) or pruned. Each kind's ids are a list that only grows, so a walk
 -- reads it in place (copying it for every walk made most of the addon's garbage); a record removed some other way
@@ -825,7 +893,7 @@ end
 function private.Index()
 	local records = Wanted.db.records
 	if private.indexFor ~= records then
-		private.byKind, private.indexed, private.lastActive, private.indexFor = {}, {}, {}, records
+		private.byKind, private.byOrigin, private.indexed, private.lastActive, private.indexFor = {}, {}, {}, {}, records
 		for _, record in pairs(records) do
 			private.AddId(record)
 			private.NoteActive(record)
@@ -845,6 +913,14 @@ function private.AddId(record)
 		private.byKind[record.kind] = ids
 	end
 	ids[#ids + 1] = record.id
+	if type(record.origin) == "string" then
+		ids = private.byOrigin[record.origin]
+		if not ids then
+			ids = {}
+			private.byOrigin[record.origin] = ids
+		end
+		ids[#ids + 1] = record.id
+	end
 end
 
 function private.NoteActive(record)
@@ -879,6 +955,28 @@ function Store:Iterator(kind)
 			-- An altered record is kept (and synced) but never read. One with a broken chain can be innocent (a
 			-- reinstall, lost saved data): it's listed, but never witnesses a claim (Store:IsTrusted)
 			if record and record.kind == kind and not record.tampered then
+				return record
+			end
+		end
+		return nil
+	end
+end
+
+---Iterates one origin's records, unordered, tampered ones too (a gap fill sends what it holds). Records added meanwhile
+---are left for the next walk.
+---@param origin string
+---@return fun(): table?
+function Store:OriginIterator(origin)
+	local records = Wanted.db.records
+	private.Index()
+	local list = private.byOrigin[origin]
+	local n = list and #list or 0
+	local i = 0
+	return function()
+		while i < n do
+			i = i + 1
+			local record = records[list[i]]
+			if record and record.origin == origin then
 				return record
 			end
 		end
@@ -925,6 +1023,19 @@ end
 function Store:GetFirstSeen(origin)
 	local chain = Wanted.db.chains[origin]
 	return chain and chain.first
+end
+
+---The highest seq of an origin's records held that checked out (not altered, following the chain), or its chain's base.
+---@param origin string
+---@return number
+function Store:GetHighestHeld(origin)
+	local highest = Store:SeqBase()
+	for record in Store:OriginIterator(origin) do
+		if type(record.seq) == "number" and record.seq > highest and not record.tampered and not record.brokenChain then
+			highest = record.seq
+		end
+	end
+	return highest
 end
 
 ---The highest seq held for an origin (for gap requests).

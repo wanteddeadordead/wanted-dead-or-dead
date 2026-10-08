@@ -39,6 +39,53 @@
   of the log lines they include; zones, races and spells stay.
 - Less work in busy fights: the main window is no longer redrawn while it's closed.
 - Long play sessions no longer slowly fill memory with every player seen: short-lived notes about them are let go.
+- A shared record has to be the one its id names: a player can no longer pass off a record as someone else's, or
+  send a broken one that stopped your sync with an error.
+- Another player can no longer send a record that poses as one of your own sightings.
+- Numbers in shared records are checked: a record with a negative, endless or made-up amount, or text where a time
+  or place goes, is never counted, and amounts past what the game's money can hold (214,748g) can't be posted. A
+  bounty for more than that from an older version still shows, at 214,748g.
+- One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
+  required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
+  lifts when you load this version.
+- Only the poster can raise a bounty, and only the poster's own record of paying settles it: another player's raise
+  or payment record no longer changes someone else's bounty.
+- When a poster both confirms and disputes a claim, their latest decision stands on every client.
+- A claim is owed the bounty as it stood at the kill: a raise made after the kill doesn't add to what the hunter is
+  owed (Pay fills in that amount).
+- A bounty is only ever owed once: once the poster confirms or pays a claim, no other claim on that bounty is owed.
+  A claim nobody witnessed no longer beats a witnessed one with a later kill, and a kill from before the bounty was
+  posted (or after it ended) wins nothing.
+- Withdrawing a bounty no longer hides a claim on a kill made before the withdrawal: it still shows, with Confirm,
+  Dispute and Pay.
+- A death record only counts as the victim's own word when the game knows the victim by its maker's name (or the
+  Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
+- A guild bounty claim is only witnessed by someone who saw the victim in that guild, and a bounty no longer tells
+  your client which guild its target is in, so a made-up bounty can't turn a kill into a guild bounty claim.
+- Payments are checked: a mail only counts as a bounty payment when it goes from the bounty's poster to the hunter
+  with at least what the claim is owed, never cash on delivery, and only for your own claim. A failed send no longer
+  counts the next mail you send, and a send still counts when you close the mailbox while it's going out. A payment
+  sent through another mail addon (TSM) is no longer recorded on the poster's side from the drop in their gold; the
+  hunter's side records it when they receive it. A hunter's own record of being paid never decides which claim a
+  bounty goes to.
+- A request for records is answered for a few chains at a time, and only for chains you hold, so one player can't
+  make everyone resend everything they have.
+- Half-received sync messages are let go after 30 seconds, and one player can only have a few open at once.
+- In a fight, one player flooding the sync channel can no longer push out everyone else's news waiting for the fight
+  to end.
+- Bounty notices sent to the other faction no longer reveal who posted the bounty. Notices received are capped per
+  sender and per player each hour, so nobody can flood your price on your head, and the same bounty carried by old
+  and new versions counts once, while two posted in the same second stay two. A notice for more than the game's
+  money can hold is kept at 214,748g.
+- One player can no longer push someone's record chain far ahead of their real records, which then looked forged to
+  everyone: a skip over pruned records goes no further than the player's own sync says the chain reaches, or, before
+  they've said, than two other players' do, and then only a little way at a time. A long stretch of pruned records the
+  player's own sync accounts for is crossed at once.
+- A whispered sync channel move can't walk players onto a made-up channel any more: it needs two players saying the
+  same one, and whispers can take a player at most four channel moves past the last one the Wanted app gave (three
+  players must agree past the first); that limit rises by one a day at most while three players agree on where the
+  player is, so someone who missed a few moves catches up. The channel the Wanted app gives wins when
+  its catch-up is newer than the whispered move.
 
 ## [1.18.3] - 2026-10-08
 

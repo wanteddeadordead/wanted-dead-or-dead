@@ -962,16 +962,19 @@ SlashCmdList.WANTED("synctest")
 ns.VERSION = "0.1.0"
 check(#addonSent == 1 and addonSent[1].text:find("^H:"), "the sync test sends a hello")
 local hello = addonSent[1].text:gsub("^H:%w+:", "H:zz9:")
-Fire("CHAT_MSG_ADDON", "WNTD", hello, "CHANNEL", "Other Player", nil, nil, nil, "WantedNetHorde")
+-- (Three players have to say it: one player's word locks nothing)
+for _, who in ipairs({ "Other Player", "Other Player Two", "Other Player Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", hello, "CHANNEL", who, nil, nil, nil, "WantedNetHorde")
+end
 check(ns.newerVersion == "0.3.0", "a newer peer's version is noticed, got "..tostring(ns.newerVersion))
 ns:NoteVersion("0.2.5")
 check(ns.newerVersion == "0.3.0", "an older one doesn't replace it")
-ns:NoteVersion("0.4.0|cffff0000evil")
-check(ns.newerVersion == "0.4.0", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
+for _, who in ipairs({ "Voter A", "Voter B", "Voter C" }) do ns:NoteVersion("0.3.1|cffff0000evil", who) end
+check(ns.newerVersion == "0.3.1", "peer text is rebuilt, not shown as sent, got "..tostring(ns.newerVersion))
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
-check(ns.Report:Build():find("newer version seen: 0.4.0", 1, true), "the bug report names the newer version")
+check(ns.Report:Build():find("newer version seen: 0.3.1", 1, true), "the bug report names the newer version")
 -- The newest version wins: that newer peer locked the shared side until this client updates
-check(ns:GetRequiredUpdate() == "0.4.0", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
+check(ns:GetRequiredUpdate() == "0.3.1", "a newer version on the network requires an update, got "..tostring(ns:GetRequiredUpdate()))
 ;(function()
 	local function Told(from)
 		for i = from + 1, #printed do
@@ -999,12 +1002,12 @@ ns.db.requiredVersion = nil
 ns:NoteVersion("99.0.0")
 check(ns:GetRequiredUpdate() == nil, "an implausible version is ignored")
 -- Updating lifts the lock at load; so does nobody on that version being seen for three days
-ns:NoteVersion("0.4.0")
-ns.VERSION = "0.4.0"
+ns:NoteVersion("0.3.1") -- three players said it this session
+ns.VERSION = "0.3.1"
 ns:LoadSavedData()
 check(ns:GetRequiredUpdate() == nil, "on the new version the lock is gone")
 ns.VERSION = "0.1.0"
-ns:NoteVersion("0.4.0")
+ns:NoteVersion("0.3.1")
 clock = clock + 4 * 86400
 ns:LoadSavedData()
 check(ns:GetRequiredUpdate() == nil, "a version nobody has shown for days stops locking")
@@ -1021,13 +1024,17 @@ check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Old 
 	"the 'not online' for someone just told to update is hidden")
 check(ns.db.addonVersions["Old Timer"] and ns.db.addonVersions["Old Timer"].v == "0.0.5", "the version book notes the older player's version")
 -- And an update notice whispered to us locks us
-Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", "New Timer")
-check(ns:GetRequiredUpdate() == "0.2.0", "an update notice locks this client")
+for _, who in ipairs({ "New Timer", "New Timer Two", "New Timer Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("U", { v = "0.2.0" }), "WHISPER", who)
+end
+check(ns:GetRequiredUpdate() == "0.2.0", "update notices from three players lock this client")
 ns.db.requiredVersion, ns.newerVersion = nil, nil
 -- 1.4.0 needs everyone on it (older versions pick channels themselves): a 1.3.x client hearing a 1.4.0 message locks
 -- its shared side, and is told to update at once and at each login
 ns.VERSION = "1.3.4"
-Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("H", { v = "1.4.0", c = {} }), "WHISPER", "New Hand")
+for _, who in ipairs({ "New Hand", "New Hand Two", "New Hand Three" }) do
+	Fire("CHAT_MSG_ADDON", "WNTD", OldMessage("H", { v = "1.4.0", c = {} }), "WHISPER", who)
+end
 check(ns:GetRequiredUpdate() == "1.4.0" and printed[#printed]:find("Wanted 1.4.0 is out", 1, true), "a 1.3.x client hearing 1.4.0 is told to update, and its sharing pauses")
 ns.db.requiredVersion, ns.newerVersion = nil, nil
 ns.VERSION = "0.1.0"
@@ -1561,7 +1568,9 @@ ClearBn()
 local crossBounty = ns.Store:NewRecord("bounty", { target = "Player-9-ALLY", targetName = "Ally Target", amount = 50000 })
 RunTimers()
 local sentNotice = #bnSent == 1 and BnDecode(1)
-check(sentNotice and sentNotice.k == "N" and sentNotice.n[1].b == crossBounty.id and sentNotice.n[1].a == 50000 and sentNotice.n[1].p ~= "Test Player", "a new bounty goes across as a notice, poster hashed")
+check(sentNotice and sentNotice.k == "N" and sentNotice.n[1].b and sentNotice.n[1].a == 50000, "a new bounty goes across as a notice")
+-- Without the poster: not their name in the bounty's id, nor a hash of the name anyone could match against a list
+check(not sentNotice.n[1].b:find("Test", 1, true) and sentNotice.n[1].p == nil, "the notice doesn't name the poster: "..tostring(sentNotice.n[1].b))
 ClearBn()
 ns.Store:NewRecord("raise", { bounty = crossBounty.id, amount = 25000 })
 RunTimers()
@@ -1765,7 +1774,7 @@ local function Sent(chatType, target)
 	return out
 end
 local function ClearSent() for i = #addonSent, 1, -1 do addonSent[i] = nil end end
-local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", t = clock, data = { bounty = "far-"..seq } } end
+local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "far-"..seq } } end
 ClearSent()
 clock = clock + 700
 ns.Sync:Greet("Far Friend", "Other Realm")
@@ -1885,7 +1894,7 @@ RunFrames()
 local fills = Sent("WHISPER", "Far Friend")
 check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them back over the next frames")
 ClearSent()
-Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", t = clock, data = {} } } }), "WHISPER", "Stranger")
+Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", hash = "x", t = clock, data = {} } } }), "WHISPER", "Stranger")
 check(ns.Store:Get("Stranger:1") == nil, "records whispered by someone who isn't a link are ignored")
 Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Realm" }), "WHISPER", "Same Realmer")
 check(ns.Sync:GetLinks()["Same Realmer"] == nil and #Sent("WHISPER", "Same Realmer") == 0, "a whispered hello from our own realm isn't a link (the channel covers them)")
@@ -1994,16 +2003,18 @@ ns.Store:GetPlayer("Player-9-SNAP").lastSeen = snapSeen
 local snapBounty = ns.Bounties:Post("Player-9-SNAP", "Snap Shot", 5000)
 local sd = snapBounty.data
 check(sd.class == "HUNTER" and sd.race == "NightElf" and sd.level == 20 and sd.targetGuild == "Polarity Check" and sd.seenAt == snapSeen and sd.x == 21.8 and sd.mapId == 1434, "a bounty records what the poster knew about the target")
-local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", t = clock, data = {
+local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", hash = "x", t = clock, data = {
 	target = "Player-9-UNKNOWN", targetName = "Never Seen", targetGuild = "Some Guild", amount = 5000, level = 22, zone = "The Barrens",
 	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
 ns.Store:MergeRelayed(farBounty)
 local learnt = ns.Store:GetPlayer("Player-9-UNKNOWN")
-check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.guild == "Some Guild" and learnt.zone == "The Barrens"
+check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone == "The Barrens"
 	and learnt.lastSeen == clock - 3600 and learnt.seenBy == "Far Poster", "a client that never saw the target learns them from the bounty, seen by the poster")
+-- Never their guild: a kill of them would then claim a bounty on that guild on the bounty's word alone
+check(learnt.guild == nil, "the target's guild isn't learned from a bounty")
 ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
 local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
-ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", t = clock, data = {
+ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", hash = "x", t = clock, data = {
 	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
 local known = ns.Store:GetPlayer("Player-9-KNOWN")
 check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
@@ -2025,15 +2036,15 @@ ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 24, 71, 1434)
 check(SpottedCount("Player-9-SNAP") == 2, "again after five minutes")
 ns.Store:AddSighting("Player-9-NOTWANTED", "Durotar", 50, 50, 1411)
 check(SpottedCount("Player-9-NOTWANTED") == 0, "someone without a bounty isn't shared (sightings stay passing news)")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", t = clock - 7200,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", hash = "x", t = clock - 7200,
 	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } })
 local farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 1 and farTrack[1].zone == "Ashenvale" and farTrack[1].by == "Spotter Far" and farTrack[1].t == clock - 7200, "someone else's sighting lands in the history by them, even before the bounty arrives")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", t = clock - 9000,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", hash = "x", t = clock - 9000,
 	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } })
 farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 2 and farTrack[1].zone == "Ashenvale" and farTrack[2].zone == "Darkshore", "an older sighting arriving later still sorts into place")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", t = clock - 40 * 86400,
+ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", hash = "x", t = clock - 40 * 86400,
 	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } })
 ns.Tracks:PruneSpotted()
 check(ns.Store:Get("Spotter Far:3") == nil and ns.Store:Get("Spotter Far:1") ~= nil, "shared sightings over a month old are pruned")
@@ -2147,7 +2158,7 @@ end)()
 end)()
 -- Records straight from their origin are marked live; relayed ones aren't, whatever flags they arrive with
 local function Rec(origin, seq, extra)
-	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock, data = { bounty = "b"..seq } }
+	local r = { kind = "pass", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "b"..seq } }
 	for k, v in pairs(extra or {}) do r[k] = v end
 	return r
 end
@@ -2691,7 +2702,7 @@ end)()
 	end
 	check(Has(B:GetClaimWarnings(loyal), "only ever backs up Sly Hunter"), "a witness who only backs one hunter is flagged")
 	-- An established witness who backs up others too: no warnings
-	ns.Store:Merge({ kind = "death", id = "Old Hand:1", origin = "Old Hand", seq = 1, prev = "0", t = clock - 30 * 86400,
+	ns.Store:Merge({ kind = "death", id = "Old Hand:1", origin = "Old Hand", seq = 1, prev = "0", hash = "x", t = clock - 30 * 86400,
 		data = { victim = "Player-9-SOMEONE", zone = "Durotar" } }, "Old Hand")
 	local fair = Claim("Honest Hunter", t0 + 5000)
 	Death("Old Hand", t0 + 5001)
@@ -2750,9 +2761,13 @@ end)()
 	ns.Store:MergeRelayed(own)
 	check(B:GetClaimLevel(victimsClaim) == 1, "the victim's own death relayed by another player is not a witness")
 	ns.Store:Merge(Own(2, link.hash, t0 + 601), "Trust Victim")
+	-- (The game knows the victim's GUID by that name: a link only names a GUID, which anyone could write)
+	local realInfo = GetPlayerInfoByGUID
+	GetPlayerInfoByGUID = function(guid) if guid == victim then return "Rogue", "ROGUE", "Human", "Human", 2, "Trust Victim", "" end return realInfo(guid) end
 	local witnesses, victimsOwn = B:GetWitnesses(victimsClaim)
 	check(#witnesses == 1 and victimsOwn and B:GetClaimLevel(victimsClaim) == 2, "the victim's own death heard live gives the witnessed level alone")
 	check(#B:GetClaimWarnings(victimsClaim) == 0, "and no warnings, though the victim is new to the network, got "..table.concat(B:GetClaimWarnings(victimsClaim), " / "))
+	GetPlayerInfoByGUID = realInfo
 end)()
 ;(function()
 	-- In a dungeon or raid the Nearby window closes, and comes back outside if it was open; battlegrounds keep it
@@ -3158,7 +3173,7 @@ end)()
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then asked = m.tbl.n.Pruner end end
 	check(asked == db.chains.Pruner.seq + 1, "only what's past our chain is asked for, got "..tostring(asked))
 	-- And one a peer sends again (answering someone else) isn't taken back in
-	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", t = old, data = { victim = "Player-9-V" } }
+	local back = { kind = "death", id = gone[2], origin = "Pruner", seq = tonumber(gone[2]:match("%d+$")), prev = "0", hash = "x", t = old, data = { victim = "Player-9-V" } }
 	check(select(2, ns.Store:MergeRelayed(back)) == "pruned" and not db.records[gone[2]], "a pruned record sent again isn't stored")
 	-- Players not seen for a month go with it, unless a page still needs them; then the book keeps its cap
 	local savedPlayers, savedStats, savedKos = db.players, db.enemyStats, db.kos
@@ -3224,7 +3239,11 @@ end)()
 	local function Rec(seq, prev, hash)
 		return { kind = "death", id = "Old Timer:"..seq, origin = "Old Timer", seq = seq, prev = prev, t = clock - 60, data = { victim = "Player-9-V" }, hash = hash }
 	end
-	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on
+	-- Receiving: we hold nothing of Old Timer; a fill starting at 50 with p moves the chain to 49 and on (two players
+	-- said the chain reaches 51: a skip goes no further than that)
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Old Timer"] = 51 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	ClearSent()
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { p = { ["Old Timer"] = 50 }, r = { Rec(50, "abc", "h50"), Rec(51, "h50", "h51") } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Old Timer") == 51, "the chain moved on past the pruned start, got "..ns.Store:GetChainSeq("Old Timer"))
@@ -3244,6 +3263,10 @@ end)()
 		return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "h"..(seq - 1), t = clock - 60, data = { victim = "Player-9-V" }, hash = "h"..seq }
 	end
 	for _, s in ipairs({ 1, 2, 5, 6, 20 }) do ns.db.records["Holey:"..s] = Holey("Holey", s) end
+	-- (Written straight in, so the store's index is built again: as when the records table is replaced)
+	local copy = {}
+	for id, r in pairs(ns.db.records) do copy[id] = r end
+	ns.db.records = copy
 	ns.db.chains.Holey = { seq = 30, lastHash = "h30" }
 	ClearSent()
 	clock = clock + 11
@@ -3261,8 +3284,12 @@ end)()
 	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
 	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
 	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
+	-- (A skip goes no further than two players said a chain reaches: here their haves said 30)
 	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
 	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
+	for _, peer in ipairs({ "Some Peer", "Other Peer" }) do
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { Holey2 = 30 } }), "CHANNEL", peer, nil, nil, nil, "WantedNetHorde")
+	end
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
 	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
@@ -3619,7 +3646,7 @@ end)()
 	check(leftChannels[#leftChannels] == "WantedNetHordesrvone", "the server's channel is left")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
--- A pointer by whisper: followed only when it's the server's (the via-app mark), from a player we know, and newer;
+-- A pointer by whisper: followed only when it's the server's (the via-app mark), from players we know, and newer;
 -- passed on once more, never past the hop cap
 ;(function()
 	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) end
@@ -3635,13 +3662,16 @@ end)()
 	check(ns.db.syncChannel.e == e, "nor one from a player we don't know")
 	ClearSent()
 	Move("Peer One", { e = e + 1, n = "WantedNetHordesrvtwo", a = 1, h = 1 })
+	Move("Peer Three", { e = e + 1, n = "WantedNetHordesrvtwo", a = 1, h = 1 })
 	RunTimers()
-	check(ns.db.syncChannel.e == e + 1 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvtwo", "the server's pointer from a player we know is followed")
+	check(ns.db.syncChannel.e == e + 1 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvtwo", "the server's pointer from two players we know is followed")
 	local move
 	for _, m in ipairs(Sent("WHISPER", "Peer Two")) do if m.tag == "M" then move = m end end
 	check(move and move.tbl.h == 2 and move.tbl.a == 1 and move.tbl.e == e + 1, "and passed on once more, a whisper further")
 	ClearSent()
-	Move("Peer One", { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 })
+	-- (The app has caught up with e + 1 meanwhile, so e + 2 is the next one: two players saying it are enough)
+	ns.Sync:AdoptFromApp({ e = e + 1, n = "WantedNetHordesrvtwo" })
+	for _, peer in ipairs({ "Peer One", "Peer Two" }) do Move(peer, { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 }) end
 	RunTimers()
 	local spread = 0
 	for _, m in ipairs(Sent("WHISPER")) do if m.tag == "M" then spread = spread + 1 end end
@@ -5583,9 +5613,9 @@ end)()
 	check(#asked == 0, "and no unit asked about: "..table.concat(asked, ", "))
 	check(ns.db.players["Player-9-CONTROLLED"] == nil, "nobody listed from inside")
 end)()
--- Paying a bounty is recorded however the mail goes out: Wanted's own Send (the SendMail hook), a send another mail
--- addon makes without the hook seeing it (TSM keeps its own copy of SendMail) when the gold left with it, and a mail
--- written by hand with at least the bounty. The hunter's side counts a hand-written mail from the poster too.
+-- Paying a bounty is recorded when the mail goes out through Wanted's own Send (the SendMail hook) or is written by
+-- hand with at least the bounty. A send another mail addon makes without the hook seeing it (TSM keeps its own copy
+-- of SendMail) is left to the hunter's side, which counts a hand-written mail from the poster too.
 ;(function()
 	local me = ns.Store:GetOrigin()
 	local function Owed(hunter, amount)
@@ -5607,13 +5637,14 @@ end)()
 		GetSendMailMoney = function() return amount end
 		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
 	end
-	-- 1. A send TSM makes: Pay fills the mail in, the hook never sees the send, the gold leaves, the game says sent
+	-- 1. A send TSM makes: Pay fills the mail in, the hook never sees the send, the gold leaves, the game says sent.
+	-- Whatever mail that was (the gold may have gone to anyone), it isn't recorded as this payment
 	local tsmClaim = Owed("Tsm Hunter", 10000)
 	check(ns.Payments:Prefill(tsmClaim), "Pay fills in the mail")
 	money = money - 10000 - 30
 	Fire("MAIL_SEND_SUCCESS")
 	local paid = ns.Payments:GetForClaim(tsmClaim.id)
-	check(paid and paid.data.amount == 10000 and paid.data.to == "Tsm Hunter", "a send the hook missed is recorded from the gold that left")
+	check(not paid, "a send the hook missed isn't taken for the payment")
 	-- 2. Pay, then a mail that didn't take the gold (another letter): not the payment
 	local otherClaim = Owed("Other Hunter", 20000)
 	ns.Payments:Prefill(otherClaim)
@@ -5643,16 +5674,7 @@ end)()
 	Fire("MAIL_INBOX_UPDATE")
 	local got = ns.Payments:GetForClaim(myClaim.id)
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
-	-- 5. Wanted's own mail: claim ids hold a space ("First Last:seq"), and the subject carries all of it
-	SendHook("Mhureth Theolia", "Wanted bounty Mhureth Theolia:7515", 10000)
-	Fire("MAIL_SEND_SUCCESS")
-	paid = ns.Payments:GetForClaim("Mhureth Theolia:7515")
-	check(paid and paid.data.claim == "Mhureth Theolia:7515", "Wanted's own mail pays the whole claim id")
-	-- The hunter's side reads the whole id from the subject too
-	GetInboxHeaderInfo = function() return nil, nil, "Kind Poster", "Wanted bounty Hunter Me:42", 7000 end
-	Fire("MAIL_INBOX_UPDATE")
-	got = ns.Payments:GetForClaim("Hunter Me:42")
-	check(got and got.data.side == "payee", "the hunter reads the whole claim id from the subject")
+	-- 5. Wanted's own mail with claim ids that hold a space ("First Last:seq"): the next test, with real ids
 	-- 6. Payments recorded before (1.10.0 and older) kept only the first name: they still pay the claim to that hunter
 	local legacy, legacyBounty = Owed("Legacy Hunter", 10000)
 	local paidBefore = ns.Model:GetMySummary()
@@ -7668,6 +7690,660 @@ end)()
 	check(ranks[0] and count == 1 and known == false, "only the guild master's rank counts when permissions can't be read")
 	check(said == 1, "said once in the log, got "..said)
 	C_GuildInfo, GuildControlGetNumRanks = realInfo, realRanks
+end)()
+-- The shared record network: what a record says about who made it is only believed when the game vouches for it
+;(function()
+	local S = ns.Store
+	-- A record as a client makes it, hashed the way the store checks it (id may be given to forge one)
+	local function Signed(kind, origin, seq, prev, data, t, id)
+		local r = { kind = kind, id = id or (origin..":"..tostring(seq)), origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = { r.kind, r.id, tostring(r.prev), tostring(r.t) }
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		r.hash = S:Hash(table.concat(parts, "\n"))
+		return r
+	end
+	S:FreshStart()
+	-- A relayed record must be the one its id names: Mallory can't slip a record in as Carol's first
+	local forged = Signed("pass", "Mallory Bad", 1, "0", { bounty = "x" }, nil, "Carol Real:1")
+	local taken, why = S:MergeRelayed(forged)
+	check(not taken and why == "malformed" and not S:Get("Carol Real:1"), "a record whose id isn't origin:seq is refused: "..tostring(why))
+	taken, why = S:Merge(forged, "Mallory Bad")
+	check(not taken and why == "malformed", "even sent live by the origin it names: "..tostring(why))
+	check(S:Merge(Signed("pass", "Carol Real", 1, "0", { bounty = "x" }), "Carol Real") and S:GetChainSeq("Carol Real") == 1, "Carol's real first record still comes in")
+	-- Malformed records are refused, never a Lua error
+	for _, bad in ipairs({
+		{ kind = "pass", id = "Nil Origin:1", seq = 1, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Str Seq:2", origin = "Str Seq", seq = "2", prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "No Prev:1", origin = "No Prev", seq = 1, t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Half Seq:1.5", origin = "Half Seq", seq = 1.5, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Inf Seq:inf", origin = "Inf Seq", seq = 1 / 0, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Huge Seq:1e300", origin = "Huge Seq", seq = 1e300, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Nested:1", origin = "Nested", seq = 1, prev = "0", t = clock, hash = "x", data = { x = {} } },
+	}) do
+		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
+		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
+	end
+	-- Numbers others add up are checked on the way in: amounts are whole copper the game can hold, and nothing is
+	-- infinite or not a number (a string amount threw; a negative or infinite one passed). Such a record is held, so
+	-- its chain moves on (a client before these checks may have made one), but never read.
+	local seq = 0
+	for _, case in ipairs({
+		{ "bounty", { target = "Player-9-NUM", amount = "lots" } },
+		{ "bounty", { target = "Player-9-NUM", amount = -5000 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 1 / 0 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 0 / 0 } },
+		{ "bounty", { target = "Player-9-NUM", amount = 1000.5 } },
+		{ "bounty", { target = "Player-9-NUM" } },
+		{ "raise", { bounty = "Numbers Guy:1" } },
+		{ "payment", { claim = "x:1", amount = -1 } },
+		{ "claim", { bounty = "x:1", killT = 1 / 0 } },
+	}) do
+		seq = seq + 1
+		local ok = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
+		local listed = false
+		for r in S:Iterator(case[1]) do if r.id == "Numbers Guy:"..seq then listed = true end end
+		check(ok and not listed and S:GetChainSeq("Numbers Guy") == seq, "a "..case[1].." with a bad number is never read ("..seq..")")
+	end
+	check(S:MergeRelayed(Signed("bounty", "Numbers Guy", 20, "0", { target = "Player-9-NUM", amount = 5000 })), "a sound bounty still comes in")
+	-- One past what the game's money holds (from a client before the cap) is kept, and counted at the most it can be
+	S:MergeRelayed(Signed("bounty", "Numbers Guy", 21, "0", { target = "Player-9-NUMBIG", amount = 2 ^ 40 }))
+	local big
+	for r in S:Iterator("bounty") do if r.id == "Numbers Guy:21" then big = r end end
+	check(big and ns.Bounties:GetAmount(big) == 2 ^ 31 - 1, "a bounty past what money holds is shown at the most it can be")
+	-- And this client never makes one others would refuse
+	check(ns.Bounties:ParseMoney("300000g") == nil and ns.Bounties:ParseMoney("214748g") == 2147480000, "an amount past what the game holds isn't read")
+	check(ns.Bounties:Post("Player-9-NUM2", "Num Two", 2 ^ 40) == nil and ns.Bounties:PostGuild("Num Guild", nil, 2 ^ 40) == nil, "nor posted")
+	-- Kinds the addon keeps for its own news are never taken from a peer: a "sighting" record reached the listeners
+	-- for our own sightings, and could make a spotted record in our name
+	local fake = Signed("sighting", "Sneaky Peer", 1, "0", {})
+	fake.sighting = { guid = "Player-9-SNEAK", zone = "Durotar", x = 1, y = 1 }
+	taken, why = S:MergeRelayed(fake)
+	check(not taken and why == "reserved" and #(ns.Tracks:Get("Player-9-SNEAK") or {}) == 0, "a peer's record of a reserved kind is refused: "..tostring(why))
+	S:FreshStart()
+end)()
+-- One player can't lock everyone's sharing with a made-up version: a newer one locks only once three players have said
+-- they run it, only a couple of minor versions ahead, and a lock from before that rule lifts at the next load
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.18.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	for _, who in ipairs({ "Voter A", "Voter B", "Voter C" }) do ns:NoteVersion("1.99.0", who) end
+	check(ns:GetRequiredUpdate() == nil, "a version far ahead locks nobody, however many say it")
+	for _ = 1, 5 do ns:NoteVersion("1.19.0", "Mallory Bad") end
+	Fire("CHAT_MSG_ADDON", "WNTD", "U:1:1/1:"..ns.Sync:Encode({ v = "1.19.0" }), "WHISPER", "Mallory Bad")
+	check(ns:GetRequiredUpdate() == nil, "one player saying it, again and again, locks nothing")
+	ns:NoteVersion("1.19.0", "Voter B")
+	ns:NoteVersion("1.19.0", "Voter C")
+	check(ns:GetRequiredUpdate() == "1.19.0", "three players saying it lock sharing until the update")
+	-- A lock from before the rule (one player's word) lifts at the next load
+	ns.db.requiredVersion = { version = "1.20.0", seen = clock }
+	ns:LoadSavedData()
+	check(ns:GetRequiredUpdate() == nil, "an older, unconfirmed lock lifts at load")
+	-- Updating past what a lock could plausibly be lifts it too
+	ns.db.requiredVersion = { version = "1.20.0", seen = clock, votes = 3 }
+	ns.VERSION = "1.17.0"
+	ns:LoadSavedData()
+	check(ns:GetRequiredUpdate() == nil, "a lock too far ahead of the running version lifts")
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
+-- One player naming many versions can't wipe out what other players said
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.30.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	ns:NoteVersion("1.31.0", "Wipe Voter A")
+	ns:NoteVersion("1.31.0", "Wipe Voter B")
+	for i = 1, 25 do ns:NoteVersion("1.32."..i, "Wipe Mallory") end
+	check(ns:GetRequiredUpdate() == nil, "one player naming many versions locks nothing")
+	ns:NoteVersion("1.31.0", "Wipe Voter C")
+	check(ns:GetRequiredUpdate() == "1.31.0", "the three who said 1.31.0 still lock: "..tostring(ns:GetRequiredUpdate()))
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
+-- A raise counts only from the bounty's poster, and only the poster's payment record settles it
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	S:FreshStart()
+	local bounty = Live("bounty", "Raise Poster", { target = "Player-9-RAISE", targetName = "Raise Target", amount = 10000 }, clock - 60)
+	Live("raise", "Raise Mallory", { bounty = bounty.id, amount = 50000 }, clock - 30)
+	check(B:GetAmount(bounty) == 10000, "a raise by someone other than the poster doesn't add to the bounty")
+	Live("payment", "Raise Mallory", { claim = "x:1", bounty = bounty.id, to = "Someone", amount = 10000, side = "payer" }, clock - 20)
+	check(not B:IsSettled(bounty), "nor does someone else's payment record settle it")
+	Live("raise", "Raise Poster", { bounty = bounty.id, amount = 5000 }, clock - 10)
+	check(B:GetAmount(bounty) == 15000, "the poster's raise does")
+	S:FreshStart()
+end)()
+-- A bounty's state: every client reaches the same answer, and a poster never owes one bounty twice
+;(function()
+	local S, B, P, M = ns.Store, ns.Bounties, ns.Payments, ns.Model
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local function Witness(claim)
+		Live("death", "Witness "..claim.origin, { victim = claim.data.victim, zone = claim.data.zone, deathId = "w"..claim.id }, claim.data.killT + 1)
+	end
+	local t0 = clock - 3 * 86400
+	-- The poster changed their mind: their latest word stands, whatever order the records came in
+	local b1 = Live("bounty", "State Poster", { target = "Player-9-ST1", targetName = "St One", amount = 5000 }, t0)
+	local c1 = Live("claim", "State Hunter", { bounty = b1.id, kill = "State Hunter:0", victim = "Player-9-ST1", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("confirm", "State Poster", { claim = c1.id }, t0 + 200)
+	Live("confirm", "State Poster", { claim = c1.id, disputed = true }, t0 + 300)
+	check(B:GetClaimLevel(c1) == 0, "the poster's latest decision on a claim stands: "..B:GetClaimLevel(c1))
+	-- A confirmed claim is the one owed: a witnessed claim with an earlier kill doesn't make the poster owe twice
+	local b2 = Live("bounty", "State Poster", { target = "Player-9-ST2", targetName = "St Two", amount = 5000 }, t0)
+	local a = Live("claim", "Hunter Ay", { bounty = b2.id, kill = "Hunter Ay:0", victim = "Player-9-ST2", zone = "Durotar", killT = t0 + 500 }, t0 + 501)
+	local bee = Live("claim", "Hunter Bee", { bounty = b2.id, kill = "Hunter Bee:0", victim = "Player-9-ST2", zone = "Durotar", killT = t0 + 400 }, t0 + 600)
+	Witness(a)
+	Witness(bee)
+	Live("confirm", "State Poster", { claim = a.id }, t0 + 700)
+	check(P:IsUnpaid(a) and not P:IsUnpaid(bee), "only the confirmed claim is owed")
+	check(B:GetWinningClaim(b2) == a and M:GetBountyInfo(b2).claim == a, "and it's the bounty's claim")
+	-- Only witnessed claims compete for the earliest kill: a claim nobody saw doesn't beat one somebody did
+	local b3 = Live("bounty", "State Poster", { target = "Player-9-ST3", targetName = "St Three", amount = 5000 }, t0)
+	local lone = Live("claim", "Hunter Cee", { bounty = b3.id, kill = "Hunter Cee:0", victim = "Player-9-ST3", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	local seen = Live("claim", "Hunter Dee", { bounty = b3.id, kill = "Hunter Dee:0", victim = "Player-9-ST3", zone = "Durotar", killT = t0 + 200 }, t0 + 201)
+	Witness(seen)
+	check(B:GetWinningClaim(b3) == seen and P:IsUnpaid(seen) and not P:IsUnpaid(lone), "a witnessed claim beats an earlier one nobody saw")
+	-- A kill before the bounty was posted, or one dated after its own claim, wins nothing
+	local b4 = Live("bounty", "State Poster", { target = "Player-9-ST4", targetName = "St Four", amount = 5000 }, t0 + 1000)
+	local early = Live("claim", "Hunter Eee", { bounty = b4.id, kill = "Hunter Eee:0", victim = "Player-9-ST4", zone = "Durotar", killT = t0 + 900 }, t0 + 1100)
+	local future = Live("claim", "Hunter Eff", { bounty = b4.id, kill = "Hunter Eff:0", victim = "Player-9-ST4", zone = "Durotar", killT = t0 + 5000 }, t0 + 1200)
+	Witness(early)
+	Witness(future)
+	check(B:GetWinningClaim(b4) == nil and not P:IsUnpaid(early) and not P:IsUnpaid(future), "kills outside the bounty's time win nothing")
+	-- A withdrawal only ends the bounty for kills after it: a kill before it is still owed, and shows so
+	local b5 = Live("bounty", "State Poster", { target = "Player-9-ST5", targetName = "St Five", amount = 5000 }, t0)
+	local before = Live("claim", "Hunter Gee", { bounty = b5.id, kill = "Hunter Gee:0", victim = "Player-9-ST5", zone = "Durotar", killT = t0 + 100 }, t0 + 400)
+	Witness(before)
+	Live("withdraw", "State Poster", { bounty = b5.id }, t0 + 200)
+	check(B:IsWithdrawn(b5) and M:GetBountyInfo(b5).state == "claimed" and P:IsUnpaid(before), "a kill before the withdrawal still shows as claimed and owed: "..M:GetBountyInfo(b5).state)
+	local b6 = Live("bounty", "State Poster", { target = "Player-9-ST6", targetName = "St Six", amount = 5000 }, t0)
+	Live("withdraw", "State Poster", { bounty = b6.id }, t0 + 200)
+	local after = Live("claim", "Hunter Aitch", { bounty = b6.id, kill = "Hunter Aitch:0", victim = "Player-9-ST6", zone = "Durotar", killT = t0 + 300 }, t0 + 301)
+	Witness(after)
+	check(M:GetBountyInfo(b6).state == "withdrawn" and not P:IsUnpaid(after), "a kill after it is owed nothing")
+	-- The victim's own record only counts when the GUID it claims is really theirs: the game names that GUID so, or the
+	-- app vouched for the link. Anyone can write a link naming someone else's GUID.
+	local hunterKill = Live("kill", "Hunter Eye", { killer = "Player-9-EYE", victim = "Player-9-ST7", zone = "Durotar" }, t0 + 99)
+	local b7 = Live("bounty", "State Poster", { target = "Player-9-ST7", targetName = "St Seven", amount = 5000 }, t0)
+	local c7 = Live("claim", "Hunter Eye", { bounty = b7.id, kill = hunterKill.id, victim = "Player-9-ST7", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("link", "Sock Puppet", { code = "SOCK2345", guid = "Player-9-ST7" }, t0)
+	Live("death", "Sock Puppet", { victim = "Player-9-ST7", killer = "Player-9-EYE", zone = "Durotar" }, t0 + 100)
+	local _, victimsOwn = B:GetWitnesses(c7)
+	check(not victimsOwn, "a link naming someone else's GUID doesn't make its maker the victim")
+	-- What's owed is the bounty at the kill: a raise after it doesn't raise what the hunter is owed
+	local b8 = Live("bounty", "State Poster", { target = "Player-9-ST8", targetName = "St Eight", amount = 5000 }, t0)
+	local c8 = Live("claim", "Hunter Jay", { bounty = b8.id, kill = "Hunter Jay:0", victim = "Player-9-ST8", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Witness(c8)
+	Live("raise", "State Poster", { bounty = b8.id, amount = 10000 }, t0 + 200)
+	Live("confirm", "State Poster", { claim = c8.id }, t0 + 300)
+	check(B:GetAmount(b8) == 15000 and B:GetOwed(c8) == 5000, "owed is the bounty at the kill: "..tostring(B.GetOwed and B:GetOwed(c8)))
+	Live("payment", "State Poster", { claim = c8.id, bounty = b8.id, to = "Hunter Jay", amount = 5000, side = "payer" }, t0 + 400)
+	check(P:GetForClaim(c8.id), "and paying that settles it")
+	-- A claim with its kill time in text: what it'd be owed reads the bounty now, never an error
+	local c9 = Live("claim", "Hunter Kay", { bounty = b8.id, kill = "Hunter Kay:0", victim = "Player-9-ST8", zone = "Durotar", killT = "x" }, t0 + 500)
+	local ok, owed = pcall(B.GetOwed, B, c9)
+	check(ok and owed == 15000, "a kill time in text is never compared: "..tostring(owed))
+	-- MORE
+end)()
+-- A claim on a guild bounty is witnessed only by a death whose recorder saw the victim in that guild: the hunter's own
+-- word about the victim's guild isn't enough
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local t0 = clock - 600
+	local bounty = Live("bounty", "Guild Poster", { guild = "Gold Guild", targetName = "<Gold Guild>", amount = 5000 }, t0)
+	local claim = Live("claim", "Guild Hunter", { bounty = bounty.id, kill = "Guild Hunter:0", victim = "Player-9-GMEMBER", victimGuild = "Gold Guild", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Live("death", "Guild Witness One", { victim = "Player-9-GMEMBER", zone = "Durotar" }, t0 + 101)
+	check(B:GetClaimLevel(claim) == 1, "a witness who didn't see the victim in the guild doesn't witness a guild claim")
+	Live("death", "Guild Witness Two", { victim = "Player-9-GMEMBER", victimGuild = "Gold Guild", zone = "Durotar" }, t0 + 101)
+	check(B:GetClaimLevel(claim) == 2, "one who did, does")
+end)()
+-- A payment counts only between the claim's poster and hunter, with at least what's owed: not any mail with the right
+-- subject (nothing, or cash on delivery), not one for someone else's claim, not a stranger's record
+;(function()
+	local S, P, me = ns.Store, ns.Payments, ns.Store:GetOrigin()
+	local function Signed(kind, origin, seq, data, t)
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local realCount, realHeader, realSendMoney, realCOD = GetInboxNumItems, GetInboxHeaderInfo, GetSendMailMoney, GetSendMailCOD
+	local function Inbox(sender, subject, money, cod)
+		GetInboxNumItems = function() return 1 end
+		GetInboxHeaderInfo = function() return nil, nil, sender, subject, money, cod or 0 end
+		Fire("MAIL_INBOX_UPDATE")
+	end
+	local function Send(recipient, subject, amount, cod)
+		GetSendMailMoney = function() return amount end
+		GetSendMailCOD = function() return cod or 0 end
+		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
+	end
+	-- The hunter's side: our claim on Pat Poster's 7000 bounty
+	local theirs = Signed("bounty", "Pat Poster", 1, { target = "Player-9-PAYSEC", targetName = "Pay Sec", amount = 7000 }, clock - 7200)
+	local myKill = S:NewRecord("kill", { killer = "Player-1-ME", killerName = me, victim = "Player-9-PAYSEC", victimName = "Pay Sec", deathId = "paysec-1", honor = true })
+	local myClaim = S:NewRecord("claim", { bounty = theirs.id, kill = myKill.id, victim = "Player-9-PAYSEC", victimName = "Pay Sec", deathId = "paysec-1", killT = myKill.t })
+	Signed("confirm", "Pat Poster", 2, { claim = myClaim.id }, clock)
+	Inbox("Random Stranger", "Wanted bounty "..myClaim.id, 7000)
+	check(not P:GetForClaim(myClaim.id), "a mail from someone other than the poster doesn't pay our claim")
+	Inbox("Pat Poster", "Wanted bounty "..myClaim.id, 1)
+	check(not P:GetForClaim(myClaim.id), "nor one from the poster with less than the bounty")
+	-- Someone else's claim named in a subject isn't recorded as paid to us
+	local otherClaim = Signed("claim", "Other Hunter", 1, { bounty = theirs.id, kill = "Other Hunter:0", victim = "Player-9-PAYSEC", killT = clock - 50 }, clock - 40)
+	Inbox("Pat Poster", "Wanted bounty "..otherClaim.id, 7000)
+	local recorded = false
+	for payment in S:Iterator("payment") do if payment.data.claim == otherClaim.id then recorded = true end end
+	check(not recorded, "a payment for someone else's claim isn't recorded by us")
+	Inbox("Pat Poster", "Wanted bounty "..myClaim.id, 7000)
+	check(P:GetForClaim(myClaim.id), "the poster's mail with the bounty pays it")
+	-- The poster's side: our bounty, Hal Hunter's confirmed claim
+	local mine = ns.Bounties:Post("Player-9-PAYSEC2", "Pay Sec Two", 5000)
+	local hisClaim = Signed("claim", "Hal Hunter", 1, { bounty = mine.id, kill = "Hal Hunter:0", victim = "Player-9-PAYSEC2", killT = clock - 30 }, clock - 20)
+	ns.Bounties:Decide(hisClaim, false)
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 0, 5000)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a cash-on-delivery mail with the subject isn't a payment")
+	Send("Someone Else", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "nor one to anyone but the hunter")
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_FAILED")
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a send that failed leaves nothing waiting for the next mail to count")
+	-- Closing the mailbox while the send is on its way, or failing to take an item, doesn't lose it
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_FAILED", 12345)
+	Fire("MAIL_CLOSED")
+	clock = clock + 2
+	Fire("MAIL_SEND_SUCCESS")
+	check(P:GetForClaim(hisClaim.id), "a send that goes through just after the mailbox closes still counts")
+	ns.db.records[P:GetForClaim(hisClaim.id).id] = nil
+	-- But long after the close, a success is some other mail's
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_CLOSED")
+	clock = clock + 60
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a success long after the mailbox closed isn't this send's")
+	-- A stranger's payment record, or one for less than owed, doesn't pay it either
+	Signed("payment", "Random Stranger", 1, { claim = hisClaim.id, bounty = mine.id, to = "Hal Hunter", amount = 5000, side = "payer" })
+	Signed("payment", "Hal Hunter", 2, { claim = hisClaim.id, bounty = mine.id, from = me, amount = 10, side = "payee" })
+	check(not P:GetForClaim(hisClaim.id), "a stranger's payment record, or the hunter's for less than owed, doesn't count")
+	Signed("payment", "Hal Hunter", 3, { claim = hisClaim.id, bounty = mine.id, from = me, amount = 5000, side = "payee" })
+	check(P:GetForClaim(hisClaim.id), "the hunter's own record of the full amount does")
+	GetInboxNumItems, GetInboxHeaderInfo, GetSendMailMoney, GetSendMailCOD = realCount, realHeader, realSendMoney, realCOD
+end)()
+-- Who gets a bounty: a hunter's own record of being paid can't make their claim the one paid
+;(function()
+	local S, B, P = ns.Store, ns.Bounties, ns.Payments
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	S:FreshStart()
+	local t0 = clock - 600
+	local bounty = Live("bounty", "Win Poster", { target = "Player-9-WIN", targetName = "Win Target", amount = 10000 }, t0)
+	local hank = Live("claim", "Win Hunter", { bounty = bounty.id, kill = "Win Hunter:0", victim = "Player-9-WIN", killT = t0 + 60, zone = "Durotar" }, t0 + 61)
+	Live("death", "Win Witness", { victim = "Player-9-WIN", zone = "Durotar" }, t0 + 61)
+	check(B:GetWinningClaim(bounty) == hank, "the witnessed claim wins")
+	local mal = Live("claim", "Win Mallory", { bounty = bounty.id, kill = "Win Mallory:0", victim = "Player-9-WIN", killT = t0 - 5000, zone = "Barrens" }, t0 + 300)
+	Live("payment", "Win Mallory", { claim = mal.id, bounty = bounty.id, from = "Win Poster", amount = 10000, side = "payee" }, t0 + 400)
+	check(B:GetWinningClaim(bounty) == hank and not P:GetForClaim(mal.id), "a hunter's own payee record doesn't make their claim the paid one")
+	clock = clock + 3 * 86400
+	check(P:IsUnpaid(hank), "and the real claim is still owed")
+	clock = clock - 3 * 86400
+	-- The winner's own record of the poster's mail does count
+	Live("payment", "Win Hunter", { claim = hank.id, bounty = bounty.id, from = "Win Poster", amount = 10000, side = "payee" }, t0 + 500)
+	check(P:GetForClaim(hank.id), "the winning hunter's record of being paid counts")
+	S:FreshStart()
+end)()
+-- A request for records (N) can't make this client walk and send everything it holds: at most a few chains per request,
+-- each from a real seq, and only chains it holds
+;(function()
+	local S = ns.Store
+	S:FreshStart()
+	local asked = {}
+	for i = 1, 30 do
+		local origin = "Need Origin "..i
+		S:Merge(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "n"..i } }), origin)
+		asked[origin] = 1
+	end
+	asked["Never Heard"] = -5
+	RunFrames()
+	local realQueue, fills = ns.QueueWork, 0
+	ns.QueueWork = function(self, f) fills = fills + 1 return realQueue(self, f) end
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = asked }), "CHANNEL", "Greedy Asker", nil, nil, nil, ns.Sync:GetPointer().n)
+	RunTimers()
+	ns.QueueWork = realQueue
+	RunFrames()
+	check(fills > 0 and fills <= 5, "a request is answered for a few chains at most: "..fills)
+	ns.QueueWork = function(self, f) fills = fills + 1 return realQueue(self, f) end
+	fills = 0
+	clock = clock + 61
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("N", { n = { ["Never Heard"] = -5, ["Need Origin 1"] = 0.5 } }), "CHANNEL", "Greedy Asker", nil, nil, nil, ns.Sync:GetPointer().n)
+	RunTimers()
+	ns.QueueWork = realQueue
+	RunFrames()
+	check(fills == 0, "nor for a chain we don't hold, or from a seq that isn't one: "..fills)
+	S:FreshStart()
+end)()
+-- Messages in parts whose other parts never come are let go after a while, and one player can't hold many open
+;(function()
+	local channel = ns.Sync:GetPointer().n
+	local function Part(id, part, total, chunk)
+		Fire("CHAT_MSG_ADDON", "WNTD", "S:"..id..":"..part.."/"..total..":"..chunk, "CHANNEL", "Part Spammer", nil, nil, nil, channel)
+	end
+	local payload = ns.Sync:Encode({ s = { { g = "Player-9-PARTS", n = "Parts Pat", z = "Durotar", m = 1, x = 1, y = 1 } } })
+	local half = math.floor(#payload / 2)
+	clock = clock + 61
+	for i = 1, 6 do Part("g"..i, 1, 2, "garbage") end
+	Part("rr", 1, 2, payload:sub(1, half))
+	Part("rr", 2, 2, payload:sub(half + 1))
+	check(ns.Store:GetPlayer("Player-9-PARTS") == nil, "a player holding many messages open can't start another")
+	clock = clock + 61 -- the open ones are let go
+	Part("ok", 1, 2, payload:sub(1, half))
+	Part("ok", 2, 2, payload:sub(half + 1))
+	check(ns.Store:GetPlayer("Player-9-PARTS") ~= nil, "once they're let go, a whole message comes through")
+end)()
+-- Messages held back by a fight: one player flooding can't use up the room everyone else's need
+;(function()
+	local channel = ns.Sync:GetPointer().n
+	RunTimers()
+	RunFrames()
+	Fire("PLAYER_REGEN_DISABLED")
+	check(ns:InCombat(), "a fight starts")
+	for _ = 1, 6 do
+		clock = clock + 61
+		for _ = 1, 55 do
+			Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { r = {} }), "CHANNEL", "Fight Flooder", nil, nil, nil, channel)
+		end
+	end
+	local quiet = Sealed({ kind = "pass", id = "Quiet Fighter:1", origin = "Quiet Fighter", seq = 1, prev = "0", t = clock, data = { bounty = "q" } })
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { r = { quiet } }), "CHANNEL", "Quiet Fighter", nil, nil, nil, channel)
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	RunFrames()
+	check(ns.Store:Get("Quiet Fighter:1") ~= nil, "another player's record held back in the fight is still taken in after it")
+end)()
+-- Notices from across the factions: one bridge can't flood a player's price, and amounts stay within what a record holds
+;(function()
+	local function Notices(list)
+		Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "N", n = list }), "WHISPER", 101)
+		RunTimers()
+	end
+	local function Count(guid)
+		local n = 0
+		for notice in ns.Store:Iterator("notice") do if notice.data.target == guid then n = n + 1 end end
+		return n
+	end
+	clock = clock + 3600
+	Notices({ { b = "Far Side:1", g = "Player-1-HUGE", n = "Huge Price", a = 2 ^ 40, t = clock } })
+	local huge
+	for notice in ns.Store:Iterator("notice") do if notice.data.target == "Player-1-HUGE" then huge = notice end end
+	check(huge and huge.data.amount == 2 ^ 31 - 1, "a notice past what a record holds is kept at the most it can be")
+	local flood = {}
+	for i = 1, 30 do flood[i] = { b = "Far Side:"..(100 + i), g = "Player-1-FLOODED", n = "Flooded", a = 10000, t = clock - i } end
+	Notices(flood)
+	check(Count("Player-1-FLOODED") <= 10, "one player gets only so many new notices an hour: "..Count("Player-1-FLOODED"))
+	for round = 0, 2 do
+		local wide = {}
+		for i = 1, 50 do
+			local n = round * 50 + i
+			wide[i] = { b = "Far Side:"..(200 + n), g = "Player-1-WIDE"..n, n = "Wide "..n, a = 10000, t = clock }
+		end
+		Notices(wide)
+	end
+	local stored = 0
+	for n = 1, 150 do stored = stored + Count("Player-1-WIDE"..n) end
+	check(stored <= 100, "one bridge gets only so many new notices an hour: "..stored)
+	-- The same bounty under an older bridge's id (the poster's) and a newer one's counts once
+	local me = UnitGUID("player")
+	local before = ns.Bridge:GetPriceOnMe()
+	clock = clock + 3600
+	Notices({ { b = "Far Poster:5", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
+	Notices({ { b = "w1234abcd", g = me, n = "Test Player", a = 7000, t = clock - 50 } })
+	check(ns.Bridge:GetPriceOnMe() == before + 7000, "one bounty carried under two ids counts once: "..(ns.Bridge:GetPriceOnMe() - before))
+	-- Two bounties posted in the same second on the same player, both under new ids, are two
+	clock = clock + 3600
+	Notices({ { b = "waaaa0001", g = me, n = "Test Player", a = 3000, t = clock - 10 }, { b = "wbbbb0002", g = me, n = "Test Player", a = 4000, t = clock - 10 } })
+	check(ns.Bridge:GetPriceOnMe() == before + 14000, "two bounties in the same second both count: "..(ns.Bridge:GetPriceOnMe() - before))
+end)()
+-- A fill's "pruned before here" (p) and "holes" (g) can't move someone's chain far ahead of their real records: never
+-- past what the origin, or two other players, said it reaches, never our own, and no more than 500 past what we hold
+-- unless the fill carries the record it skips to
+;(function()
+	local S = ns.Store
+	local function Signed(seq, prev, data)
+		return Sealed({ kind = "pass", id = "Alice Chain:"..seq, origin = "Alice Chain", seq = seq, prev = prev, t = clock, data = data or {} })
+	end
+	local channel = ns.Sync:GetPointer().n
+	local function From(sender, tag, tbl)
+		clock = clock + 61 -- clear of the per-sender cap
+		Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channel)
+		RunTimers()
+		RunFrames()
+	end
+	S:FreshStart()
+	local prev = "0"
+	for seq = 1, 3 do
+		local r = Signed(seq, prev, { bounty = "b"..seq })
+		S:Merge(r, "Alice Chain")
+		prev = r.hash
+	end
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 3, "a skip past anything anyone said the chain reaches doesn't move it: "..S:GetChainSeq("Alice Chain"))
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 2.5 }, r = {}, g = { ["Alice Chain"] = { 3, 1e9, "x", 7 } } })
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 1 / 0 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1 / 0 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 3, "nor do odd numbers, endless ones or holes past what anyone said")
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 300 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 301 }, r = { Signed(301, "x") } })
+	check(S:GetChainSeq("Alice Chain") == 3, "one player's word moves no chain, nor a record the fill carries: "..S:GetChainSeq("Alice Chain"))
+	-- Two players far ahead: one skip goes no more than 500 past what we hold, and skips don't add up
+	local big = 2 ^ 31 - 2
+	From("Alt One", "V", { c = { ["Alice Chain"] = big } })
+	From("Alt Two", "V", { c = { ["Alice Chain"] = big } })
+	From("Alt One", "F", { r = {}, p = { ["Alice Chain"] = big } })
+	local once = S:GetChainSeq("Alice Chain")
+	check(once <= 302 + 500, "two players' word moves a chain at most 500 past what's held: "..once)
+	-- Once the origin itself says how far its chain reaches, nobody else's word takes it further, self-made records or not
+	From("Alice Chain", "V", { c = { ["Alice Chain"] = once } })
+	From("Alt Two", "F", { r = { Signed(once + 500, "?") }, p = { ["Alice Chain"] = once + 500 } })
+	check(S:GetChainSeq("Alice Chain") <= once + 1, "past what the origin said, no skip: "..S:GetChainSeq("Alice Chain"))
+	-- Our own chain is never skipped
+	local me = S:GetOrigin()
+	local mine = S:GetChainSeq(me)
+	From("Alt One", "V", { c = { [me] = mine + 300 } })
+	From("Alt Two", "V", { c = { [me] = mine + 300 } })
+	From("Alt One", "F", { r = {}, p = { [me] = mine + 300 } })
+	check(S:GetChainSeq(me) == mine, "our own chain is never skipped")
+	-- A long honest gap: each fill that carries the record it skips to moves on from where the chain stands, so it
+	-- doesn't stall at 500 past what's held
+	S:FreshStart()
+	local function Bob(seq, p)
+		return Sealed({ kind = "pass", id = "Bob Long:"..seq, origin = "Bob Long", seq = seq, prev = p or "?", t = clock, data = {} })
+	end
+	S:Merge(Bob(1, "0"), "Bob Long")
+	From("Peer One", "V", { c = { ["Bob Long"] = 2000 } })
+	From("Peer Two", "V", { c = { ["Bob Long"] = 2000 } })
+	From("Peer One", "F", { p = { ["Bob Long"] = 450 }, r = { Bob(450) } })
+	check(S:GetChainSeq("Bob Long") == 450, "a fill carrying the record it skips to moves the chain there: "..S:GetChainSeq("Bob Long"))
+	From("Peer One", "F", { p = { ["Bob Long"] = 900 }, r = { Bob(900) } })
+	From("Peer One", "F", { p = { ["Bob Long"] = 1350 }, r = { Bob(1350) } })
+	check(S:GetChainSeq("Bob Long") == 1350, "and on, past 500 from what was held at first: "..S:GetChainSeq("Bob Long"))
+	S:FreshStart()
+end)()
+-- A channel pointer by whisper: two players we know must say the same one, at most one step past the newest one not set
+-- by a whisper (the app's, or one saved before whispers were told apart); three agreeing players can take someone who
+-- missed a few moves further, never more than three past that; the app's pointer always wins
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	ns.db.recentPeers["Peer One"], ns.db.recentPeers["Peer Two"], ns.db.recentPeers["Peer Three"] = clock, clock, clock
+	RunTimers()
+	local e = ns.Sync:GetPointer().e + 1
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
+	RunTimers()
+	check(ns.Sync:GetPointer().e == e and ns.db.syncChannel.hop == 0, "on the app's channel, saved as the app's")
+	Move("Peer One", { e = 99999, n = "WantedNetHordehijack", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e, "a whispered pointer far ahead isn't followed")
+	Move("Peer One", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e, "one player's word for the next one isn't enough")
+	Move("Peer Two", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 1 and ns.Sync:GetPointer().n == "WantedNetHordenext" and ns.db.syncChannel.hop == 1, "two players saying the next one is, saved as a whisper's")
+	for i = 2, 50 do Move("Peer One", { e = e + i, n = "WantedNetHordeevil"..i, a = 1, h = 1 }) end
+	check(ns.Sync:GetPointer().e == e + 1, "one player stepping the epoch up moves nobody: "..ns.Sync:GetPointer().e)
+	Move("Peer One", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	Move("Peer Two", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 1, "two players can't take us past the next one")
+	Move("Peer Three", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
+	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = 99999, n = "WantedNetHordemallory", a = 1, h = 1 }) end
+	check(ns.Sync:GetPointer().e == e + 3, "three players saying a pointer far ahead move nobody: "..ns.Sync:GetPointer().e)
+	-- Three agreeing lift the ceiling a single step toward their pointer (two never do)
+	check(ns.db.trustedEpoch == e + 1, "a pointer three past the ceiling lifts it one step: "..tostring(ns.db.trustedEpoch))
+	-- A catch-up older than the whisper that moved us (the same one read again at the next login) doesn't pull us back
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock - 3600)
+	RunTimers()
+	check(ns.Sync:GetPointer().e == e + 3, "an older catch-up doesn't take us back from where whispers moved us")
+	-- A newer one overrides whatever whispers brought, even at a lower epoch
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock + 10)
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "a newer app pointer wins over whispered ones")
+	ns.Sync:AdoptFromApp({ e = e - 1, n = "WantedNetHordestale" })
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal", "an app pointer older than the app's last is ignored")
+end)()
+-- A player without the app follows real server moves, each whispered by three app players, however many there are
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	for _, p in ipairs({ "App A", "App B", "App C" }) do ns.db.recentPeers[p] = clock end
+	local base = ns.Sync:GetPointer().e + 1
+	ns.Sync:AdoptFromApp({ e = base, n = "WantedNetHordebase" }, clock + 1)
+	RunTimers()
+	ns.db.appChannelEpoch = nil
+	ns.db.trustedEpoch = base
+	-- (Real moves come days apart: a whisper lifts the ceiling at most once a day)
+	for step = 1, 8 do
+		clock = clock + 25 * 3600
+		for _, p in ipairs({ "App A", "App B", "App C" }) do ns.db.recentPeers[p] = clock end
+		for _, p in ipairs({ "App A", "App B", "App C" }) do Move(p, { e = base + step, n = "WantedNetHordereal"..step, a = 1, h = 1 }) end
+	end
+	check(ns.Sync:GetPointer().e == base + 8, "a player without the app keeps up with eight real moves: "..(ns.Sync:GetPointer().e - base))
+	-- Three alts can't ratchet the ceiling: only a pointer one past it lifts it, and at most once a day
+	clock = clock + 25 * 3600
+	local alts = { "Alt A", "Alt B", "Alt C" }
+	for _, p in ipairs(alts) do ns.db.recentPeers[p] = clock end
+	local top = ns.Sync:GetPointer().e
+	for _ = 1, 30 do
+		local e = (ns.db.trustedEpoch or 0) + 4
+		for _, p in ipairs(alts) do Move(p, { e = e, n = "WantedNetHordeevil", a = 1, h = 1 }) end
+	end
+	check(ns.Sync:GetPointer().e <= top + 5 and ns.db.trustedEpoch <= top + 1, "thirty rounds of three alts in a day lift the ceiling one step at most: "..(ns.Sync:GetPointer().e - top))
+end)()
+-- A pruned chain end longer than 500 records still crosses, when the origin itself says how far the chain reaches
+;(function()
+	local S = ns.Store
+	local function Rec(seq, prev) return Sealed({ kind = "pass", id = "Long Timer:"..seq, origin = "Long Timer", seq = seq, prev = prev, t = clock, data = {} }) end
+	local channel = ns.Sync:GetPointer().n
+	local function From(sender, tag, tbl)
+		clock = clock + 61
+		Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channel)
+		RunTimers()
+		RunFrames()
+	end
+	S:FreshStart()
+	local prev = "0"
+	for seq = 1, 3 do local r = Rec(seq, prev) S:Merge(r, "Long Timer") prev = r.hash end
+	From("Long Timer", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer One", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer Two", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer One", "F", { r = {}, g = { ["Long Timer"] = { 3, 2001 } } })
+	check(S:GetChainSeq("Long Timer") == 2000, "a pruned end up to what the origin said crosses in one fill: "..S:GetChainSeq("Long Timer"))
+	-- Records that didn't check (altered, or not following the chain) don't count as held when capping a skip
+	S:FreshStart()
+	S:Merge(Rec(1, "0"), "Long Timer")
+	local fake = Rec(400, "x")
+	fake.hash = "00000000"
+	S:MergeRelayed(fake)
+	check(S:GetHighestHeld("Long Timer") == 1, "an altered record isn't counted as held")
+	S:FreshStart()
+end)()
+-- Version votes are kept in saved data with their age, so a /reload doesn't lose them; a player on a newer patch of the
+-- locked version keeps the lock fresh
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION = "1.40.2"
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+	ns:NoteVersion("1.41.0", "Saved Voter A")
+	ns:NoteVersion("1.41.0", "Saved Voter B")
+	local saved = ns.db.versionVotes and ns.db.versionVotes["1.41"]
+	check(saved and saved["Saved Voter A"] and saved["Saved Voter A"].t == clock, "votes are kept in saved data, with when")
+	ns:LoadSavedData()
+	ns:NoteVersion("1.41.0", "Saved Voter C")
+	check(ns:GetRequiredUpdate() == "1.41.0", "a third vote after a reload still locks")
+	ns.db.requiredVersion.seen = clock - 2 * 86400
+	ns:NoteVersion("1.41.3", "Patch Player")
+	check(ns:GetRequiredUpdate() == "1.41.0" and ns.db.requiredVersion.seen == clock, "a player on a newer patch keeps the lock fresh")
+	clock = clock + 2 * 3600
+	ns:LoadSavedData()
+	check(next(ns.db.versionVotes["1.41"] or {}) == nil, "votes older than an hour go")
+	ns.VERSION = realVersion
+	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
+-- A player who missed a few moves (offline through an incident) catches up: three players re-whispering the pointer
+-- they're on lift the ceiling a step a day until it reaches it, so later real moves are followed
+;(function()
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	local peers = { "App A", "App B", "App C" }
+	local function All(e, n)
+		for _, p in ipairs(peers) do
+			ns.db.recentPeers[p] = clock
+			Move(p, { e = e, n = n, a = 1, h = 1 })
+		end
+	end
+	for _, p in ipairs(peers) do ns.db.recentPeers[p] = clock end
+	local base = ns.Sync:GetPointer().e + 1
+	ns.Sync:AdoptFromApp({ e = base, n = "WantedNetHordegapbase" }, clock + 10)
+	RunTimers()
+	ns.db.appChannelEpoch, ns.db.trustedEpoch, ns.db.trustedRaisedAt = nil, base, nil
+	clock = clock + 5 * 86400
+	All(base + 3, "WantedNetHordegap3")
+	check(ns.Sync:GetPointer().e == base + 3, "three players' pointer a few moves on is followed")
+	for step = 4, 9 do
+		for _ = 1, 2 do
+			clock = clock + 86400
+			All(ns.Sync:GetPointer().e, ns.Sync:GetPointer().n)
+		end
+		All(base + step, "WantedNetHordegap"..step)
+	end
+	check(ns.Sync:GetPointer().e == base + 9, "and later moves, a couple of days apart, are followed too: "..(ns.Sync:GetPointer().e - base))
+	check(ns.db.trustedEpoch <= base + 9, "the ceiling never passes the pointer followed")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

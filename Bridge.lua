@@ -1,8 +1,8 @@
 -- Wanted: bounty notices across the factions. Each faction runs its own network (a custom channel is per
 -- faction), so a player never hears of the bounties the other side posts on them. A Battle.net friend on the
 -- other faction who also runs Wanted can carry them across as hidden game data (C_BattleNet.SendGameData),
--- never chat. Only bounty facts cross: the target, the amount, when it was posted, and a hash standing in
--- for the poster so posters can be counted without being named. The friend's client stores each as a
+-- never chat. Only bounty facts cross: the target, the amount, and when it was posted, under an id that doesn't
+-- name the poster. The friend's client stores each as a
 -- "notice" record of its own and ordinary sync spreads it on that side, so the target learns of the price on
 -- their head and it adds to their lifetime total (the wanted poster).
 --
@@ -32,6 +32,8 @@ local private = {
 	msgCounter = 0,
 	partial = {}, -- senderID:msgId -> { sender, parts, total, count, t } parts still arriving
 	inbound = {}, -- senderID -> { count, minute }
+	noticeTimes = {}, -- senderID -> when each new notice from them in the last hour was taken
+	targetTimes = {}, -- target GUID -> when each new notice about them in the last hour was taken
 	stats = { hellos = 0, noticesSent = 0, noticesReceived = 0, noticesStored = 0, skipped = 0, pushes = 0, partsSent = 0, partsReceived = 0, partsExpired = 0 },
 }
 local PREFIX = "WNTDB"
@@ -62,7 +64,9 @@ local PRESENCE_IN_GAME = { [1] = true, [4] = true, [5] = true }
 local PVP_FACTION = { Horde = 0, Alliance = 1 }
 local BACKLOG_SECONDS = 30 * 24 * 60 * 60
 local MAX_BACKLOG = 50
-local MAX_AMOUNT = 1e10 -- a million gold in copper; anything above is not a real bounty
+-- New notices taken from one bridge, and about one player, an hour: a bridge's whole backlog fits (MAX_BACKLOG)
+local MAX_NOTICES_PER_SENDER_HOUR = 100
+local MAX_NOTICES_PER_TARGET_HOUR = 10
 local ALERT_GATHER_SECONDS = 2 -- notices arriving together (a login's catch-up) make one alert
 -- The community in use (a field so the tests can set one)
 Bridge.clubId = WANTED_CLUB_ID
@@ -520,7 +524,7 @@ function private.OnMessage(text, senderID)
 		end
 	elseif tbl.k == TAG_NOTICES and type(tbl.n) == "table" then
 		for _, notice in ipairs(tbl.n) do
-			private.Receive(notice)
+			private.Receive(notice, senderID)
 		end
 	end
 end
@@ -536,12 +540,14 @@ function private.MakeNotice(bounty)
 	if not bounty or Store:IsTest(bounty) or type(bounty.data.target) ~= "string" then
 		return nil
 	end
+	-- The bounty's id names its poster ("First Last:seq"), and a hash of a name can be matched against a list of names:
+	-- the other side gets neither. The record's own hash stands in for the id, the same on every client of this side
+	-- (it covers the previous record's hash, which the other side never sees, so it says nothing of who posted it).
 	return {
-		b = bounty.id,
+		b = "w"..tostring(bounty.hash),
 		g = bounty.data.target,
 		n = bounty.data.targetName,
 		a = Bounties:GetAmount(bounty),
-		p = Store:Hash(bounty.origin),
 		t = bounty.t,
 	}
 end
@@ -615,21 +621,32 @@ local function ValidText(value, maxLen)
 	return type(value) == "string" and value ~= "" and #value <= maxLen
 end
 
-function private.Receive(notice)
+---@param notice table
+---@param senderID number? the bridge that sent it; nil for the app's catch-up (the server's word)
+function private.Receive(notice, senderID)
 	if type(notice) ~= "table" or not ValidText(notice.b, 80) or not ValidText(notice.g, 64) or not strmatch(notice.g, "^Player%-")
-		or not ValidText(notice.n, 48) or type(notice.a) ~= "number" or notice.a <= 0 or notice.a > MAX_AMOUNT
-		or type(notice.t) ~= "number" or (notice.p ~= nil and not ValidText(notice.p, 16)) then
+		or not ValidText(notice.n, 48) or type(notice.a) ~= "number" or notice.a <= 0 or notice.a == math.huge
+		or notice.a ~= notice.a or type(notice.t) ~= "number" or notice.t ~= notice.t or notice.t == math.huge or notice.t == -math.huge
+		or (notice.p ~= nil and not ValidText(notice.p, 16)) then
 		private.stats.skipped = private.stats.skipped + 1
 		Wanted:Log("!! Bridge: rejected a malformed bounty notice")
 		return
 	end
 	private.stats.noticesReceived = private.stats.noticesReceived + 1
-	local amount = floor(notice.a)
-	-- Someone on this side may have carried it across already, at this amount or higher
+	-- At most what the game's money holds (an older bridge may send more)
+	local amount = min(floor(notice.a), Store.MAX_COPPER)
+	-- Someone on this side may have carried it across already, at this amount or higher (an older bridge sends the
+	-- bounty's own id, a newer one its hash: the same bounty is the same target and posting time either way)
 	for known in Store:Iterator("notice") do
-		if known.data.bounty == notice.b and (known.data.amount or 0) >= amount then
+		if private.SameBounty(known.data.target, known.data.postedAt, known.data.bounty, notice.g, notice.t, notice.b)
+			and (known.data.amount or 0) >= amount then
 			return
 		end
+	end
+	if senderID and not private.UnderNoticeCaps(senderID, notice.g) then
+		private.stats.skipped = private.stats.skipped + 1
+		Wanted:Log("!! Bridge: too many new bounty notices from %s, or on %s, this hour; left out", tostring(senderID), notice.g)
+		return
 	end
 	private.stats.noticesStored = private.stats.noticesStored + 1
 	Store:NewRecord("notice", {
@@ -640,6 +657,45 @@ function private.Receive(notice)
 		poster = notice.p,
 		postedAt = floor(notice.t),
 	})
+end
+
+---Whether two notices are of the same bounty. Its id differs between bridges of different versions (an older one
+---sends the bounty's own id, a newer one "w" and its hash), so notices with ids of different forms are the same bounty
+---when they name the same target and posting time; with ids of the same form, only when the ids match (two bounties
+---can be posted on one player in the same second).
+function private.SameBounty(targetA, postedA, idA, targetB, postedB, idB)
+	if idA == idB then
+		return true
+	end
+	if targetA ~= targetB or type(postedA) ~= "number" or postedA ~= postedB then
+		return false
+	end
+	return private.IsHashId(idA) ~= private.IsHashId(idB)
+end
+
+---Whether a notice's bounty id is the newer form: "w" and the bounty record's hash.
+function private.IsHashId(id)
+	return type(id) == "string" and strfind(id, "^w%x+$") ~= nil
+end
+
+---Whether one more new notice from a bridge, about a player, fits this hour's caps; counts it if so.
+function private.UnderNoticeCaps(senderID, target)
+	local now = GetTime()
+	local function Recent(times)
+		while times[1] and now - times[1] >= 3600 do
+			tremove(times, 1)
+		end
+		return times
+	end
+	local bySender = Recent(private.noticeTimes[senderID] or {})
+	local byTarget = Recent(private.targetTimes[target] or {})
+	private.noticeTimes[senderID], private.targetTimes[target] = bySender, byTarget
+	if #bySender >= MAX_NOTICES_PER_SENDER_HOUR or #byTarget >= MAX_NOTICES_PER_TARGET_HOUR then
+		return false
+	end
+	tinsert(bySender, now)
+	tinsert(byTarget, now)
+	return true
 end
 
 ---A bounty notice from elsewhere than a Battle.net friend (the desktop app's catch-up): checked and stored the
@@ -702,19 +758,31 @@ end
 ---@return number posters distinct players who posted them
 function Bridge:GetPriceOnMe()
 	local me = UnitGUID("player")
-	local byBounty, posters = {}, {}
+	-- Each bounty once, at its highest amount: notices of the same bounty (SameBounty) go together
+	local bounties, posters = {}, {}
 	for notice in Store:Iterator("notice") do
 		local data = notice.data
 		if data.target == me and not Store:IsTest(notice) and type(data.amount) == "number" then
-			byBounty[data.bounty] = max(byBounty[data.bounty] or 0, data.amount)
+			local found
+			for _, bounty in ipairs(bounties) do
+				if private.SameBounty(bounty.target, bounty.postedAt, bounty.id, data.target, data.postedAt, data.bounty) then
+					found = bounty
+					break
+				end
+			end
+			if found then
+				found.amount = max(found.amount, data.amount)
+			else
+				tinsert(bounties, { target = data.target, postedAt = data.postedAt, id = data.bounty, amount = data.amount })
+			end
 			if data.poster then
 				posters[data.poster] = true
 			end
 		end
 	end
 	local total, count, numPosters = 0, 0, 0
-	for _, amount in pairs(byBounty) do
-		total, count = total + amount, count + 1
+	for _, bounty in ipairs(bounties) do
+		total, count = total + bounty.amount, count + 1
 	end
 	for _ in pairs(posters) do
 		numPosters = numPosters + 1

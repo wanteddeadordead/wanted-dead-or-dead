@@ -258,6 +258,22 @@ function private.Witnesses(record, claimTimes)
 end
 
 ---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
+-- The live world numbers every chain from LIVE_SEQ_BASE: the server keeps the beta's records, and a character that
+-- keeps its beta name would otherwise make records with the same ids as its beta ones, which the server refuses
+local LIVE_SEQ_BASE = 1000000
+
+---Where chains start counting in this world: 0 in the beta, LIVE_SEQ_BASE in the live game (a chain's first record
+---is the next number).
+---@return number
+function Store:SeqBase()
+	return Wanted.WORLD == "live" and LIVE_SEQ_BASE or 0
+end
+
+---A chain with no records yet, at this world's base.
+function private.NewChain()
+	return { seq = Store:SeqBase(), lastHash = "0" }
+end
+
 ---moves on to there, so this client stops asking for records nobody has, and continues from prev (the first
 ---record's predecessor) or from an unknown one.
 ---@param origin string
@@ -267,7 +283,7 @@ function Store:SkipTo(origin, seq, prev)
 	local db = Wanted.db
 	local chain = db.chains[origin]
 	if not chain then
-		chain = { seq = 0, lastHash = "0" }
+		chain = private.NewChain()
 		db.chains[origin] = chain
 	end
 	if origin == private.origin or type(seq) ~= "number" or seq - 1 <= chain.seq then
@@ -418,7 +434,7 @@ end
 function Store:OnEnable()
 	private.origin = Store:GetOrigin()
 	Wanted:Log("Store: origin %s", private.origin)
-	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or { seq = 0, lastHash = "0" }
+	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or private.NewChain()
 	private.ownChain = Wanted.db.chains[private.origin]
 	Store:NoteCharacter(UnitGUID("player"), private.origin)
 	Store:Prune(GetServerTime())
@@ -481,14 +497,14 @@ function Store:LearnOrigin(sender)
 	if sender == private.origin then
 		return
 	end
-	if private.ownChain and private.ownChain.seq > 0 then
+	if private.ownChain and private.ownChain.seq > Store:SeqBase() then
 		Wanted:Log("Store: sender name %s differs from origin %s but records exist; keeping origin", sender, private.origin)
 		return
 	end
 	Wanted:Log("Store: origin corrected from %s to %s", tostring(private.origin), sender)
 	Wanted.db.chains[private.origin] = nil
 	private.origin = sender
-	Wanted.db.chains[sender] = Wanted.db.chains[sender] or { seq = 0, lastHash = "0" }
+	Wanted.db.chains[sender] = Wanted.db.chains[sender] or private.NewChain()
 	private.ownChain = Wanted.db.chains[sender]
 end
 
@@ -610,7 +626,7 @@ function private.Insert(record, live, fromApp)
 	end
 	local chain = db.chains[record.origin]
 	if not chain then
-		chain = { seq = 0, lastHash = "0" }
+		chain = private.NewChain()
 		db.chains[record.origin] = chain
 	end
 	private.NoteFirst(chain, record)
@@ -782,7 +798,7 @@ function Store:FreshStart()
 	end
 	db.records = {}
 	db.chains = {}
-	db.chains[private.origin] = { seq = 0, lastHash = "0" }
+	db.chains[private.origin] = private.NewChain()
 	private.ownChain = db.chains[private.origin]
 	return removed
 end
@@ -911,7 +927,7 @@ end
 ---@return number
 function Store:GetChainSeq(origin)
 	local chain = Wanted.db.chains[origin]
-	return chain and chain.seq or 0
+	return chain and chain.seq or Store:SeqBase()
 end
 
 

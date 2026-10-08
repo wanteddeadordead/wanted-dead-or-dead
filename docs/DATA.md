@@ -363,18 +363,20 @@ can be innocent (a reinstall, lost saved data) and are still listed, but never w
 migration. Records held from before 1.3.3 that came by catch-up have no `app` flag and witness nothing until the
 app or their origin sends them again.
 
-Records made after 1.18.2 carry `prev2`: the strong hash (`Store:Strong`, the first 16 hex digits of a SHA-256 of the
-record before's canonical content and its own `prev2`) of the origin's previous record. It sits beside `prev`, outside
-the canonical string, so older clients check the same Adler-32 and pass the field on untouched. The own chain keeps
-`lastStrong`, the strong hash of its last record. A chain may keep `stubs = { [seq] = strong..prev2 }` (32 hex
-digits) for records pruned after one of its origin's confirms, raises, withdrawals or payments that nothing has vouched
-for yet, so a chain walk can still cross the hole; they go once no such record comes before them. Both are optional new fields: no migration. The desktop app and the
-server should keep `prev2` on the records they carry, or a chain walk can't cross a record that came that way.
+Records made after 1.18.2 carry `data.p2`: the strong hash (`Store:Strong`, the first 16 hex digits of a SHA-256 of the
+record's canonical content, its own `p2` included) of the origin's previous record. It rides in `data` because the
+desktop app and the server keep only `kind`, `id`, `origin`, `seq`, `prev`, `t`, `data` and `hash`, and drop any other
+field; older clients hash `data` as it is, so they compute the same Adler-32 and pass it on. A `p2` that isn't 16 hex
+digits is no strong link (`Store:StrongLink`), never an error. The own chain keeps
+`lastStrong`, the strong hash of its last record. A chain may keep `stubs = { [seq] = strong..p2 }` (32 hex digits:
+the record's strong hash and its `p2`) for records pruned after one of its origin's confirms, raises, withdrawals or
+payments that nothing has vouched for yet, so a chain walk can still cross the hole; they go once no such record comes
+before them. All optional new fields: no migration.
 
 A received record's `vouched` flag (after 1.18.2) is local too: set once `Store:IsVouched` has found a trusted record
 of the same origin later in its chain, every record between held and each naming the one before by its strong hash
-(`prev2`; an Adler-32 `prev` can be forged to fit in a fraction of a second). A record already held is only taken as the
-same as an incoming copy when its whole canonical content and `prev2` match, not only its hash. Incoming
+(`data.p2`; an Adler-32 `prev` can be forged to fit in a fraction of a second). A record already held is only taken as
+the same as an incoming copy when its whole canonical content matches, not only its hash. Incoming
 copies drop it. A `confirm`, `raise`, `withdraw` or `payment` counts only when vouched (its maker's own word), and a
 raise or withdrawal only from the bounty's poster. A record in this client's own name is only taken from the app's
 catch-up, and a relayed record (not trusted) is replaced when its origin sends a different one for the same id. An

@@ -157,9 +157,10 @@ end
 ---Keeps what a chain walk needs of a record being pruned after an unvouched one: its strong hash and the strong link
 ---it carries (chain.stubs[seq], 32 hex digits). The record itself goes.
 function private.KeepStub(chain, record, from)
-	if chain and from and type(record.seq) == "number" and record.seq > from and type(record.prev2) == "string" then
+	local link = Store:StrongLink(record)
+	if chain and from and type(record.seq) == "number" and record.seq > from and link then
 		chain.stubs = chain.stubs or {}
-		chain.stubs[record.seq] = Store:Strong(record)..record.prev2
+		chain.stubs[record.seq] = Store:Strong(record)..link
 	end
 end
 
@@ -682,17 +683,31 @@ end
 -- Strong hashes worked out this session, by record (records never change)
 private.strong = setmetatable({}, { __mode = "k" })
 
----A record's strong hash: the first 16 hex digits of the SHA-256 of its canonical content and its own strong link, so a
----record naming it (prev2) commits to it and to everything before it. Worked out once per record.
+---A record's strong hash: the first 16 hex digits of the SHA-256 of its canonical content, which holds its own strong
+---link (data.p2), so a record naming it commits to it and to everything before it. Worked out once per record.
 ---@param record table
 ---@return string
 function Store:Strong(record)
 	local strong = private.strong[record]
 	if not strong then
-		strong = strsub(Store:StrongHash(Canonical(record).."\n"..tostring(record.prev2 or "")), 1, 16)
+		strong = strsub(Store:StrongHash(Canonical(record)), 1, 16)
 		private.strong[record] = strong
 	end
 	return strong
+end
+
+---A record's strong link: data.p2, the strong hash of its origin's record before, when it's 16 hex digits; nil for
+---anything else (a record from a client before strong links, or a made-up value), never an error. It rides in data,
+---which the desktop app and the server carry whole (they keep no other field of their own), so older clients hash it
+---like any data and pass it on.
+---@param record table
+---@return string?
+function Store:StrongLink(record)
+	local link = type(record.data) == "table" and record.data.p2
+	if type(link) == "string" and #link == 16 and strfind(link, "^%x+$") then
+		return link
+	end
+	return nil
 end
 
 
@@ -714,11 +729,11 @@ function Store:NewRecord(kind, data)
 		origin = private.origin,
 		seq = chain.seq,
 		prev = chain.lastHash,
-		-- The strong link to our record before (a SHA-256 older clients pass on without reading)
-		prev2 = private.LastStrong(chain),
 		t = GetServerTime(),
 		data = data,
 	}
+	-- The strong link to our record before (a SHA-256 older clients hash and pass on without reading)
+	data.p2 = private.LastStrong(chain)
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
 	chain.lastStrong = Store:Strong(record)
@@ -746,8 +761,7 @@ end
 ---@return boolean
 function Store:IsWellFormed(r)
 	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
-		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq)
-		or (r.prev2 ~= nil and (type(r.prev2) ~= "string" or not strfind(r.prev2, "^%x+$") or #r.prev2 ~= 16)) then
+		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
 		return false
 	end
 	for key, value in pairs(r.data) do
@@ -865,11 +879,6 @@ function private.Insert(record, live, fromApp)
 	end
 	if existing then
 		if same and not existing.test then
-			if (live or fromApp) and record.prev2 and existing.prev2 ~= record.prev2 then
-				-- The origin's own strong link replaces whatever a relayed copy carried
-				existing.prev2 = record.prev2
-				private.strong[existing] = nil
-			end
 			if live then
 				existing.live = true
 			end
@@ -960,9 +969,7 @@ function private.Insert(record, live, fromApp)
 	return true
 end
 
----Whether two copies of a record say the same thing: kind, id, prev, time and data. The strong link (prev2) isn't part
----of it: the app or the server may carry a record without it, and a relayed copy's could be made up (Insert takes the
----origin's own).
+---Whether two copies of a record say the same thing: kind, id, prev, time and data (its strong link included).
 function private.SameContent(a, b)
 	return a.hash == b.hash and type(a.data) == "table" and Canonical(a) == Canonical(b)
 end
@@ -1065,7 +1072,7 @@ end
 local VOUCH_WALK = 200
 
 ---Whether a record can be taken as its origin's word: trusted (Store:IsTrusted), or followed in its chain by
----records held, each naming the one before by its strong hash (prev2, Store:Strong), up to one that is trusted. A record its origin later built on
+---records held, each naming the one before by its strong hash (data.p2, Store:StrongLink), up to one that is trusted. A record its origin later built on
 ---is theirs, so a confirm or a payment relayed by another player counts once the poster's own word follows it. A yes
 ---is kept on the record (vouched, a local flag); a no is asked again once more records have come in.
 ---@param record table
@@ -1089,8 +1096,8 @@ function Store:IsVouched(record)
 		seq = seq + 1
 		local after = records[origin..":"..format("%d", seq)]
 		if after then
-			-- Only a strong link (prev2, from updated clients) counts: an Adler-32 prev can be forged to fit
-			if after.origin ~= origin or after.prev2 ~= strong then
+			-- Only a strong link (data.p2, from updated clients) counts: an Adler-32 prev can be forged to fit
+			if after.origin ~= origin or Store:StrongLink(after) ~= strong then
 				break
 			end
 			if after.vouched or Store:IsTrusted(after) then

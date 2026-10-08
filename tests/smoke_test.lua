@@ -7788,7 +7788,7 @@ end)()
 	local S, B = ns.Store, ns.Bounties
 	local function Signed(kind, origin, seq, prev, data, t, before)
 		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
-		r.prev2 = before and S:Strong(before) or nil
+		r.data.p2 = before and S:Strong(before) or nil
 		local keys = {}
 		for k in pairs(r.data) do keys[#keys + 1] = k end
 		table.sort(keys)
@@ -8233,7 +8233,7 @@ end)()
 	check(B:GetClaimLevel(claim) == 2, "one who did, does")
 end)()
 -- Adler-32 can be forged in a fraction of a second, so a chain only vouches for a record through a strong link: updated
--- clients put a SHA-256 of the record before (prev2) on each record they make
+-- clients put a SHA-256 of the record before (data.p2) on each record they make
 ;(function()
 	local S, B = ns.Store, ns.Bounties
 	check(S:StrongHash("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of abc: "..S:StrongHash("abc"))
@@ -8247,8 +8247,9 @@ end)()
 		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
 		return table.concat(parts, "\n")
 	end
-	local function Signed(kind, origin, seq, prev, data, t, prev2)
-		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", prev2 = prev2, t = t or clock, data = data or {} }
+	local function Signed(kind, origin, seq, prev, data, t, p2)
+		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		r.data.p2 = p2
 		r.hash = S:Hash(Canon(r))
 		return r
 	end
@@ -8308,7 +8309,7 @@ end)()
 	S:MergeRelayed(forged)
 	S:Merge(Signed("pass", "Alice Strong", 3, dispute.hash, { bounty = "x:1" }, t0 + 140, S:Strong(dispute)), "Alice Strong")
 	check(B:GetClaimLevel(claim) ~= 3, "a forged confirm isn't vouched for by the poster's next record: "..B:GetClaimLevel(claim))
-	-- A record from a client before strong links (no prev2) vouches for nothing before it
+	-- A record from a client before strong links (no p2) vouches for nothing before it
 	t0, bounty, claim = Setup()
 	local confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100)
 	S:MergeRelayed(confirm)
@@ -8327,20 +8328,27 @@ end)()
 	S:MergeRelayed(Forge(Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100), dispute.hash))
 	S:MergeRelayed(dispute, true)
 	check(S:Get(dispute.id).data.disputed and S:Get(dispute.id).app and B:GetClaimLevel(claim) == 0, "the app's real record replaces a forgery with the same Adler-32")
-	-- The app (or the server) may carry a record without its strong link: it's still the same record, and keeps the link
+	-- The app and the server keep only kind, id, origin, seq, prev, t, data and hash: the strong link rides in data, so a
+	-- record round-tripped through them still links strongly
+	local function AppCopy(r)
+		local data = {}
+		for k, v in pairs(r.data) do data[k] = v end
+		return { kind = r.kind, id = r.id, origin = r.origin, seq = r.seq, prev = r.prev, t = r.t, data = data, hash = r.hash }
+	end
+	t0, bounty, claim = Setup()
+	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
+	S:MergeRelayed(AppCopy(confirm))
+	S:MergeRelayed(AppCopy(Signed("pass", "Alice Strong", 3, confirm.hash, { bounty = "x:1" }, t0 + 140, S:Strong(confirm))), true)
+	check(B:GetClaimLevel(claim) == 3, "a record round-tripped through the app's format still links strongly")
+	-- A p2 that isn't 16 hex digits is no strong link, never an error
 	t0, bounty, claim = Setup()
 	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
 	S:MergeRelayed(confirm)
-	local stripped = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100)
-	S:MergeRelayed(stripped, true)
-	check(S:Get(confirm.id).app and S:Get(confirm.id).prev2 == confirm.prev2, "a copy without the strong link is the same record, and the link stays")
-	-- A relayed copy with a made-up strong link takes the origin's own link when that arrives
-	t0, bounty, claim = Setup()
-	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
-	local badLink = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, "0123456789abcdef")
-	S:MergeRelayed(badLink)
-	S:Merge(confirm, "Alice Strong")
-	check(S:Get(confirm.id).live and S:Get(confirm.id).prev2 == confirm.prev2, "the origin's strong link replaces a made-up one")
+	for i, odd in ipairs({ "not hex at all!!", "abc", 12345, true }) do
+		local ok = pcall(S.Merge, S, Signed("pass", "Alice Strong", 2 + i, i == 1 and confirm.hash or "?", { bounty = "x:1" }, t0 + 140 + i, odd), "Alice Strong")
+		check(ok, "an odd p2 is no error: "..tostring(odd))
+	end
+	check(B:GetClaimLevel(claim) == 1, "and links nothing")
 	-- What it costs: the strong hash is worked out once per record and kept
 	local records = {}
 	for i = 1, 200 do
@@ -8414,9 +8422,8 @@ end)()
 ;(function()
 	local S, B = ns.Store, ns.Bounties
 	local function Signed(kind, origin, seq, prev, data, t, before)
-		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev, t = t, data = data })
-		r.prev2 = before and S:Strong(before) or nil
-		return r
+		data.p2 = before and S:Strong(before) or nil
+		return Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev, t = t, data = data })
 	end
 	S:FreshStart()
 	local old = clock - 5 * 86400

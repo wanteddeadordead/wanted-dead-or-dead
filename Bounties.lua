@@ -744,12 +744,12 @@ local LOYAL_WITNESS_CLAIMS = 3
 ---their records that we can't tell they've been around. The first record's time is kept with their chain, as the
 ---record itself may be pruned.
 function private.IsNewWitness(origin, killT)
-	local first = Store:Get(origin..":1")
+	local first = Store:Get(origin..":"..(Store:SeqBase() + 1))
 	local firstT = first and first.t or Store:GetFirstSeen(origin)
 	if firstT then
 		return killT - firstT < NEW_WITNESS_SECONDS
 	end
-	return Store:GetChainSeq(origin) < 10
+	return Store:GetChainSeq(origin) - Store:SeqBase() < 10
 end
 
 ---The hunter a witness only ever backs up, when every claim they've witnessed (at least a few) is one hunter's.

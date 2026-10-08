@@ -33,6 +33,11 @@ function Minimap_:OnEnable()
 		OnLeave = function() GameTooltip:Hide() end,
 	})
 	DBIcon:Register(NAME, launcher, settings)
+	-- Forever isn't the retail client, so LibDBIcon pins the icon at Classic's spot, which leaves the round seal up
+	-- and left of the ring's centre; this spot was centred by eye in game
+	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then
+		DBIcon:SetButtonIcon(NAME, nil, nil, "TOPLEFT", 8, -6.8)
+	end
 	local button = DBIcon:GetMinimapButton(NAME)
 	button.badge = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	button.badge:SetPoint("BOTTOMRIGHT", -2, 2)

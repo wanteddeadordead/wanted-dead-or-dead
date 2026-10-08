@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.18.3] - 2026-10-08
+
+- The minimap button and the addon list show the wax seal, as on the website and CurseForge, centred in the minimap ring.
+- Raid invites go through one queue: four while you're alone, then the group becomes a raid and the rest follow;
+  invites out count against the room, anyone not in after a minute is invited once more, and "joined" or "didn't
+  join" says how it went. Nobody already in your group is invited again, and members stop asking once they're in.
+- Whispering "inv" before a planned raid starts signs you up and tells you when it starts; you're invited at the
+  start. "inv pls" and "invite" work too, and a full raid whispers back that it's full.
+- Your raid's card warns when you can't invite (in a group without lead or assist); invites wait until you can.
+- Later raids can be set up to six days ahead, and Announce gives the day ("Thu at 23:00 server time").
+- Raid names and places are held to 40 letters as you type, instead of being cut short after.
+- A new start time brings the "starts soon" reminder and the join popup back at the new time.
+- A raid can only be listed, changed or closed by its own leader: nobody else can post as them, close their raid or
+  take it over, and a copy shared across realms or sent before an edit can't undo the edit.
+- Guild only raids now show for your guildmates (they were dropped on the way in).
+- A declined invite leaves the line at once; a player who couldn't be invited is let go after a few minutes; anyone
+  who whispers "inv" while you can't invite is told why; players who signed up by whisper survive a /reload.
+- Raid days ahead land on the hour you typed even across a clock change, and the day picker names days by the clock
+  you're typing in.
+- Your calling card's name fits its plate: full size while it fits between the ornaments, a little smaller past that,
+  and a long name on two lines, so it no longer runs onto the plate's ends or gets cut off.
+
 ## [1.18.2] - 2026-10-08
 
 - New things show as a blue count on the menu until you open the page that shows them: raids on Raids, other players'

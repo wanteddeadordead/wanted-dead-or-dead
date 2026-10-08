@@ -89,6 +89,8 @@ local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
 local MOVE_VOTES, MOVE_VOTES_AHEAD = 2, 3
 local MOVE_MAX_AHEAD = 3
 local MOVE_VOTE_SECONDS = 30 * 60
+-- Whispers lift the channel ceiling at most this often (the app's pointer sets it any time)
+local TRUST_RAISE_SECONDS = 24 * 60 * 60
 local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
 local MAX_MESSAGE_LEN = 255
@@ -2573,8 +2575,7 @@ end
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
----@param trusted boolean? three players agreed on it: it lifts the ceiling as the app's word does
-function private.Adopt(pointer, why, hop, trusted)
+function private.Adopt(pointer, why, hop)
 	if not private.ValidPointer(pointer) or (pointer.e == private.epoch and pointer.n == private.channelName) then
 		return false
 	end
@@ -2587,7 +2588,7 @@ function private.Adopt(pointer, why, hop, trusted)
 	private.channelName, private.epoch, private.hop = pointer.n, pointer.e, hop
 	-- Where it came from is kept (hop 0: our own app): what a whisper set never raises the next whispered pointer's ceiling
 	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime(), hop = hop }
-	if hop == 0 or trusted then
+	if hop == 0 then
 		Wanted.db.trustedEpoch = pointer.e
 	end
 	if old ~= pointer.n then
@@ -2791,6 +2792,20 @@ function private.VoteMove(epoch, name, sender)
 	return n
 end
 
+---Three players agreeing on the pointer we're now on, when it's the very next epoch past the ceiling, lift the ceiling to
+---it, at most once a day: a player without the app keeps up with real moves (days apart), while alts can't ratchet it
+---(two never lift it, nor a pointer further on).
+---@param epoch number
+---@param votes number players who said it lately
+function private.LiftCeiling(epoch, votes)
+	local db = Wanted.db
+	local ceiling = max(db.trustedEpoch or 0, db.appChannelEpoch or 0) + 1
+	if votes >= MOVE_VOTES_AHEAD and epoch == ceiling and GetServerTime() - (db.trustedRaisedAt or 0) >= TRUST_RAISE_SECONDS then
+		db.trustedEpoch, db.trustedRaisedAt = epoch, GetServerTime()
+		Wanted:Log("Sync: three players agree on channel epoch %d; whispered moves may go one past it now", epoch)
+	end
+end
+
 ---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
 ---and newer than ours; passed on once more while under the hop cap (Adopt).
 function private.OnMove(tbl, sender)
@@ -2814,11 +2829,17 @@ function private.OnMove(tbl, sender)
 		Wanted:Log("Sync: a channel move from %s that isn't the server's; ignored", tostring(sender))
 		return
 	end
-	if tbl.e <= private.epoch then
+	-- The pointer we're on (followed on two players' word): a third may still lift the ceiling to it (LiftCeiling)
+	local current = tbl.e == private.epoch and tbl.n == private.channelName
+	if tbl.e < private.epoch or (tbl.e == private.epoch and not current) then
 		return
 	end
 	if not private.KnownPeers()[sender] then
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
+		return
+	end
+	if current then
+		private.LiftCeiling(tbl.e, private.VoteMove(tbl.e, tbl.n, sender))
 		return
 	end
 	-- Followed once enough players we know say the same pointer: two for the next one past the newest epoch not set by a
@@ -2839,9 +2860,9 @@ function private.OnMove(tbl, sender)
 		return
 	end
 	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
-	-- Three agreeing are as good as the app's word for the ceiling: a player without the app keeps up with real moves
-	-- (two never lift it, or two alts could walk us along)
-	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops, votes >= MOVE_VOTES_AHEAD)
+	if private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops) then
+		private.LiftCeiling(tbl.e, votes)
+	end
 end
 
 ---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed unless older than the app's last,

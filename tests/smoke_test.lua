@@ -8225,8 +8225,8 @@ end)()
 	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
 	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = 99999, n = "WantedNetHordemallory", a = 1, h = 1 }) end
 	check(ns.Sync:GetPointer().e == e + 3, "three players saying a pointer far ahead move nobody: "..ns.Sync:GetPointer().e)
-	-- Three agreeing lift the ceiling (two never do), so a player without the app keeps up with real moves
-	check(ns.db.trustedEpoch == e + 3, "a pointer three players agreed on lifts the ceiling: "..tostring(ns.db.trustedEpoch))
+	-- Only three agreeing on the very next epoch lift the ceiling (two never do, nor a pointer further on)
+	check(ns.db.trustedEpoch == e, "a pointer three past the ceiling doesn't lift it: "..tostring(ns.db.trustedEpoch))
 	-- A catch-up older than the whisper that moved us (the same one read again at the next login) doesn't pull us back
 	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" }, clock - 3600)
 	RunTimers()
@@ -8248,10 +8248,26 @@ end)()
 	RunTimers()
 	ns.db.appChannelEpoch = nil
 	ns.db.trustedEpoch = base
+	-- (Real moves come days apart: a whisper lifts the ceiling at most once a day)
 	for step = 1, 8 do
+		clock = clock + 25 * 3600
+		for _, p in ipairs({ "App A", "App B", "App C" }) do ns.db.recentPeers[p] = clock end
 		for _, p in ipairs({ "App A", "App B", "App C" }) do Move(p, { e = base + step, n = "WantedNetHordereal"..step, a = 1, h = 1 }) end
 	end
 	check(ns.Sync:GetPointer().e == base + 8, "a player without the app keeps up with eight real moves: "..(ns.Sync:GetPointer().e - base))
+	-- Three alts can't ratchet the ceiling: only a pointer one past it lifts it, and at most once a day
+	clock = clock + 25 * 3600
+	local alts = { "Alt A", "Alt B", "Alt C" }
+	for _, p in ipairs(alts) do ns.db.recentPeers[p] = clock end
+	local top = ns.Sync:GetPointer().e
+	for _ = 1, 30 do
+		local e = (ns.db.trustedEpoch or 0) + 4
+		for _, p in ipairs(alts) do Move(p, { e = e, n = "WantedNetHordeevil", a = 1, h = 1 }) end
+	end
+	check(ns.Sync:GetPointer().e <= top + 4 and ns.db.trustedEpoch == top, "thirty rounds of three alts get no further than three past the ceiling: "..(ns.Sync:GetPointer().e - top))
+	for _, p in ipairs(alts) do Move(p, { e = top + 1, n = "WantedNetHordeone", a = 1, h = 1 }) end
+	for _, p in ipairs(alts) do Move(p, { e = top + 2, n = "WantedNetHordetwo", a = 1, h = 1 }) end
+	check(ns.db.trustedEpoch == top, "nor ones that step it up: the ceiling rises at most once a day: "..tostring(ns.db.trustedEpoch - top))
 end)()
 -- A pruned chain end longer than 500 records still crosses, when the origin itself says how far the chain reaches
 ;(function()

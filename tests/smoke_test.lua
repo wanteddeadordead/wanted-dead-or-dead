@@ -5593,9 +5593,9 @@ end)()
 	check(#asked == 0, "and no unit asked about: "..table.concat(asked, ", "))
 	check(ns.db.players["Player-9-CONTROLLED"] == nil, "nobody listed from inside")
 end)()
--- Paying a bounty is recorded however the mail goes out: Wanted's own Send (the SendMail hook), a send another mail
--- addon makes without the hook seeing it (TSM keeps its own copy of SendMail) when the gold left with it, and a mail
--- written by hand with at least the bounty. The hunter's side counts a hand-written mail from the poster too.
+-- Paying a bounty is recorded when the mail goes out through Wanted's own Send (the SendMail hook) or is written by
+-- hand with at least the bounty. A send another mail addon makes without the hook seeing it (TSM keeps its own copy
+-- of SendMail) is left to the hunter's side, which counts a hand-written mail from the poster too.
 ;(function()
 	local me = ns.Store:GetOrigin()
 	local function Owed(hunter, amount)
@@ -5617,13 +5617,14 @@ end)()
 		GetSendMailMoney = function() return amount end
 		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
 	end
-	-- 1. A send TSM makes: Pay fills the mail in, the hook never sees the send, the gold leaves, the game says sent
+	-- 1. A send TSM makes: Pay fills the mail in, the hook never sees the send, the gold leaves, the game says sent.
+	-- Whatever mail that was (the gold may have gone to anyone), it isn't recorded as this payment
 	local tsmClaim = Owed("Tsm Hunter", 10000)
 	check(ns.Payments:Prefill(tsmClaim), "Pay fills in the mail")
 	money = money - 10000 - 30
 	Fire("MAIL_SEND_SUCCESS")
 	local paid = ns.Payments:GetForClaim(tsmClaim.id)
-	check(paid and paid.data.amount == 10000 and paid.data.to == "Tsm Hunter", "a send the hook missed is recorded from the gold that left")
+	check(not paid, "a send the hook missed isn't taken for the payment")
 	-- 2. Pay, then a mail that didn't take the gold (another letter): not the payment
 	local otherClaim = Owed("Other Hunter", 20000)
 	ns.Payments:Prefill(otherClaim)
@@ -5653,16 +5654,7 @@ end)()
 	Fire("MAIL_INBOX_UPDATE")
 	local got = ns.Payments:GetForClaim(myClaim.id)
 	check(got and got.data.side == "payee" and got.data.from == "Kind Poster", "the hunter counts a hand-written mail from the poster")
-	-- 5. Wanted's own mail: claim ids hold a space ("First Last:seq"), and the subject carries all of it
-	SendHook("Mhureth Theolia", "Wanted bounty Mhureth Theolia:7515", 10000)
-	Fire("MAIL_SEND_SUCCESS")
-	paid = ns.Payments:GetForClaim("Mhureth Theolia:7515")
-	check(paid and paid.data.claim == "Mhureth Theolia:7515", "Wanted's own mail pays the whole claim id")
-	-- The hunter's side reads the whole id from the subject too
-	GetInboxHeaderInfo = function() return nil, nil, "Kind Poster", "Wanted bounty Hunter Me:42", 7000 end
-	Fire("MAIL_INBOX_UPDATE")
-	got = ns.Payments:GetForClaim("Hunter Me:42")
-	check(got and got.data.side == "payee", "the hunter reads the whole claim id from the subject")
+	-- 5. Wanted's own mail with claim ids that hold a space ("First Last:seq"): the next test, with real ids
 	-- 6. Payments recorded before (1.10.0 and older) kept only the first name: they still pay the claim to that hunter
 	local legacy, legacyBounty = Owed("Legacy Hunter", 10000)
 	local paidBefore = ns.Model:GetMySummary()
@@ -7889,6 +7881,66 @@ end)()
 	check(ns:GetRequiredUpdate() == nil, "a lock too far ahead of the running version lifts")
 	ns.VERSION = realVersion
 	ns.db.requiredVersion, ns.newerVersion = nil, nil
+end)()
+-- A payment counts only between the claim's poster and hunter, with at least what's owed: not any mail with the right
+-- subject (nothing, or cash on delivery), not one for someone else's claim, not a stranger's record
+;(function()
+	local S, P, me = ns.Store, ns.Payments, ns.Store:GetOrigin()
+	local function Signed(kind, origin, seq, data, t)
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	local realCount, realHeader, realSendMoney, realCOD = GetInboxNumItems, GetInboxHeaderInfo, GetSendMailMoney, GetSendMailCOD
+	local function Inbox(sender, subject, money, cod)
+		GetInboxNumItems = function() return 1 end
+		GetInboxHeaderInfo = function() return nil, nil, sender, subject, money, cod or 0 end
+		Fire("MAIL_INBOX_UPDATE")
+	end
+	local function Send(recipient, subject, amount, cod)
+		GetSendMailMoney = function() return amount end
+		GetSendMailCOD = function() return cod or 0 end
+		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
+	end
+	-- The hunter's side: our claim on Pat Poster's 7000 bounty
+	local theirs = Signed("bounty", "Pat Poster", 1, { target = "Player-9-PAYSEC", targetName = "Pay Sec", amount = 7000 }, clock - 7200)
+	local myKill = S:NewRecord("kill", { killer = "Player-1-ME", killerName = me, victim = "Player-9-PAYSEC", victimName = "Pay Sec", deathId = "paysec-1", honor = true })
+	local myClaim = S:NewRecord("claim", { bounty = theirs.id, kill = myKill.id, victim = "Player-9-PAYSEC", victimName = "Pay Sec", deathId = "paysec-1", killT = myKill.t })
+	Signed("confirm", "Pat Poster", 2, { claim = myClaim.id }, clock)
+	Inbox("Random Stranger", "Wanted bounty "..myClaim.id, 7000)
+	check(not P:GetForClaim(myClaim.id), "a mail from someone other than the poster doesn't pay our claim")
+	Inbox("Pat Poster", "Wanted bounty "..myClaim.id, 1)
+	check(not P:GetForClaim(myClaim.id), "nor one from the poster with less than the bounty")
+	-- Someone else's claim named in a subject isn't recorded as paid to us
+	local otherClaim = Signed("claim", "Other Hunter", 1, { bounty = theirs.id, kill = "Other Hunter:0", victim = "Player-9-PAYSEC", killT = clock - 50 }, clock - 40)
+	Inbox("Pat Poster", "Wanted bounty "..otherClaim.id, 7000)
+	local recorded = false
+	for payment in S:Iterator("payment") do if payment.data.claim == otherClaim.id then recorded = true end end
+	check(not recorded, "a payment for someone else's claim isn't recorded by us")
+	Inbox("Pat Poster", "Wanted bounty "..myClaim.id, 7000)
+	check(P:GetForClaim(myClaim.id), "the poster's mail with the bounty pays it")
+	-- The poster's side: our bounty, Hal Hunter's confirmed claim
+	local mine = ns.Bounties:Post("Player-9-PAYSEC2", "Pay Sec Two", 5000)
+	local hisClaim = Signed("claim", "Hal Hunter", 1, { bounty = mine.id, kill = "Hal Hunter:0", victim = "Player-9-PAYSEC2", killT = clock - 30 }, clock - 20)
+	ns.Bounties:Decide(hisClaim, false)
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 0, 5000)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a cash-on-delivery mail with the subject isn't a payment")
+	Send("Someone Else", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "nor one to anyone but the hunter")
+	Send("Hal Hunter", "Wanted bounty "..hisClaim.id, 5000)
+	Fire("MAIL_FAILED")
+	Fire("MAIL_SEND_SUCCESS")
+	check(not P:GetForClaim(hisClaim.id), "a send that failed leaves nothing waiting for the next mail to count")
+	-- A stranger's payment record, or one for less than owed, doesn't pay it either
+	Signed("payment", "Random Stranger", 1, { claim = hisClaim.id, bounty = mine.id, to = "Hal Hunter", amount = 5000, side = "payer" })
+	Signed("payment", "Hal Hunter", 2, { claim = hisClaim.id, bounty = mine.id, from = me, amount = 10, side = "payee" })
+	check(not P:GetForClaim(hisClaim.id), "a stranger's payment record, or the hunter's for less than owed, doesn't count")
+	Signed("payment", "Hal Hunter", 3, { claim = hisClaim.id, bounty = mine.id, from = me, amount = 5000, side = "payee" })
+	check(P:GetForClaim(hisClaim.id), "the hunter's own record of the full amount does")
+	GetInboxNumItems, GetInboxHeaderInfo, GetSendMailMoney, GetSendMailCOD = realCount, realHeader, realSendMoney, realCOD
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

@@ -78,6 +78,9 @@
 - One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
   required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
   lifts when you load this version.
+- Payments are checked: a mail only counts as a bounty payment when it goes from the bounty's poster to the hunter
+  with at least the bounty, never cash on delivery, and only for your own claim. A failed send no longer counts the
+  next mail you send. A payment sent through another mail addon (TSM) is now recorded when the hunter receives it.
 
 ## [1.18.2] - 2026-10-08
 

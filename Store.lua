@@ -1060,9 +1060,18 @@ function Store:IsVouched(record)
 	if private.unvouched[record] == private.vouchGen then
 		return false
 	end
+	-- In a fight only strong hashes already worked out are used (the kill path asks whether bounties are settled): a
+	-- walk that needs another waits until it's over, and isn't remembered as a no
+	local inFight = Wanted:InCombat()
+	local function StrongOf(r)
+		return private.strong[r] or (not inFight and Store:Strong(r)) or nil
+	end
 	local records, origin = Wanted.db.records, record.origin
-	local seq, strong = record.seq, Store:Strong(record)
+	local seq, strong = record.seq, StrongOf(record)
 	for _ = 1, VOUCH_WALK do
+		if not strong then
+			return false
+		end
 		seq = seq + 1
 		local after = records[origin..":"..format("%d", seq)]
 		-- Only a strong link (data.p2, from updated clients) counts: an Adler-32 prev can be forged to fit. The records
@@ -1074,7 +1083,7 @@ function Store:IsVouched(record)
 			record.vouched = true
 			return true
 		end
-		strong = Store:Strong(after)
+		strong = StrongOf(after)
 	end
 	private.unvouched[record] = private.vouchGen
 	return false

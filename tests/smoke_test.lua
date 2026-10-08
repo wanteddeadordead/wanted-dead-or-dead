@@ -8360,6 +8360,31 @@ end)()
 		check(ok, "an odd p2 is no error: "..tostring(odd))
 	end
 	check(B:GetClaimLevel(claim) == 1, "and links nothing")
+	-- No hashing in a fight (the kill path asks whether bounties are settled): a walk waits until it's over
+	t0, bounty, claim = Setup()
+	confirm = Signed("confirm", "Alice Strong", 2, bounty.hash, { claim = claim.id }, t0 + 100, S:Strong(bounty))
+	-- (Copies, so no strong hash is known yet for the records held)
+	local function Copy(r)
+		local c = {}
+		for k, v in pairs(r) do c[k] = v end
+		c.data = {}
+		for k, v in pairs(r.data) do c.data[k] = v end
+		return c
+	end
+	S:MergeRelayed(Copy(confirm))
+	local nextOne = Copy(Signed("pass", "Alice Strong", 3, confirm.hash, { bounty = "x:1" }, t0 + 140, S:Strong(confirm)))
+	local realHash, hashed = S.StrongHash, 0
+	S.StrongHash = function(self, str) hashed = hashed + 1 return realHash(self, str) end
+	Fire("PLAYER_REGEN_DISABLED")
+	S:Merge(nextOne, "Alice Strong")
+	local inFight = B:GetClaimLevel(claim)
+	local hashedInFight = hashed
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	S.StrongHash = realHash
+	check(hashedInFight == 0 and inFight == 1, "nothing is hashed in a fight: "..hashedInFight)
+	check(B:GetClaimLevel(claim) == 3, "and the walk vouches once it's over")
 	-- What it costs: the strong hash is worked out once per record and kept
 	local records = {}
 	for i = 1, 200 do

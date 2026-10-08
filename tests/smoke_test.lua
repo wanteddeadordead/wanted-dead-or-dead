@@ -555,6 +555,9 @@ do
 	check(listed, "the minimap button is registered with LibDBIcon")
 	check(ns.db.settings.minimap.minimapPos == ns.db.settings.minimap.angle, "the saved angle becomes LibDBIcon's position")
 	local button = DBIcon:GetMinimapButton("WantedDeadOrDead")
+	-- Off the retail client LibDBIcon pins icons at Classic's spot, which leaves the round seal off the ring's centre
+	local point = button.icon._point
+	check(point and point[1] == "TOPLEFT" and point[2] == 8 and point[3] == -6.8, "the seal sits in the middle of the minimap ring")
 	button:Hide() -- as a button collector does when it takes the button into its bar
 	ns.Minimap:Update()
 	check(not button:IsShown(), "an update doesn't show a button a collector has hidden")

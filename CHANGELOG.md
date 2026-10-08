@@ -31,6 +31,8 @@
   changed since they last heard.
 - Guild Kill on Sight: the rank choice for rank mode lists your guild's ranks even when the page opened before the
   game had loaded them.
+- A sighting shared with a broken position or zone no longer causes Lua errors on the map, in Hotspots or in alerts:
+  what doesn't make sense is left out.
 
 ## [1.18.2] - 2026-10-08
 

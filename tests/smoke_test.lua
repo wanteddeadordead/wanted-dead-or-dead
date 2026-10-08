@@ -7154,6 +7154,30 @@ end)()
 	ns.WORLD = "beta"
 	S:FreshStart()
 end)()
+-- Another player's shared sighting is checked before anything uses it: a position is two numbers 0 to 100 or nothing,
+-- the map a number, the zone a short string; what's left reaches the saved player, the sightings and the listeners
+;(function()
+	local shared = {}
+	ns.Enemies:OnChange(function(event, entry) if event == "shared" then shared[#shared + 1] = entry end end)
+	local function Latest(guid) for s in ns.Store:SightingIterator() do if s.guid == guid then return s end end end
+	local bad = {
+		{ x = 50 }, { x = "50", y = "40" }, { x = 150, y = 40 }, { x = 50, y = -1 }, { x = 0 / 0, y = 5 },
+		{ x = 50, y = 40, z = {}, m = "ten" }, { x = 50, y = 40, z = strrep("z", 200), m = 10 },
+	}
+	for i, data in ipairs(bad) do
+		data.g, data.n = "Player-9-0BAD"..i, "Bad Data"
+		ns.Enemies:OnSharedSighting(data, "Some Friend")
+		local e, s, p = shared[#shared], Latest(data.g), ns.Store:GetPlayer(data.g)
+		local wantPos = i >= 6
+		check(e and e.guid == data.g and (e.x ~= nil) == wantPos and (e.y ~= nil) == wantPos and (s.x ~= nil) == wantPos and (p.x ~= nil) == wantPos,
+			"case "..i..": a position is kept only as two numbers 0 to 100")
+		check(e.zone == nil or (type(e.zone) == "string" and #e.zone <= 64), "case "..i..": the zone is a short string or nothing")
+		check(s.zone == e.zone and s.mapId == (type(data.m) == "number" and data.m or nil) and p.zone == e.zone, "case "..i..": the sighting and the player get the same cleaned values")
+	end
+	ns.Enemies:OnSharedSighting({ g = "Player-9-0600D", n = "Good Data", z = "Ashenvale", m = 10, x = 0, y = 100 }, "Some Friend")
+	local e = shared[#shared]
+	check(e.zone == "Ashenvale" and e.x == 0 and e.y == 100, "a good sighting is kept as it came")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

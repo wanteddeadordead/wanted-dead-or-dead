@@ -54,6 +54,7 @@ local TARGETER_SECONDS = 2.2 -- seen targeting us within this long counts as tar
 local LAST_HOUR = 3600
 local TARGETING_WINDOW = 6 -- had us targeted within this long before we died
 local SHARE_EVERY = 120 -- seconds between shared sightings of the same enemy
+local MAX_ZONE_BYTES = 64 -- a shared sighting's zone name longer than this isn't one
 local STORE_EVERY = 5 -- seconds between updates of a nearby enemy's saved record
 local RECAP_DELAYS = { 0.5, 2 }
 -- Stealth-type abilities by spell id (all ranks); names catch anything the client renumbered
@@ -1049,6 +1050,14 @@ function Enemies:OnSharedSighting(data, sender)
 	if player and player.faction == private.playerFaction then
 		return
 	end
+	-- Where, as only numbers and a short name: a peer can send anything, and the map, Hotspots and the alerts use it.
+	-- A position is both coordinates (0 to 100) or neither.
+	local zone = type(data.z) == "string" and data.z ~= "" and #data.z <= MAX_ZONE_BYTES and data.z or nil
+	local mapId = type(data.m) == "number" and data.m == data.m and data.m or nil
+	local x, y = data.x, data.y
+	if not (private.Percent(x) and private.Percent(y)) then
+		x, y = nil, nil
+	end
 	Store:UpdatePlayer(data.g, {
 		name = name,
 		class = type(data.c) == "string" and data.c or nil,
@@ -1056,14 +1065,19 @@ function Enemies:OnSharedSighting(data, sender)
 		race = type(data.r) == "string" and data.r or nil,
 		guild = type(data.u) == "string" and data.u or nil,
 		faction = player and player.faction or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
-		zone = type(data.z) == "string" and data.z or nil,
-		mapId = type(data.m) == "number" and data.m or nil,
-		x = type(data.x) == "number" and data.x or nil,
-		y = type(data.y) == "number" and data.y or nil,
+		zone = zone,
+		mapId = mapId,
+		x = x,
+		y = y,
 		seenBy = sender,
 	})
-	Store:AddSighting(data.g, data.z, data.x, data.y, data.m, sender)
+	Store:AddSighting(data.g, zone, x, y, mapId, sender)
 	-- p: the sender is calling a posse against them (Posse); the caller is the sender, whom the game names
 	local posse = type(data.p) == "table" and { why = type(data.p.k) == "string" and data.p.k or "wanted" } or nil
-	Fire("shared", { guid = data.g, name = name, by = sender, zone = data.z, x = data.x, y = data.y, stealthed = data.s, posse = posse })
+	Fire("shared", { guid = data.g, name = name, by = sender, zone = zone, x = x, y = y, stealthed = data.s == true or nil, posse = posse })
+end
+
+---Whether a value is a map coordinate: a number from 0 to 100.
+function private.Percent(value)
+	return type(value) == "number" and value >= 0 and value <= 100
 end

@@ -604,6 +604,7 @@ end
 local dialog = nil
 local AREA_HEIGHT = 74 -- a multiline dialog box: about four lines
 local hookedHosts = {} -- windows whose closing closes the dialog over them
+local waiting = {} -- dialogs asked for while another was up: shown in turn, so none loses its answer
 
 local function CreateDialog()
 	-- The dialog lives on UIParent so it shows from the Nearby window with the main window closed too. When
@@ -648,6 +649,16 @@ local function CreateDialog()
 		frame.decided = true
 		if frame.options and frame.options.onCancel then
 			frame.options.onCancel()
+		end
+	end)
+	-- The next dialog waiting, a moment after this one closes (its answer may have opened another first)
+	blocker:HookScript("OnHide", function()
+		if #waiting > 0 then
+			C_Timer.After(0, function()
+				if not blocker:IsShown() and #waiting > 0 then
+					W:Dialog(tremove(waiting, 1))
+				end
+			end)
 		end
 	end)
 	-- Escape closes it (the game's list of windows Escape closes: keyboard capture would be blocked in combat)
@@ -716,6 +727,11 @@ end
 
 function W:Dialog(options)
 	dialog = dialog or CreateDialog()
+	if dialog:IsShown() then
+		-- One at a time: this one waits its turn rather than take the open one's place (and its answer)
+		tinsert(waiting, options)
+		return
+	end
 	local frame = dialog.frame
 	-- Dim the main window if it's open, and centre the dialog on it; otherwise centre on the screen with
 	-- nothing dimmed (the blocker shrinks to nothing so the game stays clickable)

@@ -48,6 +48,8 @@
   when they vanish beside you, and a night elf is no longer guessed to have used Shadowmeld.
 - Escape closes any Wanted dialog, as Cancel, and closing the main window takes its dialog with it instead of leaving
   a dark layer behind.
+- A Wanted dialog that comes up while another is open waits its turn instead of replacing it, so no question is lost
+  unanswered.
 - A raid's popup is no longer folded into the "more unlocks" summary when many popups come at once: it waits its turn.
 - The What's new window is never taller than your screen: a long note scrolls inside it.
 - The honor scout no longer closes an achievement comparison you (or another addon) opened while it waited for an

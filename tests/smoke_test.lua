@@ -395,7 +395,14 @@ RunTimers()
 local W = ns.Widgets
 local lastDialog
 local origDialog = W.Dialog
-W.Dialog = function(self, options) lastDialog = options return origDialog(self, options) end
+-- Tests answer a dialog by calling its callbacks, not by clicking: the next dialog takes the screen as if the last had
+-- been answered (its frame closed without counting as Cancel)
+W.Dialog = function(self, options)
+	lastDialog = options
+	local up = _G.WantedDialog
+	if up and up:IsShown() then up.frame.decided = true up:Hide() end
+	return origDialog(self, options)
+end
 local function ConfirmDialog(value)
 	assert(lastDialog, "no dialog shown")
 	local options = lastDialog
@@ -7453,6 +7460,18 @@ end)()
 	W:Dialog({ title = "Over the window", text = "x", onCancel = function() cancelled = cancelled + 1 end })
 	ns.UI:GetFrame():Hide()
 	check(not W:IsDialogShown() and cancelled == 4, "closing the main window closes its dialog, as Cancel")
+	-- A dialog asked for while another is up waits its turn (the harness's W.Dialog closes the last one; the real one
+	-- is used here)
+	local answers = {}
+	origDialog(W, { title = "First", text = "x", onCancel = function() answers[#answers + 1] = "first cancelled" end })
+	origDialog(W, { title = "Second", text = "y", onConfirm = function() answers[#answers + 1] = "second confirmed" end })
+	check(frame.title._text == "First", "the open dialog stays: "..tostring(frame.title._text))
+	frame.cancel:Click()
+	check(not W:IsDialogShown(), "closed")
+	RunTimers()
+	check(W:IsDialogShown() and frame.title._text == "Second", "then the next one shows")
+	frame.confirm:Click()
+	check(answers[1] == "first cancelled" and answers[2] == "second confirmed" and #answers == 2, "each gets its own answer: "..table.concat(answers, ", "))
 	lastDialog = nil
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -48,12 +48,11 @@ function Model:GetBountyInfo(bounty)
 		passed = Bounties:IsPassed(bounty),
 		t = bounty.t,
 	}
-	-- A paid or confirmed claim is the poster's decision and stands; otherwise the earliest kill is the claim
+	-- A paid or confirmed claim is the poster's decision and stands; otherwise the earliest kill is the claim. A
+	-- withdrawal only ends the bounty for kills after it: a claim on one before it is still shown, and still owed.
 	local winner = Bounties:GetWinningClaim(bounty)
 	local level = winner and Bounties:GetClaimLevel(winner)
-	if Bounties:IsWithdrawn(bounty) then
-		info.state = STATE.WITHDRAWN
-	elseif winner and Payments:GetForClaim(winner.id) then
+	if winner and Payments:GetForClaim(winner.id) then
 		info.state, info.claim = STATE.PAID, winner
 	elseif level == 3 then
 		info.state, info.claim = STATE.OWED, winner
@@ -61,6 +60,8 @@ function Model:GetBountyInfo(bounty)
 		info.state, info.claim = STATE.CLAIMED, winner
 	elseif winner then
 		info.state, info.claim = STATE.UNVERIFIED, winner
+	elseif Bounties:IsWithdrawn(bounty) then
+		info.state = STATE.WITHDRAWN
 	elseif info.expiry <= now then
 		info.state = STATE.EXPIRED
 	else

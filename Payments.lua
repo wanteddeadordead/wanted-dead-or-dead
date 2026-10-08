@@ -91,7 +91,7 @@ end
 ---claim.
 function private.Pays(payment, claim, legacy)
 	local bounty = Store:Get(claim.data.bounty)
-	if not bounty or not Store:IsVouched(payment) or (tonumber(payment.data.amount) or 0) < Bounties:GetAmount(bounty) then
+	if not bounty or not Store:IsVouched(payment) or (tonumber(payment.data.amount) or 0) < Bounties:GetOwed(claim) then
 		return false
 	end
 	if legacy and (payment.data.claim ~= strmatch(claim.origin or "", "^(%S+)") or payment.t < claim.t) then
@@ -145,11 +145,11 @@ function private.ClaimCovered(poster, hunter, amount)
 end
 
 ---Whether a mail between two players with an amount covers a claim: from its bounty's poster to its hunter, with at
----least the bounty.
+---least what the claim is owed.
 function private.Covers(claim, poster, hunter, amount)
 	local bounty = Store:Get(claim.data.bounty)
 	return bounty ~= nil and private.SameName(bounty.origin, poster) and private.SameName(claim.origin, hunter)
-		and amount >= Bounties:GetAmount(bounty)
+		and amount >= Bounties:GetOwed(claim)
 end
 
 ---Whether a claim is overdue: witnessed or confirmed, older than 48 hours, and not paid.
@@ -178,7 +178,7 @@ function Payments:Prefill(claim)
 	if not bounty then
 		return false, "the bounty is missing"
 	end
-	local amount = Bounties:GetAmount(bounty)
+	local amount = Bounties:GetOwed(claim)
 	MailFrameTab_OnClick(nil, 2)
 	SendMailNameEditBox:SetText(claim.origin)
 	SendMailSubjectEditBox:SetText(SUBJECT_PREFIX..claim.id)
@@ -318,7 +318,7 @@ Wanted:RegisterCommand("owed", "Lists what you owe and what you are owed.", func
 		local bounty = Store:Get(claim.data.bounty)
 		if bounty and (bounty.origin == me or claim.origin == me) and Bounties:GetClaimLevel(claim) >= 2 then
 			local payment = Payments:GetForClaim(claim.id)
-			local amount = Bounties:FormatMoney(Bounties:GetAmount(bounty))
+			local amount = Bounties:FormatMoney(Bounties:GetOwed(claim))
 			if bounty.origin == me then
 				Wanted:Print("You owe %s to %s for %s: %s%s", amount, claim.origin, claim.data.victimName or "?", payment and "paid" or "unpaid", not payment and (" - /wanted pay "..claim.id) or "")
 			else

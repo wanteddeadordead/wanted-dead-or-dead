@@ -67,6 +67,8 @@ function Model:GetBountyInfo(bounty)
 	else
 		info.state = STATE.OPEN
 	end
+	-- What the claim is owed: the bounty as it stood at the kill
+	info.owed = info.claim and Bounties:GetOwed(info.claim)
 	info.hunter = info.claim and info.claim.origin
 	info.myClaim = info.claim and info.claim.origin == me
 	info.hunters = (info.state == STATE.OPEN or info.state == STATE.UNVERIFIED) and Bounties:GetActiveHunters(bounty) or {}
@@ -411,7 +413,7 @@ function Model:GetMyClaims()
 				local item = {
 					claim = claim,
 					bounty = bounty,
-					amount = Bounties:GetAmount(bounty),
+					amount = Bounties:GetOwed(claim),
 					poster = bounty.origin,
 					targetName = claim.data.victimName or bounty.data.targetName or "?",
 					player = Store:GetPlayer(bounty.data.target),
@@ -457,7 +459,7 @@ function Model:GetMySummary()
 	local me = Store:GetOrigin()
 	for _, info in ipairs(Model:GetMyBounties()) do
 		if info.state == STATE.OWED then
-			summary.owe = summary.owe + info.amount
+			summary.owe = summary.owe + info.owed
 			summary.oweCount = summary.oweCount + 1
 		elseif info.state == STATE.OPEN then
 			summary.open = summary.open + info.amount

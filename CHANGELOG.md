@@ -89,6 +89,8 @@
   Dispute and Pay.
 - A death record only counts as the victim's own word when the game knows the victim by its maker's name (or the
   Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
+- A claim is owed the bounty as it stood at the kill: a raise made after the kill doesn't add to what the hunter is
+  owed (Pay fills in that amount).
 
 ## [1.18.2] - 2026-10-08
 

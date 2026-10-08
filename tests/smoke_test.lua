@@ -8008,6 +8008,15 @@ end)()
 	Live("death", "Sock Puppet", { victim = "Player-9-ST7", killer = "Player-9-EYE", zone = "Durotar" }, t0 + 100)
 	local _, victimsOwn = B:GetWitnesses(c7)
 	check(not victimsOwn, "a link naming someone else's GUID doesn't make its maker the victim")
+	-- What's owed is the bounty at the kill: a raise after it doesn't raise what the hunter is owed
+	local b8 = Live("bounty", "State Poster", { target = "Player-9-ST8", targetName = "St Eight", amount = 5000 }, t0)
+	local c8 = Live("claim", "Hunter Jay", { bounty = b8.id, kill = "Hunter Jay:0", victim = "Player-9-ST8", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Witness(c8)
+	Live("raise", "State Poster", { bounty = b8.id, amount = 10000 }, t0 + 200)
+	Live("confirm", "State Poster", { claim = c8.id }, t0 + 300)
+	check(B:GetAmount(b8) == 15000 and B:GetOwed(c8) == 5000, "owed is the bounty at the kill: "..tostring(B.GetOwed and B:GetOwed(c8)))
+	Live("payment", "State Poster", { claim = c8.id, bounty = b8.id, to = "Hunter Jay", amount = 5000, side = "payer" }, t0 + 400)
+	check(P:GetForClaim(c8.id), "and paying that settles it")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

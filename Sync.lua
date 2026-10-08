@@ -84,6 +84,11 @@ local CHANNEL_BASE = "WantedNet"
 local MOVE_MAX_HOPS = 2
 local MOVE_ASK_PEERS = 5 -- players asked for the current channel at login
 local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
+-- Players who must say the same whispered pointer: for the next epoch, and for one further on (never more than
+-- MOVE_MAX_AHEAD past the next); how long a player's word is counted
+local MOVE_VOTES, MOVE_VOTES_AHEAD = 2, 3
+local MOVE_MAX_AHEAD = 3
+local MOVE_VOTE_SECONDS = 30 * 60
 local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
 local MAX_MESSAGE_LEN = 255
@@ -257,6 +262,10 @@ function Sync:OnEnable()
 	local pointer = Wanted.db.syncChannel
 	if type(pointer) == "table" and private.ValidPointer(pointer) then
 		private.channelName, private.epoch = pointer.n, pointer.e
+		-- Saved before where it came from was kept (1.18.3 and older): taken as not a whisper's, once
+		if pointer.hop == nil and Wanted.db.trustedEpoch == nil then
+			Wanted.db.trustedEpoch = pointer.e
+		end
 	end
 	local result = C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
@@ -2555,20 +2564,28 @@ function private.ValidPointer(p)
 end
 
 ---Moves to the server's channel (or back to the main one): leaves the old one, joins the new, and tells the players
----we know unless the pointer has already gone as far by whisper as it may. Followed when its epoch is newer than ours;
----from our own app, also at the same epoch with another name (the server's word).
+---we know unless the pointer has already gone as far by whisper as it may. By whisper, followed when its epoch is
+---newer than ours; from our own app, whenever it's another channel (the server's word).
 ---@param pointer table { e, n }
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
 function private.Adopt(pointer, why, hop)
-	if not private.ValidPointer(pointer) or pointer.e < private.epoch
-		or (pointer.e == private.epoch and (hop > 0 or pointer.n == private.channelName)) then
+	if not private.ValidPointer(pointer) or (pointer.e == private.epoch and pointer.n == private.channelName) then
+		return false
+	end
+	-- By whisper only a newer one; from our own app any other (AdoptFromApp keeps it from going back in time): the
+	-- app's word replaces whatever a whisper brought
+	if hop > 0 and pointer.e <= private.epoch then
 		return false
 	end
 	local old = private.channelName
 	private.channelName, private.epoch, private.hop = pointer.n, pointer.e, hop
-	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime() }
+	-- Where it came from is kept (hop 0: our own app): what a whisper set never raises the next whispered pointer's ceiling
+	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime(), hop = hop }
+	if hop == 0 then
+		Wanted.db.trustedEpoch = pointer.e
+	end
 	if old ~= pointer.n then
 		if pointer.n == private.MainName() then
 			Wanted:Print("Wanted's sync channel is back to the main one, as wanteddeadordead.com says.")
@@ -2735,6 +2752,41 @@ function private.AskPointer()
 	end
 end
 
+---Counts a player saying the channel moved to a pointer; returns how many different players say it now. Each player's
+---latest pointer is the one counted for them, so one player naming many pointers holds only one vote.
+function private.VoteMove(epoch, name, sender)
+	local votes, now = private.moveVotes or {}, GetTime()
+	private.moveVotes = votes
+	private.moveVoteOf = private.moveVoteOf or {}
+	local key = epoch.."|"..name
+	local before = private.moveVoteOf[sender]
+	if before and before.key ~= key and votes[before.key] then
+		local old = votes[before.key]
+		old.senders[sender], old.n = nil, old.n - 1
+		if old.n <= 0 then
+			votes[before.key] = nil
+		end
+	end
+	private.moveVoteOf[sender] = { key = key, t = now }
+	local entry = votes[key]
+	if not entry then
+		entry = { senders = {}, n = 0 }
+		votes[key] = entry
+	end
+	if not entry.senders[sender] then
+		entry.n = entry.n + 1
+	end
+	entry.senders[sender] = { t = now }
+	-- A player's word counts for a while
+	local n = 0
+	for _, said in pairs(entry.senders) do
+		if now - said.t <= MOVE_VOTE_SECONDS then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 ---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
 ---and newer than ours; passed on once more while under the hop cap (Adopt).
 function private.OnMove(tbl, sender)
@@ -2765,15 +2817,37 @@ function private.OnMove(tbl, sender)
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
 		return
 	end
+	-- Followed once enough players we know say the same pointer: two for the next one past the newest epoch not set by a
+	-- whisper (the app's; never what a whisper set, or players could walk us along a step at a time, this session or
+	-- the next), three for one further on (someone without the app who missed a few moves). The server moves one epoch at a time, and a made-up
+	-- pointer far ahead could never be outbid by its real one.
 	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS
+	local ceiling = max(Wanted.db.trustedEpoch or 0, Wanted.db.appChannelEpoch or 0) + 1
+	-- Never far ahead, however many say so: a few alts could otherwise pin everyone at an epoch the server never outbids
+	if tbl.e > ceiling + MOVE_MAX_AHEAD then
+		Wanted:Log("!! Sync: a channel move from %s to epoch %d, far past the next one (%d); ignored", tostring(sender), tbl.e, ceiling)
+		return
+	end
+	local votes = private.VoteMove(tbl.e, tbl.n, sender)
+	local needed = tbl.e <= ceiling and MOVE_VOTES or MOVE_VOTES_AHEAD
+	if votes < needed then
+		Wanted:Log("Sync: %s says the channel moved to %s (%d); %d of %d players needed", tostring(sender), tbl.n, tbl.e, votes, needed)
+		return
+	end
 	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
 	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
 end
 
----The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed when newer than ours.
+---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed unless older than the app's last,
+---whatever a whisper brought meanwhile.
 ---@param pointer table { e, n }
 function Sync:AdoptFromApp(pointer)
-	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so", 0) then
+	-- Never one older than the app gave before (an old catch-up read again)
+	if type(pointer) ~= "table" or not private.ValidPointer(pointer) or pointer.e < (Wanted.db.appChannelEpoch or 0) then
+		return
+	end
+	Wanted.db.appChannelEpoch = pointer.e
+	if private.Adopt(pointer, "the Wanted app says so", 0) then
 		Wanted:Log("Sync: moved to the app's channel %s (%d)", pointer.n, pointer.e)
 	end
 end

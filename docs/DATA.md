@@ -344,7 +344,14 @@ server checked who sent it), or later brought a record already held with the sam
 are kept and synced. `Store:Iterator` leaves `tampered` ones out, so nothing in game reads them; `brokenChain` ones
 can be innocent (a reinstall, lost saved data) and are still listed, but never witness a claim. An optional new field: no
 migration. Records held from before 1.3.3 that came by catch-up have no `app` flag and witness nothing until the
-app or their origin sends them again. The record hash is Adler32, which can be forged; a stronger hash is a planned
+app or their origin sends them again.
+
+A received record's `vouched` flag (after 1.18.2) is local too: set once `Store:IsVouched` has found a trusted record
+of the same origin later in its chain, every record between held and each naming the one before by its hash. Incoming
+copies drop it. A `confirm`, `raise`, `withdraw` or `payment` counts only when vouched (its maker's own word), and a
+raise or withdrawal only from the bounty's poster. A record in this client's own name is only taken from the app's
+catch-up, and a relayed record (not trusted) is replaced when its origin sends a different one for the same id. An
+optional new field: no migration. The record hash is Adler32, which can be forged; a stronger hash is a planned
 follow-up that needs the server and the desktop app to change with the addon.
 
 ## Fresh start (development builds)

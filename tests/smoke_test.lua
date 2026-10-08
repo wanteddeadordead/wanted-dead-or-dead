@@ -4606,9 +4606,10 @@ end)()
 	local origWarn, origSound = ns.Alerts.Warn, ns.Alerts.Sound
 	ns.Alerts.Warn = function(self, title, sub, color) warns[#warns + 1] = title.." / "..tostring(sub) return origWarn(self, title, sub, color) end
 	ns.Alerts.Sound = function(self, kind) sounds[#sounds + 1] = kind return origSound(self, kind) end
+	-- Brought by the app's catch-up, so a withdrawal or raise in it is the poster's word
 	local function Relay(origin, seq, kind, data, t)
 		local before = ns.Store:Get(origin..":"..(seq - 1))
-		ns.Store:MergeRelayed(Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t, data = data }))
+		ns.Store:MergeRelayed(Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t, data = data }), true)
 		return ns.Store:Get(origin..":"..seq)
 	end
 	local function Kill(guid, name, guild)
@@ -7738,6 +7739,51 @@ end)()
 	fake.sighting = { guid = "Player-9-SNEAK", zone = "Durotar", x = 1, y = 1 }
 	taken, why = S:MergeRelayed(fake)
 	check(not taken and why == "reserved" and #(ns.Tracks:Get("Player-9-SNEAK") or {}) == 0, "a peer's record of a reserved kind is refused: "..tostring(why))
+	S:FreshStart()
+end)()
+-- A confirm, withdrawal, raise or payment is the poster's word only when the game vouches for it: heard from them, from
+-- the app, or built on by a record of theirs that is. Anyone else's copy could be forged.
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Signed(kind, origin, seq, prev, data, t)
+		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = { r.kind, r.id, r.prev, tostring(r.t) }
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		r.hash = S:Hash(table.concat(parts, "\n"))
+		return r
+	end
+	S:FreshStart()
+	local t0 = clock - 600
+	local bounty = Signed("bounty", "Alice Post", 1, "0", { target = "Player-9-AUTH", targetName = "Auth Target", amount = 10000 }, t0)
+	S:Merge(bounty, "Alice Post")
+	local claim = Signed("claim", "Hank Hunt", 1, "0", { bounty = bounty.id, kill = "Hank Hunt:0", victim = "Player-9-AUTH", killT = t0 + 60, zone = "Durotar" }, t0 + 61)
+	S:Merge(claim, "Hank Hunt")
+	claim = S:Get(claim.id)
+	-- Mallory relays a confirm, a raise and a withdrawal "from Alice"
+	local confirm = Signed("confirm", "Alice Post", 2, bounty.hash, { claim = claim.id }, t0 + 100)
+	local raise = Signed("raise", "Alice Post", 3, confirm.hash, { bounty = bounty.id, amount = 990000 }, t0 + 110)
+	local withdraw = Signed("withdraw", "Alice Post", 4, raise.hash, { bounty = bounty.id }, t0 + 120)
+	S:MergeRelayed(confirm)
+	S:MergeRelayed(raise)
+	S:MergeRelayed(withdraw)
+	check(B:GetClaimLevel(claim) < 3, "a relayed confirm nobody vouches for doesn't confirm the claim")
+	check(B:GetAmount(bounty) == 10000 and not B:IsWithdrawn(bounty), "nor does a relayed raise or withdrawal count")
+	-- A raise from anyone but the poster never counts, even heard from them
+	S:Merge(Signed("raise", "Mallory Bad", 1, "0", { bounty = bounty.id, amount = 50000 }, t0 + 130), "Mallory Bad")
+	check(B:GetAmount(bounty) == 10000, "a raise by someone other than the poster doesn't add to the bounty")
+	-- Alice's next record, heard from her, names the one before: her chain vouches for what she made before it
+	S:Merge(Signed("pass", "Alice Post", 5, withdraw.hash, { bounty = "x:1" }, t0 + 140), "Alice Post")
+	check(B:GetClaimLevel(claim) == 3 and B:GetAmount(bounty) == 1000000, "records the poster's own later record builds on count")
+	-- A forged record ahead of the poster's real one is replaced when the real one comes from her
+	local fake = Signed("confirm", "Bob Post", 2, "0", { claim = "Someone:1", disputed = true }, t0 + 200)
+	S:Merge(Signed("bounty", "Bob Post", 1, "0", { target = "Player-9-AUTH2", amount = 5000 }, t0), "Bob Post")
+	S:MergeRelayed(fake)
+	local real = Signed("confirm", "Bob Post", 2, S:Get("Bob Post:1").hash, { claim = "Someone:1" }, t0 + 210)
+	check(S:Merge(real, "Bob Post") and S:Get(real.id).hash == real.hash and S:Get(real.id).live, "the origin's own record replaces a relayed one in its place")
+	check(S:Merge(Signed("pass", "Bob Post", 3, real.hash, {}, t0 + 220), "Bob Post") and not S:Get("Bob Post:3").brokenChain, "and the chain goes on from the real one")
 	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

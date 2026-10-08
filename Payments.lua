@@ -71,7 +71,8 @@ function Payments:GetForClaim(claimId)
 	local claim
 	for payment in Store:Iterator("payment") do
 		local paid = payment.data.claim
-		if paid == claimId then
+		-- Only a payment its maker's client vouches for: another player's copy could be forged
+		if paid == claimId and Store:IsVouched(payment) then
 			return payment
 		end
 		-- Addon 1.10.0 and older read the claim id from the mail subject only up to its first space, so a payment

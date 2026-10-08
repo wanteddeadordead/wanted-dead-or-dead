@@ -67,6 +67,9 @@
 - Amounts in shared records are checked: a bounty, raise or payment with a negative, endless or made-up amount is
   refused, and amounts past what the game's money can hold (214,748g) can't be posted.
 - Another player can no longer slip a record into the network in your name (a confirm or payment you never made).
+- A confirmation, withdrawal, raise or payment only counts when it really comes from the player who made it: heard
+  from them, brought by the Wanted app, or followed by their own later records. Only the poster can raise a bounty.
+  Another player can no longer confirm, take down or raise someone else's bounty, or mark it paid.
 
 ## [1.18.2] - 2026-10-08
 

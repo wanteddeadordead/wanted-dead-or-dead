@@ -162,11 +162,20 @@ end
 function Bounties:GetAmount(bounty)
 	local amount = bounty.data.amount
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if private.IsPostersWord(raise, bounty) then
 			amount = amount + raise.data.amount
 		end
 	end
 	return amount
+end
+
+---Whether a record about a bounty (a raise, a withdrawal, a confirm) is its poster's own word: made by the poster,
+---and vouched for by the game (Store:IsVouched). Another player's copy of it could be forged.
+---@param record table
+---@param bounty table
+---@return boolean
+function private.IsPostersWord(record, bounty)
+	return record.data.bounty == bounty.id and record.origin == bounty.origin and Store:IsVouched(record)
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -175,7 +184,7 @@ end
 function Bounties:GetExpiry(bounty)
 	local expiry = bounty.t + EXPIRY_SECONDS
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if private.IsPostersWord(raise, bounty) then
 			expiry = max(expiry, raise.t + EXPIRY_SECONDS)
 		end
 	end
@@ -191,8 +200,9 @@ function Bounties:IsSettled(bounty)
 			return true
 		end
 	end
+	-- The poster's own word that they paid (its claim may not be here yet)
 	for payment in Store:Iterator("payment") do
-		if payment.data.bounty == bounty.id then
+		if private.IsPostersWord(payment, bounty) then
 			return true
 		end
 	end
@@ -295,7 +305,7 @@ end
 function private.WithdrawnAt(bounty)
 	local at = nil
 	for withdraw in Store:Iterator("withdraw") do
-		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
+		if private.IsPostersWord(withdraw, bounty) and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
 			at = withdraw.t
 		end
 	end
@@ -852,7 +862,7 @@ end
 function Bounties:GetClaimLevel(claim)
 	local bounty = Store:Get(claim.data.bounty)
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin and Store:IsVouched(confirm) then
 			return confirm.data.disputed and 0 or 3
 		end
 	end

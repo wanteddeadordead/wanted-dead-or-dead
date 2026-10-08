@@ -644,8 +644,17 @@ function private.Insert(record, live, fromApp)
 	if RESERVED_KINDS[record.kind] then
 		return false, "reserved"
 	end
-	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
+	record.live, record.app, record.tampered, record.brokenChain, record.vouched = nil, nil, nil, nil, nil
+	private.vouchGen = (private.vouchGen or 0) + 1
 	local existing = db.records[record.id]
+	if existing and existing.hash ~= record.hash and (live or fromApp) and not existing.test and not existing.live
+		and not existing.app and not existing.vouched and existing.origin ~= private.origin then
+		-- Someone relayed a record in this place before its origin's own arrived: theirs could be forged (a stalled
+		-- chain, a confirm the poster never made), the origin's word replaces it
+		Wanted:Log("!! Store: record %s from its origin differs from a relayed copy; the relayed one is replaced", tostring(record.id))
+		private.Replace(existing, record)
+		existing = nil
+	end
 	if existing then
 		if existing.hash == record.hash and not existing.test then
 			if live then
@@ -715,6 +724,23 @@ function private.Insert(record, live, fromApp)
 	private.AddToIndex(record)
 	private.Notify(record, false)
 	return true
+end
+
+---Takes a relayed record out of the way of its origin's own copy: the chain steps back to before it when it was
+---the chain's end, so the real one follows on there.
+function private.Replace(existing, record)
+	local db = Wanted.db
+	db.records[existing.id] = nil
+	local chain = db.chains[existing.origin]
+	if chain and chain.seq == existing.seq and chain.lastHash == existing.hash then
+		chain.seq, chain.lastHash = existing.seq - 1, record.prev
+	end
+	-- A record held after it was flagged for not following the relayed copy: whether it follows the real one is
+	-- checked again as the chain moves on
+	local after = db.records[existing.origin..":"..format("%d", existing.seq + 1)]
+	if after and after.prev == record.hash and after.brokenChain then
+		after.brokenChain = nil
+	end
 end
 
 ---Moves a chain on over records already held past its end (they arrived ahead of a gap). Without this the
@@ -791,6 +817,42 @@ function Store:IsTrusted(record)
 		return false
 	end
 	return record.origin == private.origin or record.live == true or record.app == true or Store:IsTest(record)
+end
+
+-- How far along an origin's chain IsVouched looks for a trusted record
+local VOUCH_WALK = 200
+
+---Whether a record can be taken as its origin's word: trusted (Store:IsTrusted), or followed in its chain by
+---records held, each naming the one before by its hash, up to one that is trusted. A record its origin later built on
+---is theirs, so a confirm or a payment relayed by another player counts once the poster's own word follows it. A yes
+---is kept on the record (vouched, a local flag); a no is asked again once more records have come in.
+---@param record table
+---@return boolean
+function Store:IsVouched(record)
+	if record.vouched or Store:IsTrusted(record) then
+		return true
+	end
+	if record.tampered or type(record.seq) ~= "number" or type(record.origin) ~= "string" then
+		return false
+	end
+	private.unvouched = private.unvouched or setmetatable({}, { __mode = "k" })
+	if private.unvouched[record] == private.vouchGen then
+		return false
+	end
+	local records, current = Wanted.db.records, record
+	for _ = 1, VOUCH_WALK do
+		local after = records[record.origin..":"..format("%d", current.seq + 1)]
+		if not after or after.origin ~= record.origin or after.prev ~= current.hash or after.tampered then
+			break
+		end
+		if after.vouched or Store:IsTrusted(after) then
+			record.vouched = true
+			return true
+		end
+		current = after
+	end
+	private.unvouched[record] = private.vouchGen
+	return false
 end
 
 ---How many records held are flagged tampered, and how many brokenChain.

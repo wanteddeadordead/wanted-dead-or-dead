@@ -368,7 +368,8 @@ record's canonical content, its own `p2` included) of the origin's previous reco
 desktop app and the server keep only `kind`, `id`, `origin`, `seq`, `prev`, `t`, `data` and `hash`, and drop any other
 field; older clients hash `data` as it is, so they compute the same Adler-32 and pass it on. A `p2` that isn't 16 hex
 digits is no strong link (`Store:StrongLink`), never an error. The own chain keeps
-`lastStrong`, the strong hash of its last record. A chain may keep `stubs = { [seq] = strong..p2 }` (32 hex digits:
+`lastStrong`, the strong hash of its last record, with `lastStrongOf`, the `lastHash` it belongs to (worked out again
+whenever they differ). A chain may keep `stubs = { [seq] = strong..p2 }` (32 hex digits:
 the record's strong hash and its `p2`) for records pruned after one of its origin's confirms, raises, withdrawals or
 payments that nothing has vouched for yet, so a chain walk can still cross the hole; they go once no such record comes
 before them. All optional new fields: no migration.

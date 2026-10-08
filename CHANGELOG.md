@@ -106,8 +106,6 @@
 - A whispered sync channel move can't park players on a made-up channel any more: it needs two players saying the
   same one and can't be walked along a step at a time, a player who missed a few moves follows once three agree, and
   the channel the Wanted app gives always wins.
-- Playing the same character from a second PC (or after restoring old saved data) no longer forks your record chain:
-  your next record follows the ones other players already hold.
 - A bounty payment still counts when you close the mailbox while it's sending, or when taking an item from another
   mail fails meanwhile.
 - A bounty or notice for more than the game's money can hold (posted by an older version) still shows, at 214,748g,

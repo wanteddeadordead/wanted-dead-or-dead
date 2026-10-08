@@ -722,6 +722,8 @@ end
 ---@return table record
 function Store:NewRecord(kind, data)
 	local chain = private.ownChain
+	-- The strong link to our record before (a SHA-256 older clients hash and pass on without reading)
+	local link = private.LastStrong(chain)
 	chain.seq = chain.seq + 1
 	local record = {
 		kind = kind,
@@ -732,11 +734,10 @@ function Store:NewRecord(kind, data)
 		t = GetServerTime(),
 		data = data,
 	}
-	-- The strong link to our record before (a SHA-256 older clients hash and pass on without reading)
-	data.p2 = private.LastStrong(chain)
+	data.p2 = link
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
-	chain.lastStrong = Store:Strong(record)
+	chain.lastStrong, chain.lastStrongOf = Store:Strong(record), record.hash
 	private.NoteFirst(chain, record)
 	Wanted.db.records[record.id] = record
 	private.AddToIndex(record)
@@ -795,30 +796,15 @@ function private.HasSoundNumbers(r)
 	return true
 end
 
--- How far one of our own records seen elsewhere may move our chain on, and how often a session
-local MAX_OWN_JUMP = 1000
-local MAX_OWN_FOLLOWS = 20
-
----One of our own records, made elsewhere (a second PC, saved data restored from before), that a peer holds: it isn't
----taken in (another player could have made it up), but our chain moves on past it, so our next record doesn't take an
----id that already names another copy. Only a little way ahead, and only a few times a session.
-function private.FollowOwn(record)
-	local chain = private.ownChain
-	if not chain or record.seq <= chain.seq or record.seq - chain.seq > MAX_OWN_JUMP
-		or (private.ownFollows or 0) >= MAX_OWN_FOLLOWS then
-		return
-	end
-	private.ownFollows = (private.ownFollows or 0) + 1
-	Wanted:Log("!! Store: our own record %s is out there, made elsewhere; our chain moves on from %d", tostring(record.id), chain.seq)
-	chain.seq, chain.lastHash, chain.lastStrong = record.seq, record.hash, Store:Strong(record)
-end
-
----Our chain's last record's strong hash (kept with the chain; worked out from the record held when it isn't yet), or
----nil before our first record.
+---Our chain's last record's strong hash (kept with the chain; worked out from the record held when it isn't, or is
+---another record's), or nil before our first record.
 function private.LastStrong(chain)
-	if not chain.lastStrong and chain.seq > Store:SeqBase() then
-		local last = Wanted.db.records[private.origin..":"..format("%d", chain.seq)]
+	-- Kept with the hash it belongs to (lastStrongOf): the chain can move on without it (the app's catch-up of our own
+	-- records, a version before strong links), and then it's worked out again
+	if chain.lastStrongOf ~= chain.lastHash then
+		local last = chain.seq > Store:SeqBase() and Wanted.db.records[private.origin..":"..format("%d", chain.seq)]
 		chain.lastStrong = last and last.hash == chain.lastHash and Store:Strong(last) or nil
+		chain.lastStrongOf = chain.lastHash
 	end
 	return chain.lastStrong
 end
@@ -892,9 +878,9 @@ function private.Insert(record, live, fromApp)
 		return false, "test data"
 	end
 	-- Our own records are trusted as our own word (Store:IsTrusted): another player can't add one. Only the app's
-	-- catch-up brings them back (saved data lost and restored from the server); others only move our chain on.
+	-- catch-up brings them back (saved data lost and restored from the server). Our chain never builds on another
+	-- player's copy: it could be forged, and our next record would vouch for it.
 	if record.origin == private.origin and not fromApp then
-		private.FollowOwn(record)
 		return false, "own"
 	end
 	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a

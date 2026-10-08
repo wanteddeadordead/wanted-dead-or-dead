@@ -8464,21 +8464,45 @@ end)()
 	check(S:GetChainSeq("Skip Carol") == 100 and ns.db.chains["Skip Carol"].skip == nil, "the origin's record past the skip moves the chain on and the skip is forgotten")
 	S:FreshStart()
 end)()
--- Our own records made elsewhere (a second PC, saved data restored from before) aren't taken in, but our chain moves
--- past them, so the next record we make doesn't take an id that's already someone else's copy
+-- A record in our own name that another player sends is never taken in, and our chain never builds on it: it could be
+-- forged, and our next record would then vouch for it to everyone. Only the app's catch-up brings our own records
+-- back, and our next record follows the newest of them, by its hash and its strong link.
 ;(function()
 	local S = ns.Store
+	local function Canon(r)
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = { r.kind, r.id, r.prev, tostring(r.t) }
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		return table.concat(parts, "\n")
+	end
+	local function Own(seq, prev, data, before)
+		local me = S:GetOrigin()
+		local r = { kind = "confirm", id = me..":"..seq, origin = me, seq = seq, prev = prev, t = clock, data = data }
+		r.data.p2 = S:Strong(before)
+		r.hash = S:Hash(Canon(r))
+		return r
+	end
 	S:FreshStart()
-	local me = S:GetOrigin()
-	local before = S:GetChainSeq(me)
-	local elsewhere = Sealed({ kind = "pass", id = me..":"..(before + 1), origin = me, seq = before + 1, prev = "0", t = clock, data = { bounty = "b" } })
-	local taken, why = S:MergeRelayed(elsewhere)
-	check(not taken and why == "own" and S:GetChainSeq(me) == before + 1, "our chain moves past our own record made elsewhere: "..S:GetChainSeq(me))
-	local mine = S:NewRecord("pass", { bounty = "next" })
-	check(mine.seq == before + 2 and mine.prev == elsewhere.hash, "and our next record follows it")
-	local far = Sealed({ kind = "pass", id = me..":"..(before + 100000), origin = me, seq = before + 100000, prev = "0", t = clock, data = {} })
-	S:MergeRelayed(far)
-	check(S:GetChainSeq(me) == before + 2, "but a record far past ours doesn't throw our chain forward")
+	local first = S:NewRecord("pass", { bounty = "x" })
+	-- Mallory forges "us:seq+1", a confirm of her claim, with a valid Adler-32 and our real last strong hash, and fills
+	-- it on the channel unasked
+	local forged = Own(first.seq + 1, first.hash, { claim = "Mallory:1" }, first)
+	RunTimers()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { forged } }), "CHANNEL", "Mallory Alt", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunTimers()
+	RunFrames()
+	check(not S:Get(forged.id), "a relayed record in our own name isn't taken in")
+	local mine = S:NewRecord("pass", { bounty = "y" })
+	check(mine.prev == first.hash and mine.data.p2 == S:Strong(first), "our next record follows our own last one, never the forged one")
+	-- The app brings back a record of ours made elsewhere: our next record links to it, by its strong hash too
+	S:FreshStart()
+	local a = S:NewRecord("pass", { bounty = "a" })
+	local elsewhere = Own(a.seq + 1, a.hash, { claim = "Someone:1" }, a)
+	check(S:MergeRelayed(elsewhere, true), "the app brings our own record back")
+	local nxt = S:NewRecord("pass", { bounty = "b" })
+	check(nxt.prev == elsewhere.hash and nxt.data.p2 == S:Strong(S:Get(elsewhere.id)), "our next record's strong link names it, not an older one")
 	S:FreshStart()
 end)()
 -- One player naming many versions can't wipe out what other players said

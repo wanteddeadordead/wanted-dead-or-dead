@@ -65,11 +65,14 @@ end
 -- ============================================================================
 
 ---The payment record for a claim, from either side, if any: one that went between the claim's poster and hunter with
----at least what's owed (Pays).
+---at least what's owed (Pays). The poster's own record first.
+---A hunter's own record of being paid only counts for the claim the bounty goes to without it (the poster's paid or
+---confirmed claim, or the earliest witnessed kill): otherwise a hunter could make their own claim the paid one.
 ---@param claimId string
+---@param posterOnly boolean? only the poster's own record of paying (what picks the bounty's claim)
 ---@return table?
-function Payments:GetForClaim(claimId)
-	local claim
+function Payments:GetForClaim(claimId, posterOnly)
+	local claim, payee
 	for payment in Store:Iterator("payment") do
 		local paid = payment.data.claim
 		-- Addon 1.10.0 and older read the claim id from the mail subject only up to its first space, so a payment
@@ -78,8 +81,17 @@ function Payments:GetForClaim(claimId)
 		if paid == claimId or legacy then
 			claim = claim or Store:Get(claimId) or false
 			if claim and private.Pays(payment, claim, legacy) then
-				return payment
+				if payment.data.side == "payer" then
+					return payment
+				end
+				payee = payee or payment
 			end
+		end
+	end
+	if payee and not posterOnly then
+		local bounty = Store:Get(claim.data.bounty)
+		if Bounties:GetClaimLevel(claim) == 3 or (bounty and Bounties:GetWinningClaim(bounty) == claim) then
+			return payee
 		end
 	end
 	return nil

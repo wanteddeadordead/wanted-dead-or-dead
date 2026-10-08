@@ -8294,6 +8294,33 @@ end)()
 	check(perRecord < 5 and cached < perRecord, "the strong hash is cheap, and kept once worked out")
 	S:FreshStart()
 end)()
+-- Who gets a bounty: a hunter's own record of being paid can't make their claim the one paid
+;(function()
+	local S, B, P = ns.Store, ns.Bounties, ns.Payments
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	S:FreshStart()
+	local t0 = clock - 600
+	local bounty = Live("bounty", "Win Poster", { target = "Player-9-WIN", targetName = "Win Target", amount = 10000 }, t0)
+	local hank = Live("claim", "Win Hunter", { bounty = bounty.id, kill = "Win Hunter:0", victim = "Player-9-WIN", killT = t0 + 60, zone = "Durotar" }, t0 + 61)
+	Live("death", "Win Witness", { victim = "Player-9-WIN", zone = "Durotar" }, t0 + 61)
+	check(B:GetWinningClaim(bounty) == hank, "the witnessed claim wins")
+	local mal = Live("claim", "Win Mallory", { bounty = bounty.id, kill = "Win Mallory:0", victim = "Player-9-WIN", killT = t0 - 5000, zone = "Barrens" }, t0 + 300)
+	Live("payment", "Win Mallory", { claim = mal.id, bounty = bounty.id, from = "Win Poster", amount = 10000, side = "payee" }, t0 + 400)
+	check(B:GetWinningClaim(bounty) == hank and not P:GetForClaim(mal.id), "a hunter's own payee record doesn't make their claim the paid one")
+	clock = clock + 3 * 86400
+	check(P:IsUnpaid(hank), "and the real claim is still owed")
+	clock = clock - 3 * 86400
+	-- The winner's own record of the poster's mail does count
+	Live("payment", "Win Hunter", { claim = hank.id, bounty = bounty.id, from = "Win Poster", amount = 10000, side = "payee" }, t0 + 500)
+	check(P:GetForClaim(hank.id), "the winning hunter's record of being paid counts")
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

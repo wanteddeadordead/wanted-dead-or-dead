@@ -103,6 +103,8 @@
   your client which guild its target is in, so a made-up bounty can't turn a kill into a guild bounty claim.
 - Records now carry a strong (SHA-256) link to the record before, and only that link lets a player's later record
   vouch for an earlier one another player passed on: the old hash could be forged to fit.
+- A hunter's own record of being paid no longer makes their claim the one a bounty goes to; only the poster's record
+  of paying does.
 
 ## [1.18.2] - 2026-10-08
 

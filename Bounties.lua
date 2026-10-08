@@ -877,7 +877,7 @@ function Bounties:DeathPageURL(claim)
 	return format("https://wanteddeadordead.com/death/%s/%d", claim.data.victim or "", claim.data.killT or claim.t)
 end
 
----The claim that gets the bounty. Once the poster has paid or confirmed one, that one: their decision stands, and
+---The claim that gets the bounty. Once the poster has paid (by their own record) or confirmed one, that one: their decision stands, and
 ---nobody else is owed for the same bounty. Otherwise the earliest kill among witnessed claims whose kill fell while
 ---the bounty was open (IsInWindow), and failing those (shown as unverified, owed nothing yet) among the rest. Every
 ---hunter can chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
@@ -888,7 +888,8 @@ function Bounties:GetWinningClaim(bounty)
 	for claim in Store:Iterator("claim") do
 		if claim.data.bounty == bounty.id then
 			local level = Bounties:GetClaimLevel(claim)
-			if Wanted.Payments:GetForClaim(claim.id) then
+			-- Only the poster's own record of paying picks a claim: a hunter's record of being paid could be anyone's
+			if Wanted.Payments:GetForClaim(claim.id, true) then
 				paid = private.EarlierKill(paid, claim)
 			elseif level == 3 then
 				confirmed = private.EarlierKill(confirmed, claim)

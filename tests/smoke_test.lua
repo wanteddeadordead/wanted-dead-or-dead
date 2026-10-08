@@ -6898,6 +6898,24 @@ end)()
 	ns.Model.GetActionCount, ns.Model.GetMyHunts = realActions, realHunts
 	ns.UI:GetFrame():Hide()
 end)()
+-- The live world numbers every chain from 1,000,000, so no live record shares an id with a beta one (the server keeps
+-- the beta's records, and a character can keep its beta name): our own first live record is :1000001, another
+-- player's first one follows on with no gap to ask for, and "new player" checks count from there
+;(function()
+	local S = ns.Store
+	check(S:SeqBase() == 0, "the beta numbers from 0")
+	ns.WORLD = "live"
+	check(S:SeqBase() == 1000000, "the live world from 1,000,000")
+	S:FreshStart()
+	local mine = S:NewRecord("mark", { target = "Player-9-LIVE1", name = "Live Target" })
+	check(mine.seq == 1000001 and mine.id == S:GetOrigin()..":1000001" and mine.prev == "0", "our first live record: "..mine.id)
+	check(S:GetChainSeq("Never Heard") == 1000000, "a chain we've no record of stands at the base")
+	local theirs = { kind = "mark", id = "Livey Person:1000001", origin = "Livey Person", seq = 1000001, prev = "0", t = clock, data = { target = "Player-9-LIVE2" } }
+	theirs.hash = S:Hash(table.concat({ theirs.kind, theirs.id, theirs.prev, tostring(theirs.t), "target=Player-9-LIVE2" }, "\n"))
+	check(S:Merge(theirs, "Livey Person") and S:GetChainSeq("Livey Person") == 1000001 and not S:Get(theirs.id).brokenChain, "another's first live record follows on, nothing missing")
+	ns.WORLD = "beta"
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

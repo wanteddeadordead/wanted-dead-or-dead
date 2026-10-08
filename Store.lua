@@ -144,7 +144,8 @@ function private.UnvouchedFrom()
 	for kind in pairs(AUTHORITY_KINDS) do
 		for record in Store:Iterator(kind) do
 			local origin = record.origin
-			if origin ~= private.origin and not Store:IsTest(record) and not Store:IsVouched(record)
+			-- Not walked here (IsVouched hashes records): known vouched or trusted is enough to leave one out
+			if origin ~= private.origin and not Store:IsTest(record) and not record.vouched and not Store:IsTrusted(record)
 				and (not lowest[origin] or record.seq < lowest[origin]) then
 				lowest[origin] = record.seq
 			end
@@ -167,7 +168,7 @@ function private.StubOnArrival(chain, record)
 	local seq = record.seq
 	local before = Wanted.db.records[record.origin..":"..format("%d", seq - 1)]
 	if (type(chain.stubs) == "table" and chain.stubs[seq - 1])
-		or (before and AUTHORITY_KINDS[before.kind] and before.origin ~= private.origin and not Store:IsVouched(before)) then
+		or (before and AUTHORITY_KINDS[before.kind] and before.origin ~= private.origin and not before.vouched and not Store:IsTrusted(before)) then
 		private.KeepStub(chain, record, seq - 1)
 	end
 end

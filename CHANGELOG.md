@@ -96,6 +96,9 @@
 - Half-received sync messages are let go after 30 seconds, and one player can only have a few open at once.
 - In a fight, one player flooding the sync channel can no longer push out everyone else's news waiting for the fight
   to end.
+- Bounty notices sent to the other faction no longer reveal who posted the bounty. Notices received are capped per
+  sender and per player each hour, so nobody can flood your price on your head, and the same bounty carried by old
+  and new versions counts once.
 
 ## [1.18.2] - 2026-10-08
 

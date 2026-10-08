@@ -40,6 +40,7 @@ local CLOSE_FRESH_SECONDS = 1.5 -- "within 28 yards" from the last scan still co
 local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen, your own teleport) aren't stealth
 local MASS_REMOVAL = 3
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
+local CAST_REPEAT_SECONDS = 1 -- one cast is reported once for every token pointing at the caster, within this long
 local CAST_BAR_GRACE_SECONDS = 1.5 -- a cast bar that just ended (Hearthstone, a teleport) explains a vanish
 -- Only someone seen acting (casting, or targeting us) this recently is guessed to have stealthed: anyone else going
 -- from view close by more likely logged off, zoned or phased
@@ -270,6 +271,7 @@ function Enemies:GetTargeters()
 end
 
 function private.Tick()
+	private.Prune(GetTime())
 	if not private.Settings().enabled then
 		return
 	end
@@ -309,6 +311,31 @@ end
 -- ============================================================================
 -- Seeing enemies
 -- ============================================================================
+
+---Lets go of what's only kept for a moment: casts already reported, when each enemy was last shared, nameplate
+---removals. A long session would otherwise keep everyone ever seen.
+function private.Prune(now)
+	for key, t in pairs(private.recentCasts) do
+		if now - t >= CAST_REPEAT_SECONDS then
+			private.recentCasts[key] = nil
+		end
+	end
+	for guid, t in pairs(private.lastShared) do
+		if now - t > SHARE_EVERY then
+			private.lastShared[guid] = nil
+		end
+	end
+	private.PruneRemovals(now)
+end
+
+---Drops nameplate removals too old to be part of one going together (OnPlateRemoved).
+function private.PruneRemovals(now)
+	for i = #private.removals, 1, -1 do
+		if now - private.removals[i] > VANISH_SETTLE_SECONDS * 2 then
+			tremove(private.removals, i)
+		end
+	end
+end
 
 ---Looks at a unit; if it's an enemy player, updates the Nearby list and returns its entry.
 function private.Scan(unit)
@@ -435,6 +462,7 @@ end
 function private.OnPlateRemoved(unit)
 	local known = private.tokens[unit]
 	local now = GetTime()
+	private.PruneRemovals(now)
 	tinsert(private.removals, now)
 	if not known then
 		return
@@ -528,7 +556,7 @@ function private.OnCast(unit, spellID)
 	local key = entry.guid..":"..spellID
 	local now = GetTime()
 	-- One cast is reported once for every token pointing at the caster
-	if private.recentCasts[key] and now - private.recentCasts[key] < 1 then
+	if private.recentCasts[key] and now - private.recentCasts[key] < CAST_REPEAT_SECONDS then
 		return
 	end
 	private.recentCasts[key] = now

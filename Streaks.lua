@@ -91,6 +91,12 @@ function Streaks:OnKill(victim)
 		if private.recentVictims[victim] and now - private.recentVictims[victim] < SAME_VICTIM_SECONDS then
 			return
 		end
+		-- Only the last few seconds' victims are needed
+		for name, t in pairs(private.recentVictims) do
+			if now - t >= SAME_VICTIM_SECONDS then
+				private.recentVictims[name] = nil
+			end
+		end
 		private.recentVictims[victim] = now
 	end
 	if private.lastKill and now - private.lastKill <= Streaks.CHAIN_SECONDS then

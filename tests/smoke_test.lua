@@ -7306,6 +7306,32 @@ end)()
 	clock = clock + 300
 	RunTimers()
 end)()
+-- What's kept per enemy for a moment (casts, shares, nameplate removals, sightings, deaths, victims) is let go once
+-- it's old, so a long session doesn't keep everyone ever seen
+;(function()
+	local function Private(fn)
+		for i = 1, 30 do
+			local name, value = debug.getupvalue(fn, i)
+			if name == "private" then return value end
+		end
+	end
+	local ep, rp, sp = Private(ns.Enemies.Status), Private(ns.Recorder.OnEnable), Private(ns.Streaks.OnKill)
+	local now = GetTime()
+	ep.recentCasts["Player-9-0OLD:1784"], ep.lastShared["Player-9-0OLD"] = now - 100, now - 1000
+	for i = 1, 50 do ep.removals[#ep.removals + 1] = now - 100 end
+	ep.Tick()
+	check(not ep.recentCasts["Player-9-0OLD:1784"] and not ep.lastShared["Player-9-0OLD"] and #ep.removals == 0, "Enemies lets old casts, shares and removals go")
+	rp.lastSighting["Player-9-0OLD"], rp.recentDeaths["Player-9-0OLD"], rp.seenAlive["Player-9-0OLD"] = now - 100, now - 100, now - 3600
+	rp.friendly["Player-1-0OLD"] = { name = "Old Friend", t = now - 3600 }
+	rp.lastSighting["Player-9-0NEW"], rp.seenAlive["Player-9-0NEW"], rp.friendly["Player-1-0NEW"] = now, now, { name = "New Friend", t = now }
+	rp.Prune()
+	check(not rp.lastSighting["Player-9-0OLD"] and not rp.recentDeaths["Player-9-0OLD"] and not rp.seenAlive["Player-9-0OLD"] and not rp.friendly["Player-1-0OLD"],
+		"the recorder lets old sightings, deaths and players go")
+	check(rp.lastSighting["Player-9-0NEW"] and rp.seenAlive["Player-9-0NEW"] and rp.friendly["Player-1-0NEW"], "and keeps the recent ones")
+	sp.recentVictims["Old Victim"] = now - 100
+	ns.Streaks:OnKill("New Victim")
+	check(not sp.recentVictims["Old Victim"] and sp.recentVictims["New Victim"], "streaks let old victims go")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

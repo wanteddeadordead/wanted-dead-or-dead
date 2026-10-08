@@ -67,6 +67,8 @@
   counts the next mail you send, and a send still counts when you close the mailbox while it's going out. A payment
   sent through another mail addon (TSM) is now recorded when the hunter receives it. A hunter's own record of being
   paid never decides which claim a bounty goes to.
+- A request for records is answered for a few chains at a time, and only for chains you hold, so one player can't
+  make everyone resend everything they have.
 
 ## [1.18.3] - 2026-10-08
 

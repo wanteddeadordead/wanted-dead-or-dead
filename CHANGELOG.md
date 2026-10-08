@@ -58,6 +58,8 @@
   posted (or after it ended) wins nothing.
 - Withdrawing a bounty no longer hides a claim on a kill made before the withdrawal: it still shows, with Confirm,
   Dispute and Pay.
+- A death record only counts as the victim's own word when the game knows the victim by its maker's name (or the
+  Wanted app vouched for the link), so nobody can pose as the victim to back up a claim.
 
 ## [1.18.3] - 2026-10-08
 

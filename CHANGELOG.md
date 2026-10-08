@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.18.3] - 2026-10-08
+
 - The minimap button and the addon list show the wax seal, as on the website and CurseForge, centred in the minimap ring.
 - Raid invites go through one queue: four while you're alone, then the group becomes a raid and the rest follow;
   invites out count against the room, anyone not in after a minute is invited once more, and "joined" or "didn't

@@ -77,7 +77,7 @@ end
 -- ============================================================================
 
 ---Shows what's waiting in the free places, out of combat only. When more wait than there's room for, the last place
----sums up the rest.
+---sums up the unlocks waiting (toasts that open the calling card); any other toast (a raid's) keeps its place in line.
 function private.Pump()
 	if not private.ready or InCombatLockdown() or #private.queue == 0 then
 		return
@@ -86,24 +86,35 @@ function private.Pump()
 	if free <= 0 then
 		return
 	end
-	if #private.queue > free then
-		for _ = 1, free - 1 do
-			private.Show(tremove(private.queue, 1))
+	while free > 0 and #private.queue > 0 do
+		if free == 1 and #private.queue > 1 and private.SumUp() then
+			break
 		end
-		local names = {}
-		for i = 1, min(#private.queue, MORE_NAMES) do
-			tinsert(names, private.queue[i].name)
-		end
-		local more = #private.queue - #names
-		private.Show({ kind = format("%d MORE UNLOCKS", #private.queue), name = table.concat(names, ", ")..(more > 0 and format(" and %d more", more) or ""),
-			detail = "Click to see them on your calling card" })
-		private.queue = {}
-	else
-		while #private.queue > 0 do
-			private.Show(tremove(private.queue, 1))
-		end
+		private.Show(tremove(private.queue, 1))
+		free = free - 1
 	end
 	Wanted.Alerts:Sound("important")
+end
+
+---Shows one toast summing up the unlocks waiting, leaving the rest in line. Returns whether there were enough to
+---sum up (two or more).
+function private.SumUp()
+	local unlocks, rest = {}, {}
+	for _, toast in ipairs(private.queue) do
+		tinsert(toast.onClick and rest or unlocks, toast)
+	end
+	if #unlocks < 2 then
+		return false
+	end
+	local names = {}
+	for i = 1, min(#unlocks, MORE_NAMES) do
+		tinsert(names, unlocks[i].name)
+	end
+	local more = #unlocks - #names
+	private.Show({ kind = format("%d MORE UNLOCKS", #unlocks), name = table.concat(names, ", ")..(more > 0 and format(" and %d more", more) or ""),
+		detail = "Click to see them on your calling card" })
+	private.queue = rest
+	return true
 end
 
 ---Lets toasts show after seconds, unless a loading screen has started by then.

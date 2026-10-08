@@ -10,11 +10,11 @@ local Store = Wanted.Store
 local private = {
 	frame = CreateFrame("Frame"),
 	tracked = {}, -- unit token -> guid of a player being watched (enemies, and our own side for their deaths)
-	friendly = {}, -- guid -> { name, level, guild } for players of our own faction being watched
+	friendly = {}, -- guid -> { name, level, guild, t } for players of our own faction being watched (t: when last seen)
 	skyborne = {}, -- the game's name for each side's Skyborne -> that side, learned from units seen
 	lastSighting = {}, -- guid -> time
 	recentDeaths = {}, -- guid -> time the death was recorded
-	seenAlive = {}, -- guid -> true once we've seen them alive (a corpse we come across is not a new death)
+	seenAlive = {}, -- guid -> when we last saw them alive (a corpse we come across is not a new death)
 	confirming = {}, -- guid -> true while a death waits to be confirmed
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	ownKillTimes = {}, -- GetTime() of each own kill not yet matched to an HK credit
@@ -28,6 +28,9 @@ local private = {
 local SIGHTING_INTERVAL = 30
 -- One death per victim within this window, however many units show it
 local DEATH_DEDUPE_SECONDS = 15
+-- Players out of view this long are let go (Prune, every PRUNE_SECONDS)
+local FORGET_SECONDS = 10 * 60
+local PRUNE_SECONDS = 60
 -- A death on our own side counts only with an enemy player in view this recently: dying to a mob while
 -- questing isn't world PvP
 local PVP_CONTEXT_SECONDS = 20
@@ -71,6 +74,37 @@ function Recorder:OnEnable()
 		private.frame:RegisterEvent(event)
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Recorder events", private.OnEvent))
+	C_Timer.NewTicker(PRUNE_SECONDS, private.Prune)
+end
+
+---Lets go of players not watched or seen for a while, and of sightings and deaths past their dedupe windows: a long
+---session would otherwise keep everyone ever seen.
+function private.Prune()
+	local now = GetTime()
+	local watched = {}
+	for _, guid in pairs(private.tracked) do
+		watched[guid] = true
+	end
+	for guid, t in pairs(private.lastSighting) do
+		if now - t >= SIGHTING_INTERVAL then
+			private.lastSighting[guid] = nil
+		end
+	end
+	for guid, t in pairs(private.recentDeaths) do
+		if now - t >= DEATH_DEDUPE_SECONDS then
+			private.recentDeaths[guid] = nil
+		end
+	end
+	for guid, t in pairs(private.seenAlive) do
+		if not watched[guid] and now - t > FORGET_SECONDS then
+			private.seenAlive[guid] = nil
+		end
+	end
+	for guid, friend in pairs(private.friendly) do
+		if not watched[guid] and not private.confirming[guid] and now - (friend.t or 0) > FORGET_SECONDS then
+			private.friendly[guid] = nil
+		end
+	end
 end
 
 function Recorder:Status()
@@ -381,7 +415,7 @@ function private.Track(unit)
 		private.tracked[unit] = guid
 		local level = private.Readable(UnitLevel(unit))
 		private.friendly[guid] = { name = GetUnitName(unit, true), level = type(level) == "number" and level > 0 and level or nil,
-			guild = Recorder:GetUnitGuild(unit) }
+			guild = Recorder:GetUnitGuild(unit), t = GetTime() }
 		private.NoteAlive(unit, guid)
 		return
 	end
@@ -394,10 +428,12 @@ function private.Track(unit)
 	private.lastSighting[guid] = now
 	local zone, x, y, mapId = Recorder:GetPosition()
 	local _, class = UnitClass(unit)
+	-- A skull (-1: far above us) isn't a level: the last one known stays
+	local level = private.Readable(UnitLevel(unit))
 	Store:UpdatePlayer(guid, {
 		name = GetUnitName(unit, true),
 		class = class,
-		level = UnitLevel(unit),
+		level = type(level) == "number" and level > 0 and level or nil,
 		faction = faction,
 		guild = Recorder:GetUnitGuild(unit) or false, -- false = seen without a guild
 		race = UnitRace(unit),
@@ -426,7 +462,7 @@ function private.CheckDeath(unit)
 		return
 	end
 	if not dead then
-		private.seenAlive[guid] = true
+		private.seenAlive[guid] = GetTime()
 		return
 	end
 	-- Only a death we saw happen: someone already dead when we found them (a corpse at login, say) died
@@ -461,7 +497,7 @@ function private.ConfirmDeath(guid, name)
 		private.confirming[guid] = nil
 		if private.IsAliveNow(guid) then
 			Wanted:Log("Recorder: %s got up again (Feign Death), not a death", tostring(name))
-			private.seenAlive[guid] = true
+			private.seenAlive[guid] = GetTime()
 			return
 		end
 		private.RecordDeath(guid, name)
@@ -472,7 +508,7 @@ end
 function private.NoteAlive(unit, guid)
 	local dead = UnitIsDeadOrGhost(unit)
 	if dead == false then
-		private.seenAlive[guid] = true
+		private.seenAlive[guid] = GetTime()
 	end
 end
 
@@ -518,7 +554,7 @@ function private.OnUnitDied(guid)
 	if guid == private.playerGUID or (ours and race and ours[race]) or (race == "Skyborne" and private.IsOurSkyborne(raceName)) then
 		-- One of our side we never had a unit for (friendly nameplates are usually off)
 		Wanted:Log("Recorder: UNIT_DIED for %s (%s), one of ours", name, tostring(raceName))
-		private.friendly[guid] = { name = name }
+		private.friendly[guid] = { name = name, t = GetTime() }
 		private.ConfirmDeath(guid, name)
 		return
 	end
@@ -876,7 +912,7 @@ Wanted:RegisterCommand("seen", "Lists recently sighted enemy players, or one by 
 		local player = Store:GetPlayer(sighting.guid)
 		local name = player and player.name or sighting.guid
 		if wanted == "" or strfind(strlower(name), strlower(wanted), 1, true) then
-			Wanted:Print("%s: %s (%s %s) in %s%s", Ago(sighting.t), name, player and player.level or "?", player and player.class or "?", sighting.zone, sighting.x and format(" (%.1f, %.1f)", sighting.x, sighting.y) or "")
+			Wanted:Print("%s: %s (%s %s) in %s%s", Ago(sighting.t), name, player and player.level and (player.level > 0 and player.level or "??") or "?", player and player.class or "?", sighting.zone, sighting.x and format(" (%.1f, %.1f)", sighting.x, sighting.y) or "")
 			shown = shown + 1
 			if shown >= MAX_LOG_LINES then
 				break

@@ -101,7 +101,15 @@ function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
 function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[k] = v end
 function Methods:GetAttribute(k) return self._attrs and self._attrs[k] end
-function CreateFrame(kind, name, parent) local f = NewMock(kind) f._parent = parent if name then _G[name] = f end Mock.created[#Mock.created + 1] = f return f end
+function CreateFrame(kind, name, parent, template)
+	local f = NewMock(kind)
+	f._parent = parent
+	if name then _G[name] = f end
+	-- The game's scroll frame template comes with its scroll bar
+	if template == "UIPanelScrollFrameTemplate" then f.ScrollBar = NewMock("Slider") end
+	Mock.created[#Mock.created + 1] = f
+	return f
+end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
@@ -387,7 +395,14 @@ RunTimers()
 local W = ns.Widgets
 local lastDialog
 local origDialog = W.Dialog
-W.Dialog = function(self, options) lastDialog = options return origDialog(self, options) end
+-- Tests answer a dialog by calling its callbacks, not by clicking: the next dialog takes the screen as if the last had
+-- been answered (its frame closed without counting as Cancel)
+W.Dialog = function(self, options)
+	lastDialog = options
+	local up = _G.WantedDialog
+	if up and up:IsShown() then up.frame.decided = true up:Hide() end
+	return origDialog(self, options)
+end
 local function ConfirmDialog(value)
 	assert(lastDialog, "no dialog shown")
 	local options = lastDialog
@@ -667,12 +682,19 @@ check(#stealthEvents == 2, "every nameplate going at once (a loading screen) is 
 Appear("nameplate60", warrior)
 Vanish("nameplate60")
 check(#stealthEvents == 2, "a warrior can't stealth")
+-- Only someone who's been fighting: a mage standing by who goes from view (logged off, zoned, phased) is no alarm
 Appear("nameplate62", mage)
 Vanish("nameplate62")
-check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Invisibility", "a mage close by is Invisibility")
+check(#stealthEvents == 2, "an idle mage gone from view is not stealth")
+Appear("nameplate62", mage)
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate62", "cast", SECRET_SPELL)
+Vanish("nameplate62")
+check(#stealthEvents == 3 and stealthEvents[3].stealthKind == "Invisibility", "a mage close by who was casting is Invisibility")
+-- A night elf's race alone (Shadowmeld) is too weak a sign: hunters and warriors go from view for all sorts of reasons
 Appear("nameplate61", elf)
+Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate61", "cast", SECRET_SPELL)
 Vanish("nameplate61")
-check(#stealthEvents == 4 and stealthEvents[4].stealthKind == "Shadowmeld", "a night elf of any class can Shadowmeld")
+check(#stealthEvents == 3, "a night elf hunter is not guessed to Shadowmeld")
 stabUnit.close = nil
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
@@ -2518,7 +2540,8 @@ end)()
 	ns.db.settings.liveLog = true
 	LiveLog:Update()
 	check(combatLogging, "and back on")
-	-- Instances aren't world PvP: logging Wanted turned on goes off inside, and back on outside
+	-- Instances aren't world PvP (the app's log reader doesn't tell them apart): logging Wanted turned on goes off
+	-- inside, and back on outside
 	local outside = IsInInstance
 	IsInInstance = function() return true end
 	LiveLog:Update()
@@ -2526,6 +2549,16 @@ end)()
 	IsInInstance = outside
 	LiveLog:Update()
 	check(combatLogging, "and back on outside")
+	-- A raid logger (or /combatlog) switching it on after Wanted did makes it theirs: left on inside
+	local function Other(on) LoggingCombat(on) for _, hook in ipairs(globalHooks.LoggingCombat or {}) do hook(on) end end
+	Other(true)
+	IsInInstance = function() return true end
+	LiveLog:Update()
+	check(combatLogging, "logging another addon turned on is left on in an instance")
+	IsInInstance = outside
+	Other(false)
+	LiveLog:Update()
+	check(combatLogging and ns.db.liveLogOn, "outside, Wanted turns it on again as its own")
 	-- Logging the player turned on themselves (for Warcraft Logs, say) is theirs: Wanted never turns it off
 	LoggingCombat(false)
 	ns.db.liveLogOn = nil
@@ -4190,13 +4223,64 @@ end)()
 	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
 	check(G:Match("Player-9-0F00D") == nil, "a list nobody asked for is ignored")
 	G:Ask()
-	From("Plain Member", "L", { s = G:Current().settings, l = { listed } })
-	check(G:Match("Player-9-0F00D"), "a list in answer to our ask is taken, each entry judged by who made it")
+	-- A member answering first can't pass on what only an officer may do, whoever the list says did it: settings,
+	-- approvals, or a time far ahead that no later change could beat
+	From("Office Rman", "S", { s = { enabled = true, mode = "review", rank = 4, t = clock + 8.5, by = "Office Rman" } })
+	local forged = {}
+	for k, v in pairs(G:Current().settings) do forged[k] = v end
+	forged.mode, forged.enabled, forged.t, forged.by = "open", false, clock + 10, "Office Rman"
+	From("Plain Member", "L", { s = forged, l = { listed } })
+	check(G:Current().settings.mode == "review" and G:Current().settings.enabled, "a member's list can't change the settings in an officer's name")
+	check(G:Match("Player-9-0F00D") == nil, "a member's list can't approve in an officer's name")
+	local memberPending = { kind = "player", guid = "Player-9-0BEAD", name = "Member Pick", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock + 9 }
+	From("Plain Member", "L", { s = G:Current().settings, l = { memberPending } })
+	check(#G:Entries("pending") == 1 and G:Entries("pending")[1].name == "Member Pick", "a member's list still brings a pending entry")
+	local takeBack = {}
+	for k, v in pairs(memberPending) do takeBack[k] = v end
+	takeBack.state, takeBack.t = "removed", clock + 9.5
+	From("Plain Member", "E", { e = takeBack })
+	check(#G:Entries("pending") == 0, "a member takes back their own pending entry")
+	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" },
+		entries = { farAhead } } })
+	check(G:Current().settings.enabled and G:Match("Player-9-0FA2") == nil, "the server's copy dated far ahead is refused too")
+	local farAhead = {}
+	for k, v in pairs(listed) do farAhead[k] = v end
+	farAhead.guid, farAhead.name, farAhead.t = "Player-9-0FA2", "Far Ahead", clock + 2 ^ 53
+	From("Office Rman", "L", { s = { enabled = true, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" }, l = { listed, farAhead } })
+	check(G:Current().settings.mode == "review" and G:Match("Player-9-0FA2") == nil, "a change dated far ahead is refused, even from an officer")
+	check(G:Match("Player-9-0F00D"), "an officer's list is taken")
+	-- Review mode: a member can't take an approved name off in two steps (send it back as their own pending entry,
+	-- then take that back), and an edit never changes who added an entry or when
+	local asPending = {}
+	for k, v in pairs(listed) do asPending[k] = v end
+	asPending.state, asPending.by, asPending.at, asPending.dby, asPending.eby, asPending.t = "pending", "Plain Member", clock + 1, nil, "Plain Member", clock + 9.2
+	From("Plain Member", "E", { e = asPending })
+	local held = G:Current().entries[G.EntryId("player", "Player-9-0F00D")]
+	check(held.state == "approved" and held.by == "Office Rman", "a member's pending copy of an approved entry is a removal, which they can't make")
+	local second = {}
+	for k, v in pairs(memberPending) do second[k] = v end
+	second.guid, second.name, second.t = "Player-9-0BEE2", "Second Pick", clock + 9.55
+	From("Plain Member", "E", { e = second })
+	local reworded = {}
+	for k, v in pairs(second) do reworded[k] = v end
+	reworded.state, reworded.by, reworded.at, reworded.eby, reworded.reason, reworded.t = "pending", "New Recruit", clock + 2, "New Recruit", "reworded", clock + 9.6
+	From("New Recruit", "E", { e = reworded })
+	held = G:Current().entries[G.EntryId("player", "Player-9-0BEE2")]
+	check(held.state == "pending" and held.reason == "reworded" and held.by == "Plain Member" and held.at == clock, "an edit keeps who added the entry and when, got "..tostring(held.by))
+	local offTake = {}
+	for k, v in pairs(held) do offTake[k] = v end
+	offTake.state, offTake.eby, offTake.t = "removed", "Office Rman", clock + 9.7
+	From("Office Rman", "E", { e = offTake })
+	From("Office Rman", "S", { s = { enabled = true, mode = "rank", rank = 4, t = clock + 10, by = "Office Rman" } })
 
 	-- The page shows the list, and what waits for an officer
 	ns.UI:Show("guildkos")
 	ns.UI:Refresh()
 	check(#G:Entries("approved") >= 2, "the page lists the guild's entries")
+	-- The rank choice reads the guild's ranks again each time (the page may be built before the roster loads)
+	local rankChoice
+	for _, f in ipairs(Mock.created) do if f.SetChoices and f.key == 4 then rankChoice = f end end
+	check(rankChoice and rankChoice:GetText():find("Rank 5", 1, true), "the rank choice names the guild's ranks, got "..tostring(rankChoice and rankChoice:GetText()))
 	local pendingAdd = { kind = "player", guid = "Player-9-0ABC", name = "Waiting One", state = "pending", by = "Plain Member", at = clock, eby = "Plain Member", t = clock + 20 }
 	From("Office Rman", "S", { s = { enabled = true, mode = "review", rank = 4, t = clock + 19, by = "Office Rman" } })
 	From("Plain Member", "E", { e = pendingAdd })
@@ -4218,10 +4302,148 @@ end)()
 	check(G:Match("Player-9-0D00D") and G:Current().settings.discord == true, "the server's newer entries and settings are taken")
 	check(#G:Entries("pending") == 1 and G:Entries("pending")[1].t == clock + 20, "an older copy from the server doesn't undo a newer change")
 
+	-- A long list still reaches a member who asks: only what's newer than what they hold, in as many messages as it takes
+	local entries = G:Current().entries
+	local seed = 7
+	local function Words(n) -- text that doesn't compress, as real reasons don't much
+		local out = {}
+		for j = 1, n do seed = (seed * 1103515245 + 12345) % 2147483648 out[j] = string.char(97 + seed % 26) end
+		return table.concat(out)
+	end
+	for i = 1, 200 do
+		local guid = format("Player-9-%08X", i * 7919)
+		entries[G.EntryId("player", guid)] = { kind = "player", guid = guid, name = "Long "..Words(10), reason = Words(110),
+			state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 40 + i }
+	end
+	local listBase = clock + 40
+	-- At the game's pace (about ten parts at once, then one every two seconds), with the game refusing a part now and
+	-- then: each refused part goes again
+	local function Answer(n)
+		addonSent = {}
+		From("Plain Member", "Q", { n = n })
+		local burst = 0
+		for _ = 1, 600 do
+			throttleNext = (#addonSent == 3 and burst == 0) and 2 or throttleNext
+			if #addonSent == 3 then burst = 1 end
+			clock = clock + 2
+			RunTimers()
+		end
+		throttleNext = 0
+		local byId, got, most = {}, {}, 0
+		for _, m in ipairs(addonSent) do
+			local tag, id, part, total, chunk = m.text:match("^(%u):(%x+):(%d+)/(%d+):(.*)$")
+			if tag == "L" then
+				most = math.max(most, tonumber(total))
+				byId[id] = byId[id] or {}
+				byId[id][tonumber(part)] = chunk
+			end
+		end
+		for _, parts in pairs(byId) do
+			for _, e in ipairs(ns.Sync:Decode(table.concat(parts)).l) do got[e.guid or e.name] = true end
+		end
+		return got, most
+	end
+	local got, most = Answer(0)
+	local count = 0
+	for _ in pairs(got) do count = count + 1 end
+	check(count >= 200 and most <= 12, "a list of 200 goes whole, in messages short enough to finish at the game's pace: "..count.." entries, "..most.." parts at most")
+	got = Answer(listBase + 190)
+	count = 0
+	for _ in pairs(got) do count = count + 1 end
+	check(count == 10 and got[format("Player-9-%08X", 200 * 7919)], "only what's newer than the asker holds goes, got "..count)
+	for i = 1, 200 do entries[G.EntryId("player", format("Player-9-%08X", i * 7919))] = nil end
+
+	-- A guildmate's unfinished messages are held a few at a time: a flood of first parts can't pile up
+	local partial
+	for i = 1, 10 do
+		local name, value = debug.getupvalue(G.Ask, i)
+		if name == "private" then partial = value.partial end
+	end
+	for i = 1, 50 do Fire("CHAT_MSG_ADDON", "WNTDK", format("E:%x:1/2:xx", i), "GUILD", "Plain Member-Realm") end
+	local held = 0
+	for key in pairs(partial) do if key:find("^Plain Member") then held = held + 1 end end
+	check(held <= 4, "a sender's unfinished messages are capped, got "..held)
+
+	-- Names as the guild channel and the roster write them may differ (realm, case, a first name alone): matched
+	-- anyway, by first name only when that's one guildmate's
+	roster[#roster + 1] = { guid = "Player-1-0E", order = 4, name = "Solo" }
+	roster[#roster + 1] = { guid = "Player-1-0F", order = 6, name = "Twin One" }
+	roster[#roster + 1] = { guid = "Player-1-10", order = 2, name = "Twin Two" }
+	clock = clock + 31
+	check(G:RankOf("Office Rman-Realm") == 2 and G:RankOf("office rman") == 2, "a name with a realm or in another case matches")
+	check(G:RankOf("Office") == 2 and G:RankOf("Solo Person") == 3, "a first name alone matches a guildmate's full name, and the other way round")
+	check(G:RankOf("Twin") == nil and G:RankOf("Nobody Here") == nil, "a first name two guildmates share matches neither; a stranger matches nobody")
+	roster[#roster], roster[#roster - 1], roster[#roster - 2] = nil, nil, nil
+	-- Two guildmates whose names only differ by realm or case: neither's rank is taken for the other's
+	roster[#roster + 1] = { guid = "Player-1-11", order = 2, name = "Dup Name-RealmA" }
+	roster[#roster + 1] = { guid = "Player-2-12", order = 7, name = "Dup Name-RealmB" }
+	roster[#roster + 1] = { guid = "Player-1-13", order = 2, name = "Mixed Case" }
+	roster[#roster + 1] = { guid = "Player-1-14", order = 7, name = "mixed case" }
+	clock = clock + 31
+	check(G:RankOf("Dup Name-RealmB") == nil and G:RankOf("Dup Name") == nil, "a name two guildmates share (by realm) matches neither")
+	check(G:RankOf("MIXED CASE") == nil, "a name two guildmates share (by case) matches neither")
+	for _ = 1, 4 do roster[#roster] = nil end
+	clock = clock + 31
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()
 	check(G:Decide(G.EntryId("player", "Player-9-0BAD"), "remove") and G:Match("Player-9-0BAD") == nil, "an officer removes an entry")
+
+	-- A member's answer can't hold back an officer's data: a member logging in (here, us) with nothing hears first from
+	-- another member, who passes on an officer's approval of X and settings (refused: not theirs) and their own pending
+	-- Y (taken). Asking again still asks for everything an officer has; an officer's answer brings X and the settings.
+	own.rankIndex = 4
+	ns.GuildRank:NoteOwn()
+	ns.db.guildKos = {}
+	clock = clock + 100
+	local base = clock
+	local X = { kind = "player", guid = "Player-9-0A1", name = "Officer Pick", state = "approved", by = "Office Rman", at = base, dby = "Office Rman", eby = "Office Rman", t = base }
+	local Y = { kind = "player", guid = "Player-9-0A2", name = "Member Pick", state = "pending", by = "Plain Member", at = base, eby = "Plain Member", t = base + 100 }
+	local offSettings = { enabled = true, mode = "review", rank = 4, t = base - 10, by = "Office Rman" }
+	local function Asked()
+		addonSent = {}
+		G:Ask()
+		RunTimers()
+		for _, m in ipairs(addonSent) do
+			local chunk = m.text:match("^Q:%x+:1/1:(.*)$")
+			if chunk then return ns.Sync:Decode(chunk).n end
+		end
+	end
+	check(Asked() == 0, "a member with nothing asks for everything")
+	From("Plain Member", "L", { s = offSettings, l = { X, Y } })
+	check(not G:Current().settings.enabled and G:Match("Player-9-0A1") == nil and #G:Entries("pending") == 1, "a member's answer brings only the pending entry")
+	check(Asked() == 0, "asking again still asks for what only an officer can bring, got "..tostring(Asked()))
+	From("Office Rman", "L", { s = offSettings, l = { X, Y } })
+	check(G:Current().settings.enabled and G:Match("Player-9-0A1"), "an officer's answer brings the settings and the approval")
+	check(Asked() == base + 100, "then only what's newer than the officer's answer is asked for")
+	-- A member's answer doesn't stop an officer's (here, ours) from going; an officer's does
+	own.rankIndex = 1
+	ns.GuildRank:NoteOwn()
+	addonSent = {}
+	From("Plain Member", "Q", { n = 0 })
+	From("New Recruit", "L", { s = offSettings, l = {} })
+	for _ = 1, 20 do RunTimers() end
+	local answered = false
+	for _, m in ipairs(addonSent) do answered = answered or m.text:find("^L:") ~= nil end
+	check(answered, "an officer still answers after a member did")
+	addonSent = {}
+	From("Plain Member", "Q", { n = 0 })
+	From("Office Rman", "L", { s = offSettings, l = {} })
+	for _ = 1, 20 do RunTimers() end
+	answered = false
+	for _, m in ipairs(addonSent) do answered = answered or m.text:find("^L:") ~= nil end
+	check(not answered, "another officer's answer is enough")
+	-- An officer logging in with newer officer data than we've heard: we ask too
+	own.rankIndex = 4
+	ns.GuildRank:NoteOwn()
+	clock = clock + 120
+	addonSent = {}
+	From("Office Rman", "Q", { n = base + 200 })
+	RunTimers()
+	local asked = false
+	for _, m in ipairs(addonSent) do asked = asked or m.text:find("^Q:") ~= nil end
+	check(asked, "an officer holding officer data newer than ours makes us ask")
 
 	GetGuildInfo, IsInGuild, IsGuildLeader, C_GuildInfo, C_Club, GuildControlGetNumRanks = real.GetGuildInfo, real.IsInGuild, real.IsGuildLeader, real.C_GuildInfo, real.C_Club, real.GuildControlGetNumRanks
 	ns.db.guildRanks[me] = nil
@@ -6087,6 +6309,23 @@ end)()
 	check(#shown == 3 and shown[1].name == "Again 1" and shown[2].name == "Again 2" and shown[3].kind == "8 MORE UNLOCKS" and T:Pending() == 0,
 		"after the fight: the first two in order, then the rest summed up: "..kinds())
 	check(shown[3].name == "Killer II, Piece 1, Piece 2 and 5 more", "the summary names a few: "..shown[3].name)
+	-- Only unlocks are summed up: a raid's toast (it opens the Raids page) keeps its place in line
+	for _, t in ipairs(T:Shown()) do local tf = frameOf(t) for _ = 1, 80 do tf._scripts.OnUpdate(tf, 0.1) end end
+	check(#T:Shown() == 0, "the places are free")
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	local function Raid(name) return { kind = "RAID FORMING", name = name, onClick = function() end } end
+	T:Add(Raid("Raid One"))
+	for i = 1, 4 do T:Add({ kind = "TEST", name = "Unlock "..i }) end
+	T:Add(Raid("Raid Two"))
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	shown = T:Shown()
+	check(#shown == 3 and shown[1].name == "Raid One" and shown[2].name == "Unlock 1" and shown[3].kind == "3 MORE UNLOCKS" and T:Pending() == 1,
+		"the unlocks are summed up, the second raid waits its turn: "..kinds())
+	for _, t in ipairs(T:Shown()) do local tf = frameOf(t) for _ = 1, 80 do tf._scripts.OnUpdate(tf, 0.1) end end
+	check(T:Shown()[1] and T:Shown()[1].name == "Raid Two", "then shows")
 	ns.db.cardsSeen = nil
 	CC:TakeMine(nil)
 	CreateFrame = realCreate
@@ -6220,6 +6459,18 @@ end)()
 	RunTimers()
 	check(not N:IsShown(), "not over a dialog")
 	ns.Widgets.IsDialogShown, ns.VERSION = realIsDialogShown, realVersion
+	-- Never taller than the screen: a long note scrolls inside the window
+	local realHeight = UIParent._h
+	UIParent._h = 600
+	tinsert(ns.WHATS_NEW, 1, { version = "1.99.0", note = strrep("A long note.\n", 80), lines = { "One line." } })
+	N:Show()
+	check(N:IsShown() and f:GetHeight() <= 500 and f.body._text:find("One line.", 1, true), "a long note fits the screen, got "..f:GetHeight())
+	f.ok:Click()
+	tremove(ns.WHATS_NEW, 1)
+	N:Show()
+	check(f:GetHeight() < 500, "a short one is as tall as it needs, got "..f:GetHeight())
+	f.ok:Click()
+	UIParent._h = realHeight
 end)()
 -- World PvP raids: forming, ads, joining, invites (a raid before the sixth, never past full, after a fight), "inv"
 -- whispers, Announce, planned raids with sign-ups and reminders, and other players' ads
@@ -7038,6 +7289,385 @@ end)()
 	WantedAppCatchup = nil
 	ns.WORLD = "beta"
 	S:FreshStart()
+end)()
+-- Another player's shared sighting is checked before anything uses it: a position is two numbers 0 to 100 or nothing,
+-- the map a number, the zone a short string; what's left reaches the saved player, the sightings and the listeners
+;(function()
+	local shared = {}
+	ns.Enemies:OnChange(function(event, entry) if event == "shared" then shared[#shared + 1] = entry end end)
+	local function Latest(guid) for s in ns.Store:SightingIterator() do if s.guid == guid then return s end end end
+	local bad = {
+		{ x = 50 }, { x = "50", y = "40" }, { x = 150, y = 40 }, { x = 50, y = -1 }, { x = 0 / 0, y = 5 },
+		{ x = 50, y = 40, z = {}, m = "ten" }, { x = 50, y = 40, z = strrep("z", 200), m = 10 },
+	}
+	for i, data in ipairs(bad) do
+		data.g, data.n = "Player-9-0BAD"..i, "Bad Data"
+		ns.Enemies:OnSharedSighting(data, "Some Friend")
+		local e, s, p = shared[#shared], Latest(data.g), ns.Store:GetPlayer(data.g)
+		local wantPos = i >= 6
+		check(e and e.guid == data.g and (e.x ~= nil) == wantPos and (e.y ~= nil) == wantPos and (s.x ~= nil) == wantPos and (p.x ~= nil) == wantPos,
+			"case "..i..": a position is kept only as two numbers 0 to 100")
+		check(e.zone == nil or (type(e.zone) == "string" and #e.zone <= 64), "case "..i..": the zone is a short string or nothing")
+		check(s.zone == e.zone and s.mapId == (type(data.m) == "number" and data.m or nil) and p.zone == e.zone, "case "..i..": the sighting and the player get the same cleaned values")
+	end
+	ns.Enemies:OnSharedSighting({ g = "Player-9-0600D", n = "Good Data", z = "Ashenvale", m = 10, x = 0, y = 100 }, "Some Friend")
+	local e = shared[#shared]
+	check(e.zone == "Ashenvale" and e.x == 0 and e.y == 100, "a good sighting is kept as it came")
+end)()
+-- A posse call from another player asks to join only when it makes sense: in our zone with a position, not in a
+-- fight, not more than once in a while per caller as well as per target, and its reason held short
+;(function()
+	local realShown = ns.Widgets.IsDialogShown
+	ns.Widgets.IsDialogShown = function() return false end
+	local function Call(guid, caller, extra)
+		local data = { g = guid, n = "Posse Target", z = GetZoneText(), x = 10, y = 20, p = { c = caller, k = "Wanted" } }
+		for k, v in pairs(extra or {}) do data[k] = v end
+		lastDialog = nil
+		ns.Enemies:OnSharedSighting(data, caller)
+		return lastDialog
+	end
+	clock = clock + 3600
+	local said = #printed
+	check(Call("Player-9-0P01", "Caller Zero", { x = false }) == nil and #printed == said + 1 and printed[#printed]:find("Caller Zero is calling a posse", 1, true)
+		and not printed[#printed]:find("%(%d+, %d+%)"), "a call with no position is a chat line, with no place on the map: "..tostring(printed[#printed]))
+	check(Call("Player-9-0P02", "Caller One", { z = false }) == nil, "a call with no zone doesn't ask")
+	local d = Call("Player-9-0P03", "Caller One", { p = { c = "Caller One", k = strrep("very long reason |cffff0000", 20) } })
+	check(d and not d.text:find("|", 1, true) and #d.text < 200, "the reason is held short and plain: "..tostring(d and d.text))
+	check(Call("Player-9-0P04", "Caller One") == nil, "the same caller against someone else soon after doesn't ask again")
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(Call("Player-9-0P05", "Caller Two") == nil, "not in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	ns.Widgets.IsDialogShown = realShown
+	lastDialog = nil
+end)()
+-- A player of our own faction the game calls an enemy (a duel, mind control) isn't an enemy player
+;(function()
+	local realEnemy = UnitIsEnemy
+	UnitIsEnemy = function() return true end
+	enemyUnits.nameplate7 = { guid = "Player-1-0DUEL", name = "Duel Partner", class = "WARRIOR", level = 20, faction = "Horde" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+	local listed = false
+	for _, d in ipairs(ns.Enemies:GetNearby()) do listed = listed or d.guid == "Player-1-0DUEL" end
+	check(not listed and not ns.Enemies:GetStats("Player-1-0DUEL"), "a duel partner of our faction isn't listed or counted")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate7")
+	enemyUnits.nameplate7 = nil
+	UnitIsEnemy = realEnemy
+end)()
+-- The targeted sound: several enemies picking you at once sound once, not once each
+;(function()
+	local realPlay, played = ns.Alerts.PlayRaw, 0
+	ns.Alerts.PlayRaw = function(self, kind) if kind == "targeted" then played = played + 1 end end
+	local detect = ns.db.settings.detect
+	local savedExposed = detect.onlyWhenExposed
+	detect.onlyWhenExposed = false
+	clock = clock + 120
+	for i = 1, 3 do
+		enemyUnits["nameplate"..(20 + i)] = { guid = "Player-9-0AA"..i, name = "Picker "..i, class = "ROGUE", level = 20, targetsMe = true }
+		Fire("NAME_PLATE_UNIT_ADDED", "nameplate"..(20 + i))
+		Fire("UNIT_TARGET", "nameplate"..(20 + i))
+	end
+	check(played == 1, "three at once sound once, got "..played)
+	clock = clock + 2
+	enemyUnits.nameplate24 = { guid = "Player-9-0AA4", name = "Picker 4", class = "ROGUE", level = 20, targetsMe = true }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate24")
+	Fire("UNIT_TARGET", "nameplate24")
+	check(played == 2, "a moment later, another sounds, got "..played)
+	for i = 1, 4 do
+		enemyUnits["nameplate"..(20 + i)] = nil
+		Fire("NAME_PLATE_UNIT_REMOVED", "nameplate"..(20 + i))
+	end
+	ns.Enemies:ClearNearby()
+	detect.onlyWhenExposed = savedExposed
+	ns.Alerts.PlayRaw = realPlay
+end)()
+-- The once-a-second scan reads no unit in an instance either, and nameplates that went inside are forgotten
+;(function()
+	local enemiesPrivate
+	for i = 1, 20 do
+		local name, value = debug.getupvalue(ns.Enemies.Status, i)
+		if name == "private" then enemiesPrivate = value end
+	end
+	enemyUnits.nameplate8 = { guid = "Player-9-0BEF0", name = "Before Inside", class = "MAGE", level = 20 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate8")
+	check(enemiesPrivate.plates.nameplate8, "a nameplate outside is watched")
+	local outside, realExists, asked = IsInInstance, UnitExists, 0
+	IsInInstance = function() return true, "party" end
+	UnitExists = function(unit) if unit ~= "player" then asked = asked + 1 error("Secret values are only allowed during untainted execution for this argument.") end return realExists(unit) end
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate8")
+	enemyUnits.nameplate8 = nil
+	local ok, err = pcall(enemiesPrivate.Tick)
+	UnitExists, IsInInstance = realExists, outside
+	check(ok and asked == 0, "the scan reads no unit in an instance: "..tostring(err))
+	check(not enemiesPrivate.plates.nameplate8, "a nameplate that went inside isn't watched any more")
+	ns.Enemies:ClearNearby()
+end)()
+-- A death the recap hasn't caught up with (it still shows the last one) isn't blamed on whoever had us targeted
+;(function()
+	clock = clock + 300
+	RunTimers()
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:8888|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-9-0RCP" } } end,
+	}
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	check(ns.Enemies:GetStats("Player-9-0RCP") and ns.Enemies:GetStats("Player-9-0RCP").losses == 1, "a fresh recap names the killer")
+	Fire("PLAYER_ALIVE")
+	clock = clock + 300
+	RunTimers()
+	enemyUnits.nameplate44 = { guid = "Player-9-0TGT", name = "Just Looking", class = "ROGUE", level = 20, targetsMe = true }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate44")
+	Fire("UNIT_TARGET", "nameplate44")
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	local stats = ns.Enemies:GetStats("Player-9-0TGT")
+	check(not stats or (stats.losses or 0) == 0, "a stale recap blames nobody, not even the one who had us targeted")
+	Fire("PLAYER_ALIVE")
+	enemyUnits.nameplate44 = nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate44")
+	ns.Enemies:ClearNearby()
+	C_DeathRecap = nil
+	clock = clock + 300
+	RunTimers()
+end)()
+-- What's kept per enemy for a moment (casts, shares, nameplate removals, sightings, deaths, victims) is let go once
+-- it's old, so a long session doesn't keep everyone ever seen
+;(function()
+	local function Private(fn)
+		for i = 1, 30 do
+			local name, value = debug.getupvalue(fn, i)
+			if name == "private" then return value end
+		end
+	end
+	local ep, rp, sp = Private(ns.Enemies.Status), Private(ns.Recorder.OnEnable), Private(ns.Streaks.OnKill)
+	local now = GetTime()
+	ep.recentCasts["Player-9-0OLD:1784"], ep.lastShared["Player-9-0OLD"] = now - 100, now - 1000
+	for i = 1, 50 do ep.removals[#ep.removals + 1] = now - 100 end
+	ep.Tick()
+	check(not ep.recentCasts["Player-9-0OLD:1784"] and not ep.lastShared["Player-9-0OLD"] and #ep.removals == 0, "Enemies lets old casts, shares and removals go")
+	rp.lastSighting["Player-9-0OLD"], rp.recentDeaths["Player-9-0OLD"], rp.seenAlive["Player-9-0OLD"] = now - 100, now - 100, now - 3600
+	rp.friendly["Player-1-0OLD"] = { name = "Old Friend", t = now - 3600 }
+	rp.lastSighting["Player-9-0NEW"], rp.seenAlive["Player-9-0NEW"], rp.friendly["Player-1-0NEW"] = now, now, { name = "New Friend", t = now }
+	rp.Prune()
+	check(not rp.lastSighting["Player-9-0OLD"] and not rp.recentDeaths["Player-9-0OLD"] and not rp.seenAlive["Player-9-0OLD"] and not rp.friendly["Player-1-0OLD"],
+		"the recorder lets old sightings, deaths and players go")
+	check(rp.lastSighting["Player-9-0NEW"] and rp.seenAlive["Player-9-0NEW"] and rp.friendly["Player-1-0NEW"], "and keeps the recent ones")
+	sp.recentVictims["Old Victim"] = now - 100
+	ns.Streaks:OnKill("New Victim")
+	check(not sp.recentVictims["Old Victim"] and sp.recentVictims["New Victim"], "streaks let old victims go")
+end)()
+-- A skull-level enemy (the game says level -1) is saved with no level and shown as "??", never as level -1
+;(function()
+	clock = clock + 60
+	enemyUnits.target = { guid = "Player-9-0SKUL", name = "Skull Face", class = "WARRIOR", level = -1 }
+	Fire("PLAYER_TARGET_CHANGED")
+	local p = ns.Store:GetPlayer("Player-9-0SKUL")
+	check(p and p.level == nil, "a skull's level isn't saved, got "..tostring(p and p.level))
+	enemyUnits.target = nil
+	Fire("PLAYER_TARGET_CHANGED")
+	ns.Enemies:ClearNearby()
+	-- Saved before this fix
+	ns.db.players["Player-9-0SKUL"].level = -1
+	local d = ns.Enemies:Describe("Player-9-0SKUL")
+	check(d.level == nil and d.skull, "a level -1 saved before is a skull")
+end)()
+-- The honor scout's comparison running out of time lets go only of its own: not one the achievement window (or
+-- another addon) started meanwhile
+;(function()
+	local cleared = 0
+	local real = { SetAchievementComparisonUnit = SetAchievementComparisonUnit, GetComparisonStatistic = GetComparisonStatistic,
+		ClearAchievementComparisonUnit = ClearAchievementComparisonUnit, UnitIsPlayer = UnitIsPlayer, UnitName = UnitName, UnitGUID = UnitGUID,
+		UnitFactionGroup = UnitFactionGroup }
+	local units = { target = { guid = "Player-9-0HS1", first = "Honor", last = "One" }, mouseover = { guid = "Player-9-0HS2", first = "Honor", last = "Two" } }
+	SetAchievementComparisonUnit = function() return 1 end
+	GetComparisonStatistic = function() return "5" end
+	ClearAchievementComparisonUnit = function() cleared = cleared + 1 end
+	UnitIsPlayer = function(u) return units[u] ~= nil or real.UnitIsPlayer(u) end
+	UnitName = function(u) if units[u] then return units[u].first, units[u].last end return real.UnitName(u) end
+	UnitGUID = function(u) if units[u] then return units[u].guid end return real.UnitGUID(u) end
+	UnitFactionGroup = function(u) if units[u] then return "Alliance" end return real.UnitFactionGroup(u) end
+	ns.db.hkBook = {}
+	-- The player opens the achievement window's comparison while ours waits
+	clock = clock + 60
+	Fire("PLAYER_TARGET_CHANGED")
+	AchievementFrame = CreateFrame("Frame")
+	RunTimers()
+	check(cleared == 0, "a comparison the achievement window shows isn't let go under it")
+	AchievementFrame = nil
+	-- Another addon starts one while ours waits
+	clock = clock + 60
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	for _, hook in ipairs(globalHooks.SetAchievementComparisonUnit or {}) do hook("target") end
+	RunTimers()
+	check(cleared == 0, "nor one another addon started")
+	-- Nothing else: ours is let go when it runs out
+	clock = clock + 60
+	ns.db.hkBook = {}
+	Fire("PLAYER_TARGET_CHANGED")
+	RunTimers()
+	check(cleared == 1, "our own unanswered comparison is let go, got "..cleared)
+	for k, v in pairs(real) do _G[k] = v end
+	ns.db.hkBook = {}
+end)()
+-- Dialogs and Escape: any dialog closes on Escape (the game's list of windows Escape closes). Only the Cancel button is
+-- Cancel: closed any other way (Escape, the game closing every window on a fear or a flight, the main window closing)
+-- it's dismissed with no answer. Hidden with the whole interface (Alt+Z) it's still up.
+;(function()
+	local W = ns.Widgets
+	local function Escape()
+		for _, name in ipairs(UISpecialFrames) do
+			local frame = _G[name]
+			if frame and frame:IsShown() then frame:Hide() end
+		end
+	end
+	Escape() -- whatever earlier tests left up
+	RunTimers()
+	local cancelled, confirmed, closed = 0, 0, 0
+	local function Options(title, extra)
+		local o = { title = title, text = "x", onCancel = function() cancelled = cancelled + 1 end,
+			onConfirm = function() confirmed = confirmed + 1 end, onClose = function() closed = closed + 1 end }
+		for k, v in pairs(extra or {}) do o[k] = v end
+		return o
+	end
+	W:Dialog(Options("No input"))
+	check(W:IsDialogShown(), "the dialog is up")
+	Escape()
+	check(not W:IsDialogShown() and cancelled == 0 and closed == 1, "Escape closes a dialog with no input, with no answer")
+	W:Dialog(Options("Input", { input = { placeholder = "x" } }))
+	local frame = _G.WantedDialog.frame
+	frame.input._scripts.OnEscapePressed(frame.input)
+	check(not W:IsDialogShown() and cancelled == 0 and closed == 2, "Escape in its box closes it with no answer")
+	W:Dialog(Options("OK"))
+	frame.confirm:Click()
+	check(not W:IsDialogShown() and cancelled == 0 and confirmed == 1 and closed == 2, "OK is only OK")
+	W:Dialog(Options("Cancel"))
+	frame.cancel:Click()
+	check(cancelled == 1 and closed == 2, "Cancel is Cancel")
+	-- Alt+Z: the dialog goes out of sight with its parent, but is still up; its buttons still answer it once
+	W:Dialog(Options("Alt Z"))
+	local blocker = _G.WantedDialog
+	blocker._scripts.OnHide(blocker)
+	check(W:IsDialogShown() and closed == 2 and cancelled == 1, "hidden with the interface, it's still waiting")
+	frame.confirm:Click()
+	frame.cancel:Click()
+	check(confirmed == 2 and cancelled == 1, "then OK answers it, and only once")
+	-- Over the main window: closing the window takes the dialog with it, unanswered
+	ns.UI:Show("home")
+	W:Dialog(Options("Over the window"))
+	ns.UI:GetFrame():Hide()
+	check(not W:IsDialogShown() and cancelled == 1 and closed == 3, "closing the main window closes its dialog, with no answer")
+	-- A dialog asked for while another is up waits its turn (the harness's W.Dialog closes the last one; the real one
+	-- is used here)
+	local answers = {}
+	origDialog(W, { title = "First", text = "x", onCancel = function() answers[#answers + 1] = "first cancelled" end })
+	origDialog(W, { title = "Second", text = "y", onConfirm = function() answers[#answers + 1] = "second confirmed" end })
+	check(frame.title._text == "First", "the open dialog stays: "..tostring(frame.title._text))
+	frame.cancel:Click()
+	check(not W:IsDialogShown(), "closed")
+	RunTimers()
+	check(W:IsDialogShown() and frame.title._text == "Second", "then the next one shows")
+	frame.confirm:Click()
+	check(answers[1] == "first cancelled" and answers[2] == "second confirmed" and #answers == 2, "each gets its own answer: "..table.concat(answers, ", "))
+	-- Waiting in a fight: shown once it's over
+	origDialog(W, { title = "Up", text = "x" })
+	origDialog(W, { title = "After the fight", text = "x" })
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	frame.confirm:Click()
+	RunTimers()
+	check(not W:IsDialogShown(), "nothing new pops up in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(W:IsDialogShown() and frame.title._text == "After the fight", "it shows once the fight is over")
+	frame.confirm:Click()
+	-- Waiting over the main window: dropped when the window closes
+	ns.UI:Show("home")
+	origDialog(W, { title = "Up over the window", text = "x" })
+	origDialog(W, { title = "Waiting over the window", text = "x" })
+	ns.UI:GetFrame():Hide()
+	RunTimers()
+	check(not W:IsDialogShown(), "a dialog waiting over a window that closed is dropped")
+	-- The beta welcome waits for a window opening with no dialog up
+	local realBeta, realWelcomed = ns.BETA, ns.db.welcomed
+	ns.BETA, ns.db.welcomed = true, nil
+	origDialog(W, { title = "Busy", text = "x" })
+	ns.Report:MaybeWelcome()
+	RunTimers()
+	check(ns.db.welcomed == nil and frame.title._text == "Busy", "no welcome over another dialog")
+	frame.confirm:Click()
+	ns.Report:MaybeWelcome()
+	RunTimers()
+	check(ns.db.welcomed == ns.VERSION and frame.title._text == "Welcome, bounty hunter", "welcomed the next time")
+	frame.confirm:Click()
+	ns.BETA, ns.db.welcomed = realBeta, realWelcomed
+	lastDialog = nil
+end)()
+-- A closed window isn't redrawn (data changes ask for a redraw often, in a fight several a second); opening it redraws
+-- it with every badge worked out afresh
+;(function()
+	local up
+	for i = 1, 30 do
+		local name, value = debug.getupvalue(ns.UI.Refresh, i)
+		if name == "private" then up = value end
+	end
+	ns.UI:Show("board")
+	local def = up.pageByKey[up.current]
+	local realRefresh, drawn = def.refresh, 0
+	def.refresh = function(...) drawn = drawn + 1 if realRefresh then return realRefresh(...) end end
+	ns.UI:GetFrame():Hide()
+	ns.UI:Refresh()
+	ns.UI:Refresh(true)
+	check(drawn == 0, "a closed window isn't redrawn, got "..drawn)
+	ns.UI:Show()
+	check(drawn == 1, "opening it redraws it once, got "..drawn)
+	def.refresh = realRefresh
+	ns.UI:GetFrame():Hide()
+end)()
+-- A bug report carries no other player's name: the names Wanted knows (players seen, record origins, the guild
+-- roster, lists), with a realm or not, GUIDs in any case and realm names are left out of the log it quotes; zones,
+-- races and spells stay
+;(function()
+	ns.db.players["Player-9-0C1"] = { name = "Łukasz Nowak", faction = "Alliance" }
+	ns.db.players["Player-9-0C2"] = { name = "Bob", faction = "Alliance" }
+	ns.db.chains["Caller Guy"] = ns.db.chains["Caller Guy"] or { seq = 1 }
+	ns.db.chains["Joiner Jane"] = ns.db.chains["Joiner Jane"] or { seq = 1 }
+	ns.db.players["Player-9-ENEMY"].name = "Stabby Mcstab"
+	ns:Log("Sync: received B from Caller Guy-OtherRealm, 3 records")
+	ns:Log("Posse: Joiner Jane calls one against player-9-0abcdef in Stranglethorn Vale")
+	ns:Log("Enemies: Łukasz Nowak (Night Elf) cast Lesser Healing; Bob-Forever whispered")
+	ns:Log("Realm links: greeted %s on %s", "Bob", GetRealmName())
+	ns:NoteProblem("error near Stabby Mcstab")
+	local report = ns.Report:Build()
+	for _, leak in ipairs({ "Caller Guy", "OtherRealm", "Joiner Jane", "0abcdef", "Łukasz", "Nowak", "Bob", "Stabby Mcstab", "on Realm" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	for _, kept in ipairs({ "Sync: received B from", "3 records", "calls one against", "Stranglethorn Vale", "Night Elf", "Lesser Healing", "whispered" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
+	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
+	ns.db.players["Player-9-0C1"], ns.db.players["Player-9-0C2"] = nil, nil
+end)()
+-- Officer ranks when the game won't show a rank's permissions: only the guild master's rank counts (never every
+-- rank), it's said once in the log, and the Guild Kill on Sight page says so
+;(function()
+	local realInfo, realRanks = C_GuildInfo, GuildControlGetNumRanks
+	local readable = true
+	C_GuildInfo = { GuildControlGetRankFlags = function() if not readable then error("not allowed") end return {} end }
+	GuildControlGetNumRanks = function() return 7 end
+	check(select(2, ns.GuildRank:OfficerRanks()) == true, "permissions read")
+	readable = false
+	local ranks, known = ns.GuildRank:OfficerRanks()
+	ns.GuildRank:OfficerRanks()
+	local count, said = 0, 0
+	for _ in pairs(ranks) do count = count + 1 end
+	for _, line in ipairs(ns:GetLogLines(10)) do if line:find("rank permissions", 1, true) then said = said + 1 end end
+	check(ranks[0] and count == 1 and known == false, "only the guild master's rank counts when permissions can't be read")
+	check(said == 1, "said once in the log, got "..said)
+	C_GuildInfo, GuildControlGetNumRanks = realInfo, realRanks
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

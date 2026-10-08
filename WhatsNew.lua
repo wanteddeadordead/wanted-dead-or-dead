@@ -78,6 +78,10 @@ local SETTLE_SECONDS = 4 -- after the loading screen, before the window
 local MOST_VERSIONS = 3 -- versions listed after a long break
 local WIDTH = 460
 local ART_SIZE = 96
+local ART_TOP = 52
+local BODY_RIGHT = 36 -- the text's right margin, with room for the scroll bar
+local SCREEN_MARGIN = 100 -- the window is at most the screen's height less this
+local MIN_HEIGHT = 300
 
 
 
@@ -189,15 +193,16 @@ function private.Open(title, note, entries, welcome, art)
 	local f = private.frame or private.Create()
 	f.title:SetText(title)
 	local path = art and Wanted.CallingCard:Art(art)
-	f.body:ClearAllPoints()
+	f.scroll:ClearAllPoints()
 	if path then
 		f.art:SetTexture(path)
 		f.art:Show()
-		f.body:SetPoint("TOP", f.art, "BOTTOM", 0, -10)
+		f.scroll:SetPoint("TOPLEFT", 20, -(ART_TOP + ART_SIZE + 10)) -- under the picture
 	else
 		f.art:Hide()
-		f.body:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -14)
+		f.scroll:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -14)
 	end
+	f.scroll:SetPoint("BOTTOMRIGHT", -BODY_RIGHT, 52)
 	local parts = {}
 	if note then
 		tinsert(parts, note)
@@ -222,7 +227,14 @@ function private.Open(title, note, entries, welcome, art)
 	end
 	f.body:SetText(table.concat(parts, "\n"))
 	f.welcome = welcome
-	f:SetHeight(64 + (path and ART_SIZE + 10 or 0) + ceil(f.body:GetStringHeight() or 0) + 56)
+	-- As tall as the text needs, but never taller than the screen: past that the text scrolls
+	local bodyHeight = ceil(f.body:GetStringHeight() or 0)
+	local room = max(MIN_HEIGHT, (UIParent:GetHeight() or 0) - SCREEN_MARGIN)
+	local height = 64 + (path and ART_SIZE + 10 or 0) + bodyHeight + 56
+	f.bodyHolder:SetHeight(max(bodyHeight, 1))
+	f:SetHeight(min(height, room))
+	f.scroll:SetVerticalScroll(0)
+	f.scroll.ScrollBar:SetShown(height > room)
 	f:Show()
 	f:Raise()
 end
@@ -239,9 +251,16 @@ function private.Create()
 	f.title:SetWidth(WIDTH - 40)
 	f.art = f:CreateTexture(nil, "ARTWORK")
 	f.art:SetSize(ART_SIZE, ART_SIZE)
-	f.art:SetPoint("TOP", f, "TOP", 0, -52) -- centred, under the title
-	f.body = Theme:Text(f, "body", "")
-	f.body:SetWidth(WIDTH - 40)
+	f.art:SetPoint("TOP", f, "TOP", 0, -ART_TOP) -- centred, under the title
+	-- The text, in a scroll frame: a long note scrolls rather than running off the screen
+	f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+	f.scroll.scrollBarHideable = true
+	f.bodyHolder = CreateFrame("Frame", nil, f.scroll)
+	f.bodyHolder:SetSize(WIDTH - 20 - BODY_RIGHT, 1)
+	f.scroll:SetScrollChild(f.bodyHolder)
+	f.body = Theme:Text(f.bodyHolder, "body", "")
+	f.body:SetPoint("TOPLEFT")
+	f.body:SetWidth(WIDTH - 20 - BODY_RIGHT)
 	f.body:SetWordWrap(true)
 	f.body:SetSpacing(3)
 	f.ok = W:Button(f, "OK", "primary", 120, 26, function()

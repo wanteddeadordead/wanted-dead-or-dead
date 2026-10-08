@@ -7697,20 +7697,22 @@ end)()
 		{ kind = "pass", id = "Str Seq:2", origin = "Str Seq", seq = "2", prev = "0", t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "No Prev:1", origin = "No Prev", seq = 1, t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "Half Seq:1.5", origin = "Half Seq", seq = 1.5, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Inf Seq:inf", origin = "Inf Seq", seq = 1 / 0, prev = "0", t = clock, hash = "x", data = {} },
+		{ kind = "pass", id = "Huge Seq:1e300", origin = "Huge Seq", seq = 1e300, prev = "0", t = clock, hash = "x", data = {} },
 		{ kind = "pass", id = "Nested:1", origin = "Nested", seq = 1, prev = "0", t = clock, hash = "x", data = { x = {} } },
 	}) do
 		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
 		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
 	end
 	-- Numbers others add up are checked on the way in: amounts are whole copper the game can hold, and nothing is
-	-- infinite or not a number (a string amount threw; a negative or infinite one passed)
+	-- infinite or not a number (a string amount threw; a negative or infinite one passed). Such a record is held, so
+	-- its chain moves on (a client before these checks may have made one), but never read.
 	local seq = 0
 	for _, case in ipairs({
 		{ "bounty", { target = "Player-9-NUM", amount = "lots" } },
 		{ "bounty", { target = "Player-9-NUM", amount = -5000 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 1 / 0 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 0 / 0 } },
-		{ "bounty", { target = "Player-9-NUM", amount = 2 ^ 40 } },
 		{ "bounty", { target = "Player-9-NUM", amount = 1000.5 } },
 		{ "bounty", { target = "Player-9-NUM" } },
 		{ "raise", { bounty = "Numbers Guy:1" } },
@@ -7718,10 +7720,17 @@ end)()
 		{ "claim", { bounty = "x:1", killT = 1 / 0 } },
 	}) do
 		seq = seq + 1
-		local ok, isNew, reason = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
-		check(ok and not isNew and reason == "malformed", "a "..case[1].." with a bad number is refused ("..seq.."): "..tostring(isNew).." "..tostring(reason))
+		local ok = pcall(S.MergeRelayed, S, Signed(case[1], "Numbers Guy", seq, "0", case[2]))
+		local listed = false
+		for r in S:Iterator(case[1]) do if r.id == "Numbers Guy:"..seq then listed = true end end
+		check(ok and not listed and S:GetChainSeq("Numbers Guy") == seq, "a "..case[1].." with a bad number is never read ("..seq..")")
 	end
 	check(S:MergeRelayed(Signed("bounty", "Numbers Guy", 20, "0", { target = "Player-9-NUM", amount = 5000 })), "a sound bounty still comes in")
+	-- One past what the game's money holds (from a client before the cap) is kept, and counted at the most it can be
+	S:MergeRelayed(Signed("bounty", "Numbers Guy", 21, "0", { target = "Player-9-NUMBIG", amount = 2 ^ 40 }))
+	local big
+	for r in S:Iterator("bounty") do if r.id == "Numbers Guy:21" then big = r end end
+	check(big and ns.Bounties:GetAmount(big) == 2 ^ 31 - 1, "a bounty past what money holds is shown at the most it can be")
 	-- And this client never makes one others would refuse
 	check(ns.Bounties:ParseMoney("300000g") == nil and ns.Bounties:ParseMoney("214748g") == 2147480000, "an amount past what the game holds isn't read")
 	check(ns.Bounties:Post("Player-9-NUM2", "Num Two", 2 ^ 40) == nil and ns.Bounties:PostGuild("Num Guild", nil, 2 ^ 40) == nil, "nor posted")

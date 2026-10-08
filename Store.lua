@@ -33,6 +33,8 @@ local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
 local MAX_COPPER = 2 ^ 31 - 1
 Store.MAX_COPPER = MAX_COPPER
 local AMOUNT_REQUIRED = { bounty = true, raise = true }
+-- Fields that are numbers in every kind that has them (times, levels, places): the code compares and adds them
+local NUMBER_FIELDS = { killT = true, seenAt = true, postedAt = true, level = true, x = true, y = true, mapId = true }
 -- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
 -- never taken from a peer
 local RESERVED_KINDS = { sighting = true, ["*"] = true }
@@ -576,9 +578,8 @@ end
 ---@param r any
 ---@return boolean
 function Store:IsWellFormed(r)
-	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or type(r.seq) ~= "number"
-		or r.seq ~= floor(r.seq) or r.seq < 1 or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
-		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number"
+		or type(r.prev) ~= "string" or type(r.hash) ~= "string" or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
 		return false
 	end
 	for key, value in pairs(r.data) do
@@ -586,18 +587,37 @@ function Store:IsWellFormed(r)
 		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
 			return false
 		end
-		-- Nothing infinite or not a number (NaN is the one value not equal to itself)
-		if kind == "number" and (value ~= value or value == math.huge or value == -math.huge) then
+	end
+	return private.IsFinite(r.t)
+end
+
+-- No chain gets anywhere near this many records; anything past it is made up (and too big to write as a whole number)
+local MAX_SEQ = 2 ^ 31 - 1
+
+---Whether a value is a seq a chain can have: a whole number from 1 to MAX_SEQ.
+---@param n any
+---@return boolean
+function Store:IsSeq(n)
+	return type(n) == "number" and n >= 1 and n <= MAX_SEQ and n == floor(n)
+end
+
+---Whether a number is one (not NaN, the one value not equal to itself) and not infinite.
+function private.IsFinite(value)
+	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+---Whether a well formed record's numbers are ones a client makes: nothing infinite or not a number, times, levels and
+---places as numbers, and money whole copper, which a bounty or a raise always gives. Others add these up and compare
+---them. More than the game's money holds (a client before the cap) is kept: readers count it at MAX_COPPER.
+function private.HasSoundNumbers(r)
+	for key, value in pairs(r.data) do
+		if (type(value) == "number" and not private.IsFinite(value)) or (NUMBER_FIELDS[key] and type(value) ~= "number") then
 			return false
 		end
 	end
-	if r.t ~= r.t or r.t == math.huge or r.t == -math.huge then
-		return false
-	end
-	-- Money is whole copper the game can hold, and a bounty or a raise always says how much
 	local amount = r.data.amount
 	if (amount == nil and AMOUNT_REQUIRED[r.kind])
-		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0 or amount > MAX_COPPER)) then
+		or (amount ~= nil and (type(amount) ~= "number" or amount ~= floor(amount) or amount < 0)) then
 		return false
 	end
 	return true
@@ -671,6 +691,11 @@ function private.Insert(record, live, fromApp)
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s doesn't match its hash (altered)", tostring(record.kind), tostring(record.id))
+	elseif not private.HasSoundNumbers(record) then
+		-- A number no client makes (made up, or text where a number goes): held, so its chain moves on, but never read,
+		-- like an altered one
+		record.tampered = true
+		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
 	local chain = db.chains[record.origin]
 	if not chain then

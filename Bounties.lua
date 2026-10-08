@@ -161,12 +161,17 @@ end
 ---@return number
 function Bounties:GetAmount(bounty)
 	local amount = bounty.data.amount
+	-- A record never read (Store:Iterator) can still reach a listener as it arrives
+	if type(amount) ~= "number" then
+		return 0
+	end
 	for raise in Store:Iterator("raise") do
 		if raise.data.bounty == bounty.id then
 			amount = amount + raise.data.amount
 		end
 	end
-	return amount
+	-- At most what the game's money holds (a record from before the cap can say more)
+	return min(amount, Store.MAX_COPPER)
 end
 
 ---When a bounty expires (raises extend it from the raise).

@@ -70,6 +70,9 @@
 - A confirmation, withdrawal, raise or payment only counts when it really comes from the player who made it: heard
   from them, brought by the Wanted app, or followed by their own later records. Only the poster can raise a bounty.
   Another player can no longer confirm, take down or raise someone else's bounty, or mark it paid.
+- One player can no longer push someone's record chain far ahead of their real records (which then looked forged
+  to everyone): a skip over pruned records goes no further than anyone's sync says the chain reaches, and the
+  player's own next record undoes a false one.
 
 ## [1.18.2] - 2026-10-08
 

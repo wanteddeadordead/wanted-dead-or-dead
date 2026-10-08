@@ -3261,8 +3261,10 @@ end)()
 	check(gaps == "2,5,6,20,20,31", "the fill lists each hole as the seq before and after it, got "..tostring(gaps))
 	-- Receiving: the chain moves over every hole in one fill, and past the pruned end. The records after the holes
 	-- are held already (they came ahead of the gap), so the harness's decoded seqs (floats in Lua 5.4) don't matter
+	-- (A skip goes no further than someone said a chain reaches: here the peer's hello said 30)
 	local fill = { r = { Holey("Holey2", 1), Holey("Holey2", 2) }, g = { Holey2 = { 2, 5, 6, 20, 20, 31 } } }
 	for _, s in ipairs({ 5, 6, 20 }) do ns.db.records["Holey2:"..s] = Holey("Holey2", s) end
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { Holey2 = 30 } }), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", fill), "CHANNEL", "Some Peer", nil, nil, nil, "WantedNetHorde")
 	check(ns.Store:GetChainSeq("Holey2") == 30, "the chain moved over the holes to the sender's end, got "..ns.Store:GetChainSeq("Holey2"))
 	check(not ns.Store:Get("Holey2:5").brokenChain and not ns.Store:Get("Holey2:20").brokenChain, "records after a hole aren't flagged")
@@ -7793,6 +7795,45 @@ end)()
 	check(S:Get("Carl Mid:3").brokenChain and S:GetChainSeq("Carl Mid") == 3, "a record after a forged one doesn't follow it")
 	check(S:Merge(carl2, "Carl Mid") and S:Get("Carl Mid:2").hash == carl2.hash and not S:Get("Carl Mid:2").brokenChain, "the real one replaces it, mid-chain")
 	check(not S:Get("Carl Mid:3").brokenChain and S:GetChainSeq("Carl Mid") == 3, "and what follows it is whole again")
+	S:FreshStart()
+end)()
+-- A fill's "pruned before here" (p) and "holes" (g) can't move someone's chain far ahead of their real records: a skip
+-- goes no further than any player said the chain reaches, and a recent record inside a skip undoes it
+;(function()
+	local S = ns.Store
+	local function Signed(kind, origin, seq, prev, data, t)
+		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev or "0", t = t or clock, data = data or {} }
+		local parts = { r.kind, r.id, r.prev, tostring(r.t) }
+		local keys = {}
+		for k in pairs(r.data) do keys[#keys + 1] = k end
+		table.sort(keys)
+		for _, k in ipairs(keys) do parts[#parts + 1] = k.."="..tostring(r.data[k]) end
+		r.hash = S:Hash(table.concat(parts, "\n"))
+		return r
+	end
+	local channel = ns.Sync:GetPointer().n
+	local function From(sender, tag, tbl)
+		clock = clock + 61 -- clear of the per-sender cap
+		Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channel)
+		RunFrames()
+	end
+	S:FreshStart()
+	local prev = "0"
+	for seq = 1, 3 do
+		local r = Signed("pass", "Alice Chain", seq, prev, { bounty = "b"..seq })
+		S:Merge(r, "Alice Chain")
+		prev = r.hash
+	end
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 3, "a skip past anything anyone said the chain reaches doesn't move it: "..S:GetChainSeq("Alice Chain"))
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 2.5 }, r = {}, g = { ["Alice Chain"] = { 3, 1e9, "x", 7 } } })
+	check(S:GetChainSeq("Alice Chain") == 3, "nor do odd numbers or holes past what anyone said")
+	-- Even when someone says it reaches that far, a recent record of Alice's inside the skip undoes it
+	From("Mallory Bad", "V", { c = { ["Alice Chain"] = 999999 } })
+	From("Mallory Bad", "F", { p = { ["Alice Chain"] = 1000000 }, r = {} })
+	check(S:GetChainSeq("Alice Chain") == 999999, "a skip to what someone said the chain reaches goes through")
+	local four = Signed("pass", "Alice Chain", 4, prev, { bounty = "b4" })
+	check(S:Merge(four, "Alice Chain") and S:GetChainSeq("Alice Chain") == 4 and not S:Get(four.id).brokenChain, "her next real record undoes the skip: "..S:GetChainSeq("Alice Chain"))
 	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

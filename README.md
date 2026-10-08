@@ -73,6 +73,8 @@ challenges, achievements and calling cards.
 - **Your nemesis:** who has killed you most, and who you've killed most, with wins and losses against every enemy.
 - **Players' Blizzard PvP ranks** on nameplates, tooltips and your target, for anyone running Wanted.
 
+Follow the war on X: [@WantedDoD](https://x.com/WantedDoD), with the biggest battles as they happen.
+
 ## Install
 
 Install from CurseForge, or download the latest release zip and extract the `WantedDeadOrDead` folder into

@@ -8171,8 +8171,11 @@ end)()
 	From("Alt Two", "V", { c = { ["Alice Chain"] = big } })
 	From("Alt One", "F", { r = {}, p = { ["Alice Chain"] = big } })
 	local once = S:GetChainSeq("Alice Chain")
-	From("Alt Two", "F", { r = {}, p = { ["Alice Chain"] = big } })
-	check(once <= 302 + 500 and S:GetChainSeq("Alice Chain") == once, "two players' word moves a chain at most 500 past what's held, once: "..S:GetChainSeq("Alice Chain"))
+	check(once <= 302 + 500, "two players' word moves a chain at most 500 past what's held: "..once)
+	-- Once the origin itself says how far its chain reaches, nobody else's word takes it further, self-made records or not
+	From("Alice Chain", "V", { c = { ["Alice Chain"] = once } })
+	From("Alt Two", "F", { r = { Signed(once + 500, "?") }, p = { ["Alice Chain"] = once + 500 } })
+	check(S:GetChainSeq("Alice Chain") <= once + 1, "past what the origin said, no skip: "..S:GetChainSeq("Alice Chain"))
 	-- Our own chain is never skipped
 	local me = S:GetOrigin()
 	local mine = S:GetChainSeq(me)
@@ -8249,6 +8252,34 @@ end)()
 		for _, p in ipairs({ "App A", "App B", "App C" }) do Move(p, { e = base + step, n = "WantedNetHordereal"..step, a = 1, h = 1 }) end
 	end
 	check(ns.Sync:GetPointer().e == base + 8, "a player without the app keeps up with eight real moves: "..(ns.Sync:GetPointer().e - base))
+end)()
+-- A pruned chain end longer than 500 records still crosses, when the origin itself says how far the chain reaches
+;(function()
+	local S = ns.Store
+	local function Rec(seq, prev) return Sealed({ kind = "pass", id = "Long Timer:"..seq, origin = "Long Timer", seq = seq, prev = prev, t = clock, data = {} }) end
+	local channel = ns.Sync:GetPointer().n
+	local function From(sender, tag, tbl)
+		clock = clock + 61
+		Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channel)
+		RunTimers()
+		RunFrames()
+	end
+	S:FreshStart()
+	local prev = "0"
+	for seq = 1, 3 do local r = Rec(seq, prev) S:Merge(r, "Long Timer") prev = r.hash end
+	From("Long Timer", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer One", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer Two", "V", { c = { ["Long Timer"] = 2000 } })
+	From("Peer One", "F", { r = {}, g = { ["Long Timer"] = { 3, 2001 } } })
+	check(S:GetChainSeq("Long Timer") == 2000, "a pruned end up to what the origin said crosses in one fill: "..S:GetChainSeq("Long Timer"))
+	-- Records that didn't check (altered, or not following the chain) don't count as held when capping a skip
+	S:FreshStart()
+	S:Merge(Rec(1, "0"), "Long Timer")
+	local fake = Rec(400, "x")
+	fake.hash = "00000000"
+	S:MergeRelayed(fake)
+	check(S:GetHighestHeld("Long Timer") == 1, "an altered record isn't counted as held")
+	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

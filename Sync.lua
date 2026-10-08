@@ -2005,6 +2005,12 @@ function private.NoteAdvertised(origin, seq, sender)
 	entry.by[sender] = max(entry.by[sender] or 0, seq)
 end
 
+---How far the origin itself said its chain reaches, or nil when it hasn't.
+function private.OwnAdvertised(origin)
+	local entry = private.advertised and private.advertised[origin]
+	return entry and entry.own > 0 and entry.own or nil
+end
+
 ---How far an origin's chain reaches by a word that isn't one player's alone: the origin's own, or the highest seq at
 ---least two other players said.
 function private.Advertised(origin)
@@ -2023,31 +2029,28 @@ function private.Advertised(origin)
 	return max(entry.own, second)
 end
 
--- How far one skip may take a chain past the records held, unless the fill carries the record it skips to
+-- How far one skip may take a chain past the records held, unless the origin itself said the chain reaches there
 local MAX_SKIP = 500
 
 ---Where a fill may move an origin's chain to (a skip over records pruned at its sender): a whole seq, never our own
----chain, and no further than one past what the origin, or two other players, said the chain reaches (Advertised) or
----what we hold. Nor more than MAX_SKIP past the highest record held, or, when the fill carries a record at the seq it
----skips to whose hash checks, past where the chain stands (a long pruned stretch is crossed a fill at a time). A false
----skip would leave the origin's real records looking like a rewritten history. The origin itself may say anything
----about its own chain.
+---chain. Up to one past what the origin itself said its chain reaches (its hello or have), in one go: a long pruned end
+---crosses at once. Past that, nothing once the origin has said; before it has, no further than one past what two other
+---players said or we hold, and no more than MAX_SKIP past the highest record held or the chain's seq. A false skip
+---would leave the origin's real records looking like a rewritten history. The origin itself may say anything about its
+---own chain.
 ---@return number? seq nil when it's no seq at all, or our own chain
 function private.SkipTarget(origin, seq, tbl, sender)
 	if not Store:IsSeq(seq) or origin == Store:GetOrigin() then
 		return nil
 	end
 	seq = floor(seq)
-	if sender == origin then
+	local own = private.OwnAdvertised(origin)
+	if sender == origin or (own and seq <= own + 1) then
 		return seq
 	end
-	local base = Store:GetHighestHeld(origin)
-	for _, record in ipairs(type(tbl.r) == "table" and tbl.r or {}) do
-		if type(record) == "table" and record.origin == origin and record.seq == seq and Store:HashChecks(record) then
-			base = max(base, Store:GetChainSeq(origin))
-		end
-	end
-	return min(seq, floor(max(private.Advertised(origin), Store:GetChainSeq(origin))) + 1, base + MAX_SKIP)
+	local chainSeq = Store:GetChainSeq(origin)
+	local limit = own and own + 1 or floor(max(private.Advertised(origin), chainSeq)) + 1
+	return min(seq, limit, max(Store:GetHighestHeld(origin), chainSeq) + MAX_SKIP)
 end
 
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what

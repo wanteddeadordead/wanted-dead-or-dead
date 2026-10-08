@@ -122,10 +122,12 @@ on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`,
 fill also carries `g = { [origin] = { held1, next1, held2, next2, ... } }`, one pair per hole pruning left in the
 chain past the first record (the seq held before it and the one after it, or the sender's chain end + 1 for a pruned
 end); a receiver whose chain has reached `held` moves on to `next - 1` the same way. Older clients ignore `g` and keep
-asking for interior holes, as before. After 1.18.3 a skip from `p` or `g` never moves this client's own chain, and
-goes no further than one past what this client holds or what the origin's own hello or have, or two other players',
-said the chain reaches; nor more than 500 past the highest record held, or past where the chain stands when the fill
-carries a record at the seq it skips to whose hash checks. Odd numbers are ignored. No saved field changes.
+asking for interior holes, as before. From 1.18.4 a skip from `p` or `g` never moves this client's own chain. It goes up
+to one past what the origin's own hello or have said its chain reaches in one go (a long pruned end crosses at once),
+and never past that once the origin has said. Before the origin has said, it goes no further than one past what two
+other players said or this client holds, and no more than 500 past the highest record held that checked out or the
+chain's seq, so two players together can still move an offline origin's chain 500 at a time. Odd numbers are
+ignored. No saved field changes.
 
 `WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
 login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the

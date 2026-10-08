@@ -76,9 +76,10 @@
   sender and per player each hour, so nobody can flood your price on your head, and the same bounty carried by old
   and new versions counts once, while two posted in the same second stay two. A notice for more than the game's
   money can hold is kept at 214,748g.
-- One player (or two) can no longer push someone's record chain far ahead of their real records, which then looked
-  forged to everyone: a skip over pruned records goes no further than the player's own sync, or two other players',
-  says the chain reaches, and only a little way at a time.
+- One player can no longer push someone's record chain far ahead of their real records, which then looked forged to
+  everyone: a skip over pruned records goes no further than the player's own sync says the chain reaches, or, before
+  they've said, than two other players' do, and then only a little way at a time. A long stretch of pruned records the
+  player's own sync accounts for is crossed at once.
 - A whispered sync channel move can't park players on a made-up channel any more: it needs two players saying the
   same one and can't be walked along a step at a time, a player who missed a few moves follows once three agree (but
   never far ahead), and the channel the Wanted app gives always wins.

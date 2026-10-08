@@ -1025,24 +1025,17 @@ function Store:GetFirstSeen(origin)
 	return chain and chain.first
 end
 
----The highest seq of an origin's records held (its chain's base when none is).
+---The highest seq of an origin's records held that checked out (not altered, following the chain), or its chain's base.
 ---@param origin string
 ---@return number
 function Store:GetHighestHeld(origin)
 	local highest = Store:SeqBase()
 	for record in Store:OriginIterator(origin) do
-		if type(record.seq) == "number" and record.seq > highest then
+		if type(record.seq) == "number" and record.seq > highest and not record.tampered and not record.brokenChain then
 			highest = record.seq
 		end
 	end
 	return highest
-end
-
----Whether a record is well formed and hashes to itself (it may still be made up: Adler-32 is easy to fit).
----@param record any
----@return boolean
-function Store:HashChecks(record)
-	return Store:IsWellFormed(record) and record.hash == Store:Hash(Canonical(record))
 end
 
 ---The highest seq held for an origin (for gap requests).

@@ -36,8 +36,8 @@
   what doesn't make sense is left out.
 - Posse calls from other players never pop up in a fight (a chat line instead), ask at most once every two minutes per
   caller, need a place to go to, and keep their reason short.
-- Live battle reports no longer switch combat logging off when you enter a dungeon or raid, where a raid logger (or
-  you) may want it on.
+- Live battle reports only switch off combat logging they switched on: once a raid logger (or /combatlog) switches
+  it, it's left as it is in dungeons and raids.
 - A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an
   enemy.
 - The targeted sound plays once when several enemies target you at the same moment, not once for each.

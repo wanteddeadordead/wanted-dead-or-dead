@@ -886,11 +886,11 @@ function private.Insert(record, live, fromApp)
 	end
 	private.NoteFirst(chain, record)
 	local skip = chain.skip
-	if type(skip) == "table" and record.seq <= chain.seq and record.seq > (skip.from or 0)
+	if type(skip) == "table" and (live or fromApp) and record.seq <= chain.seq and record.seq > (skip.from or 0)
 		and type(record.t) == "number" and record.t >= GetServerTime() - KEEP_SECONDS then
 		-- A skip says everything before its end was pruned everywhere, which only happens to records days old: a
-		-- recent one inside it shows it was false (one player's word can't push a chain past the real records). Back
-		-- to where the chain stood, and on from there.
+		-- recent one inside it, in the origin's own word, shows it was false (one player's word can't push a chain past
+		-- the real records). Back to where the chain stood, and on from there.
 		Wanted:Log("!! Store: recent record %s is inside a skip of %s's chain; the skip is undone", tostring(record.id), tostring(record.origin))
 		chain.seq, chain.lastHash, chain.skip = skip.from, skip.hash, nil
 	end
@@ -901,6 +901,10 @@ function private.Insert(record, live, fromApp)
 		end
 		chain.seq = record.seq
 		chain.lastHash = record.hash
+		if chain.skip and (live or fromApp) and not record.brokenChain then
+			-- The origin's own record carries the chain on past the skip: it was true, and is forgotten
+			chain.skip = nil
+		end
 		private.CatchUpChain(record.origin, chain)
 		if private.IsPrunable(record) then
 			-- Already too old to keep (the app's catch-up, or a fill, of old records): the chain moves on over it, so

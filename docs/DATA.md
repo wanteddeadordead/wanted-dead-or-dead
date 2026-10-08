@@ -125,8 +125,9 @@ end); a receiver whose chain has reached `held` moves on to `next - 1` the same 
 asking for interior holes, as before. After 1.18.2 a skip from `p` or `g` goes no further than one past the highest seq
 any player's hello or have said the origin reaches, this client holds, or the fill carries (the origin may skip its own
 chain as it likes), and odd numbers are ignored. A chain moved by a skip keeps `skip = { from, hash }`, where it stood
-before: a recent record (younger than the 3 days records are kept) arriving inside the skipped range shows the skip
-was false, and the chain goes back there and on from that record. An optional new field: no migration.
+before: a recent record (younger than the 3 days records are kept) arriving inside the skipped range, heard from its
+origin or brought by the app, shows the skip was false, and the chain goes back there and on from that record. The
+origin's own record carrying the chain on past the skip clears `skip`. An optional new field: no migration.
 
 `WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
 login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the

@@ -8373,6 +8373,28 @@ end)()
 	check(B:GetClaimLevel(claim) == 3, "the poster's later record still vouches for the confirm across the pruned death: "..B:GetClaimLevel(claim))
 	S:FreshStart()
 end)()
+-- A skip is undone only by the origin's own word (heard from them, or from the app), and forgotten once the chain moves
+-- past it on that word
+;(function()
+	local S = ns.Store
+	S:FreshStart()
+	local prev = "0"
+	local function Rec(seq, data, p)
+		return Sealed({ kind = "pass", id = "Skip Carol:"..seq, origin = "Skip Carol", seq = seq, prev = p or prev, t = clock, data = data })
+	end
+	for seq = 1, 3 do
+		local r = Rec(seq, { bounty = "b"..seq })
+		S:Merge(r, "Skip Carol")
+		prev = r.hash
+	end
+	S:SkipTo("Skip Carol", 100, nil)
+	check(S:GetChainSeq("Skip Carol") == 99, "skipped")
+	S:MergeRelayed(Rec(4, { bounty = "forged" }))
+	check(S:GetChainSeq("Skip Carol") == 99, "a relayed record inside the skip doesn't undo it")
+	S:Merge(Rec(100, { bounty = "b100" }, "?"), "Skip Carol")
+	check(S:GetChainSeq("Skip Carol") == 100 and ns.db.chains["Skip Carol"].skip == nil, "the origin's record past the skip moves the chain on and the skip is forgotten")
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

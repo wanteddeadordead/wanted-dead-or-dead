@@ -8419,6 +8419,23 @@ end)()
 	check(S:GetChainSeq("Skip Carol") == 100 and ns.db.chains["Skip Carol"].skip == nil, "the origin's record past the skip moves the chain on and the skip is forgotten")
 	S:FreshStart()
 end)()
+-- Our own records made elsewhere (a second PC, saved data restored from before) aren't taken in, but our chain moves
+-- past them, so the next record we make doesn't take an id that's already someone else's copy
+;(function()
+	local S = ns.Store
+	S:FreshStart()
+	local me = S:GetOrigin()
+	local before = S:GetChainSeq(me)
+	local elsewhere = Sealed({ kind = "pass", id = me..":"..(before + 1), origin = me, seq = before + 1, prev = "0", t = clock, data = { bounty = "b" } })
+	local taken, why = S:MergeRelayed(elsewhere)
+	check(not taken and why == "own" and S:GetChainSeq(me) == before + 1, "our chain moves past our own record made elsewhere: "..S:GetChainSeq(me))
+	local mine = S:NewRecord("pass", { bounty = "next" })
+	check(mine.seq == before + 2 and mine.prev == elsewhere.hash, "and our next record follows it")
+	local far = Sealed({ kind = "pass", id = me..":"..(before + 100000), origin = me, seq = before + 100000, prev = "0", t = clock, data = {} })
+	S:MergeRelayed(far)
+	check(S:GetChainSeq(me) == before + 2, "but a record far past ours doesn't throw our chain forward")
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -7701,6 +7701,12 @@ end)()
 		local ok, isNew, reason = pcall(S.MergeRelayed, S, bad)
 		check(ok and not isNew and reason == "malformed", "a malformed record is refused: "..tostring(bad.id).." "..tostring(isNew).." "..tostring(reason))
 	end
+	-- Kinds the addon keeps for its own news are never taken from a peer: a "sighting" record reached the listeners
+	-- for our own sightings, and could make a spotted record in our name
+	local fake = Signed("sighting", "Sneaky Peer", 1, "0", {})
+	fake.sighting = { guid = "Player-9-SNEAK", zone = "Durotar", x = 1, y = 1 }
+	taken, why = S:MergeRelayed(fake)
+	check(not taken and why == "reserved" and #(ns.Tracks:Get("Player-9-SNEAK") or {}) == 0, "a peer's record of a reserved kind is refused: "..tostring(why))
 	S:FreshStart()
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -7317,7 +7317,9 @@ end)()
 		return lastDialog
 	end
 	clock = clock + 3600
-	check(Call("Player-9-0P01", "Caller One", { x = false }) == nil, "a call with no position doesn't ask")
+	local said = #printed
+	check(Call("Player-9-0P01", "Caller Zero", { x = false }) == nil and #printed == said + 1 and printed[#printed]:find("Caller Zero is calling a posse", 1, true)
+		and not printed[#printed]:find("%(%d+, %d+%)"), "a call with no position is a chat line, with no place on the map: "..tostring(printed[#printed]))
 	check(Call("Player-9-0P02", "Caller One", { z = false }) == nil, "a call with no zone doesn't ask")
 	local d = Call("Player-9-0P03", "Caller One", { p = { c = "Caller One", k = strrep("very long reason |cffff0000", 20) } })
 	check(d and not d.text:find("|", 1, true) and #d.text < 200, "the reason is held short and plain: "..tostring(d and d.text))

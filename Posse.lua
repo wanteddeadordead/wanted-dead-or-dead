@@ -89,16 +89,17 @@ function private.Refresh()
 	end
 end
 
----A posse call from another player: ask to join, in the caller's zone with a position, once per target and once per
----caller in a while.
+---A posse call from another player: ask to join, in the caller's zone, once per target and once per caller in a while.
+---A call with no position (or a broken one) is only a chat line: there's nowhere to point to.
 function private.OnCall(entry)
 	local caller = entry.by
 	if type(caller) ~= "string" or caller == Store:GetOrigin() or type(entry.guid) ~= "string" then
 		return
 	end
-	if type(entry.zone) ~= "string" or entry.zone ~= GetZoneText() or type(entry.x) ~= "number" or type(entry.y) ~= "number" then
+	if type(entry.zone) ~= "string" or entry.zone ~= GetZoneText() then
 		return
 	end
+	local placed = type(entry.x) == "number" and type(entry.y) == "number"
 	local now = GetTime()
 	if (private.prompted[entry.guid] and now - private.prompted[entry.guid] < POSSE_SECONDS)
 		or (private.promptedBy[caller] and now - private.promptedBy[caller] < CALLER_SECONDS) then
@@ -112,12 +113,12 @@ function private.OnCall(entry)
 		end
 	end
 	private.prompted[entry.guid], private.promptedBy[caller] = now, now
-	local where = format("%s (%.0f, %.0f)", entry.zone, entry.x, entry.y)
+	local where = placed and format("%s (%.0f, %.0f)", entry.zone, entry.x, entry.y) or entry.zone
 	local why = type(entry.posse.why) == "string" and strsub((gsub(entry.posse.why, "[%c|]", "")), 1, MAX_WHY) or "wanted"
 	why = why == "bounty" and "a price on their head" or why
 	Wanted:Log("Posse: %s calls one against %s in %s", caller, entry.name, where)
-	if W:IsDialogShown() or Wanted:InCombat() or InCombatLockdown() then
-		-- Never a dialog in a fight (or over another): a line in chat instead
+	if not placed or W:IsDialogShown() or Wanted:InCombat() or InCombatLockdown() then
+		-- Never a dialog in a fight (or over another, or with nowhere to point to): a line in chat instead
 		Wanted:Print("%s is calling a posse against %s (%s) in %s.", caller, entry.name, why, where)
 		return
 	end

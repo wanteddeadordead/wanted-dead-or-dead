@@ -35,7 +35,7 @@
 - A sighting shared with a broken position or zone no longer causes Lua errors on the map, in Hotspots or in alerts:
   what doesn't make sense is left out.
 - Posse calls from other players never pop up in a fight (a chat line instead), ask at most once every two minutes per
-  caller, need a place to go to, and keep their reason short.
+  caller, and keep their reason short; a call with no position on the map is a chat line.
 - Live battle reports only switch off combat logging they switched on: once a raid logger (or /combatlog) switches
   it, it's left as it is in dungeons and raids.
 - A duel partner or a mind-controlled player of your own faction is no longer listed, counted or alerted on as an

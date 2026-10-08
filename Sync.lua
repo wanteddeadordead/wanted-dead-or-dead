@@ -30,6 +30,7 @@ local private = {
 	tokensAt = 0,
 	drainScheduled = false,
 	inbound = {}, -- sender -> { count, minute }
+	deferred = {}, -- sender -> their messages waiting out a fight (or a backlog)
 	ceilingHitMinute = nil,
 	pausedUntil = 0,
 	peers = {}, -- sender -> last message time
@@ -123,8 +124,10 @@ private.tokens = CHANNEL_BURST
 local MAX_QUEUED_PARTS = 48
 local MAX_QUEUED_FILL_PARTS = 16
 local SIGHTING_QUEUE_SECONDS = 15
--- Messages received in a fight wait, unopened, until it's over; past this many the rest are left to the resync
+-- Messages received in a fight wait, unopened, until it's over; past this many (or this many from one player) the
+-- rest are left to the resync
 local MAX_DEFERRED_MESSAGES = 300
+local MAX_DEFERRED_PER_SENDER = 50
 -- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
 local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
@@ -1663,12 +1666,18 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	end
 	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
 	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
-		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES then
+		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
+		local waiting = private.deferred[sender] or 0
+		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
 			-- The next resync asks again for anything this leaves out
 			private.Drop("busy in combat", 1)
 			return
 		end
-		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink, channel) end)
+		private.deferred[sender] = waiting + 1
+		Wanted:QueueWork(function()
+			private.deferred[sender] = (private.deferred[sender] or 1) > 1 and private.deferred[sender] - 1 or nil
+			private.Process(tag, payload, sender, viaLink, channel)
+		end)
 		return
 	end
 	private.Process(tag, payload, sender, viaLink, channel)

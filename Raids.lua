@@ -10,7 +10,7 @@ local Raids = Wanted:NewModule("Raids")
 local Sync = Wanted.Sync
 local Store = Wanted.Store
 local private = {
-	mine = nil, -- the raid we lead: { id, title, where, startAt, size, minLevel, created, signups = { name = true } }
+	mine = nil, -- the raid we lead: { id, title, guild?, where, startAt, size, minLevel, created, signups = { name = true } }
 	seen = {}, -- id -> { ad, sender, heard } other players' raids
 	toasted = {}, -- id -> true once its toast has shown
 	joined = {}, -- id -> { leader, startAt, asked } raids we joined or signed up for
@@ -30,6 +30,8 @@ local ASK_MINUTES = 10 -- a planned raid's members ask for their invite for this
 local ANNOUNCE_SECONDS = 60
 local MAX_SEEN = 30
 local PARTY_SIZE = 5
+local MAP_WORLD = Enum.UIMapType and Enum.UIMapType.World or 1
+local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 
 -- ============================================================================
 -- Forming and leading a raid
@@ -45,7 +47,8 @@ function Raids:OnEnable()
 	private.ticker = private.ticker or C_Timer.NewTicker(AD_SECONDS, function() Raids:Tick() end)
 end
 
----Forms a raid: { title, where, startAt (server seconds; nil or past for now), size (10, 20 or 40), minLevel }.
+---Forms a raid: { title, where, startAt (server seconds; nil or past for now), size (10, 20 or 40), minLevel, guild
+---(true: under our own guild's name) }.
 ---Returns the raid, or nil and why not.
 ---@param o table
 ---@return table? raid
@@ -62,6 +65,10 @@ function Raids:Create(o)
 	if not SIZES[size] then
 		return nil, "Pick a size: 10, 20 or 40."
 	end
+	local guild = o.guild and GetGuildInfo("player") or nil
+	if o.guild and not guild then
+		return nil, "You're not in a guild."
+	end
 	local now = GetServerTime()
 	local startAt = tonumber(o.startAt)
 	if not startAt or startAt < now then
@@ -74,6 +81,7 @@ function Raids:Create(o)
 	private.mine = {
 		id = Store:GetOrigin()..":"..now..":"..private.counter,
 		title = title,
+		guild = guild,
 		where = private.Clean(o.where) ~= "" and private.Clean(o.where) or (GetZoneText() or ""),
 		startAt = startAt,
 		size = size,
@@ -84,6 +92,40 @@ function Raids:Create(o)
 	private.SendAd()
 	private.Changed()
 	return private.mine
+end
+
+---A raid's name as shown: with its guild, if it's a guild raid.
+---@param raid table
+---@return string
+function Raids:Title(raid)
+	return raid.guild and format("%s with <%s>", raid.title, raid.guild) or raid.title
+end
+
+---The game's outdoor zone names, in this client's language, sorted, for the Where box: every zone under the world
+---map we're on. Empty while the map isn't known yet (asked again next time).
+---@return string[]
+function Raids:Zones()
+	if private.zones then
+		return private.zones
+	end
+	local mapId = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local info = mapId and C_Map.GetMapInfo(mapId)
+	-- Up to the world map (Azeroth), whose zones are every continent's
+	while info and info.mapType > MAP_WORLD and info.parentMapID and info.parentMapID > 0 do
+		mapId, info = info.parentMapID, C_Map.GetMapInfo(info.parentMapID)
+	end
+	local names, seen = {}, {}
+	for _, zone in ipairs(info and C_Map.GetMapChildrenInfo and C_Map.GetMapChildrenInfo(mapId, MAP_ZONE, true) or {}) do
+		if zone.name and zone.name ~= "" and not seen[zone.name] then
+			seen[zone.name] = true
+			tinsert(names, zone.name)
+		end
+	end
+	sort(names)
+	if #names > 0 then
+		private.zones = names
+	end
+	return names
 end
 
 ---The raid we lead, or nil.
@@ -111,7 +153,7 @@ function Raids:AnnounceText()
 		return nil
 	end
 	local when = private.Started(raid) and "now" or ("at "..date("%H:%M", raid.startAt))
-	return format("Forming a world PvP raid: %s in %s %s (%d/%d). Whisper me \"inv\" to join.", raid.title, raid.where, when,
+	return format("Forming a world PvP raid: %s in %s %s (%d/%d). Whisper me \"inv\" to join.", Raids:Title(raid), raid.where, when,
 		private.GroupSize(), raid.size)
 end
 
@@ -220,7 +262,7 @@ function private.SendAd(closed)
 	if not raid then
 		return
 	end
-	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, z = raid.where, s = raid.startAt, m = raid.size,
+	Sync:SendRaidAd({ id = raid.id, l = Store:GetOrigin(), t = raid.title, g = raid.guild, z = raid.where, s = raid.startAt, m = raid.size,
 		ml = raid.minLevel, n = private.GroupSize(), u = private.Count(raid.signups), f = UnitFactionGroup("player"), c = closed and 1 or nil })
 end
 
@@ -294,7 +336,7 @@ function Raids:OnAd(ad, sender)
 	end
 	entry.heard = GetTime()
 	entry.raid = {
-		id = ad.id, leader = ad.l, title = private.Clean(ad.t), where = private.Clean(ad.z), startAt = startAt, size = size,
+		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
 		minLevel = max(1, min(60, floor(tonumber(ad.ml) or 1))), members = max(0, min(size, floor(tonumber(ad.n) or 0))),
 		signups = max(0, min(99, floor(tonumber(ad.u) or 0))),
 	}
@@ -303,7 +345,7 @@ function Raids:OnAd(ad, sender)
 		private.toasted[ad.id] = true
 		local raid = entry.raid
 		local started = raid.startAt <= GetServerTime()
-		Wanted.Toast:Add({ kind = started and "RAID FORMING" or "RAID PLANNED", name = raid.title,
+		Wanted.Toast:Add({ kind = started and "RAID FORMING" or "RAID PLANNED", name = Raids:Title(raid),
 			detail = format("%s, %s  %d/%d  led by %s", raid.where, started and "now" or date("%a %H:%M", raid.startAt), raid.members, raid.size, raid.leader),
 			onClick = function() Wanted.UI:Show("raids") end })
 	end
@@ -342,7 +384,7 @@ function Raids:Join(id)
 	if raid.members >= raid.size then
 		return "That raid is full."
 	end
-	private.joined[id] = { leader = raid.leader, startAt = raid.startAt, title = raid.title }
+	private.joined[id] = { leader = raid.leader, startAt = raid.startAt, title = Raids:Title(raid) }
 	Sync:SendRaidJoin(raid.leader, id)
 	if raid.startAt <= GetServerTime() then
 		Wanted:Print("Joining %s: %s will invite you.", raid.title, raid.leader)

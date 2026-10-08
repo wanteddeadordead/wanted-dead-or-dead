@@ -6267,6 +6267,38 @@ end)()
 	clock = clock + 4 * 60
 	R:Tick()
 	check(#R:List() == 0, "quiet ads drop off")
+	-- A guild raid: under our own guild's name, which its ad carries; not in a guild, no guild raid
+	local realGuildInfo = GetGuildInfo
+	GetGuildInfo = function() end
+	check(select(2, R:Create({ title = "The Duskwood Takeover", size = 40, guild = true })) == "You're not in a guild.", "a guild raid needs a guild")
+	GetGuildInfo = function(unit) if unit == "player" then return "Blood Oath", "Grunt", 3 end end
+	local guildRaid = R:Create({ title = "The Duskwood Takeover", size = 40, guild = true })
+	check(R:Title(guildRaid) == "The Duskwood Takeover with <Blood Oath>" and ads[#ads].g == "Blood Oath", "a guild raid: named with our guild, in its ad")
+	check(R:AnnounceText():find("raid: The Duskwood Takeover with <Blood Oath> in ", 1, true), "announced with the guild: "..tostring(R:AnnounceText()))
+	R:Close()
+	check(R:Title(R:Create({ title = "Just us", size = 10 })) == "Just us" and ads[#ads].g == nil, "not a guild raid: no guild")
+	R:Close()
+	GetGuildInfo = realGuildInfo
+	R:OnAd(ad({ id = "guild", g = "Blood|HOath" }), "Lead Er-Realm")
+	check(R:Title(R:List()[1]) == "Crossroads with <BloodHOath>", "another's guild raid, escapes taken out: "..R:Title(R:List()[1]))
+	R:OnAd(ad({ id = "guild", c = 1 }), "Lead Er-Realm")
+	-- Zones for the Where box: the game's outdoor zones from the world map down, sorted, each once; what's typed
+	-- matches the start of a name first, then anywhere in it
+	local realMap = C_Map
+	local maps = { [1] = { name = "Durotar", mapType = 3, parentMapID = 12 }, [12] = { name = "Kalimdor", mapType = 2, parentMapID = 947 },
+		[947] = { name = "Azeroth", mapType = 1, parentMapID = 946 }, [946] = { name = "Cosmic", mapType = 0, parentMapID = 0 } }
+	C_Map = { GetBestMapForUnit = function() return 1 end, GetMapInfo = function(id) return maps[id] end,
+		GetMapChildrenInfo = function(id, kind, all)
+			if id == 947 and kind == 3 and all then
+				return { { name = "Duskwood" }, { name = "Durotar" }, { name = "Loch Modan" }, { name = "Ashenvale" }, { name = "Durotar" } }
+			end
+			return {}
+		end }
+	local zones = R:Zones()
+	check(table.concat(zones, ",") == "Ashenvale,Durotar,Duskwood,Loch Modan", "the zones: "..table.concat(zones, ","))
+	check(table.concat(ns.Widgets:Matches(zones, "D"), ",") == "Durotar,Duskwood,Loch Modan", "starts first, then anywhere")
+	check(table.concat(ns.Widgets:Matches(zones, "mod"), ",") == "Loch Modan" and #ns.Widgets:Matches(zones, "") == 0, "anywhere; nothing typed, nothing")
+	C_Map = realMap
 	-- Through the sync channel and realm links (real messages): listed; a link's ad shared once on our channel; a join
 	-- whisper from another realm name invited
 	ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realAd, realJoin
@@ -6303,7 +6335,21 @@ end)()
 			end
 		end
 	end
-	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads"), "the Raids page: the form, and the raid with Join")
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid"), "the Raids page: the form, and the raid with Join")
+	-- Typing in Where suggests zones under it; Tab takes the first
+	local where
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Where (your zone)" then where = fs._parent end
+	end
+	local realMenu = ns.Widgets.Menu
+	local suggested
+	ns.Widgets.Menu = function(_, items) suggested = items end
+	where:SetText("dusk")
+	where:GetScript("OnTextChanged")(where, true)
+	check(suggested and #suggested == 1 and suggested[1].text == "Duskwood", "typing suggests zones")
+	where:GetScript("OnTabPressed")(where)
+	check(where:GetText() == "Duskwood", "Tab takes the first: "..where:GetText())
+	ns.Widgets.Menu = realMenu
 	-- Announce shows the line and where it goes before anything is posted; Post sends what's in the box
 	local dialog
 	local realDialog = ns.Widgets.Dialog

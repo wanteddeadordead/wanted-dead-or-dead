@@ -7,7 +7,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Raids = Wanted.Raids
-local private = { size = 40, later = false }
+local private = { size = 40, later = false, guild = false }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 120
 
@@ -47,7 +47,7 @@ end
 
 function private.UpdateRow(row, raid)
 	local started = raid.startAt <= GetServerTime()
-	row.title:SetText(raid.title..Theme:Colorize("  "..raid.where, C.muted))
+	row.title:SetText(Raids:Title(raid)..Theme:Colorize("  "..raid.where, C.muted))
 	local when = started and "Forming now" or ("Starts "..date("%a %H:%M", raid.startAt))
 	local count = format("%d/%d", raid.members, raid.size)..(raid.signups > 0 and format(", %d signed up", raid.signups) or "")
 	row.sub:SetText(format("%s  -  %s  -  led by %s  -  level %d+", when, count, raid.leader, raid.minLevel))
@@ -70,7 +70,7 @@ function private.RefreshCard()
 		return
 	end
 	local started = mine.startAt <= GetServerTime()
-	private.leadTitle:SetText(mine.title..Theme:Colorize("  "..mine.where, C.muted))
+	private.leadTitle:SetText(Raids:Title(mine)..Theme:Colorize("  "..mine.where, C.muted))
 	local names = {}
 	for name in pairs(mine.signups) do
 		tinsert(names, name)
@@ -100,7 +100,7 @@ function private.Form()
 		end
 	end
 	local raid, why = Raids:Create({ title = private.titleBox:GetText(), where = private.whereBox:GetText(), startAt = startAt,
-		size = private.size, minLevel = private.levelBox:GetText() })
+		size = private.size, minLevel = private.levelBox:GetText(), guild = private.guild })
 	if not raid then
 		UI:Toast(why, C.red)
 		return
@@ -119,6 +119,7 @@ function private.BuildForm(parent, width)
 	private.titleBox:SetPoint("TOPLEFT", 14, -36)
 	private.whereBox = W:Input(form, 170, "Where (your zone)")
 	private.whereBox:SetPoint("LEFT", private.titleBox, "RIGHT", 8, 0)
+	W:Suggest(private.whereBox, function() return Raids:Zones() end)
 	private.levelBox = W:Input(form, 90, "Min. level")
 	private.levelBox:SetPoint("LEFT", private.whereBox, "RIGHT", 8, 0)
 	local when = W:Segmented(form, { { key = "now", label = "Now" }, { key = "later", label = "Later" } }, function(key)
@@ -134,6 +135,11 @@ function private.BuildForm(parent, width)
 	end)
 	size:SetChoice(40)
 	size:SetPoint("LEFT", private.timeBox, "RIGHT", 8, 0)
+	local guild = W:Toggle(form, "Guild raid", function(checked)
+		private.guild = checked
+	end)
+	guild:SetPoint("LEFT", size, "RIGHT", 12, 0)
+	guild.tooltipTitle, guild.tooltipText = "Guild raid", "Shows the raid with your guild's name: The Duskwood Takeover with <Your Guild>."
 	local go = W:Button(form, "Form raid", "primary", 110, 26, private.Form)
 	go:SetPoint("TOPRIGHT", -14, -74)
 	return form

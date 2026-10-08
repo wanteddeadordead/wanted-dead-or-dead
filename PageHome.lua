@@ -261,7 +261,7 @@ function private.RefreshRaids()
 			local joined = not item.mine and Raids:Joined(raid.id)
 			card.kind:Set(item.mine and "YOUR RAID" or joined and (started and "JOINED" or "SIGNED UP") or started and "FORMING" or "PLANNED",
 				item.mine and C.gold or joined and C.green or started and C.red or C.blue)
-			private.Fit(card.name, { raid.title }, "small")
+			private.Fit(card.name, { Raids:Title(raid) }, "small")
 			local count = item.mine and (IsInGroup() and max(1, GetNumGroupMembers()) or 1) or raid.members
 			local when = started and "now" or date("%a %H:%M", raid.startAt)
 			private.Fit(card.text, { format("%s, %s  %d/%d%s", raid.where, when, count, raid.size, item.mine and "" or ("  led by "..raid.leader)) }, "tiny", true)

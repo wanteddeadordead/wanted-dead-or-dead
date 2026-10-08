@@ -852,3 +852,89 @@ function W:Menu(items, anchor)
 	end
 	menu:Show()
 end
+
+---Hides the menu, if it's up.
+function W:HideMenu()
+	if menu then
+		menu:Hide()
+	end
+end
+
+
+
+-- ============================================================================
+-- Suggestions
+-- ============================================================================
+
+local MOST_SUGGESTIONS = 8
+
+---The names that match what's typed, ignoring case: those starting with it, then those with it anywhere, at most
+---MOST_SUGGESTIONS. Nothing typed matches nothing.
+---@param names string[]
+---@param text string
+---@return string[]
+function W:Matches(names, text)
+	local typed = strlower(strtrim and strtrim(text or "") or text or "")
+	local starts, inside = {}, {}
+	if typed == "" then
+		return starts
+	end
+	for _, name in ipairs(names) do
+		local at = strfind(strlower(name), typed, 1, true)
+		if at == 1 then
+			tinsert(starts, name)
+		elseif at then
+			tinsert(inside, name)
+		end
+	end
+	for _, name in ipairs(inside) do
+		tinsert(starts, name)
+	end
+	for i = #starts, MOST_SUGGESTIONS + 1, -1 do
+		starts[i] = nil
+	end
+	return starts
+end
+
+---Suggests names under an input as you type (a menu of matches from source(), called each time): click one, or
+---press Tab for the first, to fill it in. Anything else typed stays as typed.
+---@param box table an input from W:Input
+---@param source fun(): string[]
+function W:Suggest(box, source)
+	local first
+	local function Take(name)
+		box:SetValue(name)
+		W:HideMenu()
+		first = nil
+	end
+	box:HookScript("OnTextChanged", function(self, userInput)
+		if not userInput then
+			return
+		end
+		local matches = W:Matches(source(), self:GetText())
+		first = matches[1]
+		-- Nothing to offer, or it's already typed in full
+		if not first or (#matches == 1 and strlower(first) == strlower(self:GetText())) then
+			first = nil
+			W:HideMenu()
+			return
+		end
+		local items = {}
+		for _, name in ipairs(matches) do
+			tinsert(items, { text = name, onClick = function() Take(name) end })
+		end
+		W:Menu(items, self)
+	end)
+	box:HookScript("OnTabPressed", function()
+		if first then
+			Take(first)
+		end
+	end)
+	-- Escape, Enter or clicking elsewhere ends it; a click on a suggestion is the menu's own
+	box:HookScript("OnEditFocusLost", function()
+		if menu and not menu:IsMouseOver() then
+			menu:Hide()
+			first = nil
+		end
+	end)
+end

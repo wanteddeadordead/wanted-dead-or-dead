@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover
+  with <Your Guild>", on the Raids page, Home, the popups and the Announce line.
+- The raid form's Where box suggests zones as you type; click one or press Tab for the first.
+
 ## [1.18.0] - 2026-10-07
 
 - World PvP raids: a Raids page to form a raid, now or at a time, and join the ones other Wanted players of your

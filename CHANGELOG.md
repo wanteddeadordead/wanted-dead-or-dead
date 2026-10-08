@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The minimap button and the addon list show the wax seal, as on the website and CurseForge.
 - Raid invites go through one queue: four while you're alone, then the group becomes a raid and the rest follow;
   invites out count against the room, anyone not in after a minute is invited once more, and "joined" or "didn't
   join" says how it went. Nobody already in your group is invited again, and members stop asking once they're in.

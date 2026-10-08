@@ -156,22 +156,35 @@ end
 -- Bounties
 -- ============================================================================
 
----The total amount on a bounty, including raises.
+---The total amount on a bounty, including the poster's raises (those made by a time, when given).
 ---@param bounty table
+---@param at number? a server time: only raises made at or before it count
 ---@return number
-function Bounties:GetAmount(bounty)
+function Bounties:GetAmount(bounty, at)
 	local amount = bounty.data.amount
 	-- A record never read (Store:Iterator) can still reach a listener as it arrives
 	if type(amount) ~= "number" then
 		return 0
 	end
 	for raise in Store:Iterator("raise") do
-		if private.IsPostersWord(raise, bounty) then
+		if (not at or raise.t <= at) and private.IsPostersWord(raise, bounty) then
 			amount = amount + raise.data.amount
 		end
 	end
 	-- At most what the game's money holds (a record from before the cap can say more)
 	return min(amount, Store.MAX_COPPER)
+end
+
+---What a claim is owed: the bounty as it stood at the kill. A raise after it doesn't raise what's owed.
+---@param claim table
+---@return number
+function Bounties:GetOwed(claim)
+	local bounty = Store:Get(claim.data.bounty)
+	if not bounty then
+		return 0
+	end
+	local killT = claim.data.killT
+	return Bounties:GetAmount(bounty, type(killT) == "number" and killT or claim.t)
 end
 
 ---Whether a record about a bounty (a raise, a withdrawal, a payment) is its poster's: anyone else's raise doesn't add
@@ -1010,7 +1023,7 @@ Wanted:RegisterCommand("claims", "Lists claims on your bounties and claims you m
 		if bounty and (bounty.origin == me or claim.origin == me) then
 			local level = Bounties:GetClaimLevel(claim)
 			local levelText = level == 0 and "disputed" or level == 1 and "bounty hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
-			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
+			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
 			shown = shown + 1
 		end
 	end
@@ -1031,7 +1044,7 @@ local function Decide(args, disputed)
 	if disputed then
 		Wanted:Print("Disputed claim %s by %s.", claim.id, claim.origin)
 	else
-		Wanted:Print("Confirmed claim %s: %s is owed %s.", claim.id, claim.origin, Bounties:FormatMoney(Bounties:GetAmount(bounty)))
+		Wanted:Print("Confirmed claim %s: %s is owed %s.", claim.id, claim.origin, Bounties:FormatMoney(Bounties:GetOwed(claim)))
 	end
 end
 

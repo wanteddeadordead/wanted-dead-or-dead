@@ -7829,6 +7829,19 @@ end)()
 	Live("confirm", "State Poster", { claim = c1.id }, t0 + 200)
 	Live("confirm", "State Poster", { claim = c1.id, disputed = true }, t0 + 300)
 	check(B:GetClaimLevel(c1) == 0, "the poster's latest decision on a claim stands: "..B:GetClaimLevel(c1))
+	-- What's owed is the bounty at the kill: a raise after it doesn't raise what the hunter is owed
+	local b8 = Live("bounty", "State Poster", { target = "Player-9-ST8", targetName = "St Eight", amount = 5000 }, t0)
+	local c8 = Live("claim", "Hunter Jay", { bounty = b8.id, kill = "Hunter Jay:0", victim = "Player-9-ST8", zone = "Durotar", killT = t0 + 100 }, t0 + 101)
+	Witness(c8)
+	Live("raise", "State Poster", { bounty = b8.id, amount = 10000 }, t0 + 200)
+	Live("confirm", "State Poster", { claim = c8.id }, t0 + 300)
+	check(B:GetAmount(b8) == 15000 and B:GetOwed(c8) == 5000, "owed is the bounty at the kill: "..tostring(B.GetOwed and B:GetOwed(c8)))
+	Live("payment", "State Poster", { claim = c8.id, bounty = b8.id, to = "Hunter Jay", amount = 5000, side = "payer" }, t0 + 400)
+	check(P:GetForClaim(c8.id), "and paying that settles it")
+	-- A claim with its kill time in text: what it'd be owed reads the bounty now, never an error
+	local c9 = Live("claim", "Hunter Kay", { bounty = b8.id, kill = "Hunter Kay:0", victim = "Player-9-ST8", zone = "Durotar", killT = "x" }, t0 + 500)
+	local ok, owed = pcall(B.GetOwed, B, c9)
+	check(ok and owed == 15000, "a kill time in text is never compared: "..tostring(owed))
 	-- MORE
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

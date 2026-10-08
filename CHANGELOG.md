@@ -99,6 +99,8 @@
 - Bounty notices sent to the other faction no longer reveal who posted the bounty. Notices received are capped per
   sender and per player each hour, so nobody can flood your price on your head, and the same bounty carried by old
   and new versions counts once.
+- A guild bounty claim is only witnessed by someone who saw the victim in that guild, and a bounty no longer tells
+  your client which guild its target is in, so a made-up bounty can't turn a kill into a guild bounty claim.
 
 ## [1.18.2] - 2026-10-08
 

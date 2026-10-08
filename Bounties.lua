@@ -58,7 +58,7 @@ function private.LearnTarget(bounty, isOwn)
 	Fill("class", d.class, "string")
 	Fill("race", d.race, "string")
 	Fill("level", d.level, "number")
-	Fill("guild", d.targetGuild, "string")
+	-- Never the guild: a kill of them would then claim a bounty on that guild on this bounty's word alone
 	Fill("faction", d.faction, "string")
 	if type(d.seenAt) == "number" and d.seenAt <= GetServerTime() and d.seenAt > (player.lastSeen or 0) then
 		info.lastSeen = d.seenAt
@@ -728,7 +728,8 @@ function private.ClaimLate(bounty)
 	return claim
 end
 
----Other clients that recorded the same death as a claim's kill (same victim, same place, within the window). Only
+---Other clients that recorded the same death as a claim's kill (same victim, same place, within the window, and on a
+---guild bounty in that guild). Only
 ---a death record that is its origin's own word counts (Store:IsTrusted): one relayed by another player could be
 ---forged by them to make a claim look witnessed.
 ---@param claim table
@@ -738,10 +739,14 @@ function Bounties:GetWitnesses(claim)
 	local witnesses = {}
 	local seen = {}
 	local victimsOwn = false
+	-- On a guild bounty the witness must have seen the victim in that guild: the hunter's word for it isn't enough
+	local bounty = Store:Get(claim.data.bounty)
+	local guild = bounty and bounty.data.guild
 	for death in Store:Iterator("death") do
 		local data = death.data
 		if death.origin ~= claim.origin and data.victim == claim.data.victim and data.zone == claim.data.zone
-			and abs(death.t - claim.data.killT) <= WITNESS_WINDOW and Store:IsTrusted(death) then
+			and type(claim.data.killT) == "number" and abs(death.t - claim.data.killT) <= WITNESS_WINDOW and Store:IsTrusted(death)
+			and (not guild or data.victimGuild == guild) then
 			if not seen[death.origin] then
 				seen[death.origin] = true
 				tinsert(witnesses, death.origin)

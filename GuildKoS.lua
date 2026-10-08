@@ -21,6 +21,7 @@ local private = {
 	queue = {}, -- messages waiting to go: texts
 	sending = false,
 	answerAt = nil, -- when we'll answer a member's request for the list, unless someone answers first
+	answerSince = nil, -- the oldest "newest change" among the asks we'll answer: the list sends what's newer
 	askedAt = nil, -- when we asked for the list: a list is only taken in answer to our own ask
 	members = nil, -- name -> rank index, from the roster, read at most every MEMBERS_SECONDS
 	membersAt = 0,
@@ -605,20 +606,26 @@ function private.Handle(tag, tbl, sender)
 		end
 	elseif tag == TAG_ASK then
 		-- Someone logged in: if we hold something newer, answer after a moment unless another member does first
+		if type(tbl.n) == "number" and private.Newest(book) > tbl.n then
+			private.answerSince = min(private.answerSince or tbl.n, tbl.n)
+		end
 		if type(tbl.n) == "number" and private.Newest(book) > tbl.n and not private.answerAt then
 			private.answerAt = GetTime() + random() * ANSWER_DELAY_MAX
 			C_Timer.After(private.answerAt - GetTime(), function()
 				if private.answerAt then
 					private.answerAt = nil
-					private.SendList(book)
+					private.SendList(book, private.answerSince or 0)
+					private.answerSince = nil
 				end
 			end)
 		end
 	elseif tag == TAG_LIST then
-		private.answerAt = nil -- someone answered; we needn't
+		private.answerAt, private.answerSince = nil, nil -- someone answered; we needn't
 		if not private.askedAt or GetTime() - private.askedAt > ASK_ANSWER_SECONDS then
 			return -- a list nobody here asked for
 		end
+		-- A long list comes in several messages: each one keeps the door open for the next
+		private.askedAt = GetTime()
 		-- A list is judged by who sent it, as the roster ranks them, never by the names it carries: an officer's
 		-- settings and decisions are taken; from anyone else only what they may change themselves (in review mode,
 		-- pending entries)
@@ -634,12 +641,32 @@ function private.Handle(tag, tbl, sender)
 	end
 end
 
-function private.SendList(book)
+---Answers an ask with the settings and the entries changed after since (the asker's newest), oldest first, in as many
+---messages as it takes: one message holds at most MAX_PARTS parts.
+function private.SendList(book, since)
 	local list = {}
 	for _, e in pairs(book.entries) do
-		tinsert(list, e)
+		if e.t > since then
+			tinsert(list, e)
+		end
 	end
-	private.Broadcast(TAG_LIST, { s = book.settings, l = list })
+	sort(list, function(a, b) return a.t < b.t end)
+	private.SendListPart(book.settings, list, 1, #list)
+end
+
+function private.SendListPart(settings, list, first, last)
+	local part = {}
+	for i = first, last do
+		tinsert(part, list[i])
+	end
+	local tbl = { s = settings, l = part }
+	if last > first and ceil(#Sync:Encode(tbl) / PART_LEN) > MAX_PARTS then
+		local middle = floor((first + last) / 2)
+		private.SendListPart(settings, list, first, middle)
+		private.SendListPart(settings, list, middle + 1, last)
+		return
+	end
+	private.Broadcast(TAG_LIST, tbl)
 end
 
 function private.Changed()

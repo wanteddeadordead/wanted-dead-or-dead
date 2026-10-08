@@ -27,6 +27,8 @@
   an officer sent it, and changes dated in the future are refused.
 - Guild Kill on Sight: in review mode only officers can take an approved name off the list, and editing an entry
   keeps who added it.
+- Guild Kill on Sight: a long list (past about 70 names) reaches guildmates logging in again; they're sent only what
+  changed since they last heard.
 
 ## [1.18.2] - 2026-10-08
 

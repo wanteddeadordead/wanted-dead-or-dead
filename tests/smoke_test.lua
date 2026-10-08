@@ -4265,6 +4265,47 @@ end)()
 	check(G:Match("Player-9-0D00D") and G:Current().settings.discord == true, "the server's newer entries and settings are taken")
 	check(#G:Entries("pending") == 1 and G:Entries("pending")[1].t == clock + 20, "an older copy from the server doesn't undo a newer change")
 
+	-- A long list still reaches a member who asks: only what's newer than what they hold, in as many messages as it takes
+	local entries = G:Current().entries
+	local seed = 7
+	local function Words(n) -- text that doesn't compress, as real reasons don't much
+		local out = {}
+		for j = 1, n do seed = (seed * 1103515245 + 12345) % 2147483648 out[j] = string.char(97 + seed % 26) end
+		return table.concat(out)
+	end
+	for i = 1, 200 do
+		local guid = format("Player-9-%08X", i * 7919)
+		entries[G.EntryId("player", guid)] = { kind = "player", guid = guid, name = "Long "..Words(10), reason = Words(110),
+			state = "approved", by = "Office Rman", at = clock, dby = "Office Rman", eby = "Office Rman", t = clock + 40 + i }
+	end
+	local function Answer(n)
+		addonSent = {}
+		From("Plain Member", "Q", { n = n })
+		for _ = 1, 400 do RunTimers() end
+		local byId, got, most = {}, {}, 0
+		for _, m in ipairs(addonSent) do
+			local tag, id, part, total, chunk = m.text:match("^(%u):(%x+):(%d+)/(%d+):(.*)$")
+			if tag == "L" then
+				most = math.max(most, tonumber(total))
+				byId[id] = byId[id] or {}
+				byId[id][tonumber(part)] = chunk
+			end
+		end
+		for _, parts in pairs(byId) do
+			for _, e in ipairs(ns.Sync:Decode(table.concat(parts)).l) do got[e.guid or e.name] = true end
+		end
+		return got, most
+	end
+	local got, most = Answer(0)
+	local count = 0
+	for _ in pairs(got) do count = count + 1 end
+	check(count >= 200 and most <= 60, "a list of 200 goes whole, no message past 60 parts: "..count.." entries, "..most.." parts at most")
+	got = Answer(clock + 40 + 190)
+	count = 0
+	for _ in pairs(got) do count = count + 1 end
+	check(count == 10 and got[format("Player-9-%08X", 200 * 7919)], "only what's newer than the asker holds goes, got "..count)
+	for i = 1, 200 do entries[G.EntryId("player", format("Player-9-%08X", i * 7919))] = nil end
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()

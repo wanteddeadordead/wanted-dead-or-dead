@@ -3657,7 +3657,7 @@ end)()
 	check(leftChannels[#leftChannels] == "WantedNetHordesrvone", "the server's channel is left")
 	JoinPermanentChannel, GetChannelName = realJoin, realName
 end)()
--- A pointer by whisper: followed only when it's the server's (the via-app mark), from a player we know, and newer;
+-- A pointer by whisper: followed only when it's the server's (the via-app mark), from players we know, and newer;
 -- passed on once more, never past the hop cap
 ;(function()
 	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) end
@@ -3673,13 +3673,15 @@ end)()
 	check(ns.db.syncChannel.e == e, "nor one from a player we don't know")
 	ClearSent()
 	Move("Peer One", { e = e + 1, n = "WantedNetHordesrvtwo", a = 1, h = 1 })
+	Move("Peer Three", { e = e + 1, n = "WantedNetHordesrvtwo", a = 1, h = 1 })
 	RunTimers()
-	check(ns.db.syncChannel.e == e + 1 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvtwo", "the server's pointer from a player we know is followed")
+	check(ns.db.syncChannel.e == e + 1 and ns.Sync:GetInfo().channelName == "WantedNetHordesrvtwo", "the server's pointer from two players we know is followed")
 	local move
 	for _, m in ipairs(Sent("WHISPER", "Peer Two")) do if m.tag == "M" then move = m end end
 	check(move and move.tbl.h == 2 and move.tbl.a == 1 and move.tbl.e == e + 1, "and passed on once more, a whisper further")
 	ClearSent()
-	Move("Peer One", { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 })
+	-- (Two steps past the app's last: three players must say it)
+	for _, peer in ipairs({ "Peer One", "Peer Two", "Peer Three" }) do Move(peer, { e = e + 2, n = "WantedNetHordesrvthree", a = 1, h = 2 }) end
 	RunTimers()
 	local spread = 0
 	for _, m in ipairs(Sent("WHISPER")) do if m.tag == "M" then spread = spread + 1 end end
@@ -7889,23 +7891,35 @@ end)()
 	check(S:Merge(four, "Alice Chain") and S:GetChainSeq("Alice Chain") == 4 and not S:Get(four.id).brokenChain, "her next real record undoes the skip: "..S:GetChainSeq("Alice Chain"))
 	S:FreshStart()
 end)()
--- A channel pointer by whisper can only be one step past the newest one we've had (the server moves one epoch at a
--- time), so nobody can park players on a made-up channel the server can never outbid; the app's pointer always wins
+-- A channel pointer by whisper: two players we know must say the same one, at most one step past the app's last (or the
+-- one we logged in on: never what a whisper set), so nobody can walk players onto a made-up channel; three agreeing
+-- players can take someone who missed a few moves further; the app's pointer always wins
 ;(function()
-	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) end
+	local function Move(from, tbl) Fire("CHAT_MSG_ADDON", "WNTD", "M:1:1/1:"..ns.Sync:Encode(tbl), "WHISPER", from) RunTimers() end
+	ns.db.recentPeers["Peer One"], ns.db.recentPeers["Peer Two"], ns.db.recentPeers["Peer Three"] = clock, clock, clock
 	RunTimers()
-	local e = ns.Sync:GetPointer().e
-	Move("Peer One", { e = 99999, n = "WantedNetHordehijack", a = 1, h = 1 })
-	RunTimers()
-	check(ns.Sync:GetPointer().e == e and ns.Sync:GetPointer().n ~= "WantedNetHordehijack", "a whispered pointer far ahead isn't followed")
-	Move("Peer One", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
-	RunTimers()
-	check(ns.Sync:GetPointer().e == e + 1 and ns.Sync:GetPointer().n == "WantedNetHordenext", "one step ahead is")
-	-- The app's pointer overrides whatever a whisper brought, even at a lower epoch
+	local e = ns.Sync:GetPointer().e + 1
 	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
 	RunTimers()
-	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "the app's pointer wins over a whispered one")
-	-- But never an older one than the app itself gave before
+	check(ns.Sync:GetPointer().e == e, "on the app's channel")
+	Move("Peer One", { e = 99999, n = "WantedNetHordehijack", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e, "a whispered pointer far ahead isn't followed")
+	Move("Peer One", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e, "one player's word for the next one isn't enough")
+	Move("Peer Two", { e = e + 1, n = "WantedNetHordenext", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 1 and ns.Sync:GetPointer().n == "WantedNetHordenext", "two players saying the next one is")
+	-- The ceiling doesn't climb with what whispers set: one player stepping it along gets nowhere
+	for i = 2, 50 do Move("Peer One", { e = e + i, n = "WantedNetHordeevil"..i, a = 1, h = 1 }) end
+	check(ns.Sync:GetPointer().e == e + 1, "one player stepping the epoch up moves nobody: "..ns.Sync:GetPointer().e)
+	Move("Peer One", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	Move("Peer Two", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 1, "two players can't take us past the next one")
+	Move("Peer Three", { e = e + 3, n = "WantedNetHordelater", a = 1, h = 1 })
+	check(ns.Sync:GetPointer().e == e + 3 and ns.Sync:GetPointer().n == "WantedNetHordelater", "three agreeing can, for a player who missed some moves")
+	-- The app's pointer overrides whatever whispers brought, even at a lower epoch
+	ns.Sync:AdoptFromApp({ e = e, n = "WantedNetHordereal" })
+	RunTimers()
+	check(ns.Sync:GetPointer().n == "WantedNetHordereal" and ns.Sync:GetPointer().e == e, "the app's pointer wins over whispered ones")
 	ns.Sync:AdoptFromApp({ e = e - 1, n = "WantedNetHordestale" })
 	RunTimers()
 	check(ns.Sync:GetPointer().n == "WantedNetHordereal", "an app pointer older than the app's last is ignored")

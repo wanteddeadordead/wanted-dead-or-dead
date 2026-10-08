@@ -105,6 +105,8 @@
   vouch for an earlier one another player passed on: the old hash could be forged to fit.
 - A hunter's own record of being paid no longer makes their claim the one a bounty goes to; only the poster's record
   of paying does.
+- A whispered sync channel move needs two players saying the same one, and can't be walked along a step at a time;
+  a player who missed a few moves follows once three players agree.
 
 ## [1.18.2] - 2026-10-08
 

@@ -84,6 +84,10 @@ local CHANNEL_BASE = "WantedNet"
 local MOVE_MAX_HOPS = 2
 local MOVE_ASK_PEERS = 5 -- players asked for the current channel at login
 local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
+-- Players who must say the same whispered pointer: for the next epoch, and for one further on; how long a player's
+-- word is counted
+local MOVE_VOTES, MOVE_VOTES_AHEAD = 2, 3
+local MOVE_VOTE_SECONDS = 30 * 60
 local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
 local MAX_MESSAGE_LEN = 255
@@ -258,6 +262,8 @@ function Sync:OnEnable()
 	if type(pointer) == "table" and private.ValidPointer(pointer) then
 		private.channelName, private.epoch = pointer.n, pointer.e
 	end
+	-- What a whispered pointer may be one step past, besides the app's: never what a whisper sets this session
+	private.loginEpoch = private.epoch
 	local result = C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
 	private.frame:RegisterEvent("CHAT_MSG_ADDON")
@@ -2727,6 +2733,42 @@ function private.AskPointer()
 	end
 end
 
+---Counts a player saying the channel moved to a pointer; returns how many different players say it now. Each player's
+---latest pointer is the one counted for them, so one player naming many pointers holds only one vote.
+function private.VoteMove(epoch, name, sender)
+	local votes, now = private.moveVotes or {}, GetTime()
+	private.moveVotes = votes
+	private.moveVoteOf = private.moveVoteOf or {}
+	local key = epoch.."|"..name
+	local before = private.moveVoteOf[sender]
+	if before and before.key ~= key and votes[before.key] then
+		local old = votes[before.key]
+		old.senders[sender], old.n = nil, old.n - 1
+		if old.n <= 0 then
+			votes[before.key] = nil
+		end
+	end
+	private.moveVoteOf[sender] = { key = key, t = now }
+	local entry = votes[key]
+	if not entry then
+		entry = { senders = {}, n = 0 }
+		votes[key] = entry
+	end
+	if not entry.senders[sender] then
+		entry.senders[sender] = now
+		entry.n = entry.n + 1
+	end
+	entry.senders[sender] = now
+	-- A player's word counts for a while
+	local n = 0
+	for _, t in pairs(entry.senders) do
+		if now - t <= MOVE_VOTE_SECONDS then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 ---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
 ---and newer than ours; passed on once more while under the hop cap (Adopt).
 function private.OnMove(tbl, sender)
@@ -2753,15 +2795,19 @@ function private.OnMove(tbl, sender)
 	if tbl.e <= private.epoch then
 		return
 	end
-	-- At most one step past the newest pointer we've had, ours or our app's: the server moves one epoch at a time, and
-	-- a made-up pointer far ahead (99999) could never be outbid by the server's real one
-	local ceiling = max(private.epoch, Wanted.db.appChannelEpoch or 0) + 1
-	if tbl.e > ceiling then
-		Wanted:Log("!! Sync: a channel move from %s to epoch %d, past the next one (%d); ignored", tostring(sender), tbl.e, ceiling)
-		return
-	end
 	if not private.KnownPeers()[sender] then
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
+		return
+	end
+	-- Followed once enough players we know say the same pointer: two for the next one past the app's last (or the one
+	-- we logged in on; never what a whisper set, or one player could walk us along a step at a time), three for one
+	-- further on (someone without the app who missed a few moves). The server moves one epoch at a time, and a made-up
+	-- pointer far ahead could never be outbid by its real one.
+	local votes = private.VoteMove(tbl.e, tbl.n, sender)
+	local ceiling = max(private.loginEpoch or 0, Wanted.db.appChannelEpoch or 0) + 1
+	local needed = tbl.e <= ceiling and MOVE_VOTES or MOVE_VOTES_AHEAD
+	if votes < needed then
+		Wanted:Log("Sync: %s says the channel moved to %s (%d); %d of %d players needed", tostring(sender), tbl.n, tbl.e, votes, needed)
 		return
 	end
 	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS

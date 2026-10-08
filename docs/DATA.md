@@ -311,9 +311,10 @@ unset or that page is switched off. A new setting: no migration.
   current one. A client follows only a marked pointer with a higher epoch than its own, from a player it has heard on
   the channel or linked with, and passes it on only while `h` is under 2 (each client spreads a pointer once). The
   1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored. After 1.18.2 a whispered pointer is followed
-  only up to one epoch past the newest one this client has had (its own, or its app's), and the app's pointer replaces
-  whatever a whisper brought, unless it's older than the last one the app gave: `WantedDB.appChannelEpoch` keeps that
-  epoch. A new field: no migration.
+  only once two players it knows say the same one, at most one epoch past the app's last pointer or the one it logged
+  in on (never what a whisper set), or once three say the same one further on. The app's pointer replaces whatever a
+  whisper brought, unless it's older than the last one the app gave: `WantedDB.appChannelEpoch` keeps that epoch. A
+  new field: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

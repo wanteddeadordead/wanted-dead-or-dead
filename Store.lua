@@ -34,6 +34,8 @@ local MAX_NAME_BYTES = 64 -- "First Last-Realm" in UTF-8 fits with room to spare
 local MAX_COPPER = 2 ^ 31 - 1
 Store.MAX_COPPER = MAX_COPPER
 local AMOUNT_REQUIRED = { bounty = true, raise = true }
+-- Fields that are numbers in every kind that has them (times, levels, places): the code compares and adds them
+local NUMBER_FIELDS = { killT = true, seenAt = true, postedAt = true, level = true, x = true, y = true, mapId = true }
 -- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
 -- never taken from a peer
 local RESERVED_KINDS = { sighting = true, ["*"] = true }
@@ -705,8 +707,8 @@ end
 ---Whether a well formed record's numbers are ones a client makes: nothing infinite or not a number, and money whole
 ---copper the game can hold, which a bounty or a raise always gives. Others add these up and compare them.
 function private.HasSoundNumbers(r)
-	for _, value in pairs(r.data) do
-		if type(value) == "number" and not private.IsFinite(value) then
+	for key, value in pairs(r.data) do
+		if (type(value) == "number" and not private.IsFinite(value)) or (NUMBER_FIELDS[key] and type(value) ~= "number") then
 			return false
 		end
 	end

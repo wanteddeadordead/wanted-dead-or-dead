@@ -8321,6 +8321,33 @@ end)()
 	check(P:GetForClaim(hank.id), "the winning hunter's record of being paid counts")
 	S:FreshStart()
 end)()
+-- A time or other number sent as text is never compared as one (a string killT threw in the bounty code)
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	S:FreshStart()
+	local t0 = clock - 600
+	local bounty = Live("bounty", "Text Poster", { target = "Player-9-TEXT", targetName = "Text Target", amount = 10000 }, t0)
+	Live("raise", "Text Poster", { bounty = bounty.id, amount = 100 }, t0 + 1)
+	local claim = Live("claim", "Text Mallory", { bounty = bounty.id, kill = "Text Mallory:0", victim = "Player-9-TEXT", killT = "x", zone = "Durotar" }, t0 + 300)
+	Live("payment", "Text Mallory", { claim = claim.id, bounty = bounty.id, from = "Text Poster", amount = 1, side = "payee" }, t0 + 400)
+	local ok, err = pcall(B.GetWinningClaim, B, bounty)
+	check(ok, "a claim with a time in text doesn't break the bounty: "..tostring(err))
+	ok, err = pcall(ns.Model.GetBountyInfo, ns.Model, bounty)
+	check(ok, "nor its row: "..tostring(err))
+	ok, err = pcall(B.GetOwed, B, claim)
+	check(ok and err == 10100, "what it'd be owed reads the bounty now: "..tostring(err))
+	local listed = false
+	for r in S:Iterator("claim") do if r == claim then listed = true end end
+	check(not listed, "and the claim itself is never read")
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

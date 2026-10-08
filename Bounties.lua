@@ -178,7 +178,8 @@ function Bounties:GetOwed(claim)
 	if not bounty then
 		return 0
 	end
-	return Bounties:GetAmount(bounty, claim.data.killT or claim.t)
+	local killT = claim.data.killT
+	return Bounties:GetAmount(bounty, type(killT) == "number" and killT or claim.t)
 end
 
 ---Whether a record about a bounty (a raise, a withdrawal, a confirm) is its poster's own word: made by the poster,
@@ -905,12 +906,18 @@ function Bounties:GetWinningClaim(bounty)
 	return paid or confirmed or witnessed or lone
 end
 
+---When a claim's kill was: its killT, or the claim's own time when that isn't a number (older claims have none).
+function private.KillTime(claim)
+	local killT = claim.data.killT
+	return type(killT) == "number" and killT or claim.t
+end
+
 ---Whichever of two claims (the first may be nil) has the earlier kill, the lower id on a tie.
 function private.EarlierKill(best, claim)
 	if not best then
 		return claim
 	end
-	local t, bestT = claim.data.killT or claim.t, best.data.killT or best.t
+	local t, bestT = private.KillTime(claim), private.KillTime(best)
 	if t < bestT or (t == bestT and claim.id < best.id) then
 		return claim
 	end
@@ -923,8 +930,8 @@ end
 ---@param bounty table
 ---@return boolean
 function Bounties:IsInWindow(claim, bounty)
-	local killT = claim.data.killT or claim.t
-	return type(killT) == "number" and killT >= bounty.t and killT <= claim.t and killT < Bounties:GetExpiry(bounty)
+	local killT = private.KillTime(claim)
+	return killT >= bounty.t and killT <= claim.t and killT < Bounties:GetExpiry(bounty)
 		and killT < (private.WithdrawnAt(bounty) or math.huge)
 end
 

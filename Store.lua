@@ -963,8 +963,6 @@ end
 function private.Replace(existing, record)
 	local db = Wanted.db
 	db.records[existing.id] = nil
-	-- The real one may be another kind: the index is built again at the next walk (this is rare)
-	private.indexFor = nil
 	local chain = db.chains[existing.origin]
 	if chain and chain.seq >= existing.seq then
 		local before = db.records[existing.origin..":"..format("%d", existing.seq - 1)]
@@ -1194,17 +1192,20 @@ function private.Index()
 end
 
 function private.AddId(record)
-	if private.indexed[record.id] then
+	-- Listed under the kind it was last indexed as: a record replacing another of a different kind (Replace) is
+	-- listed under its own kind too, and walks of the other skip it
+	local known = private.indexed[record.id]
+	if known == record.kind then
 		return
 	end
-	private.indexed[record.id] = true
+	private.indexed[record.id] = record.kind
 	local ids = private.byKind[record.kind]
 	if not ids then
 		ids = {}
 		private.byKind[record.kind] = ids
 	end
 	ids[#ids + 1] = record.id
-	if type(record.origin) == "string" then
+	if not known and type(record.origin) == "string" then
 		ids = private.byOrigin[record.origin]
 		if not ids then
 			ids = {}

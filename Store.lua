@@ -10,6 +10,7 @@ local private = {
 	origin = nil,
 	ownChain = nil, -- { seq, lastHash } for this client
 	listeners = {}, -- kind -> { func, ... }
+	vouchGen = 0, -- counts records taken in, so IsVouched asks again about a record once more have come
 }
 local MAX_SIGHTINGS = 500
 Store.MAX_SIGHTINGS = MAX_SIGHTINGS
@@ -647,7 +648,7 @@ function private.Insert(record, live, fromApp)
 		return false, "reserved"
 	end
 	record.live, record.app, record.tampered, record.brokenChain, record.vouched = nil, nil, nil, nil, nil
-	private.vouchGen = (private.vouchGen or 0) + 1
+	private.vouchGen = private.vouchGen + 1
 	local existing = db.records[record.id]
 	if existing and existing.hash ~= record.hash and (live or fromApp) and not existing.test and not existing.live
 		and not existing.app and not existing.vouched and existing.origin ~= private.origin then
@@ -742,6 +743,8 @@ end
 function private.Replace(existing, record)
 	local db = Wanted.db
 	db.records[existing.id] = nil
+	-- The real one may be another kind: the index is built again at the next walk (this is rare)
+	private.indexFor = nil
 	local chain = db.chains[existing.origin]
 	if chain and chain.seq >= existing.seq then
 		local before = db.records[existing.origin..":"..format("%d", existing.seq - 1)]

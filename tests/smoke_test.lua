@@ -7806,6 +7806,15 @@ end)()
 	check(S:Get("Carl Mid:3").brokenChain and S:GetChainSeq("Carl Mid") == 3, "a record after a forged one doesn't follow it")
 	check(S:Merge(carl2, "Carl Mid") and S:Get("Carl Mid:2").hash == carl2.hash and not S:Get("Carl Mid:2").brokenChain, "the real one replaces it, mid-chain")
 	check(not S:Get("Carl Mid:3").brokenChain and S:GetChainSeq("Carl Mid") == 3, "and what follows it is whole again")
+	-- The real one may be another kind: it's found as that kind, and the forged one's kind no longer lists it
+	S:Merge(Signed("pass", "Dee Kind", 1, "0", {}, t0), "Dee Kind")
+	local dee1 = S:Get("Dee Kind:1")
+	S:MergeRelayed(Signed("confirm", "Dee Kind", 2, dee1.hash, { claim = "Someone:2" }, t0 + 10))
+	S:Merge(Signed("hunt", "Dee Kind", 2, dee1.hash, { bounty = "Someone:3" }, t0 + 10), "Dee Kind")
+	local asHunt, asConfirm = false, false
+	for r in S:Iterator("hunt") do if r.id == "Dee Kind:2" then asHunt = true end end
+	for r in S:Iterator("confirm") do if r.id == "Dee Kind:2" then asConfirm = true end end
+	check(asHunt and not asConfirm, "the replacing record is listed as its own kind")
 	S:FreshStart()
 end)()
 -- A fill's "pruned before here" (p) and "holes" (g) can't move someone's chain far ahead of their real records: a skip

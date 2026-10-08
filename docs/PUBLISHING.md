@@ -18,7 +18,7 @@ GitHub release. Until a CurseForge project ID and token exist, it only makes the
      goes to the bug report form).
    - Primary category: PvP. Secondary: Combat, Chat & Communication.
    - License: MIT.
-   - Logo: `docs/media/logo.png` (400 x 400).
+   - Logo: `docs/media/logo.png` (400 x 400), the wax seal; `docs/media/seal-1024.png` is the transparent master.
    - Source: <https://github.com/wanteddeadordead/wanted-dead-or-dead>, issues on the same repository.
    CurseForge reviews new projects before they go public (usually within a few days).
 2. Put the project ID into `WantedDeadOrDead.toc` as `## X-Curse-Project-ID: <id>` and commit it.

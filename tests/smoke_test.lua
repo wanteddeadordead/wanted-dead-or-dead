@@ -4321,6 +4321,18 @@ end)()
 	for key in pairs(partial) do if key:find("^Plain Member") then held = held + 1 end end
 	check(held <= 4, "a sender's unfinished messages are capped, got "..held)
 
+	-- Names as the guild channel and the roster write them may differ (realm, case, a first name alone): matched
+	-- anyway, by first name only when that's one guildmate's
+	roster[#roster + 1] = { guid = "Player-1-0E", order = 4, name = "Solo" }
+	roster[#roster + 1] = { guid = "Player-1-0F", order = 6, name = "Twin One" }
+	roster[#roster + 1] = { guid = "Player-1-10", order = 2, name = "Twin Two" }
+	clock = clock + 31
+	check(G:RankOf("Office Rman-Realm") == 2 and G:RankOf("office rman") == 2, "a name with a realm or in another case matches")
+	check(G:RankOf("Office") == 2 and G:RankOf("Solo Person") == 3, "a first name alone matches a guildmate's full name, and the other way round")
+	check(G:RankOf("Twin") == nil and G:RankOf("Nobody Here") == nil, "a first name two guildmates share matches neither; a stranger matches nobody")
+	roster[#roster], roster[#roster - 1], roster[#roster - 2] = nil, nil, nil
+	clock = clock + 31
+
 	-- An officer here removes an entry; it's no longer Kill on Sight
 	own.rankIndex = 1
 	ns.GuildRank:NoteOwn()

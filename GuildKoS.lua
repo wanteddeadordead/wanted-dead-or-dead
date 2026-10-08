@@ -24,6 +24,8 @@ local private = {
 	answerSince = nil, -- the oldest "newest change" among the asks we'll answer: the list sends what's newer
 	askedAt = nil, -- when we asked for the list: a list is only taken in answer to our own ask
 	members = nil, -- name -> rank index, from the roster, read at most every MEMBERS_SECONDS
+	lowerNames = nil, -- lower(name) -> rank index, from the same roster
+	firstNames = nil, -- lower(first name) -> rank index for a full name in the roster, false when guildmates share it
 	membersAt = 0,
 }
 
@@ -155,24 +157,49 @@ function private.Members()
 	if not private.members or GetTime() - private.membersAt >= MEMBERS_SECONDS then
 		local list = Wanted.GuildRank and Wanted.GuildRank:Members()
 		if list then
-			local byName = {}
+			local byName, lower, first = {}, {}, {}
 			for _, m in ipairs(list) do
 				if m.name then
-					byName[Ambiguate(m.name, "none")] = m.ri
+					local name = Ambiguate(m.name, "none")
+					byName[name] = m.ri
+					lower[strlower(name)] = m.ri
+					local firstName = strmatch(strlower(name), "^(%S+) ")
+					if firstName then
+						first[firstName] = first[firstName] == nil and m.ri or false
+					end
 				end
 			end
-			private.members, private.membersAt = byName, GetTime()
+			private.members, private.lowerNames, private.firstNames, private.membersAt = byName, lower, first, GetTime()
 		end
 	end
 	return private.members or {}
 end
 
----A guildmate's rank index by name, or nil if the roster doesn't have them.
+---A guildmate's rank index by name, or nil if the roster doesn't have them. The guild channel's sender names and the
+---roster's names may not be written alike (to be checked in game): failing an exact match, any case, then a first
+---name alone against a full name (or the other way round) when only one guildmate has it.
 function GuildKoS:RankOf(name)
 	if type(name) ~= "string" then
 		return nil
 	end
-	return private.Members()[Ambiguate(name, "none")]
+	name = Ambiguate(name, "none")
+	local rank = private.Members()[name]
+	if rank or not private.lowerNames then
+		return rank
+	end
+	local lower = strlower(name)
+	local firstName = strmatch(lower, "^(%S+) ")
+	if private.lowerNames[lower] ~= nil then
+		rank = private.lowerNames[lower]
+	elseif not firstName then
+		rank = private.firstNames[lower] or nil
+	else
+		rank = private.lowerNames[firstName]
+	end
+	if rank then
+		Wanted:Log("GuildKoS: %s matched the roster only loosely", name)
+	end
+	return rank
 end
 
 ---This character's rank index in its guild.

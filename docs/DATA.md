@@ -122,7 +122,12 @@ on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`,
 fill also carries `g = { [origin] = { held1, next1, held2, next2, ... } }`, one pair per hole pruning left in the
 chain past the first record (the seq held before it and the one after it, or the sender's chain end + 1 for a pruned
 end); a receiver whose chain has reached `held` moves on to `next - 1` the same way. Older clients ignore `g` and keep
-asking for interior holes, as before.
+asking for interior holes, as before. From 1.18.4 a skip from `p` or `g` never moves this client's own chain. It goes up
+to one past what the origin's own hello or have said its chain reaches in one go (a long pruned end crosses at once),
+and never past that once the origin has said. Before the origin has said, it goes no further than one past what two
+other players said or this client holds, and no more than 500 past the highest record held that checked out or the
+chain's seq, so two players together can still move an offline origin's chain 500 at a time. Odd numbers are
+ignored. No saved field changes.
 
 `WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
 login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the
@@ -294,7 +299,13 @@ unset or that page is switched off. A new setting: no migration.
   newer release (one that looks real: at most one major version ahead), the shared side of Wanted pauses
   until it's updated. Bounties, claims, payments and sync stop; the Nearby window, alerts, hotspots and the
   map keep working. The lock lifts on update, or when nobody on that version has been seen for three days
-  (so a made-up version number can't lock people out for good).
+  (so a made-up version number can't lock people out for good). From 1.18.4 a version locks only once three
+  different players have said they run it in the last hour (hellos, haves or `U` whispers; counted per minor version,
+  each player's latest word), and only up to two minor versions ahead
+  (or the next major's x.0 to x.2); `WantedDB.requiredVersion` gains `votes`, and a lock without it (one player's
+  word, from before) or no longer plausible from the running version lifts at load. No migration needed. Votes are kept in `WantedDB.versionVotes`
+  (`{ ["major.minor"] = { [player] = { v, t } } }`, each for an hour, tidied at load), so a /reload doesn't lose them,
+  and a player on the locked version or a newer patch of it keeps the lock's `seen` fresh. A new field: no migration.
 - A newer client ignores what older clients send and tells each of them, by a private addon whisper
   (`U`), at most every 10 minutes, to update. From 1.4.0 it also tells, at login, the players it knows whose last
   message came from an older release: 1.3.x clients pick channels themselves, so 1.4.0 needs them updated.
@@ -302,7 +313,16 @@ unset or that page is switched off. A new setting: no migration.
   server's (`a`), with how many whispers it has taken since an app delivered it (`h`); `{ e, q = 1 }` asks for the
   current one. A client follows only a marked pointer with a higher epoch than its own, from a player it has heard on
   the channel or linked with, and passes it on only while `h` is under 2 (each client spreads a pointer once). The
-  1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored.
+  1.3.x form, `{ e, n, p }` with a channel an addon picked, is ignored. From 1.18.4 a whispered pointer is followed
+  only once two players it knows say the same one, at most one epoch past the newest epoch not set by a whisper, or
+  once three say the same one at most three further on. `WantedDB.syncChannel` gains `hop` (0: our own app brought it;
+  1 or more: whispers), `WantedDB.trustedEpoch` keeps the newest epoch the app set (a pointer saved before `hop`
+  existed counts as one, once). Whispers raise it one step at a time, at most once a day (`WantedDB.trustedRaisedAt`, when
+  they last did), while three players agree on the pointer this client follows and it's at or past the ceiling: a
+  client that missed moves catches up a step a day as players re-whisper where they are. `WantedDB.appChannelEpoch`
+  keeps the app's last epoch. A client with nothing saved (ceiling 1) can follow the server's channel only while the
+  server's epoch is at most 4 (it was 1 for the Horde and 0 for the Alliance on 2026-10-08). The app's pointer is never older than the app's last, and replaces one a whisper brought only when
+  it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be
@@ -312,7 +332,11 @@ unset or that page is switched off. A new setting: no migration.
   faction), `targetName`, `amount` (copper, the highest seen), `poster` (a hash of the poster, for counting,
   never their name) and `postedAt`. The same bounty can arrive as several notices (raises, several bridges);
   readers take the highest amount per `bounty`. `WantedDB.seenNotices` (bounty id -> amount) remembers which
-  bounties on this player have been announced.
+  bounties on this player have been announced. From 1.18.4 a bridge sends `b` as `"w"` plus the bounty record's
+  hash (the same on every client of that side, and no name in it) and no `p`, so new notices carry no `poster`;
+  notices whose ids are of different forms are the same bounty when `target` and `postedAt` match, so one carried
+  under both ids counts once, while two posted in the same second under ids of one form stay two. A bridge's new
+  notices are capped at 100 an hour, 10 an hour about one player, and amounts at 2^31 - 1 copper.
 
 `link` records (from 1.1.0) tie a character to a Wanted desktop app key: `code` (the code the app showed) and
 `guid` (the character's own). The network confirms the link when another player's app uploads the record

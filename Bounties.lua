@@ -58,7 +58,7 @@ function private.LearnTarget(bounty, isOwn)
 	Fill("class", d.class, "string")
 	Fill("race", d.race, "string")
 	Fill("level", d.level, "number")
-	Fill("guild", d.targetGuild, "string")
+	-- Never the guild: a kill of them would then claim a bounty on that guild on this bounty's word alone
 	Fill("faction", d.faction, "string")
 	if type(d.seenAt) == "number" and d.seenAt <= GetServerTime() and d.seenAt > (player.lastSeen or 0) then
 		info.lastSeen = d.seenAt
@@ -102,9 +102,18 @@ function Bounties:ParseMoney(str)
 	if str == "" then
 		return nil
 	end
+	local copper
 	if strmatch(str, "^%d+%.?%d*$") then
-		return floor(tonumber(str) * 10000 + 0.5)
+		copper = floor(tonumber(str) * 10000 + 0.5)
+	else
+		copper = private.ParseUnits(str)
 	end
+	-- More than the game's money holds would be refused by everyone else (Store:IsWellFormed)
+	return copper and copper <= Store.MAX_COPPER and copper or nil
+end
+
+---"1g 20s", "50s" or "150c" in copper, or nil.
+function private.ParseUnits(str)
 	local copper, matched = 0, false
 	for amount, unit in gmatch(str, "(%d+%.?%d*)%s*([gsc])") do
 		matched = true
@@ -147,17 +156,44 @@ end
 -- Bounties
 -- ============================================================================
 
----The total amount on a bounty, including raises.
+---The total amount on a bounty, including the poster's raises (those made by a time, when given).
 ---@param bounty table
+---@param at number? a server time: only raises made at or before it count
 ---@return number
-function Bounties:GetAmount(bounty)
+function Bounties:GetAmount(bounty, at)
 	local amount = bounty.data.amount
+	-- A record never read (Store:Iterator) can still reach a listener as it arrives
+	if type(amount) ~= "number" then
+		return 0
+	end
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if (not at or raise.t <= at) and private.IsPostersWord(raise, bounty) then
 			amount = amount + raise.data.amount
 		end
 	end
-	return amount
+	-- At most what the game's money holds (a record from before the cap can say more)
+	return min(amount, Store.MAX_COPPER)
+end
+
+---What a claim is owed: the bounty as it stood at the kill. A raise after it doesn't raise what's owed.
+---@param claim table
+---@return number
+function Bounties:GetOwed(claim)
+	local bounty = Store:Get(claim.data.bounty)
+	if not bounty then
+		return 0
+	end
+	local killT = claim.data.killT
+	return Bounties:GetAmount(bounty, type(killT) == "number" and killT or claim.t)
+end
+
+---Whether a record about a bounty (a raise, a withdrawal, a payment) is its poster's: anyone else's raise doesn't add
+---to what the poster owes, and anyone else's withdrawal or payment record doesn't end the bounty.
+---@param record table
+---@param bounty table
+---@return boolean
+function private.IsPostersWord(record, bounty)
+	return record.data.bounty == bounty.id and record.origin == bounty.origin
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -166,7 +202,7 @@ end
 function Bounties:GetExpiry(bounty)
 	local expiry = bounty.t + EXPIRY_SECONDS
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if private.IsPostersWord(raise, bounty) then
 			expiry = max(expiry, raise.t + EXPIRY_SECONDS)
 		end
 	end
@@ -182,8 +218,9 @@ function Bounties:IsSettled(bounty)
 			return true
 		end
 	end
+	-- The poster's own record that they paid (its claim may not be here yet)
 	for payment in Store:Iterator("payment") do
-		if payment.data.bounty == bounty.id then
+		if private.IsPostersWord(payment, bounty) then
 			return true
 		end
 	end
@@ -427,6 +464,8 @@ end
 function Bounties:PostGuild(guild, faction, amount)
 	if amount < MIN_BOUNTY then
 		return nil, "the minimum bounty is "..Bounties:FormatMoney(MIN_BOUNTY)
+	elseif amount > Store.MAX_COPPER then
+		return nil, "that's more than the game's money holds"
 	end
 	if Bounties:GetMyOpenGuild(guild) then
 		return nil, "you already have a bounty on <"..guild..">, raise it instead"
@@ -452,6 +491,8 @@ end
 function Bounties:Post(guid, name, amount)
 	if amount < MIN_BOUNTY then
 		return nil, "the minimum bounty is "..Bounties:FormatMoney(MIN_BOUNTY)
+	elseif amount > Store.MAX_COPPER then
+		return nil, "that's more than the game's money holds"
 	end
 	if Bounties:GetMyOpen(guid) then
 		-- One bounty per poster per target; more gold goes onto the existing one
@@ -488,8 +529,11 @@ end
 ---Adds to a bounty.
 ---@param bounty table
 ---@param amount number copper
----@return table raise
+---@return table? raise nil when the amount isn't one others would take
 function Bounties:Raise(bounty, amount)
+	if type(amount) ~= "number" or amount <= 0 or amount ~= floor(amount) or amount > Store.MAX_COPPER then
+		return nil
+	end
 	Wanted:Log("Bounties: raised %s by %s", bounty.id, Bounties:FormatMoney(amount))
 	return Store:NewRecord("raise", { bounty = bounty.id, amount = amount })
 end
@@ -690,7 +734,8 @@ function private.ClaimLate(bounty)
 	return claim
 end
 
----Other clients that recorded the same death as a claim's kill (same victim, same place, within the window). Only
+---Other clients that recorded the same death as a claim's kill (same victim, same place, within the window, and on a
+---guild bounty in that guild). Only
 ---a death record that is its origin's own word counts (Store:IsTrusted): one relayed by another player could be
 ---forged by them to make a claim look witnessed.
 ---@param claim table
@@ -700,10 +745,14 @@ function Bounties:GetWitnesses(claim)
 	local witnesses = {}
 	local seen = {}
 	local victimsOwn = false
+	-- On a guild bounty the witness must have seen the victim in that guild: the hunter's word for it isn't enough
+	local bounty = Store:Get(claim.data.bounty)
+	local guild = bounty and bounty.data.guild
 	for death in Store:Iterator("death") do
 		local data = death.data
 		if death.origin ~= claim.origin and data.victim == claim.data.victim and data.zone == claim.data.zone
-			and abs(death.t - claim.data.killT) <= WITNESS_WINDOW and Store:IsTrusted(death) then
+			and type(claim.data.killT) == "number" and abs(death.t - claim.data.killT) <= WITNESS_WINDOW and Store:IsTrusted(death)
+			and (not guild or data.victimGuild == guild) then
 			if not seen[death.origin] then
 				seen[death.origin] = true
 				tinsert(witnesses, death.origin)
@@ -727,12 +776,34 @@ function private.IsVictimsOwn(death, claim)
 	if character and character.n == death.origin then
 		return true
 	end
+	-- A link only names a GUID, which anyone could write: it counts when the app vouched for it, or the game knows that
+	-- GUID by the link's maker's name
 	for link in Store:Iterator("link") do
-		if link.origin == death.origin and link.data.guid == victim and Store:IsTrusted(link) then
+		if link.origin == death.origin and link.data.guid == victim and Store:IsTrusted(link)
+			and (link.app or private.GameNames(victim, death.origin)) then
 			return true
 		end
 	end
 	return false
+end
+
+---Whether the game knows a player's GUID by an origin's name ("First Last", or "Name-Realm" elsewhere).
+---@param guid string
+---@param origin string
+---@return boolean
+function private.GameNames(guid, origin)
+	local _, _, _, _, _, name, realm = GetPlayerInfoByGUID(guid)
+	if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then
+		return false
+	end
+	if name == origin then
+		return true
+	end
+	-- Elsewhere an origin carries the realm, without spaces or dashes; the game gives none for our own realm
+	if type(realm) ~= "string" or realm == "" or (issecretvalue and issecretvalue(realm)) then
+		realm = GetNormalizedRealmName() or GetRealmName() or ""
+	end
+	return origin == name.."-"..gsub(realm, "[%s%-]", "")
 end
 
 -- A witness whose records started less than this long before the kill is new to the network
@@ -812,21 +883,61 @@ function Bounties:DeathPageURL(claim)
 	return format("https://wanteddeadordead.com/death/%s/%d", claim.data.victim or "", claim.data.killT or claim.t)
 end
 
----The claim that gets the bounty: the earliest kill among claims that aren't disputed. Every hunter can
----chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
+---The claim that gets the bounty. Once the poster has paid (by their own record) or confirmed one, that one: their decision stands, and
+---nobody else is owed for the same bounty. Otherwise the earliest kill among witnessed claims whose kill fell while
+---the bounty was open (IsInWindow), and failing those (shown as unverified, owed nothing yet) among the rest. Every
+---hunter can chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
 ---@param bounty table
 ---@return table? claim
 function Bounties:GetWinningClaim(bounty)
-	local best, bestT = nil, nil
+	local paid, confirmed, witnessed, lone
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id and Bounties:GetClaimLevel(claim) > 0 then
-			local t = claim.data.killT or claim.t
-			if not best or t < bestT or (t == bestT and claim.id < best.id) then
-				best, bestT = claim, t
+		if claim.data.bounty == bounty.id then
+			local level = Bounties:GetClaimLevel(claim)
+			-- Only the poster's own record of paying picks a claim: a hunter's record of being paid could be anyone's
+			if Wanted.Payments:GetForClaim(claim.id, true) then
+				paid = private.EarlierKill(paid, claim)
+			elseif level == 3 then
+				confirmed = private.EarlierKill(confirmed, claim)
+			elseif level > 0 and Bounties:IsInWindow(claim, bounty) then
+				if level == 2 then
+					witnessed = private.EarlierKill(witnessed, claim)
+				else
+					lone = private.EarlierKill(lone, claim)
+				end
 			end
 		end
 	end
+	return paid or confirmed or witnessed or lone
+end
+
+---When a claim's kill was: its killT, or the claim's own time when that isn't a number (older claims have none).
+function private.KillTime(claim)
+	local killT = claim.data.killT
+	return type(killT) == "number" and killT or claim.t
+end
+
+---Whichever of two claims (the first may be nil) has the earlier kill, the lower id on a tie.
+function private.EarlierKill(best, claim)
+	if not best then
+		return claim
+	end
+	local t, bestT = private.KillTime(claim), private.KillTime(best)
+	if t < bestT or (t == bestT and claim.id < best.id) then
+		return claim
+	end
 	return best
+end
+
+---Whether a claim's kill fell while its bounty was open: at or after it was posted, before it expired or was
+---withdrawn, and no later than the claim itself.
+---@param claim table
+---@param bounty table
+---@return boolean
+function Bounties:IsInWindow(claim, bounty)
+	local killT = private.KillTime(claim)
+	return killT >= bounty.t and killT <= claim.t and killT < Bounties:GetExpiry(bounty)
+		and killT < (private.WithdrawnAt(bounty) or math.huge)
 end
 
 ---The claim's level: 1 own client, 2 witnessed (a trusted witness, the victim's own record included), 3 confirmed
@@ -835,10 +946,16 @@ end
 ---@return number
 function Bounties:GetClaimLevel(claim)
 	local bounty = Store:Get(claim.data.bounty)
+	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in
+	local decision
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
-			return confirm.data.disputed and 0 or 3
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin
+			and (not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq)) then
+			decision = confirm
 		end
+	end
+	if decision then
+		return decision.data.disputed and 0 or 3
 	end
 	if #Bounties:GetWitnesses(claim) > 0 then
 		return 2
@@ -973,7 +1090,7 @@ Wanted:RegisterCommand("claims", "Lists claims on your bounties and claims you m
 		if bounty and (bounty.origin == me or claim.origin == me) then
 			local level = Bounties:GetClaimLevel(claim)
 			local levelText = level == 0 and "disputed" or level == 1 and "bounty hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
-			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetAmount(bounty)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
+			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
 			shown = shown + 1
 		end
 	end
@@ -994,7 +1111,7 @@ local function Decide(args, disputed)
 	if disputed then
 		Wanted:Print("Disputed claim %s by %s.", claim.id, claim.origin)
 	else
-		Wanted:Print("Confirmed claim %s: %s is owed %s.", claim.id, claim.origin, Bounties:FormatMoney(Bounties:GetAmount(bounty)))
+		Wanted:Print("Confirmed claim %s: %s is owed %s.", claim.id, claim.origin, Bounties:FormatMoney(Bounties:GetOwed(claim)))
 	end
 end
 

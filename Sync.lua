@@ -23,13 +23,14 @@ local private = {
 	channelId = nil,
 	joinAttempts = 0,
 	msgCounter = 0,
-	partial = {}, -- sender..msgId -> { parts = {}, total, t }
+	partial = {}, -- sender..msgId -> { sender, parts = {}, total, count, t }
 	outbox = {}, -- channel messages waiting to go: { tag, parts, next, priority, queued, refusals }
 	outboxParts = 0, -- parts still to send in outbox
 	tokens = 0, -- channel parts we may send now (refilled with time; starts full, below)
 	tokensAt = 0,
 	drainScheduled = false,
 	inbound = {}, -- sender -> { count, minute }
+	deferred = {}, -- sender -> their messages waiting out a fight (or a backlog)
 	ceilingHitMinute = nil,
 	pausedUntil = 0,
 	peers = {}, -- sender -> last message time
@@ -83,11 +84,19 @@ local CHANNEL_BASE = "WantedNet"
 local MOVE_MAX_HOPS = 2
 local MOVE_ASK_PEERS = 5 -- players asked for the current channel at login
 local MOVE_REPLY_SECONDS = 60 -- one answer per player a minute
+-- Players who must say the same whispered pointer: for the next epoch, and for one further on (never more than
+-- MOVE_MAX_AHEAD past the next); how long a player's word is counted
+local MOVE_VOTES, MOVE_VOTES_AHEAD = 2, 3
+local MOVE_MAX_AHEAD = 3
+local MOVE_VOTE_SECONDS = 30 * 60
+-- Whispers lift the channel ceiling at most this often (the app's pointer sets it any time)
+local TRUST_RAISE_SECONDS = 24 * 60 * 60
 local CHANNEL_NAME_MAX = 31
 -- Message = tag ":" msgId ":" part "/" total ":" chunk; the header is at most 12 characters
 local MAX_MESSAGE_LEN = 255
 local CHUNK_LEN = 240
 local PARTIAL_TIMEOUT = 30
+local MAX_PARTIALS_PER_SENDER = 4
 -- Tags
 local TAG_HELLO, TAG_HAVE, TAG_NEED, TAG_LIVE, TAG_FILL = "H", "V", "N", "R", "F"
 -- Enemy sightings are passing news, not records: never stored in a chain, never re-sent. They go out in
@@ -122,8 +131,10 @@ private.tokens = CHANNEL_BURST
 local MAX_QUEUED_PARTS = 48
 local MAX_QUEUED_FILL_PARTS = 16
 local SIGHTING_QUEUE_SECONDS = 15
--- Messages received in a fight wait, unopened, until it's over; past this many the rest are left to the resync
+-- Messages received in a fight wait, unopened, until it's over; past this many (or this many from one player) the
+-- rest are left to the resync
 local MAX_DEFERRED_MESSAGES = 300
+local MAX_DEFERRED_PER_SENDER = 50
 -- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
 local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
@@ -253,6 +264,10 @@ function Sync:OnEnable()
 	local pointer = Wanted.db.syncChannel
 	if type(pointer) == "table" and private.ValidPointer(pointer) then
 		private.channelName, private.epoch = pointer.n, pointer.e
+		-- Saved before where it came from was kept (1.18.3 and older): taken as not a whisper's, once
+		if pointer.hop == nil and Wanted.db.trustedEpoch == nil then
+			Wanted.db.trustedEpoch = pointer.e
+		end
 	end
 	local result = C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	Wanted:Log("Sync: prefix %s registered (%s), channel %s", PREFIX, tostring(result), private.channelName)
@@ -1519,7 +1534,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		local tbl = payload and Decode(payload)
 		if type(tbl) == "table" then
 			Wanted:Log("Sync: %s says we must update to %s", tostring(sender), tostring(tbl.v))
-			Wanted:NoteVersion(tbl.v)
+			Wanted:NoteVersion(tbl.v, sender)
 		end
 		return
 	end
@@ -1637,7 +1652,12 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		local key = sender..":"..msgId
 		local partial = private.partial[key]
 		if not partial or now - partial.t > PARTIAL_TIMEOUT then
-			partial = { parts = {}, total = total, t = now, count = 0 }
+			-- One player holds only a few messages open at once (ours interleave two at most)
+			if private.OpenPartials(sender, now) >= MAX_PARTIALS_PER_SENDER then
+				private.Drop("too many open messages", 1)
+				return
+			end
+			partial = { sender = sender, parts = {}, total = total, t = now, count = 0 }
 			private.partial[key] = partial
 		elseif partial.total ~= total then
 			-- Parts of one message all carry its total; a mismatch is a crafted or garbled message
@@ -1657,15 +1677,34 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	end
 	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
 	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
-		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES then
+		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
+		local waiting = private.deferred[sender] or 0
+		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
 			-- The next resync asks again for anything this leaves out
 			private.Drop("busy in combat", 1)
 			return
 		end
-		Wanted:QueueWork(function() private.Process(tag, payload, sender, viaLink, channel) end)
+		private.deferred[sender] = waiting + 1
+		Wanted:QueueWork(function()
+			private.deferred[sender] = (private.deferred[sender] or 1) > 1 and private.deferred[sender] - 1 or nil
+			private.Process(tag, payload, sender, viaLink, channel)
+		end)
 		return
 	end
 	private.Process(tag, payload, sender, viaLink, channel)
+end
+
+---How many messages a sender has part sent, letting go of every message whose parts stopped coming.
+function private.OpenPartials(sender, now)
+	local open = 0
+	for key, partial in pairs(private.partial) do
+		if now - partial.t > PARTIAL_TIMEOUT then
+			private.partial[key] = nil
+		elseif partial.sender == sender then
+			open = open + 1
+		end
+	end
+	return open
 end
 
 ---Decodes and handles one whole message.
@@ -1698,7 +1737,7 @@ end
 function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	-- The newest release wins: a newer one may lock this client (Core); an older one's news is ignored. A
 	-- development build is not a release, so it neither locks others nor turns them away.
-	Wanted:NoteVersion(tbl.v)
+	Wanted:NoteVersion(tbl.v, sender)
 	Store:NoteAddonVersion(sender, tbl.v)
 	-- Their Blizzard PvP rank, in a hello (from 1.10.0)
 	if tbl.b and Wanted.BlizzRank then
@@ -1764,8 +1803,9 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		-- The sender's copy of a chain starts later than we asked: the earlier records were pruned. Move on to
 		-- where it starts, continuing from the first record's predecessor when it's in this message.
 		if tag == TAG_FILL and type(tbl.p) == "table" then
-			for origin, seq in pairs(tbl.p) do
-				if type(origin) == "string" and type(seq) == "number" then
+			for origin, first in pairs(tbl.p) do
+				local seq = type(origin) == "string" and private.SkipTarget(origin, first, tbl, sender)
+				if seq then
 					local prev
 					for _, record in ipairs(tbl.r) do
 						if type(record) == "table" and record.origin == origin and record.seq == seq then
@@ -1794,7 +1834,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			end
 		end
 		if tag == TAG_FILL then
-			private.SkipPruned(tbl)
+			private.SkipPruned(tbl, sender)
 		end
 	end
 end
@@ -1806,7 +1846,12 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 	local numNeed = 0
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, seq in pairs(chains) do
-		if type(origin) == "string" and type(seq) == "number" and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
+		if type(origin) == "string" and Store:IsSeq(seq) then
+			private.NoteAdvertised(origin, seq, sender)
+		end
+	end
+	for origin, seq in pairs(chains) do
+		if type(origin) == "string" and Store:IsSeq(seq) and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
 			need[origin] = Store:GetChainSeq(origin) + 1
 			numNeed = numNeed + 1
 			if numNeed >= maxNeed then
@@ -1843,35 +1888,42 @@ end
 ---A peer asked for records. Answer after a random delay unless someone else already filled that range (over a
 ---realm link nobody else can: answer that player straight away).
 function private.HandleNeed(need, sender, viaLink)
-	local asked = {}
+	-- Only chains we hold, from a whole seq, and no more chains than a request asks for (HandleHave): every answer
+	-- walks an origin's records and sends them
+	local wanted, asked = {}, {}
+	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
 	for origin, fromSeq in pairs(need) do
-		tinsert(asked, tostring(origin).." from "..tostring(fromSeq))
+		if type(origin) == "string" and type(fromSeq) == "number" and fromSeq == floor(fromSeq) and fromSeq >= 1
+			and Wanted.db.chains[origin] and Store:GetChainSeq(origin) >= fromSeq then
+			wanted[origin] = floor(fromSeq)
+			tinsert(asked, origin.." from "..fromSeq)
+			if #asked >= maxNeed then
+				break
+			end
+		end
 	end
 	Wanted:Log("Sync: %s asks for %s", sender, table.concat(asked, ", "))
+	need = wanted
 	if viaLink then
 		for origin, fromSeq in pairs(need) do
-			if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
-				private.SendFill(origin, fromSeq, sender)
-			end
+			private.SendFill(origin, fromSeq, sender)
 		end
 		return
 	end
 	for origin, fromSeq in pairs(need) do
-		if type(origin) == "string" and type(fromSeq) == "number" and Store:GetChainSeq(origin) >= fromSeq then
-			private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
-			C_Timer.After(0.5 + math.random() * 2.5, function()
-				local pending = private.pendingNeedAnswers[origin]
-				if not pending or pending.from ~= fromSeq then
-					return
-				end
-				private.pendingNeedAnswers[origin] = nil
-				if (private.recentFills[origin] or 0) >= fromSeq and GetTime() - pending.t < 10 then
-					-- Someone answered first
-					return
-				end
-				private.SendFill(origin, fromSeq)
-			end)
-		end
+		private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
+		C_Timer.After(0.5 + math.random() * 2.5, function()
+			local pending = private.pendingNeedAnswers[origin]
+			if not pending or pending.from ~= fromSeq then
+				return
+			end
+			private.pendingNeedAnswers[origin] = nil
+			if (private.recentFills[origin] or 0) >= fromSeq and GetTime() - pending.t < 10 then
+				-- Someone answered first
+				return
+			end
+			private.SendFill(origin, fromSeq)
+		end)
 	end
 end
 
@@ -1880,8 +1932,8 @@ end
 function private.SendFill(origin, fromSeq, target)
 	local records = {}
 	local lowest = Store:GetChainSeq(origin) + 1
-	for _, record in pairs(Wanted.db.records) do
-		if record.origin == origin and type(record.seq) == "number" and not Store:IsTest(record) then
+	for record in Store:OriginIterator(origin) do
+		if type(record.seq) == "number" and not Store:IsTest(record) then
 			lowest = min(lowest, record.seq)
 			if record.seq >= fromSeq then
 				tinsert(records, record)
@@ -1916,10 +1968,98 @@ function private.SendFill(origin, fromSeq, target)
 	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras)
 end
 
+-- How far players said each origin's chain reaches (hellos and haves), so a fill can't skip a chain past it: the
+-- origin's own word, and the highest seq from each of a few other players. At most this many origins are remembered
+-- before the list starts over, and this many players for each.
+local MAX_ADVERTISED = 5000
+local MAX_ADVERTISERS = 6
+
+---Notes how far a player says an origin's chain reaches.
+function private.NoteAdvertised(origin, seq, sender)
+	local advertised = private.advertised
+	if not advertised or (private.advertisedCount or 0) >= MAX_ADVERTISED then
+		advertised = {}
+		private.advertised, private.advertisedCount = advertised, 0
+	end
+	local entry = advertised[origin]
+	if not entry then
+		entry = { own = 0, by = {}, count = 0 }
+		advertised[origin] = entry
+		private.advertisedCount = private.advertisedCount + 1
+	end
+	if sender == origin then
+		entry.own = max(entry.own, seq)
+		return
+	end
+	if not entry.by[sender] then
+		if entry.count >= MAX_ADVERTISERS then
+			-- Room for this one: the player who said the least goes
+			local lowest
+			for other, said in pairs(entry.by) do
+				if not lowest or said < entry.by[lowest] then
+					lowest = other
+				end
+			end
+			entry.by[lowest], entry.count = nil, entry.count - 1
+		end
+		entry.count = entry.count + 1
+	end
+	entry.by[sender] = max(entry.by[sender] or 0, seq)
+end
+
+---How far the origin itself said its chain reaches, or nil when it hasn't.
+function private.OwnAdvertised(origin)
+	local entry = private.advertised and private.advertised[origin]
+	return entry and entry.own > 0 and entry.own or nil
+end
+
+---How far an origin's chain reaches by a word that isn't one player's alone: the origin's own, or the highest seq at
+---least two other players said.
+function private.Advertised(origin)
+	local entry = private.advertised and private.advertised[origin]
+	if not entry then
+		return 0
+	end
+	local first, second = 0, 0
+	for _, said in pairs(entry.by) do
+		if said > first then
+			first, second = said, first
+		elseif said > second then
+			second = said
+		end
+	end
+	return max(entry.own, second)
+end
+
+-- How far one skip may take a chain past the records held, unless the origin itself said the chain reaches there
+local MAX_SKIP = 500
+
+---Where a fill may move an origin's chain to (a skip over records pruned at its sender): a whole seq, never our own
+---chain. Up to one past what the origin itself said its chain reaches (its hello or have), in one go: a long pruned end
+---crosses at once. Past that, nothing once the origin has said; before it has, no further than one past what two other
+---players said or we hold, and no more than MAX_SKIP past the highest record held or the chain's seq. A false skip
+---would leave the origin's real records looking like a rewritten history. The origin itself may say anything about its
+---own chain.
+---@return number? seq nil when it's no seq at all, or our own chain
+function private.SkipTarget(origin, seq, tbl, sender)
+	if not Store:IsSeq(seq) or origin == Store:GetOrigin() then
+		return nil
+	end
+	seq = floor(seq)
+	local own = private.OwnAdvertised(origin)
+	if sender == origin or (own and seq <= own + 1) then
+		return seq
+	end
+	local chainSeq = Store:GetChainSeq(origin)
+	local limit = own and own + 1 or floor(max(private.Advertised(origin), chainSeq)) + 1
+	return min(seq, limit, max(Store:GetHighestHeld(origin), chainSeq) + MAX_SKIP)
+end
+
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what
 ---comes before each: the records between were pruned everywhere it could ask, and would be asked for forever.
 ---@param tbl table the fill
-function private.SkipPruned(tbl)
+---@param sender string who sent it
+function private.SkipPruned(tbl, sender)
 	if type(tbl.g) ~= "table" then
 		return
 	end
@@ -1928,8 +2068,8 @@ function private.SkipPruned(tbl)
 			for i = 1, min(#gaps, 2 * MAX_FILL_PER_REQUEST) - 1, 2 do
 				local from, to = gaps[i], gaps[i + 1]
 				-- Whole numbers only (floor also gives Lua 5.4's integers, as the record ids need)
-				from = type(from) == "number" and from == floor(from) and floor(from) or nil
-				to = type(to) == "number" and to == floor(to) and floor(to) or nil
+				from = Store:IsSeq(from) and floor(from) or nil
+				to = private.SkipTarget(origin, to, tbl, sender)
 				if from and to and Store:GetChainSeq(origin) >= from then
 					local prev
 					for _, record in ipairs(tbl.r) do
@@ -2107,7 +2247,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 			end
 		end
 		if tag == TAG_FILL then
-			private.SkipPruned(tbl)
+			private.SkipPruned(tbl, sender)
 		end
 		private.currentSource = nil
 	end
@@ -2429,20 +2569,28 @@ function private.ValidPointer(p)
 end
 
 ---Moves to the server's channel (or back to the main one): leaves the old one, joins the new, and tells the players
----we know unless the pointer has already gone as far by whisper as it may. Followed when its epoch is newer than ours;
----from our own app, also at the same epoch with another name (the server's word).
+---we know unless the pointer has already gone as far by whisper as it may. By whisper, followed when its epoch is
+---newer than ours; from our own app, whenever it's another channel (the server's word).
 ---@param pointer table { e, n }
 ---@param why string
 ---@param hop number 0 from our own app, else how many whispers it took
 ---@return boolean moved
 function private.Adopt(pointer, why, hop)
-	if not private.ValidPointer(pointer) or pointer.e < private.epoch
-		or (pointer.e == private.epoch and (hop > 0 or pointer.n == private.channelName)) then
+	if not private.ValidPointer(pointer) or (pointer.e == private.epoch and pointer.n == private.channelName) then
+		return false
+	end
+	-- By whisper only a newer one; from our own app any other (AdoptFromApp keeps it from going back in time): the
+	-- app's word replaces whatever a whisper brought
+	if hop > 0 and pointer.e <= private.epoch then
 		return false
 	end
 	local old = private.channelName
 	private.channelName, private.epoch, private.hop = pointer.n, pointer.e, hop
-	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime() }
+	-- Where it came from is kept (hop 0: our own app): what a whisper set never raises the next whispered pointer's ceiling
+	Wanted.db.syncChannel = { e = pointer.e, n = pointer.n, t = GetServerTime(), hop = hop }
+	if hop == 0 then
+		Wanted.db.trustedEpoch = pointer.e
+	end
 	if old ~= pointer.n then
 		if pointer.n == private.MainName() then
 			Wanted:Print("Wanted's sync channel is back to the main one, as wanteddeadordead.com says.")
@@ -2609,6 +2757,56 @@ function private.AskPointer()
 	end
 end
 
+---Counts a player saying the channel moved to a pointer; returns how many different players say it now. Each player's
+---latest pointer is the one counted for them, so one player naming many pointers holds only one vote.
+function private.VoteMove(epoch, name, sender)
+	local votes, now = private.moveVotes or {}, GetTime()
+	private.moveVotes = votes
+	private.moveVoteOf = private.moveVoteOf or {}
+	local key = epoch.."|"..name
+	local before = private.moveVoteOf[sender]
+	if before and before.key ~= key and votes[before.key] then
+		local old = votes[before.key]
+		old.senders[sender], old.n = nil, old.n - 1
+		if old.n <= 0 then
+			votes[before.key] = nil
+		end
+	end
+	private.moveVoteOf[sender] = { key = key, t = now }
+	local entry = votes[key]
+	if not entry then
+		entry = { senders = {}, n = 0 }
+		votes[key] = entry
+	end
+	if not entry.senders[sender] then
+		entry.n = entry.n + 1
+	end
+	entry.senders[sender] = { t = now }
+	-- A player's word counts for a while
+	local n = 0
+	for _, said in pairs(entry.senders) do
+		if now - said.t <= MOVE_VOTE_SECONDS then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---Three players agreeing on the pointer we're now on, at or past the ceiling, lift the ceiling one step, at most once a
+---day, until it reaches that pointer: a player without the app keeps up with real moves (days apart), and one who
+---missed a few (offline through an incident) catches up as players re-whisper where they are, while alts can't ratchet
+---it faster than a step a day (two never lift it).
+---@param epoch number
+---@param votes number players who said it lately
+function private.LiftCeiling(epoch, votes)
+	local db = Wanted.db
+	local ceiling = max(db.trustedEpoch or 0, db.appChannelEpoch or 0) + 1
+	if votes >= MOVE_VOTES_AHEAD and epoch >= ceiling and GetServerTime() - (db.trustedRaisedAt or 0) >= TRUST_RAISE_SECONDS then
+		db.trustedEpoch, db.trustedRaisedAt = ceiling, GetServerTime()
+		Wanted:Log("Sync: three players agree on channel epoch %d; the ceiling for whispered moves rises to %d", epoch, ceiling + 1)
+	end
+end
+
 ---A pointer (or a question) from another player. Followed only when it's the server's (a), from a player we know,
 ---and newer than ours; passed on once more while under the hop cap (Adopt).
 function private.OnMove(tbl, sender)
@@ -2632,22 +2830,61 @@ function private.OnMove(tbl, sender)
 		Wanted:Log("Sync: a channel move from %s that isn't the server's; ignored", tostring(sender))
 		return
 	end
-	if tbl.e <= private.epoch then
+	-- The pointer we're on (followed on two players' word): a third may still lift the ceiling to it (LiftCeiling)
+	local current = tbl.e == private.epoch and tbl.n == private.channelName
+	if tbl.e < private.epoch or (tbl.e == private.epoch and not current) then
 		return
 	end
 	if not private.KnownPeers()[sender] then
 		Wanted:Log("!! Sync: a channel move from %s, who we don't know; ignored", tostring(sender))
 		return
 	end
+	if current then
+		private.LiftCeiling(tbl.e, private.VoteMove(tbl.e, tbl.n, sender))
+		return
+	end
+	-- Followed once enough players we know say the same pointer: two for the next one past the newest epoch not set by a
+	-- whisper (the app's; never what a whisper set, or players could walk us along a step at a time, this session or
+	-- the next), three for one further on (someone without the app who missed a few moves). The server moves one epoch at a time, and a made-up
+	-- pointer far ahead could never be outbid by its real one.
 	local hops = type(tbl.h) == "number" and tbl.h >= 1 and floor(tbl.h) or MOVE_MAX_HOPS
+	local ceiling = max(Wanted.db.trustedEpoch or 0, Wanted.db.appChannelEpoch or 0) + 1
+	-- Never far ahead, however many say so: a few alts could otherwise pin everyone at an epoch the server never outbids
+	if tbl.e > ceiling + MOVE_MAX_AHEAD then
+		Wanted:Log("!! Sync: a channel move from %s to epoch %d, far past the next one (%d); ignored", tostring(sender), tbl.e, ceiling)
+		return
+	end
+	local votes = private.VoteMove(tbl.e, tbl.n, sender)
+	local needed = tbl.e <= ceiling and MOVE_VOTES or MOVE_VOTES_AHEAD
+	if votes < needed then
+		Wanted:Log("Sync: %s says the channel moved to %s (%d); %d of %d players needed", tostring(sender), tbl.n, tbl.e, votes, needed)
+		return
+	end
 	Wanted:Log("Sync: %s says wanteddeadordead.com moved the channel to %s (%d), %d whisper(s) from an app", sender, tbl.n, tbl.e, hops)
-	private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops)
+	if private.Adopt({ e = tbl.e, n = tbl.n }, "a player whose Wanted app brought it", hops) then
+		private.LiftCeiling(tbl.e, votes)
+	end
 end
 
----The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed when newer than ours.
+---The channel the Wanted app passed on from wanteddeadordead.com (Catchup): followed unless older than the app's last,
+---and over one a whisper brought only when it's no older or the catch-up came after that whisper.
 ---@param pointer table { e, n }
-function Sync:AdoptFromApp(pointer)
-	if type(pointer) == "table" and private.Adopt(pointer, "the Wanted app says so", 0) then
+---@param at number? when the app wrote the catch-up that carried it
+function Sync:AdoptFromApp(pointer, at)
+	-- Never one older than the app gave before (an old catch-up read again)
+	if type(pointer) ~= "table" or not private.ValidPointer(pointer) or pointer.e < (Wanted.db.appChannelEpoch or 0) then
+		return
+	end
+	-- Back from where whispers moved us only when the catch-up is newer than that move: a catch-up read again at the
+	-- next login, from before the server moved, mustn't pull us back to the old channel
+	local saved = Wanted.db.syncChannel
+	if pointer.e < private.epoch and type(saved) == "table" and (saved.hop or 0) > 0
+		and not (type(at) == "number" and type(saved.t) == "number" and at > saved.t) then
+		Wanted:Log("Sync: the app's channel %s (%d) is older than the whispered move to %s; staying", pointer.n, pointer.e, tostring(private.channelName))
+		return
+	end
+	Wanted.db.appChannelEpoch = pointer.e
+	if private.Adopt(pointer, "the Wanted app says so", 0) then
 		Wanted:Log("Sync: moved to the app's channel %s (%d)", pointer.n, pointer.e)
 	end
 end

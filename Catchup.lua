@@ -34,22 +34,6 @@ function Catchup:OnEnable()
 	private.frame:SetScript("OnEvent", function() private.AskSoon(ASK_DELAY) end)
 end
 
----A record as the addon makes them: plain values only, its id its origin and seq.
-function private.IsWellFormed(r)
-	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or type(r.seq) ~= "number"
-		or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string" or type(r.data) ~= "table"
-		or r.id ~= r.origin..":"..r.seq then
-		return false
-	end
-	for key, value in pairs(r.data) do
-		local kind = type(value)
-		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
-			return false
-		end
-	end
-	return true
-end
-
 -- The most GUIDs looked up at once
 local MAX_UNNAMED = 300
 
@@ -92,7 +76,7 @@ function Catchup:Import()
 	private.LookUpUnnamed(entry.unnamed)
 	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over
 	if type(entry.channel) == "table" then
-		Sync:AdoptFromApp(entry.channel)
+		Sync:AdoptFromApp(entry.channel, entry.t)
 	end
 	-- Bounty requests are kept by id, so taking in the same ones again changes nothing
 	private.TakeRequests(entry.requests)
@@ -134,7 +118,7 @@ function Catchup:Import()
 			Sync:WithoutForwarding(function()
 				for i = first, min(first + BATCH - 1, #records) do
 					local record = records[i]
-					if not private.IsWellFormed(record) then
+					if not Store:IsWellFormed(record) then
 						counts.skipped = counts.skipped + 1
 					else
 						local isNew, why = Store:MergeRelayed(record, true)

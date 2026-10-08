@@ -306,7 +306,9 @@ Wanted:RegisterCommand("simulate", "Creates test data: a bounty of yours, a witn
 			end
 		end
 		for _, claim in ipairs(unpaid) do
-			Store:InsertTest("payment", HUNTER, { claim = claim.id, bounty = claim.data.bounty, from = me, amount = Bounties:GetAmount(Store:Get(claim.data.bounty)), side = "payee" })
+			-- From the bounty's poster: a payment counts only between the poster and the hunter
+			local bounty = Store:Get(claim.data.bounty)
+			Store:InsertTest("payment", HUNTER, { claim = claim.id, bounty = claim.data.bounty, from = bounty.origin, amount = Bounties:GetAmount(bounty), side = "payee" })
 		end
 		local paid = #unpaid
 		Wanted:Print("Simulated %d payment(s) received by %s.", paid, HUNTER)

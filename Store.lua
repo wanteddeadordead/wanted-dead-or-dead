@@ -563,6 +563,26 @@ function Store:NewRecord(kind, data)
 	return record
 end
 
+---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
+---record whose id names someone else (Mallory's record as "Carol:1") would take the place of theirs, and a missing
+---origin, seq or prev would break the chain code.
+---@param r any
+---@return boolean
+function Store:IsWellFormed(r)
+	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or type(r.seq) ~= "number"
+		or r.seq ~= floor(r.seq) or r.seq < 1 or type(r.t) ~= "number" or type(r.prev) ~= "string" or type(r.hash) ~= "string"
+		or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+		return false
+	end
+	for key, value in pairs(r.data) do
+		local kind = type(value)
+		if type(key) ~= "string" or (kind ~= "string" and kind ~= "number" and kind ~= "boolean") then
+			return false
+		end
+	end
+	return true
+end
+
 ---Merges a record received from a peer. Returns whether it was new. The chain check is advisory: a record
 ---whose prev does not match what we hold for that origin is stored but flagged, never dropped, since we
 ---may simply be missing the records between.
@@ -571,7 +591,7 @@ end
 ---@return boolean isNew
 ---@return string? why when not new: "already held", "malformed", "not sent by its origin", "test data" or "pruned"
 function Store:Merge(record, sender)
-	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
+	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
 	if record.origin ~= sender then
@@ -589,7 +609,7 @@ end
 ---@return boolean isNew
 ---@return string? why when not new, as for Merge
 function Store:MergeRelayed(record, fromApp)
-	if type(record) ~= "table" or type(record.id) ~= "string" or type(record.kind) ~= "string" or type(record.data) ~= "table" then
+	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
 	return private.Insert(record, false, fromApp)

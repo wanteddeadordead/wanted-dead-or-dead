@@ -282,6 +282,16 @@ UI:RegisterPage("board", {
 	order = 1,
 	menuLabel = "Bounties",
 	tabLabel = "Board",
+	-- Other players' bounties not seen on the board yet
+	news = { kind = "board", ids = function()
+		local ids = {}
+		for _, info in ipairs(Model:GetBoard({ showPassed = true })) do
+			if not info.mine then
+				tinsert(ids, info.id)
+			end
+		end
+		return ids
+	end },
 	tabs = { "board", "mine", "hunts" },
 	build = function(container, width, height)
 		private.BuildPostCard(container, width)

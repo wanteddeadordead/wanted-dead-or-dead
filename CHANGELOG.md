@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Hotspots: enemies named in a PvP death count in that zone (unless seen somewhere since), so a zone with deaths no
+  longer shows 0 enemies now and 0 in the hour.
+- The header's App and WantedNet lights no longer overlap on development builds.
 - Guild raids: tick Guild raid when you form one and it shows with your guild's name, like "The Duskwood Takeover
   with <Your Guild>", on the Raids page, Home, the popups and the Announce line.
 - The raid form's Where box suggests zones as you type; click one or press Tab for the first.

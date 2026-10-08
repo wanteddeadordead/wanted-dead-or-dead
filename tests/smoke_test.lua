@@ -827,6 +827,28 @@ check(barrens.hour == 3, "the ignored enemy in the Barrens is left out, got "..t
 check(ns.Hotspots:FormatLevels(barrens) == "31-32 + ??", "level range with a skull, got "..ns.Hotspots:FormatLevels(barrens))
 check(#ns.Hotspots:GetTop(3) == 2, "two zones busy now")
 check(ns.Hotspots:OpenMap(durotar) and mapOpened == 1, "clicking a hotspot opens its map")
+-- Enemies named in a PvP death count in its zone, unless seen somewhere since: a zone of deaths with no enemies didn't
+-- add up. One last seen elsewhere before the fight moves to where it happened; one seen elsewhere after stays there.
+do
+ns.Store:UpdatePlayer("Player-9-HILLS1", { name = "Hill Ganker", class = "ROGUE", level = 30, faction = "Alliance", zone = "The Barrens", mapId = 10 })
+ns.db.players["Player-9-HILLS1"].lastSeen = clock - 20 * 60
+ns.Store:NewRecord("kill", { killer = "Player-9-HILLS1", killerName = "Hill Ganker", killerFaction = "Alliance", victim = "Player-1-OURS1",
+	victimName = "Our One", victimFaction = "Horde", deathId = "hills-1", zone = "Hillsbrad Foothills" })
+ns.Store:NewRecord("death", { killer = "Player-9-HILLS2", killerName = "Unseen Ganker", killerClass = "MAGE", killerLevel = 31, killerFaction = "Alliance",
+	victim = "Player-1-OURS2", victimName = "Our Two", victimFaction = "Horde", deathId = "hills-2", zone = "Hillsbrad Foothills" })
+ns.Store:NewRecord("kill", { killer = "Player-9-GANK1", killerName = "Ganker1", killerFaction = "Alliance", victim = "Player-1-OURS3",
+	victimName = "Our Three", victimFaction = "Horde", deathId = "hills-3", zone = "Hillsbrad Foothills" })
+clock = clock + 60
+ns.Store:UpdatePlayer("Player-9-GANK1", { name = "Ganker1", faction = "Alliance", zone = "The Barrens", mapId = 10 })
+spots = ns.Hotspots:Get()
+local hills = FindZone(spots, "Hillsbrad Foothills")
+local hillNames = {}
+for _, e in ipairs(hills and hills.enemies or {}) do hillNames[#hillNames + 1] = e.name end
+table.sort(hillNames)
+check(hills and hills.deaths == 3 and hills.hour == 2 and hills.recent == 2 and table.concat(hillNames, ",") == "Hill Ganker,Unseen Ganker" and hills.minLevel == 30,
+	"the fights' enemies count in Hillsbrad: "..tostring(hills and hills.hour).." "..table.concat(hillNames, ","))
+check(FindZone(spots, "The Barrens").hour == 3, "one seen in the Barrens since stays there")
+end
 ns.UI:Show("hotspots")
 ;(function()
 	local function NavBadge(title)
@@ -837,7 +859,7 @@ ns.UI:Show("hotspots")
 			end
 		end
 	end
-	check(NavBadge("Hotspots") == "2", "the Hotspots menu item counts the busy zones, got "..tostring(NavBadge("Hotspots")))
+	check(NavBadge("Hotspots") == "3", "the Hotspots menu item counts the busy zones (Hillsbrad too now), got "..tostring(NavBadge("Hotspots")))
 end)()
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 -- The world map: markers come through the map's own pin system, in their own layer under group members

@@ -96,13 +96,13 @@ function Store:Prune(now)
 		end
 	end
 	private.BuildOwn()
-	local unvouched = private.UnvouchedFrom()
+	private.WalkTargets(true)
 	local pruned, kept, left = 0, 0, 0
 	local pastGap = {} -- origin -> the newest old record held past a gap in its chain
 	for id, record in pairs(records) do
 		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff then
 			local chain = chains[record.origin]
-			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes) then
+			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes) or private.NeededByWalk(record) then
 				kept = kept + 1
 				left = left + 1
 			else
@@ -110,7 +110,6 @@ function Store:Prune(now)
 					and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
 					pastGap[record.origin] = record
 				end
-				private.KeepStub(chain, record, unvouched[record.origin])
 				records[id] = nil
 				pruned = pruned + 1
 			end
@@ -118,7 +117,6 @@ function Store:Prune(now)
 			left = left + 1
 		end
 	end
-	private.DropStubs(unvouched)
 	-- A gap still open behind a record this old won't be filled with anything worth keeping (what's in it is older
 	-- still): the chain moves past the pruned record, so it isn't asked for again
 	for origin, record in pairs(pastGap) do
@@ -133,62 +131,50 @@ function Store:Prune(now)
 	return pruned
 end
 
--- What another player may vouch for later (Store:IsVouched): a pruned record after one of these keeps its strong link
+-- How far along an origin's chain IsVouched looks for a trusted record
+local VOUCH_WALK = 200
+-- What another player's later record may yet vouch for (Store:IsVouched): the records a walk from one of these crosses
+-- are kept, however old, so the walk has the real ones (a stand-in kept for a pruned one could be spoilt by a junk copy)
 local AUTHORITY_KINDS = { confirm = true, raise = true, withdraw = true, payment = true }
+-- How long the list of those is used before it's made again
+local WALK_TARGETS_SECONDS = 5
 
----For each origin, the lowest seq of a record of theirs held that its later records may yet vouch for: one of the
----AUTHORITY_KINDS, not ours, not vouched for yet.
----@return table origin -> seq
-function private.UnvouchedFrom()
-	local lowest = {}
+---For each origin, the seqs of its records a walk may yet start from: one of the AUTHORITY_KINDS, not ours, not
+---trusted or vouched for yet, from an updated client (it carries a strong link: an older client's records past it
+---wouldn't link to it either). Nothing is hashed here. Made again every few seconds, or when asked to.
+---@param fresh boolean? make it again now
+---@return table origin -> { seq, ... }
+function private.WalkTargets(fresh)
+	if not fresh and private.walkTargets and GetTime() - private.walkTargetsAt < WALK_TARGETS_SECONDS then
+		return private.walkTargets
+	end
+	local targets = {}
 	for kind in pairs(AUTHORITY_KINDS) do
 		for record in Store:Iterator(kind) do
 			local origin = record.origin
-			-- Not walked here (IsVouched hashes records): known vouched or trusted is enough to leave one out
 			if origin ~= private.origin and not Store:IsTest(record) and not record.vouched and not Store:IsTrusted(record)
-				and (not lowest[origin] or record.seq < lowest[origin]) then
-				lowest[origin] = record.seq
+				and Store:StrongLink(record) then
+				targets[origin] = targets[origin] or {}
+				tinsert(targets[origin], record.seq)
 			end
 		end
 	end
-	return lowest
+	private.walkTargets, private.walkTargetsAt = targets, GetTime()
+	return targets
 end
 
----Keeps what a chain walk needs of a record being pruned after an unvouched one: its strong hash and the strong link
----it carries (chain.stubs[seq], 32 hex digits). The record itself goes.
-function private.KeepStub(chain, record, from)
-	local link = Store:StrongLink(record)
-	if chain and from and type(record.seq) == "number" and record.seq > from and link then
-		chain.stubs = chain.stubs or {}
-		chain.stubs[record.seq] = Store:Strong(record)..link
-	end
-end
-
----A record too old to keep that arrives right after an unvouched one (or after a stub) keeps a stub too.
-function private.StubOnArrival(chain, record)
-	local seq = record.seq
-	local before = Wanted.db.records[record.origin..":"..format("%d", seq - 1)]
-	if (type(chain.stubs) == "table" and chain.stubs[seq - 1])
-		or (before and AUTHORITY_KINDS[before.kind] and before.origin ~= private.origin and not before.vouched and not Store:IsTrusted(before)) then
-		private.KeepStub(chain, record, seq - 1)
-	end
-end
-
----Lets go of the stubs no unvouched record comes before any more.
-function private.DropStubs(unvouched)
-	for origin, chain in pairs(Wanted.db.chains) do
-		if type(chain.stubs) == "table" then
-			local from = unvouched[origin]
-			for seq in pairs(chain.stubs) do
-				if not from or seq <= from then
-					chain.stubs[seq] = nil
-				end
-			end
-			if not next(chain.stubs) then
-				chain.stubs = nil
-			end
+---Whether a vouching walk may still need a record: one a walk could start from comes no more than VOUCH_WALK before it.
+---@param record table
+---@param fresh boolean?
+---@return boolean
+function private.NeededByWalk(record, fresh)
+	local seqs = type(record.seq) == "number" and private.WalkTargets(fresh)[record.origin]
+	for _, seq in ipairs(seqs or {}) do
+		if seq < record.seq and record.seq - seq <= VOUCH_WALK then
+			return true
 		end
 	end
+	return false
 end
 
 -- Players the addon knows (enemies seen, bounty targets) are kept while seen lately, then at most PLAYERS_MAX, the
@@ -300,7 +286,7 @@ end
 ---KEEP_SECONDS that no claim needs.
 function private.IsPrunable(record)
 	if not PRUNED_KINDS[record.kind] or type(record.t) ~= "number" or record.t >= GetServerTime() - KEEP_SECONDS
-		or private.IsOwnRelated(record) then
+		or private.IsOwnRelated(record) or private.NeededByWalk(record) then
 		return false
 	end
 	local data = type(record.data) == "table" and record.data or {}
@@ -930,7 +916,6 @@ function private.Insert(record, live, fromApp)
 		if private.IsPrunable(record) then
 			-- Already too old to keep (the app's catch-up, or a fill, of old records): the chain moves on over it, so
 			-- it's neither asked for nor sent again, but it isn't stored only to be pruned at the next login
-			private.StubOnArrival(chain, record)
 			return false, "pruned"
 		end
 	elseif record.seq <= chain.seq then
@@ -938,7 +923,6 @@ function private.Insert(record, live, fromApp)
 		-- comes back whenever a peer fills someone else's gap on the channel: it isn't taken in again.
 		local old = type(record.t) == "number" and record.t < GetServerTime() - KEEP_SECONDS
 		if private.IsPrunable(record) then
-			private.StubOnArrival(chain, record)
 			return false, "pruned"
 		elseif old then
 			Wanted:Log("Store: record %s is from before %s's chain was pruned or skipped; kept", tostring(record.id), tostring(record.origin))
@@ -950,6 +934,10 @@ function private.Insert(record, live, fromApp)
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record
+	if AUTHORITY_KINDS[record.kind] then
+		-- A walk may start from it: the records after it are kept from now (NeededByWalk)
+		private.walkTargets = nil
+	end
 	private.AddToIndex(record)
 	private.Notify(record, false)
 	return true
@@ -1054,8 +1042,6 @@ function Store:IsTrusted(record)
 	return record.origin == private.origin or record.live == true or record.app == true or Store:IsTest(record)
 end
 
--- How far along an origin's chain IsVouched looks for a trusted record
-local VOUCH_WALK = 200
 
 ---Whether a record can be taken as its origin's word: trusted (Store:IsTrusted), or followed in its chain by
 ---records held, each naming the one before by its strong hash (data.p2, Store:StrongLink), up to one that is trusted. A record its origin later built on
@@ -1075,30 +1061,20 @@ function Store:IsVouched(record)
 		return false
 	end
 	local records, origin = Wanted.db.records, record.origin
-	local chain = Wanted.db.chains[origin]
-	local stubs = chain and type(chain.stubs) == "table" and chain.stubs
 	local seq, strong = record.seq, Store:Strong(record)
 	for _ = 1, VOUCH_WALK do
 		seq = seq + 1
 		local after = records[origin..":"..format("%d", seq)]
-		if after then
-			-- Only a strong link (data.p2, from updated clients) counts: an Adler-32 prev can be forged to fit
-			if after.origin ~= origin or Store:StrongLink(after) ~= strong then
-				break
-			end
-			if after.vouched or Store:IsTrusted(after) then
-				record.vouched = true
-				return true
-			end
-			strong = Store:Strong(after)
-		else
-			-- A record pruned here: its stub keeps its strong hash and the link it carried (KeepStub)
-			local stub = stubs and stubs[seq]
-			if type(stub) ~= "string" or strsub(stub, 17) ~= strong then
-				break
-			end
-			strong = strsub(stub, 1, 16)
+		-- Only a strong link (data.p2, from updated clients) counts: an Adler-32 prev can be forged to fit. The records
+		-- crossed are kept from pruning while they may be needed (NeededByWalk)
+		if not after or after.origin ~= origin or Store:StrongLink(after) ~= strong then
+			break
 		end
+		if after.vouched or Store:IsTrusted(after) then
+			record.vouched = true
+			return true
+		end
+		strong = Store:Strong(after)
 	end
 	private.unvouched[record] = private.vouchGen
 	return false

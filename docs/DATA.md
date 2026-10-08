@@ -369,10 +369,10 @@ desktop app and the server keep only `kind`, `id`, `origin`, `seq`, `prev`, `t`,
 field; older clients hash `data` as it is, so they compute the same Adler-32 and pass it on. A `p2` that isn't 16 hex
 digits is no strong link (`Store:StrongLink`), never an error. The own chain keeps
 `lastStrong`, the strong hash of its last record, with `lastStrongOf`, the `lastHash` it belongs to (worked out again
-whenever they differ). A chain may keep `stubs = { [seq] = strong..p2 }` (32 hex digits:
-the record's strong hash and its `p2`) for records pruned after one of its origin's confirms, raises, withdrawals or
-payments that nothing has vouched for yet, so a chain walk can still cross the hole; they go once no such record comes
-before them. All optional new fields: no migration.
+whenever they differ). Kills, deaths and assists of an origin are kept from
+pruning (and taken in when they arrive already old) while one of its confirms, raises, withdrawals or payments that
+carries a strong link and that nothing has vouched for yet comes no more than 200 records before them, so a chain walk
+can cross them. All optional new fields: no migration.
 
 A received record's `vouched` flag (after 1.18.2) is local too: set once `Store:IsVouched` has found a trusted record
 of the same origin later in its chain, every record between held and each naming the one before by its strong hash

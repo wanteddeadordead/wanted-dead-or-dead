@@ -8418,28 +8418,58 @@ end)()
 	check(not listed, "and the claim itself is never read")
 	S:FreshStart()
 end)()
--- A relayed confirm stays vouchable after a record after it is pruned: pruning keeps the strong hashes the walk needs
+-- A relayed confirm stays vouchable when records after it are old enough to prune: they're kept (and taken in) while a
+-- record a walk could still vouch for comes shortly before them, so the walk needs no stand-ins a relayed copy could
+-- spoil; and no further than a walk goes
 ;(function()
 	local S, B = ns.Store, ns.Bounties
 	local function Signed(kind, origin, seq, prev, data, t, before)
 		data.p2 = before and S:Strong(before) or nil
 		return Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev, t = t, data = data })
 	end
-	S:FreshStart()
-	local old = clock - 5 * 86400
-	local bounty = Signed("bounty", "Prune Poster", 1, "0", { target = "Player-9-PRUNEB", targetName = "Prune Target", amount = 5000 }, old)
-	S:Merge(bounty, "Prune Poster")
-	local claim = Sealed({ kind = "claim", id = "Prune Hunter:1", origin = "Prune Hunter", seq = 1, prev = "0", t = old + 61, data = { bounty = bounty.id, kill = "Prune Hunter:0", victim = "Player-9-PRUNEB", killT = old + 60, zone = "Durotar" } })
-	S:Merge(claim, "Prune Hunter")
-	claim = S:Get(claim.id)
-	local confirm = Signed("confirm", "Prune Poster", 2, bounty.hash, { claim = claim.id }, old + 100, bounty)
+	local function Setup()
+		S:FreshStart()
+		local old = clock - 5 * 86400
+		local bounty = Signed("bounty", "Prune Poster", 1, "0", { target = "Player-9-PRUNEB", targetName = "Prune Target", amount = 5000 }, old)
+		S:Merge(bounty, "Prune Poster")
+		local claim = Sealed({ kind = "claim", id = "Prune Hunter:1", origin = "Prune Hunter", seq = 1, prev = "0", t = old + 61, data = { bounty = bounty.id, kill = "Prune Hunter:0", victim = "Player-9-PRUNEB", killT = old + 60, zone = "Durotar" } })
+		S:Merge(claim, "Prune Hunter")
+		local confirm = Signed("confirm", "Prune Poster", 2, bounty.hash, { claim = claim.id }, old + 100, bounty)
+		S:MergeRelayed(confirm)
+		return old, S:Get(claim.id), confirm
+	end
+	-- Held, then pruned: kept
+	local old, claim, confirm = Setup()
 	local death = Signed("death", "Prune Poster", 3, confirm.hash, { victim = "Player-9-ELSEWHERE", zone = "Barrens" }, old + 110, confirm)
-	S:MergeRelayed(confirm)
 	S:MergeRelayed(death)
 	S:Prune(clock)
-	check(S:Get(death.id) == nil, "the old death is pruned")
+	check(S:Get(death.id) ~= nil, "an old death right after a confirm that may yet be vouched for is kept")
 	S:Merge(Signed("pass", "Prune Poster", 4, death.hash, { bounty = "x:1" }, clock, death), "Prune Poster")
-	check(B:GetClaimLevel(claim) == 3, "the poster's later record still vouches for the confirm across the pruned death: "..B:GetClaimLevel(claim))
+	check(B:GetClaimLevel(claim) == 3, "the poster's later record vouches for the confirm through it: "..B:GetClaimLevel(claim))
+	-- Arriving already old, then a junk copy of it: the honest one is kept, the junk one can't take its place
+	old, claim, confirm = Setup()
+	death = Signed("death", "Prune Poster", 3, confirm.hash, { victim = "Player-9-ELSEWHERE", zone = "Barrens" }, old - 40 * 86400, confirm)
+	S:MergeRelayed(death)
+	S:MergeRelayed(Sealed({ kind = "death", id = "Prune Poster:3", origin = "Prune Poster", seq = 3, prev = confirm.hash, t = old - 40 * 86400, data = { victim = "Player-9-JUNK", zone = "Durotar", p2 = "0123456789abcdef" } }))
+	S:Merge(Signed("pass", "Prune Poster", 4, death.hash, { bounty = "q" }, clock, death), "Prune Poster")
+	check(B:GetClaimLevel(claim) == 3, "a junk copy of a record a walk needs doesn't spoil the vouch: "..B:GetClaimLevel(claim))
+	-- Only as far as a walk goes, and only after a record a walk could vouch for (one with a strong link)
+	old, claim, confirm = Setup()
+	local prev = confirm
+	for seq = 3, 260 do
+		local d = Signed("death", "Prune Poster", seq, prev.hash, { victim = "Player-9-FAR"..seq, zone = "Barrens" }, old + seq, prev)
+		S:MergeRelayed(d)
+		prev = d
+	end
+	S:Prune(clock)
+	check(S:Get("Prune Poster:200") ~= nil and S:Get("Prune Poster:250") == nil, "records past a walk's reach are pruned as usual")
+	S:FreshStart()
+	local oldConfirm = Sealed({ kind = "confirm", id = "Old Poster:1", origin = "Old Poster", seq = 1, prev = "0", t = clock - 5 * 86400, data = { claim = "x:1" } })
+	S:MergeRelayed(oldConfirm)
+	local oldDeath = Sealed({ kind = "death", id = "Old Poster:2", origin = "Old Poster", seq = 2, prev = oldConfirm.hash, t = clock - 5 * 86400, data = { victim = "Player-9-OLDV", zone = "Barrens" } })
+	S:MergeRelayed(oldDeath)
+	S:Prune(clock)
+	check(S:Get(oldDeath.id) == nil, "after a confirm no walk can vouch for (an old client's), nothing is kept")
 	S:FreshStart()
 end)()
 -- A skip is undone only by the origin's own word (heard from them, or from the app), and forgotten once the chain moves

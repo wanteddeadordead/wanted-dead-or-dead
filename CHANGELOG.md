@@ -48,6 +48,8 @@
 - One player can no longer pause everyone's sharing by claiming a made-up newer version: an update is only
   required once three players report it, and only for a version a couple of releases ahead. A lock from such a claim
   lifts when you load this version.
+- Only the poster can raise a bounty, and only the poster's own record of paying settles it: another player's raise
+  or payment record no longer changes someone else's bounty.
 
 ## [1.18.3] - 2026-10-08
 

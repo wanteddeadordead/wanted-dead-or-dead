@@ -166,12 +166,21 @@ function Bounties:GetAmount(bounty)
 		return 0
 	end
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if private.IsPostersWord(raise, bounty) then
 			amount = amount + raise.data.amount
 		end
 	end
 	-- At most what the game's money holds (a record from before the cap can say more)
 	return min(amount, Store.MAX_COPPER)
+end
+
+---Whether a record about a bounty (a raise, a withdrawal, a payment) is its poster's: anyone else's raise doesn't add
+---to what the poster owes, and anyone else's withdrawal or payment record doesn't end the bounty.
+---@param record table
+---@param bounty table
+---@return boolean
+function private.IsPostersWord(record, bounty)
+	return record.data.bounty == bounty.id and record.origin == bounty.origin
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -180,7 +189,7 @@ end
 function Bounties:GetExpiry(bounty)
 	local expiry = bounty.t + EXPIRY_SECONDS
 	for raise in Store:Iterator("raise") do
-		if raise.data.bounty == bounty.id then
+		if private.IsPostersWord(raise, bounty) then
 			expiry = max(expiry, raise.t + EXPIRY_SECONDS)
 		end
 	end
@@ -196,8 +205,9 @@ function Bounties:IsSettled(bounty)
 			return true
 		end
 	end
+	-- The poster's own record that they paid (its claim may not be here yet)
 	for payment in Store:Iterator("payment") do
-		if payment.data.bounty == bounty.id then
+		if private.IsPostersWord(payment, bounty) then
 			return true
 		end
 	end

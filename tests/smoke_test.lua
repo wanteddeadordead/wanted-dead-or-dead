@@ -7789,6 +7789,26 @@ end)()
 	ns.VERSION = realVersion
 	ns.db.requiredVersion, ns.newerVersion = nil, nil
 end)()
+-- A raise counts only from the bounty's poster, and only the poster's payment record settles it
+;(function()
+	local S, B = ns.Store, ns.Bounties
+	local function Live(kind, origin, data, t)
+		local seq = S:GetChainSeq(origin) + 1
+		local before = S:Get(origin..":"..(seq - 1))
+		local r = Sealed({ kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = before and before.hash or "0", t = t or clock, data = data })
+		S:Merge(r, origin)
+		return S:Get(r.id)
+	end
+	S:FreshStart()
+	local bounty = Live("bounty", "Raise Poster", { target = "Player-9-RAISE", targetName = "Raise Target", amount = 10000 }, clock - 60)
+	Live("raise", "Raise Mallory", { bounty = bounty.id, amount = 50000 }, clock - 30)
+	check(B:GetAmount(bounty) == 10000, "a raise by someone other than the poster doesn't add to the bounty")
+	Live("payment", "Raise Mallory", { claim = "x:1", bounty = bounty.id, to = "Someone", amount = 10000, side = "payer" }, clock - 20)
+	check(not B:IsSettled(bounty), "nor does someone else's payment record settle it")
+	Live("raise", "Raise Poster", { bounty = bounty.id, amount = 5000 }, clock - 10)
+	check(B:GetAmount(bounty) == 15000, "the poster's raise does")
+	S:FreshStart()
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

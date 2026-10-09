@@ -413,9 +413,15 @@ and are pinned:
 - **Key id:** base64 of the first 6 bytes of SHA-512(public key), 8 characters. Only a hint for finding the key.
 - **`data.sig`:** `"1" .. key id .. base64(signature)`, 95 characters, inside `data` (the server and app keep only kind,
   id, origin, seq, prev, t, data and hash).
-- **What's signed:** `"wanted-sig-v1\n" .. Canonical(record)` with `data.sig` left out (`Store:SigningMessage`), where
-  Canonical is the string the hash uses. The signature is added, then `hash` is made as before, so the Adler-32 covers
-  it and 1.18 clients hash, keep and relay signed records unchanged.
+- **What's signed** (`Store:SigningMessage`, plan section 17): `"wanted-sig-v1\n" .. E(kind) .. "\n" .. E(id) .. "\n" ..
+  E(prev) .. "\n" .. tostring(t)`, then for each data key but `sig`, in byte order, `"\n" .. E(key) .. "=" .. V(value)`.
+  E escapes `\` as `\\`, a newline as `\n` and `=` as `\=`; V is `"s" .. E(string)`, `"n" .. number` (`%.14g`, as Lua
+  5.1 writes it) or `"b1"`/`"b0"`. Any other value makes the record unsignable. So no two records sign the same, which
+  the plain canonical string (the hash's) can't promise. The signature is added, then `hash` is made as before
+  (Adler-32 over the canonical string, which covers `data.sig`), so 1.18 clients hash, keep and relay signed records
+  unchanged.
+- **Keys refused:** a public key that isn't a curve point, or is one of small order (`[8]A` is the identity; such a key
+  checks out for any message), never binds and never checks anything.
 - **Hello:** gains `k` (the sender's public key) and `g` (its GUID); only the one hello after `/wanted key reset` carries
   `kr = 1`. A key binds only from a hello heard on the channel (or guild channel) from its sender: never from a realm
   link's whisper, a fill or a record.

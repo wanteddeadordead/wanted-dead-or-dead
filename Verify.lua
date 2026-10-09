@@ -220,6 +220,11 @@ end
 
 ---Starts checking a record. Returns whether a check is running (not for a signature that can't be one).
 function private.Start(record, key, sig)
+	local message = Wanted.Store:SigningMessage(record)
+	if not message then
+		-- A field no record can carry (a stored one never has one): nothing to check
+		return false
+	end
 	local signature = Crypto:FromBase64(sig)
 	if not signature or #signature ~= 64 then
 		-- Its key id is a known key's, but what follows is no signature
@@ -228,7 +233,7 @@ function private.Start(record, key, sig)
 	end
 	private.running = record
 	local prepared = Wanted.KeyBook:GetPrepared(key.pk)
-	local job = Crypto:NewCheck(prepared or Crypto:FromBase64(key.pk), Wanted.Store:SigningMessage(record), signature)
+	local job = Crypto:NewCheck(prepared or Crypto:FromBase64(key.pk), message, signature)
 	Crypto:Check(job, function(ok)
 		private.running = nil
 		Wanted.KeyBook:KeepPrepared(key.pk, job.key)

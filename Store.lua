@@ -561,12 +561,48 @@ end
 -- Records
 -- ============================================================================
 
----What a record's signature covers: a version line, then its canonical string without data.sig. The hash is made
----after data.sig is added, so it covers the signature, and a record that keeps its hash keeps its signature.
+-- The signing message escapes what would let two records spell the same (plan section 17): a backslash, a newline
+-- and "=" in kind, id, prev and data keys, and in string values, which also carry their type
+local ESCAPES = { ["\\"] = "\\\\", ["\n"] = "\\n", ["="] = "\\=" }
+local function Escape(s)
+	return (gsub(s, "[\\\n=]", ESCAPES))
+end
+
+---What a record's signature covers: a version line, then kind, id, prev and t, then each data field but data.sig in key
+---order, as E(key) "=" a typed value (s and the escaped string, n and the number as Lua 5.1 writes it, b1 or b0). The
+---hash (Canonical) is made after data.sig is added, so it covers the signature. nil when the record can't be signed:
+---a field that isn't a string, number or boolean.
 ---@param record table
----@return string
+---@return string?
 function Store:SigningMessage(record)
-	return Wanted.Signing.MESSAGE_PREFIX..Canonical(record, "sig")
+	if type(record.kind) ~= "string" or type(record.id) ~= "string" or type(record.prev) ~= "string" or type(record.t) ~= "number"
+		or type(record.data) ~= "table" then
+		return nil
+	end
+	local keys = {}
+	for key in pairs(record.data) do
+		if type(key) ~= "string" then
+			return nil
+		elseif key ~= "sig" then
+			tinsert(keys, key)
+		end
+	end
+	sort(keys)
+	local parts = { Wanted.Signing.MESSAGE_PREFIX..Escape(record.kind), Escape(record.id), Escape(record.prev), tostring(record.t) }
+	for _, key in ipairs(keys) do
+		local value, typed = record.data[key], nil
+		if type(value) == "string" then
+			typed = "s"..Escape(value)
+		elseif type(value) == "number" then
+			typed = "n"..format("%.14g", value)
+		elseif type(value) == "boolean" then
+			typed = value and "b1" or "b0"
+		else
+			return nil
+		end
+		tinsert(parts, Escape(key).."="..typed)
+	end
+	return table.concat(parts, "\n")
 end
 
 ---Creates and stores a new record of this client's own. An authority record (Signing.KINDS) is signed. One asked for
@@ -610,8 +646,9 @@ function private.Create(kind, data, t)
 		data = data,
 	}
 	data.sig = nil
-	if Wanted.Signing.KINDS[kind] then
-		data.sig = Wanted.Signing:Sign(Store:SigningMessage(record))
+	local message = Wanted.Signing.KINDS[kind] and Store:SigningMessage(record)
+	if message then
+		data.sig = Wanted.Signing:Sign(message)
 		-- Our own signature needs no check
 		Wanted.db.sigChecked[record.id] = data.sig and true or nil
 	end

@@ -8657,8 +8657,28 @@ end)()
 	clock = clock + 60
 	local bounty = Store:NewRecord("bounty", { target = "Player-9-SIGNED", targetName = "Signed Target", amount = 1500 })
 	check(type(bounty.data.sig) == "string" and #bounty.data.sig == 95 and SV(bounty) == true, "a bounty is signed: "..tostring(bounty.data.sig))
-	local message = "wanted-sig-v1\nbounty\n"..bounty.id.."\n"..bounty.prev.."\n"..tostring(bounty.t).."\namount=1500\ntarget=Player-9-SIGNED\ntargetName=Signed Target"
-	check(Store:SigningMessage(bounty) == message, "it signs the canonical string without data.sig: "..Store:SigningMessage(bounty))
+	local message = "wanted-sig-v1\nbounty\n"..bounty.id.."\n"..bounty.prev.."\n"..tostring(bounty.t).."\namount=n1500\ntarget=sPlayer-9-SIGNED\ntargetName=sSigned Target"
+	check(Store:SigningMessage(bounty) == message, "it signs the pinned encoding without data.sig: "..Store:SigningMessage(bounty))
+	-- The encoding is one-to-one: what the plain canonical string can't tell apart signs differently (plan section 17)
+	local function Message(data, kind, id, prev)
+		return Store:SigningMessage({ kind = kind or "notice", id = id or "Victim:7", prev = prev or "0badc0de", t = 1760000000, data = data })
+	end
+	local pairsToTell = {
+		{ { poster = "Evil\npq=1" }, { poster = "Evil", pq = "1" }, "a newline and = in a value" },
+		{ { disputed = true }, { disputed = "true" }, "true and \"true\"" },
+		{ { amount = 100 }, { amount = "100" }, "100 and \"100\"" },
+		{ { ["a=b"] = "c" }, { a = "b=c" }, "= in a key" },
+		{ { note = "a\\n" }, { note = "a\n" }, "a backslash-n and a newline" },
+		{ { flag = false }, { flag = "false" }, "false and \"false\"" },
+	}
+	for _, case in ipairs(pairsToTell) do
+		local a, b = Message(case[1]), Message(case[2])
+		check(a and b and a ~= b, "the signed messages differ: "..case[3])
+	end
+	check(Message({}, "kind\n", "id") ~= Message({}, "kind", "\nid"), "a newline moved between kind and id")
+	check(Message({ note = "x=\\\n" }):find("\nnote=sx\\=\\\\\\n", 1, true), "escapes: \\ to \\\\, newline to \\n, = to \\=: "..Message({ note = "x=\\\n" }))
+	check(Message({ flag = true, off = false, n = 2.5 }):find("\nflag=b1\nn=n2.5\noff=b0", 1, true), "booleans b1 and b0, numbers n")
+	check(Message({ bad = {} }) == nil, "a table value: the record can't be signed")
 	check(C:Verify(C:FromBase64(k), message, C:FromBase64(bounty.data.sig:sub(10))) and bounty.data.sig:sub(2, 9) == C:KeyId(C:FromBase64(k)), "with this character's key")
 	local copy = { kind = bounty.kind, id = bounty.id, origin = bounty.origin, seq = bounty.seq, prev = bounty.prev, t = bounty.t, data = {} }
 	for key, value in pairs(bounty.data) do copy.data[key] = value end
@@ -9115,21 +9135,35 @@ end)()
 			check(SV(held) == true and not held.tampered, from..": "..held.id.." taken in and checked: "..tostring(SV(held)))
 		end
 	end
+	-- Keys of small order check out for any message: every encoding the server refuses is refused here, and never bound
+	local function CheckSmallOrder(list, from)
+		for i, k in ipairs(list) do
+			local pk = C:FromBase64(k)
+			check(pk and #pk == 32 and C:Prepare(pk) == nil, from..": a small-order key is refused: "..k)
+			KB:FromApp({ { n = "Small Order "..i, g = "Player-1-0A0B0C", k = k, t = clock } }, clock)
+			check(not KB:HasKeys("Small Order "..i), from..": and never bound: "..k)
+		end
+	end
+	CheckSmallOrder(Decode(Read(ADDON.."tests/fixtures/small_order_keys.json")), "small_order_keys.json")
 	local lua = dofile(ADDON.."tests/fixtures/signed_records.lua")
 	CheckKeys(lua.keys, "signed_records.lua")
 	CheckRecords(lua.records, "signed_records.lua")
 	local goKeys, goSigned = Decode(Read(ADDON.."tests/fixtures/go_keys.json")), Decode(Read(ADDON.."tests/fixtures/go_signed.json"))
 	CheckKeys(goKeys, "go_keys.json")
+	for _, g in ipairs(goSigned) do db.records[g.id] = nil end
+	CheckRecords(goSigned, "go_signed.json")
 	-- Byte for byte: Ed25519 is deterministic, so the same record and key give the same signature in both
 	for i, g in ipairs(goSigned) do
 		check(lua.records[i].id == g.id and lua.records[i].data.sig == g.data.sig and lua.records[i].hash == g.hash, "go_signed.json: "..g.id.." is signed the same here")
 	end
 	local dir = os.getenv("WANTED_FIXTURES")
 	if dir then
-		for _, name in ipairs({ "go_keys.json", "go_signed.json", "lua_signed.json" }) do
+		for _, name in ipairs({ "go_keys.json", "small_order_keys.json", "go_signed.json", "lua_signed.json" }) do
 			local text = Read(dir.."/"..name)
 			if text and name == "go_keys.json" then
 				CheckKeys(Decode(text), dir.."/"..name)
+			elseif text and name == "small_order_keys.json" then
+				CheckSmallOrder(Decode(text), dir.."/"..name)
 			elseif text then
 				local records = Decode(text)
 				for _, r in ipairs(records) do db.records[r.id] = nil end

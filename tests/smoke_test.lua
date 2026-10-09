@@ -8851,7 +8851,8 @@ end)()
 	-- Another character with the name: the earlier keys go
 	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
 	check(#Keys("Key Peer") == 1 and Keys("Key Peer")[1] == (Key(6)), "a new GUID under the name drops the old keys")
-	-- The app's list wins: a live key it doesn't list goes, and one heard live isn't taken while the list is fresh
+	-- The app's key joins the one heard live (a second PC without the app keeps its own key, 1.19.3); while the app's
+	-- list is fresh its word on who the character is wins: a key heard live under another GUID isn't taken
 	local k7, kid7 = Key(7)
 	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, addonKeys = {
 		{ n = "Key Peer", g = "Player-1-0E0E", k = k7, t = clock - 100 },
@@ -8860,16 +8861,18 @@ end)()
 	} } }
 	ns.Catchup:Import()
 	RunFrames()
-	check(#Keys("Key Peer") == 1 and KB:Find("Key Peer", kid7).src == "app", "the app's key replaces the one heard live")
+	check(#Keys("Key Peer") == 2 and KB:Find("Key Peer", kid7).src == "app" and Keys("Key Peer")[1] == (Key(6)), "the app's key joins the one heard live")
 	check(not KB:HasKeys("Key Bad") and not KB:HasKeys("Key Bad Two"), "a malformed app key is left out")
 	clock = clock + 60
-	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
-	check(#Keys("Key Peer") == 1, "a live key the app doesn't list isn't taken while its list is fresh")
+	Hello("Key Peer", { c = {}, k = (Key(11)), g = "Player-1-0D0D" })
+	check(#Keys("Key Peer") == 2 and KB:Find("Key Peer", kid7), "a live key under another character isn't taken while the app's list is fresh")
+	Hello("Key Peer", { c = {}, k = (Key(12)), g = "Player-1-0E0E" })
+	check(#Keys("Key Peer") == 3, "one under the app's character is")
 	Hello("Key Peer", { c = {}, k = k7, g = "Player-1-0E0E" })
 	check(KB:Find("Key Peer", kid7).lastHeard == clock and KB:Find("Key Peer", kid7).src == "app", "the app's key heard live stays the app's")
 	clock = clock + 4 * 86400
-	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
-	check(#Keys("Key Peer") == 2, "once the app's list is days old, a new live key is added again")
+	Hello("Key Peer", { c = {}, k = (Key(11)), g = "Player-1-0D0D" })
+	check(#Keys("Key Peer") == 1 and Keys("Key Peer")[1] == (Key(11)), "once the app's list is days old, a hello under another character replaces them")
 	-- The first key for an origin: what's held from it is marked pre
 	local base = { kind = "bounty", id = "Key Held:1", origin = "Key Held", seq = 1, prev = "0", t = clock, data = { target = "Player-9-X", targetName = "X", amount = 1000 } }
 	Store:Merge(Sealed(base), "Key Held")
@@ -8958,8 +8961,7 @@ end)()
 	prev = raise.hash
 	local amountBefore = B:GetAmount(early)
 	check(Store:MergeRelayed(raise) and not raise.tampered, "a relayed raise with the peer's key id but another's signature comes in")
-	check(B:GetAmount(early) == amountBefore + 500, "unchecked, it counts as today")
-	V:Want(raise, true)
+	check(B:GetAmount(early) == amountBefore and Store:Authority(raise) == "pending", "unchecked, it doesn't count yet (1.19.3)")
 	Drain()
 	check(SV(raise) == false and raise.tampered and V:Label(raise) == "Bad signature", "its signature fails: tampered")
 	check(B:GetAmount(early) == amountBefore and V:CountBad(early) == 1, "it isn't read, and the bounty counts one bad record")
@@ -8971,34 +8973,48 @@ end)()
 	V:Want(withdraw, true)
 	Drain()
 	check(withdraw.tampered and SV(withdraw) == false, "a signed record changed in transit is tampered")
-	-- A key id nobody knows: held, unchecked, counted as before; checked once that key is learned
+	-- A key id nobody knows: held, unchecked, pending (it counts for nothing); checked once that key is learned
 	local seed2 = C:SHA512("verify peer second pc"):sub(1, 32)
 	local pk2 = C:PublicKey(seed2)
 	local hunt = Next("hunt", { bounty = early.id }, seed2)
 	Store:MergeRelayed(hunt)
 	V:Want(hunt, true)
 	Drain()
-	check(SV(hunt) == nil and not hunt.tampered and #B:GetActiveHunters(early) == 1, "an unknown key id: unchecked, and it counts as today")
+	check(SV(hunt) == nil and not hunt.tampered and #B:GetActiveHunters(early) == 0, "an unknown key id: unchecked, and it doesn't count yet (1.19.3)")
 	Hello(origin, C:Base64(pk2), "Player-1-5A5A")
 	V:BackgroundStep()
 	Drain()
-	check(SV(hunt) == true, "checked once the second key is learned")
-	-- Unsigned records from a keyed origin count as they always did (1.19.0 changes no rules)
+	check(SV(hunt) == true and #B:GetActiveHunters(early) == 1, "checked once the second key is learned, and then it counts")
+	-- An unsigned record from a keyed origin counts only as their own word: heard from them, not passed on (1.19.3)
 	local unsigned = Next("raise", { bounty = early.id, amount = 700 })
 	Store:Merge(unsigned, origin)
 	V:BackgroundStep()
 	Drain()
-	check(SV(unsigned) == nil and not unsigned.tampered and B:GetAmount(early) == amountBefore + 700, "an unsigned raise from a keyed origin still counts")
-	-- An authority read asks for a check at once: the poster's confirm on a claim
+	check(SV(unsigned) == nil and not unsigned.tampered and B:GetAmount(early) == amountBefore + 700, "an unsigned raise heard from a keyed origin counts")
+	local relayed = Next("raise", { bounty = early.id, amount = 900 })
+	Store:MergeRelayed(relayed)
+	check(Store:Authority(relayed) == "no" and B:GetAmount(early) == amountBefore + 700, "one passed on by someone else doesn't")
+	-- An authority read asks for a check at once when the record waits on it; one heard from the poster counts already,
+	-- so it's checked in the background (1.19.3)
 	local claim = Sealed({ kind = "claim", id = "Verify Hunter:1", origin = "Verify Hunter", seq = 1, prev = "0", t = clock, data = { bounty = early.id, kill = "x:1", victim = "Player-9-V", killT = clock } })
 	Store:Merge(claim, "Verify Hunter")
 	local confirm = Next("confirm", { claim = claim.id }, seed)
 	db.settings.sigBackground = false
 	Store:Merge(confirm, origin)
 	check(SV(confirm) == nil, "not checked before anything reads it")
-	check(B:GetClaimLevel(claim) == 3, "the confirm counts while it isn't checked yet")
+	check(B:GetClaimLevel(claim) == 3, "the confirm heard from the poster counts while it isn't checked yet")
 	Drain()
-	check(SV(confirm) == true, "reading it got it checked")
+	check(SV(confirm) == nil, "reading it didn't check it first: it counts already")
+	db.settings.sigBackground = true
+	V:BackgroundStep()
+	Drain()
+	check(SV(confirm) == true, "the background checks it")
+	db.settings.sigBackground = false
+	local relayedConfirm = Next("confirm", { claim = claim.id, disputed = true }, seed)
+	Store:MergeRelayed(relayedConfirm)
+	check(B:GetClaimLevel(claim) == 3 and SV(relayedConfirm) == nil, "one passed on waits on its check")
+	Drain()
+	check(SV(relayedConfirm) == true and B:GetClaimLevel(claim) == 0, "reading it got it checked first, and then it decides")
 	-- A record about a bounty of ours is checked as it arrives; nothing is checked in a fight
 	local mine = Store:NewRecord("bounty", { target = "Player-9-MINE", targetName = "Mine", amount = 2000 })
 	local hunterSeed = C:SHA512("verify hunter"):sub(1, 32)
@@ -9755,6 +9771,182 @@ end)()
 	check(Store:Get(victim..":702").data.bounty == "real:702" and Store:Get(victim..":703").data.bounty == "held:703" and Store:Get(victim..":704").data.bounty == "held:704",
 		"a fill's challengers count against the sender's hourly allowance: three taken, the rest refused")
 	Store.MAX_VERIFIES_NOW_PER_MINUTE, Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realMax, realCap
+end)()
+-- 1.19.3: an authority read counts a record only when Store:Authority says ok. A record passed on under a player's name
+-- whose key is known has to be signed with it: an unsigned confirm relayed under the poster's name once confirmed a
+-- claim (AS-2), and the same shape withdrew, raised, hunted, claimed, paid or posted in their name. Records held before
+-- the key was learned, brought by the desktop app, or heard from the player themselves still count
+;(function()
+	local Store, C, B, V, KB, P, db = ns.Store, ns.Crypto, ns.Bounties, ns.Verify, ns.KeyBook, ns.Payments, ns.db
+	local poster, seed = "Keyed Poster", C:SHA512("keyed poster"):sub(1, 32)
+	local hunter, hunterSeed = "Keyed Hunter", C:SHA512("keyed hunter"):sub(1, 32)
+	local pk = C:PublicKey(seed)
+	local function Hello(who, k, g)
+		RunFrames()
+		Fire("CHAT_MSG_ADDON", "WNTD", "H:kp"..who:len()..":1/1:"..ns.Sync:Encode({ c = {}, k = k, g = g }), "CHANNEL", who, nil, nil, nil, ns.Sync:GetInfo().channelName)
+		RunFrames()
+	end
+	local function Drain()
+		for _ = 1, 30 do RunTimers() end
+	end
+	local chains = {}
+	-- The next record of an origin's chain, sealed, or signed with a seed
+	local function Next(origin, kind, data, by)
+		local chain = chains[origin] or { seq = 0, prev = "0" }
+		chains[origin] = chain
+		chain.seq = chain.seq + 1
+		local r = { kind = kind, id = origin..":"..chain.seq, origin = origin, seq = chain.seq, prev = chain.prev, t = clock, data = data }
+		if by then SignedBy(r, by) else Sealed(r) end
+		chain.prev = r.hash
+		return r
+	end
+	local function Found(kind, record)
+		for r in Store:Iterator(kind) do
+			if r == record then
+				return true
+			end
+		end
+		return false
+	end
+	clock = clock + 60
+	db.settings.sigBackground = false
+	-- No key known for either: today's rules, by a relay or live
+	local bounty = Next(poster, "bounty", { target = "Player-9-KP", targetName = "Keyed Target", amount = 5000 })
+	Store:MergeRelayed(bounty)
+	local claim = Next(hunter, "claim", { bounty = bounty.id, kill = "k:1", victim = "Player-9-KP", killT = clock })
+	Store:Merge(claim, hunter)
+	check(Store:Authority(bounty) == "ok" and Store:Authority(claim) == "ok" and #B:GetOpenForTarget("Player-9-KP") == 1 and B:GetClaimLevel(claim) == 1,
+		"an origin with no key known: today's rules")
+	Hello(poster, C:Base64(pk), "Player-1-8D8D")
+	Hello(hunter, C:Base64(C:PublicKey(hunterSeed)), "Player-1-8E8E")
+	check(KB:HasKeys(poster) and PRE(bounty) == true and Store:Authority(bounty) == "ok" and Store:Authority(claim) == "ok" and B:GetWinningClaim(bounty) == claim,
+		"held before the key was learned: grandfathered, they still count")
+	-- AS-2: an unsigned confirm relayed under the poster's name
+	local forged = Next(poster, "confirm", { claim = claim.id })
+	check(Store:MergeRelayed(forged) and not forged.tampered, "the forged confirm is held")
+	check(Store:Authority(forged) == "no", "unsigned, from a keyed origin, after the key, not the app's: no")
+	check(B:GetClaimLevel(claim) == 1, "AS-2: it doesn't confirm the claim")
+	check(not Found("confirm", forged), "and no walk of confirms finds it, as with an altered one")
+	-- The same forgery as a withdrawal, a raise, a payment, a hunt, a claim and a bounty
+	local amount = B:GetAmount(bounty)
+	local withdraw = Next(poster, "withdraw", { bounty = bounty.id })
+	local raise = Next(poster, "raise", { bounty = bounty.id, amount = 1000 })
+	local payment = Next(poster, "payment", { claim = claim.id, bounty = bounty.id, to = hunter, amount = 5000, side = "payer" })
+	local hunt = Next(hunter, "hunt", { bounty = bounty.id })
+	local forgedClaim = Next(hunter, "claim", { bounty = bounty.id, kill = "k:0", victim = "Player-9-KP", killT = clock - 600 })
+	local forgedBounty = Next(poster, "bounty", { target = "Player-9-FB", targetName = "Forged Target", amount = 9000 })
+	for _, r in ipairs({ withdraw, raise, payment, hunt, forgedClaim, forgedBounty }) do
+		Store:MergeRelayed(r)
+	end
+	check(not B:IsWithdrawn(bounty) and B:GetAmount(bounty) == amount and not P:GetForClaim(claim.id) and #B:GetActiveHunters(bounty) == 0
+		and B:GetWinningClaim(bounty) == claim and #B:GetOpenForTarget("Player-9-FB") == 0, "none of them counts")
+	local listed = false
+	for _, info in ipairs(ns.Model:GetBoard({ minAmount = 0 })) do
+		if info.id == forgedBounty.id then
+			listed = true
+		end
+	end
+	check(not listed and ns.Reputation:GetTally(poster).posted == 1, "the forged bounty isn't on the board and isn't the poster's")
+	-- A forged claim on one of our bounties doesn't keep us from withdrawing it
+	local myBounty = Store:NewRecord("bounty", { target = "Player-9-MB", targetName = "My Target", amount = 2000 })
+	Store:MergeRelayed(Next(hunter, "claim", { bounty = myBounty.id, kill = "k:2", victim = "Player-9-MB", killT = clock }))
+	check(B:Withdraw(myBounty) == true and B:IsWithdrawn(myBounty), "a forged claim in a keyed hunter's name doesn't block a withdrawal")
+	-- Brought by the desktop app (the server checked who sent it): it counts
+	local appConfirm = Next(poster, "confirm", { claim = claim.id, disputed = true })
+	Store:MergeRelayed(appConfirm, true)
+	check(Store:Authority(appConfirm) == "ok" and B:GetClaimLevel(claim) == 0, "one the app's catch-up brought counts")
+	db.records[appConfirm.id] = nil
+	-- Heard from the player themselves (a PC with no seed yet): their own word, unsigned
+	local live = Next(poster, "raise", { bounty = bounty.id, amount = 100 })
+	Store:Merge(live, poster)
+	check(Store:Authority(live) == "ok" and B:GetAmount(bounty) == amount + 100, "one heard from its origin counts")
+	-- Signed with the right key: pending until checked, then ok
+	local good = Next(poster, "confirm", { claim = claim.id }, seed)
+	Store:MergeRelayed(good)
+	check(Store:Authority(good) == "pending" and B:GetClaimLevel(claim) == 1 and V:Label(good) == "Not checked yet", "signed, not checked yet: pending, and it doesn't count yet")
+	Drain()
+	check(SV(good) == true and Store:Authority(good) == "ok" and B:GetClaimLevel(claim) == 3 and V:Label(good) == "Signed", "checked: ok, and the claim is confirmed")
+	-- Signed with another key under the poster's key id: a bad signature, no
+	local wrong = Next(poster, "confirm", { claim = claim.id, disputed = true }, C:SHA512("not the poster"):sub(1, 32))
+	wrong.data.sig = "1"..C:KeyId(pk)..wrong.data.sig:sub(10)
+	Sealed(wrong)
+	chains[poster].prev = wrong.hash
+	Store:MergeRelayed(wrong)
+	check(Store:Authority(wrong) == "pending" and B:GetClaimLevel(claim) == 3, "a signature under the key id waits to be checked")
+	Drain()
+	check(wrong.tampered and Store:Authority(wrong) == "no" and B:GetClaimLevel(claim) == 3 and V:Label(wrong) == "Bad signature", "the wrong key: no, and the dispute doesn't count")
+	-- A signed bounty: not open while pending, open once it checks out (the open bounties are worked out again)
+	local signedBounty = Next(poster, "bounty", { target = "Player-9-SB", targetName = "Signed Target", amount = 7000 }, seed)
+	Store:MergeRelayed(signedBounty)
+	check(#B:GetOpenForTarget("Player-9-SB") == 0, "a signed bounty isn't open before it's checked")
+	Drain()
+	check(SV(signedBounty) == true and #B:GetOpenForTarget("Player-9-SB") == 1, "it's open once it checks out")
+	check(V:Label(forged) == "Unsigned", "an unsigned record that doesn't count says so")
+	db.settings.sigBackground = true
+end)()
+-- 1.19.3: a record passed on in this client's own name is refused: this client holds everything it made, and one it
+-- doesn't hold would count as its own word (Store:Authority) and its chain would carry on from the forgery
+;(function()
+	local Store, B, db = ns.Store, ns.Bounties, ns.db
+	local me = Store:GetOrigin()
+	local mine = Store:NewRecord("bounty", { target = "Player-9-OWN", targetName = "Own Target", amount = 3000 })
+	local seq, hash = mine.seq, mine.hash
+	local forged = Sealed({ kind = "confirm", id = me..":"..(seq + 1), origin = me, seq = seq + 1, prev = hash, t = clock, data = { claim = "Hunter:1" } })
+	local isNew, why = Store:MergeRelayed(forged, nil, "Attacker")
+	check(isNew == false and why == "ours" and not Store:Get(forged.id), "a confirm passed on in our own name is refused: "..tostring(why))
+	local withdraw = Sealed({ kind = "withdraw", id = me..":"..(seq + 1), origin = me, seq = seq + 1, prev = hash, t = clock, data = { bounty = mine.id } })
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:own1:1/1:"..ns.Sync:Encode({ r = { withdraw } }), "CHANNEL", "Attacker", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(not Store:Get(withdraw.id) and not B:IsWithdrawn(mine), "and so is a withdrawal of our bounty by a fill")
+	local following = Store:NewRecord("raise", { bounty = mine.id, amount = 10 })
+	check(following.seq == seq + 1 and following.prev == hash, "our next record follows our own last one, not the forgery")
+	-- Our own records from the app's catch-up come in as before
+	local _, held = Store:MergeRelayed(Store:ForWire(mine), true)
+	check(held == "already held", "one of ours from the app isn't refused: "..tostring(held))
+end)()
+-- 1.19.3: a keyed player's second PC without the desktop app: its key heard live stays beside the one the app lists,
+-- so what it signs is checked and counts on app users too (it was dropped at every catch-up, and its records were
+-- pending for good)
+;(function()
+	local Store, C, B, KB, db = ns.Store, ns.Crypto, ns.Bounties, ns.KeyBook, ns.db
+	local origin = "Two PC Poster"
+	local seedA, seedB = C:SHA512("two pc app seed"):sub(1, 32), C:SHA512("two pc local seed"):sub(1, 32)
+	local kA, kB = C:Base64(C:PublicKey(seedA)), C:Base64(C:PublicKey(seedB))
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, addonKeys = { { n = origin, g = "Player-1-2B2B", k = kA, t = clock } } } }
+	ns.Catchup:Import()
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:2pc:1/1:"..ns.Sync:Encode({ c = {}, k = kB, g = "Player-1-2B2B" }), "CHANNEL", origin, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(#db.keys[origin].list == 2 and KB:Find(origin, C:KeyId(C:PublicKey(seedB))), "the second PC's key heard live stays beside the app's")
+	local bounty = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-2PC", targetName = "Two PC Target", amount = 1500 } }, seedB)
+	Store:MergeRelayed(bounty)
+	check(Store:Authority(bounty) == "pending", "a bounty signed on the second PC is pending")
+	for _ = 1, 30 do RunTimers() end
+	check(SV(bounty) == true and Store:Authority(bounty) == "ok" and #B:GetOpenForTarget("Player-9-2PC") == 1, "checked with that key, it counts")
+end)()
+-- 1.19.3: a check under way when its record is replaced (the origin's own word came in, Store.private.Insert) writes
+-- nothing: what it found was the old record's, and once marked the genuine record bad for good
+;(function()
+	local Store, C, db = ns.Store, ns.Crypto, ns.db
+	local origin, seed = "Race Poster", C:SHA512("race poster"):sub(1, 32)
+	local pk = C:PublicKey(seed)
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:race:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-3C3C" }), "CHANNEL", origin, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	db.settings.sigBackground = false
+	local forged = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-RC", targetName = "Forged", amount = 1 } }, C:SHA512("forger"):sub(1, 32))
+	forged.data.sig = "1"..C:KeyId(pk)..forged.data.sig:sub(10)
+	Sealed(forged)
+	Store:MergeRelayed(forged)
+	check(Store:Authority(forged) == "pending", "a forgery under the poster's key id waits to be checked")
+	ns:DoQueuedWork(1e9) -- one slice of the check
+	check(SV(forged) == nil and ns.Crypto:Busy(), "the check is under way")
+	local genuine = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-RC", targetName = "Genuine", amount = 2000 } }, seed)
+	check(Store:Merge(genuine, origin) and Store:Get(origin..":1") == genuine, "the genuine record heard live takes its place meanwhile")
+	for _ = 1, 30 do RunTimers() end
+	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
+	db.settings.sigBackground = true
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

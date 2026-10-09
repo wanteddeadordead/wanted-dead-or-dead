@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.19.3] - 2026-10-09
+
+- A record passed on by another player in the name of someone whose signing key you know counts only once its
+  signature checks out. A confirmation, withdrawal, raise, payment, hunt, claim or bounty forged in their name (unsigned,
+  or signed with another key) no longer confirms a claim, takes a bounty down, adds to it, pays it or appears on the
+  board. Their records heard from them directly, brought by the desktop app, or held before you learned their key still
+  count, as does everything from players with no key (1.18 and earlier, or never heard on the channel). One not checked
+  yet decides nothing until it is; the bounty tooltip says "Not checked yet" or "Unsigned" where it says "Signed".
+- For players on old versions: once others have learned your key, records made by a client of yours that can't sign
+  (1.18 or earlier, or 1.19 in its first minutes before its key is made) count for them only when heard from you
+  directly or brought by the desktop app. Update every PC you play on. Records you made before updating that reach a
+  player only after they learned your key (they reinstalled, or were away for part of your history) don't count for
+  them unless the desktop app brings them.
+- A second PC without the desktop app keeps its own signing key: the app's list of your keys no longer drops it at
+  every catch-up, so what that PC signs is checked and counts for app users too.
+
 ## [1.19.2] - 2026-10-09
 
 - A sighting shared by another Wanted user can no longer put a player on your Kill on Sight or under a guild bounty

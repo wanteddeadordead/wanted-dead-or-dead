@@ -92,7 +92,6 @@ function Payments:GetForClaim(claimId, posterOnly)
 		-- for "Mhureth Theolia:7515" says "Mhureth": it pays that claim too, if it came after it
 		local legacy = type(paid) == "string" and not strfind(paid, ":", 1, true)
 		if paid == claimId or legacy then
-			Wanted.Verify:Want(payment, true)
 			claim = claim or Store:Get(claimId) or false
 			if claim and private.Pays(payment, claim, legacy) then
 				if payment.data.side == "payer" then
@@ -111,12 +110,12 @@ function Payments:GetForClaim(claimId, posterOnly)
 	return nil
 end
 
----Whether a payment record pays a claim: at least what's owed, and between the claim's poster and hunter: the poster's
----record of a mail to the hunter, or the hunter's of a mail from the poster. A legacy one names the hunter's first
----name and came after the claim.
+---Whether a payment record pays a claim: its maker's word (Store:Authority), at least what's owed, and between the
+---claim's poster and hunter: the poster's record of a mail to the hunter, or the hunter's of a mail from the poster. A
+---legacy one names the hunter's first name and came after the claim.
 function private.Pays(payment, claim, legacy)
 	local bounty = Store:Get(claim.data.bounty)
-	if not bounty or (tonumber(payment.data.amount) or 0) < Bounties:GetOwed(claim) then
+	if not bounty or Store:Authority(payment) ~= "ok" or (tonumber(payment.data.amount) or 0) < Bounties:GetOwed(claim) then
 		return false
 	end
 	if legacy and (payment.data.claim ~= strmatch(claim.origin or "", "^(%S+)") or payment.t < claim.t) then

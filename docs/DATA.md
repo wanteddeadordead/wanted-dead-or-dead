@@ -76,8 +76,10 @@ resetAt, list = { { pk, kid, src, g, firstAt, lastHeard } } }`. `pk` is the key 
 (below), `src` `"live"` (from that player's own hello on the channel: the game stamps the sender) or `"app"` (from the
 app's catch-up `addonKeys`), `g` the GUID it's bound to. At most 4 keys an origin; a new one pushes out the least
 recently heard. A key heard under another GUID for the name drops the earlier GUID's keys. `appAt` is when the app last
-listed the origin's keys: its list wins (live keys it doesn't list are dropped, and for 3 days a live key it doesn't list
-isn't taken). `keyedAt` is when the origin's first key was learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
+listed the origin's keys: for 3 days after, a key heard live under another GUID than the app's isn't taken (the server's
+word on who the character is wins). A key heard live under the app's GUID stays beside the app's (a second PC without the
+app, from 1.19.3; before, the app's list dropped it at every catch-up). `keyedAt` is when the origin's first key was
+learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
 origins not heard for 60 days with no authority record held go, then the least recently heard until 2,000 remain (about
 0.5 MB at most). New table with a default: no migration.
 
@@ -454,9 +456,12 @@ peer sent), and incoming records drop them too. Records are sent with their own 
 origin, seq, prev, t, data, hash), never this client's local flags (`live`, `app`, `tampered`, `brokenChain`, `test`).
 Checks run only out of combat, a slice a frame, first for records something reads or shows (an authority decision, the
 board, a bounty's page, a record about a bounty the player posted, hunts or claimed) and otherwise one a second in the
-background. 1.19.0 changes no counting rules beyond a failed signature: unsigned records, and signed ones not checked
-yet or signed by a key not known, count as before. A later release is planned to stop counting unsigned or unchecked
-authority records from origins with a known key (except those in `sigPre`).
+background. 1.19.0 to 1.19.2 changed no counting rules beyond a failed signature. From 1.19.3 an authority read counts
+a record only when `Store:Authority` says ok: this client's own, or its signature checked and good, or its origin's word
+some other way (heard from them live, brought by the app's catch-up, or in `sigPre`), or no key known for the origin
+(today's rules). One passed on by another player in a keyed origin's name is pending while signed and not checked yet
+(it decides nothing, and is checked next) and never counts while unsigned; walks by kind (`Store:Iterator`) leave those
+out as they do altered ones. No layout change: nothing new is saved.
 
 ## Fresh start (development builds)
 

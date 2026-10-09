@@ -17,8 +17,9 @@ KeyBook.MAX_KEYS = 4
 -- MAX_ORIGINS remain (about 0.5 MB at most)
 local KEEP_SECONDS = 60 * 24 * 60 * 60
 KeyBook.MAX_ORIGINS = 2000
--- While the app's list for an origin is this fresh, a key heard live that isn't on it isn't taken: the server's word
--- wins over a hello's
+-- While the app's list for an origin is this fresh, a key heard live under another character than the app's isn't
+-- taken: the server's word on who the character is wins over a hello's. A key heard live under the same character (a
+-- second PC without the app) stays beside the app's: a record signed on either PC must check out everywhere
 local APP_FRESH_SECONDS = 3 * 24 * 60 * 60
 -- Prepared keys kept in memory this session (about 21 KB each)
 local PREPARED_MAX = 16
@@ -64,14 +65,16 @@ function KeyBook:FromHello(tbl, sender)
 end
 
 ---Keys from the desktop app's catch-up: { n = name, g = GUID, k = key, t = when the server took it } each. The server
----only takes a key from the app of the account its character is confirmed to, so these win over keys heard live.
+---only takes a key from the app of the account its character is confirmed to, so its word on which character has
+---the name wins over a hello's (Bind). Keys heard live under that character stay: the app uploads only the keys of
+---the PCs it runs on.
 ---@param list any
 ---@param at number when the app wrote the catch-up
 function KeyBook:FromApp(list, at)
 	if type(list) ~= "table" or type(at) ~= "number" then
 		return
 	end
-	local byOrigin = {}
+	local origins = {}
 	for i = 1, min(#list, KeyBook.MAX_ORIGINS) do
 		local entry = list[i]
 		local k = type(entry) == "table" and private.CleanKey(entry.k)
@@ -80,24 +83,16 @@ function KeyBook:FromApp(list, at)
 			local t = type(entry.t) == "number" and entry.t or at
 			-- A key the owner reset away before the server heard of the reset
 			if not (book and book.resetAt and t < book.resetAt) then
-				byOrigin[entry.n] = byOrigin[entry.n] or {}
-				byOrigin[entry.n][k] = true
+				origins[entry.n] = true
 				private.Bind(entry.n, k, entry.g, "app", at)
 			end
 		end
 	end
-	-- The app's word wins: keys heard live that it doesn't list go
-	for origin, listed in pairs(byOrigin) do
+	-- When the app last listed each origin's keys (Bind)
+	for origin in pairs(origins) do
 		local book = Wanted.db.keys[origin]
 		if book then
 			book.appAt = max(book.appAt or 0, at)
-			for i = #book.list, 1, -1 do
-				local key = book.list[i]
-				if not listed[key.pk] and key.src ~= "app" then
-					Wanted:Log("KeyBook: %s's key %s isn't the app's; dropped", origin, tostring(key.kid))
-					tremove(book.list, i)
-				end
-			end
 		end
 	end
 end
@@ -118,7 +113,14 @@ function private.Bind(origin, k, guid, src, at)
 		Wanted:Log("!! KeyBook: %s's key is one of small order; not taken", origin)
 		return
 	end
-	-- Another character took the name: the keys of the one before go
+	-- Another character took the name: the keys of the one before go. Not on a hello's word while the app's list is
+	-- fresh and says the name is the app's character: the server's word on who the character is wins
+	for _, key in ipairs(book.list) do
+		if key.g ~= guid and key.src == "app" and src == "live" and now - (book.appAt or 0) < APP_FRESH_SECONDS then
+			Wanted:Log("KeyBook: %s's key heard live is under another character than the app's; not taken", origin)
+			return
+		end
+	end
 	for i = #book.list, 1, -1 do
 		if book.list[i].g ~= guid then
 			Wanted:Log("KeyBook: %s is another character now; its earlier keys dropped", origin)
@@ -133,10 +135,6 @@ function private.Bind(origin, k, guid, src, at)
 			end
 			return
 		end
-	end
-	if src == "live" and book.appAt and now - book.appAt < APP_FRESH_SECONDS then
-		Wanted:Log("KeyBook: %s's key heard live isn't the one the app gave; not taken", origin)
-		return
 	end
 	if #book.list >= KeyBook.MAX_KEYS then
 		local oldest = 1

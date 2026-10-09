@@ -1,7 +1,7 @@
 -- Wanted: checking other players' signatures. A signed record from an origin whose key is known is checked once and
 -- what was found is kept (WantedDB.sigChecked[id]: true or false). A bad signature from a known key marks it tampered, so it's never
--- read, like a record altered in transit. Nothing else changes in 1.19.0: unsigned records, and signed ones not
--- checked yet, count as they always did.
+-- read, like a record altered in transit. From 1.19.3 an authority record passed on in a keyed player's name counts
+-- only once its signature checks out (Store:Authority); until then it decides nothing.
 -- A check takes about 23 ms in the game, so it's done only when wanted, a slice a frame (Crypto:Check), never in a
 -- fight: first the records something is reading or showing (on demand), then, one a second, the rest held (in the
 -- background, which can be turned off in the settings).
@@ -332,21 +332,43 @@ function private.FinishChallenger(record, key, ok)
 	Wanted:Log("!! Verify: %s record %s offered for a held one has a bad signature for %s's key %s; dropped", tostring(record.kind), tostring(record.id), tostring(record.origin), tostring(key.kid))
 end
 
----Keeps what a check found (sigChecked). A bad signature from a known key: someone forged or changed it, so it's
----tampered, never read.
+---Keeps what a check found (sigChecked). A good signature: the record counts from now (Store:Authority), so what rests
+---on it is worked out again. A bad signature from a known key: someone forged or changed it, so it's tampered, never
+---read.
 function private.Finish(record, key, ok)
+	if Wanted.Store:Get(record.id) ~= record then
+		-- Replaced while it was being checked (its origin's own word came in, Store.private.Insert): what was found is
+		-- the old record's, not the one held now
+		return
+	end
 	private.checked = private.checked + 1
 	Wanted.db.sigChecked[record.id] = ok == true
 	if ok == true then
+		Wanted.Bounties:OnVerified(record)
+		private.RefreshSoon()
 		return
 	end
 	private.bad = private.bad + 1
 	record.tampered = true
 	Wanted:Log("!! Verify: %s record %s has a bad signature for %s's key %s; kept out of sight", tostring(record.kind), tostring(record.id), tostring(record.origin), tostring(key.kid))
 	Wanted.Bounties:ForgetOpen()
-	if Wanted.UI and Wanted.UI.Refresh then
-		Wanted.UI:Refresh()
+	private.RefreshSoon()
+end
+
+-- The window is refreshed this long after a check changed what counts: a backlog checks a record every few frames,
+-- and each refresh rebuilds the page shown
+local REFRESH_AFTER_SECONDS = 0.5
+
+---Refreshes the window once, after the checks under way settle (nothing while it's closed: UI:Refresh).
+function private.RefreshSoon()
+	if private.refreshDue or not (Wanted.UI and Wanted.UI.Refresh) then
+		return
 	end
+	private.refreshDue = true
+	C_Timer.After(REFRESH_AFTER_SECONDS, function()
+		private.refreshDue = nil
+		Wanted.UI:Refresh()
+	end)
 end
 
 
@@ -355,8 +377,9 @@ end
 -- Reading the results
 -- ============================================================================
 
----What's known of a record's signature, for its details: "Signed" (checked, or our own), "Bad signature", or nil
----(unsigned, or not checked yet).
+---What's known of a record's signature, for its details: "Signed" (checked, or our own), "Bad signature", and for
+---one in a keyed player's name that isn't their word yet (Store:Authority) "Not checked yet" or "Unsigned"; nil when
+---nothing is known and nothing rests on it (unsigned from a player with no key, or not checked yet but theirs).
 ---@param record table?
 ---@return string?
 function Verify:Label(record)
@@ -368,6 +391,12 @@ function Verify:Label(record)
 		return "Signed"
 	elseif checked == false then
 		return "Bad signature"
+	end
+	local authority = Wanted.Store:Authority(record)
+	if authority == "pending" then
+		return "Not checked yet"
+	elseif authority == "no" then
+		return "Unsigned"
 	end
 	return nil
 end

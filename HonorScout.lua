@@ -11,6 +11,7 @@ local private = {
 	-- else started one since, so ours is no longer the game's to let go)
 	asking = false, -- while our own SetAchievementComparisonUnit runs
 	lastAt = -math.huge, -- GetTime() of the last comparison asked for
+	muted = nil, -- the achievement window's comparison panel, while it isn't hearing answers (MutePanel)
 }
 local HK_STATISTIC = 588 -- "Total Honorable Kills"
 local RECHECK_SECONDS = 6 * 60 * 60
@@ -41,6 +42,7 @@ function HonorScout:OnEnable()
 	pcall(hooksecurefunc, "SetAchievementComparisonUnit", function()
 		if private.pending and not private.asking then
 			private.pending.taken = true
+			private.UnmutePanel(true)
 		end
 	end)
 end
@@ -87,10 +89,12 @@ function private.Consider(unit)
 	if not private.Readable(name) or not private.Readable(surname) or not private.Readable(faction) or type(name) ~= "string" then
 		return
 	end
+	private.MutePanel()
 	private.asking = true
 	local asked = pcall(SetAchievementComparisonUnit, unit)
 	private.asking = false
 	if not asked then
+		private.UnmutePanel()
 		return
 	end
 	local pending = { guid = guid, name = (type(surname) == "string" and surname ~= "") and (name.." "..surname) or name,
@@ -122,11 +126,41 @@ end
 function private.Done()
 	local pending = private.pending
 	private.pending = nil
+	private.UnmutePanel()
 	if pending and pending.taken or (AchievementFrame and AchievementFrame:IsShown()) then
 		return
 	end
 	if ClearAchievementComparisonUnit then
 		pcall(ClearAchievementComparisonUnit)
+	end
+end
+
+---Stops the achievement window's comparison panel hearing our answer while it's closed. Blizzard's panel registers for
+---INSPECT_ACHIEVEMENT_READY when it loads, not when it's shown, and errors on an answer it didn't ask for (no category
+---chosen: GetCategoryNumAchievements usage error), so once the window has been loaded each of our questions broke it.
+function private.MutePanel()
+	local panel = AchievementFrameComparison
+	if panel and not private.muted and not panel:IsShown() then
+		panel:UnregisterEvent("INSPECT_ACHIEVEMENT_READY")
+		private.muted = panel
+	end
+end
+
+---Gives the panel its answers back (only if we took them away), next frame: not while the answer it shouldn't hear
+---is still being handed out. now: the player's own comparison took over, so its answer must reach the panel.
+---@param now boolean?
+function private.UnmutePanel(now)
+	local panel = private.muted
+	if panel and now then
+		private.muted = nil
+		panel:RegisterEvent("INSPECT_ACHIEVEMENT_READY")
+	elseif panel then
+		private.muted = nil
+		C_Timer.After(0, function()
+			if not private.muted then
+				panel:RegisterEvent("INSPECT_ACHIEVEMENT_READY")
+			end
+		end)
 	end
 end
 

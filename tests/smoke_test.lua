@@ -8663,6 +8663,118 @@ end)()
 	check(Store:Get(claimed.id) and Store:Get(claimed.id).sv == nil and Store:Get(claimed.id).pre == nil, "sv and pre from a peer are dropped")
 	WantedAppSeed = nil
 end)()
+-- Signing (1.19.0), the key book: a key binds only from its owner's hello on the channel or from the app's catch-up,
+-- at most four per player, the app's list wins, a reset hello keeps only the new key, and the book is pruned
+;(function()
+	local C, KB, Store, db = ns.Crypto, ns.KeyBook, ns.Store, ns.db
+	local function Key(n)
+		local seed = C:SHA512("test peer key "..n):sub(1, 32)
+		local pk = C:PublicKey(seed)
+		return C:Base64(pk), C:KeyId(pk), seed
+	end
+	local helloId = 0
+	local function Hello(who, fields, chatType)
+		helloId = helloId + 1
+		RunFrames()
+		Fire("CHAT_MSG_ADDON", "WNTD", "H:k"..helloId..":1/1:"..ns.Sync:Encode(fields), chatType or "CHANNEL", who, nil, nil, nil, ns.Sync:GetInfo().channelName)
+		RunFrames()
+	end
+	local function Keys(origin)
+		local book = db.keys[origin]
+		local out = {}
+		for _, key in ipairs(book and book.list or {}) do out[#out + 1] = key.pk end
+		return out
+	end
+	local k1, kid1 = Key(1)
+	clock = clock + 60
+	Hello("Key Peer", { c = {}, k = k1, g = "Player-1-0A0A" })
+	local found = KB:Find("Key Peer", kid1)
+	check(found and found.pk == k1 and found.src == "live" and found.g == "Player-1-0A0A" and KB:HasKeys("Key Peer"), "a hello on the channel binds its sender's key")
+	clock = clock + 60
+	Hello("Key Peer", { c = {}, k = k1, g = "Player-1-0A0A" })
+	check(#Keys("Key Peer") == 1 and KB:Find("Key Peer", kid1).lastHeard == clock, "heard again: the same key, heard later")
+	-- Never from a whisper, a record or a fill, nor without a GUID or with a key that isn't one
+	Hello("Key Whisperer", { c = {}, k = k1, g = "Player-1-0B0B" }, "WHISPER")
+	Hello("Key No Guid", { c = {}, k = k1 })
+	Hello("Key Bad Guid", { c = {}, k = k1, g = "Creature-0-1" })
+	Hello("Key Bad Key", { c = {}, k = k1:sub(1, 42).."!", g = "Player-1-0C0C" })
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:kf1:1/1:"..ns.Sync:Encode({ r = { Sealed({ kind = "link", id = "Key Relayed:1", origin = "Key Relayed", seq = 1, prev = "0", t = clock, data = { k = k1, g = "Player-1-0D0D" } }) } }), "CHANNEL", "Key Filler", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	for _, who in ipairs({ "Key Whisperer", "Key No Guid", "Key Bad Guid", "Key Bad Key", "Key Relayed", "Key Filler" }) do
+		check(not KB:HasKeys(who), "no key bound for "..who)
+	end
+	-- At most four: the one heard least lately goes
+	for n = 2, 5 do
+		clock = clock + 60
+		Hello("Key Peer", { c = {}, k = (Key(n)), g = "Player-1-0A0A" })
+	end
+	local held = Keys("Key Peer")
+	check(#held == 4 and not KB:Find("Key Peer", kid1) and held[4] == (Key(5)), "four keys at most, the oldest heard dropped")
+	-- Another character with the name: the earlier keys go
+	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
+	check(#Keys("Key Peer") == 1 and Keys("Key Peer")[1] == (Key(6)), "a new GUID under the name drops the old keys")
+	-- The app's list wins: a live key it doesn't list goes, and one heard live isn't taken while the list is fresh
+	local k7, kid7 = Key(7)
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, addonKeys = {
+		{ n = "Key Peer", g = "Player-1-0E0E", k = k7, t = clock - 100 },
+		{ n = "Key Bad", g = "nope", k = k7 },
+		{ n = "Key Bad Two", g = "Player-1-0F0F", k = "short" },
+	} } }
+	ns.Catchup:Import()
+	RunFrames()
+	check(#Keys("Key Peer") == 1 and KB:Find("Key Peer", kid7).src == "app", "the app's key replaces the one heard live")
+	check(not KB:HasKeys("Key Bad") and not KB:HasKeys("Key Bad Two"), "a malformed app key is left out")
+	clock = clock + 60
+	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
+	check(#Keys("Key Peer") == 1, "a live key the app doesn't list isn't taken while its list is fresh")
+	Hello("Key Peer", { c = {}, k = k7, g = "Player-1-0E0E" })
+	check(KB:Find("Key Peer", kid7).lastHeard == clock and KB:Find("Key Peer", kid7).src == "app", "the app's key heard live stays the app's")
+	clock = clock + 4 * 86400
+	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
+	check(#Keys("Key Peer") == 2, "once the app's list is days old, a new live key is added again")
+	-- The first key for an origin: what's held from it is marked pre
+	local base = { kind = "bounty", id = "Key Held:1", origin = "Key Held", seq = 1, prev = "0", t = clock, data = { target = "Player-9-X", targetName = "X", amount = 1000 } }
+	Store:Merge(Sealed(base), "Key Held")
+	local heldKill = Sealed({ kind = "kill", id = "Key Held:2", origin = "Key Held", seq = 2, prev = base.hash, t = clock, data = { victim = "Player-9-X" } })
+	Store:Merge(heldKill, "Key Held")
+	local k8, kid8 = Key(8)
+	Hello("Key Held", { c = {}, k = k8, g = "Player-1-1A1A" })
+	check(Store:Get("Key Held:1").pre == true and Store:Get("Key Held:2").pre == nil and db.keys["Key Held"].keyedAt == clock, "authority records held before the first key are marked pre")
+	-- A reset hello: only the new key stays; what was checked stays checked; the app's old keys don't come back
+	Hello("Key Held", { c = {}, k = (Key(9)), g = "Player-1-1A1A" })
+	Store:Get("Key Held:1").sv = true
+	local k10, kid10 = Key(10)
+	clock = clock + 60
+	Hello("Key Held", { c = {}, k = k10, g = "Player-1-1A1A", kr = 1 })
+	check(#Keys("Key Held") == 1 and KB:Find("Key Held", kid10) and Store:Get("Key Held:1").sv == true, "a reset keeps only the new key, and records already checked")
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 10, records = {}, addonKeys = { { n = "Key Held", g = "Player-1-1A1A", k = k8, t = clock - 50 } } } }
+	ns.Catchup:Import()
+	check(#Keys("Key Held") == 1 and not KB:Find("Key Held", kid8), "a key the app had from before the reset isn't taken")
+	-- Our own hello echoed back binds nothing
+	Hello(Store:GetOrigin(), { c = {}, k = k10, g = "Player-1-ME" })
+	check(not KB:HasKeys(Store:GetOrigin()), "our own key isn't in the book")
+	-- Pruning: not heard for 60 days and nothing held from them, then the least recently heard past the cap
+	db.keys["Key Old"] = { list = { { pk = k1, kid = kid1, src = "live", g = "Player-1-2A2A", firstAt = 1, lastHeard = clock - 61 * 86400 } } }
+	db.keys["Key Old Held"] = { list = { { pk = k1, kid = kid1, src = "live", g = "Player-1-1A1A", firstAt = 1, lastHeard = clock - 61 * 86400 } } }
+	local oldHeld = Sealed({ kind = "confirm", id = "Key Old Held:1", origin = "Key Old Held", seq = 1, prev = "0", t = clock, data = { claim = "x:1" } })
+	Store:Merge(oldHeld, "Key Old Held")
+	db.keys["Key Empty"] = { list = {} }
+	KB:Prune(clock)
+	check(not db.keys["Key Old"] and db.keys["Key Old Held"] and not db.keys["Key Empty"] and db.keys["Key Peer"], "an origin unheard for 60 days goes unless an authority record of theirs is held")
+	local origins = KB:Count()
+	local cap = KB.MAX_ORIGINS
+	KB.MAX_ORIGINS = origins - 1
+	KB:Prune(clock)
+	check(KB:Count() == origins - 1 and not db.keys["Key Old Held"], "past the cap the least recently heard goes")
+	KB.MAX_ORIGINS = cap
+	-- Prepared keys: the 16 most recently used are kept
+	for n = 1, 17 do KB:KeepPrepared("key"..n, { n = n }) end
+	check(KB:GetPrepared("key1") == nil and KB:GetPrepared("key2").n == 2, "16 prepared keys at most, the least recently used goes")
+	KB:KeepPrepared("key18", { n = 18 })
+	check(KB:GetPrepared("key2") and KB:GetPrepared("key3") == nil, "using one keeps it")
+	WantedAppCatchup = nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -133,6 +133,7 @@ local DEFAULTS = {
 	enemyStats = {}, -- guid -> { wins, losses, detections, first, last }
 	-- This account's signing seed and its characters' public keys (Signing; docs/DATA.md)
 	signing = { pub = {} },
+	keys = {}, -- origin -> { keyedAt, appAt, resetAt, list = { { pk, kid, src, g, firstAt, lastHeard } } }: other players' keys (KeyBook)
 }
 
 local private = {

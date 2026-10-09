@@ -1794,6 +1794,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		return
 	end
 	if tag == TAG_HELLO or tag == TAG_HAVE then
+		-- The sender's signing key (1.19.0): a hello is the only message that teaches one, and only for its sender
+		if tag == TAG_HELLO then
+			Wanted.KeyBook:FromHello(tbl, sender)
+		end
 		if type(tbl.c) ~= "table" then
 			return
 		end

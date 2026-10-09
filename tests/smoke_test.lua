@@ -107,7 +107,16 @@ function Methods:GetEffectiveScale() return 1 end
 function Methods:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
 function Methods:SetFontString(fs) self._fs = fs end
 function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(self, "LeftButton") end end
-function Methods:RegisterEvent(e) registry[e] = registry[e] or {} table.insert(registry[e], self) end
+-- As the game's: registering twice is once, and unregistering stops the events
+function Methods:RegisterEvent(e)
+	registry[e] = registry[e] or {}
+	for _, f in ipairs(registry[e]) do if f == self then return end end
+	table.insert(registry[e], self)
+end
+function Methods:UnregisterEvent(e)
+	for i = #(registry[e] or {}), 1, -1 do if registry[e][i] == self then table.remove(registry[e], i) end end
+end
+function Methods:UnregisterAllEvents() for e in pairs(registry) do self:UnregisterEvent(e) end end
 function Methods:SetChecked(v) self._checked = v end
 function Methods:GetChecked() return self._checked end
 function Methods:SetAttribute(k, v) self._attrs = self._attrs or {} self._attrs[k] = v end
@@ -178,6 +187,7 @@ clock = 1790270000
 function GetServerTime() return clock end
 function GetTime() return clock end
 function debugprofilestop() return os.clock() * 1000 end
+function GetTimePreciseSec() return os.clock() end
 function UnitName(unit) if unit == "player" then return "Test", "Player" end return nil end
 function UnitFactionGroup(unit) if unit and enemyUnits[unit] then return enemyUnits[unit].faction or "Alliance" end return "Horde" end
 function UnitGUID(unit) if unit == "player" then return "Player-1-ME" end local e = enemyUnits[unit] return e and e.guid end
@@ -8471,6 +8481,93 @@ end)()
 	check(result == true, "it runs once the fight is over")
 	print(format("wanted smoke: crypto here (%s): SHA-512 of 128 bytes %.2f ms, key %.1f ms, sign %.1f ms, check %.1f ms, prepare a key %.2f ms, check with it %.1f ms; a check takes %d frames at the game's speed, the busiest %.2f ms",
 		_VERSION, costs.sha, costs.pk, costs.sign, costs.verify, costs.prepare, costs.prepared, frames, worst))
+end)()
+-- Signing (1.19.0), the keys: one account seed, the desktop app's or else one gathered from event times; a key per
+-- character from the seed and its GUID; nothing signed without a seed; /wanted key reset
+;(function()
+	local C, S, db = ns.Crypto, ns.Signing, ns.db
+	local mark = db.accountMark
+	local function Pool(n)
+		for _ = 1, n do Fire("CHAT_MSG_CHANNEL") end
+		for _ = 1, 40 do RunTimers() end
+	end
+	local function CharKey(seedHex, guid)
+		return C:Base64(C:PublicKey(C:SHA512("wanted-char-key-v1\n"..C:FromHex(seedHex).."\n"..guid):sub(1, 32)))
+	end
+	-- No seed: nothing signed, no key in the hello
+	S:Reset()
+	db.signing.resetPending = nil
+	check(not S:CanSign() and S:Sign("x") == nil and S:PublicKey() == nil and S:Source() == nil, "no seed: nothing is signed")
+	local fields = {}
+	S:AddToHello(fields)
+	check(fields.k == nil and fields.g == nil, "no key in the hello without a seed")
+	-- The local seed: 256 event times, then a seed and a key
+	Pool(255)
+	check(db.signing.seed == nil, "no seed before 256 event times")
+	Pool(1)
+	check(type(db.signing.seed) == "string" and #db.signing.seed == 64 and db.signing.source == "local" and S:Source() == "local", "a local seed after 256: "..tostring(db.signing.seed))
+	local k, kid = S:PublicKey()
+	check(k == CharKey(db.signing.seed, "Player-1-ME") and #k == 43 and kid == C:KeyId(C:FromBase64(k)), "this character's key comes from the seed and its GUID")
+	check(db.signing.pub["Test Player"] and db.signing.pub["Test Player"].k == k and db.signing.pub["Test Player"].g == "Player-1-ME", "its public key is saved for the app")
+	local sig = S:Sign("wanted-sig-v1\nhello")
+	check(#sig == 95 and sig:sub(1, 1) == "1" and sig:sub(2, 9) == kid and C:Verify(C:FromBase64(k), "wanted-sig-v1\nhello", C:FromBase64(sig:sub(10))), "data.sig: 1, the key id, the signature")
+	fields = {}
+	S:AddToHello(fields)
+	check(fields.k == k and fields.g == "Player-1-ME" and fields.kr == nil, "the hello carries the key and GUID")
+	-- The app's seed replaces the local one; the same seed always makes the same key, another GUID another key
+	local appSeed = string.rep("5a", 32)
+	WantedAppSeed = { [mark] = appSeed:upper() }
+	S:OnEnable()
+	RunFrames()
+	check(db.signing.seed == appSeed and S:Source() == "app" and S:PublicKey() == CharKey(appSeed, "Player-1-ME") and S:PublicKey() ~= k, "the app's seed replaces the local one")
+	check(CharKey(appSeed, "Player-1-ME") == CharKey(appSeed, "Player-1-ME") and CharKey(appSeed, "Player-1-OTHER") ~= CharKey(appSeed, "Player-1-ME"), "same seed, same key; another character, another key")
+	for _, bad in ipairs({ "xyz", string.rep("g", 64), string.rep("a", 63), 5 }) do
+		WantedAppSeed = { [mark] = bad }
+		S:OnEnable()
+		check(db.signing.seed == appSeed, "an app seed that isn't 64 hex digits is ignored: "..tostring(bad))
+	end
+	WantedAppSeed = { someOtherAccount = string.rep("11", 32) }
+	S:OnEnable()
+	check(db.signing.seed == appSeed, "another account's seed is ignored")
+	-- A failed self-test: nothing signed
+	C:RunSelfTest({ pk = string.rep("00", 32), msg = "", sig = string.rep("00", 64) })
+	RunTimers() RunTimers()
+	check(not S:CanSign() and S:Sign("x") == nil and S:PublicKey() == nil, "a failed self-test: nothing signed")
+	C:RunSelfTest({ pk = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", msg = "72", sig = "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00" })
+	RunTimers() RunTimers()
+	-- Nor in a fight
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(S:CanSign() and S:Sign("x") == nil, "nothing signed in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	-- /wanted key reset: the app's seed is dropped for good, a new one gathered, one hello says kr = 1
+	ns:RunCommand("key", "reset")
+	check(db.signing.seed == nil and db.signing.resetPending and db.signing.appDropped and S:Sign("x") == nil, "reset drops the seed")
+	WantedAppSeed = { [mark] = appSeed }
+	S:OnEnable()
+	check(db.signing.seed == nil, "the dropped app seed isn't taken again")
+	for i = #addonSent, 1, -1 do addonSent[i] = nil end
+	Pool(256)
+	RunTimers() RunTimers()
+	local newK = S:PublicKey()
+	check(db.signing.source == "local" and newK and newK ~= CharKey(appSeed, "Player-1-ME"), "a new local key after the reset")
+	local resetHello
+	for _, m in ipairs(Sent("CHANNEL")) do
+		if m.tag == "H" and m.tbl.kr == 1 then resetHello = m.tbl end
+	end
+	check(resetHello and resetHello.k == newK and resetHello.g == "Player-1-ME" and not db.signing.resetPending, "one hello with kr = 1 and the new key")
+	fields = {}
+	S:AddToHello(fields)
+	check(fields.k == newK and fields.kr == nil, "later hellos carry no kr")
+	-- A new app seed (the app made another) is taken
+	local appSeed2 = string.rep("7c", 32)
+	WantedAppSeed = { [mark] = appSeed2 }
+	S:OnEnable()
+	check(db.signing.seed == appSeed2 and S:Source() == "app", "a new app seed is taken after a reset")
+	ns:RunCommand("key", "")
+	WantedAppSeed = nil
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

@@ -22,6 +22,7 @@ Libs\LibSerialize\LibSerialize.lua
 
 Core.lua
 Crypto.lua
+Signing.lua
 Store.lua
 Recorder.lua
 Sync.lua

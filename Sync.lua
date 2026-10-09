@@ -1478,11 +1478,18 @@ function private.HelloFields()
 	if Wanted.BlizzRank then
 		fields.b, fields.bs = Wanted.BlizzRank:Mine()
 	end
+	-- This character's signing key and GUID (1.19.0); kr = 1 once after /wanted key reset
+	Wanted.Signing:AddToHello(fields)
 	return fields
 end
 
 function private.SendHello()
 	private.Send(TAG_HELLO, private.HelloFields())
+end
+
+---Says hello on the channel now (a new signing key after /wanted key reset).
+function Sync:SayHello()
+	private.SendHello()
 end
 
 -- Our new records go out together: a busy fight makes one every few seconds, and one message each hit the send

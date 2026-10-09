@@ -131,6 +131,8 @@ local DEFAULTS = {
 	posterShots = {}, -- { t, who, l, top, r, b }: poster pictures for the app to upload (Poster)
 	ignore = {}, -- guid -> { name, t }
 	enemyStats = {}, -- guid -> { wins, losses, detections, first, last }
+	-- This account's signing seed and its characters' public keys (Signing; docs/DATA.md)
+	signing = { pub = {} },
 }
 
 local private = {

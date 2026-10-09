@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-10-09
+
 - No more Lua errors from Blizzard's achievement code (GetCategoryNumAchievements) after opening the Legacy Challenges
   window: once it had been opened, each player Wanted's PvP rank scout looked up made its hidden comparison panel throw
   an error.

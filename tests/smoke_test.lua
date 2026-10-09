@@ -9585,6 +9585,21 @@ end)()
 	check(R:OnAd(ad("Near Leader", 1, clock + 60, { fw = 1 }), "Random Member") == true, "a shared-on copy of a raid heard from its leader is still taken")
 	ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realToast, realAd, realJoin
 end)()
+-- 1.19.2: a record replacing a held one of another kind is found by walks of its own kind at once (the index by kind
+-- listed the id under the old kind, so a real confirm replacing a forged hunt was invisible to every authority read
+-- until the next prune)
+;(function()
+	local Store = ns.Store
+	local victim = "Victim Kinds"
+	for _ in Store:Iterator("confirm") do end
+	check(Store:MergeRelayed(Sealed({ kind = "hunt", id = victim..":7", origin = victim, seq = 7, prev = "0", t = clock, data = { bounty = "Someone:1" } })), "a forged hunt holds the id")
+	local real = Sealed({ kind = "confirm", id = victim..":7", origin = victim, seq = 7, prev = "0", t = clock, data = { claim = "Hunter:3" } })
+	check(Store:Merge(real, victim) == true and Store:Get(victim..":7").kind == "confirm", "the real confirm replaces it")
+	local asConfirm, asHunt = false, false
+	for r in Store:Iterator("confirm") do if r.id == victim..":7" then asConfirm = true end end
+	for r in Store:Iterator("hunt") do if r.id == victim..":7" then asHunt = true end end
+	check(asConfirm and not asHunt, "and a walk of confirms finds it, a walk of hunts doesn't")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

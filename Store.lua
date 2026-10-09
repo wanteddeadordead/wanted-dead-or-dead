@@ -1001,6 +1001,9 @@ function private.Unhold(existing)
 	local db = Wanted.db
 	db.records[existing.id] = nil
 	db.sigChecked[existing.id], db.sigPre[existing.id] = nil, nil
+	-- The id is listed under the old record's kind: the index is built again on the next walk, so the newcomer is
+	-- found under its own (a rare path)
+	private.indexFor = nil
 	local chain = db.chains[existing.origin]
 	if chain and type(existing.seq) == "number" and chain.seq >= existing.seq then
 		local before = db.records[existing.origin..":"..(existing.seq - 1)]

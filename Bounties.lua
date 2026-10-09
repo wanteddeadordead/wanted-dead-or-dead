@@ -201,6 +201,19 @@ function private.IsPostersWord(record, bounty)
 	return false
 end
 
+---Whether one of our records of a kind is waiting for a fight to end to be signed (Store:NewRecord) and matches.
+---@param kind string
+---@param match fun(data: table): boolean
+---@return boolean
+function private.IsWaiting(kind, match)
+	for _, waiting in ipairs(Store:GetPending()) do
+		if waiting.kind == kind and match(waiting.data) then
+			return true
+		end
+	end
+	return false
+end
+
 ---Forgets which bounties are open, so the next look works it out again (a record held turned out forged).
 function Bounties:ForgetOpen()
 	private.openCache = nil
@@ -481,7 +494,7 @@ function Bounties:PostGuild(guild, faction, amount)
 	elseif amount > Store.MAX_COPPER then
 		return nil, "that's more than the game's money holds"
 	end
-	if Bounties:GetMyOpenGuild(guild) then
+	if Bounties:GetMyOpenGuild(guild) or private.IsWaiting("bounty", function(data) return data.guild == guild end) then
 		return nil, "you already have a bounty on <"..guild..">, raise it instead"
 	end
 	if faction and faction == UnitFactionGroup("player") then
@@ -508,7 +521,7 @@ function Bounties:Post(guid, name, amount)
 	elseif amount > Store.MAX_COPPER then
 		return nil, "that's more than the game's money holds"
 	end
-	if Bounties:GetMyOpen(guid) then
+	if Bounties:GetMyOpen(guid) or private.IsWaiting("bounty", function(data) return data.target == guid end) then
 		-- One bounty per poster per target; more gold goes onto the existing one
 		return nil, "you already have a bounty on "..(name or "them")..", raise it instead"
 	end
@@ -635,10 +648,8 @@ function private.FileClaim(bounty, kill)
 		end
 	end
 	-- Nor one waiting for the fight to end to be signed
-	for _, waiting in ipairs(Store:GetPending()) do
-		if waiting.kind == "claim" and waiting.data.bounty == bounty.id then
-			return nil
-		end
+	if private.IsWaiting("claim", function(data) return data.bounty == bounty.id end) then
+		return nil
 	end
 	return Store:NewRecord("claim", {
 		bounty = bounty.id,

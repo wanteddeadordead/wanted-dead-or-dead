@@ -9169,6 +9169,43 @@ end)()
 	check(table.concat(fields, ",") == "data,hash,id,kind,origin,prev,seq,t", "only the record's own fields go out: "..table.concat(fields, ","))
 	held.live, held.app, held.brokenChain, held.sv, held.pre = nil, nil, nil, nil, nil
 end)()
+-- Records waiting for a fight to end to be signed count for the checks that stop a second one: the same bounty
+-- notice twice, or the same bounty posted twice, in one fight make one record
+;(function()
+	local Store, B, db = ns.Store, ns.Bounties, ns.db
+	WantedAppSeed = { [db.accountMark] = string.rep("6d", 32) }
+	ns.Signing:OnEnable()
+	RunFrames()
+	check(ns.Signing:CanSign(), "a key, so records in a fight wait")
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	local notice = { b = "wDupe0001", g = "Player-1-0D0E0F", n = "Dupe Target", a = 4500, t = clock - 100 }
+	ns.Bridge:ReceiveNotice(notice)
+	ns.Bridge:ReceiveNotice(notice)
+	local first, firstErr = B:Post("Player-9-DUPE", "Dupe Poster Target", 2000)
+	local second, secondErr = B:Post("Player-9-DUPE", "Dupe Poster Target", 3000)
+	local guildFirst = B:PostGuild("Dupe Guild", nil, 2000)
+	local guildSecond, guildErr = B:PostGuild("Dupe Guild", nil, 2000)
+	check(first and first.pending and not second and secondErr and secondErr:find("already", 1, true), "a bounty posted twice in a fight: the second is refused: "..tostring(secondErr))
+	check(guildFirst and not guildSecond and guildErr and guildErr:find("already", 1, true), "the same on a guild: "..tostring(guildErr))
+	local waiting = 0
+	for _, w in ipairs(Store:GetPending()) do
+		if w.kind == "notice" and w.data.bounty == "wDupe0001" then waiting = waiting + 1 end
+	end
+	check(waiting == 1, "one notice waits, not two: "..waiting)
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	for _ = 1, 10 do RunTimers() end
+	local notices, bounties = 0, 0
+	for record in Store:Iterator("notice") do
+		if record.data.bounty == "wDupe0001" then notices = notices + 1 end
+	end
+	for record in Store:Iterator("bounty") do
+		if record.origin == Store:GetOrigin() and (record.data.target == "Player-9-DUPE" or record.data.guild == "Dupe Guild") then bounties = bounties + 1 end
+	end
+	check(notices == 1 and bounties == 2 and #Store:GetPending() == 0, "after the fight: one notice, one bounty each: "..notices.." "..bounties)
+	WantedAppSeed = nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -892,6 +892,16 @@ function private.Insert(record, live, fromApp)
 	-- What this client found checking a signature is kept outside the records (WantedDB.sigChecked, sigPre): a peer's
 	-- copy can't carry it in
 	record.sv, record.pre = nil, nil
+	local existing = db.records[record.id]
+	if existing and existing.hash == record.hash and not existing.test then
+		if live then
+			existing.live = true
+		end
+		if fromApp then
+			existing.app = true
+		end
+		return false, "already held"
+	end
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
 		return false, "test data"
 	end
@@ -905,17 +915,7 @@ function private.Insert(record, live, fromApp)
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
-	local existing = db.records[record.id]
 	if existing then
-		if existing.hash == record.hash and not existing.test then
-			if live then
-				existing.live = true
-			end
-			if fromApp then
-				existing.app = true
-			end
-			return false, "already held"
-		end
 		-- A different record under a held id. One relayed by another player could be made up to hold the id so the
 		-- origin's real record is never taken (nothing it decided would then count here): it gives way to that record
 		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,

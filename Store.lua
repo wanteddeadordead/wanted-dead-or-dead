@@ -1144,6 +1144,52 @@ function Store:IsTrusted(record)
 	return record.origin == private.origin or record.live == true or record.app == true or Store:IsTest(record)
 end
 
+---Whether an authority record (Signing.KINDS: who posted, raised, withdrew, hunted, claimed, confirmed, paid...) may
+---decide anything (1.19.3). The rule, in order:
+---"no" when it's altered (tampered, a bad signature among them): never read.
+---"ok" when it's this client's own, or test data, or not an authority kind at all.
+---"ok" when its signature was checked here and held (sigChecked); "no" when the check failed.
+---"ok" when it's its origin's own word some other way: heard from them live (the game stamped the sender), or brought
+---by the desktop app's catch-up (the server took it from the account it's confirmed to and leaves out what it found
+---forged); or it was held before this client learned the origin's first key (sigPre: grandfathered, since nothing
+---they made before they had a key could be signed); or no key is known for the origin at all (a 1.18 player, or one
+---never heard live: today's rules, which the reader applies).
+---Otherwise the origin has a key and the record was passed on by someone else: "pending" while it's signed and not
+---checked yet (it's queued to be checked next, and counts for nothing until then), "no" when it's unsigned (a forgery
+---in the origin's name, or a signature stripped off).
+---Readers call this instead of reading a record's origin alone (Bounties, Payments); walks of a kind (Store:Iterator)
+---leave out the "no" ones, as they do altered ones.
+---@param record table
+---@return string "ok" | "pending" | "no"
+function Store:Authority(record)
+	local answer = private.Authority(record)
+	if answer ~= "no" and Wanted.db.sigChecked[record.id] == nil and Wanted.Verify then
+		-- An authority read: a signature not checked yet is checked next (cheap when there's none)
+		Wanted.Verify:Want(record, true)
+	end
+	return answer
+end
+
+function private.Authority(record)
+	if record.tampered then
+		return "no"
+	end
+	if not Wanted.Signing.KINDS[record.kind] or record.origin == private.origin or record.test then
+		return "ok"
+	end
+	local db = Wanted.db
+	local checked = db.sigChecked[record.id]
+	if checked == true then
+		return "ok"
+	elseif checked == false then
+		return "no"
+	end
+	if record.live or record.app or db.sigPre[record.id] or not Wanted.KeyBook:HasKeys(record.origin) then
+		return "ok"
+	end
+	return type(record.data.sig) == "string" and "pending" or "no"
+end
+
 ---How many records held are flagged tampered, and how many brokenChain.
 ---@return number tampered
 ---@return number brokenChain
@@ -1272,8 +1318,9 @@ function private.AddToIndex(record)
 	private.NoteActive(record)
 end
 
----Iterates the records of one kind, unordered, leaving out records flagged tampered. It walks the ids as they were
----when it started, so records added meanwhile are left for the next walk.
+---Iterates the records of one kind, unordered, leaving out records flagged tampered and authority records that can't
+---count (Store:Authority "no"). It walks the ids as they were when it started, so records added meanwhile are left for
+---the next walk.
 ---@param kind string
 ---@return fun(): table?
 function Store:Iterator(kind)
@@ -1285,9 +1332,10 @@ function Store:Iterator(kind)
 		while i < n do
 			i = i + 1
 			local record = records[list[i]]
-			-- An altered record is kept (and synced) but never read. One with a broken chain can be innocent (a
-			-- reinstall, lost saved data): it's listed, but never witnesses a claim (Store:IsTrusted)
-			if record and record.kind == kind and not record.tampered then
+			-- An altered record is kept (and synced) but never read, and so is an unsigned one in a keyed player's
+			-- name. One with a broken chain can be innocent (a reinstall, lost saved data): it's listed, but never
+			-- witnesses a claim (Store:IsTrusted)
+			if record and record.kind == kind and not record.tampered and private.Authority(record) ~= "no" then
 				return record
 			end
 		end

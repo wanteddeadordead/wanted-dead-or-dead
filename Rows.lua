@@ -150,11 +150,12 @@ end
 -- Tooltip
 -- ============================================================================
 
----A tooltip line saying a record is signed, or its signature is bad (1.19.0), when that's known.
+---A tooltip line saying a record is signed, or its signature is bad (1.19.0), or that it doesn't count yet or at all
+---(1.19.3: not checked yet, or unsigned in a keyed player's name), when that's known.
 local function AddSignature(record)
 	local label = Wanted.Verify:Label(record)
 	if label then
-		local color = label == "Signed" and C.green or C.red
+		local color = label == "Signed" and C.green or label == "Bad signature" and C.red or C.muted
 		GameTooltip:AddDoubleLine(" ", label, 1, 1, 1, color[1], color[2], color[3])
 	end
 end

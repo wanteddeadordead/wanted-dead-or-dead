@@ -189,17 +189,13 @@ function Bounties:GetOwed(claim)
 end
 
 ---Whether a record about a bounty (a raise, a withdrawal, a payment) is its poster's: anyone else's raise doesn't add
----to what the poster owes, and anyone else's withdrawal or payment record doesn't end the bounty.
+---to what the poster owes, and anyone else's withdrawal or payment record doesn't end the bounty. One in the poster's
+---name that isn't their word (Store:Authority: unsigned though they sign, or not checked yet) doesn't count.
 ---@param record table
 ---@param bounty table
 ---@return boolean
 function private.IsPostersWord(record, bounty)
-	if record.data.bounty == bounty.id and record.origin == bounty.origin then
-		-- An authority read: its signature is checked next (1.19.0 counts it either way)
-		Wanted.Verify:Want(record, true)
-		return true
-	end
-	return false
+	return record.data.bounty == bounty.id and record.origin == bounty.origin and Store:Authority(record) == "ok"
 end
 
 ---Whether one of our records of a kind is waiting for a fight to end to be signed (Store:NewRecord) and matches.
@@ -218,6 +214,16 @@ end
 ---Forgets which bounties are open, so the next look works it out again (a record held turned out forged).
 function Bounties:ForgetOpen()
 	private.openCache = nil
+end
+
+---A record's signature checked out (Verify): it counts now (Store:Authority), so which bounties are open is worked out
+---again, and a bounty or a raise may put one of this client's kills inside a bounty (ClaimLate).
+---@param record table
+function Bounties:OnVerified(record)
+	private.openCache = nil
+	if record.kind == "bounty" or record.kind == "raise" then
+		private.OnBountyNews(record, false)
+	end
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -272,8 +278,7 @@ function Bounties:GetActiveHunters(bounty, at)
 	at = at or GetServerTime()
 	local latest = {}
 	for hunt in Store:Iterator("hunt") do
-		if hunt.data.bounty == bounty.id and hunt.t <= at then
-			Wanted.Verify:Want(hunt, true)
+		if hunt.data.bounty == bounty.id and hunt.t <= at and Store:Authority(hunt) == "ok" then
 			local previous = latest[hunt.origin]
 			if not previous or hunt.t > previous.t or (hunt.t == previous.t and hunt.seq > previous.seq) then
 				latest[hunt.origin] = hunt
@@ -348,11 +353,8 @@ end
 function private.WithdrawnAt(bounty)
 	local at = nil
 	for withdraw in Store:Iterator("withdraw") do
-		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin then
-			Wanted.Verify:Want(withdraw, true)
-			if (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
-				at = withdraw.t
-			end
+		if private.IsPostersWord(withdraw, bounty) and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
+			at = withdraw.t
 		end
 	end
 	return at
@@ -392,14 +394,14 @@ function Bounties:IsPassed(bounty)
 	return false
 end
 
----Iterates open bounties: not expired, not settled.
+---Iterates open bounties: the poster's word (Store:Authority), not expired, not settled.
 ---@return fun(): table?
 function Bounties:OpenIterator()
 	local now = GetServerTime()
 	local iterator = Store:Iterator("bounty")
 	return function()
 		local bounty = iterator()
-		while bounty and (Bounties:GetExpiry(bounty) <= now or Bounties:IsSettled(bounty) or Bounties:IsWithdrawn(bounty)) do
+		while bounty and (Store:Authority(bounty) ~= "ok" or Bounties:GetExpiry(bounty) <= now or Bounties:IsSettled(bounty) or Bounties:IsWithdrawn(bounty)) do
 			bounty = iterator()
 		end
 		return bounty
@@ -744,7 +746,7 @@ end
 ---@param bounty table
 ---@return table? claim
 function private.ClaimLate(bounty)
-	if bounty.origin == Store:GetOrigin() or Store:IsTest(bounty) or Bounties:IsSettled(bounty) then
+	if bounty.origin == Store:GetOrigin() or Store:IsTest(bounty) or Store:Authority(bounty) ~= "ok" or Bounties:IsSettled(bounty) then
 		return nil
 	end
 	local index = private.OwnKills()
@@ -919,13 +921,14 @@ end
 ---The claim that gets the bounty. Once the poster has paid (by their own record) or confirmed one, that one: their decision stands, and
 ---nobody else is owed for the same bounty. Otherwise the earliest kill among witnessed claims whose kill fell while
 ---the bounty was open (IsInWindow), and failing those (shown as unverified, owed nothing yet) among the rest. Every
----hunter can chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees).
+---hunter can chase a bounty; whoever got the kill first wins it (ties go to the lower id, so every client agrees). A
+---claim that isn't its hunter's word (Store:Authority) wins nothing.
 ---@param bounty table
 ---@return table? claim
 function Bounties:GetWinningClaim(bounty)
 	local paid, confirmed, witnessed, lone
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id then
+		if claim.data.bounty == bounty.id and Store:Authority(claim) == "ok" then
 			local level = Bounties:GetClaimLevel(claim)
 			-- Only the poster's own record of paying picks a claim: a hunter's record of being paid could be anyone's
 			if Wanted.Payments:GetForClaim(claim.id, true) then
@@ -979,14 +982,14 @@ end
 ---@return number
 function Bounties:GetClaimLevel(claim)
 	local bounty = Store:Get(claim.data.bounty)
-	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in
+	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in.
+	-- Only their word decides (Store:Authority): one in their name that isn't signed with their key, or not checked yet,
+	-- is no decision
 	local decision
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
-			Wanted.Verify:Want(confirm, true)
-			if not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq) then
-				decision = confirm
-			end
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin and Store:Authority(confirm) == "ok"
+			and (not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq)) then
+			decision = confirm
 		end
 	end
 	if decision then

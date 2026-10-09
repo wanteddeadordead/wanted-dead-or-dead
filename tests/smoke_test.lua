@@ -9620,6 +9620,27 @@ end)()
 	check(Store:MergeRelayed(SignedBy(Bounty(32, "Signed32"), seed)) == true and Store:Get(victim..":32").data.targetName == "Signed32", "the next minute it's checked")
 	Store.MAX_VERIFIES_NOW_PER_MINUTE, C.Verify = realMax, realVerify
 end)()
+-- 1.19.2: what the replace rule leaves alone: a held record whose signature this client checked (the origin's word
+-- as much as a live one: an origin can't rewrite its own history on peers that caught up from fills), and in the
+-- live world a record numbered in the beta (refused before anything held is touched)
+;(function()
+	local Store, db = ns.Store, ns.db
+	local origin = "Settled Origin"
+	Store:MergeRelayed(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "a:1" } }))
+	db.sigChecked[origin..":1"] = true
+	local isNew, why = Store:Merge(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "b:1" } }), origin)
+	check(isNew == false and why == "already held" and Store:Get(origin..":1").data.bounty == "a:1" and db.sigChecked[origin..":1"] == true,
+		"a held record whose signature checked out isn't replaced, not even by its origin's live one")
+	db.sigChecked[origin..":1"] = nil
+	ns.WORLD = "live"
+	local beta = Sealed({ kind = "hunt", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, prev = "0", t = clock, data = { bounty = "x:1" } })
+	db.records[beta.id] = beta
+	db.chains["Beta Guy"] = { seq = 5, lastHash = beta.hash }
+	isNew, why = Store:Merge(Sealed({ kind = "hunt", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, prev = "0", t = clock, data = { bounty = "y:1" } }), "Beta Guy")
+	check(isNew == false and why == "beta" and Store:Get("Beta Guy:5") == beta and db.chains["Beta Guy"].seq == 5, "a beta-numbered record in the live world is refused before anything held is touched: "..tostring(why))
+	ns.WORLD = "beta"
+	db.records[beta.id], db.chains["Beta Guy"] = nil, nil
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

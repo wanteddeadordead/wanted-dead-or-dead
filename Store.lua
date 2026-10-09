@@ -915,21 +915,23 @@ function private.Insert(record, live, fromApp)
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
-	if existing then
-		-- A different record under a held id. One relayed by another player could be made up to hold the id so the
-		-- origin's real record is never taken (nothing it decided would then count here): it gives way to that record
-		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,
-		-- once held, is never replaced.
-		if existing.test or Store:IsTrusted(existing) or record.tampered or not (live or fromApp or private.VerifiesNow(record)) then
-			return false, "already held"
-		end
-		Wanted:Log("!! Store: %s record %s held from a relay gives way to its origin's own", tostring(record.kind), tostring(record.id))
-		private.Unhold(existing)
-	end
 	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
 	-- beta build): it never comes in
 	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
 		return false, "beta"
+	end
+	if existing then
+		-- A different record under a held id. One relayed by another player could be made up to hold the id so the
+		-- origin's real record is never taken (nothing it decided would then count here): it gives way to that record
+		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,
+		-- once held (heard from them, or its signature checked here), is never replaced: not even by them, or an
+		-- origin could rewrite its own history on peers that caught up from fills.
+		if existing.test or Store:IsTrusted(existing) or db.sigChecked[existing.id] == true or record.tampered
+			or not (live or fromApp or private.VerifiesNow(record)) then
+			return false, "already held"
+		end
+		Wanted:Log("!! Store: %s record %s held from a relay gives way to its origin's own", tostring(record.kind), tostring(record.id))
+		private.Unhold(existing)
 	end
 	record.live = live or nil
 	record.app = fromApp or nil

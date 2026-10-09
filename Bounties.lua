@@ -193,7 +193,30 @@ end
 ---@param bounty table
 ---@return boolean
 function private.IsPostersWord(record, bounty)
-	return record.data.bounty == bounty.id and record.origin == bounty.origin
+	if record.data.bounty == bounty.id and record.origin == bounty.origin then
+		-- An authority read: its signature is checked next (1.19.0 counts it either way)
+		Wanted.Verify:Want(record, true)
+		return true
+	end
+	return false
+end
+
+---Whether one of our records of a kind is waiting for a fight to end to be signed (Store:NewRecord) and matches.
+---@param kind string
+---@param match fun(data: table): boolean
+---@return boolean
+function private.IsWaiting(kind, match)
+	for _, waiting in ipairs(Store:GetPending()) do
+		if waiting.kind == kind and match(waiting.data) then
+			return true
+		end
+	end
+	return false
+end
+
+---Forgets which bounties are open, so the next look works it out again (a record held turned out forged).
+function Bounties:ForgetOpen()
+	private.openCache = nil
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -249,6 +272,7 @@ function Bounties:GetActiveHunters(bounty, at)
 	local latest = {}
 	for hunt in Store:Iterator("hunt") do
 		if hunt.data.bounty == bounty.id and hunt.t <= at then
+			Wanted.Verify:Want(hunt, true)
 			local previous = latest[hunt.origin]
 			if not previous or hunt.t > previous.t or (hunt.t == previous.t and hunt.seq > previous.seq) then
 				latest[hunt.origin] = hunt
@@ -323,8 +347,11 @@ end
 function private.WithdrawnAt(bounty)
 	local at = nil
 	for withdraw in Store:Iterator("withdraw") do
-		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
-			at = withdraw.t
+		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin then
+			Wanted.Verify:Want(withdraw, true)
+			if (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
+				at = withdraw.t
+			end
 		end
 	end
 	return at
@@ -467,7 +494,7 @@ function Bounties:PostGuild(guild, faction, amount)
 	elseif amount > Store.MAX_COPPER then
 		return nil, "that's more than the game's money holds"
 	end
-	if Bounties:GetMyOpenGuild(guild) then
+	if Bounties:GetMyOpenGuild(guild) or private.IsWaiting("bounty", function(data) return data.guild == guild end) then
 		return nil, "you already have a bounty on <"..guild..">, raise it instead"
 	end
 	if faction and faction == UnitFactionGroup("player") then
@@ -494,7 +521,7 @@ function Bounties:Post(guid, name, amount)
 	elseif amount > Store.MAX_COPPER then
 		return nil, "that's more than the game's money holds"
 	end
-	if Bounties:GetMyOpen(guid) then
+	if Bounties:GetMyOpen(guid) or private.IsWaiting("bounty", function(data) return data.target == guid end) then
 		-- One bounty per poster per target; more gold goes onto the existing one
 		return nil, "you already have a bounty on "..(name or "them")..", raise it instead"
 	end
@@ -619,6 +646,10 @@ function private.FileClaim(bounty, kill)
 		if claim.data.bounty == bounty.id and claim.origin == me then
 			return nil
 		end
+	end
+	-- Nor one waiting for the fight to end to be signed
+	if private.IsWaiting("claim", function(data) return data.bounty == bounty.id end) then
+		return nil
 	end
 	return Store:NewRecord("claim", {
 		bounty = bounty.id,
@@ -949,9 +980,11 @@ function Bounties:GetClaimLevel(claim)
 	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in
 	local decision
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin
-			and (not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq)) then
-			decision = confirm
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
+			Wanted.Verify:Want(confirm, true)
+			if not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq) then
+				decision = confirm
+			end
 		end
 	end
 	if decision then

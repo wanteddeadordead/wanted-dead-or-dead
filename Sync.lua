@@ -1048,6 +1048,14 @@ function private.Send(tag, tbl, attempt, target)
 	end
 	-- Every message says which version sent it: the newest version wins (Core)
 	tbl.v = Wanted.VERSION
+	-- Records go out with their own fields only, never what this client worked out about them (1.19.0)
+	if (tag == TAG_LIVE or tag == TAG_FILL) and type(tbl.r) == "table" then
+		local wire = {}
+		for i, record in ipairs(tbl.r) do
+			wire[i] = type(record) == "table" and Store:ForWire(record) or record
+		end
+		tbl.r = wire
+	end
 	if not target and not isSighting and now < private.pausedUntil then
 		private.Drop("paused", 1)
 		return false
@@ -1478,11 +1486,21 @@ function private.HelloFields()
 	if Wanted.BlizzRank then
 		fields.b, fields.bs = Wanted.BlizzRank:Mine()
 	end
+	-- This character's signing key and GUID (1.19.0); kr = 1 once after /wanted key reset
+	Wanted.Signing:AddToHello(fields)
 	return fields
 end
 
 function private.SendHello()
-	private.Send(TAG_HELLO, private.HelloFields())
+	local fields = private.HelloFields()
+	if private.Send(TAG_HELLO, fields) and fields.kr then
+		Wanted.Signing:ResetSent()
+	end
+end
+
+---Says hello on the channel now (a new signing key after /wanted key reset).
+function Sync:SayHello()
+	private.SendHello()
 end
 
 -- Our new records go out together: a busy fight makes one every few seconds, and one message each hit the send
@@ -1787,6 +1805,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		return
 	end
 	if tag == TAG_HELLO or tag == TAG_HAVE then
+		-- The sender's signing key (1.19.0): a hello is the only message that teaches one, and only for its sender
+		if tag == TAG_HELLO then
+			Wanted.KeyBook:FromHello(tbl, sender)
+		end
 		if type(tbl.c) ~= "table" then
 			return
 		end

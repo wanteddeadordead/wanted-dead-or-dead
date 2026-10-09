@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-09
+
 - Signed records: your bounties, raises, withdrawals, hunts, passes, claims, confirmations, payments, marks, links and
   bounty notices carry a signature made with your character's own key, so nobody can forge them in your name when they
   pass them on. One made in a fight is signed once the fight is over. New files: quit and restart the game after

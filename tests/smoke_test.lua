@@ -9600,6 +9600,26 @@ end)()
 	for r in Store:Iterator("hunt") do if r.id == victim..":7" then asHunt = true end end
 	check(asConfirm and not asHunt, "and a walk of confirms finds it, a walk of hunts doesn't")
 end)()
+-- 1.19.2: a signature checked at once for a record that would replace a held one is budgeted a minute (a fill of 200
+-- records under held ids, each with a signature naming the origin's key, once meant 200 checks on the main thread)
+;(function()
+	local Store, C = ns.Store, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax, realVerify, verifies = Store.MAX_VERIFIES_NOW_PER_MINUTE, C.Verify, 0
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 2
+	C.Verify = function(...) verifies = verifies + 1 return realVerify(...) end
+	clock = clock + 60
+	local function Bounty(seq, targetName)
+		return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { target = "Player-9-"..targetName, targetName = targetName, amount = 1 } }
+	end
+	for seq = 30, 32 do Store:MergeRelayed(Sealed(Bounty(seq, "Held"..seq))) end
+	for seq = 30, 32 do Store:MergeRelayed(SignedBy(Bounty(seq, "Signed"..seq), seed)) end
+	check(Store:Get(victim..":30").data.targetName == "Signed30" and Store:Get(victim..":31").data.targetName == "Signed31" and Store:Get(victim..":32").data.targetName == "Held32" and verifies == 2,
+		"two signed challengers are checked and replace, the third keeps what's held: "..verifies.." checks")
+	clock = clock + 60
+	check(Store:MergeRelayed(SignedBy(Bounty(32, "Signed32"), seed)) == true and Store:Get(victim..":32").data.targetName == "Signed32", "the next minute it's checked")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE, C.Verify = realMax, realVerify
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

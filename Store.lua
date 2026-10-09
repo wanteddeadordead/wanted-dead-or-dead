@@ -976,8 +976,13 @@ function private.Insert(record, live, fromApp)
 	return true
 end
 
+-- Signatures checked at once (VerifiesNow) a minute: a check takes about 20 ms on the main thread, and a fill can
+-- carry 200 records under held ids, each with a signature that looks like the origin's
+Store.MAX_VERIFIES_NOW_PER_MINUTE = 5
+
 ---Whether a record's signature checks out with a key of its origin's, checked now (about 20 ms in the game): for
----the rare record that would replace a held one. Unsigned, no key for it, or the check not ready: no.
+---the rare record that would replace a held one. Unsigned, no key for it, the check not ready, or this minute's
+---checks used up: no (the origin's own live record, or the app's, still replaces without one).
 function private.VerifiesNow(record)
 	local Signing, KeyBook, Crypto = Wanted.Signing, Wanted.KeyBook, Wanted.Crypto
 	local sig = record.data.sig
@@ -991,6 +996,20 @@ function private.VerifiesNow(record)
 	if not signature or #signature ~= 64 then
 		return false
 	end
+	local minute = floor(GetTime() / 60)
+	local budget = private.verifiedNow
+	if not budget or budget.minute ~= minute then
+		budget = { minute = minute, count = 0 }
+		private.verifiedNow = budget
+	end
+	if budget.count >= Store.MAX_VERIFIES_NOW_PER_MINUTE then
+		if budget.count == Store.MAX_VERIFIES_NOW_PER_MINUTE then
+			budget.count = budget.count + 1
+			Wanted:Log("!! Store: over %d signatures to check at once this minute; the rest keep what's held", Store.MAX_VERIFIES_NOW_PER_MINUTE)
+		end
+		return false
+	end
+	budget.count = budget.count + 1
 	return Crypto:Verify(KeyBook:GetPrepared(key.pk) or Crypto:FromBase64(key.pk), message, signature) == true
 end
 

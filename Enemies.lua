@@ -1105,13 +1105,14 @@ function Enemies:OnSharedSighting(data, sender)
 	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") then
 		return
 	end
-	-- The name the game read on them here stands; a peer's is taken for a player the game never named (a peer could
-	-- otherwise rename one and hand their name to another, so a bounty typed by name lands on the wrong player)
-	local name = Store:GameName(data.g) or Store:CleanName(data.n)
+	-- The name the game read on them here stands, then the name already held; a peer's is taken only for a player
+	-- not named yet (a peer could otherwise rename one and hand their name to another, so a bounty typed by name lands
+	-- on the wrong player; two players under one name are refused instead, Store:FindPlayerByName)
+	local player = Store:GetPlayer(data.g)
+	local name = Store:GameName(data.g) or (player and player.name) or Store:CleanName(data.n)
 	if not name then
 		return
 	end
-	local player = Store:GetPlayer(data.g)
 	if player and player.faction == private.playerFaction then
 		return
 	end

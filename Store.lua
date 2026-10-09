@@ -57,6 +57,12 @@ function Store:OnLoad()
 	db.records = db.records or {} -- id -> record
 	db.chains = db.chains or {} -- origin -> { seq, lastHash }
 	db.players = db.players or {} -- guid -> { name, class, level, faction, lastSeen, zone, x, y }
+	-- A guild written by a peer's shared sighting before 1.19.2 may carry escape codes; it reaches chat (EnemyMenu)
+	for _, player in pairs(db.players) do
+		if type(player) == "table" and type(player.guild) == "string" then
+			player.guild = Store:CleanName(player.guild)
+		end
+	end
 	db.sightings = db.sightings or {} -- ring of { guid, zone, x, y, t }
 	db.sightingsPos = db.sightingsPos or 0
 	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)

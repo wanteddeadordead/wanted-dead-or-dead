@@ -9673,6 +9673,21 @@ end)()
 	line = LastPrinted("Deadcffff0000Redr")
 	check(line and not line:find("|cffff0000", 1, true), "/wanted log too: "..tostring(line))
 end)()
+-- 1.19.2: a guild a peer wrote into a saved player before this version is cleaned at load (it reaches the "Tell your
+-- party" chat line), and a shared sighting never renames a player already named, even one only peers named: the
+-- rename-and-reassign trick then leaves two players under one name, which a typed name refuses
+;(function()
+	local Store, Enemies = ns.Store, ns.Enemies
+	ns.db.players["Player-9-1E6AC7"] = { name = "Legacy Foe", faction = "Alliance", guild = "Old|TInterface\\Icons\\X:64|t Guild\n/run print(1)", lastSeen = clock }
+	Store:OnLoad()
+	check(ns.db.players["Player-9-1E6AC7"].guild == "OldTInterface\\Icons\\X:64t Guild/run print(1)", "a saved guild loses its escapes at load: "..tostring(ns.db.players["Player-9-1E6AC7"].guild))
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2E", n = "Rumour Two" }, "Some Friend")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2E", n = "Rumour Twoo" }, "Evil Doer")
+	check(Store:GetPlayer("Player-9-0A1B2E").name == "Rumour Two", "a peer can't rename a player another peer named")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2F", n = "Rumour Two" }, "Evil Doer")
+	local guid, _, why = Store:FindPlayerByName("Rumour Two")
+	check(guid == nil and why ~= nil, "so handing the name to another player leaves two, which a typed name refuses")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

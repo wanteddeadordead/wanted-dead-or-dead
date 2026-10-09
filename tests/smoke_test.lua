@@ -8851,7 +8851,8 @@ end)()
 	-- Another character with the name: the earlier keys go
 	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
 	check(#Keys("Key Peer") == 1 and Keys("Key Peer")[1] == (Key(6)), "a new GUID under the name drops the old keys")
-	-- The app's list wins: a live key it doesn't list goes, and one heard live isn't taken while the list is fresh
+	-- The app's key joins the one heard live (a second PC without the app keeps its own key, 1.19.3); while the app's
+	-- list is fresh its word on who the character is wins: a key heard live under another GUID isn't taken
 	local k7, kid7 = Key(7)
 	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, addonKeys = {
 		{ n = "Key Peer", g = "Player-1-0E0E", k = k7, t = clock - 100 },
@@ -8860,16 +8861,18 @@ end)()
 	} } }
 	ns.Catchup:Import()
 	RunFrames()
-	check(#Keys("Key Peer") == 1 and KB:Find("Key Peer", kid7).src == "app", "the app's key replaces the one heard live")
+	check(#Keys("Key Peer") == 2 and KB:Find("Key Peer", kid7).src == "app" and Keys("Key Peer")[1] == (Key(6)), "the app's key joins the one heard live")
 	check(not KB:HasKeys("Key Bad") and not KB:HasKeys("Key Bad Two"), "a malformed app key is left out")
 	clock = clock + 60
-	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
-	check(#Keys("Key Peer") == 1, "a live key the app doesn't list isn't taken while its list is fresh")
+	Hello("Key Peer", { c = {}, k = (Key(11)), g = "Player-1-0D0D" })
+	check(#Keys("Key Peer") == 2 and KB:Find("Key Peer", kid7), "a live key under another character isn't taken while the app's list is fresh")
+	Hello("Key Peer", { c = {}, k = (Key(12)), g = "Player-1-0E0E" })
+	check(#Keys("Key Peer") == 3, "one under the app's character is")
 	Hello("Key Peer", { c = {}, k = k7, g = "Player-1-0E0E" })
 	check(KB:Find("Key Peer", kid7).lastHeard == clock and KB:Find("Key Peer", kid7).src == "app", "the app's key heard live stays the app's")
 	clock = clock + 4 * 86400
-	Hello("Key Peer", { c = {}, k = (Key(6)), g = "Player-1-0E0E" })
-	check(#Keys("Key Peer") == 2, "once the app's list is days old, a new live key is added again")
+	Hello("Key Peer", { c = {}, k = (Key(11)), g = "Player-1-0D0D" })
+	check(#Keys("Key Peer") == 1 and Keys("Key Peer")[1] == (Key(11)), "once the app's list is days old, a hello under another character replaces them")
 	-- The first key for an origin: what's held from it is marked pre
 	local base = { kind = "bounty", id = "Key Held:1", origin = "Key Held", seq = 1, prev = "0", t = clock, data = { target = "Player-9-X", targetName = "X", amount = 1000 } }
 	Store:Merge(Sealed(base), "Key Held")
@@ -9886,6 +9889,26 @@ end)()
 	-- Our own records from the app's catch-up come in as before
 	local _, held = Store:MergeRelayed(Store:ForWire(mine), true)
 	check(held == "already held", "one of ours from the app isn't refused: "..tostring(held))
+end)()
+-- 1.19.3: a keyed player's second PC without the desktop app: its key heard live stays beside the one the app lists,
+-- so what it signs is checked and counts on app users too (it was dropped at every catch-up, and its records were
+-- pending for good)
+;(function()
+	local Store, C, B, KB, db = ns.Store, ns.Crypto, ns.Bounties, ns.KeyBook, ns.db
+	local origin = "Two PC Poster"
+	local seedA, seedB = C:SHA512("two pc app seed"):sub(1, 32), C:SHA512("two pc local seed"):sub(1, 32)
+	local kA, kB = C:Base64(C:PublicKey(seedA)), C:Base64(C:PublicKey(seedB))
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, addonKeys = { { n = origin, g = "Player-1-2B2B", k = kA, t = clock } } } }
+	ns.Catchup:Import()
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:2pc:1/1:"..ns.Sync:Encode({ c = {}, k = kB, g = "Player-1-2B2B" }), "CHANNEL", origin, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(#db.keys[origin].list == 2 and KB:Find(origin, C:KeyId(C:PublicKey(seedB))), "the second PC's key heard live stays beside the app's")
+	local bounty = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-2PC", targetName = "Two PC Target", amount = 1500 } }, seedB)
+	Store:MergeRelayed(bounty)
+	check(Store:Authority(bounty) == "pending", "a bounty signed on the second PC is pending")
+	for _ = 1, 30 do RunTimers() end
+	check(SV(bounty) == true and Store:Authority(bounty) == "ok" and #B:GetOpenForTarget("Player-9-2PC") == 1, "checked with that key, it counts")
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

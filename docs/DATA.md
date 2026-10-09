@@ -76,8 +76,10 @@ resetAt, list = { { pk, kid, src, g, firstAt, lastHeard } } }`. `pk` is the key 
 (below), `src` `"live"` (from that player's own hello on the channel: the game stamps the sender) or `"app"` (from the
 app's catch-up `addonKeys`), `g` the GUID it's bound to. At most 4 keys an origin; a new one pushes out the least
 recently heard. A key heard under another GUID for the name drops the earlier GUID's keys. `appAt` is when the app last
-listed the origin's keys: its list wins (live keys it doesn't list are dropped, and for 3 days a live key it doesn't list
-isn't taken). `keyedAt` is when the origin's first key was learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
+listed the origin's keys: for 3 days after, a key heard live under another GUID than the app's isn't taken (the server's
+word on who the character is wins). A key heard live under the app's GUID stays beside the app's (a second PC without the
+app, from 1.19.3; before, the app's list dropped it at every catch-up). `keyedAt` is when the origin's first key was
+learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
 origins not heard for 60 days with no authority record held go, then the least recently heard until 2,000 remain (about
 0.5 MB at most). New table with a default: no migration.
 

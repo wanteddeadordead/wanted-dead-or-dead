@@ -19,6 +19,13 @@ Store.MAX_SIGHTINGS = MAX_SIGHTINGS
 local KEEP_SECONDS = 3 * 24 * 60 * 60
 Store.KEEP_SECONDS = KEEP_SECONDS
 local PRUNED_KINDS = { kill = true, death = true, assist = true }
+-- A bounty and what happened to it (raises, withdrawals, passes, hunts, claims, confirms, payments) go this long
+-- after the bounty expired, unless it's still owed (a confirmed claim nobody paid) or one of this account's own:
+-- the reputation code gives a claim this old no weight (Reputation DECAY_DAYS), and records never pruned grew without
+-- bound on every client a flood of them reached. Bounty notices from the other faction (Bridge) go by their own age.
+local BOUNTY_KEEP_SECONDS = 90 * 24 * 60 * 60
+local BOUNTY_KINDS = { raise = true, withdraw = true, pass = true, hunt = true, claim = true }
+local CLAIM_KINDS = { confirm = true, payment = true }
 -- While the desktop app hasn't read the latest save, records since its last catch-up may not be uploaded yet:
 -- they're kept, unless it hasn't caught up for this long (it's no longer used)
 local APP_WAIT_SECONDS = 30 * 24 * 60 * 60
@@ -73,6 +80,8 @@ end
 function Store:Prune(now)
 	local records, chains = Wanted.db.records, Wanted.db.chains
 	local cutoff = private.PruneCutoff(now)
+	-- Whether a bounty is finished is read through the index by kind: built afresh, so it holds every record
+	private.indexFor = nil
 	-- What old records may still be needed for: claims (their kill, and deaths within the witness window), and
 	-- which characters are this account's (every link record with the app's code for this account)
 	local code = private.AppLinkCode()
@@ -97,22 +106,60 @@ function Store:Prune(now)
 	private.BuildOwn()
 	local pruned, kept, left = 0, 0, 0
 	local pastGap = {} -- origin -> the newest old record held past a gap in its chain
+	local function Drop(id, record)
+		local chain = chains[record.origin]
+		if chain and type(record.seq) == "number" and record.seq > chain.seq
+			and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
+			pastGap[record.origin] = record
+		end
+		records[id] = nil
+		pruned = pruned + 1
+	end
 	for id, record in pairs(records) do
 		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff then
-			local chain = chains[record.origin]
 			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes) then
 				kept = kept + 1
 				left = left + 1
 			else
-				if chain and type(record.seq) == "number" and record.seq > chain.seq
-					and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
-					pastGap[record.origin] = record
-				end
-				records[id] = nil
-				pruned = pruned + 1
+				Drop(id, record)
 			end
 		else
 			left = left + 1
+		end
+	end
+	-- Bounties long finished go with everything that happened to them
+	local oldBounties, oldClaims = {}, {}
+	for id, record in pairs(records) do
+		if record.kind == "bounty" and private.IsFinishedBounty(record, now) then
+			oldBounties[id] = true
+			Drop(id, record)
+			left = left - 1
+		end
+	end
+	if next(oldBounties) then
+		for id, record in pairs(records) do
+			local data = record.data
+			if BOUNTY_KINDS[record.kind] and type(data) == "table" and oldBounties[data.bounty] then
+				if record.kind == "claim" then
+					oldClaims[id] = true
+				end
+				Drop(id, record)
+				left = left - 1
+			end
+		end
+		for id, record in pairs(records) do
+			local data = record.data
+			if CLAIM_KINDS[record.kind] and type(data) == "table" and oldClaims[data.claim] then
+				Drop(id, record)
+				left = left - 1
+			end
+		end
+	end
+	for id, record in pairs(records) do
+		if record.kind == "notice" and type(record.t) == "number" and record.t < now - BOUNTY_KEEP_SECONDS - private.BountyExpirySeconds()
+			and not private.IsOwnRelated(record) then
+			Drop(id, record)
+			left = left - 1
 		end
 	end
 	-- A gap still open behind a record this old won't be filled with anything worth keeping (what's in it is older
@@ -183,6 +230,31 @@ function private.PrunePlayers(now, targets)
 	if dropped > 0 then
 		Wanted:Log("Store: dropped %d players not seen for %d days or past the %d most recent", dropped, PLAYERS_DAYS, Store.PLAYERS_MAX)
 	end
+end
+
+---How long a bounty stays open from its posting or last raise (Bounties), or a week before the bounties load.
+function private.BountyExpirySeconds()
+	local Bounties = Wanted.Bounties
+	return Bounties and Bounties.EXPIRY_SECONDS or 7 * 24 * 60 * 60
+end
+
+---Whether a bounty is long finished and may go (Prune): expired (raises count) more than BOUNTY_KEEP_SECONDS ago,
+---not one of this account's, and not owed (a claim the poster confirmed that nobody has paid). Not before the
+---bounties load (the first prune runs after every module has).
+function private.IsFinishedBounty(bounty, now)
+	local Bounties, Payments = Wanted.Bounties, Wanted.Payments
+	if not Bounties or not Payments or type(bounty.t) ~= "number" or bounty.t > now - BOUNTY_KEEP_SECONDS - private.BountyExpirySeconds()
+		or private.IsOwnRelated(bounty) or Store:IsTest(bounty) then
+		return false
+	end
+	if Bounties:GetExpiry(bounty) > now - BOUNTY_KEEP_SECONDS then
+		return false
+	end
+	local winner = Bounties:GetWinningClaim(bounty)
+	if winner and (private.IsOwnRelated(winner) or (Bounties:GetClaimLevel(winner) == 3 and not Payments:GetForClaim(winner.id))) then
+		return false
+	end
+	return true
 end
 
 ---Records older than this may be pruned: KEEP_SECONDS ago, or earlier when the desktop app is set up but hasn't

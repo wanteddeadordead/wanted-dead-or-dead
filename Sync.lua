@@ -30,6 +30,7 @@ local private = {
 	tokensAt = 0,
 	drainScheduled = false,
 	inbound = {}, -- sender -> { count, minute }
+	accepted = {}, -- sender -> { count, hour } new records taken from them this hour
 	deferred = {}, -- sender -> their messages waiting out a fight (or a backlog)
 	ceilingHitMinute = nil,
 	pausedUntil = 0,
@@ -161,6 +162,10 @@ local NEVER_HIDDEN_NOTICES = { YOU_JOINED = true, YOU_LEFT = true, YOU_CHANGED =
 local MAX_RETRIES = 3
 local MAX_RETRY_QUEUE = 30
 local MAX_INBOUND_PER_SENDER_PER_MINUTE = 60
+-- New records taken from one sender in an hour: a catch-up from one peer fits (fills carry 200 a message), a flood of
+-- made-up records (ten a message, a message a second) doesn't. Records are kept for days to months, so it bounds
+-- how fast the saved data can be made to grow.
+Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 3000
 local PAUSE_SECONDS = 10 * 60
 local JOIN_RETRY_SECONDS = 10
 local JOIN_SETTLE_SECONDS = 5
@@ -1843,7 +1848,9 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			local isNew, why
 			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
 			-- stamps the sender)
-			if tag == TAG_LIVE or (type(record) == "table" and record.origin == sender) then
+			if not private.UnderRecordCap(sender) then
+				isNew, why = false, "over this hour's records from them"
+			elseif tag == TAG_LIVE or (type(record) == "table" and record.origin == sender) then
 				isNew, why = Store:Merge(record, sender)
 			elseif not private.RelayedInBounds(record, limits) then
 				isNew, why = false, "further than its origin's chain is known to reach"
@@ -1852,6 +1859,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			end
 			Wanted:Log("Sync: %s record %s from %s: %s", tag == TAG_LIVE and "live" or "fill", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
+				private.NoteAccepted(sender)
 				private.stats.merged = private.stats.merged + 1
 				if type(record.origin) == "string" and type(record.seq) == "number" then
 					private.recentFills[record.origin] = max(private.recentFills[record.origin] or 0, record.seq)
@@ -2080,6 +2088,32 @@ function private.SkipTarget(origin, seq, tbl, sender)
 	return min(seq, limit, max(Store:GetHighestHeld(origin), chainSeq) + MAX_SKIP)
 end
 
+---Whether a sender is still under this hour's allowance of new records (MAX_NEW_RECORDS_PER_SENDER_PER_HOUR).
+function private.UnderRecordCap(sender)
+	local hour = floor(GetTime() / 3600)
+	local entry = private.accepted[sender]
+	if not entry or entry.hour ~= hour then
+		entry = { hour = hour, count = 0 }
+		private.accepted[sender] = entry
+	end
+	if entry.count >= Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR then
+		if not entry.told then
+			entry.told = true
+			Wanted:Log("!! Sync: %s sent over %d new records this hour; taking no more from them until the next", tostring(sender), Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR)
+		end
+		return false
+	end
+	return true
+end
+
+---Counts a new record taken from a sender against this hour's allowance.
+function private.NoteAccepted(sender)
+	local entry = private.accepted[sender]
+	if entry then
+		entry.count = entry.count + 1
+	end
+end
+
 ---Whether a relayed record's seq is one its origin's chain could have reached: no more than MAX_SKIP past what the
 ---origin itself said, two other players said, or this client holds, as a skip is bounded. The first record under an
 ---id is kept until the origin's own comes (Store), so one relayed far ahead would hold ids the origin's own records
@@ -2283,7 +2317,9 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		local limits = {}
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
-			if type(record) == "table" and record.origin == sender then
+			if not private.UnderRecordCap(sender) then
+				isNew, why = false, "over this hour's records from them"
+			elseif type(record) == "table" and record.origin == sender then
 				isNew, why = Store:Merge(record, sender)
 			elseif not private.RelayedInBounds(record, limits) then
 				isNew, why = false, "further than its origin's chain is known to reach"
@@ -2292,6 +2328,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 			end
 			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
+				private.NoteAccepted(sender)
 				private.stats.merged = private.stats.merged + 1
 			end
 		end

@@ -9490,6 +9490,66 @@ end)()
 	RunFrames()
 	check(Store:Get(victim..":9000") == nil and Store:Get(victim..":400") ~= nil, "a relayed record further than a skip could go isn't taken; one within reach is: "..tostring(Store:Get(victim..":9000") ~= nil)..","..tostring(Store:Get(victim..":400") ~= nil))
 end)()
+-- 1.19.2: bounties and what happened to them were kept forever (a peer could flood every client's saved data with
+-- them). Three months after a bounty expired it goes with its raises, passes, hunts, claims, confirms and payments,
+-- unless it's still owed (confirmed, not paid) or this account's own; old notices from the other faction go too
+;(function()
+	local db, Store = ns.db, ns.Store
+	local long = clock - 100 * 86400 -- expired 93 days ago
+	local seq = 0
+	local function Put(kind, t, data, origin)
+		seq = seq + 1
+		origin = origin or "Old Poster"
+		local id = origin..":"..seq
+		db.records[id] = { kind = kind, id = id, origin = origin, seq = seq, prev = "0", t = t, data = data or {}, hash = "x" }
+		db.chains[origin] = { seq = 1000, lastHash = "x" }
+		return id
+	end
+	local done = Put("bounty", long, { amount = 1000, target = "Player-9-D0E1", targetName = "Done" })
+	local doneClaim = Put("claim", long + 60, { bounty = done, kill = "Hunter Old:1", victim = "Player-9-D0E1", killT = long + 50 }, "Hunter Old")
+	local gone = { done, doneClaim, Put("raise", long + 10, { bounty = done, amount = 500 }), Put("pass", long + 20, { bounty = done }, "Passer Old"),
+		Put("hunt", long + 30, { bounty = done }, "Hunter Old"), Put("confirm", long + 70, { claim = doneClaim, disputed = true }),
+		Put("notice", long, { bounty = "wOld00001", target = "Player-9-N0E1", targetName = "Noticed", amount = 100, postedAt = long }, "Bridge Old") }
+	local owed = Put("bounty", long, { amount = 1000, target = "Player-9-0E2D", targetName = "Owed" })
+	local owedClaim = Put("claim", long + 60, { bounty = owed, kill = "Hunter Old:9", victim = "Player-9-0E2D", killT = long + 50 }, "Hunter Old")
+	local raised = Put("bounty", long, { amount = 1000, target = "Player-9-4A15", targetName = "Raised" })
+	local kept = { owed, owedClaim, Put("confirm", long + 70, { claim = owedClaim }),
+		raised, Put("raise", long + 80 * 86400, { bounty = raised, amount = 500 }), -- raised 20 days ago: open 7 days from then
+		Put("bounty", clock - 10 * 86400, { amount = 1000, target = "Player-9-4ECE", targetName = "Recent" }),
+		Put("bounty", long, { amount = 1000, target = "Player-9-0A11", targetName = "Mine" }, Store:GetOrigin()),
+		Put("notice", clock - 30 * 86400, { bounty = "wNew00001", target = "Player-9-N0E2", targetName = "Noticed", amount = 100, postedAt = clock - 30 * 86400 }, "Bridge Old") }
+	ns.Bounties:ForgetOpen()
+	Store:Prune(clock)
+	for _, id in ipairs(gone) do check(not db.records[id], id.." (a long finished bounty's) is pruned") end
+	for _, id in ipairs(kept) do check(db.records[id], id.." is kept") end
+	check(Store:Prune(clock) == 0, "a second prune finds nothing")
+end)()
+-- 1.19.2: one sender's new records are taken up to an hourly allowance, so a flood of made-up records can't grow the
+-- saved data at the message rate
+;(function()
+	local Store, Sync = ns.Store, ns.Sync
+	local realCap = Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 20
+	local function Flood(origin, from, to)
+		local list = {}
+		for i = from, to do
+			list[#list + 1] = Sealed({ kind = "pass", id = origin..":"..i, origin = origin, seq = i, prev = "0", t = clock, data = { bounty = "x:"..i } })
+		end
+		return list
+	end
+	clock = clock + 3600
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl1:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 1, 15) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl2:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 16, 30) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	RunFrames()
+	check(Store:Get("Flood Peer:20") and not Store:Get("Flood Peer:21"), "the twenty-first new record from one sender this hour isn't taken")
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl3:1/1:"..Sync:Encode({ r = Flood("Other Peer", 1, 2) }), "CHANNEL", "Other Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	check(Store:Get("Other Peer:2"), "another sender has their own allowance")
+	clock = clock + 3600
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl4:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 21, 22) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	check(Store:Get("Flood Peer:22"), "the next hour starts afresh")
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realCap
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

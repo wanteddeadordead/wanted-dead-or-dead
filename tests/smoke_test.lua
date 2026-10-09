@@ -9847,6 +9847,10 @@ end)()
 		end
 	end
 	check(not listed and ns.Reputation:GetTally(poster).posted == 1, "the forged bounty isn't on the board and isn't the poster's")
+	-- A forged claim on one of our bounties doesn't keep us from withdrawing it
+	local myBounty = Store:NewRecord("bounty", { target = "Player-9-MB", targetName = "My Target", amount = 2000 })
+	Store:MergeRelayed(Next(hunter, "claim", { bounty = myBounty.id, kill = "k:2", victim = "Player-9-MB", killT = clock }))
+	check(B:Withdraw(myBounty) == true and B:IsWithdrawn(myBounty), "a forged claim in a keyed hunter's name doesn't block a withdrawal")
 	-- Brought by the desktop app (the server checked who sent it): it counts
 	local appConfirm = Next(poster, "confirm", { claim = claim.id, disputed = true })
 	Store:MergeRelayed(appConfirm, true)

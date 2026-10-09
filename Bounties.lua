@@ -262,7 +262,7 @@ end
 ---@return table? claim
 function Bounties:GetPendingClaim(bounty)
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id and Bounties:GetClaimLevel(claim) == 2 then
+		if claim.data.bounty == bounty.id and Store:Authority(claim) == "ok" and Bounties:GetClaimLevel(claim) == 2 then
 			return claim
 		end
 	end
@@ -369,7 +369,7 @@ function Bounties:Withdraw(bounty)
 		return false, "only the poster can withdraw a bounty"
 	end
 	for claim in Store:Iterator("claim") do
-		if claim.data.bounty == bounty.id and Bounties:GetClaimLevel(claim) > 0 then
+		if claim.data.bounty == bounty.id and Store:Authority(claim) == "ok" and Bounties:GetClaimLevel(claim) > 0 then
 			return false, "someone has already claimed it"
 		end
 	end

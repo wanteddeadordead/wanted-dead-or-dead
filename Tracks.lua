@@ -18,6 +18,7 @@ local KEEP_SECONDS = 30 * 24 * 60 * 60
 local MIN_GAP = 60 -- one entry a minute per player, unless they changed zone
 local WATCHED_REFRESH = 30 -- seconds between rebuilding the list of who is wanted
 local SPOT_SECONDS = 5 * 60 -- one shared sighting per wanted player this often
+local MAX_ZONE_BYTES = 64 -- a shared sighting's zone name longer than this isn't one
 
 function Tracks:OnLoad()
 	Wanted.db.tracks = Wanted.db.tracks or {}
@@ -66,7 +67,20 @@ function private.OnSpotted(record, isOwn)
 	if isOwn or type(d.target) ~= "string" or Store:IsTest(record) then
 		return
 	end
-	Tracks:Add({ guid = d.target, zone = d.zone, mapId = d.mapId, x = d.x, y = d.y, by = record.origin, t = record.t }, true)
+	-- Only what the file can format: a position as two numbers (the file prints them as numbers), a map id as a
+	-- number and a zone as a short name. A peer's record can carry anything.
+	local x, y = d.x, d.y
+	if not (private.Percent(x) and private.Percent(y)) then
+		x, y = nil, nil
+	end
+	local zone = type(d.zone) == "string" and d.zone ~= "" and strsub(d.zone, 1, MAX_ZONE_BYTES) or nil
+	local mapId = type(d.mapId) == "number" and d.mapId == d.mapId and d.mapId or nil
+	Tracks:Add({ guid = d.target, zone = zone, mapId = mapId, x = x, y = y, by = record.origin, t = record.t }, true)
+end
+
+---Whether a value is a map coordinate: a number from 0 to 100.
+function private.Percent(value)
+	return type(value) == "number" and value >= 0 and value <= 100
 end
 
 ---Drops spotted records older than the history keeps.

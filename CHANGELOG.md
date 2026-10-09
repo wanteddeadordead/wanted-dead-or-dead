@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.19.2] - 2026-10-09
+
+- A sighting shared by another Wanted user can no longer put a player on your Kill on Sight or under a guild bounty
+  by naming their guild: only the guild the game shows on the player counts, for alerts, posse calls and the guild
+  a kill or death records. Shared guild, class, race and zone names lose escape codes and control characters before
+  they reach a tooltip or the "Tell your party" line, and one sender's sightings add at most 40 players you've never
+  seen a minute.
+- A bounty typed by name on the board goes to the player the game named so here. A shared sighting can't rename a
+  player the game has named, and a name other users gave several players is refused: target them to be sure.
+- A record another player passed on under an id the origin's own record later needs no longer blocks it: the
+  origin's own record (heard from them, signed with their key, or from the desktop app) takes its place, and
+  records passed on far past where an origin's chain is known to reach aren't taken.
+- Target names and guilds from records are shown as plain text on the board, in tooltips and in /wanted bounties
+  (an escape code in one once drew as a link, a picture or a colour), and a record whose origin isn't a player's name
+  is refused.
+- Bounties long finished (expired three months ago, not owed, not yours) are dropped from the saved data with their
+  raises, passes, hunts, claims, confirmations and payments, and one sender's new records are taken up to 3000 an
+  hour, so the saved data can't be made to grow without bound.
+- Raid ads planned further than a week ahead, long past or with an absurd time are dropped (they once filled the raid
+  list for good, or caused a Lua error); a leader's ads take three places at most; when the list is full the raid
+  furthest off makes room; and one player's passed-on copies of raids from other realms list three raids at most. A
+  passed-on copy can still name anyone as a raid's leader: nothing in it says who passed it on. Still open.
+- A record held as altered (a sighting with text where a number goes, say) no longer reaches the target's history:
+  the target file once threw a Lua error opening it for 30 days.
+
 ## [1.19.1] - 2026-10-09
 
 - No more Lua errors from Blizzard's achievement code (GetCategoryNumAchievements) after opening the Legacy Challenges

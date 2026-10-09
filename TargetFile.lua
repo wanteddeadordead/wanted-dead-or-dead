@@ -280,7 +280,7 @@ end
 function TargetFile:ShowGuild(guild)
 	local frame = private.frame or private.Create()
 	frame.targetName = nil
-	frame.name:SetText(Theme:Colorize("<"..guild..">", C.amber))
+	frame.name:SetText(Theme:Colorize("<"..Theme:Plain(guild)..">", C.amber))
 	local members = Wanted.Model:GetGuildMembers(guild)
 	frame.who:SetText(format("Bounty on any member. %d member%s seen.", #members, #members == 1 and "" or "s"))
 	local money, text = private.BountyText(Bounties:GetOpenForGuild(guild))
@@ -324,15 +324,19 @@ end
 
 Wanted:RegisterCommand("file", "The file on a player: where they've been, when they're about, their record. /wanted file <First Last>.", function(args)
 	local name = strtrim(args or "")
-	local guid, player
+	local guid, player, why
 	if name == "" and not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 		guid, name = UnitGUID("target"), GetUnitName("target", true)
 	else
-		guid, player = Store:FindPlayerByName(name)
+		guid, player, why = Store:FindPlayerByName(name)
 		name = player and player.name or name
 	end
 	if not guid then
-		Wanted:Print("No player named %s has been seen. Target them, or check the spelling.", name ~= "" and name or "(none given)")
+		if why then
+			Wanted:Print("Several players have been called %s by other Wanted users. Target them to be sure.", name)
+		else
+			Wanted:Print("No player named %s has been seen. Target them, or check the spelling.", name ~= "" and name or "(none given)")
+		end
 		return
 	end
 	TargetFile:ShowPlayer(guid, name)

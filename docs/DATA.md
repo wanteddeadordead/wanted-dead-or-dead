@@ -171,6 +171,18 @@ except bounty targets, Kill on Sight, Ignore, players with a history in `tracks`
 `enemyStats`) and the account's characters. At load, `enemyStats` entries with no wins or losses (only seen), not on
 Kill on Sight and not seen for 30 days are dropped, then the least recently seen past 5000 (from 1.2.21).
 
+From 1.19.2 the same pass also drops bounties long finished with everything about them: a `bounty` whose expiry
+(raises count) passed more than 90 days ago, not one of this account's characters' and not owed (a claim the poster
+confirmed that no payment record pays), goes with the `raise`, `withdraw`, `pass`, `hunt` and `claim` records naming
+it and the `confirm` and `payment` records naming those claims; `notice` records older than 97 days go too. The
+reputation code gives a claim that old no weight. Records, chains and `sigChecked` are handled as for kills. No saved
+field changes.
+
+From 1.19.2 a `players` entry's `guild` is only ever what the game read on the unit (`GetGuildInfo`). The guild a
+shared sighting names is kept in `guildHint` (cleaned like a name, 64 bytes at most) and read nowhere that matters:
+Kill on Sight guilds, guild bounties, `victimGuild` on kills and deaths and the guild boards use `guild` alone. A
+new optional field: no migration. Entries written by shared sightings before 1.19.2 keep whatever `guild` they had.
+
 `WantedDB.recentPeers` (from 1.2.10) is `name -> seen` for the last 20 players heard on the sync channel. A client
 locked out of the channel (banned, a password set, or no answer after 12 join attempts) whispers them a hello
 with `x = 1`, and a peer accepts a same-realm whispered hello only when it carries `x`; sync then runs over

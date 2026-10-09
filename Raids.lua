@@ -39,6 +39,10 @@ local ASK_MINUTES = 10 -- a planned raid's members ask for their invite for this
 local ANNOUNCE_SECONDS = 60
 local WHISPER_GAP_SECONDS = 0.5 -- between Whisper sign-ups' whispers, so the game doesn't hold them back
 local MAX_SEEN = 30
+local MAX_SEEN_PER_LEADER = 3 -- a leader has one raid at a time; more ids than this under one name at once is noise
+local MAX_SHARED_ON_PER_SENDER = 3 -- raids one player's shared-on copies (fw) may list at once
+local PLAN_AHEAD_SECONDS = 7 * 24 * 3600 -- a raid can be planned this far ahead (Create), so no ad says further
+local AD_PAST_SECONDS = 24 * 3600 -- an ad for a raid that started longer ago than this is nonsense (raids close after OPEN_HOURS)
 local PARTY_SIZE = 5
 local WHO_SECONDS = 10 -- a player is told who's going at most this often
 local ROSTER_SECONDS = 30 -- a leader is asked who's going at most this often per raid
@@ -217,7 +221,7 @@ function private.Details(o, keep)
 	if not startAt or (startAt < now and startAt ~= keep) then
 		startAt = now
 	end
-	if startAt > now + 7 * 24 * 3600 then
+	if startAt > now + PLAN_AHEAD_SECONDS then
 		return nil, "A raid can be planned up to a week ahead."
 	end
 	return {
@@ -982,6 +986,12 @@ function Raids:OnAd(ad, sender, channel)
 	if direct and not private.SameName(sender, ad.l) then
 		return
 	end
+	-- A shared-on copy lists a raid led on another realm name (the one who shared it heard its leader there). Nothing
+	-- says who shared it on, so one player's copies list only a few raids never heard from their leader: anyone can
+	-- otherwise list raids under any name here, and joiners whisper that player
+	if not direct and not known and private.CountSharedOn(sender) >= MAX_SHARED_ON_PER_SENDER then
+		return
+	end
 	local now = GetServerTime()
 	local heardDirect = known and known.direct and now - known.direct < DIRECT_SECONDS
 	if not direct and heardDirect then
@@ -1021,21 +1031,31 @@ function Raids:OnAd(ad, sender, channel)
 	end
 	local faction = UnitFactionGroup("player")
 	local size, startAt = tonumber(ad.m), tonumber(ad.s)
-	if ad.f ~= faction or not SIZES[size] or not startAt then
+	-- A start no raid can have (further ahead than one can be planned, or long past) is nonsense: a far-off one would
+	-- be listed for good, and a huge number throws in date()
+	if ad.f ~= faction or not SIZES[size] or not startAt or startAt ~= startAt or startAt > now + PLAN_AHEAD_SECONDS or startAt < now - AD_PAST_SECONDS then
 		return
 	end
 	local entry = private.seen[ad.id]
 	if not entry then
-		if private.Count(private.seen) >= MAX_SEEN then
+		if private.CountLed(ad.l) >= MAX_SEEN_PER_LEADER then
 			return
+		end
+		-- Full: the raid furthest off (or, of those starting together, the one heard longest ago) makes room, so a
+		-- list filled with far-off ads can't keep a raid forming now off it
+		if private.Count(private.seen) >= MAX_SEEN then
+			private.Evict()
 		end
 		entry = {}
 		private.seen[ad.id] = entry
 	end
 	entry.heard = GetServerTime()
-	-- When we last heard it straight from its leader (copies shared on can't change it for a while after)
+	-- When we last heard it straight from its leader (copies shared on can't change it for a while after), or who
+	-- shared it on when we never have
 	if direct then
 		entry.direct = now
+	elseif not entry.direct then
+		entry.sharedBy = sender
 	end
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
@@ -1348,17 +1368,24 @@ function Raids:ZoneName()
 	return Raids:ShortZone(ok and name or nil, time(here) - time(utc))
 end
 
+---A time formatted with date(), or "?" for one date() can't format: the game's Lua gives nil for a time out of its
+---range, and newer ones throw, so a number from another client never gets that far unguarded.
+local function Clock(fmt, t)
+	local ok, text = pcall(date, fmt, t)
+	return ok and type(text) == "string" and text or "?"
+end
+
 ---A raid's start as shown here: our own time with our time zone ("Thu 20:00 EDT"), and the realm's beside it when it
 ---differs ("Thu 20:00 EDT (server 23:00)").
 ---@param t number
 ---@return string
 function Raids:When(t)
 	local offset = Raids:ServerOffset()
-	local ours = date("%a %H:%M", t).." "..Raids:ZoneName()
+	local ours = Clock("%a %H:%M", t).." "..Raids:ZoneName()
 	if offset == 0 then
 		return ours
 	end
-	return format("%s (server %s)", ours, date("%H:%M", t + offset))
+	return format("%s (server %s)", ours, Clock("%H:%M", t + offset))
 end
 
 ---A start in the realm's time for chat lines, which every reader shares, with its day unless it's today on the realm:
@@ -1367,15 +1394,15 @@ end
 ---@return string
 function Raids:ServerWhen(t)
 	local offset = Raids:ServerOffset()
-	local today = date("%Y%m%d", GetServerTime() + offset) == date("%Y%m%d", t + offset)
-	return (today and "" or date("%a ", t + offset)).."at "..Raids:ServerClock(t)
+	local today = Clock("%Y%m%d", GetServerTime() + offset) == Clock("%Y%m%d", t + offset)
+	return (today and "" or Clock("%a ", t + offset)).."at "..Raids:ServerClock(t)
 end
 
 ---A start in the realm's time, for chat lines, which every reader shares: "23:00 server time".
 ---@param t number
 ---@return string
 function Raids:ServerClock(t)
-	return date("%H:%M", t + Raids:ServerOffset()).." server time"
+	return Clock("%H:%M", t + Raids:ServerOffset()).." server time"
 end
 
 -- ============================================================================
@@ -1393,6 +1420,44 @@ function private.SameName(a, b)
 	local aName, aRealm = strmatch(a, "^([^%-]+)%-?(.*)$")
 	local bName, bRealm = strmatch(b, "^([^%-]+)%-?(.*)$")
 	return aName == bName and (aRealm == "" or bRealm == "")
+end
+
+---How many raids seen, never heard from their leader, one player's shared-on copies listed.
+function private.CountSharedOn(sender)
+	local n = 0
+	for _, entry in pairs(private.seen) do
+		if entry.sharedBy == sender and not entry.direct then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---How many raids seen are under a leader's name.
+function private.CountLed(leader)
+	local n = 0
+	for _, entry in pairs(private.seen) do
+		if entry.raid and entry.raid.leader == leader then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---Drops the raid seen that's least worth a place: the one starting furthest off, or of those starting at the same
+---time, the one heard longest ago.
+function private.Evict()
+	local worst, worstId
+	for id, entry in pairs(private.seen) do
+		if entry.raid and (not worst or entry.raid.startAt > worst.raid.startAt
+			or (entry.raid.startAt == worst.raid.startAt and entry.heard < worst.heard)) then
+			worst, worstId = entry, id
+		end
+	end
+	if worstId then
+		private.seen[worstId] = nil
+		private.viewed[worstId] = nil
+	end
 end
 
 ---Text from a form or another client: a string, no escape codes, at most MAX_TEXT letters.

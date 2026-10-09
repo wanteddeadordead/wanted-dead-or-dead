@@ -6163,6 +6163,32 @@ end)()
 	clock = clock + 5
 	Fire("UPDATE_MOUSEOVER_UNIT")
 	check(#asked == 4, "an unanswered comparison is given up")
+	-- The achievement window loaded but closed: its comparison panel listens for answers from load (Blizzard's
+	-- AchievementFrameComparison_OnLoad) and errors on one it didn't ask for, so it doesn't hear ours, and hears again after
+	RunTimers()
+	local panelHeard = 0
+	AchievementFrameComparison = CreateFrame("Frame")
+	AchievementFrameComparison._shown = false
+	AchievementFrameComparison:SetScript("OnEvent", function() panelHeard = panelHeard + 1 end)
+	AchievementFrameComparison:RegisterEvent("INSPECT_ACHIEVEMENT_READY")
+	ns.db.hkBook = {}
+	clock = clock + 5
+	answer = "12"
+	Fire("PLAYER_TARGET_CHANGED")
+	check(#asked == 5, "asked with the achievement window loaded but closed")
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-ELRIN")
+	check(panelHeard == 0 and ns.db.hkBook["Player-9-ELRIN"].hk == 12, "the closed comparison panel doesn't hear our answer; we do")
+	RunTimers()
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-OTHER")
+	check(panelHeard == 1, "and it hears answers again once ours is in")
+	-- Given up with no answer: it listens again too
+	clock = clock + 5
+	ns.db.hkBook = {}
+	Fire("UPDATE_MOUSEOVER_UNIT")
+	RunTimers()
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-OTHER")
+	check(panelHeard == 2, "an unanswered comparison gives the panel its answers back")
+	AchievementFrameComparison = nil
 	for k, v in pairs(real) do _G[k] = v end
 	ns.db.hkBook = {}
 	-- Our own numbers, for the Blizzard PvP boards: the season's rank points are the rank's threshold plus the points into it

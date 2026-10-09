@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The PvP rank scout no longer causes Lua errors in the achievement window's comparison panel. Once the achievement
+  window had been loaded, even closed, each player the scout looked up made that panel throw an error.
+
 ## [1.19.0] - 2026-10-09
 
 - Signed records: your bounties, raises, withdrawals, hunts, passes, claims, confirmations, payments, marks, links and

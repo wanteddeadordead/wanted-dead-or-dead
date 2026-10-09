@@ -9550,6 +9550,41 @@ end)()
 	check(Store:Get("Flood Peer:22"), "the next hour starts afresh")
 	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realCap
 end)()
+-- 1.19.2: raid ads from other players are bounded. A start further ahead than a raid can be planned, long past or
+-- absurd is dropped (far-off ads once filled the list for good, and a huge number threw in date()); one leader's ads
+-- take three places at most; when the list is full the raid furthest off makes room; a shared-on copy (fw) naming
+-- a leader of this realm is taken only for a raid heard from that leader (anyone could list a raid in anyone's name)
+;(function()
+	local R, Store = ns.Raids, ns.Store
+	local me = Store:GetOrigin()
+	local realToast, realAd, realJoin = ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin
+	ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function() end, function() end, function() end
+	ns.db.raids[me].seen = {}
+	R:Load()
+	local function ad(leader, i, startAt, extra)
+		local a = { id = leader..":1:"..i, l = leader, t = "Raid "..i, z = "Durotar", s = startAt, m = 40, ml = 1, n = 1, u = 0, i = 0, f = "Horde", e = 0 }
+		for k, v in pairs(extra or {}) do a[k] = v end
+		return a
+	end
+	local function Listed(id) for _, r in ipairs(R:List()) do if r.id == id then return true end end return false end
+	check(not R:OnAd(ad("Evil Doer", 1, clock + 10 * 365 * 86400), "Evil Doer") and not R:OnAd(ad("Evil Doer", 2, clock - 2 * 86400), "Evil Doer")
+		and not R:OnAd(ad("Evil Doer", 3, 1e300), "Evil Doer") and not R:OnAd(ad("Evil Doer", 4, 0 / 0), "Evil Doer") and #R:List() == 0,
+		"ads planned further than a week ahead, long past, or absurd are dropped")
+	for i = 1, 10 do R:OnAd(ad("Evil Doer", 10 + i, clock + 6 * 86400), "Evil Doer") end
+	check(#R:List() == 3, "one leader's ads take three places at most, got "..#R:List())
+	for i = 1, 30 do R:OnAd(ad("Leader "..i, 1, clock + 6 * 86400 - i), "Leader "..i) end
+	check(#R:List() == 30 and not Listed("Evil Doer:1:11") and Listed("Leader 30:1:1"), "the list holds 30; the raids furthest off made room")
+	check(R:OnAd(ad("Good Leader", 1, clock), "Good Leader") == true and Listed("Good Leader:1:1") and not Listed("Leader 1:1:1") and #R:List() == 30,
+		"a raid forming now is taken when the list is full, in the place of the one furthest off")
+	check(R:When(1e300):find("?", 1, true) and type(R:ServerWhen(1e300)) == "string" and type(R:ServerClock(1e300)) == "string", "a time date() can't format shows as ?: "..R:When(1e300))
+	check(not R:OnAd(ad("Victim Name", 1, clock, { fw = 1 }), "Random Member") and not Listed("Victim Name:1:1"), "a shared-on ad naming a player of this realm as its leader isn't taken")
+	check(not R:OnAd(ad("Victim Name-Realm", 1, clock, { fw = 1 }), "Random Member") and not Listed("Victim Name-Realm:1:1"), "nor with our realm's name on it")
+	check(R:OnAd(ad("Far Lead-Elsewhere", 7, clock, { fw = 1 }), "Link Holder") == true and Listed("Far Lead-Elsewhere:1:7"), "one naming a leader on another realm name is: that's what shared-on copies are for")
+	R:OnAd(ad("Near Leader", 1, clock), "Near Leader")
+	clock = clock + 150 -- the leader not heard for a while: copies shared on count again (as before)
+	check(R:OnAd(ad("Near Leader", 1, clock + 60, { fw = 1 }), "Random Member") == true, "a shared-on copy of a raid heard from its leader is still taken")
+	ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realToast, realAd, realJoin
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

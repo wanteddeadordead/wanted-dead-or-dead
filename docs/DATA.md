@@ -454,9 +454,12 @@ peer sent), and incoming records drop them too. Records are sent with their own 
 origin, seq, prev, t, data, hash), never this client's local flags (`live`, `app`, `tampered`, `brokenChain`, `test`).
 Checks run only out of combat, a slice a frame, first for records something reads or shows (an authority decision, the
 board, a bounty's page, a record about a bounty the player posted, hunts or claimed) and otherwise one a second in the
-background. 1.19.0 changes no counting rules beyond a failed signature: unsigned records, and signed ones not checked
-yet or signed by a key not known, count as before. A later release is planned to stop counting unsigned or unchecked
-authority records from origins with a known key (except those in `sigPre`).
+background. 1.19.0 to 1.19.2 changed no counting rules beyond a failed signature. From 1.19.3 an authority read counts
+a record only when `Store:Authority` says ok: this client's own, or its signature checked and good, or its origin's word
+some other way (heard from them live, brought by the app's catch-up, or in `sigPre`), or no key known for the origin
+(today's rules). One passed on by another player in a keyed origin's name is pending while signed and not checked yet
+(it decides nothing, and is checked next) and never counts while unsigned; walks by kind (`Store:Iterator`) leave those
+out as they do altered ones. No layout change: nothing new is saved.
 
 ## Fresh start (development builds)
 

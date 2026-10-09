@@ -620,6 +620,12 @@ function private.FileClaim(bounty, kill)
 			return nil
 		end
 	end
+	-- Nor one waiting for the fight to end to be signed
+	for _, waiting in ipairs(Store:GetPending()) do
+		if waiting.kind == "claim" and waiting.data.bounty == bounty.id then
+			return nil
+		end
+	end
 	return Store:NewRecord("claim", {
 		bounty = bounty.id,
 		kill = kill.id,

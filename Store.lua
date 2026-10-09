@@ -448,6 +448,9 @@ function Store:OnEnable()
 	Store:NoteCharacter(UnitGUID("player"), private.origin)
 	Store:Prune(GetServerTime())
 	Store:RepairChains()
+	-- Records asked for in a fight the last session ended in
+	private.FinishPendingSoon()
+	Wanted:OnCombatEnd(private.FinishPendingSoon)
 	Store:AutoLink()
 	-- When this client last saved: the desktop app has uploaded everything held if it caught up after that
 	private.frame = CreateFrame("Frame")
@@ -527,11 +530,14 @@ function Store:Hash(str)
 	return format("%08x", LibDeflate:Adler32(str))
 end
 
--- The canonical string of a record covers everything but its own hash, with fields in a fixed order
-local function Canonical(record)
+-- The canonical string of a record covers everything but its own hash, with fields in a fixed order. without: a data
+-- field left out (the signature, for what it signs)
+local function Canonical(record, without)
 	local keys = {}
 	for key in pairs(record.data) do
-		tinsert(keys, key)
+		if key ~= without then
+			tinsert(keys, key)
+		end
 	end
 	sort(keys)
 	local parts = { record.kind, record.id, record.prev, tostring(record.t) }
@@ -547,22 +553,61 @@ end
 -- Records
 -- ============================================================================
 
----Creates and stores a new record of this client's own.
+---What a record's signature covers: a version line, then its canonical string without data.sig. The hash is made
+---after data.sig is added, so it covers the signature, and a record that keeps its hash keeps its signature.
+---@param record table
+---@return string
+function Store:SigningMessage(record)
+	return Wanted.Signing.MESSAGE_PREFIX..Canonical(record, "sig")
+end
+
+---Creates and stores a new record of this client's own. An authority record (Signing.KINDS) is signed. One asked for
+---in a fight, while there's a key to sign it with, waits for the fight to end (a signature takes about 20 ms in the
+---game), and so does any asked for after it until it's made, so they're made in the order asked; its seq and prev
+---are given when it's made, after whatever was recorded meanwhile, and its time is when it was asked for (a claim's
+---is close to its kill). Waiting, it's saved, and the table returned is a stand-in with pending = true.
 ---@param kind string kill | bounty | claim | payment | mark | raise | pass
 ---@param data table Plain values only (strings, numbers, booleans)
 ---@return table record
 function Store:NewRecord(kind, data)
+	local Signing = Wanted.Signing
+	if Signing.KINDS[kind] and (private.Pending() or (Wanted:InCombat() and Signing:CanSign())) then
+		local waiting = { kind = kind, data = data, t = GetServerTime(), pending = true }
+		local all = Wanted.db.signing.pending
+		if type(all) ~= "table" then
+			all = {}
+			Wanted.db.signing.pending = all
+		end
+		all[private.origin] = private.Pending() or {}
+		tinsert(all[private.origin], waiting)
+		Wanted:Log("Store: a %s record waits for the fight to end to be signed", kind)
+		private.FinishPendingSoon()
+		return waiting
+	end
+	return private.Create(kind, data)
+end
+
+---Makes a record of this client's own now: signed when it's an authority kind and there's a key, then hashed.
+---@param t number? when it was asked for, default now
+function private.Create(kind, data, t)
 	local chain = private.ownChain
-	chain.seq = chain.seq + 1
+	local seq = chain.seq + 1
 	local record = {
 		kind = kind,
-		id = private.origin..":"..chain.seq,
+		id = private.origin..":"..seq,
 		origin = private.origin,
-		seq = chain.seq,
+		seq = seq,
 		prev = chain.lastHash,
-		t = GetServerTime(),
+		t = t or GetServerTime(),
 		data = data,
 	}
+	data.sig = nil
+	if Wanted.Signing.KINDS[kind] then
+		data.sig = Wanted.Signing:Sign(Store:SigningMessage(record))
+		-- Our own signature needs no check
+		record.sv = data.sig and true or nil
+	end
+	chain.seq = seq
 	record.hash = Store:Hash(Canonical(record))
 	chain.lastHash = record.hash
 	private.NoteFirst(chain, record)
@@ -570,6 +615,48 @@ function Store:NewRecord(kind, data)
 	private.AddToIndex(record)
 	private.Notify(record, true)
 	return record
+end
+
+---This character's records waiting to be signed, oldest first: { kind, data, t } each, or nil when none wait. Saved, so
+---a disconnect in a fight doesn't lose them.
+function private.Pending()
+	local all = Wanted.db.signing.pending
+	local mine = type(all) == "table" and all[private.origin]
+	return type(mine) == "table" and #mine > 0 and mine or nil
+end
+
+---Lists this character's records waiting to be signed (stand-ins with kind and data), oldest first. Read only.
+---@return table[]
+function Store:GetPending()
+	return private.Pending() or {}
+end
+
+---Makes the waiting records in the background work once out of a fight, one a frame.
+function private.FinishPendingSoon()
+	if private.finishQueued or not private.Pending() then
+		return
+	end
+	private.finishQueued = true
+	Wanted:QueueWork(private.FinishPending)
+end
+
+function private.FinishPending()
+	private.finishQueued = nil
+	local pending = private.Pending()
+	if not pending then
+		return
+	end
+	local waiting = tremove(pending, 1)
+	if type(waiting) == "table" and type(waiting.kind) == "string" and type(waiting.data) == "table" then
+		waiting.pending = nil
+		private.Create(waiting.kind, waiting.data, type(waiting.t) == "number" and waiting.t or nil)
+	end
+	if #pending > 0 then
+		-- The next frame: a signature is most of one
+		C_Timer.After(0, private.FinishPendingSoon)
+	else
+		Wanted.db.signing.pending[private.origin] = nil
+	end
 end
 
 ---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
@@ -665,6 +752,8 @@ function private.Insert(record, live, fromApp)
 		return false, "reserved"
 	end
 	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
+	-- What this client found checking its signature, and whether it was held before its origin's key was known
+	record.sv, record.pre = nil, nil
 	local existing = db.records[record.id]
 	if existing then
 		if existing.hash == record.hash and not existing.test then

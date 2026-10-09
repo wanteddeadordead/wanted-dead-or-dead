@@ -8569,6 +8569,100 @@ end)()
 	ns:RunCommand("key", "")
 	WantedAppSeed = nil
 end)()
+-- Signing (1.19.0), our own records: authority kinds are signed as they're made, the hash covers the signature, kills
+-- and deaths aren't signed, and one asked for in a fight is made and signed when it's over, after what the fight
+-- recorded
+;(function()
+	local C, S, Store, db = ns.Crypto, ns.Signing, ns.Store, ns.db
+	WantedAppSeed = { [db.accountMark] = string.rep("3e", 32) }
+	S:OnEnable()
+	RunTimers()
+	local k = S:PublicKey()
+	check(k and S:Source() == "app", "a key to sign with")
+	local function Chain(r)
+		local before = Store:Get(Store:GetOrigin()..":"..(r.seq - 1))
+		return before and r.prev == before.hash
+	end
+	clock = clock + 60
+	local bounty = Store:NewRecord("bounty", { target = "Player-9-SIGNED", targetName = "Signed Target", amount = 1500 })
+	check(type(bounty.data.sig) == "string" and #bounty.data.sig == 95 and bounty.sv == true, "a bounty is signed: "..tostring(bounty.data.sig))
+	local message = "wanted-sig-v1\nbounty\n"..bounty.id.."\n"..bounty.prev.."\n"..tostring(bounty.t).."\namount=1500\ntarget=Player-9-SIGNED\ntargetName=Signed Target"
+	check(Store:SigningMessage(bounty) == message, "it signs the canonical string without data.sig: "..Store:SigningMessage(bounty))
+	check(C:Verify(C:FromBase64(k), message, C:FromBase64(bounty.data.sig:sub(10))) and bounty.data.sig:sub(2, 9) == C:KeyId(C:FromBase64(k)), "with this character's key")
+	local copy = { kind = bounty.kind, id = bounty.id, origin = bounty.origin, seq = bounty.seq, prev = bounty.prev, t = bounty.t, data = {} }
+	for key, value in pairs(bounty.data) do copy.data[key] = value end
+	check(Sealed(copy).hash == bounty.hash, "the hash covers the signature, as a 1.18 client hashes it")
+	local kill = Store:NewRecord("kill", { victim = "Player-9-SIGNED", victimName = "Signed Target", zone = "Durotar" })
+	check(kill.data.sig == nil and kill.sv == nil, "a kill isn't signed")
+	-- In a fight: a confirm waits; a kill made meanwhile takes the next seq; after the fight the confirm follows it
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	local askedAt = clock
+	local confirm = Store:NewRecord("confirm", { claim = "Someone:1" })
+	check(confirm.pending and not confirm.id and #Store:GetPending() == 1 and db.signing.pending[Store:GetOrigin()], "in a fight a confirm waits, saved")
+	clock = clock + 5
+	local death = Store:NewRecord("death", { victim = "Player-1-ME", zone = "Durotar" })
+	check(death.id and not death.data.sig and death.seq == kill.seq + 1, "a death in the fight is made at once, unsigned")
+	RunFrames()
+	check(#Store:GetPending() == 1, "nothing is signed in the fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 5
+	-- Out of the fight but before it's made: a dispute queues behind it, so they're made in the order asked
+	local dispute = Store:NewRecord("confirm", { claim = "Someone:1", disputed = true })
+	check(dispute.pending and #Store:GetPending() == 2, "a record asked for while one waits queues behind it")
+	RunTimers() RunTimers()
+	check(#Store:GetPending() == 0 and db.signing.pending[Store:GetOrigin()] == nil, "both made once the fight is over")
+	local made = Store:Get(Store:GetOrigin()..":"..(death.seq + 1))
+	local made2 = Store:Get(Store:GetOrigin()..":"..(death.seq + 2))
+	check(made and made.kind == "confirm" and not made.data.disputed and made.prev == death.hash and made.t == askedAt and made.sv == true
+		and #made.data.sig == 95, "the confirm follows the death in the chain, signed, at the time it was asked for")
+	check(made2 and made2.kind == "confirm" and made2.data.disputed and Chain(made2) and made2.t > made.t, "then the dispute")
+	check(Store:Get(Store:GetOrigin()..":"..(made2.seq + 1)) == nil and db.chains[Store:GetOrigin()].lastHash == made2.hash, "and the chain ends there")
+	-- A claim from a kill in a fight waits too, once: a second kill of the target in the same fight files no second claim
+	local target = Store:NewRecord("bounty", { target = "Player-9-FIGHT", targetName = "Fight Target", amount = 1000 })
+	local other = { kind = "bounty", id = "Poster Elsewhere:1", origin = "Poster Elsewhere", seq = 1, prev = "0", t = clock - 30,
+		data = { target = "Player-9-FIGHT", targetName = "Fight Target", amount = 2000 } }
+	Store:MergeRelayed(Sealed(other))
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	for _ = 1, 2 do
+		Store:NewRecord("kill", { victim = "Player-9-FIGHT", victimName = "Fight Target", zone = "Durotar" })
+	end
+	local waitingClaims = 0
+	for _, waiting in ipairs(Store:GetPending()) do
+		if waiting.kind == "claim" and waiting.data.bounty == other.id then waitingClaims = waitingClaims + 1 end
+	end
+	check(waitingClaims == 1, "one claim waits for the fight, not one per kill: "..waitingClaims)
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers() RunTimers()
+	local claims = 0
+	for claim in Store:Iterator("claim") do
+		if claim.data.bounty == other.id and claim.origin == Store:GetOrigin() then
+			claims = claims + 1
+			check(#claim.data.sig == 95 and claim.sv and claim.t - claim.data.killT <= 10, "the claim is signed, timed at the kill")
+		end
+	end
+	check(claims == 1 and target.data.sig, "one claim after the fight")
+	-- Without a key nothing waits: a record in a fight is made at once, unsigned, as before 1.19
+	local savedSeed = db.signing.seed
+	db.signing.seed = nil
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	local pass = Store:NewRecord("pass", { bounty = other.id })
+	check(pass.id and not pass.pending and pass.data.sig == nil and pass.sv == nil, "no key: made at once, unsigned")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	db.signing.seed = savedSeed
+	-- A peer's record can't bring this client's findings with it
+	local claimed = { kind = "raise", id = "Poster Elsewhere:2", origin = "Poster Elsewhere", seq = 2, prev = other.hash, t = clock,
+		data = { bounty = other.id, amount = 100 }, sv = true, pre = true }
+	Store:Merge(Sealed(claimed), "Poster Elsewhere")
+	check(Store:Get(claimed.id) and Store:Get(claimed.id).sv == nil and Store:Get(claimed.id).pre == nil, "sv and pre from a peer are dropped")
+	WantedAppSeed = nil
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

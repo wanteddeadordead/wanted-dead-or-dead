@@ -792,27 +792,43 @@ end
 
 -- The longest stretch between checkpoints in the game, kept free at the end of a frame's work time
 local STRETCH_MS = 1
+-- Checks waiting, oldest first: { job, onDone }
+private.checks = {}
 
----Runs a check in the background work, a slice a frame within what's left of the frame's work time, so never in
----a fight, and calls onDone(ok) when it's done.
+---Runs a check in the background, a slice a frame within what's left of the frame's work time once the work queue is
+---empty (Core's idle work: queued work makes the sync hold what arrives, so checks never go in the queue), never in a
+---fight, and calls onDone(ok) when it's done.
 ---@param job table from NewCheck
 ---@param onDone fun(ok: boolean)
 function Crypto:Check(job, onDone)
-	local function Slice()
-		local ms = min(Crypto.YIELD_MS, Wanted:WorkTimeLeft() - STRETCH_MS)
-		local done, ok = false, nil
-		if ms > 0 then
-			done, ok = Crypto:RunCheck(job, ms)
-		end
+	tinsert(private.checks, { job = job, onDone = onDone })
+	Wanted:WakeIdleWork()
+end
+
+---Whether a check is waiting or under way.
+---@return boolean
+function Crypto:Busy()
+	return #private.checks > 0
+end
+
+---One slice of the oldest check, in up to ms. Returns whether there's more to do.
+function private.Slice(ms)
+	local item = private.checks[1]
+	if not item then
+		return false
+	end
+	local limit = min(Crypto.YIELD_MS, ms - STRETCH_MS)
+	if limit > 0 then
+		local done, ok = Crypto:RunCheck(item.job, limit)
 		if done then
-			onDone(ok)
-		else
-			-- The next frame: work queued now would run again in this one
-			C_Timer.After(0, function() Wanted:QueueWork(Slice) end)
+			tremove(private.checks, 1)
+			item.onDone(ok)
 		end
 	end
-	Wanted:QueueWork(Slice)
+	return #private.checks > 0
 end
+
+Wanted:SetIdleWork(private.Slice)
 
 
 

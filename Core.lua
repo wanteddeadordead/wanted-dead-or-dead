@@ -973,32 +973,45 @@ function Wanted:QueuedWork()
 	return private.workTail - private.workHead + 1
 end
 
----Runs queued work for up to ms milliseconds (none during a fight). The work frame calls it every frame.
+---Sets the work done with a frame's time left once the queue is empty: func(ms) does up to ms milliseconds and says
+---whether there's more. Signature checks (Crypto) run there: they take many frames, and work in the queue makes the
+---sync hold what arrives, so they don't go in it.
+---@param func fun(ms: number): boolean
+function Wanted:SetIdleWork(func)
+	private.idleWork = func
+	private.idleMore = true
+	private.workFrame:Show()
+end
+
+---Runs queued work for up to ms milliseconds (none during a fight), then the idle work with what's left. The work
+---frame calls it every frame.
 ---@param ms number
 function Wanted:DoQueuedWork(ms)
 	if private.inCombat then
 		return
 	end
 	local start = debugprofilestop()
-	private.workUntil = start + ms
 	while private.workHead <= private.workTail and debugprofilestop() - start < ms do
 		local func = private.work[private.workHead]
 		private.work[private.workHead] = nil
 		private.workHead = private.workHead + 1
 		func()
 	end
-	private.workUntil = nil
 	if private.workHead > private.workTail then
 		private.work, private.workHead, private.workTail = {}, 1, 0
-		private.workFrame:Hide()
+		if private.idleWork and private.idleMore then
+			private.idleMore = private.idleWork(ms - (debugprofilestop() - start))
+		end
+		if not private.idleMore then
+			private.workFrame:Hide()
+		end
 	end
 end
 
----How many milliseconds of this frame's work time are left, for a piece of queued work that can stop early (a
----signature check). Outside the queue, a whole frame's.
----@return number
-function Wanted:WorkTimeLeft()
-	return private.workUntil and private.workUntil - debugprofilestop() or WORK_MS_PER_FRAME
+---Wakes the idle work after it said it had nothing more to do.
+function Wanted:WakeIdleWork()
+	private.idleMore = true
+	private.workFrame:Show()
 end
 
 private.workFrame:SetScript("OnUpdate", function()

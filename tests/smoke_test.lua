@@ -165,10 +165,16 @@ C_Timer = {
 	NewTicker = function(_, f) tickers[#tickers + 1] = f return NewMock() end,
 	NewTimer = function() return NewMock() end,
 }
--- Frames passing: the addon's background work runs until it's done (as it would over the next frames)
+-- Frames passing: the addon's background work runs until it's done (as it would over the next frames), signature
+-- checks a slice a frame
 function RunFrames()
 	if WantedTestNS and WantedTestNS.DoQueuedWork then
-		WantedTestNS:DoQueuedWork(1e9)
+		for _ = 1, 1000 do
+			WantedTestNS:DoQueuedWork(1e9)
+			if not (WantedTestNS.Crypto and WantedTestNS.Crypto:Busy()) or WantedTestNS:InCombat() then
+				break
+			end
+		end
 	end
 end
 
@@ -8517,6 +8523,15 @@ end)()
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers() RunTimers()
 	check(result == true, "it runs once the fight is over")
+	-- A check under way leaves the work queue empty, so the sync takes in what arrives at once rather than holding it
+	result = nil
+	C:Check(C:NewCheck(pk, msg, sig), function(ok) result = ok end)
+	check(ns:QueuedWork() == 0 and C:Busy(), "a check under way queues no work")
+	local helloKey = C:Base64(C:PublicKey(C:SHA512("busy peer"):sub(1, 32)))
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:bz1:1/1:"..ns.Sync:Encode({ c = {}, k = helloKey, g = "Player-1-0B0A" }), "CHANNEL", "Busy Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	check(ns.KeyBook:HasKeys("Busy Peer"), "a hello arriving while a check runs is handled at once")
+	RunFrames()
+	check(result == true and not C:Busy(), "and the check finishes")
 	print(format("wanted smoke: crypto here (%s): SHA-512 of 128 bytes %.2f ms, key %.1f ms, sign %.1f ms, check %.1f ms, prepare a key %.2f ms, check with it %.1f ms; a check takes %d frames at the game's speed, the busiest %.2f ms",
 		_VERSION, costs.sha, costs.pk, costs.sign, costs.verify, costs.prepare, costs.prepared, frames, worst))
 end)()

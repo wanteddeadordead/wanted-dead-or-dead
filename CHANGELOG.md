@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.19.3] - 2026-10-09
+
 - A record passed on by another player in the name of someone whose signing key you know counts only once its
   signature checks out. A confirmation, withdrawal, raise, payment, hunt, claim or bounty forged in their name (unsigned,
   or signed with another key) no longer confirms a claim, takes a bounty down, adds to it, pays it or appears on the

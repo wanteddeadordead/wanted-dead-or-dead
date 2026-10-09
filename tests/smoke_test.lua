@@ -401,6 +401,8 @@ Enum = { TooltipDataType = { Unit = 2 } }
 tooltipPostCalls = {} -- global: the main chunk is at its limit of locals
 TooltipDataProcessor = { AddTooltipPostCall = function(_, f) tooltipPostCalls[#tooltipPostCalls + 1] = f end }
 RAID_CLASS_COLORS = { ROGUE = { r = 1, g = 0.96, b = 0.41, WrapTextInColorCode = function(_, t) return t end } }
+-- The game's table has every class; only the rogue's colour matters to the tests
+for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }) do RAID_CLASS_COLORS[class] = { r = 1, g = 1, b = 1 } end
 LOCALIZED_CLASS_NAMES_MALE = { ROGUE = "Rogue" }
 SlashCmdList = {}
 
@@ -9323,6 +9325,48 @@ end)()
 	local entries = Tracks:Get(victim)
 	check(#entries == 1 and entries[1].zone == nil and entries[1].x == nil and entries[1].y == nil and entries[1].mapId == 1 and entries[1].by == "Spotter Odd",
 		"a sound record with odd fields keeps only what the file can show")
+end)()
+-- 1.19.2: a shared sighting is one peer's word. Its guild, class, race and zone are cleaned like its name (they reach
+-- tooltips and the "Tell your party" chat line), a class is one the game has, and the guild is kept as a hint only:
+-- a peer naming a guild on your Kill on Sight, or one with a bounty on it, once made an innocent player Kill on Sight
+-- with a price on their head (and a posse callable against them). Only a guild the game reads on the unit counts
+;(function()
+	local Store, Enemies = ns.Store, ns.Enemies
+	local innocent = "Player-9-1AA0C3"
+	ns.db.kosGuilds["Camping Guild"] = { t = clock, reason = "campers" }
+	Store:InsertTest("bounty", "Some Poster", { guild = "Bountied Guild", targetName = "<Bountied Guild>", amount = 50000 }, clock - 60)
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", c = "ROGUE", r = "Human", u = "Camping Guild", z = "Durotar|Hitem:19019|h[Thunderfury]|h", x = 50, y = 50 }, "Evil Doer")
+	local d = Enemies:Describe(innocent)
+	check(not d.kos and not d.kosGuild and d.guild == nil and d.zone == "DurotarHitem:19019h[Thunderfury]h", "a peer naming a Kill on Sight guild doesn't make them Kill on Sight; the zone is cleaned: "..tostring(d.zone))
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", u = "Bountied Guild" }, "Evil Doer")
+	d = Enemies:Describe(innocent)
+	check(d.bounty == 0 and not ns.Posse:CanCall(d) and Store:GetPlayer(innocent).guildHint == "Bountied Guild", "nor does it put a guild bounty on them: the guild is kept as a hint")
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", u = "Evil|TInterface\\Icons\\X:64|t Guild\n/run print(1)", c = "X\n/run print(2)", r = strrep("R", 2000) }, "Evil Doer")
+	local p = Store:GetPlayer(innocent)
+	check(p.guildHint == "EvilTInterface\\Icons\\X:64t Guild/run print(1)" and p.class == "ROGUE" and #p.race == 64, "escapes and control characters come out of a peer's guild, class and race, and a class is one the game has")
+	check(ns.Recorder:GetKnownGuild(innocent) == nil, "a kill of them records no guild on a peer's word")
+	-- Seen in game in that guild: that counts
+	enemyUnits.nameplate3 = { guid = innocent, name = "Innocent Bob", class = "ROGUE", level = 30, guild = "Camping Guild" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+	d = Enemies:Describe(innocent)
+	check(d.kos and d.kosGuild and d.guild == "Camping Guild" and ns.Recorder:GetKnownGuild(innocent) == "Camping Guild", "the guild the game reads on them does")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate3")
+	enemyUnits.nameplate3 = nil
+	-- Players never seen here come from one sender only so fast
+	local function Count() local n = 0 for _ in pairs(ns.db.players) do n = n + 1 end return n end
+	clock = clock + 60
+	local before = Count()
+	for i = 1, 100 do
+		Enemies:OnSharedSighting({ g = "Player-9-F1DD"..i, n = "Fake "..i }, "Evil Doer")
+	end
+	check(Count() - before == 40, "one sender adds at most 40 players never seen here a minute, got "..(Count() - before))
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", z = "Ashenvale" }, "Evil Doer")
+	check(Store:GetPlayer(innocent).zone == "Ashenvale", "a player already known is still updated past it")
+	Enemies:OnSharedSighting({ g = "Player-9-F1DDA1", n = "Fake Other" }, "Other Sender")
+	check(Count() - before == 41, "another sender has their own allowance")
+	clock = clock + 60
+	Enemies:OnSharedSighting({ g = "Player-9-F1DDA2", n = "Fake Later" }, "Evil Doer")
+	check(Count() - before == 42, "and the next minute starts afresh")
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

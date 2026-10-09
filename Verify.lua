@@ -336,6 +336,11 @@ end
 ---on it is worked out again. A bad signature from a known key: someone forged or changed it, so it's tampered, never
 ---read.
 function private.Finish(record, key, ok)
+	if Wanted.Store:Get(record.id) ~= record then
+		-- Replaced while it was being checked (its origin's own word came in, Store.private.Insert): what was found is
+		-- the old record's, not the one held now
+		return
+	end
 	private.checked = private.checked + 1
 	Wanted.db.sigChecked[record.id] = ok == true
 	if ok == true then

@@ -9910,6 +9910,29 @@ end)()
 	for _ = 1, 30 do RunTimers() end
 	check(SV(bounty) == true and Store:Authority(bounty) == "ok" and #B:GetOpenForTarget("Player-9-2PC") == 1, "checked with that key, it counts")
 end)()
+-- 1.19.3: a check under way when its record is replaced (the origin's own word came in, Store.private.Insert) writes
+-- nothing: what it found was the old record's, and once marked the genuine record bad for good
+;(function()
+	local Store, C, db = ns.Store, ns.Crypto, ns.db
+	local origin, seed = "Race Poster", C:SHA512("race poster"):sub(1, 32)
+	local pk = C:PublicKey(seed)
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:race:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-3C3C" }), "CHANNEL", origin, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	db.settings.sigBackground = false
+	local forged = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-RC", targetName = "Forged", amount = 1 } }, C:SHA512("forger"):sub(1, 32))
+	forged.data.sig = "1"..C:KeyId(pk)..forged.data.sig:sub(10)
+	Sealed(forged)
+	Store:MergeRelayed(forged)
+	check(Store:Authority(forged) == "pending", "a forgery under the poster's key id waits to be checked")
+	ns:DoQueuedWork(1e9) -- one slice of the check
+	check(SV(forged) == nil and ns.Crypto:Busy(), "the check is under way")
+	local genuine = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-RC", targetName = "Genuine", amount = 2000 } }, seed)
+	check(Store:Merge(genuine, origin) and Store:Get(origin..":1") == genuine, "the genuine record heard live takes its place meanwhile")
+	for _ = 1, 30 do RunTimers() end
+	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
+	db.settings.sigBackground = true
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -345,18 +345,30 @@ function private.Finish(record, key, ok)
 	Wanted.db.sigChecked[record.id] = ok == true
 	if ok == true then
 		Wanted.Bounties:OnVerified(record)
-		if Wanted.UI and Wanted.UI.Refresh then
-			Wanted.UI:Refresh()
-		end
+		private.RefreshSoon()
 		return
 	end
 	private.bad = private.bad + 1
 	record.tampered = true
 	Wanted:Log("!! Verify: %s record %s has a bad signature for %s's key %s; kept out of sight", tostring(record.kind), tostring(record.id), tostring(record.origin), tostring(key.kid))
 	Wanted.Bounties:ForgetOpen()
-	if Wanted.UI and Wanted.UI.Refresh then
-		Wanted.UI:Refresh()
+	private.RefreshSoon()
+end
+
+-- The window is refreshed this long after a check changed what counts: a backlog checks a record every few frames,
+-- and each refresh rebuilds the page shown
+local REFRESH_AFTER_SECONDS = 0.5
+
+---Refreshes the window once, after the checks under way settle (nothing while it's closed: UI:Refresh).
+function private.RefreshSoon()
+	if private.refreshDue or not (Wanted.UI and Wanted.UI.Refresh) then
+		return
 	end
+	private.refreshDue = true
+	C_Timer.After(REFRESH_AFTER_SECONDS, function()
+		private.refreshDue = nil
+		Wanted.UI:Refresh()
+	end)
 end
 
 

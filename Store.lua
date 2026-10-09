@@ -878,7 +878,7 @@ end
 ---@param fromApp boolean? true for the app's catch-up: the server checked who sent it, so it's marked `app`
 ---@param sender string? who relayed it (a peer's fill), for a signed one that waits to be checked (Verify:Challenge)
 ---@return boolean isNew
----@return string? why when not new, as for Merge, or "waiting for its signature to be checked"
+---@return string? why when not new, as for Merge, or "ours" (in this client's own name) or "waiting for its signature to be checked"
 function Store:MergeRelayed(record, fromApp, sender)
 	if not Store:IsWellFormed(record) then
 		return false, "malformed"
@@ -911,6 +911,12 @@ function private.Insert(record, live, fromApp, sender, checked)
 	-- What this client found checking a signature is kept outside the records (WantedDB.sigChecked, sigPre): a peer's
 	-- copy can't carry it in
 	record.sv, record.pre = nil, nil
+	-- This client holds every record it made: one in its own name passed on by someone else is made up (it would count
+	-- as our own word, and our chain would carry on from it). Our own messages echoed back and the app's catch-up bring
+	-- our records straight from us
+	if record.origin == private.origin and not (live or fromApp) then
+		return false, "ours"
+	end
 	local existing = db.records[record.id]
 	if existing and existing.hash == record.hash and not existing.test then
 		if live then

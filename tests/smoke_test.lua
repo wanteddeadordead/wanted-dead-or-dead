@@ -9866,6 +9866,27 @@ end)()
 	check(V:Label(forged) == "Unsigned", "an unsigned record that doesn't count says so")
 	db.settings.sigBackground = true
 end)()
+-- 1.19.3: a record passed on in this client's own name is refused: this client holds everything it made, and one it
+-- doesn't hold would count as its own word (Store:Authority) and its chain would carry on from the forgery
+;(function()
+	local Store, B, db = ns.Store, ns.Bounties, ns.db
+	local me = Store:GetOrigin()
+	local mine = Store:NewRecord("bounty", { target = "Player-9-OWN", targetName = "Own Target", amount = 3000 })
+	local seq, hash = mine.seq, mine.hash
+	local forged = Sealed({ kind = "confirm", id = me..":"..(seq + 1), origin = me, seq = seq + 1, prev = hash, t = clock, data = { claim = "Hunter:1" } })
+	local isNew, why = Store:MergeRelayed(forged, nil, "Attacker")
+	check(isNew == false and why == "ours" and not Store:Get(forged.id), "a confirm passed on in our own name is refused: "..tostring(why))
+	local withdraw = Sealed({ kind = "withdraw", id = me..":"..(seq + 1), origin = me, seq = seq + 1, prev = hash, t = clock, data = { bounty = mine.id } })
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:own1:1/1:"..ns.Sync:Encode({ r = { withdraw } }), "CHANNEL", "Attacker", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(not Store:Get(withdraw.id) and not B:IsWithdrawn(mine), "and so is a withdrawal of our bounty by a fill")
+	local following = Store:NewRecord("raise", { bounty = mine.id, amount = 10 })
+	check(following.seq == seq + 1 and following.prev == hash, "our next record follows our own last one, not the forgery")
+	-- Our own records from the app's catch-up come in as before
+	local _, held = Store:MergeRelayed(Store:ForWire(mine), true)
+	check(held == "already held", "one of ours from the app isn't refused: "..tostring(held))
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

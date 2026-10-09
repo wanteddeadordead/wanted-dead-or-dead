@@ -10,7 +10,11 @@
   yet decides nothing until it is; the bounty tooltip says "Not checked yet" or "Unsigned" where it says "Signed".
 - For players on old versions: once others have learned your key, records made by a client of yours that can't sign
   (1.18 or earlier, or 1.19 in its first minutes before its key is made) count for them only when heard from you
-  directly or brought by the desktop app. Update every PC you play on.
+  directly or brought by the desktop app. Update every PC you play on. Records you made before updating that reach a
+  player only after they learned your key (they reinstalled, or were away for part of your history) don't count for
+  them unless the desktop app brings them.
+- A second PC without the desktop app keeps its own signing key: the app's list of your keys no longer drops it at
+  every catch-up, so what that PC signs is checked and counts for app users too.
 
 ## [1.19.2] - 2026-10-09
 

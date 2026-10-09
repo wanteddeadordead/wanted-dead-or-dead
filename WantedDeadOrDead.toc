@@ -24,6 +24,7 @@ Core.lua
 Crypto.lua
 Signing.lua
 KeyBook.lua
+Verify.lua
 Store.lua
 Recorder.lua
 Sync.lua

@@ -52,6 +52,7 @@ local DEFAULTS = {
 		raidToasts = true, -- a toast when another Wanted player of your faction forms or plans a world PvP raid (Raids)
 		bridge = true, -- carry bounty notices to and from Battle.net friends on the other faction (Bridge)
 		honorScout = true, -- read players' lifetime honorable kills when you target or mouse over them (HonorScout)
+		sigBackground = true, -- check other players' record signatures in the background, one a second (Verify)
 		signatureChat = true, -- players' signature badges (a cosmetic, from the site) before what they say in chat
 		ranks = { -- players' Blizzard PvP ranks as Wanted players share them, where they show (Ranks)
 			tooltip = true,

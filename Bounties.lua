@@ -193,7 +193,17 @@ end
 ---@param bounty table
 ---@return boolean
 function private.IsPostersWord(record, bounty)
-	return record.data.bounty == bounty.id and record.origin == bounty.origin
+	if record.data.bounty == bounty.id and record.origin == bounty.origin then
+		-- An authority read: its signature is checked next (1.19.0 counts it either way)
+		Wanted.Verify:Want(record, true)
+		return true
+	end
+	return false
+end
+
+---Forgets which bounties are open, so the next look works it out again (a record held turned out forged).
+function Bounties:ForgetOpen()
+	private.openCache = nil
 end
 
 ---When a bounty expires (raises extend it from the raise).
@@ -249,6 +259,7 @@ function Bounties:GetActiveHunters(bounty, at)
 	local latest = {}
 	for hunt in Store:Iterator("hunt") do
 		if hunt.data.bounty == bounty.id and hunt.t <= at then
+			Wanted.Verify:Want(hunt, true)
 			local previous = latest[hunt.origin]
 			if not previous or hunt.t > previous.t or (hunt.t == previous.t and hunt.seq > previous.seq) then
 				latest[hunt.origin] = hunt
@@ -323,8 +334,11 @@ end
 function private.WithdrawnAt(bounty)
 	local at = nil
 	for withdraw in Store:Iterator("withdraw") do
-		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin and (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
-			at = withdraw.t
+		if withdraw.data.bounty == bounty.id and withdraw.origin == bounty.origin then
+			Wanted.Verify:Want(withdraw, true)
+			if (not at or withdraw.t < at) and #Bounties:GetActiveHunters(bounty, withdraw.t) == 0 then
+				at = withdraw.t
+			end
 		end
 	end
 	return at
@@ -955,9 +969,11 @@ function Bounties:GetClaimLevel(claim)
 	-- The poster's latest decision stands (by time, then by seq), so every client agrees whatever order they came in
 	local decision
 	for confirm in Store:Iterator("confirm") do
-		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin
-			and (not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq)) then
-			decision = confirm
+		if confirm.data.claim == claim.id and bounty and confirm.origin == bounty.origin then
+			Wanted.Verify:Want(confirm, true)
+			if not decision or confirm.t > decision.t or (confirm.t == decision.t and confirm.seq > decision.seq) then
+				decision = confirm
+			end
 		end
 	end
 	if decision then

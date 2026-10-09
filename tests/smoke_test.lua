@@ -448,6 +448,14 @@ function Sealed(r) -- a global: the main chunk is at its limit of locals
 	r.hash = ns.Store:Hash(table.concat(parts, "\n"))
 	return r
 end
+-- Signs a hand-made record with a 32-byte seed, as its origin's addon would (1.19.0), then seals it
+function SignedBy(r, seed)
+	local C = ns.Crypto
+	local pk = C:PublicKey(seed)
+	r.data.sig = nil
+	r.data.sig = "1"..C:KeyId(pk)..C:Base64(C:Sign(seed, pk, ns.Store:SigningMessage(r)))
+	return Sealed(r)
+end
 
 -- Every page with no data
 for _, key in ipairs({ "board", "mine", "hunters", "activity", "tools" }) do
@@ -8774,6 +8782,120 @@ end)()
 	KB:KeepPrepared("key18", { n = 18 })
 	check(KB:GetPrepared("key2") and KB:GetPrepared("key3") == nil, "using one keeps it")
 	WantedAppCatchup = nil
+end)()
+-- Signing (1.19.0), checking others' records: on demand (a read, a page, a record about our bounties) and one a second
+-- in the background, never in a fight; what's found is kept as sv; a bad signature from a known key is tampered;
+-- nothing else changes how records count
+;(function()
+	local C, V, KB, Store, B, db = ns.Crypto, ns.Verify, ns.KeyBook, ns.Store, ns.Bounties, ns.db
+	local seed = C:SHA512("verify peer"):sub(1, 32)
+	local pk = C:PublicKey(seed)
+	local forger = C:SHA512("forger"):sub(1, 32)
+	local function Drain()
+		for _ = 1, 30 do RunTimers() end
+	end
+	local function Hello(who, k, g)
+		RunFrames()
+		Fire("CHAT_MSG_ADDON", "WNTD", "H:v"..who:len()..":1/1:"..ns.Sync:Encode({ c = {}, k = k, g = g }), "CHANNEL", who, nil, nil, nil, ns.Sync:GetInfo().channelName)
+		RunFrames()
+	end
+	local origin, seq, prev = "Verify Peer", 0, "0"
+	local function Next(kind, data, by)
+		seq = seq + 1
+		local r = { kind = kind, id = origin..":"..seq, origin = origin, seq = seq, prev = prev, t = clock, data = data }
+		if by then SignedBy(r, by) else Sealed(r) end
+		prev = r.hash
+		return r
+	end
+	clock = clock + 60
+	-- Held before the key is known: kept as it is, today's rules
+	local early = Next("bounty", { target = "Player-9-V", targetName = "Verify Target", amount = 3000 }, seed)
+	check(Store:Merge(early, origin) and early.sv == nil and not early.tampered, "a signed record from an origin with no known key is kept, unchecked")
+	Hello(origin, C:Base64(pk), "Player-1-5A5A")
+	check(KB:HasKeys(origin) and early.pre == true, "the key is learned; the record held before it is marked pre")
+	-- Background: one a second, out of a fight; off when the setting is
+	db.settings.sigBackground = false
+	V:BackgroundStep()
+	Drain()
+	check(early.sv == nil, "no background checks with the setting off")
+	db.settings.sigBackground = true
+	V:BackgroundStep()
+	Drain()
+	check(early.sv == true and not early.tampered and V:Label(early) == "Signed", "the background checks it: Signed")
+	-- A forgery under the peer's key id: tampered, never read, Bad signature
+	local raise = Next("raise", { bounty = early.id, amount = 500 }, forger)
+	raise.data.sig = "1"..C:KeyId(pk)..raise.data.sig:sub(10)
+	Sealed(raise)
+	prev = raise.hash
+	local amountBefore = B:GetAmount(early)
+	check(Store:MergeRelayed(raise) and not raise.tampered, "a relayed raise with the peer's key id but another's signature comes in")
+	check(B:GetAmount(early) == amountBefore + 500, "unchecked, it counts as today")
+	V:Want(raise, true)
+	Drain()
+	check(raise.sv == false and raise.tampered and V:Label(raise) == "Bad signature", "its signature fails: tampered")
+	check(B:GetAmount(early) == amountBefore and V:CountBad(early) == 1, "it isn't read, and the bounty counts one bad record")
+	-- Changed in transit (the hash made again to match): the signature no longer holds
+	local withdraw = Next("withdraw", { bounty = early.id }, seed)
+	withdraw.data.bounty = "Someone Else:9"
+	Sealed(withdraw)
+	Store:MergeRelayed(withdraw)
+	V:Want(withdraw, true)
+	Drain()
+	check(withdraw.tampered and withdraw.sv == false, "a signed record changed in transit is tampered")
+	-- A key id nobody knows: held, unchecked, counted as before; checked once that key is learned
+	local seed2 = C:SHA512("verify peer second pc"):sub(1, 32)
+	local pk2 = C:PublicKey(seed2)
+	local hunt = Next("hunt", { bounty = early.id }, seed2)
+	Store:MergeRelayed(hunt)
+	V:Want(hunt, true)
+	Drain()
+	check(hunt.sv == nil and not hunt.tampered and #B:GetActiveHunters(early) == 1, "an unknown key id: unchecked, and it counts as today")
+	Hello(origin, C:Base64(pk2), "Player-1-5A5A")
+	V:BackgroundStep()
+	Drain()
+	check(hunt.sv == true, "checked once the second key is learned")
+	-- Unsigned records from a keyed origin count as they always did (1.19.0 changes no rules)
+	local unsigned = Next("raise", { bounty = early.id, amount = 700 })
+	Store:Merge(unsigned, origin)
+	V:BackgroundStep()
+	Drain()
+	check(unsigned.sv == nil and not unsigned.tampered and B:GetAmount(early) == amountBefore + 700, "an unsigned raise from a keyed origin still counts")
+	-- An authority read asks for a check at once: the poster's confirm on a claim
+	local claim = Sealed({ kind = "claim", id = "Verify Hunter:1", origin = "Verify Hunter", seq = 1, prev = "0", t = clock, data = { bounty = early.id, kill = "x:1", victim = "Player-9-V", killT = clock } })
+	Store:Merge(claim, "Verify Hunter")
+	local confirm = Next("confirm", { claim = claim.id }, seed)
+	db.settings.sigBackground = false
+	Store:Merge(confirm, origin)
+	check(confirm.sv == nil, "not checked before anything reads it")
+	check(B:GetClaimLevel(claim) == 3, "the confirm counts while it isn't checked yet")
+	Drain()
+	check(confirm.sv == true, "reading it got it checked")
+	-- A record about a bounty of ours is checked as it arrives; nothing is checked in a fight
+	local mine = Store:NewRecord("bounty", { target = "Player-9-MINE", targetName = "Mine", amount = 2000 })
+	local hunterSeed = C:SHA512("verify hunter"):sub(1, 32)
+	Hello("Verify Hunter", C:Base64(C:PublicKey(hunterSeed)), "Player-1-6B6B")
+	local hunterClaim = SignedBy({ kind = "claim", id = "Verify Hunter:2", origin = "Verify Hunter", seq = 2, prev = claim.hash, t = clock,
+		data = { bounty = mine.id, kill = "y:1", victim = "Player-9-MINE", killT = clock } }, hunterSeed)
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	Store:Merge(hunterClaim, "Verify Hunter")
+	RunFrames() RunTimers()
+	check(hunterClaim.sv == nil, "nothing is checked in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	Drain()
+	check(hunterClaim.sv == true, "a claim on our bounty is checked once the fight is over, without the background")
+	-- Opening a bounty's page asks for all its records
+	local pageRaise = Next("raise", { bounty = early.id, amount = 100 }, seed)
+	Store:Merge(pageRaise, origin)
+	ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(early))
+	Drain()
+	check(pageRaise.sv == true, "opening the bounty's page checks its records")
+	db.settings.sigBackground = true
+	-- Our own records are ours: Signed, never checked
+	check(V:Label(mine) == "Signed" and mine.sv == true, "our own signed records show Signed")
+	local good, bad = V:Counts()
+	check(good >= 5 and bad == 2, "counts for the bug report: "..good.." good, "..bad.." bad")
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

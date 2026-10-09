@@ -302,6 +302,10 @@ end
 ---Opens the right file for a bounty (a Model bounty info).
 ---@param info table
 function TargetFile:ShowBounty(info)
+	-- The bounty's records have their signatures checked first (1.19.0)
+	if info.bounty then
+		Wanted.Verify:WantBounty(info.bounty)
+	end
 	if info.guild then
 		TargetFile:ShowGuild(info.guild)
 	elseif info.bounty and info.bounty.data.target then

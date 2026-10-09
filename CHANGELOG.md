@@ -20,8 +20,8 @@
   hour, so the saved data can't be made to grow without bound.
 - Raid ads planned further than a week ahead, long past or with an absurd time are dropped (they once filled the raid
   list for good, or caused a Lua error); a leader's ads take three places at most; when the list is full the raid
-  furthest off makes room; and a raid ad passed on from another realm can't name a player of this realm as its leader
-  unless you heard that raid from them.
+  furthest off makes room; and one player's passed-on copies of raids from other realms list three raids at most. A
+  passed-on copy can still name anyone as a raid's leader: nothing in it says who passed it on. Still open.
 - A record held as altered (a sighting with text where a number goes, say) no longer reaches the target's history:
   the target file once threw a Lua error opening it for 30 days.
 

@@ -9577,9 +9577,12 @@ end)()
 	check(R:OnAd(ad("Good Leader", 1, clock), "Good Leader") == true and Listed("Good Leader:1:1") and not Listed("Leader 1:1:1") and #R:List() == 30,
 		"a raid forming now is taken when the list is full, in the place of the one furthest off")
 	check(R:When(1e300):find("?", 1, true) and type(R:ServerWhen(1e300)) == "string" and type(R:ServerClock(1e300)) == "string", "a time date() can't format shows as ?: "..R:When(1e300))
-	check(not R:OnAd(ad("Victim Name", 1, clock, { fw = 1 }), "Random Member") and not Listed("Victim Name:1:1"), "a shared-on ad naming a player of this realm as its leader isn't taken")
-	check(not R:OnAd(ad("Victim Name-Realm", 1, clock, { fw = 1 }), "Random Member") and not Listed("Victim Name-Realm:1:1"), "nor with our realm's name on it")
-	check(R:OnAd(ad("Far Lead-Elsewhere", 7, clock, { fw = 1 }), "Link Holder") == true and Listed("Far Lead-Elsewhere:1:7"), "one naming a leader on another realm name is: that's what shared-on copies are for")
+	-- Shared-on copies (fw) list raids led on other realm names, whose leaders are named as this client names them
+	-- ("First Last", no realm), so they can't be told from a player of this realm: one sender's copies list a few
+	for i = 1, 5 do R:OnAd(ad("Far Leader "..i, 1, clock, { fw = 1 }), "Link Holder") end
+	check(Listed("Far Leader 1:1:1") and Listed("Far Leader 3:1:1") and not Listed("Far Leader 4:1:1"), "one player's shared-on copies list three raids never heard from their leaders")
+	check(R:OnAd(ad("Far Leader 1", 1, clock + 60, { fw = 1 }), "Link Holder") == true, "a copy of one already listed is still taken")
+	check(R:OnAd(ad("Far Leader 6", 1, clock, { fw = 1 }), "Other Holder") == true, "another player's copies have their own places")
 	R:OnAd(ad("Near Leader", 1, clock), "Near Leader")
 	clock = clock + 150 -- the leader not heard for a while: copies shared on count again (as before)
 	check(R:OnAd(ad("Near Leader", 1, clock + 60, { fw = 1 }), "Random Member") == true, "a shared-on copy of a raid heard from its leader is still taken")

@@ -40,6 +40,7 @@ local ANNOUNCE_SECONDS = 60
 local WHISPER_GAP_SECONDS = 0.5 -- between Whisper sign-ups' whispers, so the game doesn't hold them back
 local MAX_SEEN = 30
 local MAX_SEEN_PER_LEADER = 3 -- a leader has one raid at a time; more ids than this under one name at once is noise
+local MAX_SHARED_ON_PER_SENDER = 3 -- raids one player's shared-on copies (fw) may list at once
 local PLAN_AHEAD_SECONDS = 7 * 24 * 3600 -- a raid can be planned this far ahead (Create), so no ad says further
 local AD_PAST_SECONDS = 24 * 3600 -- an ad for a raid that started longer ago than this is nonsense (raids close after OPEN_HOURS)
 local PARTY_SIZE = 5
@@ -985,10 +986,10 @@ function Raids:OnAd(ad, sender, channel)
 	if direct and not private.SameName(sender, ad.l) then
 		return
 	end
-	-- A shared-on copy lists a raid led on another realm name (the one who shared it heard its leader there). One
-	-- naming a leader of this realm is taken only for a raid heard from that leader: anyone could otherwise list a
-	-- raid under any name here, and joiners would whisper that player
-	if not direct and not (known and known.direct) and not private.OtherRealm(ad.l) then
+	-- A shared-on copy lists a raid led on another realm name (the one who shared it heard its leader there). Nothing
+	-- says who shared it on, so one player's copies list only a few raids never heard from their leader: anyone can
+	-- otherwise list raids under any name here, and joiners whisper that player
+	if not direct and not known and private.CountSharedOn(sender) >= MAX_SHARED_ON_PER_SENDER then
 		return
 	end
 	local now = GetServerTime()
@@ -1049,9 +1050,12 @@ function Raids:OnAd(ad, sender, channel)
 		private.seen[ad.id] = entry
 	end
 	entry.heard = GetServerTime()
-	-- When we last heard it straight from its leader (copies shared on can't change it for a while after)
+	-- When we last heard it straight from its leader (copies shared on can't change it for a while after), or who
+	-- shared it on when we never have
 	if direct then
 		entry.direct = now
+	elseif not entry.direct then
+		entry.sharedBy = sender
 	end
 	entry.raid = {
 		id = ad.id, leader = ad.l, title = private.Clean(ad.t), guild = private.Clean(ad.g) ~= "" and private.Clean(ad.g) or nil, where = private.Clean(ad.z), startAt = startAt, size = size,
@@ -1418,15 +1422,15 @@ function private.SameName(a, b)
 	return aName == bName and (aRealm == "" or bRealm == "")
 end
 
----Whether a name is a player's on another realm name: it carries a realm, and not ours. Players of this realm name
----are named without one, as the game stamps senders here.
-function private.OtherRealm(name)
-	local realm = type(name) == "string" and strmatch(name, "^[^%-]+%-(.+)$") or nil
-	if not realm then
-		return false
+---How many raids seen, never heard from their leader, one player's shared-on copies listed.
+function private.CountSharedOn(sender)
+	local n = 0
+	for _, entry in pairs(private.seen) do
+		if entry.sharedBy == sender and not entry.direct then
+			n = n + 1
+		end
 	end
-	local ours = GetNormalizedRealmName and GetNormalizedRealmName() or GetRealmName and GetRealmName() or ""
-	return gsub(realm, "[%s%-]", "") ~= gsub(ours, "[%s%-]", "")
+	return n
 end
 
 ---How many raids seen are under a leader's name.

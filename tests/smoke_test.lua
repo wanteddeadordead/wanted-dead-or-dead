@@ -8534,7 +8534,7 @@ end)()
 	end
 	-- No seed: nothing signed, no key in the hello
 	S:Reset()
-	db.signing.resetPending = nil
+	db.signing.resetAt = nil
 	check(not S:CanSign() and S:Sign("x") == nil and S:PublicKey() == nil and S:Source() == nil, "no seed: nothing is signed")
 	local fields = {}
 	S:AddToHello(fields)
@@ -8580,9 +8580,12 @@ end)()
 	inCombat = false
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
-	-- /wanted key reset: the app's seed is dropped for good, a new one gathered, one hello says kr = 1
+	-- /wanted key reset: the app's seed is dropped for good, every character's public key too (the app mustn't upload one
+	-- from before), a new seed is gathered, and each character's first hello with its new key says kr = 1
+	db.signing.pub["Alt Character"] = { k = "an old key", g = "Player-1-ALT" }
 	ns:RunCommand("key", "reset")
-	check(db.signing.seed == nil and db.signing.resetPending and db.signing.appDropped and S:Sign("x") == nil, "reset drops the seed")
+	check(db.signing.seed == nil and db.signing.resetAt == clock and db.signing.appDropped and S:Sign("x") == nil, "reset drops the seed")
+	check(next(db.signing.pub) == nil, "and every character's public key, for the app")
 	WantedAppSeed = { [mark] = appSeed }
 	S:OnEnable()
 	check(db.signing.seed == nil, "the dropped app seed isn't taken again")
@@ -8595,16 +8598,25 @@ end)()
 	for _, m in ipairs(Sent("CHANNEL")) do
 		if m.tag == "H" and m.tbl.kr == 1 then resetHello = m.tbl end
 	end
-	check(resetHello and resetHello.k == newK and resetHello.g == "Player-1-ME" and not db.signing.resetPending, "one hello with kr = 1 and the new key")
+	check(resetHello and resetHello.k == newK and resetHello.g == "Player-1-ME" and db.signing.krSent["Test Player"] == db.signing.resetAt, "one hello with kr = 1 and the new key")
+	check(db.signing.pub["Test Player"].k == newK and db.signing.pub["Alt Character"] == nil, "only the new key is there for the app")
 	fields = {}
 	S:AddToHello(fields)
 	check(fields.k == newK and fields.kr == nil, "later hellos carry no kr")
-	-- Not sent (out of the channel): it stays for the next hello
-	db.signing.resetPending = true
+	-- Another character of the account: kr = 1 on its first hello after the reset too
+	local realOrigin = ns.Store.GetOrigin
+	ns.Store.GetOrigin = function() return "Alt Character" end
 	fields = {}
 	S:AddToHello(fields)
-	check(fields.kr == 1 and db.signing.resetPending, "kr stays until a hello carrying it is sent")
-	db.signing.resetPending = nil
+	ns.Store.GetOrigin = realOrigin
+	db.signing.pub["Alt Character"] = nil
+	check(fields.kr == 1, "another character of the account says kr = 1 too")
+	-- Not sent (out of the channel): it stays for the next hello
+	db.signing.krSent["Test Player"] = nil
+	fields = {}
+	S:AddToHello(fields)
+	check(fields.kr == 1 and db.signing.krSent["Test Player"] == nil, "kr stays until a hello carrying it is sent")
+	db.signing.krSent["Test Player"] = db.signing.resetAt
 	-- A new app seed (the app made another) is taken
 	local appSeed2 = string.rep("7c", 32)
 	WantedAppSeed = { [mark] = appSeed2 }

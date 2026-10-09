@@ -53,7 +53,7 @@ A kind's first count takes in everything there, so nothing old shows as new. Rai
 `WantedDB.raids[character].viewed`.
 
 `WantedDB.signing` (from 1.19.0) is this WoW account's signing seed and its characters' public keys (`Signing.lua`):
-`{ seed, source, pub = { [origin] = { k, g } }, resetAt, resetPending, appDropped, pending = { [origin] = { { kind,
+`{ seed, source, pub = { [origin] = { k, g } }, resetAt, krSent, appDropped, pending = { [origin] = { { kind,
 data, t, pending } } } }`. `seed` is the account seed as 64 lower-case hex digits (32 bytes); `source` is `"app"` (the
 desktop app wrote it as `WantedAppSeed[accountMark]` in `!!WantedLink`'s `Links.lua`, from Go `crypto/rand`) or
 `"local"` (made by the addon). **A local seed is weak**: it is SHA-512 over 256 event arrival times
@@ -64,8 +64,10 @@ installed. With no seed (a fresh install's first minutes) nothing is signed. Eac
 first 32 bytes of `SHA-512("wanted-char-key-v1\n" .. seed bytes .. "\n" .. character GUID)`. `pub[origin]` is that
 character's public key in base64 (`k`, 43 characters) and its GUID (`g`), for the app to send the server; only public
 keys are kept per character. `/wanted key reset` drops the seed, notes the app's seed it dropped (`appDropped`, a hash,
-so the app writing it again doesn't bring it back), sets `resetAt` and `resetPending`, and gathers a new local seed;
-the next hello carries `kr = 1`. `pending` holds authority records asked for in a fight, by origin, oldest first: they're
+so the app writing it again doesn't bring it back; a different app seed is taken as usual), clears `pub` (so the app
+uploads no key from before), sets `resetAt` (one time for the whole account: the app sends it with the keys and the
+server retires those bound before it) and gathers a new local seed. Each character's first hello with its new key
+carries `kr = 1`; `krSent[origin] = resetAt` notes that it went, so every character of the account says it once. `pending` holds authority records asked for in a fight, by origin, oldest first: they're
 made and signed once it's over (`Store:NewRecord`), with `t` the time they were asked for. A malformed seed is dropped
 at load. New tables with defaults: no migration.
 

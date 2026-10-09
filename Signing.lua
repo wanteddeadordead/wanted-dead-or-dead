@@ -150,14 +150,23 @@ function Signing:AddToHello(fields)
 		return
 	end
 	fields.k, fields.g = k, UnitGUID("player")
-	if Wanted.db.signing.resetPending then
+	if private.OwesResetHello() then
 		fields.kr = 1
 	end
 end
 
----A hello with kr = 1 went out: later ones go without it.
+---Whether this character hasn't yet said kr = 1 since the account's keys were last reset: every character of the
+---account says it once, on its first hello with its new key.
+function private.OwesResetHello()
+	local signing = Wanted.db.signing
+	return type(signing.resetAt) == "number" and (type(signing.krSent) ~= "table" or signing.krSent[Wanted.Store:GetOrigin()] ~= signing.resetAt)
+end
+
+---A hello with kr = 1 went out from this character: its later ones go without it.
 function Signing:ResetSent()
-	Wanted.db.signing.resetPending = nil
+	local signing = Wanted.db.signing
+	signing.krSent = type(signing.krSent) == "table" and signing.krSent or {}
+	signing.krSent[Wanted.Store:GetOrigin()] = signing.resetAt
 end
 
 ---Where the seed came from: "app", "local" or nil (none yet).
@@ -274,7 +283,7 @@ function private.FinishPool(pool)
 	Wanted:QueueWork(function()
 		private.Key()
 		-- After /wanted key reset: tell the channel at once, with kr = 1
-		if signing.resetPending and Wanted.Sync and Wanted.Sync.SayHello then
+		if private.OwesResetHello() and Wanted.Sync and Wanted.Sync.SayHello then
 			Wanted.Sync:SayHello()
 		end
 	end)
@@ -287,8 +296,9 @@ end
 -- ============================================================================
 
 ---Drops this account's seed and makes a new one (from event times: an app seed that was stolen can't be used
----again), then sends one hello with kr = 1. Peers who hear it keep only the new key for this character (and what
----they already checked). Every character of the account gets a new key.
+---again), and every character's public key, so the app uploads none from before (it tells the server the time, and
+---the server retires the keys bound before it). Every character of the account gets a new key and says kr = 1 on its
+---first hello with it: peers who hear that keep only the new key for that character (and what they already checked).
 function Signing:Reset()
 	local signing = Wanted.db.signing
 	if signing.source == "app" and signing.seed then
@@ -296,7 +306,7 @@ function Signing:Reset()
 	end
 	signing.seed, signing.source = nil, nil
 	signing.resetAt = GetServerTime()
-	signing.resetPending = true
+	signing.pub = {}
 	private.key = nil
 	private.StopPool()
 	private.StartPool()

@@ -1838,12 +1838,15 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 				end
 			end
 		end
+		local limits = {}
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
 			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
 			-- stamps the sender)
 			if tag == TAG_LIVE or (type(record) == "table" and record.origin == sender) then
 				isNew, why = Store:Merge(record, sender)
+			elseif not private.RelayedInBounds(record, limits) then
+				isNew, why = false, "further than its origin's chain is known to reach"
 			else
 				isNew, why = Store:MergeRelayed(record)
 			end
@@ -2077,6 +2080,27 @@ function private.SkipTarget(origin, seq, tbl, sender)
 	return min(seq, limit, max(Store:GetHighestHeld(origin), chainSeq) + MAX_SKIP)
 end
 
+---Whether a relayed record's seq is one its origin's chain could have reached: no more than MAX_SKIP past what the
+---origin itself said, two other players said, or this client holds, as a skip is bounded. The first record under an
+---id is kept until the origin's own comes (Store), so one relayed far ahead would hold ids the origin's own records
+---need. limits: the bound worked out once per origin for one message (a fill carries one origin's records in order,
+---so the chain moves with them). A record that isn't one passes: the store refuses it as malformed.
+---@param record any
+---@param limits table origin -> seq
+---@return boolean
+function private.RelayedInBounds(record, limits)
+	if type(record) ~= "table" or type(record.origin) ~= "string" or type(record.seq) ~= "number" then
+		return true
+	end
+	local origin = record.origin
+	local limit = limits[origin]
+	if not limit then
+		limit = max(private.OwnAdvertised(origin) or 0, private.Advertised(origin), Store:GetHighestHeld(origin), Store:GetChainSeq(origin)) + MAX_SKIP
+		limits[origin] = limit
+	end
+	return record.seq <= limit
+end
+
 ---Moves chains on over the holes a fill says pruning left at its sender (SendFill), once this client has what
 ---comes before each: the records between were pruned everywhere it could ask, and would be asked for forever.
 ---@param tbl table the fill
@@ -2256,10 +2280,13 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		private.HandleNeed(tbl.n, sender, true)
 	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then
 		private.currentSource = sender
+		local limits = {}
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
 			if type(record) == "table" and record.origin == sender then
 				isNew, why = Store:Merge(record, sender)
+			elseif not private.RelayedInBounds(record, limits) then
+				isNew, why = false, "further than its origin's chain is known to reach"
 			else
 				isNew, why = Store:MergeRelayed(record)
 			end

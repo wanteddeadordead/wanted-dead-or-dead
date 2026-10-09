@@ -820,28 +820,9 @@ function private.Insert(record, live, fromApp)
 	-- What this client found checking a signature is kept outside the records (WantedDB.sigChecked, sigPre): a peer's
 	-- copy can't carry it in
 	record.sv, record.pre = nil, nil
-	local existing = db.records[record.id]
-	if existing then
-		if existing.hash == record.hash and not existing.test then
-			if live then
-				existing.live = true
-			end
-			if fromApp then
-				existing.app = true
-			end
-		end
-		return false, "already held"
-	end
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
 		return false, "test data"
 	end
-	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
-	-- beta build): it never comes in
-	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
-		return false, "beta"
-	end
-	record.live = live or nil
-	record.app = fromApp or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
@@ -852,6 +833,34 @@ function private.Insert(record, live, fromApp)
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
+	local existing = db.records[record.id]
+	if existing then
+		if existing.hash == record.hash and not existing.test then
+			if live then
+				existing.live = true
+			end
+			if fromApp then
+				existing.app = true
+			end
+			return false, "already held"
+		end
+		-- A different record under a held id. One relayed by another player could be made up to hold the id so the
+		-- origin's real record is never taken (nothing it decided would then count here): it gives way to that record
+		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,
+		-- once held, is never replaced.
+		if existing.test or Store:IsTrusted(existing) or record.tampered or not (live or fromApp or private.VerifiesNow(record)) then
+			return false, "already held"
+		end
+		Wanted:Log("!! Store: %s record %s held from a relay gives way to its origin's own", tostring(record.kind), tostring(record.id))
+		private.Unhold(existing)
+	end
+	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
+	-- beta build): it never comes in
+	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
+		return false, "beta"
+	end
+	record.live = live or nil
+	record.app = fromApp or nil
 	local chain = db.chains[record.origin]
 	if not chain then
 		chain = private.NewChain()
@@ -895,8 +904,42 @@ function private.Insert(record, live, fromApp)
 	return true
 end
 
+---Whether a record's signature checks out with a key of its origin's, checked now (about 20 ms in the game): for
+---the rare record that would replace a held one. Unsigned, no key for it, or the check not ready: no.
+function private.VerifiesNow(record)
+	local Signing, KeyBook, Crypto = Wanted.Signing, Wanted.KeyBook, Wanted.Crypto
+	local sig = record.data.sig
+	if not (Signing and KeyBook and Crypto and Crypto:IsOn() == true) or not Signing.KINDS[record.kind] or type(sig) ~= "string"
+		or #sig ~= Signing.SIG_LENGTH or strsub(sig, 1, 1) ~= Signing.SIG_VERSION then
+		return false
+	end
+	local key = KeyBook:Find(record.origin, strsub(sig, 2, 9))
+	local message = key and Store:SigningMessage(record)
+	local signature = message and Crypto:FromBase64(strsub(sig, 10))
+	if not signature or #signature ~= 64 then
+		return false
+	end
+	return Crypto:Verify(KeyBook:GetPrepared(key.pk) or Crypto:FromBase64(key.pk), message, signature) == true
+end
+
+---Takes a held record out for another under its id (Insert): what was found of its signature goes with it, and
+---its chain, if it went on over it, comes back to just before it, so the newcomer and the records after it are
+---checked against the chain afresh.
+function private.Unhold(existing)
+	local db = Wanted.db
+	db.records[existing.id] = nil
+	db.sigChecked[existing.id], db.sigPre[existing.id] = nil, nil
+	local chain = db.chains[existing.origin]
+	if chain and type(existing.seq) == "number" and chain.seq >= existing.seq then
+		local before = db.records[existing.origin..":"..(existing.seq - 1)]
+		chain.seq = existing.seq - 1
+		chain.lastHash = before and before.hash or (chain.seq == Store:SeqBase() and "0" or UNKNOWN_HASH)
+	end
+end
+
 ---Moves a chain on over records already held past its end (they arrived ahead of a gap). Without this the
----chain stays at the gap and the sync asks for those records again at every resync.
+---chain stays at the gap and the sync asks for those records again at every resync. A record flagged as not
+---following the chain that follows it now (the one before it was replaced) is cleared.
 ---@param origin string
 ---@param chain table
 function private.CatchUpChain(origin, chain)
@@ -906,6 +949,8 @@ function private.CatchUpChain(origin, chain)
 		if nextRecord.prev ~= chain.lastHash then
 			nextRecord.brokenChain = true
 			Wanted:Log("!! Store: record %s doesn't follow %s's previous record (broken chain)", tostring(nextRecord.id), origin)
+		elseif nextRecord.brokenChain then
+			nextRecord.brokenChain = nil
 		end
 		chain.seq = nextRecord.seq
 		chain.lastHash = nextRecord.hash

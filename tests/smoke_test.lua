@@ -9439,6 +9439,57 @@ end)()
 	end
 	check(select(1, Store:MergeRelayed(Sealed({ kind = "pass", id = "Fine Name-Realm:1", origin = "Fine Name-Realm", seq = 1, prev = "0", t = clock, data = { bounty = "x:1" } }))), "a name with a realm is fine")
 end)()
+-- 1.19.2: a record relayed by another player (an unsolicited fill) under an id the origin's own record later needs
+-- once held it for good: the real record was "already held", so a bounty, confirm or withdrawal was lost on every
+-- client the forgery reached first. The origin's own word (live, from the app, or signed with its key) replaces
+-- hearsay; hearsay never replaces anything. A relayed record far past the origin's known chain isn't taken at all
+;(function()
+	local Store, C, KB = ns.Store, ns.Crypto, ns.KeyBook
+	local victim = "Victim Poster"
+	local function Bounty(seq, prev, targetName, amount)
+		return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = prev, t = clock, data = { target = "Player-9-"..targetName, targetName = targetName, amount = amount } }
+	end
+	local forged = Sealed(Bounty(1, "0", "Fake", 1000))
+	check(select(1, Store:MergeRelayed(forged)) == true, "a relayed record takes a free id")
+	local real = Sealed(Bounty(1, "0", "Real", 5000))
+	-- Their next record, chained on the real one, arrives first: it doesn't follow the forgery
+	local second = Sealed(Bounty(2, real.hash, "Second", 100))
+	Store:Merge(second, victim)
+	check(Store:Get(victim..":2").brokenChain == true, "a record chained on the real one doesn't follow the forgery")
+	local isNew = Store:Merge(real, victim)
+	local held = Store:Get(victim..":1")
+	check(isNew == true and held.data.targetName == "Real" and held.live == true and not held.brokenChain, "the origin's own record replaces the relayed one")
+	check(Store:GetChainSeq(victim) == 2 and ns.db.chains[victim].lastHash == second.hash and not Store:Get(victim..":2").brokenChain,
+		"the chain stands on the real records, and the one after follows again: seq "..Store:GetChainSeq(victim))
+	local n2, why2 = Store:MergeRelayed(Sealed(Bounty(1, "0", "Again", 7000)))
+	check(n2 == false and why2 == "already held" and Store:Get(victim..":1").data.targetName == "Real", "a relayed record never replaces one heard from its origin")
+	Store:MergeRelayed(Sealed(Bounty(5, "0", "FiveA", 1)))
+	local n3 = Store:MergeRelayed(Sealed(Bounty(5, "0", "FiveB", 2)))
+	check(n3 == false and Store:Get(victim..":5").data.targetName == "FiveA", "one relayed record doesn't replace another")
+	-- Signed with the origin's key (learned from their hello): that's their word too
+	local seed = C:SHA512("victim poster"):sub(1, 32)
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:vp1:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(C:PublicKey(seed)), g = "Player-1-7C7C" }), "CHANNEL", victim, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(KB:HasKeys(victim), "the poster's key is known")
+	local signed = SignedBy(Bounty(5, "0", "FiveSigned", 3), seed)
+	local n4 = Store:MergeRelayed(signed)
+	check(n4 == true and Store:Get(victim..":5").data.targetName == "FiveSigned" and SV(signed) == nil, "a relayed record signed with the origin's key replaces hearsay")
+	local badSig = SignedBy(Bounty(5, "0", "FiveForged", 4), C:SHA512("someone else"):sub(1, 32))
+	badSig.data.sig = "1"..strsub(signed.data.sig, 2, 9)..strsub(badSig.data.sig, 10)
+	Sealed(badSig)
+	local n5 = Store:MergeRelayed(badSig)
+	check(n5 == false and Store:Get(victim..":5").data.targetName == "FiveSigned", "one signed with the wrong key doesn't")
+	-- The desktop app's catch-up brings the origin's word as well
+	Store:MergeRelayed(Sealed(Bounty(6, "0", "SixA", 1)))
+	local fromApp = Sealed(Bounty(6, "0", "SixApp", 2))
+	check(Store:MergeRelayed(fromApp, true) == true and Store:Get(victim..":6").data.targetName == "SixApp" and Store:Get(victim..":6").app == true, "and so does the app's catch-up")
+	-- Relayed records far past what anyone said the origin's chain reaches aren't taken
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:rp1:1/1:"..ns.Sync:Encode({ r = { Sealed(Bounty(9000, "0", "Far", 1)), Sealed(Bounty(400, "0", "Near", 1)) } }), "CHANNEL", "Relay Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(Store:Get(victim..":9000") == nil and Store:Get(victim..":400") ~= nil, "a relayed record further than a skip could go isn't taken; one within reach is: "..tostring(Store:Get(victim..":9000") ~= nil)..","..tostring(Store:Get(victim..":400") ~= nil))
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

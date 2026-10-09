@@ -1020,6 +1020,8 @@ function Store:FreshStart()
 		removed = removed + 1
 	end
 	db.records = {}
+	-- Signature results go with the records: the chain starts again, so ids come round again
+	db.sigChecked, db.sigPre = {}, {}
 	db.chains = {}
 	db.chains[private.origin] = private.NewChain()
 	private.ownChain = db.chains[private.origin]

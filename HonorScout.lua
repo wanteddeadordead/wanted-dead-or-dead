@@ -42,7 +42,7 @@ function HonorScout:OnEnable()
 	pcall(hooksecurefunc, "SetAchievementComparisonUnit", function()
 		if private.pending and not private.asking then
 			private.pending.taken = true
-			private.UnmutePanel()
+			private.UnmutePanel(true)
 		end
 	end)
 end
@@ -147,10 +147,14 @@ function private.MutePanel()
 end
 
 ---Gives the panel its answers back (only if we took them away), next frame: not while the answer it shouldn't hear
----is still being handed out.
-function private.UnmutePanel()
+---is still being handed out. now: the player's own comparison took over, so its answer must reach the panel.
+---@param now boolean?
+function private.UnmutePanel(now)
 	local panel = private.muted
-	if panel then
+	if panel and now then
+		private.muted = nil
+		panel:RegisterEvent("INSPECT_ACHIEVEMENT_READY")
+	elseif panel then
 		private.muted = nil
 		C_Timer.After(0, function()
 			if not private.muted then

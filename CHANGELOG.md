@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
-- The PvP rank scout no longer causes Lua errors in the achievement window's comparison panel. Once the achievement
-  window had been loaded, even closed, each player the scout looked up made that panel throw an error.
+- No more Lua errors from Blizzard's achievement code (GetCategoryNumAchievements) after opening the Legacy Challenges
+  window: once it had been opened, each player Wanted's PvP rank scout looked up made its hidden comparison panel throw
+  an error.
 
 ## [1.19.0] - 2026-10-09
 

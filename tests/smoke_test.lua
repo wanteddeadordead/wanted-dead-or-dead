@@ -6188,6 +6188,16 @@ end)()
 	RunTimers()
 	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-OTHER")
 	check(panelHeard == 2, "an unanswered comparison gives the panel its answers back")
+	-- The player's own comparison takes over while ours is out: the panel hears its answer at once
+	clock = clock + 5
+	ns.db.hkBook = {}
+	answer = "7"
+	Fire("PLAYER_TARGET_CHANGED")
+	-- the window's own call, which the scout's hook sees
+	SetAchievementComparisonUnit("target")
+	for _, hook in ipairs(globalHooks.SetAchievementComparisonUnit or {}) do hook("target") end
+	Fire("INSPECT_ACHIEVEMENT_READY", "Player-9-ELRIN")
+	check(panelHeard == 3, "the player's own comparison reaches the panel straight away")
 	AchievementFrameComparison = nil
 	for k, v in pairs(real) do _G[k] = v end
 	ns.db.hkBook = {}

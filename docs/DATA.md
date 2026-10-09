@@ -52,6 +52,36 @@ character, for the menu's counts of new things (`UI:NewCount`, `UI:MarkViewed`).
 A kind's first count takes in everything there, so nothing old shows as new. Raids keep their own in
 `WantedDB.raids[character].viewed`.
 
+`WantedDB.signing` (from 1.19.0) is this WoW account's signing seed and its characters' public keys (`Signing.lua`):
+`{ seed, source, pub = { [origin] = { k, g } }, resetAt, resetPending, appDropped, pending = { [origin] = { { kind,
+data, t, pending } } } }`. `seed` is the account seed as 64 lower-case hex digits (32 bytes); `source` is `"app"` (the
+desktop app wrote it as `WantedAppSeed[accountMark]` in `!!WantedLink`'s `Links.lua`, from Go `crypto/rand`) or
+`"local"` (made by the addon). **A local seed is weak**: it is SHA-512 over 256 event arrival times
+(`debugprofilestop()` and `GetTimePreciseSec()`) plus readings of the session (`time()`, `GetTime()`, the player GUID,
+`fastrandom()`, `math.random()`, the cursor, `GetNetStats()`, `GetFramerate()`, `collectgarbage("count")`). No API
+promises those are hard to guess, and it hasn't been measured; the app's seed replaces it whenever the app is
+installed. With no seed (a fresh install's first minutes) nothing is signed. Each character's key is Ed25519 from the
+first 32 bytes of `SHA-512("wanted-char-key-v1\n" .. seed bytes .. "\n" .. character GUID)`. `pub[origin]` is that
+character's public key in base64 (`k`, 43 characters) and its GUID (`g`), for the app to send the server; only public
+keys are kept per character. `/wanted key reset` drops the seed, notes the app's seed it dropped (`appDropped`, a hash,
+so the app writing it again doesn't bring it back), sets `resetAt` and `resetPending`, and gathers a new local seed;
+the next hello carries `kr = 1`. `pending` holds authority records asked for in a fight, by origin, oldest first: they're
+made and signed once it's over (`Store:NewRecord`), with `t` the time they were asked for. A malformed seed is dropped
+at load. New tables with defaults: no migration.
+
+`WantedDB.keys` (from 1.19.0) is other players' public signing keys (`KeyBook.lua`): `keys[origin] = { keyedAt, appAt,
+resetAt, list = { { pk, kid, src, g, firstAt, lastHeard } } }`. `pk` is the key in base64 (43 characters), `kid` its id
+(below), `src` `"live"` (from that player's own hello on the channel: the game stamps the sender) or `"app"` (from the
+app's catch-up `addonKeys`), `g` the GUID it's bound to. At most 4 keys an origin; a new one pushes out the least
+recently heard. A key heard under another GUID for the name drops the earlier GUID's keys. `appAt` is when the app last
+listed the origin's keys: its list wins (live keys it doesn't list are dropped, and for 3 days a live key it doesn't list
+isn't taken). `keyedAt` is when the origin's first key was learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
+origins not heard for 60 days with no authority record held go, then the least recently heard until 2,000 remain (about
+0.5 MB at most). New table with a default: no migration.
+
+`WantedDB.settings.sigBackground` (from 1.19.0, default on): check held records' signatures in the background, one a
+second, out of combat (Settings, Display). Off, only records a page shows or an authority decision reads are checked.
+
 `WantedDB.pvpSeason` (from 1.9.0) is `{ season, week, endsAt, weekMax, seasonMax, at }`: Blizzard's PvP season as the
 game tells it (`GetCurrentArenaSeason()`, the PvP rank track's `weekNumber`, `currentWeekProgressiveMaxLevel` and
 `maxLevel`), `endsAt` the game-server time it ends (0 when the game doesn't know yet) and `at` when it was read.
@@ -370,6 +400,36 @@ can be innocent (a reinstall, lost saved data) and are still listed, but never w
 migration. Records held from before 1.3.3 that came by catch-up have no `app` flag and witness nothing until the
 app or their origin sends them again. The record hash is Adler32, which can be forged; a stronger hash is a planned
 follow-up that needs the server and the desktop app to change with the addon.
+
+Signed records (from 1.19.0). Each character signs its authority records with its own Ed25519 key (RFC 8032), so a
+record relayed by someone else can't be forged in its name. The formats are shared with the server and the desktop app
+and are pinned:
+- **Kinds signed:** `bounty`, `raise`, `withdraw`, `pass`, `hunt`, `claim`, `confirm`, `mark`, `payment`, `link` and
+  `notice` (`Signing.KINDS`). Kills, deaths, assists, `spotted` and `proof` are not.
+- **Base64:** RFC 4648's standard alphabet (`A-Z a-z 0-9 + /`), no padding. A 32-byte public key is 43 characters, a
+  64-byte signature 86.
+- **Key id:** base64 of the first 6 bytes of SHA-512(public key), 8 characters. Only a hint for finding the key.
+- **`data.sig`:** `"1" .. key id .. base64(signature)`, 95 characters, inside `data` (the server and app keep only kind,
+  id, origin, seq, prev, t, data and hash).
+- **What's signed:** `"wanted-sig-v1\n" .. Canonical(record)` with `data.sig` left out (`Store:SigningMessage`), where
+  Canonical is the string the hash uses. The signature is added, then `hash` is made as before, so the Adler-32 covers
+  it and 1.18 clients hash, keep and relay signed records unchanged.
+- **Hello:** gains `k` (the sender's public key) and `g` (its GUID); only the one hello after `/wanted key reset` carries
+  `kr = 1`. A key binds only from a hello heard on the channel (or guild channel) from its sender: never from a realm
+  link's whisper, a fill or a record.
+- **App catch-up:** an entry may carry `addonKeys = { { n = name, g = GUID, k = key, t = when the server took it } }`, keys
+  the server accepted only from the app of the account the character is confirmed to. They bind with `src = "app"`.
+- A record made in a fight is made and signed when it's over (`WantedDB.signing.pending`).
+
+A received record's `sv` (from 1.19.0) is local, like `live` and `app`: `true` when this client checked its signature
+against a known key of its origin (or it's this client's own signed record), `false` when the signature failed. A failed
+one is also flagged `tampered`, so it's never read. `pre` (from 1.19.0, local) marks an authority record held before
+its origin's first key was learned. Incoming copies drop both. Checks run only out of combat, a slice a frame within the
+work queue's 3 ms, first for records something reads or shows (an authority decision, the board, a bounty's page, a
+record about a bounty the player posted, hunts or claimed) and otherwise one a second in the background. 1.19.0 changes
+no counting rules beyond a failed signature: unsigned records, and signed ones not checked yet or signed by a key not
+known, count as before. A later release is planned to stop counting unsigned or unchecked authority records from origins
+with a known key (except those marked `pre`). Optional new fields: no migration.
 
 ## Fresh start (development builds)
 

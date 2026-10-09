@@ -21,6 +21,7 @@ Libs\LibDeflate\LibDeflate.lua
 Libs\LibSerialize\LibSerialize.lua
 
 Core.lua
+Crypto.lua
 Store.lua
 Recorder.lua
 Sync.lua

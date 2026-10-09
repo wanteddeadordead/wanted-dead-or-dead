@@ -26,7 +26,18 @@ wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 date = os.date
 time = os.time
-bit = { band = function(a, b) local r, p = 0, 1 while a > 0 and b > 0 do if a % 2 == 1 and b % 2 == 1 then r = r + p end a, b, p = a // 2, b // 2, p * 2 end return r end }
+-- The game's bit library: inputs taken modulo 2^32, unsigned 32-bit results
+do
+	local function u(x) return math.tointeger(x % 4294967296) end
+	bit = {
+		band = function(a, b) return u(a) & u(b) end,
+		bor = function(a, b) return u(a) | u(b) end,
+		bxor = function(a, b) return u(a) ~ u(b) end,
+		bnot = function(a) return u(~u(a)) end,
+		lshift = function(a, n) return u(u(a) << (n % 32)) end,
+		rshift = function(a, n) return u(a) >> (n % 32) end,
+	}
+end
 
 -- Frames
 local registry = {}
@@ -8344,6 +8355,122 @@ end)()
 	end
 	check(ns.Sync:GetPointer().e == base + 9, "and later moves, a couple of days apart, are followed too: "..(ns.Sync:GetPointer().e - base))
 	check(ns.db.trustedEpoch <= base + 9, "the ceiling never passes the pointer followed")
+end)()
+-- Signing (1.19.0), the arithmetic: SHA-512 and Ed25519 under the game's bit library, RFC 8032 section 7.1's four
+-- vectors, base64, a check run a slice at a time within the frame's work time, and the self-test
+;(function()
+	local C = ns.Crypto
+	local vectors = {
+		{ "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "", "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b" },
+		{ "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb", "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", "72", "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00" },
+		{ "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7", "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025", "af82", "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a" },
+		{ "833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42", "ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf", "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", "dc2a4459e7369633a52b1bf277839a00201009a3efbf3ecb69bea2186c26b58909351fc9ac90b3ecfdfbc7c66431e0303dca179c138ac17ad9bef1177331a704" },
+	}
+	for i, v in ipairs(vectors) do
+		local seed, pk, msg, sig = C:FromHex(v[1]), C:FromHex(v[2]), C:FromHex(v[3]), C:FromHex(v[4])
+		check(C:PublicKey(seed) == pk, "RFC 8032 vector "..i..": the public key")
+		check(C:Sign(seed, pk, msg) == sig, "RFC 8032 vector "..i..": the signature")
+		check(C:Verify(pk, msg, sig) and C:Verify(C:Prepare(pk), msg, sig), "RFC 8032 vector "..i..": it checks out")
+		check(not C:Verify(pk, msg.."x", sig), "RFC 8032 vector "..i..": not with the message changed")
+		for _, at in ipairs({ 1, 32, 33, 64 }) do
+			local flipped = sig:sub(1, at - 1)..string.char((sig:byte(at) + 1) % 256)..sig:sub(at + 1)
+			check(not C:Verify(pk, msg, flipped), "RFC 8032 vector "..i..": not with byte "..at.." of the signature changed")
+		end
+	end
+	-- s + L, the same signature written another way, fails (RFC 8032 asks for s < L)
+	local v = vectors[1]
+	local pk, sig = C:FromHex(v[2]), C:FromHex(v[4])
+	local L = C:FromHex("edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010")
+	local carry, s = 0, {}
+	for i = 1, 32 do
+		local sum = sig:byte(32 + i) + L:byte(i) + carry
+		s[i], carry = string.char(sum % 256), sum >= 256 and 1 or 0
+	end
+	check(carry == 0 and not C:Verify(pk, "", sig:sub(1, 32)..table.concat(s)), "a signature with s + L fails")
+	-- y = 2 is on no point of the curve (x squared would have to be a non-square)
+	check(C:Prepare("\2"..string.rep("\0", 31)) == nil and C:Prepare("short") == nil and not C:Verify("short", "", sig), "a key that isn't a point is refused")
+	-- SHA-512: FIPS 180-2's one-block and two-block messages, and the empty one
+	check(C:Hex(C:SHA512("")) == "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e", "SHA-512 of nothing")
+	check(C:Hex(C:SHA512("abc")) == "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", "SHA-512 of abc")
+	check(C:Hex(C:SHA512("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"))
+		== "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909", "SHA-512 of two blocks")
+	-- Base64, RFC 4648's standard alphabet without padding
+	local b64 = { [""] = "", f = "Zg", fo = "Zm8", foo = "Zm9v", foob = "Zm9vYg", fooba = "Zm9vYmE", foobar = "Zm9vYmFy", ["\251\255\191"] = "+/+/" }
+	for plain, coded in pairs(b64) do
+		check(C:Base64(plain) == coded and C:FromBase64(coded) == plain, "base64 of "..coded)
+	end
+	for _, bad in ipairs({ "Zg==", "Z", "Zh", "Zm9", "Zm-v", "Zm9v_w", 7 }) do
+		check(C:FromBase64(bad) == nil, "not base64: "..tostring(bad))
+	end
+	check(#C:Base64(pk) == 43 and #C:Base64(sig) == 86 and #C:KeyId(pk) == 8 and C:KeyId(pk) == C:Base64(C:SHA512(pk):sub(1, 6)),
+		"a key is 43 characters, a signature 86 and a key id 8")
+	check(C:FromHex("0aFf") == "\10\255" and C:FromHex("0g") == nil and C:FromHex("abc") == nil, "hex")
+	-- The self-test ran at login, out of combat; a failing one switches signing and checking off
+	RunTimers()
+	check(C:IsOn() == true and C:SelfTestText() == "passed", "the self-test passed at login: "..C:SelfTestText())
+	C:RunSelfTest({ pk = v[2], msg = "00", sig = v[4] })
+	RunTimers() RunTimers()
+	check(C:IsOn() == false and C:SelfTestText():find("FAILED", 1, true), "a failing self-test switches signing off: "..C:SelfTestText())
+	C:RunSelfTest({ pk = v[2], msg = v[3], sig = v[4] })
+	RunTimers() RunTimers()
+	check(C:IsOn() == true, "and passing switches it on")
+	-- A check runs a slice a frame within the frame's 3 ms of work, at the game's speed: the clock here runs as much
+	-- faster as this Lua is (a check took 23 ms in the game)
+	local v4 = vectors[4]
+	pk, sig = C:FromHex(v4[2]), C:FromHex(v4[4])
+	local msg = C:FromHex(v4[3])
+	local function Time(f, n)
+		local t0 = os.clock()
+		for _ = 1, n do f() end
+		return (os.clock() - t0) * 1000 / n
+	end
+	local seed = C:FromHex(v4[1])
+	local key = C:Prepare(pk)
+	local costs = {
+		sha = Time(function() C:SHA512(msg..msg) end, 20),
+		pk = Time(function() C:PublicKey(seed) end, 5),
+		sign = Time(function() C:Sign(seed, pk, msg) end, 5),
+		verify = Time(function() C:Verify(pk, msg, sig) end, 5),
+		prepare = Time(function() C:Prepare(pk) end, 5),
+		prepared = Time(function() C:Verify(key, msg, sig) end, 5),
+	}
+	local scale = 23 / costs.verify
+	local realStop, realAfter = debugprofilestop, C_Timer.After
+	local nextFrame = {}
+	debugprofilestop = function() return os.clock() * 1000 * scale end
+	C_Timer.After = function(_, f) nextFrame[#nextFrame + 1] = f end
+	-- Other work waiting takes its share of the frame first
+	ns:QueueWork(function() local t = debugprofilestop() while debugprofilestop() - t < 1.2 do end end)
+	local result
+	C:Check(C:NewCheck(pk, msg, sig), function(ok) result = ok end)
+	collectgarbage("stop")
+	local frames, worst = 0, 0
+	while result == nil and frames < 100 do
+		frames = frames + 1
+		local t0 = debugprofilestop()
+		ns:DoQueuedWork(3)
+		worst = max(worst, debugprofilestop() - t0)
+		local due = nextFrame
+		nextFrame = {}
+		for _, f in ipairs(due) do f() end
+	end
+	collectgarbage("restart")
+	debugprofilestop, C_Timer.After = realStop, realAfter
+	check(result == true, "the check finished and checked out: "..tostring(result))
+	check(worst <= 3, format("no frame's work went over 3 ms at the game's speed: %.2f ms", worst))
+	-- Nor does a check run in a fight
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	result = nil
+	C:Check(C:NewCheck(pk, msg, sig), function(ok) result = ok end)
+	RunFrames()
+	check(result == nil, "no check in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers() RunTimers()
+	check(result == true, "it runs once the fight is over")
+	print(format("wanted smoke: crypto here (%s): SHA-512 of 128 bytes %.2f ms, key %.1f ms, sign %.1f ms, check %.1f ms, prepare a key %.2f ms, check with it %.1f ms; a check takes %d frames at the game's speed, the busiest %.2f ms",
+		_VERSION, costs.sha, costs.pk, costs.sign, costs.verify, costs.prepare, costs.prepared, frames, worst))
 end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.

@@ -962,16 +962,25 @@ function Wanted:DoQueuedWork(ms)
 		return
 	end
 	local start = debugprofilestop()
+	private.workUntil = start + ms
 	while private.workHead <= private.workTail and debugprofilestop() - start < ms do
 		local func = private.work[private.workHead]
 		private.work[private.workHead] = nil
 		private.workHead = private.workHead + 1
 		func()
 	end
+	private.workUntil = nil
 	if private.workHead > private.workTail then
 		private.work, private.workHead, private.workTail = {}, 1, 0
 		private.workFrame:Hide()
 	end
+end
+
+---How many milliseconds of this frame's work time are left, for a piece of queued work that can stop early (a
+---signature check). Outside the queue, a whole frame's.
+---@return number
+function Wanted:WorkTimeLeft()
+	return private.workUntil and private.workUntil - debugprofilestop() or WORK_MS_PER_FRAME
 end
 
 private.workFrame:SetScript("OnUpdate", function()

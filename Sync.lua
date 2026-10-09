@@ -1484,7 +1484,10 @@ function private.HelloFields()
 end
 
 function private.SendHello()
-	private.Send(TAG_HELLO, private.HelloFields())
+	local fields = private.HelloFields()
+	if private.Send(TAG_HELLO, fields) and fields.kr then
+		Wanted.Signing:ResetSent()
+	end
 end
 
 ---Says hello on the channel now (a new signing key after /wanted key reset).

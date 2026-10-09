@@ -8576,6 +8576,12 @@ end)()
 	fields = {}
 	S:AddToHello(fields)
 	check(fields.k == newK and fields.kr == nil, "later hellos carry no kr")
+	-- Not sent (out of the channel): it stays for the next hello
+	db.signing.resetPending = true
+	fields = {}
+	S:AddToHello(fields)
+	check(fields.kr == 1 and db.signing.resetPending, "kr stays until a hello carrying it is sent")
+	db.signing.resetPending = nil
 	-- A new app seed (the app made another) is taken
 	local appSeed2 = string.rep("7c", 32)
 	WantedAppSeed = { [mark] = appSeed2 }

@@ -152,8 +152,12 @@ function Signing:AddToHello(fields)
 	fields.k, fields.g = k, UnitGUID("player")
 	if Wanted.db.signing.resetPending then
 		fields.kr = 1
-		Wanted.db.signing.resetPending = nil
 	end
+end
+
+---A hello with kr = 1 went out: later ones go without it.
+function Signing:ResetSent()
+	Wanted.db.signing.resetPending = nil
 end
 
 ---Where the seed came from: "app", "local" or nil (none yet).

@@ -9725,6 +9725,37 @@ end)()
 	check(Store:Get(victim..":510").data.bounty == "b:1", "a fill's signed challenger is taken the same way")
 	Store.MAX_VERIFIES_NOW_PER_MINUTE = realMax
 end)()
+-- 1.19.2: a sender's challengers waiting to be checked are a fill's worth at most (none of an honest catch-up is
+-- lost), and each counts against the sender's hourly records like one taken in, so one account can't keep the
+-- checks running for ever
+;(function()
+	local Store, Sync, C = ns.Store, ns.Sync, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax, realCap = Store.MAX_VERIFIES_NOW_PER_MINUTE, Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 0
+	local waiting = select(3, ns.Verify:Counts())
+	local function Rec(seq, name) return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { target = "Player-9-W", targetName = name, amount = 1 } } end
+	for seq = 600, 659 do Store:MergeRelayed(Sealed(Rec(seq, "Held"..seq)), nil, "Evil Doer") end
+	for seq = 600, 659 do Store:MergeRelayed(SignedBy(Rec(seq, "Real"..seq), seed), nil, "Honest Filler") end
+	check(select(3, ns.Verify:Counts()) >= waiting + 59, "sixty challengers from one sender all wait (one may be under check already): "..(select(3, ns.Verify:Counts()) - waiting))
+	for _ = 1, 400 do RunTimers() end
+	check(Store:Get(victim..":659").data.targetName == "Real659" and select(3, ns.Verify:Counts()) == waiting, "and every one is checked and taken")
+	clock = clock + 3600
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 3
+	-- Hunts (no numbers in the data: this harness's encoder turns them into floats, which hash differently here)
+	local function Hunt(seq, bounty) return { kind = "hunt", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { bounty = bounty } } end
+	local offered = {}
+	for seq = 700, 704 do
+		Store:MergeRelayed(Sealed(Hunt(seq, "held:"..seq)), nil, "Evil Doer")
+		offered[#offered + 1] = SignedBy(Hunt(seq, "real:"..seq), seed)
+	end
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:ch2:1/1:"..Sync:Encode({ r = offered }), "CHANNEL", "Capped Sender", nil, nil, nil, Sync:GetInfo().channelName)
+	for _ = 1, 40 do RunTimers() end
+	check(Store:Get(victim..":702").data.bounty == "real:702" and Store:Get(victim..":703").data.bounty == "held:703" and Store:Get(victim..":704").data.bounty == "held:704",
+		"a fill's challengers count against the sender's hourly allowance: three taken, the rest refused")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE, Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realMax, realCap
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -22,8 +22,9 @@ local private = {
 -- Bounties posted, hunted or claimed by this character: records arriving about them are checked at once. Worked out
 -- again at most this often
 local MINE_SECONDS = 10
--- Challengers (Verify:Challenge) waiting from one sender at most: an honest fill's catch-up carries a few at a time
-local MAX_CHALLENGERS_PER_SENDER = 50
+-- Challengers (Verify:Challenge) waiting from one sender at most: a whole fill's worth (Sync's MAX_FILL_PER_REQUEST),
+-- so an honest filler's catch-up over held forgeries never loses one (a dropped record isn't asked for again)
+local MAX_CHALLENGERS_PER_SENDER = 200
 
 
 

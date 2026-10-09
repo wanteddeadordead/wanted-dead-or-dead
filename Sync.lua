@@ -166,6 +166,8 @@ local MAX_INBOUND_PER_SENDER_PER_MINUTE = 60
 -- made-up records (ten a message, a message a second) doesn't. Records are kept for days to months, so it bounds
 -- how fast the saved data can be made to grow.
 Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 3000
+-- The store's answer for a relayed record that waits for Verify to check its signature (Store.private.Insert)
+local WAITING_CHECK = "waiting for its signature to be checked"
 local PAUSE_SECONDS = 10 * 60
 local JOIN_RETRY_SECONDS = 10
 local JOIN_SETTLE_SECONDS = 5
@@ -1858,7 +1860,8 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 				isNew, why = Store:MergeRelayed(record, nil, sender)
 			end
 			Wanted:Log("Sync: %s record %s from %s: %s", tag == TAG_LIVE and "live" or "fill", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
-			if isNew then
+			-- One waiting for its signature to be checked (Verify) costs a check: it counts like one taken in
+			if isNew or why == WAITING_CHECK then
 				private.NoteAccepted(sender)
 				private.stats.merged = private.stats.merged + 1
 				if type(record.origin) == "string" and type(record.seq) == "number" then
@@ -2327,7 +2330,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 				isNew, why = Store:MergeRelayed(record, nil, sender)
 			end
 			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
-			if isNew then
+			if isNew or why == WAITING_CHECK then
 				private.NoteAccepted(sender)
 				private.stats.merged = private.stats.merged + 1
 			end

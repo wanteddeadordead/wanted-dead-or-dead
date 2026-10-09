@@ -6390,10 +6390,14 @@ end)()
 	local released, unreleased = {}, changelog:match("## %[Unreleased%](.-)\n## %[")
 	for v in changelog:gmatch("\n## %[(%d+%.%d+%.%d+)%]") do released[#released + 1] = v end
 	local entries = {}
+	local isReleased = {}
+	for _, v in ipairs(released) do isReleased[v] = true end
 	for _, e in ipairs(ns.WHATS_NEW) do
 		entries[e.version] = true
 		check(#e.lines > 0 and #e.lines <= 5, e.version..": one to five lines")
 		check(e.version:match("%.0$") or e.pinned, e.version..": a patch release gets no What's new")
+		-- A placeholder waiting for the author's note never ships
+		check(not isReleased[e.version] or not ((e.note or "")..table.concat(e.lines, "\n")):find("TODO", 1, true), e.version..": released with a TODO in What's new")
 	end
 	local newestMinor
 	for _, v in ipairs(released) do
@@ -6459,13 +6463,16 @@ end)()
 	Fire("LOADING_SCREEN_DISABLED")
 	RunTimers()
 	check(not N:IsShown(), "and once only")
-	-- The author's note leads, signed
+	-- The author's note leads, signed (Show shows the newest entry: any newer than 1.18.0 are set aside)
+	local newer = {}
+	while ns.WHATS_NEW[1].version ~= "1.18.0" do tinsert(newer, 1, tremove(ns.WHATS_NEW, 1)) end
 	ns.VERSION = "1.18.0"
 	N:Show()
 	check(f.title._text == "What's new in Wanted 1.18.0" and f.body._text:find("^This one is about getting together") and f.body._text:find("Chris (xmadness), who makes Wanted", 1, true),
 		"the note first, signed: "..f.body._text:sub(1, 60))
 	check(not f.art._shown, "no picture when the version has none")
 	f.ok:Click()
+	for _, e in ipairs(newer) do tinsert(ns.WHATS_NEW, 1, e) end
 	-- 1.17.1's: the Founding Hunter crest above the note, and the launch paragraph
 	ns.db.whatsNewSeen = "1.17.0"
 	ns.VERSION = "1.17.1"

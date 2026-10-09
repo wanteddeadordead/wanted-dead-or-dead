@@ -14,6 +14,15 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		-- TODO(Chris): placeholder. The note and lines for 1.19.0 are the owner's to write; the smoke test fails once
+		-- 1.19.0 is released in CHANGELOG.md while this still says TODO.
+		version = "1.19.0",
+		note = "TODO: the author's note for 1.19.0.",
+		lines = {
+			"TODO: signed records (placeholder).",
+		},
+	},
+	{
 		version = "1.18.0",
 		note = "This one is about getting together and finding things faster. You asked for an easy way to set up world PvP "
 			.."raids, so now there is one, and the menu was getting crowded, so I cut it down.\n\n"

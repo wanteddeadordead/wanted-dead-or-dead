@@ -14,12 +14,18 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
-		-- TODO(Chris): placeholder. The note and lines for 1.19.0 are the owner's to write; the smoke test fails once
-		-- 1.19.0 is released in CHANGELOG.md while this still says TODO.
 		version = "1.19.0",
-		note = "TODO: the author's note for 1.19.0.",
+		note = "This one is about trust. Bounties run on your word: when a poster confirms a kill or pays a hunter, "
+			.."everyone's addon has to believe it really came from them, and until now another player could fake that. "
+			.."From this version, your addon signs what you post, claim, confirm and pay, so nobody can do it in your name.\n\n"
+			.."You don't need to do anything. With the Wanted app, your key comes from it; without it, the addon makes one "
+			.."after a few minutes of play.",
 		lines = {
-			"TODO: signed records (placeholder).",
+			"Your bounties, claims, confirms and payments are signed, so nobody can fake them in your name.",
+			"A bounty's details show Signed when a poster's or hunter's word checks out, and leave out anything forged.",
+			"Checking runs in the background, out of combat, without slowing your game.",
+			"Using the Wanted app? Your key comes from it and is stronger. Get it at wanteddeadordead.com/app.",
+			"Think someone has your key? Type /wanted key reset.",
 		},
 	},
 	{

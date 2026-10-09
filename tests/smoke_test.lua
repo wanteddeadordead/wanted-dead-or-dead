@@ -8938,6 +8938,148 @@ end)()
 		"the bug report has the signing lines")
 	check(ns.db.settings.sigBackground == true, "background checks are on by default")
 end)()
+-- Signing (1.19.0), golden fixtures shared with the server (wanted-network): records signed by this addon's code
+-- (tests/fixtures/signed_records.lua; the same as JSON is the server's lua_signed.json) and by Go's crypto/ed25519
+-- (go_signed.json, go_keys.json). The character keys, the signed string and the hash must agree both ways, or a
+-- signature made on one side fails on the other. WANTED_FIXTURES=<dir> checks newer ones from the server as well.
+;(function()
+	local C, S, KB, V, Store, db = ns.Crypto, ns.Signing, ns.KeyBook, ns.Verify, ns.Store, ns.db
+	-- JSON, enough for the fixtures. Numbers as the game holds them: whole ones under 1e14 print the same in Lua 5.1
+	-- and as 5.4 integers, the rest as floats (5.4 prints a whole float as "1.0")
+	local function Decode(s)
+		local pos = 1
+		local function Space() pos = s:find("[^ \t\r\n]", pos) or #s + 1 end
+		local Value
+		local function String()
+			pos = pos + 1
+			local out = {}
+			while true do
+				local c = s:sub(pos, pos)
+				if c == '"' then pos = pos + 1 return table.concat(out) end
+				if c == "\\" then
+					local e = s:sub(pos + 1, pos + 1)
+					if e == "u" then
+						local cp = tonumber(s:sub(pos + 2, pos + 5), 16)
+						check(cp < 128, "fixture JSON: only ASCII \\u escapes")
+						out[#out + 1] = string.char(cp)
+						pos = pos + 6
+					else
+						out[#out + 1] = ({ ['"'] = '"', ["\\"] = "\\", ["/"] = "/", n = "\n", t = "\t", r = "\r", b = "\b", f = "\f" })[e]
+						pos = pos + 2
+					end
+				else
+					out[#out + 1] = c
+					pos = pos + 1
+				end
+			end
+		end
+		function Value()
+			Space()
+			local c = s:sub(pos, pos)
+			if c == "{" or c == "[" then
+				local t, close = {}, c == "{" and "}" or "]"
+				pos = pos + 1
+				Space()
+				if s:sub(pos, pos) == close then pos = pos + 1 return t end
+				while true do
+					if close == "}" then
+						Space()
+						local k = String()
+						Space()
+						pos = pos + 1
+						t[k] = Value()
+					else
+						t[#t + 1] = Value()
+					end
+					Space()
+					local d = s:sub(pos, pos)
+					pos = pos + 1
+					if d == close then return t end
+				end
+			elseif c == '"' then
+				return String()
+			elseif s:sub(pos, pos + 3) == "true" then pos = pos + 4 return true
+			elseif s:sub(pos, pos + 4) == "false" then pos = pos + 5 return false
+			end
+			local text = s:match("^-?[%d%.eE+-]+", pos)
+			pos = pos + #text
+			local n = tonumber(text) + 0.0
+			return (n == math.floor(n) and math.abs(n) < 1e14) and math.tointeger(n) or n
+		end
+		return Value()
+	end
+	local function Read(path)
+		local f = io.open(path, "rb")
+		if not f then return nil end
+		local s = f:read("a")
+		f:close()
+		return s
+	end
+	-- Each character key made as Signing does, from the app's seed and the GUID
+	local function CheckKeys(keys, from)
+		local realGUID = UnitGUID
+		for _, k in ipairs(keys) do
+			UnitGUID = function(unit) if unit == "player" then return k.guid end return realGUID(unit) end
+			WantedAppSeed = { [db.accountMark] = k.appSeed }
+			S:OnEnable()
+			local pk, kid = S:PublicKey()
+			check(pk == k.pk and kid == k.kid, from..": the key for "..k.guid.." is Go's: "..tostring(pk))
+		end
+		UnitGUID, WantedAppSeed = realGUID, nil
+		S:OnEnable()
+	end
+	-- Every record: the signature holds over Store:SigningMessage, the hash is Store's, and taken in like any other
+	-- (the key from the app, the record relayed) it checks out
+	local function CheckRecords(records, from)
+		local app = {}
+		for _, r in ipairs(records) do
+			local copy = { kind = r.kind, id = r.id, origin = r.origin, seq = r.seq, prev = r.prev, t = r.t, data = {} }
+			for k, v in pairs(r.data) do copy.data[k] = v end
+			local sig = r.data.sig
+			check(type(sig) == "string" and #sig == 95 and sig:sub(1, 1) == "1" and sig:sub(2, 9) == C:KeyId(C:FromBase64(r.pk)), from..": "..r.id.."'s data.sig")
+			check(C:Verify(C:FromBase64(r.pk), Store:SigningMessage(copy), C:FromBase64(sig:sub(10))), from..": "..r.id.." checks out over Store:SigningMessage")
+			check(Sealed(copy).hash == r.hash, from..": "..r.id.."'s hash is Store's")
+			app[#app + 1] = { n = r.origin, g = "Player-1-00F1F1F1", k = r.pk, t = clock }
+		end
+		KB:FromApp(app, clock)
+		local taken = {}
+		for _, r in ipairs(records) do
+			local copy = { kind = r.kind, id = r.id, origin = r.origin, seq = r.seq, prev = r.prev, t = r.t, hash = r.hash, data = {} }
+			for k, v in pairs(r.data) do copy.data[k] = v end
+			Store:MergeRelayed(copy)
+			taken[#taken + 1] = Store:Get(r.id)
+			V:Want(Store:Get(r.id), true)
+		end
+		for _ = 1, 30 * #records do RunTimers() if V:Counts() and select(3, V:Counts()) == 0 then break end end
+		for _ = 1, 60 do RunTimers() end
+		for _, held in ipairs(taken) do
+			check(held.sv == true and not held.tampered, from..": "..held.id.." taken in and checked: "..tostring(held.sv))
+		end
+	end
+	local lua = dofile(ADDON.."tests/fixtures/signed_records.lua")
+	CheckKeys(lua.keys, "signed_records.lua")
+	CheckRecords(lua.records, "signed_records.lua")
+	local goKeys, goSigned = Decode(Read(ADDON.."tests/fixtures/go_keys.json")), Decode(Read(ADDON.."tests/fixtures/go_signed.json"))
+	CheckKeys(goKeys, "go_keys.json")
+	-- Byte for byte: Ed25519 is deterministic, so the same record and key give the same signature in both
+	for i, g in ipairs(goSigned) do
+		check(lua.records[i].id == g.id and lua.records[i].data.sig == g.data.sig and lua.records[i].hash == g.hash, "go_signed.json: "..g.id.." is signed the same here")
+	end
+	local dir = os.getenv("WANTED_FIXTURES")
+	if dir then
+		for _, name in ipairs({ "go_keys.json", "go_signed.json", "lua_signed.json" }) do
+			local text = Read(dir.."/"..name)
+			if text and name == "go_keys.json" then
+				CheckKeys(Decode(text), dir.."/"..name)
+			elseif text then
+				local records = Decode(text)
+				for _, r in ipairs(records) do db.records[r.id] = nil end
+				CheckRecords(records, dir.."/"..name)
+			end
+			print("wanted smoke: "..(text and "checked " or "no ")..dir.."/"..name)
+		end
+	end
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

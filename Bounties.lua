@@ -20,6 +20,7 @@ Bounties.MIN_BOUNTY = MIN_BOUNTY
 -- A death record from another client counts as a witness within this many seconds of the kill
 local WITNESS_WINDOW = 30
 Bounties.WITNESS_WINDOW = WITNESS_WINDOW
+Bounties.EXPIRY_SECONDS = EXPIRY_SECONDS
 
 
 
@@ -591,6 +592,7 @@ end
 ---@param name string
 ---@return string? guid
 ---@return string? name
+---@return string? why when none, if there's more to say than "not seen" (Store:FindPlayerByName)
 function Bounties:ResolveName(name)
 	name = strtrim(name or "")
 	if name == "" then
@@ -602,8 +604,8 @@ function Bounties:ResolveName(name)
 			return UnitGUID("target"), targetName
 		end
 	end
-	local guid, player = Store:FindPlayerByName(name)
-	return guid, player and player.name
+	local guid, player, why = Store:FindPlayerByName(name)
+	return guid, player and player.name, why
 end
 
 
@@ -1021,9 +1023,9 @@ local function ResolveTarget(nameArg)
 		end
 		return nil, nil, "no name given and no player targeted"
 	end
-	local guid, player = Store:FindPlayerByName(nameArg)
+	local guid, player, why = Store:FindPlayerByName(nameArg)
 	if not guid then
-		return nil, nil, "no player named "..nameArg.." has been seen; target them first"
+		return nil, nil, why or ("no player named "..nameArg.." has been seen; target them first")
 	end
 	return guid, player.name
 end
@@ -1111,7 +1113,7 @@ Wanted:RegisterCommand("bounties", "Lists open bounties, highest first (your boa
 		local left = Bounties:GetExpiry(bounty) - GetServerTime()
 		local pending = Bounties:GetPendingClaim(bounty)
 		local state = pending and format("CLAIMED by %s, awaiting poster", pending.origin) or (Ago(GetServerTime() - left).." left")
-		Wanted:Print("%s on %s (%s %s), by %s, %s%s", Bounties:FormatMoney(entry.amount), bounty.data.targetName, player and player.level or "?", player and player.class or "?", bounty.origin, state, pending and "" or seen)
+		Wanted:Print("%s on %s (%s %s), by %s, %s%s", Bounties:FormatMoney(entry.amount), Store:CleanName(bounty.data.targetName) or "?", player and player.level or "?", player and player.class or "?", bounty.origin, state, pending and "" or seen)
 	end
 end)
 
@@ -1123,7 +1125,7 @@ Wanted:RegisterCommand("claims", "Lists claims on your bounties and claims you m
 		if bounty and (bounty.origin == me or claim.origin == me) then
 			local level = Bounties:GetClaimLevel(claim)
 			local levelText = level == 0 and "disputed" or level == 1 and "bounty hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
-			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
+			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, Store:CleanName(claim.data.victimName) or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
 			shown = shown + 1
 		end
 	end

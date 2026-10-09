@@ -19,6 +19,7 @@ local private = {
 	tokens = {}, -- unit token -> { guid, t } the enemy last seen on it, and when (or when its nameplate went)
 	removals = {}, -- times of recent nameplate removals (many at once is a loading screen, not stealth)
 	lastShared = {}, -- guid -> time we last shared a sighting of them
+	newShared = {}, -- sender -> { minute, count } players never seen here their shared sightings added this minute
 	targeters = {}, -- guid -> true for enemies targeting us now
 	described = {}, -- guid -> the description GetNearby last gave, filled again in place
 	lastRecapId = nil,
@@ -59,6 +60,7 @@ local LAST_HOUR = 3600
 local TARGETING_WINDOW = 6 -- had us targeted within this long before we died
 local SHARE_EVERY = 120 -- seconds between shared sightings of the same enemy
 local MAX_ZONE_BYTES = 64 -- a shared sighting's zone name longer than this isn't one
+local MAX_NEW_SHARED_PER_MINUTE = 40 -- players never seen here that one sender's shared sightings may add a minute
 local STORE_EVERY = 5 -- seconds between updates of a nearby enemy's saved record
 local RECAP_DELAYS = { 0.5, 2 }
 -- Stealth-type abilities by spell id (all ranks); names catch anything the client renumbered
@@ -1100,28 +1102,43 @@ end
 ---@param data table
 ---@param sender string
 function Enemies:OnSharedSighting(data, sender)
-	local name = Store:CleanName(data.n)
-	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") or not name then
+	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") then
 		return
 	end
+	-- The name the game read on them here stands, then the name already held; a peer's is taken only for a player
+	-- not named yet (a peer could otherwise rename one and hand their name to another, so a bounty typed by name lands
+	-- on the wrong player; two players under one name are refused instead, Store:FindPlayerByName)
 	local player = Store:GetPlayer(data.g)
+	local name = Store:GameName(data.g) or (player and player.name) or Store:CleanName(data.n)
+	if not name then
+		return
+	end
 	if player and player.faction == private.playerFaction then
+		return
+	end
+	-- Players never seen here are taken from one sender only so fast: a flood of made-up ones would fill the saved
+	-- players (walked by the last hour list, the map and every name lookup)
+	if not player and not private.UnderNewPlayerCap(sender) then
 		return
 	end
 	-- Where, as only numbers and a short name: a peer can send anything, and the map, Hotspots and the alerts use it.
 	-- A position is both coordinates (0 to 100) or neither.
-	local zone = type(data.z) == "string" and data.z ~= "" and #data.z <= MAX_ZONE_BYTES and data.z or nil
+	local zone = type(data.z) == "string" and #data.z <= MAX_ZONE_BYTES and Store:CleanName(data.z) or nil
 	local mapId = type(data.m) == "number" and data.m == data.m and data.m or nil
 	local x, y = data.x, data.y
 	if not (private.Percent(x) and private.Percent(y)) then
 		x, y = nil, nil
 	end
+	-- Class, race and guild as text go into tooltips, the Nearby rows and the lines "Tell your party" sends to chat:
+	-- no escape codes or control characters, and a class only the game has. The guild is the sender's word alone, so
+	-- it's kept as a hint, never as the guild: that would put the player on Kill on Sight or under a guild bounty on
+	-- any peer's say-so (Describe, GetKnownGuild). Only a guild the game read on the unit counts.
 	Store:UpdatePlayer(data.g, {
 		name = name,
-		class = type(data.c) == "string" and data.c or nil,
+		class = private.KnownClass(data.c) and data.c or nil,
 		level = type(data.l) == "number" and data.l or nil,
-		race = type(data.r) == "string" and data.r or nil,
-		guild = type(data.u) == "string" and data.u or nil,
+		race = Store:CleanName(data.r),
+		guildHint = Store:CleanName(data.u),
 		faction = player and player.faction or (private.playerFaction == "Horde" and "Alliance" or "Horde"),
 		zone = zone,
 		mapId = mapId,
@@ -1138,4 +1155,25 @@ end
 ---Whether a value is a map coordinate: a number from 0 to 100.
 function private.Percent(value)
 	return type(value) == "number" and value >= 0 and value <= 100
+end
+
+---Whether a value is a class file name the game knows (ROGUE, MAGE...): the class colours are keyed by them.
+function private.KnownClass(class)
+	return type(class) == "string" and RAID_CLASS_COLORS ~= nil and RAID_CLASS_COLORS[class] ~= nil
+end
+
+---Whether a sender may still introduce a player not seen here this minute. A batch of shared sightings names a
+---dozen or so and goes out every couple of minutes, so a fight names far fewer than this.
+function private.UnderNewPlayerCap(sender)
+	local minute = floor(GetTime() / 60)
+	local entry = private.newShared[sender]
+	if not entry or entry.minute ~= minute then
+		entry = { minute = minute, count = 0 }
+		private.newShared[sender] = entry
+	end
+	entry.count = entry.count + 1
+	if entry.count == MAX_NEW_SHARED_PER_MINUTE + 1 then
+		Wanted:Log("!! Enemies: %s shared over %d players never seen here this minute; ignoring the rest", tostring(sender), MAX_NEW_SHARED_PER_MINUTE)
+	end
+	return entry.count <= MAX_NEW_SHARED_PER_MINUTE
 end

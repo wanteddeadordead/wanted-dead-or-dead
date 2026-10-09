@@ -79,8 +79,8 @@ function private.ResolveForm()
 	if name == "" then
 		return nil
 	end
-	local guid, resolvedName = Bounties:ResolveName(name)
-	return guid, resolvedName or name
+	local guid, resolvedName, why = Bounties:ResolveName(name)
+	return guid, resolvedName or name, why
 end
 
 ---The guild the form targets when "Their whole guild" is ticked, or nil.
@@ -89,7 +89,7 @@ function private.GetFormGuild(player)
 end
 
 function private.OnFormChanged()
-	local guid, name = private.ResolveForm()
+	local guid, name, why = private.ResolveForm()
 	local amount = Bounties:ParseMoney(private.amountBox:GetText())
 	local player = guid and Store:GetPlayer(guid)
 	local guild = private.GetFormGuild(player)
@@ -98,7 +98,7 @@ function private.OnFormChanged()
 		private.preview:SetText("Target an enemy, or type the name of one you've seen.")
 		private.preview:SetTextColor(unpack(C.faint))
 	elseif not guid then
-		private.preview:SetText("Not seen yet. Target them or mouse over them once.")
+		private.preview:SetText(why and "Several players have been called that by other Wanted users. Target them to be sure." or "Not seen yet. Target them or mouse over them once.")
 		private.preview:SetTextColor(unpack(C.amber))
 	elseif player and player.faction and player.faction == UnitFactionGroup("player") then
 		private.preview:SetText(name.." is on your side. Bounties are for the other faction.")

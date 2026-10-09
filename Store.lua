@@ -19,6 +19,13 @@ Store.MAX_SIGHTINGS = MAX_SIGHTINGS
 local KEEP_SECONDS = 3 * 24 * 60 * 60
 Store.KEEP_SECONDS = KEEP_SECONDS
 local PRUNED_KINDS = { kill = true, death = true, assist = true }
+-- A bounty and what happened to it (raises, withdrawals, passes, hunts, claims, confirms, payments) go this long
+-- after the bounty expired, unless it's still owed (a confirmed claim nobody paid) or one of this account's own:
+-- the reputation code gives a claim this old no weight (Reputation DECAY_DAYS), and records never pruned grew without
+-- bound on every client a flood of them reached. Bounty notices from the other faction (Bridge) go by their own age.
+local BOUNTY_KEEP_SECONDS = 90 * 24 * 60 * 60
+local BOUNTY_KINDS = { raise = true, withdraw = true, pass = true, hunt = true, claim = true }
+local CLAIM_KINDS = { confirm = true, payment = true }
 -- While the desktop app hasn't read the latest save, records since its last catch-up may not be uploaded yet:
 -- they're kept, unless it hasn't caught up for this long (it's no longer used)
 local APP_WAIT_SECONDS = 30 * 24 * 60 * 60
@@ -50,6 +57,12 @@ function Store:OnLoad()
 	db.records = db.records or {} -- id -> record
 	db.chains = db.chains or {} -- origin -> { seq, lastHash }
 	db.players = db.players or {} -- guid -> { name, class, level, faction, lastSeen, zone, x, y }
+	-- A guild written by a peer's shared sighting before 1.19.2 may carry escape codes; it reaches chat (EnemyMenu)
+	for _, player in pairs(db.players) do
+		if type(player) == "table" and type(player.guild) == "string" then
+			player.guild = Store:CleanName(player.guild)
+		end
+	end
 	db.sightings = db.sightings or {} -- ring of { guid, zone, x, y, t }
 	db.sightingsPos = db.sightingsPos or 0
 	db.names = db.names or {} -- guid -> { n = "First Last", t } every player seen, either side (the name book)
@@ -73,6 +86,8 @@ end
 function Store:Prune(now)
 	local records, chains = Wanted.db.records, Wanted.db.chains
 	local cutoff = private.PruneCutoff(now)
+	-- Whether a bounty is finished is read through the index by kind: built afresh, so it holds every record
+	private.indexFor = nil
 	-- What old records may still be needed for: claims (their kill, and deaths within the witness window), and
 	-- which characters are this account's (every link record with the app's code for this account)
 	local code = private.AppLinkCode()
@@ -97,22 +112,60 @@ function Store:Prune(now)
 	private.BuildOwn()
 	local pruned, kept, left = 0, 0, 0
 	local pastGap = {} -- origin -> the newest old record held past a gap in its chain
+	local function Drop(id, record)
+		local chain = chains[record.origin]
+		if chain and type(record.seq) == "number" and record.seq > chain.seq
+			and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
+			pastGap[record.origin] = record
+		end
+		records[id] = nil
+		pruned = pruned + 1
+	end
 	for id, record in pairs(records) do
 		if PRUNED_KINDS[record.kind] and type(record.t) == "number" and record.t < cutoff then
-			local chain = chains[record.origin]
 			if claimed[id] or private.IsOwnRelated(record) or private.Witnesses(record, claimTimes) then
 				kept = kept + 1
 				left = left + 1
 			else
-				if chain and type(record.seq) == "number" and record.seq > chain.seq
-					and (not pastGap[record.origin] or record.seq > pastGap[record.origin].seq) then
-					pastGap[record.origin] = record
-				end
-				records[id] = nil
-				pruned = pruned + 1
+				Drop(id, record)
 			end
 		else
 			left = left + 1
+		end
+	end
+	-- Bounties long finished go with everything that happened to them
+	local oldBounties, oldClaims = {}, {}
+	for id, record in pairs(records) do
+		if record.kind == "bounty" and private.IsFinishedBounty(record, now) then
+			oldBounties[id] = true
+			Drop(id, record)
+			left = left - 1
+		end
+	end
+	if next(oldBounties) then
+		for id, record in pairs(records) do
+			local data = record.data
+			if BOUNTY_KINDS[record.kind] and type(data) == "table" and oldBounties[data.bounty] then
+				if record.kind == "claim" then
+					oldClaims[id] = true
+				end
+				Drop(id, record)
+				left = left - 1
+			end
+		end
+		for id, record in pairs(records) do
+			local data = record.data
+			if CLAIM_KINDS[record.kind] and type(data) == "table" and oldClaims[data.claim] then
+				Drop(id, record)
+				left = left - 1
+			end
+		end
+	end
+	for id, record in pairs(records) do
+		if record.kind == "notice" and type(record.t) == "number" and record.t < now - BOUNTY_KEEP_SECONDS - private.BountyExpirySeconds()
+			and not private.IsOwnRelated(record) then
+			Drop(id, record)
+			left = left - 1
 		end
 	end
 	-- A gap still open behind a record this old won't be filled with anything worth keeping (what's in it is older
@@ -183,6 +236,31 @@ function private.PrunePlayers(now, targets)
 	if dropped > 0 then
 		Wanted:Log("Store: dropped %d players not seen for %d days or past the %d most recent", dropped, PLAYERS_DAYS, Store.PLAYERS_MAX)
 	end
+end
+
+---How long a bounty stays open from its posting or last raise (Bounties), or a week before the bounties load.
+function private.BountyExpirySeconds()
+	local Bounties = Wanted.Bounties
+	return Bounties and Bounties.EXPIRY_SECONDS or 7 * 24 * 60 * 60
+end
+
+---Whether a bounty is long finished and may go (Prune): expired (raises count) more than BOUNTY_KEEP_SECONDS ago,
+---not one of this account's, and not owed (a claim the poster confirmed that nobody has paid). Not before the
+---bounties load (the first prune runs after every module has).
+function private.IsFinishedBounty(bounty, now)
+	local Bounties, Payments = Wanted.Bounties, Wanted.Payments
+	if not Bounties or not Payments or type(bounty.t) ~= "number" or bounty.t > now - BOUNTY_KEEP_SECONDS - private.BountyExpirySeconds()
+		or private.IsOwnRelated(bounty) or Store:IsTest(bounty) then
+		return false
+	end
+	if Bounties:GetExpiry(bounty) > now - BOUNTY_KEEP_SECONDS then
+		return false
+	end
+	local winner = Bounties:GetWinningClaim(bounty)
+	if winner and (private.IsOwnRelated(winner) or (Bounties:GetClaimLevel(winner) == 3 and not Payments:GetForClaim(winner.id))) then
+		return false
+	end
+	return true
 end
 
 ---Records older than this may be pruned: KEEP_SECONDS ago, or earlier when the desktop app is set up but hasn't
@@ -721,12 +799,17 @@ end
 
 ---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
 ---record whose id names someone else (Mallory's record as "Carol:1") would take the place of theirs, and a missing
----origin, seq or prev would break the chain code.
+---origin, seq or prev would break the chain code. The origin is a player's name as the game stamps senders: no
+---escape codes or control characters (it's shown as the poster or hunter wherever the record is) and no longer than
+---a name.
 ---@param r any
 ---@return boolean
 function Store:IsWellFormed(r)
 	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number"
 		or type(r.prev) ~= "string" or type(r.hash) ~= "string" or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+		return false
+	end
+	if r.origin == "" or #r.origin > MAX_NAME_BYTES or strfind(r.origin, "[%c|]") then
 		return false
 	end
 	for key, value in pairs(r.data) do
@@ -793,20 +876,33 @@ end
 ---the desktop app's catch-up.
 ---@param record table
 ---@param fromApp boolean? true for the app's catch-up: the server checked who sent it, so it's marked `app`
+---@param sender string? who relayed it (a peer's fill), for a signed one that waits to be checked (Verify:Challenge)
 ---@return boolean isNew
----@return string? why when not new, as for Merge
-function Store:MergeRelayed(record, fromApp)
+---@return string? why when not new, as for Merge, or "waiting for its signature to be checked"
+function Store:MergeRelayed(record, fromApp, sender)
 	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
-	return private.Insert(record, false, fromApp)
+	return private.Insert(record, false, fromApp, sender)
+end
+
+---Merges a relayed record whose signature Verify checked out with its origin's key (a challenger to a held one,
+---Verify:Challenge): its origin's word, so it may take a held record's place.
+---@param record table
+---@return boolean isNew
+---@return string? why
+function Store:MergeVerified(record)
+	if not Store:IsWellFormed(record) then
+		return false, "malformed"
+	end
+	return private.Insert(record, false, nil, nil, true)
 end
 
 ---Stores a received record. live: it came straight from its origin (the game stamped the sender), which the
 ---desktop app reports so the network can accept this client as a witness to it. fromApp: the desktop app's
----catch-up brought it. Local flags arriving with a record are the sender's, not ours, and are dropped: a relayed
----record can't claim to be live.
-function private.Insert(record, live, fromApp)
+---catch-up brought it. sender: who relayed it. checked: Verify found its signature good. Local flags arriving with
+---a record are the sender's, not ours, and are dropped: a relayed record can't claim to be live.
+function private.Insert(record, live, fromApp, sender, checked)
 	local db = Wanted.db
 	if RESERVED_KINDS[record.kind] then
 		return false, "reserved"
@@ -816,27 +912,18 @@ function private.Insert(record, live, fromApp)
 	-- copy can't carry it in
 	record.sv, record.pre = nil, nil
 	local existing = db.records[record.id]
-	if existing then
-		if existing.hash == record.hash and not existing.test then
-			if live then
-				existing.live = true
-			end
-			if fromApp then
-				existing.app = true
-			end
+	if existing and existing.hash == record.hash and not existing.test then
+		if live then
+			existing.live = true
+		end
+		if fromApp then
+			existing.app = true
 		end
 		return false, "already held"
 	end
 	if strsub(record.id, 1, 5) == "TEST:" or record.test then
 		return false, "test data"
 	end
-	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
-	-- beta build): it never comes in
-	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
-		return false, "beta"
-	end
-	record.live = live or nil
-	record.app = fromApp or nil
 	if record.hash ~= Store:Hash(Canonical(record)) then
 		-- Doesn't hash to itself: altered in transit or by a modified addon
 		record.tampered = true
@@ -847,6 +934,37 @@ function private.Insert(record, live, fromApp)
 		record.tampered = true
 		Wanted:Log("!! Store: %s record %s carries a number no client makes; kept out of sight", tostring(record.kind), tostring(record.id))
 	end
+	-- In the live world a record numbered at or under the base is the beta's (an old catch-up, a client still on a
+	-- beta build): it never comes in
+	if Store:SeqBase() > 0 and type(record.seq) == "number" and record.seq <= Store:SeqBase() then
+		return false, "beta"
+	end
+	if existing then
+		-- A different record under a held id. One relayed by another player could be made up to hold the id so the
+		-- origin's real record is never taken (nothing it decided would then count here): it gives way to that record
+		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,
+		-- once held (heard from them, or its signature checked here), is never replaced: not even by them, or an
+		-- origin could rewrite its own history on peers that caught up from fills.
+		if existing.test or Store:IsTrusted(existing) or db.sigChecked[existing.id] == true or record.tampered then
+			return false, "already held"
+		end
+		if not (live or fromApp or checked) then
+			local ok = private.VerifiesNow(record)
+			if ok == nil then
+				-- Signed as the origin's, but this minute's checks are used up: checked in its turn, never dropped (a
+				-- flood of junk signatures could otherwise spend the checks and keep the real record out for good)
+				Wanted.Verify:Challenge(record, sender)
+				return false, "waiting for its signature to be checked"
+			elseif not ok then
+				return false, "already held"
+			end
+			checked = true
+		end
+		Wanted:Log("!! Store: %s record %s held from a relay gives way to its origin's own", tostring(record.kind), tostring(record.id))
+		private.Unhold(existing)
+	end
+	record.live = live or nil
+	record.app = fromApp or nil
 	local chain = db.chains[record.origin]
 	if not chain then
 		chain = private.NewChain()
@@ -882,13 +1000,74 @@ function private.Insert(record, live, fromApp)
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record
+	if checked then
+		-- Its signature was checked on the way in
+		db.sigChecked[record.id] = true
+	end
 	private.AddToIndex(record)
-	private.Notify(record, false)
+	-- An altered record is held only so its chain moves on: nothing acts on it (a listener would store what it says)
+	if not record.tampered then
+		private.Notify(record, false)
+	end
 	return true
 end
 
+-- Signatures checked at once (VerifiesNow) a minute: a check takes about 20 ms on the main thread, and a fill can
+-- carry 200 records under held ids, each with a signature that looks like the origin's
+Store.MAX_VERIFIES_NOW_PER_MINUTE = 5
+
+---Whether a record's signature checks out with a key of its origin's, checked now (about 20 ms in the game): for
+---the rare record that would replace a held one. false when it's unsigned, no key is known for it, the check isn't
+---ready, or the signature is bad; nil when it could be checked but this minute's checks are used up (Verify checks
+---it in its turn).
+---@return boolean? ok
+function private.VerifiesNow(record)
+	local Signing, KeyBook, Crypto = Wanted.Signing, Wanted.KeyBook, Wanted.Crypto
+	local sig = record.data.sig
+	if not (Signing and KeyBook and Crypto and Crypto:IsOn() == true) or not Signing.KINDS[record.kind] or type(sig) ~= "string"
+		or #sig ~= Signing.SIG_LENGTH or strsub(sig, 1, 1) ~= Signing.SIG_VERSION then
+		return false
+	end
+	local key = KeyBook:Find(record.origin, strsub(sig, 2, 9))
+	local message = key and Store:SigningMessage(record)
+	local signature = message and Crypto:FromBase64(strsub(sig, 10))
+	if not signature or #signature ~= 64 then
+		return false
+	end
+	local minute = floor(GetTime() / 60)
+	local budget = private.verifiedNow
+	if not budget or budget.minute ~= minute then
+		budget = { minute = minute, count = 0 }
+		private.verifiedNow = budget
+	end
+	if budget.count >= Store.MAX_VERIFIES_NOW_PER_MINUTE then
+		return nil
+	end
+	budget.count = budget.count + 1
+	return Crypto:Verify(KeyBook:GetPrepared(key.pk) or Crypto:FromBase64(key.pk), message, signature) == true
+end
+
+---Takes a held record out for another under its id (Insert): what was found of its signature goes with it, and
+---its chain, if it went on over it, comes back to just before it, so the newcomer and the records after it are
+---checked against the chain afresh.
+function private.Unhold(existing)
+	local db = Wanted.db
+	db.records[existing.id] = nil
+	db.sigChecked[existing.id], db.sigPre[existing.id] = nil, nil
+	-- The id is listed under the old record's kind: the index is built again on the next walk, so the newcomer is
+	-- found under its own (a rare path)
+	private.indexFor = nil
+	local chain = db.chains[existing.origin]
+	if chain and type(existing.seq) == "number" and chain.seq >= existing.seq then
+		local before = db.records[existing.origin..":"..(existing.seq - 1)]
+		chain.seq = existing.seq - 1
+		chain.lastHash = before and before.hash or (chain.seq == Store:SeqBase() and "0" or UNKNOWN_HASH)
+	end
+end
+
 ---Moves a chain on over records already held past its end (they arrived ahead of a gap). Without this the
----chain stays at the gap and the sync asks for those records again at every resync.
+---chain stays at the gap and the sync asks for those records again at every resync. A record flagged as not
+---following the chain that follows it now (the one before it was replaced) is cleared.
 ---@param origin string
 ---@param chain table
 function private.CatchUpChain(origin, chain)
@@ -898,6 +1077,8 @@ function private.CatchUpChain(origin, chain)
 		if nextRecord.prev ~= chain.lastHash then
 			nextRecord.brokenChain = true
 			Wanted:Log("!! Store: record %s doesn't follow %s's previous record (broken chain)", tostring(nextRecord.id), origin)
+		elseif nextRecord.brokenChain then
+			nextRecord.brokenChain = nil
 		end
 		chain.seq = nextRecord.seq
 		chain.lastHash = nextRecord.hash
@@ -1246,18 +1427,52 @@ function Store:GetPlayer(guid)
 	return Wanted.db.players[guid]
 end
 
----Finds a player by name (case-insensitive, realm optional).
+---Whether a name is the one given, case-insensitive, with any realm left off.
+local function SameName(name, wanted)
+	return type(name) == "string" and strlower(strmatch(name, "^([^%-]+)") or name) == wanted
+end
+
+---The name the game itself gave a player: the name book's (read on their unit), or the client's own lookup of
+---the GUID. nil when the game never named them here (every name known is a peer's word).
+---@param guid string
+---@return string?
+function Store:GameName(guid)
+	local entry = Wanted.db.names[guid]
+	if type(entry) == "table" and type(entry.n) == "string" and entry.n ~= "" then
+		return entry.n
+	end
+	if GetPlayerInfoByGUID then
+		local ok, _, _, _, _, _, name = pcall(GetPlayerInfoByGUID, guid)
+		if ok and type(name) == "string" and name ~= "" and not (issecretvalue and issecretvalue(name)) then
+			return name
+		end
+	end
+	return nil
+end
+
+---Finds a player by name (case-insensitive, realm optional). A name can be on several players' entries: peers'
+---shared sightings name players as they please, so a bounty typed by name once landed on whichever GUID a peer
+---had given the name last. One the game itself named so wins; among names only peers gave, one alone is taken
+---and several are refused (why says so): the player should target them instead.
 ---@param name string
 ---@return string? guid
 ---@return table? player
+---@return string? why when none: the name is on several players, none of them named so by the game
 function Store:FindPlayerByName(name)
 	name = strlower(strmatch(name, "^([^%-]+)") or name)
+	local foundGuid, foundPlayer, count = nil, nil, 0
 	for guid, player in pairs(Wanted.db.players) do
-		if player.name and strlower(strmatch(player.name, "^([^%-]+)")) == name then
-			return guid, player
+		if SameName(player.name, name) then
+			if SameName(Store:GameName(guid), name) then
+				return guid, player
+			end
+			foundGuid, foundPlayer, count = guid, player, count + 1
 		end
 	end
-	return nil, nil
+	if count > 1 then
+		return nil, nil, "several players have been called that by other Wanted users; target them to be sure"
+	end
+	return foundGuid, foundPlayer
 end
 
 ---Adds a sighting to the bounded ring.

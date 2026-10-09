@@ -401,6 +401,8 @@ Enum = { TooltipDataType = { Unit = 2 } }
 tooltipPostCalls = {} -- global: the main chunk is at its limit of locals
 TooltipDataProcessor = { AddTooltipPostCall = function(_, f) tooltipPostCalls[#tooltipPostCalls + 1] = f end }
 RAID_CLASS_COLORS = { ROGUE = { r = 1, g = 0.96, b = 0.41, WrapTextInColorCode = function(_, t) return t end } }
+-- The game's table has every class; only the rogue's colour matters to the tests
+for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }) do RAID_CLASS_COLORS[class] = { r = 1, g = 1, b = 1 } end
 LOCALIZED_CLASS_NAMES_MALE = { ROGUE = "Rogue" }
 SlashCmdList = {}
 
@@ -1824,7 +1826,7 @@ local function Sent(chatType, target)
 	return out
 end
 local function ClearSent() for i = #addonSent, 1, -1 do addonSent[i] = nil end end
-local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "far-"..seq } } end
+local function FarRecord(seq) return Sealed({ kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", t = clock, data = { bounty = "far-"..seq } }) end
 ClearSent()
 clock = clock + 700
 ns.Sync:Greet("Far Friend", "Other Realm")
@@ -2053,9 +2055,9 @@ ns.Store:GetPlayer("Player-9-SNAP").lastSeen = snapSeen
 local snapBounty = ns.Bounties:Post("Player-9-SNAP", "Snap Shot", 5000)
 local sd = snapBounty.data
 check(sd.class == "HUNTER" and sd.race == "NightElf" and sd.level == 20 and sd.targetGuild == "Polarity Check" and sd.seenAt == snapSeen and sd.x == 21.8 and sd.mapId == 1434, "a bounty records what the poster knew about the target")
-local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", hash = "x", t = clock, data = {
+local farBounty = Sealed({ kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", t = clock, data = {
 	target = "Player-9-UNKNOWN", targetName = "Never Seen", targetGuild = "Some Guild", amount = 5000, level = 22, zone = "The Barrens",
-	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
+	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } })
 ns.Store:MergeRelayed(farBounty)
 local learnt = ns.Store:GetPlayer("Player-9-UNKNOWN")
 check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone == "The Barrens"
@@ -2064,8 +2066,8 @@ check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone 
 check(learnt.guild == nil, "the target's guild isn't learned from a bounty")
 ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
 local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
-ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", hash = "x", t = clock, data = {
-	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
+ns.Store:MergeRelayed(Sealed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", t = clock, data = {
+	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } }))
 local known = ns.Store:GetPlayer("Player-9-KNOWN")
 check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
 -- Shared sightings: seeing someone with an open bounty records a "spotted" record (at most every 5 minutes per
@@ -2086,16 +2088,16 @@ ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 24, 71, 1434)
 check(SpottedCount("Player-9-SNAP") == 2, "again after five minutes")
 ns.Store:AddSighting("Player-9-NOTWANTED", "Durotar", 50, 50, 1411)
 check(SpottedCount("Player-9-NOTWANTED") == 0, "someone without a bounty isn't shared (sightings stay passing news)")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", hash = "x", t = clock - 7200,
-	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", t = clock - 7200,
+	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } }))
 local farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 1 and farTrack[1].zone == "Ashenvale" and farTrack[1].by == "Spotter Far" and farTrack[1].t == clock - 7200, "someone else's sighting lands in the history by them, even before the bounty arrives")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", hash = "x", t = clock - 9000,
-	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", t = clock - 9000,
+	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } }))
 farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 2 and farTrack[1].zone == "Ashenvale" and farTrack[2].zone == "Darkshore", "an older sighting arriving later still sorts into place")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", hash = "x", t = clock - 40 * 86400,
-	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", t = clock - 40 * 86400,
+	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } }))
 ns.Tracks:PruneSpotted()
 check(ns.Store:Get("Spotter Far:3") == nil and ns.Store:Get("Spotter Far:1") ~= nil, "shared sightings over a month old are pruned")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
@@ -9305,6 +9307,454 @@ end)()
 	V:Want(Store:Get(r.id), true)
 	for _ = 1, 10 do RunTimers() end
 	check(not KB:HasKeys("Off Curve") and SV(r) == nil and not Store:Get(r.id).tampered, "the check drops the key and calls nothing forged")
+end)()
+-- 1.19.2: an altered record (its hash doesn't match, or text where a number goes) is held so its chain moves on, but no
+-- listener acts on it: a "spotted" record with text coordinates once went into the target's history, and the target
+-- file threw formatting it. Odd fields the hash check lets through are kept out of the history too
+;(function()
+	local Store, Tracks = ns.Store, ns.Tracks
+	local victim = "Player-9-7A4B01"
+	Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Odd:1", origin = "Spotter Odd", seq = 1, prev = "0", t = clock - 60,
+		data = { target = victim, zone = "Durotar", x = "abc", y = "abc", mapId = "zzz" } }))
+	check(Store:Get("Spotter Odd:1").tampered and #Tracks:Get(victim) == 0, "a spotted record with text coordinates is held out of sight and lands in no history")
+	Store:MergeRelayed({ kind = "spotted", id = "Spotter Odd:2", origin = "Spotter Odd", seq = 2, prev = Store:Get("Spotter Odd:1").hash, hash = "nope", t = clock - 50,
+		data = { target = victim, zone = "Durotar", x = 10, y = 10, mapId = 1 } })
+	check(Store:Get("Spotter Odd:2").tampered and #Tracks:Get(victim) == 0, "nor one that doesn't match its hash")
+	Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Odd:3", origin = "Spotter Odd", seq = 3, prev = "nope", t = clock - 40,
+		data = { target = victim, zone = true, x = 150, y = 10, mapId = 1 } }))
+	local entries = Tracks:Get(victim)
+	check(#entries == 1 and entries[1].zone == nil and entries[1].x == nil and entries[1].y == nil and entries[1].mapId == 1 and entries[1].by == "Spotter Odd",
+		"a sound record with odd fields keeps only what the file can show")
+end)()
+-- 1.19.2: a shared sighting is one peer's word. Its guild, class, race and zone are cleaned like its name (they reach
+-- tooltips and the "Tell your party" chat line), a class is one the game has, and the guild is kept as a hint only:
+-- a peer naming a guild on your Kill on Sight, or one with a bounty on it, once made an innocent player Kill on Sight
+-- with a price on their head (and a posse callable against them). Only a guild the game reads on the unit counts
+;(function()
+	local Store, Enemies = ns.Store, ns.Enemies
+	local innocent = "Player-9-1AA0C3"
+	ns.db.kosGuilds["Camping Guild"] = { t = clock, reason = "campers" }
+	Store:InsertTest("bounty", "Some Poster", { guild = "Bountied Guild", targetName = "<Bountied Guild>", amount = 50000 }, clock - 60)
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", c = "ROGUE", r = "Human", u = "Camping Guild", z = "Durotar|Hitem:19019|h[Thunderfury]|h", x = 50, y = 50 }, "Evil Doer")
+	local d = Enemies:Describe(innocent)
+	check(not d.kos and not d.kosGuild and d.guild == nil and d.zone == "DurotarHitem:19019h[Thunderfury]h", "a peer naming a Kill on Sight guild doesn't make them Kill on Sight; the zone is cleaned: "..tostring(d.zone))
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", u = "Bountied Guild" }, "Evil Doer")
+	d = Enemies:Describe(innocent)
+	check(d.bounty == 0 and not ns.Posse:CanCall(d) and Store:GetPlayer(innocent).guildHint == "Bountied Guild", "nor does it put a guild bounty on them: the guild is kept as a hint")
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", u = "Evil|TInterface\\Icons\\X:64|t Guild\n/run print(1)", c = "X\n/run print(2)", r = strrep("R", 2000) }, "Evil Doer")
+	local p = Store:GetPlayer(innocent)
+	check(p.guildHint == "EvilTInterface\\Icons\\X:64t Guild/run print(1)" and p.class == "ROGUE" and #p.race == 64, "escapes and control characters come out of a peer's guild, class and race, and a class is one the game has")
+	check(ns.Recorder:GetKnownGuild(innocent) == nil, "a kill of them records no guild on a peer's word")
+	-- Seen in game in that guild: that counts
+	enemyUnits.nameplate3 = { guid = innocent, name = "Innocent Bob", class = "ROGUE", level = 30, guild = "Camping Guild" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+	d = Enemies:Describe(innocent)
+	check(d.kos and d.kosGuild and d.guild == "Camping Guild" and ns.Recorder:GetKnownGuild(innocent) == "Camping Guild", "the guild the game reads on them does")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate3")
+	enemyUnits.nameplate3 = nil
+	-- Players never seen here come from one sender only so fast
+	local function Count() local n = 0 for _ in pairs(ns.db.players) do n = n + 1 end return n end
+	clock = clock + 60
+	local before = Count()
+	for i = 1, 100 do
+		Enemies:OnSharedSighting({ g = "Player-9-F1DD"..i, n = "Fake "..i }, "Evil Doer")
+	end
+	check(Count() - before == 40, "one sender adds at most 40 players never seen here a minute, got "..(Count() - before))
+	Enemies:OnSharedSighting({ g = innocent, n = "Innocent Bob", z = "Ashenvale" }, "Evil Doer")
+	check(Store:GetPlayer(innocent).zone == "Ashenvale", "a player already known is still updated past it")
+	Enemies:OnSharedSighting({ g = "Player-9-F1DDA1", n = "Fake Other" }, "Other Sender")
+	check(Count() - before == 41, "another sender has their own allowance")
+	clock = clock + 60
+	Enemies:OnSharedSighting({ g = "Player-9-F1DDA2", n = "Fake Later" }, "Evil Doer")
+	check(Count() - before == 42, "and the next minute starts afresh")
+end)()
+-- 1.19.2: a kill or a death stamps the victim's guild as the game reads it on their unit at that moment, before the
+-- saved one (a guild bounty's witnesses are matched on it, so a stale or planted guild would claim one)
+;(function()
+	local Store = ns.Store
+	local victim = "Player-9-61D1E5"
+	enemyUnits.nameplate4 = { guid = victim, name = "Guild Hopper", class = "ROGUE", level = 30, guild = "New Guild" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate4")
+	-- The saved guild is stale (or planted) by the time of the kill
+	ns.db.players[victim].guild = "Old Guild"
+	Fire("PARTY_KILL", "Player-1-ME", victim)
+	local kill
+	for r in Store:Iterator("kill") do if r.data.victim == victim then kill = r end end
+	check(kill and kill.data.victimGuild == "New Guild", "a kill carries the guild the game shows on the victim now, got "..tostring(kill and kill.data.victimGuild))
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate4")
+	enemyUnits.nameplate4 = nil
+	ns.db.players[victim].guild = "Old Guild"
+	Fire("PARTY_KILL", "Player-2-FRIEND", victim)
+	local death
+	for r in Store:Iterator("death") do if r.data.victim == victim and r.data.killer == "Player-2-FRIEND" then death = r end end
+	check(death and death.data.victimGuild == "Old Guild", "with no unit showing them, the saved guild, got "..tostring(death and death.data.victimGuild))
+end)()
+-- 1.19.2: a name typed on the board finds the player the game named so, not whichever GUID a peer gave the name
+-- last: a peer once renamed the real enemy and handed their name to another GUID (the attacker's alt), and a bounty
+-- posted by name landed there. A name only peers gave is taken when one player has it and refused when several do
+;(function()
+	local Store, Enemies, B = ns.Store, ns.Enemies, ns.Bounties
+	-- The game named Player-9-ENEMY "Stabby Mcstab" on their nameplate earlier (the name book holds it)
+	check(Store:GameName("Player-9-ENEMY") == "Stabby Mcstab", "the game's own name for the enemy is known")
+	Enemies:OnSharedSighting({ g = "Player-9-ENEMY", n = "Stabby Mcstabb" }, "Evil Doer")
+	check(Store:GetPlayer("Player-9-ENEMY").name == "Stabby Mcstab", "a peer can't rename a player the game named here")
+	Enemies:OnSharedSighting({ g = "Player-9-A17A1T", n = "Stabby Mcstab", c = "ROGUE", l = 60 }, "Evil Doer")
+	local guid, name = B:ResolveName("Stabby Mcstab")
+	check(guid == "Player-9-ENEMY" and name == "Stabby Mcstab", "the name resolves to the player the game named, got "..tostring(guid))
+	check(select(1, Store:FindPlayerByName("stabby mcstab")) == "Player-9-ENEMY", "case apart")
+	-- A name only peers gave: one player is taken, two are refused
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2C", n = "Rumour Only" }, "Some Friend")
+	check(select(1, Store:FindPlayerByName("Rumour Only")) == "Player-9-0A1B2C", "a name one peer-only player has is found")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2D", n = "Rumour Only" }, "Evil Doer")
+	local g, _, why = Store:FindPlayerByName("Rumour Only")
+	check(g == nil and type(why) == "string", "the same name on two peer-only players is refused with a reason: "..tostring(why))
+	ns:RunCommand("post", "10g Rumour Only")
+	check(printed[#printed]:find("Cannot post: several players", 1, true), "/wanted post says why: "..tostring(printed[#printed]))
+	ns:RunCommand("file", "Rumour Only")
+	check(printed[#printed]:find("Several players have been called Rumour Only", 1, true), "so does /wanted file: "..tostring(printed[#printed]))
+end)()
+-- 1.19.2: what a record says is shown as plain text: a target name or guild with an escape code in it (a link, a
+-- picture, a colour) once rendered as such on the board, in tooltips and in /wanted bounties, and a relayed record's
+-- origin (shown as its poster or hunter) could be anything at all: one that isn't a name is refused at the door
+;(function()
+	local Store, Theme = ns.Store, ns.Theme
+	check(Theme:ClassName("|Hitem:6948|h[Hearthstone]|h", "ROGUE") == "Hitem:6948h[Hearthstone]h" and Theme:ClassName(nil) == "?" and Theme:ClassName("a\nb") == "ab",
+		"a class-coloured name loses its escape codes: "..Theme:ClassName("|Hitem:6948|h[Hearthstone]|h", "ROGUE"))
+	Store:MergeRelayed(Sealed({ kind = "bounty", id = "Link Poster:1", origin = "Link Poster", seq = 1, prev = "0", t = clock, data = {
+		target = "Player-9-11A2B3", targetName = "|cffff0000Red|r|TInterface\\Icons\\X:512|t", amount = 5000 } }))
+	ns.UI:Show("board")
+	local shown
+	for _, fs in ipairs(Mock.fontStrings) do
+		local t = rawget(fs, "_text")
+		if type(t) == "string" and t:find("Red", 1, true) and t:find("TInterface", 1, true) then shown = t end
+	end
+	check(shown and not shown:find("|T", 1, true) and not shown:find("|cffff0000Red", 1, true), "the board shows the target name without its escapes: "..tostring(shown))
+	ns:RunCommand("bounties", "")
+	local line
+	for i = #printed, 1, -1 do if printed[i]:find("Link Poster", 1, true) then line = printed[i] break end end
+	check(line and not line:find("|T", 1, true) and not line:find("|cffff0000", 1, true), "so does /wanted bounties: "..tostring(line))
+	for _, origin in ipairs({ "Bad|cff00ff00Name|r", "Bad\nName", "", strrep("o", 65) }) do
+		local isNew, why = Store:MergeRelayed(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "x:1" } }))
+		check(isNew == false and why == "malformed", "a record whose origin isn't a name is refused: "..origin:gsub("|", "||"):gsub("\n", "/"))
+	end
+	check(select(1, Store:MergeRelayed(Sealed({ kind = "pass", id = "Fine Name-Realm:1", origin = "Fine Name-Realm", seq = 1, prev = "0", t = clock, data = { bounty = "x:1" } }))), "a name with a realm is fine")
+end)()
+-- 1.19.2: a record relayed by another player (an unsolicited fill) under an id the origin's own record later needs
+-- once held it for good: the real record was "already held", so a bounty, confirm or withdrawal was lost on every
+-- client the forgery reached first. The origin's own word (live, from the app, or signed with its key) replaces
+-- hearsay; hearsay never replaces anything. A relayed record far past the origin's known chain isn't taken at all
+;(function()
+	local Store, C, KB = ns.Store, ns.Crypto, ns.KeyBook
+	local victim = "Victim Poster"
+	local function Bounty(seq, prev, targetName, amount)
+		return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = prev, t = clock, data = { target = "Player-9-"..targetName, targetName = targetName, amount = amount } }
+	end
+	local forged = Sealed(Bounty(1, "0", "Fake", 1000))
+	check(select(1, Store:MergeRelayed(forged)) == true, "a relayed record takes a free id")
+	local real = Sealed(Bounty(1, "0", "Real", 5000))
+	-- Their next record, chained on the real one, arrives first: it doesn't follow the forgery
+	local second = Sealed(Bounty(2, real.hash, "Second", 100))
+	Store:Merge(second, victim)
+	check(Store:Get(victim..":2").brokenChain == true, "a record chained on the real one doesn't follow the forgery")
+	local isNew = Store:Merge(real, victim)
+	local held = Store:Get(victim..":1")
+	check(isNew == true and held.data.targetName == "Real" and held.live == true and not held.brokenChain, "the origin's own record replaces the relayed one")
+	check(Store:GetChainSeq(victim) == 2 and ns.db.chains[victim].lastHash == second.hash and not Store:Get(victim..":2").brokenChain,
+		"the chain stands on the real records, and the one after follows again: seq "..Store:GetChainSeq(victim))
+	local n2, why2 = Store:MergeRelayed(Sealed(Bounty(1, "0", "Again", 7000)))
+	check(n2 == false and why2 == "already held" and Store:Get(victim..":1").data.targetName == "Real", "a relayed record never replaces one heard from its origin")
+	Store:MergeRelayed(Sealed(Bounty(5, "0", "FiveA", 1)))
+	local n3 = Store:MergeRelayed(Sealed(Bounty(5, "0", "FiveB", 2)))
+	check(n3 == false and Store:Get(victim..":5").data.targetName == "FiveA", "one relayed record doesn't replace another")
+	-- Signed with the origin's key (learned from their hello): that's their word too
+	local seed = C:SHA512("victim poster"):sub(1, 32)
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:vp1:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(C:PublicKey(seed)), g = "Player-1-7C7C" }), "CHANNEL", victim, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(KB:HasKeys(victim), "the poster's key is known")
+	local signed = SignedBy(Bounty(5, "0", "FiveSigned", 3), seed)
+	local n4 = Store:MergeRelayed(signed)
+	check(n4 == true and Store:Get(victim..":5").data.targetName == "FiveSigned" and SV(signed) == true, "a relayed record signed with the origin's key replaces hearsay, its signature counted as checked")
+	local badSig = SignedBy(Bounty(5, "0", "FiveForged", 4), C:SHA512("someone else"):sub(1, 32))
+	badSig.data.sig = "1"..strsub(signed.data.sig, 2, 9)..strsub(badSig.data.sig, 10)
+	Sealed(badSig)
+	local n5 = Store:MergeRelayed(badSig)
+	check(n5 == false and Store:Get(victim..":5").data.targetName == "FiveSigned", "one signed with the wrong key doesn't")
+	-- The desktop app's catch-up brings the origin's word as well
+	Store:MergeRelayed(Sealed(Bounty(6, "0", "SixA", 1)))
+	local fromApp = Sealed(Bounty(6, "0", "SixApp", 2))
+	check(Store:MergeRelayed(fromApp, true) == true and Store:Get(victim..":6").data.targetName == "SixApp" and Store:Get(victim..":6").app == true, "and so does the app's catch-up")
+	-- Relayed records far past what anyone said the origin's chain reaches aren't taken
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:rp1:1/1:"..ns.Sync:Encode({ r = { Sealed(Bounty(9000, "0", "Far", 1)), Sealed(Bounty(400, "0", "Near", 1)) } }), "CHANNEL", "Relay Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(Store:Get(victim..":9000") == nil and Store:Get(victim..":400") ~= nil, "a relayed record further than a skip could go isn't taken; one within reach is: "..tostring(Store:Get(victim..":9000") ~= nil)..","..tostring(Store:Get(victim..":400") ~= nil))
+end)()
+-- 1.19.2: bounties and what happened to them were kept forever (a peer could flood every client's saved data with
+-- them). Three months after a bounty expired it goes with its raises, passes, hunts, claims, confirms and payments,
+-- unless it's still owed (confirmed, not paid) or this account's own; old notices from the other faction go too
+;(function()
+	local db, Store = ns.db, ns.Store
+	local long = clock - 100 * 86400 -- expired 93 days ago
+	local seq = 0
+	local function Put(kind, t, data, origin)
+		seq = seq + 1
+		origin = origin or "Old Poster"
+		local id = origin..":"..seq
+		db.records[id] = { kind = kind, id = id, origin = origin, seq = seq, prev = "0", t = t, data = data or {}, hash = "x" }
+		db.chains[origin] = { seq = 1000, lastHash = "x" }
+		return id
+	end
+	local done = Put("bounty", long, { amount = 1000, target = "Player-9-D0E1", targetName = "Done" })
+	local doneClaim = Put("claim", long + 60, { bounty = done, kill = "Hunter Old:1", victim = "Player-9-D0E1", killT = long + 50 }, "Hunter Old")
+	local gone = { done, doneClaim, Put("raise", long + 10, { bounty = done, amount = 500 }), Put("pass", long + 20, { bounty = done }, "Passer Old"),
+		Put("hunt", long + 30, { bounty = done }, "Hunter Old"), Put("confirm", long + 70, { claim = doneClaim, disputed = true }),
+		Put("notice", long, { bounty = "wOld00001", target = "Player-9-N0E1", targetName = "Noticed", amount = 100, postedAt = long }, "Bridge Old") }
+	local owed = Put("bounty", long, { amount = 1000, target = "Player-9-0E2D", targetName = "Owed" })
+	local owedClaim = Put("claim", long + 60, { bounty = owed, kill = "Hunter Old:9", victim = "Player-9-0E2D", killT = long + 50 }, "Hunter Old")
+	local raised = Put("bounty", long, { amount = 1000, target = "Player-9-4A15", targetName = "Raised" })
+	local kept = { owed, owedClaim, Put("confirm", long + 70, { claim = owedClaim }),
+		raised, Put("raise", long + 80 * 86400, { bounty = raised, amount = 500 }), -- raised 20 days ago: open 7 days from then
+		Put("bounty", clock - 10 * 86400, { amount = 1000, target = "Player-9-4ECE", targetName = "Recent" }),
+		Put("bounty", long, { amount = 1000, target = "Player-9-0A11", targetName = "Mine" }, Store:GetOrigin()),
+		Put("notice", clock - 30 * 86400, { bounty = "wNew00001", target = "Player-9-N0E2", targetName = "Noticed", amount = 100, postedAt = clock - 30 * 86400 }, "Bridge Old") }
+	ns.Bounties:ForgetOpen()
+	Store:Prune(clock)
+	for _, id in ipairs(gone) do check(not db.records[id], id.." (a long finished bounty's) is pruned") end
+	for _, id in ipairs(kept) do check(db.records[id], id.." is kept") end
+	check(Store:Prune(clock) == 0, "a second prune finds nothing")
+end)()
+-- 1.19.2: one sender's new records are taken up to an hourly allowance, so a flood of made-up records can't grow the
+-- saved data at the message rate
+;(function()
+	local Store, Sync = ns.Store, ns.Sync
+	local realCap = Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 20
+	local function Flood(origin, from, to)
+		local list = {}
+		for i = from, to do
+			list[#list + 1] = Sealed({ kind = "pass", id = origin..":"..i, origin = origin, seq = i, prev = "0", t = clock, data = { bounty = "x:"..i } })
+		end
+		return list
+	end
+	clock = clock + 3600
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl1:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 1, 15) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl2:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 16, 30) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	RunFrames()
+	check(Store:Get("Flood Peer:20") and not Store:Get("Flood Peer:21"), "the twenty-first new record from one sender this hour isn't taken")
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl3:1/1:"..Sync:Encode({ r = Flood("Other Peer", 1, 2) }), "CHANNEL", "Other Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	check(Store:Get("Other Peer:2"), "another sender has their own allowance")
+	clock = clock + 3600
+	Fire("CHAT_MSG_ADDON", "WNTD", "R:fl4:1/1:"..Sync:Encode({ r = Flood("Flood Peer", 21, 22) }), "CHANNEL", "Flood Peer", nil, nil, nil, Sync:GetInfo().channelName)
+	check(Store:Get("Flood Peer:22"), "the next hour starts afresh")
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realCap
+end)()
+-- 1.19.2: raid ads from other players are bounded. A start further ahead than a raid can be planned, long past or
+-- absurd is dropped (far-off ads once filled the list for good, and a huge number threw in date()); one leader's ads
+-- take three places at most; when the list is full the raid furthest off makes room; a shared-on copy (fw) naming
+-- a leader of this realm is taken only for a raid heard from that leader (anyone could list a raid in anyone's name)
+;(function()
+	local R, Store = ns.Raids, ns.Store
+	local me = Store:GetOrigin()
+	local realToast, realAd, realJoin = ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin
+	ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = function() end, function() end, function() end
+	ns.db.raids[me].seen = {}
+	R:Load()
+	local function ad(leader, i, startAt, extra)
+		local a = { id = leader..":1:"..i, l = leader, t = "Raid "..i, z = "Durotar", s = startAt, m = 40, ml = 1, n = 1, u = 0, i = 0, f = "Horde", e = 0 }
+		for k, v in pairs(extra or {}) do a[k] = v end
+		return a
+	end
+	local function Listed(id) for _, r in ipairs(R:List()) do if r.id == id then return true end end return false end
+	check(not R:OnAd(ad("Evil Doer", 1, clock + 10 * 365 * 86400), "Evil Doer") and not R:OnAd(ad("Evil Doer", 2, clock - 2 * 86400), "Evil Doer")
+		and not R:OnAd(ad("Evil Doer", 3, 1e300), "Evil Doer") and not R:OnAd(ad("Evil Doer", 4, 0 / 0), "Evil Doer") and #R:List() == 0,
+		"ads planned further than a week ahead, long past, or absurd are dropped")
+	for i = 1, 10 do R:OnAd(ad("Evil Doer", 10 + i, clock + 6 * 86400), "Evil Doer") end
+	check(#R:List() == 3, "one leader's ads take three places at most, got "..#R:List())
+	for i = 1, 30 do R:OnAd(ad("Leader "..i, 1, clock + 6 * 86400 - i), "Leader "..i) end
+	check(#R:List() == 30 and not Listed("Evil Doer:1:11") and Listed("Leader 30:1:1"), "the list holds 30; the raids furthest off made room")
+	check(R:OnAd(ad("Good Leader", 1, clock), "Good Leader") == true and Listed("Good Leader:1:1") and not Listed("Leader 1:1:1") and #R:List() == 30,
+		"a raid forming now is taken when the list is full, in the place of the one furthest off")
+	check(R:When(1e300):find("?", 1, true) and type(R:ServerWhen(1e300)) == "string" and type(R:ServerClock(1e300)) == "string", "a time date() can't format shows as ?: "..R:When(1e300))
+	-- Shared-on copies (fw) list raids led on other realm names, whose leaders are named as this client names them
+	-- ("First Last", no realm), so they can't be told from a player of this realm: one sender's copies list a few
+	for i = 1, 5 do R:OnAd(ad("Far Leader "..i, 1, clock, { fw = 1 }), "Link Holder") end
+	check(Listed("Far Leader 1:1:1") and Listed("Far Leader 3:1:1") and not Listed("Far Leader 4:1:1"), "one player's shared-on copies list three raids never heard from their leaders")
+	check(R:OnAd(ad("Far Leader 1", 1, clock + 60, { fw = 1 }), "Link Holder") == true, "a copy of one already listed is still taken")
+	check(R:OnAd(ad("Far Leader 6", 1, clock, { fw = 1 }), "Other Holder") == true, "another player's copies have their own places")
+	R:OnAd(ad("Near Leader", 1, clock), "Near Leader")
+	clock = clock + 150 -- the leader not heard for a while: copies shared on count again (as before)
+	check(R:OnAd(ad("Near Leader", 1, clock + 60, { fw = 1 }), "Random Member") == true, "a shared-on copy of a raid heard from its leader is still taken")
+	ns.Toast.Add, ns.Sync.SendRaidAd, ns.Sync.SendRaidJoin = realToast, realAd, realJoin
+end)()
+-- 1.19.2: a record replacing a held one of another kind is found by walks of its own kind at once (the index by kind
+-- listed the id under the old kind, so a real confirm replacing a forged hunt was invisible to every authority read
+-- until the next prune)
+;(function()
+	local Store = ns.Store
+	local victim = "Victim Kinds"
+	for _ in Store:Iterator("confirm") do end
+	check(Store:MergeRelayed(Sealed({ kind = "hunt", id = victim..":7", origin = victim, seq = 7, prev = "0", t = clock, data = { bounty = "Someone:1" } })), "a forged hunt holds the id")
+	local real = Sealed({ kind = "confirm", id = victim..":7", origin = victim, seq = 7, prev = "0", t = clock, data = { claim = "Hunter:3" } })
+	check(Store:Merge(real, victim) == true and Store:Get(victim..":7").kind == "confirm", "the real confirm replaces it")
+	local asConfirm, asHunt = false, false
+	for r in Store:Iterator("confirm") do if r.id == victim..":7" then asConfirm = true end end
+	for r in Store:Iterator("hunt") do if r.id == victim..":7" then asHunt = true end end
+	check(asConfirm and not asHunt, "and a walk of confirms finds it, a walk of hunts doesn't")
+end)()
+-- 1.19.2: a signature checked at once for a record that would replace a held one is budgeted a minute (a fill of 200
+-- records under held ids, each with a signature naming the origin's key, once meant 200 checks on the main thread)
+;(function()
+	local Store, C = ns.Store, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax, realVerify, verifies = Store.MAX_VERIFIES_NOW_PER_MINUTE, C.Verify, 0
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 2
+	C.Verify = function(...) verifies = verifies + 1 return realVerify(...) end
+	clock = clock + 60
+	local function Bounty(seq, targetName)
+		return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { target = "Player-9-"..targetName, targetName = targetName, amount = 1 } }
+	end
+	for seq = 30, 32 do Store:MergeRelayed(Sealed(Bounty(seq, "Held"..seq))) end
+	for seq = 30, 32 do Store:MergeRelayed(SignedBy(Bounty(seq, "Signed"..seq), seed)) end
+	check(Store:Get(victim..":30").data.targetName == "Signed30" and Store:Get(victim..":31").data.targetName == "Signed31" and Store:Get(victim..":32").data.targetName == "Held32" and verifies == 2,
+		"two signed challengers are checked and replace, the third keeps what's held: "..verifies.." checks")
+	clock = clock + 60
+	check(Store:MergeRelayed(SignedBy(Bounty(32, "Signed32"), seed)) == true and Store:Get(victim..":32").data.targetName == "Signed32", "the next minute it's checked")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE, C.Verify = realMax, realVerify
+end)()
+-- 1.19.2: what the replace rule leaves alone: a held record whose signature this client checked (the origin's word
+-- as much as a live one: an origin can't rewrite its own history on peers that caught up from fills), and in the
+-- live world a record numbered in the beta (refused before anything held is touched)
+;(function()
+	local Store, db = ns.Store, ns.db
+	local origin = "Settled Origin"
+	Store:MergeRelayed(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "a:1" } }))
+	db.sigChecked[origin..":1"] = true
+	local isNew, why = Store:Merge(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "b:1" } }), origin)
+	check(isNew == false and why == "already held" and Store:Get(origin..":1").data.bounty == "a:1" and db.sigChecked[origin..":1"] == true,
+		"a held record whose signature checked out isn't replaced, not even by its origin's live one")
+	db.sigChecked[origin..":1"] = nil
+	ns.WORLD = "live"
+	local beta = Sealed({ kind = "hunt", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, prev = "0", t = clock, data = { bounty = "x:1" } })
+	db.records[beta.id] = beta
+	db.chains["Beta Guy"] = { seq = 5, lastHash = beta.hash }
+	isNew, why = Store:Merge(Sealed({ kind = "hunt", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, prev = "0", t = clock, data = { bounty = "y:1" } }), "Beta Guy")
+	check(isNew == false and why == "beta" and Store:Get("Beta Guy:5") == beta and db.chains["Beta Guy"].seq == 5, "a beta-numbered record in the live world is refused before anything held is touched: "..tostring(why))
+	ns.WORLD = "beta"
+	db.records[beta.id], db.chains["Beta Guy"] = nil, nil
+end)()
+-- 1.19.2: the rest of the places a record's victim name or guild reached the screen or chat raw
+;(function()
+	local Store, me = ns.Store, ns.Store:GetOrigin()
+	local guild, victimName = "Evil|TInterface\\Icons\\X:64|t Guild", "Dead|cffff0000Red|r"
+	ns.TargetFile:ShowGuild(guild)
+	local shown
+	for _, fs in ipairs(Mock.fontStrings) do
+		local t = rawget(fs, "_text")
+		if type(t) == "string" and t:find("Evil", 1, true) and t:find("Guild>", 1, true) then shown = t end
+	end
+	check(shown and not shown:find("|T", 1, true), "the guild file's title is plain: "..tostring(shown))
+	local guildInfo = { guild = guild, targetName = "<"..guild..">", hunter = "Some Hunter", amount = 10000,
+		claim = { id = "Some Hunter:999", t = clock, data = { victim = "Player-9-D0A0", victimName = victimName, killT = clock } } }
+	ns.Rows:DoAction("confirm", guildInfo)
+	check(lastDialog and lastDialog.text:find("killed Deadcffff0000Redr of <EvilTInterface", 1, true), "the confirm dialog names the victim and guild plainly: "..tostring(lastDialog and lastDialog.text:sub(1, 90)))
+	lastDialog = nil
+	-- A claim of ours on a relayed bounty: /wanted claims and /wanted owed print the victim's name from the claim
+	local bounty = Sealed({ kind = "bounty", id = "Odd Poster:1", origin = "Odd Poster", seq = 1, prev = "0", t = clock - 100, data = { target = "Player-9-D0A1", targetName = "Odd Target", amount = 5000 } })
+	Store:MergeRelayed(bounty)
+	local kill = Store:NewRecord("kill", { killer = UnitGUID("player"), killerName = me, victim = "Player-9-D0A1", victimName = victimName, zone = "Durotar", deathId = "dd0a1" })
+	local claim = Store:NewRecord("claim", { bounty = bounty.id, kill = kill.id, victim = "Player-9-D0A1", victimName = victimName, killT = kill.t, zone = "Durotar" })
+	local function LastPrinted(needle) for i = #printed, 1, -1 do if printed[i]:find(needle, 1, true) then return printed[i] end end end
+	ns:RunCommand("claims", "")
+	local line = LastPrinted(claim.id)
+	check(line and not line:find("|cffff0000", 1, true) and line:find("Deadcffff0000Redr", 1, true), "/wanted claims prints the victim's name plainly: "..tostring(line))
+	ns:RunCommand("log", "")
+	line = LastPrinted("Deadcffff0000Redr")
+	check(line and not line:find("|cffff0000", 1, true), "/wanted log too: "..tostring(line))
+end)()
+-- 1.19.2: a guild a peer wrote into a saved player before this version is cleaned at load (it reaches the "Tell your
+-- party" chat line), and a shared sighting never renames a player already named, even one only peers named: the
+-- rename-and-reassign trick then leaves two players under one name, which a typed name refuses
+;(function()
+	local Store, Enemies = ns.Store, ns.Enemies
+	ns.db.players["Player-9-1E6AC7"] = { name = "Legacy Foe", faction = "Alliance", guild = "Old|TInterface\\Icons\\X:64|t Guild\n/run print(1)", lastSeen = clock }
+	Store:OnLoad()
+	check(ns.db.players["Player-9-1E6AC7"].guild == "OldTInterface\\Icons\\X:64t Guild/run print(1)", "a saved guild loses its escapes at load: "..tostring(ns.db.players["Player-9-1E6AC7"].guild))
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2E", n = "Rumour Two" }, "Some Friend")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2E", n = "Rumour Twoo" }, "Evil Doer")
+	check(Store:GetPlayer("Player-9-0A1B2E").name == "Rumour Two", "a peer can't rename a player another peer named")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2F", n = "Rumour Two" }, "Evil Doer")
+	local guid, _, why = Store:FindPlayerByName("Rumour Two")
+	check(guid == nil and why ~= nil, "so handing the name to another player leaves two, which a typed name refuses")
+end)()
+-- 1.19.2: a signed challenger the store can't check at once (the minute's checks spent, here none allowed) is never
+-- dropped: it waits for Verify's turn, senders taken in turn, and once found good takes the held record's place with
+-- the same bookkeeping; found bad, it goes. A flood of junk signatures once spent the checks and the genuine record
+-- was refused for good (the chain had moved over the forgery, so it was never asked for again)
+;(function()
+	local Store, C = ns.Store, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax = Store.MAX_VERIFIES_NOW_PER_MINUTE
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 0
+	local waiting = select(3, ns.Verify:Counts())
+	local function Rec(kind, seq, data) return { kind = kind, id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = data } end
+	Store:MergeRelayed(Sealed(Rec("confirm", 500, { claim = "Hunter:3" })), nil, "Evil Doer")
+	for seq = 501, 503 do Store:MergeRelayed(Sealed(Rec("bounty", seq, { target = "Player-9-J", targetName = "Junk"..seq, amount = 1 })), nil, "Evil Doer") end
+	for _ in Store:Iterator("confirm") do end
+	local kid = strsub(SignedBy(Rec("bounty", 501, { target = "Player-9-J", targetName = "x", amount = 1 }), seed).data.sig, 2, 9)
+	for seq = 501, 503 do
+		local isNew, why = Store:MergeRelayed(Sealed(Rec("bounty", seq, { target = "Player-9-K", targetName = "Forged"..seq, amount = 2, sig = "1"..kid..strrep("A", 86) })), nil, "Evil Doer")
+		check(isNew == false and why == "waiting for its signature to be checked", "a junk-signed challenger waits its turn: "..tostring(why))
+	end
+	local genuine = SignedBy(Rec("confirm", 500, { claim = "Hunter:9" }), seed)
+	local isNew, why = Store:MergeRelayed(genuine, nil, "Honest Peer")
+	check(isNew == false and why == "waiting for its signature to be checked" and Store:Get(victim..":500").data.claim == "Hunter:3", "the genuine signed confirm waits too, the forgery holding on: "..tostring(why))
+	check(select(3, ns.Verify:Counts()) == waiting + 4, "they count as waiting: "..select(3, ns.Verify:Counts()))
+	for _ = 1, 20 do RunTimers() end
+	local held = Store:Get(victim..":500")
+	check(held.data.claim == "Hunter:9" and SV(held) == true, "checked in its turn, it takes the forgery's place, its signature counted as checked")
+	local seen = false
+	for r in Store:Iterator("confirm") do if r.id == victim..":500" then seen = true end end
+	check(seen, "and a walk of confirms finds it")
+	check(Store:Get(victim..":501").data.targetName == "Junk501" and Store:Get(victim..":503").data.targetName == "Junk503" and select(3, ns.Verify:Counts()) == waiting, "the junk-signed ones were checked and dropped")
+	-- The same by a fill on the channel: the sender comes along
+	Store:MergeRelayed(Sealed(Rec("hunt", 510, { bounty = "a:1" })), nil, "Evil Doer")
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:ch1:1/1:"..ns.Sync:Encode({ r = { SignedBy(Rec("hunt", 510, { bounty = "b:1" }), seed) } }), "CHANNEL", "Honest Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	for _ = 1, 20 do RunTimers() end
+	check(Store:Get(victim..":510").data.bounty == "b:1", "a fill's signed challenger is taken the same way")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = realMax
+end)()
+-- 1.19.2: a sender's challengers waiting to be checked are a fill's worth at most (none of an honest catch-up is
+-- lost), and each counts against the sender's hourly records like one taken in, so one account can't keep the
+-- checks running for ever
+;(function()
+	local Store, Sync, C = ns.Store, ns.Sync, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax, realCap = Store.MAX_VERIFIES_NOW_PER_MINUTE, Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 0
+	local waiting = select(3, ns.Verify:Counts())
+	local function Rec(seq, name) return { kind = "bounty", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { target = "Player-9-W", targetName = name, amount = 1 } } end
+	for seq = 600, 659 do Store:MergeRelayed(Sealed(Rec(seq, "Held"..seq)), nil, "Evil Doer") end
+	for seq = 600, 659 do Store:MergeRelayed(SignedBy(Rec(seq, "Real"..seq), seed), nil, "Honest Filler") end
+	check(select(3, ns.Verify:Counts()) >= waiting + 59, "sixty challengers from one sender all wait (one may be under check already): "..(select(3, ns.Verify:Counts()) - waiting))
+	for _ = 1, 400 do RunTimers() end
+	check(Store:Get(victim..":659").data.targetName == "Real659" and select(3, ns.Verify:Counts()) == waiting, "and every one is checked and taken")
+	clock = clock + 3600
+	Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = 3
+	-- Hunts (no numbers in the data: this harness's encoder turns them into floats, which hash differently here)
+	local function Hunt(seq, bounty) return { kind = "hunt", id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = { bounty = bounty } } end
+	local offered = {}
+	for seq = 700, 704 do
+		Store:MergeRelayed(Sealed(Hunt(seq, "held:"..seq)), nil, "Evil Doer")
+		offered[#offered + 1] = SignedBy(Hunt(seq, "real:"..seq), seed)
+	end
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:ch2:1/1:"..Sync:Encode({ r = offered }), "CHANNEL", "Capped Sender", nil, nil, nil, Sync:GetInfo().channelName)
+	for _ = 1, 40 do RunTimers() end
+	check(Store:Get(victim..":702").data.bounty == "real:702" and Store:Get(victim..":703").data.bounty == "held:703" and Store:Get(victim..":704").data.bounty == "held:704",
+		"a fill's challengers count against the sender's hourly allowance: three taken, the rest refused")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE, Sync.MAX_NEW_RECORDS_PER_SENDER_PER_HOUR = realMax, realCap
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

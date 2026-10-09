@@ -100,6 +100,8 @@ function Catchup:Import()
 	if Wanted.GuildKoS then
 		Wanted.GuildKoS:TakeServer(entry.guildKos)
 	end
+	-- Signing keys the server took from the apps of the accounts their characters are confirmed to (1.19.0)
+	Wanted.KeyBook:FromApp(entry.addonKeys, entry.t)
 	if entry.t <= (Wanted.db.catchupT or 0) then
 		Wanted:Log("Catch-up: already taken in")
 		return

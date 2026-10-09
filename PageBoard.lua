@@ -258,6 +258,10 @@ function private.RefreshList()
 		showPassed = settings.showPassed,
 		sort = settings.boardSort,
 	})
+	-- The bounties shown have their signatures checked first (1.19.0)
+	for _, info in ipairs(items) do
+		Wanted.Verify:Want(info.bounty, true)
+	end
 	private.sortButton:SetText("Sort: "..(SORT_LABELS[settings.boardSort] or SORT_LABELS.amount))
 	local total = 0
 	for _, info in ipairs(items) do

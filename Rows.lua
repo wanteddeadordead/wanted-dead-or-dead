@@ -150,6 +150,15 @@ end
 -- Tooltip
 -- ============================================================================
 
+---A tooltip line saying a record is signed, or its signature is bad (1.19.0), when that's known.
+local function AddSignature(record)
+	local label = Wanted.Verify:Label(record)
+	if label then
+		local color = label == "Signed" and C.green or C.red
+		GameTooltip:AddDoubleLine(" ", label, 1, 1, 1, color[1], color[2], color[3])
+	end
+end
+
 function Rows:ShowBountyTooltip(row, info)
 	local player = info.player
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
@@ -183,6 +192,7 @@ function Rows:ShowBountyTooltip(row, info)
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddDoubleLine("Bounty", Theme:Money(info.amount), 1, 1, 1, 1, 1, 1)
 	GameTooltip:AddDoubleLine("Posted by", info.mine and "you" or info.poster, 1, 1, 1, C.text[1], C.text[2], C.text[3])
+	AddSignature(info.bounty)
 	if not info.mine then
 		Reputation:AddTrustLines("Poster trust", Reputation:GetPosterTrust(Reputation:GetTally(info.poster)))
 	end
@@ -192,12 +202,18 @@ function Rows:ShowBountyTooltip(row, info)
 	if info.claim then
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddDoubleLine("Claimed by", info.hunter, 1, 1, 1, C.text[1], C.text[2], C.text[3])
+		AddSignature(info.claim)
 		local witnesses = Bounties:GetWitnesses(info.claim)
 		GameTooltip:AddLine(#witnesses > 0 and ("Seen by "..table.concat(witnesses, ", ")) or "Nobody else saw the kill", C.muted[1], C.muted[2], C.muted[3], true)
 		Reputation:AddTrustLines("Bounty hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
 		if Wanted.Proof:Get(info.claim.id) then
 			GameTooltip:AddLine(format("%s's client saved a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL), C.green[1], C.green[2], C.green[3], true)
 		end
+	end
+	-- Records about it whose signature failed are never read, so nothing else shows them
+	local bad = info.bounty and Wanted.Verify:CountBad(info.bounty) or 0
+	if bad > 0 then
+		GameTooltip:AddLine(format("Bad signature: %d record%s about this bounty %s forged and left out.", bad, bad == 1 and "" or "s", bad == 1 and "was" or "were"), C.red[1], C.red[2], C.red[3], true)
 	end
 	GameTooltip:Show()
 end

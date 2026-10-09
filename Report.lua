@@ -123,6 +123,12 @@ function Report:Build()
 	end
 	if Wanted.Store and Wanted.db then
 		Add("Records flagged: %d tampered (never used), %d broken chain (never a witness)", Wanted.Store:CountFlagged())
+		-- Signing (1.19.0): this character's key, the self-test, the keys known and what checks found
+		local _, kid = Wanted.Signing:PublicKey()
+		Add("Signing: %s, self-test %s", kid and format("key %s (%s seed)", kid, tostring(Wanted.Signing:Source())) or "no key yet", Wanted.Crypto:SelfTestText())
+		local origins, keys = Wanted.KeyBook:Count()
+		local good, bad, waiting = Wanted.Verify:Counts()
+		Add("Signatures: %d keys known for %d players; %d records checked out, %d bad, %d waiting", keys, origins, good, bad, waiting)
 	end
 	Add("")
 	local problems = Wanted:GetProblems()

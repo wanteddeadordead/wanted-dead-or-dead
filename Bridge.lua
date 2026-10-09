@@ -643,6 +643,14 @@ function private.Receive(notice, senderID)
 			return
 		end
 	end
+	-- Or one taken in during a fight, waiting for it to end to be signed
+	for _, waiting in ipairs(Store:GetPending()) do
+		local data = waiting.data
+		if waiting.kind == "notice" and private.SameBounty(data.target, data.postedAt, data.bounty, notice.g, notice.t, notice.b)
+			and (data.amount or 0) >= amount then
+			return
+		end
+	end
 	if senderID and not private.UnderNoticeCaps(senderID, notice.g) then
 		private.stats.skipped = private.stats.skipped + 1
 		Wanted:Log("!! Bridge: too many new bounty notices from %s, or on %s, this hour; left out", tostring(senderID), notice.g)

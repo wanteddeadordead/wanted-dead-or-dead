@@ -92,6 +92,7 @@ function Payments:GetForClaim(claimId, posterOnly)
 		-- for "Mhureth Theolia:7515" says "Mhureth": it pays that claim too, if it came after it
 		local legacy = type(paid) == "string" and not strfind(paid, ":", 1, true)
 		if paid == claimId or legacy then
+			Wanted.Verify:Want(payment, true)
 			claim = claim or Store:Get(claimId) or false
 			if claim and private.Pays(payment, claim, legacy) then
 				if payment.data.side == "payer" then

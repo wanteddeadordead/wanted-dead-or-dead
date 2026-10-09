@@ -14,6 +14,21 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.19.0",
+		note = "This one is about trust. Bounties run on your word: when a poster confirms a kill or pays a hunter, "
+			.."everyone's addon has to believe it really came from them, and until now another player could fake that. "
+			.."From this version, your addon signs what you post, claim, confirm and pay, so nobody can do it in your name.\n\n"
+			.."You don't need to do anything. With the Wanted app, your key comes from it; without it, the addon makes one "
+			.."after a few minutes of play.",
+		lines = {
+			"Your bounties, claims, confirms and payments are signed, so nobody can fake them in your name.",
+			"A bounty's details show Signed when a poster's or hunter's word checks out, and leave out anything forged.",
+			"Checking runs in the background, out of combat, without slowing your game.",
+			"Using the Wanted app? Your key comes from it and is stronger. Get it at wanteddeadordead.com/app.",
+			"Think someone has your key? Type /wanted key reset.",
+		},
+	},
+	{
 		version = "1.18.0",
 		note = "This one is about getting together and finding things faster. You asked for an easy way to set up world PvP "
 			.."raids, so now there is one, and the menu was getting crowded, so I cut it down.\n\n"

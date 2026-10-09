@@ -876,20 +876,33 @@ end
 ---the desktop app's catch-up.
 ---@param record table
 ---@param fromApp boolean? true for the app's catch-up: the server checked who sent it, so it's marked `app`
+---@param sender string? who relayed it (a peer's fill), for a signed one that waits to be checked (Verify:Challenge)
 ---@return boolean isNew
----@return string? why when not new, as for Merge
-function Store:MergeRelayed(record, fromApp)
+---@return string? why when not new, as for Merge, or "waiting for its signature to be checked"
+function Store:MergeRelayed(record, fromApp, sender)
 	if not Store:IsWellFormed(record) then
 		return false, "malformed"
 	end
-	return private.Insert(record, false, fromApp)
+	return private.Insert(record, false, fromApp, sender)
+end
+
+---Merges a relayed record whose signature Verify checked out with its origin's key (a challenger to a held one,
+---Verify:Challenge): its origin's word, so it may take a held record's place.
+---@param record table
+---@return boolean isNew
+---@return string? why
+function Store:MergeVerified(record)
+	if not Store:IsWellFormed(record) then
+		return false, "malformed"
+	end
+	return private.Insert(record, false, nil, nil, true)
 end
 
 ---Stores a received record. live: it came straight from its origin (the game stamped the sender), which the
 ---desktop app reports so the network can accept this client as a witness to it. fromApp: the desktop app's
----catch-up brought it. Local flags arriving with a record are the sender's, not ours, and are dropped: a relayed
----record can't claim to be live.
-function private.Insert(record, live, fromApp)
+---catch-up brought it. sender: who relayed it. checked: Verify found its signature good. Local flags arriving with
+---a record are the sender's, not ours, and are dropped: a relayed record can't claim to be live.
+function private.Insert(record, live, fromApp, sender, checked)
 	local db = Wanted.db
 	if RESERVED_KINDS[record.kind] then
 		return false, "reserved"
@@ -932,9 +945,20 @@ function private.Insert(record, live, fromApp)
 		-- when it comes from the origin itself, from the app, or signed with the origin's key. The origin's own word,
 		-- once held (heard from them, or its signature checked here), is never replaced: not even by them, or an
 		-- origin could rewrite its own history on peers that caught up from fills.
-		if existing.test or Store:IsTrusted(existing) or db.sigChecked[existing.id] == true or record.tampered
-			or not (live or fromApp or private.VerifiesNow(record)) then
+		if existing.test or Store:IsTrusted(existing) or db.sigChecked[existing.id] == true or record.tampered then
 			return false, "already held"
+		end
+		if not (live or fromApp or checked) then
+			local ok = private.VerifiesNow(record)
+			if ok == nil then
+				-- Signed as the origin's, but this minute's checks are used up: checked in its turn, never dropped (a
+				-- flood of junk signatures could otherwise spend the checks and keep the real record out for good)
+				Wanted.Verify:Challenge(record, sender)
+				return false, "waiting for its signature to be checked"
+			elseif not ok then
+				return false, "already held"
+			end
+			checked = true
 		end
 		Wanted:Log("!! Store: %s record %s held from a relay gives way to its origin's own", tostring(record.kind), tostring(record.id))
 		private.Unhold(existing)
@@ -976,6 +1000,10 @@ function private.Insert(record, live, fromApp)
 	end
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record
+	if checked then
+		-- Its signature was checked on the way in
+		db.sigChecked[record.id] = true
+	end
 	private.AddToIndex(record)
 	-- An altered record is held only so its chain moves on: nothing acts on it (a listener would store what it says)
 	if not record.tampered then
@@ -989,8 +1017,10 @@ end
 Store.MAX_VERIFIES_NOW_PER_MINUTE = 5
 
 ---Whether a record's signature checks out with a key of its origin's, checked now (about 20 ms in the game): for
----the rare record that would replace a held one. Unsigned, no key for it, the check not ready, or this minute's
----checks used up: no (the origin's own live record, or the app's, still replaces without one).
+---the rare record that would replace a held one. false when it's unsigned, no key is known for it, the check isn't
+---ready, or the signature is bad; nil when it could be checked but this minute's checks are used up (Verify checks
+---it in its turn).
+---@return boolean? ok
 function private.VerifiesNow(record)
 	local Signing, KeyBook, Crypto = Wanted.Signing, Wanted.KeyBook, Wanted.Crypto
 	local sig = record.data.sig
@@ -1011,11 +1041,7 @@ function private.VerifiesNow(record)
 		private.verifiedNow = budget
 	end
 	if budget.count >= Store.MAX_VERIFIES_NOW_PER_MINUTE then
-		if budget.count == Store.MAX_VERIFIES_NOW_PER_MINUTE then
-			budget.count = budget.count + 1
-			Wanted:Log("!! Store: over %d signatures to check at once this minute; the rest keep what's held", Store.MAX_VERIFIES_NOW_PER_MINUTE)
-		end
-		return false
+		return nil
 	end
 	budget.count = budget.count + 1
 	return Crypto:Verify(KeyBook:GetPrepared(key.pk) or Crypto:FromBase64(key.pk), message, signature) == true

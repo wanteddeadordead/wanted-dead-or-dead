@@ -9474,7 +9474,7 @@ end)()
 	check(KB:HasKeys(victim), "the poster's key is known")
 	local signed = SignedBy(Bounty(5, "0", "FiveSigned", 3), seed)
 	local n4 = Store:MergeRelayed(signed)
-	check(n4 == true and Store:Get(victim..":5").data.targetName == "FiveSigned" and SV(signed) == nil, "a relayed record signed with the origin's key replaces hearsay")
+	check(n4 == true and Store:Get(victim..":5").data.targetName == "FiveSigned" and SV(signed) == true, "a relayed record signed with the origin's key replaces hearsay, its signature counted as checked")
 	local badSig = SignedBy(Bounty(5, "0", "FiveForged", 4), C:SHA512("someone else"):sub(1, 32))
 	badSig.data.sig = "1"..strsub(signed.data.sig, 2, 9)..strsub(badSig.data.sig, 10)
 	Sealed(badSig)
@@ -9687,6 +9687,43 @@ end)()
 	Enemies:OnSharedSighting({ g = "Player-9-0A1B2F", n = "Rumour Two" }, "Evil Doer")
 	local guid, _, why = Store:FindPlayerByName("Rumour Two")
 	check(guid == nil and why ~= nil, "so handing the name to another player leaves two, which a typed name refuses")
+end)()
+-- 1.19.2: a signed challenger the store can't check at once (the minute's checks spent, here none allowed) is never
+-- dropped: it waits for Verify's turn, senders taken in turn, and once found good takes the held record's place with
+-- the same bookkeeping; found bad, it goes. A flood of junk signatures once spent the checks and the genuine record
+-- was refused for good (the chain had moved over the forgery, so it was never asked for again)
+;(function()
+	local Store, C = ns.Store, ns.Crypto
+	local victim, seed = "Victim Poster", C:SHA512("victim poster"):sub(1, 32)
+	local realMax = Store.MAX_VERIFIES_NOW_PER_MINUTE
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = 0
+	local waiting = select(3, ns.Verify:Counts())
+	local function Rec(kind, seq, data) return { kind = kind, id = victim..":"..seq, origin = victim, seq = seq, prev = "0", t = clock, data = data } end
+	Store:MergeRelayed(Sealed(Rec("confirm", 500, { claim = "Hunter:3" })), nil, "Evil Doer")
+	for seq = 501, 503 do Store:MergeRelayed(Sealed(Rec("bounty", seq, { target = "Player-9-J", targetName = "Junk"..seq, amount = 1 })), nil, "Evil Doer") end
+	for _ in Store:Iterator("confirm") do end
+	local kid = strsub(SignedBy(Rec("bounty", 501, { target = "Player-9-J", targetName = "x", amount = 1 }), seed).data.sig, 2, 9)
+	for seq = 501, 503 do
+		local isNew, why = Store:MergeRelayed(Sealed(Rec("bounty", seq, { target = "Player-9-K", targetName = "Forged"..seq, amount = 2, sig = "1"..kid..strrep("A", 86) })), nil, "Evil Doer")
+		check(isNew == false and why == "waiting for its signature to be checked", "a junk-signed challenger waits its turn: "..tostring(why))
+	end
+	local genuine = SignedBy(Rec("confirm", 500, { claim = "Hunter:9" }), seed)
+	local isNew, why = Store:MergeRelayed(genuine, nil, "Honest Peer")
+	check(isNew == false and why == "waiting for its signature to be checked" and Store:Get(victim..":500").data.claim == "Hunter:3", "the genuine signed confirm waits too, the forgery holding on: "..tostring(why))
+	check(select(3, ns.Verify:Counts()) == waiting + 4, "they count as waiting: "..select(3, ns.Verify:Counts()))
+	for _ = 1, 20 do RunTimers() end
+	local held = Store:Get(victim..":500")
+	check(held.data.claim == "Hunter:9" and SV(held) == true, "checked in its turn, it takes the forgery's place, its signature counted as checked")
+	local seen = false
+	for r in Store:Iterator("confirm") do if r.id == victim..":500" then seen = true end end
+	check(seen, "and a walk of confirms finds it")
+	check(Store:Get(victim..":501").data.targetName == "Junk501" and Store:Get(victim..":503").data.targetName == "Junk503" and select(3, ns.Verify:Counts()) == waiting, "the junk-signed ones were checked and dropped")
+	-- The same by a fill on the channel: the sender comes along
+	Store:MergeRelayed(Sealed(Rec("hunt", 510, { bounty = "a:1" })), nil, "Evil Doer")
+	Fire("CHAT_MSG_ADDON", "WNTD", "F:ch1:1/1:"..ns.Sync:Encode({ r = { SignedBy(Rec("hunt", 510, { bounty = "b:1" }), seed) } }), "CHANNEL", "Honest Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	for _ = 1, 20 do RunTimers() end
+	check(Store:Get(victim..":510").data.bounty == "b:1", "a fill's signed challenger is taken the same way")
+	Store.MAX_VERIFIES_NOW_PER_MINUTE = realMax
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

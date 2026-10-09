@@ -13,6 +13,8 @@ local private = {
 	urgent = {}, -- record ids to check next (something reads or shows them)
 	background = {}, -- record ids to check one a second
 	queued = {}, -- id -> true while in either list
+	challengers = {}, -- sender -> records (not held) waiting to be checked before they may replace a held one
+	challengerSenders = {}, -- the senders with challengers waiting, taken in turn
 	running = nil, -- the record being checked
 	checked = 0, -- this session: checks done
 	bad = 0, -- this session: bad signatures found
@@ -20,6 +22,8 @@ local private = {
 -- Bounties posted, hunted or claimed by this character: records arriving about them are checked at once. Worked out
 -- again at most this often
 local MINE_SECONDS = 10
+-- Challengers (Verify:Challenge) waiting from one sender at most: an honest fill's catch-up carries a few at a time
+local MAX_CHALLENGERS_PER_SENDER = 50
 
 
 
@@ -51,6 +55,52 @@ function private.OnRecord(record, isOwn)
 		return
 	end
 	Verify:Want(record, private.IsMine(record))
+end
+
+---A record relayed under an id already held by one that isn't its origin's word, signed as the origin's, which the
+---store couldn't check at once (Store.private.Insert): checked in its turn, after what's being read; found good, it
+---takes the held one's place (Store:MergeVerified), found bad, it's dropped. Senders are taken in turn, so one
+---sender's junk can't keep another's waiting, and one sender has only so many waiting.
+---@param record table not held
+---@param sender string? who relayed it
+function Verify:Challenge(record, sender)
+	sender = type(sender) == "string" and sender or "?"
+	local list = private.challengers[sender]
+	if not list then
+		list = {}
+		private.challengers[sender] = list
+		tinsert(private.challengerSenders, sender)
+	end
+	for _, waiting in ipairs(list) do
+		if waiting.id == record.id and waiting.hash == record.hash then
+			return
+		end
+	end
+	if #list >= MAX_CHALLENGERS_PER_SENDER then
+		Wanted:Log("!! Verify: %s has %d records waiting to be checked already; %s left out", sender, #list, tostring(record.id))
+		return
+	end
+	tinsert(list, record)
+	private.RunNext()
+end
+
+---The next challenger to check, the senders taken in turn, or nil.
+function private.NextChallenger()
+	local senders = private.challengerSenders
+	for _ = 1, #senders do
+		local sender = tremove(senders, 1)
+		local list = private.challengers[sender]
+		local record = list and tremove(list, 1)
+		if list and #list > 0 then
+			tinsert(senders, sender)
+		else
+			private.challengers[sender] = nil
+		end
+		if record then
+			return record
+		end
+	end
+	return nil
 end
 
 ---Whether a record is about a bounty this character posted, hunts or claimed.
@@ -99,9 +149,11 @@ end
 ---@param record table
 ---@return table? key the key book's entry
 ---@return string? sig the signature's base64
-function private.Checkable(record)
+---@param challenger boolean? a record not held (Verify:Challenge): what's known of the held record's signature under
+---its id says nothing about it
+function private.Checkable(record, challenger)
 	local sig = record.data and record.data.sig
-	if Wanted.db.sigChecked[record.id] ~= nil or record.tampered or type(sig) ~= "string" or #sig ~= Wanted.Signing.SIG_LENGTH
+	if (not challenger and Wanted.db.sigChecked[record.id] ~= nil) or record.tampered or type(sig) ~= "string" or #sig ~= Wanted.Signing.SIG_LENGTH
 		or strsub(sig, 1, 1) ~= Wanted.Signing.SIG_VERSION or not Wanted.Signing.KINDS[record.kind]
 		or record.origin == Wanted.Store:GetOrigin() or Wanted.Store:IsTest(record) then
 		return nil
@@ -199,7 +251,17 @@ function private.RunNext(fromTick)
 	while true do
 		local list = #private.urgent > 0 and private.urgent or (fromTick and private.background) or nil
 		local id = list and tremove(list, 1)
-		if not id then
+		if not id and #private.urgent == 0 then
+			-- Challengers after what's being read, before the background
+			local challenger = private.NextChallenger()
+			if not challenger then
+				return
+			end
+			local key, sig = private.Checkable(challenger, true)
+			if key and private.Start(challenger, key, sig, true) then
+				return
+			end
+		elseif not id then
 			return
 		end
 		-- An urgent one may still be in the background list (it's skipped there once checked)
@@ -219,7 +281,8 @@ function private.RunNext(fromTick)
 end
 
 ---Starts checking a record. Returns whether a check is running (not for a signature that can't be one).
-function private.Start(record, key, sig)
+---challenger: a record not held (Verify:Challenge), taken in or dropped by what's found rather than marked.
+function private.Start(record, key, sig, challenger)
 	local message = Wanted.Store:SigningMessage(record)
 	if not message then
 		-- A field no record can carry (a stored one never has one): nothing to check
@@ -228,7 +291,9 @@ function private.Start(record, key, sig)
 	local signature = Crypto:FromBase64(sig)
 	if not signature or #signature ~= 64 then
 		-- Its key id is a known key's, but what follows is no signature
-		private.Finish(record, key, false)
+		if not challenger then
+			private.Finish(record, key, false)
+		end
 		return false
 	end
 	private.running = record
@@ -243,10 +308,27 @@ function private.Start(record, key, sig)
 			return
 		end
 		Wanted.KeyBook:KeepPrepared(key.pk, job.key)
-		private.Finish(record, key, ok)
+		if challenger then
+			private.FinishChallenger(record, key, ok)
+		else
+			private.Finish(record, key, ok)
+		end
 		C_Timer.After(0, function() private.RunNext() end)
 	end)
 	return true
+end
+
+---A challenger checked: good, it's merged (the store lets it take the held record's place, unless that one became
+---its origin's word meanwhile); bad, it's dropped.
+function private.FinishChallenger(record, key, ok)
+	private.checked = private.checked + 1
+	if ok == true then
+		local isNew, why = Wanted.Store:MergeVerified(record)
+		Wanted:Log("Verify: %s record %s checked out with %s's key %s: %s", tostring(record.kind), tostring(record.id), tostring(record.origin), tostring(key.kid), isNew and "taken in" or tostring(why))
+		return
+	end
+	private.bad = private.bad + 1
+	Wanted:Log("!! Verify: %s record %s offered for a held one has a bad signature for %s's key %s; dropped", tostring(record.kind), tostring(record.id), tostring(record.origin), tostring(key.kid))
 end
 
 ---Keeps what a check found (sigChecked). A bad signature from a known key: someone forged or changed it, so it's
@@ -341,7 +423,11 @@ function Verify:Counts()
 			bad = bad + (checked == false and 1 or 0)
 		end
 	end
-	return good, bad, #private.urgent + #private.background
+	local challengers = 0
+	for _, list in pairs(private.challengers) do
+		challengers = challengers + #list
+	end
+	return good, bad, #private.urgent + #private.background + challengers
 end
 
 function Verify:Status()

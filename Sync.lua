@@ -1855,7 +1855,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			elseif not private.RelayedInBounds(record, limits) then
 				isNew, why = false, "further than its origin's chain is known to reach"
 			else
-				isNew, why = Store:MergeRelayed(record)
+				isNew, why = Store:MergeRelayed(record, nil, sender)
 			end
 			Wanted:Log("Sync: %s record %s from %s: %s", tag == TAG_LIVE and "live" or "fill", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then
@@ -2324,7 +2324,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 			elseif not private.RelayedInBounds(record, limits) then
 				isNew, why = false, "further than its origin's chain is known to reach"
 			else
-				isNew, why = Store:MergeRelayed(record)
+				isNew, why = Store:MergeRelayed(record, nil, sender)
 			end
 			Wanted:Log("Sync: realm link record %s from %s: %s", tostring(type(record) == "table" and record.id), sender, isNew and "new" or why or "not taken")
 			if isNew then

@@ -307,12 +307,31 @@ function Recorder:GetUnitGuild(unit)
 	return guild
 end
 
----The guild last seen for a player GUID, or nil.
+---The guild last seen for a player GUID, or nil: the one the game read on a unit (Enemies), never a peer's word.
 ---@param guid string?
 ---@return string?
 function Recorder:GetKnownGuild(guid)
 	local player = guid and Store:GetPlayer(guid)
 	return player and player.guild or nil
+end
+
+---A player's guild as the game gives it right now, from any unit token showing them, or nil. At a kill or a death
+---the unit is usually still there: that reading beats the saved one (a guild bounty's witnesses are matched on it).
+---@param guid string?
+---@return string?
+function private.LiveGuild(guid)
+	if not guid then
+		return nil
+	end
+	for unit, trackedGuid in pairs(private.tracked) do
+		if trackedGuid == guid and UnitExists(unit) and UnitGUID(unit) == guid then
+			local guild = Recorder:GetUnitGuild(unit)
+			if guild then
+				return guild
+			end
+		end
+	end
+	return nil
 end
 
 ---A value the client let us read, or nil for a hidden (secret) one.
@@ -613,7 +632,7 @@ function private.RecordDeath(guid, name)
 		deathId = deathId,
 		victim = guid,
 		victimName = name,
-		victimGuild = friend and friend.guild or Recorder:GetKnownGuild(guid),
+		victimGuild = friend and friend.guild or private.LiveGuild(guid) or Recorder:GetKnownGuild(guid),
 		zone = zone,
 		mapId = mapId, -- names the zone the same in every language (the site reads it)
 		x = x,
@@ -675,7 +694,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			killerGuild = Recorder:GetUnitGuild("player"),
 			victim = targetGUID,
 			victimName = victim and victim.name or name,
-			victimGuild = Recorder:GetKnownGuild(targetGUID),
+			victimGuild = private.LiveGuild(targetGUID) or Recorder:GetKnownGuild(targetGUID),
 			deathId = deathId,
 			zone = zone,
 			mapId = mapId, -- names the zone the same in every language (the site reads it)
@@ -696,7 +715,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			deathId = deathId,
 			victim = targetGUID,
 			victimName = victim and victim.name or name,
-			victimGuild = Recorder:GetKnownGuild(targetGUID),
+			victimGuild = private.LiveGuild(targetGUID) or Recorder:GetKnownGuild(targetGUID),
 			killer = attackerGUID,
 			killerName = killerName,
 			zone = zone,
@@ -769,7 +788,7 @@ function private.HandleHonorGain(text)
 		killerGuild = Recorder:GetUnitGuild("player"),
 		victim = guid or ("name:"..victimName),
 		victimName = victimName,
-		victimGuild = Recorder:GetKnownGuild(guid),
+		victimGuild = private.LiveGuild(guid) or Recorder:GetKnownGuild(guid),
 		deathId = Store:Hash(strjoin("|", guid or victimName, zone, floor(now / 10))),
 		zone = zone,
 		mapId = mapId, -- names the zone the same in every language (the site reads it)

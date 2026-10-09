@@ -9368,6 +9368,27 @@ end)()
 	Enemies:OnSharedSighting({ g = "Player-9-F1DDA2", n = "Fake Later" }, "Evil Doer")
 	check(Count() - before == 42, "and the next minute starts afresh")
 end)()
+-- 1.19.2: a kill or a death stamps the victim's guild as the game reads it on their unit at that moment, before the
+-- saved one (a guild bounty's witnesses are matched on it, so a stale or planted guild would claim one)
+;(function()
+	local Store = ns.Store
+	local victim = "Player-9-61D1E5"
+	enemyUnits.nameplate4 = { guid = victim, name = "Guild Hopper", class = "ROGUE", level = 30, guild = "New Guild" }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate4")
+	-- The saved guild is stale (or planted) by the time of the kill
+	ns.db.players[victim].guild = "Old Guild"
+	Fire("PARTY_KILL", "Player-1-ME", victim)
+	local kill
+	for r in Store:Iterator("kill") do if r.data.victim == victim then kill = r end end
+	check(kill and kill.data.victimGuild == "New Guild", "a kill carries the guild the game shows on the victim now, got "..tostring(kill and kill.data.victimGuild))
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate4")
+	enemyUnits.nameplate4 = nil
+	ns.db.players[victim].guild = "Old Guild"
+	Fire("PARTY_KILL", "Player-2-FRIEND", victim)
+	local death
+	for r in Store:Iterator("death") do if r.data.victim == victim and r.data.killer == "Player-2-FRIEND" then death = r end end
+	check(death and death.data.victimGuild == "Old Guild", "with no unit showing them, the saved guild, got "..tostring(death and death.data.victimGuild))
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

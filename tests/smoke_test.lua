@@ -8414,6 +8414,19 @@ end)()
 	check(carry == 0 and not C:Verify(pk, "", sig:sub(1, 32)..table.concat(s)), "a signature with s + L fails")
 	-- y = 2 is on no point of the curve (x squared would have to be a non-square)
 	check(C:Prepare("\2"..string.rep("\0", 31)) == nil and C:Prepare("short") == nil and not C:Verify("short", "", sig), "a key that isn't a point is refused")
+	-- A key of small order (the identity, and the 7 others the curve has) checks out for any message: refused
+	local smallOrder = { "0100000000000000000000000000000000000000000000000000000000000000",
+		"ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", "0000000000000000000000000000000000000000000000000000000000000000",
+		"0000000000000000000000000000000000000000000000000000000000000080", "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+		"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa", "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+		"26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85" }
+	local forged = C:FromHex("5866666666666666666666666666666666666666666666666666666666666666".."01"..string.rep("00", 31))
+	for _, hex in ipairs(smallOrder) do
+		check(C:Prepare(C:FromHex(hex)) == nil and not C:Verify(C:FromHex(hex), "a forged confirm", forged), "a small-order key is refused: "..hex)
+	end
+	for _, v2 in ipairs(vectors) do
+		check(C:Prepare(C:FromHex(v2[2])), "an ordinary key is taken: "..v2[2])
+	end
 	-- SHA-512: FIPS 180-2's one-block and two-block messages, and the empty one
 	check(C:Hex(C:SHA512("")) == "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e", "SHA-512 of nothing")
 	check(C:Hex(C:SHA512("abc")) == "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", "SHA-512 of abc")
@@ -8719,10 +8732,13 @@ end)()
 	Hello("Key No Guid", { c = {}, k = k1 })
 	Hello("Key Bad Guid", { c = {}, k = k1, g = "Creature-0-1" })
 	Hello("Key Bad Key", { c = {}, k = k1:sub(1, 42).."!", g = "Player-1-0C0C" })
+	-- The identity point checks out for any message: never a key
+	Hello("Key Small Order", { c = {}, k = C:Base64("\1"..string.rep("\0", 31)), g = "Player-1-0C0D" })
+	KB:FromApp({ { n = "Key Small Order App", g = "Player-1-0C0E", k = C:Base64("\1"..string.rep("\0", 31)), t = clock } }, clock)
 	RunFrames()
 	Fire("CHAT_MSG_ADDON", "WNTD", "F:kf1:1/1:"..ns.Sync:Encode({ r = { Sealed({ kind = "link", id = "Key Relayed:1", origin = "Key Relayed", seq = 1, prev = "0", t = clock, data = { k = k1, g = "Player-1-0D0D" } }) } }), "CHANNEL", "Key Filler", nil, nil, nil, ns.Sync:GetInfo().channelName)
 	RunFrames()
-	for _, who in ipairs({ "Key Whisperer", "Key No Guid", "Key Bad Guid", "Key Bad Key", "Key Relayed", "Key Filler" }) do
+	for _, who in ipairs({ "Key Whisperer", "Key No Guid", "Key Bad Guid", "Key Bad Key", "Key Small Order", "Key Small Order App", "Key Relayed", "Key Filler" }) do
 		check(not KB:HasKeys(who), "no key bound for "..who)
 	end
 	-- At most four: the one heard least lately goes

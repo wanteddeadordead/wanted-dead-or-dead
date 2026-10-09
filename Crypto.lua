@@ -572,11 +572,21 @@ local function sign(seed, pk, msg)
 	return R .. str(modL({}, x))
 end
 
--- A public key made ready to check with: -A decoded and its window table. nil if pk isn't a point on the curve.
+-- Whether a point has small order: [8]P is the identity (X = 0, Y = Z). A key like that (the identity is one) checks
+-- out for any message, so none is taken.
+local function smallorder(P)
+	local q = point()
+	for i = 1, 4 do set(q[i], P[i]) end
+	dbl(q) dbl(q) dbl(q)
+	return eq(q[1], gf0) and eq(q[2], q[3])
+end
+
+-- A public key made ready to check with: -A decoded and its window table. nil if pk isn't a point on the curve, or is
+-- one of small order.
 local function prepare(pk)
 	if type(pk) ~= "string" or #pk ~= 32 then return nil end
 	local negA = decodeneg({ byte(pk, 1, 32) })
-	if not negA then return nil end
+	if not negA or smallorder(negA) then return nil end
 	Checkpoint()
 	return { pk = pk, tab = window(negA) }
 end

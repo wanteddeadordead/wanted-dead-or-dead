@@ -111,6 +111,20 @@ function private.Bind(origin, k, guid, src, at)
 		keys[origin] = book
 	end
 	local now = GetServerTime()
+	-- A key not held yet must be a point of the curve, and not one of small order (which checks out for any message):
+	-- prepared now (about 2 ms in the game, once a key) and kept for the checks to come
+	local known = false
+	for _, key in ipairs(book.list) do
+		known = known or key.pk == k
+	end
+	if not known then
+		local prepared = Crypto:Prepare(Crypto:FromBase64(k))
+		if not prepared then
+			Wanted:Log("!! KeyBook: %s's key isn't a usable public key; not taken", origin)
+			return
+		end
+		KeyBook:KeepPrepared(k, prepared)
+	end
 	-- Another character took the name: the keys of the one before go
 	for i = #book.list, 1, -1 do
 		if book.list[i].g ~= guid then

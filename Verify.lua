@@ -236,6 +236,12 @@ function private.Start(record, key, sig)
 	local job = Crypto:NewCheck(prepared or Crypto:FromBase64(key.pk), message, signature)
 	Crypto:Check(job, function(ok)
 		private.running = nil
+		if job.badKey then
+			-- The key isn't one: the record isn't forged, it just can't be checked with it
+			Wanted.KeyBook:Drop(record.origin, key.pk)
+			C_Timer.After(0, function() private.RunNext() end)
+			return
+		end
 		Wanted.KeyBook:KeepPrepared(key.pk, job.key)
 		private.Finish(record, key, ok)
 		C_Timer.After(0, function() private.RunNext() end)

@@ -724,6 +724,24 @@ function Crypto:Sign(seed, pk, msg)
 	return sign(seed, pk, msg)
 end
 
+-- Every encoding of the curve's 8 points of small order, with the top bit of the last byte cleared (the list libsodium
+-- and the server use): such a key checks out for any message
+local SMALL_ORDER = {}
+for _, hex in ipairs({ "0000000000000000000000000000000000000000000000000000000000000000",
+	"0100000000000000000000000000000000000000000000000000000000000000", "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+	"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a", "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+	"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f" }) do
+	SMALL_ORDER[(gsub(hex, "..", function(x) return char(tonumber(x, 16)) end))] = true
+end
+
+---Whether a public key is one of small order, by its bytes alone (no curve work, so cheap enough for every key the
+---app brings). Preparing a key checks it again on the curve.
+---@param pk string 32 bytes
+---@return boolean
+function Crypto:IsSmallOrderKey(pk)
+	return type(pk) ~= "string" or #pk ~= 32 or SMALL_ORDER[strsub(pk, 1, 31)..char(byte(pk, 32) % 128)] == true
+end
+
 ---A public key decoded and ready to check with (about 2 ms in the game, 21 KB), or nil if it isn't a key.
 ---@param pk string 32 bytes
 ---@return table?
@@ -752,6 +770,8 @@ function Crypto:NewCheck(key, msg, sig)
 		if type(key) == "string" then
 			key = prepare(key)
 			job.key = key
+			-- Not a point of the curve, or one of small order: no signature checks out with it
+			job.badKey = key == nil
 		end
 		return verify(key or false, msg, sig)
 	end)

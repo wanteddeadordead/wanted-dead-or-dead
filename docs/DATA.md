@@ -420,8 +420,11 @@ and are pinned:
   the plain canonical string (the hash's) can't promise. The signature is added, then `hash` is made as before
   (Adler-32 over the canonical string, which covers `data.sig`), so 1.18 clients hash, keep and relay signed records
   unchanged.
-- **Keys refused:** a public key that isn't a curve point, or is one of small order (`[8]A` is the identity; such a key
-  checks out for any message), never binds and never checks anything.
+- **Keys refused:** a key of small order (it checks out for any message) never binds: its bytes, with the top bit of
+  the last one cleared, are one of the 7 encodings of the curve's small-order points (the server's rule). Binding does no
+  curve work, so the app's catch-up can bring hundreds at login. The first check with a key decodes it and refuses one
+  whose `[8]A` is the identity; a key that isn't a curve point is dropped then, and its records stay unchecked rather
+  than called forged.
 - **Hello:** gains `k` (the sender's public key) and `g` (its GUID); only the one hello after `/wanted key reset` carries
   `kr = 1`. A key binds only from a hello heard on the channel (or guild channel) from its sender: never from a realm
   link's whisper, a fill or a record.

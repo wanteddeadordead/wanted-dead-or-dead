@@ -9245,6 +9245,31 @@ end)()
 	check(notices == 1 and bounties == 2 and #Store:GetPending() == 0, "after the fight: one notice, one bounty each: "..notices.." "..bounties)
 	WantedAppSeed = nil
 end)()
+-- Binding keys is cheap: the app's catch-up can bring a couple of hundred at login, and preparing each (about 2 ms in
+-- the game) would stall it. A key is prepared when a check first needs it; one that turns out not to be a point is
+-- dropped then, and its records aren't called forged
+;(function()
+	local C, KB, V, Store, db = ns.Crypto, ns.KeyBook, ns.Verify, ns.Store, ns.db
+	local realPrepare, prepared = C.Prepare, 0
+	C.Prepare = function(self, pk) prepared = prepared + 1 return realPrepare(self, pk) end
+	local list = {}
+	for i = 1, 200 do
+		list[i] = { n = "Bind Cost "..i, g = "Player-1-0C0"..i, k = C:Base64(C:SHA512("bind cost "..i):sub(1, 32)), t = clock }
+	end
+	KB:FromApp(list, clock)
+	C.Prepare = realPrepare
+	check(prepared == 0 and KB:HasKeys("Bind Cost 200"), "200 app keys bound without preparing any: "..prepared)
+	-- y = 2 is on no point: bound (cheaply), then dropped by the first check, which finds nothing forged
+	local offCurve = C:Base64("\2"..string.rep("\0", 31))
+	KB:FromApp({ { n = "Off Curve", g = "Player-1-0C1D", k = offCurve, t = clock } }, clock)
+	check(KB:HasKeys("Off Curve"), "a key that isn't a point is bound like any other")
+	local r = { kind = "confirm", id = "Off Curve:1", origin = "Off Curve", seq = 1, prev = "0", t = clock, data = { claim = "x:1" } }
+	r.data.sig = "1"..KB:Find("Off Curve", db.keys["Off Curve"].list[1].kid).kid..C:Base64(string.rep("\1", 64))
+	Store:MergeRelayed(Sealed(r))
+	V:Want(Store:Get(r.id), true)
+	for _ = 1, 10 do RunTimers() end
+	check(not KB:HasKeys("Off Curve") and SV(r) == nil and not Store:Get(r.id).tampered, "the check drops the key and calls nothing forged")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

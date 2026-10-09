@@ -111,19 +111,12 @@ function private.Bind(origin, k, guid, src, at)
 		keys[origin] = book
 	end
 	local now = GetServerTime()
-	-- A key not held yet must be a point of the curve, and not one of small order (which checks out for any message):
-	-- prepared now (about 2 ms in the game, once a key) and kept for the checks to come
-	local known = false
-	for _, key in ipairs(book.list) do
-		known = known or key.pk == k
-	end
-	if not known then
-		local prepared = Crypto:Prepare(Crypto:FromBase64(k))
-		if not prepared then
-			Wanted:Log("!! KeyBook: %s's key isn't a usable public key; not taken", origin)
-			return
-		end
-		KeyBook:KeepPrepared(k, prepared)
+	-- Never a key of small order (it checks out for any message). Checked by its bytes: the app can bring a couple of
+	-- hundred keys at login, and decoding each takes about 2 ms in the game. The first check with a key decodes it, and
+	-- drops it if it isn't a point of the curve after all (KeyBook:Drop).
+	if Crypto:IsSmallOrderKey(Crypto:FromBase64(k)) then
+		Wanted:Log("!! KeyBook: %s's key is one of small order; not taken", origin)
+		return
 	end
 	-- Another character took the name: the keys of the one before go
 	for i = #book.list, 1, -1 do
@@ -172,6 +165,19 @@ function private.Grandfather(origin)
 	for record in Wanted.Store:OriginIterator(origin) do
 		if KINDS[record.kind] and checked[record.id] == nil then
 			pre[record.id] = true
+		end
+	end
+end
+
+---Drops a key that turned out not to be a point of the curve when a check first decoded it.
+---@param origin string
+---@param k string base64
+function KeyBook:Drop(origin, k)
+	local book = Wanted.db.keys[origin]
+	for i = #(type(book) == "table" and type(book.list) == "table" and book.list or {}), 1, -1 do
+		if book.list[i].pk == k then
+			tremove(book.list, i)
+			Wanted:Log("!! KeyBook: %s's key isn't a usable public key; dropped", origin)
 		end
 	end
 end

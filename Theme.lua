@@ -237,15 +237,25 @@ function Theme:Stars(rating, size)
 	return table.concat(parts)
 end
 
----A player name in their class colour.
+---A player name in their class colour. The name is cleaned first (Theme:Plain): a bounty's target name comes from
+---the poster's record as any peer sent it on.
 function Theme:ClassName(name, class)
+	name = Theme:Plain(name)
 	local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
 	if color and color.WrapTextInColorCode then
-		return color:WrapTextInColorCode(name or "?")
+		return color:WrapTextInColorCode(name)
 	elseif color then
-		return format("|cff%02x%02x%02x%s|r", color.r * 255, color.g * 255, color.b * 255, name or "?")
+		return format("|cff%02x%02x%02x%s|r", color.r * 255, color.g * 255, color.b * 255, name)
 	end
-	return name or "?"
+	return name
+end
+
+---Text from a record or a peer as it may be shown: no escape codes (a "|H" would make a link, a "|T" a picture) or
+---control characters, cut to a name's length; "?" when nothing is left.
+---@param text any
+---@return string
+function Theme:Plain(text)
+	return Wanted.Store:CleanName(text) or "?"
 end
 
 function Theme:ClassLabel(class)

@@ -721,12 +721,17 @@ end
 
 ---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
 ---record whose id names someone else (Mallory's record as "Carol:1") would take the place of theirs, and a missing
----origin, seq or prev would break the chain code.
+---origin, seq or prev would break the chain code. The origin is a player's name as the game stamps senders: no
+---escape codes or control characters (it's shown as the poster or hunter wherever the record is) and no longer than
+---a name.
 ---@param r any
 ---@return boolean
 function Store:IsWellFormed(r)
 	if type(r) ~= "table" or type(r.kind) ~= "string" or type(r.origin) ~= "string" or not Store:IsSeq(r.seq) or type(r.t) ~= "number"
 		or type(r.prev) ~= "string" or type(r.hash) ~= "string" or type(r.data) ~= "table" or r.id ~= r.origin..":"..format("%d", r.seq) then
+		return false
+	end
+	if r.origin == "" or #r.origin > MAX_NAME_BYTES or strfind(r.origin, "[%c|]") then
 		return false
 	end
 	for key, value in pairs(r.data) do

@@ -9413,6 +9413,32 @@ end)()
 	ns:RunCommand("file", "Rumour Only")
 	check(printed[#printed]:find("Several players have been called Rumour Only", 1, true), "so does /wanted file: "..tostring(printed[#printed]))
 end)()
+-- 1.19.2: what a record says is shown as plain text: a target name or guild with an escape code in it (a link, a
+-- picture, a colour) once rendered as such on the board, in tooltips and in /wanted bounties, and a relayed record's
+-- origin (shown as its poster or hunter) could be anything at all: one that isn't a name is refused at the door
+;(function()
+	local Store, Theme = ns.Store, ns.Theme
+	check(Theme:ClassName("|Hitem:6948|h[Hearthstone]|h", "ROGUE") == "Hitem:6948h[Hearthstone]h" and Theme:ClassName(nil) == "?" and Theme:ClassName("a\nb") == "ab",
+		"a class-coloured name loses its escape codes: "..Theme:ClassName("|Hitem:6948|h[Hearthstone]|h", "ROGUE"))
+	Store:MergeRelayed(Sealed({ kind = "bounty", id = "Link Poster:1", origin = "Link Poster", seq = 1, prev = "0", t = clock, data = {
+		target = "Player-9-11A2B3", targetName = "|cffff0000Red|r|TInterface\\Icons\\X:512|t", amount = 5000 } }))
+	ns.UI:Show("board")
+	local shown
+	for _, fs in ipairs(Mock.fontStrings) do
+		local t = rawget(fs, "_text")
+		if type(t) == "string" and t:find("Red", 1, true) and t:find("TInterface", 1, true) then shown = t end
+	end
+	check(shown and not shown:find("|T", 1, true) and not shown:find("|cffff0000Red", 1, true), "the board shows the target name without its escapes: "..tostring(shown))
+	ns:RunCommand("bounties", "")
+	local line
+	for i = #printed, 1, -1 do if printed[i]:find("Link Poster", 1, true) then line = printed[i] break end end
+	check(line and not line:find("|T", 1, true) and not line:find("|cffff0000", 1, true), "so does /wanted bounties: "..tostring(line))
+	for _, origin in ipairs({ "Bad|cff00ff00Name|r", "Bad\nName", "", strrep("o", 65) }) do
+		local isNew, why = Store:MergeRelayed(Sealed({ kind = "pass", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { bounty = "x:1" } }))
+		check(isNew == false and why == "malformed", "a record whose origin isn't a name is refused: "..origin:gsub("|", "||"):gsub("\n", "/"))
+	end
+	check(select(1, Store:MergeRelayed(Sealed({ kind = "pass", id = "Fine Name-Realm:1", origin = "Fine Name-Realm", seq = 1, prev = "0", t = clock, data = { bounty = "x:1" } }))), "a name with a realm is fine")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

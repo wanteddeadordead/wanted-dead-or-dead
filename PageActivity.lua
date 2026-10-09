@@ -45,7 +45,7 @@ function private.UpdateRow(row, item)
 	if item.x then
 		where = format("%s (%.1f, %.1f)", where, item.x, item.y)
 	end
-	local guild = item.guild and ("<"..item.guild..">  -  ") or ""
+	local guild = item.guild and ("<"..Theme:Plain(item.guild)..">  -  ") or ""
 	row.sub:SetText((item.test and "Test data  -  " or "")..guild..where)
 	row.time:SetText(Theme:Ago(GetServerTime() - item.t))
 end

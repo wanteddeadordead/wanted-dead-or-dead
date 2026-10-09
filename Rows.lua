@@ -76,7 +76,7 @@ function Rows:UpdateBounty(row, info)
 	row.money:SetText(Theme:Money(info.amount))
 	if info.guild then
 		local members = #Model:GetGuildMembers(info.guild)
-		row.name:SetText(Theme:Colorize("<"..info.guild..">", C.amber).."  "..Theme:Colorize(format("any member, %d seen", members), C.muted))
+		row.name:SetText(Theme:Colorize("<"..Theme:Plain(info.guild)..">", C.amber).."  "..Theme:Colorize(format("any member, %d seen", members), C.muted))
 	else
 		local who = Theme:ClassName(info.targetName, player and player.class)
 		local level = player and player.level and ("Level "..(player.level > 0 and player.level or "??")) or "Level ?"
@@ -119,7 +119,7 @@ function Rows:UpdateClaim(row, item)
 	local player = item.player
 	row.money:SetText(Theme:Money(item.amount))
 	local who = Theme:ClassName(item.targetName, player and player.class)
-	local guildBounty = item.bounty.data.guild and ("  for the <"..item.bounty.data.guild.."> bounty") or ""
+	local guildBounty = item.bounty.data.guild and ("  for the <"..Theme:Plain(item.bounty.data.guild).."> bounty") or ""
 	row.name:SetText(who.."  "..Theme:Colorize((player and player.level and ("Level "..(player.level > 0 and player.level or "??")) or "")..guildBounty, C.muted))
 	local parts = {}
 	if item.test then
@@ -163,7 +163,7 @@ function Rows:ShowBountyTooltip(row, info)
 	local player = info.player
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 	if info.guild then
-		GameTooltip:SetText("<"..info.guild..">", C.amber[1], C.amber[2], C.amber[3])
+		GameTooltip:SetText("<"..Theme:Plain(info.guild)..">", C.amber[1], C.amber[2], C.amber[3])
 		GameTooltip:AddLine("A bounty on the whole guild: the first kill of any member claims it.", C.muted[1], C.muted[2], C.muted[3], true)
 		local members = Model:GetGuildMembers(info.guild)
 		for i = 1, min(#members, 6) do

@@ -1112,7 +1112,7 @@ Wanted:RegisterCommand("bounties", "Lists open bounties, highest first (your boa
 		local left = Bounties:GetExpiry(bounty) - GetServerTime()
 		local pending = Bounties:GetPendingClaim(bounty)
 		local state = pending and format("CLAIMED by %s, awaiting poster", pending.origin) or (Ago(GetServerTime() - left).." left")
-		Wanted:Print("%s on %s (%s %s), by %s, %s%s", Bounties:FormatMoney(entry.amount), bounty.data.targetName, player and player.level or "?", player and player.class or "?", bounty.origin, state, pending and "" or seen)
+		Wanted:Print("%s on %s (%s %s), by %s, %s%s", Bounties:FormatMoney(entry.amount), Store:CleanName(bounty.data.targetName) or "?", player and player.level or "?", player and player.class or "?", bounty.origin, state, pending and "" or seen)
 	end
 end)
 

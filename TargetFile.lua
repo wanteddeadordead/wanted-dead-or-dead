@@ -280,7 +280,7 @@ end
 function TargetFile:ShowGuild(guild)
 	local frame = private.frame or private.Create()
 	frame.targetName = nil
-	frame.name:SetText(Theme:Colorize("<"..guild..">", C.amber))
+	frame.name:SetText(Theme:Colorize("<"..Theme:Plain(guild)..">", C.amber))
 	local members = Wanted.Model:GetGuildMembers(guild)
 	frame.who:SetText(format("Bounty on any member. %d member%s seen.", #members, #members == 1 and "" or "s"))
 	local money, text = private.BountyText(Bounties:GetOpenForGuild(guild))

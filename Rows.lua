@@ -235,7 +235,7 @@ end
 ---Who a claim says was killed: the target's name, or for a guild bounty the member who died, with the guild.
 local function Killed(info, name)
 	if info.guild and info.claim and info.claim.data.victimName then
-		return format("%s of <%s>", info.claim.data.victimName, info.guild)
+		return format("%s of <%s>", Theme:Plain(info.claim.data.victimName), Theme:Plain(info.guild))
 	end
 	return name
 end

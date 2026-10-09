@@ -1125,7 +1125,7 @@ Wanted:RegisterCommand("claims", "Lists claims on your bounties and claims you m
 		if bounty and (bounty.origin == me or claim.origin == me) then
 			local level = Bounties:GetClaimLevel(claim)
 			local levelText = level == 0 and "disputed" or level == 1 and "bounty hunter's word only" or level == 2 and (#Bounties:GetWitnesses(claim).." witness(es)") or "confirmed"
-			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, claim.data.victimName or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
+			Wanted:Print("%s: %s killed %s for %s (%s)%s", claim.id, claim.origin, Store:CleanName(claim.data.victimName) or "?", Bounties:FormatMoney(Bounties:GetOwed(claim)), levelText, bounty.origin == me and level < 3 and level > 0 and " - /wanted confirm or dispute "..claim.id or "")
 			shown = shown + 1
 		end
 	end

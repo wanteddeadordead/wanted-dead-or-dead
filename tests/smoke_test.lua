@@ -9644,6 +9644,35 @@ end)()
 	ns.WORLD = "beta"
 	db.records[beta.id], db.chains["Beta Guy"] = nil, nil
 end)()
+-- 1.19.2: the rest of the places a record's victim name or guild reached the screen or chat raw
+;(function()
+	local Store, me = ns.Store, ns.Store:GetOrigin()
+	local guild, victimName = "Evil|TInterface\\Icons\\X:64|t Guild", "Dead|cffff0000Red|r"
+	ns.TargetFile:ShowGuild(guild)
+	local shown
+	for _, fs in ipairs(Mock.fontStrings) do
+		local t = rawget(fs, "_text")
+		if type(t) == "string" and t:find("Evil", 1, true) and t:find("Guild>", 1, true) then shown = t end
+	end
+	check(shown and not shown:find("|T", 1, true), "the guild file's title is plain: "..tostring(shown))
+	local guildInfo = { guild = guild, targetName = "<"..guild..">", hunter = "Some Hunter", amount = 10000,
+		claim = { id = "Some Hunter:999", t = clock, data = { victim = "Player-9-D0A0", victimName = victimName, killT = clock } } }
+	ns.Rows:DoAction("confirm", guildInfo)
+	check(lastDialog and lastDialog.text:find("killed Deadcffff0000Redr of <EvilTInterface", 1, true), "the confirm dialog names the victim and guild plainly: "..tostring(lastDialog and lastDialog.text:sub(1, 90)))
+	lastDialog = nil
+	-- A claim of ours on a relayed bounty: /wanted claims and /wanted owed print the victim's name from the claim
+	local bounty = Sealed({ kind = "bounty", id = "Odd Poster:1", origin = "Odd Poster", seq = 1, prev = "0", t = clock - 100, data = { target = "Player-9-D0A1", targetName = "Odd Target", amount = 5000 } })
+	Store:MergeRelayed(bounty)
+	local kill = Store:NewRecord("kill", { killer = UnitGUID("player"), killerName = me, victim = "Player-9-D0A1", victimName = victimName, zone = "Durotar", deathId = "dd0a1" })
+	local claim = Store:NewRecord("claim", { bounty = bounty.id, kill = kill.id, victim = "Player-9-D0A1", victimName = victimName, killT = kill.t, zone = "Durotar" })
+	local function LastPrinted(needle) for i = #printed, 1, -1 do if printed[i]:find(needle, 1, true) then return printed[i] end end end
+	ns:RunCommand("claims", "")
+	local line = LastPrinted(claim.id)
+	check(line and not line:find("|cffff0000", 1, true) and line:find("Deadcffff0000Redr", 1, true), "/wanted claims prints the victim's name plainly: "..tostring(line))
+	ns:RunCommand("log", "")
+	line = LastPrinted("Deadcffff0000Redr")
+	check(line and not line:find("|cffff0000", 1, true), "/wanted log too: "..tostring(line))
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

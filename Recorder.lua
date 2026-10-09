@@ -914,12 +914,12 @@ Wanted:RegisterCommand("log", "Lists your kills and the enemy deaths witnessed."
 	for i = 1, min(#events, MAX_LOG_LINES) do
 		local record = events[i]
 		local data = record.data
-		local where = data.zone..(data.x and format(" (%.1f, %.1f)", data.x, data.y) or "")
+		local where = (data.zone or "?")..(data.x and format(" (%.1f, %.1f)", data.x, data.y) or "")
 		if record.kind == "kill" then
 			local killer = record.origin == Store:GetOrigin() and "you" or record.origin
-			Wanted:Print("%s: %s killed %s in %s [honor]", Ago(record.t), killer, data.victimName or data.victim, where)
+			Wanted:Print("%s: %s killed %s in %s [honor]", Ago(record.t), killer, Store:CleanName(data.victimName) or data.victim, where)
 		else
-			Wanted:Print("%s: %s died in %s (witnessed by %s)", Ago(record.t), data.victimName or data.victim, where, record.origin)
+			Wanted:Print("%s: %s died in %s (witnessed by %s)", Ago(record.t), Store:CleanName(data.victimName) or data.victim, where, record.origin)
 		end
 	end
 end)

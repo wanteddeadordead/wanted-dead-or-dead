@@ -347,9 +347,9 @@ Wanted:RegisterCommand("owed", "Lists what you owe and what you are owed.", func
 			local payment = Payments:GetForClaim(claim.id)
 			local amount = Bounties:FormatMoney(Bounties:GetOwed(claim))
 			if bounty.origin == me then
-				Wanted:Print("You owe %s to %s for %s: %s%s", amount, claim.origin, claim.data.victimName or "?", payment and "paid" or "unpaid", not payment and (" - /wanted pay "..claim.id) or "")
+				Wanted:Print("You owe %s to %s for %s: %s%s", amount, claim.origin, Store:CleanName(claim.data.victimName) or "?", payment and "paid" or "unpaid", not payment and (" - /wanted pay "..claim.id) or "")
 			else
-				Wanted:Print("%s owes you %s for %s: %s", bounty.origin, amount, claim.data.victimName or "?", payment and "paid" or (Payments:IsUnpaid(claim) and "overdue" or "pending"))
+				Wanted:Print("%s owes you %s for %s: %s", bounty.origin, amount, Store:CleanName(claim.data.victimName) or "?", payment and "paid" or (Payments:IsUnpaid(claim) and "overdue" or "pending"))
 			end
 			shown = shown + 1
 		end

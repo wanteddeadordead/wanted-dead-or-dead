@@ -51,7 +51,7 @@ function private.UpdateRow(row, item, index)
 	row.col6:ClearAllPoints()
 	if private.view == "guilds" then
 		local color = item.mine and C.blue or C.red
-		row.name:SetText(Theme:Colorize("<"..item.name..">", color)..Theme:Colorize(item.faction and ("  "..item.faction) or "", C.faint))
+		row.name:SetText(Theme:Colorize("<"..Theme:Plain(item.name)..">", color)..Theme:Colorize(item.faction and ("  "..item.faction) or "", C.faint))
 		row.level:Hide()
 		row.stars:SetText("")
 		row.col3:SetPoint("LEFT", 300, 0)
@@ -155,7 +155,7 @@ UI:RegisterPage("hunters", {
 		list.onEnter = function(row, item)
 			GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 			if private.view == "guilds" then
-				GameTooltip:SetText("<"..item.name..">", 1, 1, 1)
+				GameTooltip:SetText("<"..Theme:Plain(item.name)..">", 1, 1, 1)
 				GameTooltip:AddLine("Kills count honorable kills credited to members running Wanted. Deaths count members seen dying, each death once.", C.muted[1], C.muted[2], C.muted[3], true)
 				local members = Model:GetGuildMembers(item.name)
 				for i = 1, min(#members, 8) do

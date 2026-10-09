@@ -883,7 +883,10 @@ function private.Insert(record, live, fromApp)
 	-- A gap (seq > chain.seq + 1) is stored as is; the sync layer asks for the missing records
 	db.records[record.id] = record
 	private.AddToIndex(record)
-	private.Notify(record, false)
+	-- An altered record is held only so its chain moves on: nothing acts on it (a listener would store what it says)
+	if not record.tampered then
+		private.Notify(record, false)
+	end
 	return true
 end
 

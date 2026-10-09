@@ -1824,7 +1824,7 @@ local function Sent(chatType, target)
 	return out
 end
 local function ClearSent() for i = #addonSent, 1, -1 do addonSent[i] = nil end end
-local function FarRecord(seq) return { kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", hash = "x", t = clock, data = { bounty = "far-"..seq } } end
+local function FarRecord(seq) return Sealed({ kind = "pass", id = "Far Origin:"..seq, origin = "Far Origin", seq = seq, prev = "0", t = clock, data = { bounty = "far-"..seq } }) end
 ClearSent()
 clock = clock + 700
 ns.Sync:Greet("Far Friend", "Other Realm")
@@ -2053,9 +2053,9 @@ ns.Store:GetPlayer("Player-9-SNAP").lastSeen = snapSeen
 local snapBounty = ns.Bounties:Post("Player-9-SNAP", "Snap Shot", 5000)
 local sd = snapBounty.data
 check(sd.class == "HUNTER" and sd.race == "NightElf" and sd.level == 20 and sd.targetGuild == "Polarity Check" and sd.seenAt == snapSeen and sd.x == 21.8 and sd.mapId == 1434, "a bounty records what the poster knew about the target")
-local farBounty = { kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", hash = "x", t = clock, data = {
+local farBounty = Sealed({ kind = "bounty", id = "Far Poster:1", origin = "Far Poster", seq = 1, prev = "0", t = clock, data = {
 	target = "Player-9-UNKNOWN", targetName = "Never Seen", targetGuild = "Some Guild", amount = 5000, level = 22, zone = "The Barrens",
-	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } }
+	class = "ROGUE", race = "Human", faction = "Alliance", seenAt = clock - 3600, x = 50, y = 40, mapId = 1413 } })
 ns.Store:MergeRelayed(farBounty)
 local learnt = ns.Store:GetPlayer("Player-9-UNKNOWN")
 check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone == "The Barrens"
@@ -2064,8 +2064,8 @@ check(learnt and learnt.class == "ROGUE" and learnt.level == 22 and learnt.zone 
 check(learnt.guild == nil, "the target's guild isn't learned from a bounty")
 ns.Store:UpdatePlayer("Player-9-KNOWN", { name = "Known One", class = "MAGE", level = 30, zone = "Durotar" })
 local knownSeen = ns.Store:GetPlayer("Player-9-KNOWN").lastSeen
-ns.Store:MergeRelayed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", hash = "x", t = clock, data = {
-	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } })
+ns.Store:MergeRelayed(Sealed({ kind = "bounty", id = "Far Poster:2", origin = "Far Poster", seq = 2, prev = "0", t = clock, data = {
+	target = "Player-9-KNOWN", targetName = "Known One", amount = 5000, level = 12, class = "WARRIOR", zone = "Elsewhere", seenAt = clock - 86400 } }))
 local known = ns.Store:GetPlayer("Player-9-KNOWN")
 check(known.class == "MAGE" and known.level == 30 and known.zone == "Durotar" and known.lastSeen == knownSeen, "what this client already knows, and a newer sighting of its own, are kept")
 -- Shared sightings: seeing someone with an open bounty records a "spotted" record (at most every 5 minutes per
@@ -2086,16 +2086,16 @@ ns.Store:AddSighting("Player-9-SNAP", "Stranglethorn Vale", 24, 71, 1434)
 check(SpottedCount("Player-9-SNAP") == 2, "again after five minutes")
 ns.Store:AddSighting("Player-9-NOTWANTED", "Durotar", 50, 50, 1411)
 check(SpottedCount("Player-9-NOTWANTED") == 0, "someone without a bounty isn't shared (sightings stay passing news)")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", hash = "x", t = clock - 7200,
-	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:1", origin = "Spotter Far", seq = 1, prev = "0", t = clock - 7200,
+	data = { target = "Player-9-FARWANTED", zone = "Ashenvale", x = 30, y = 40, mapId = 1440 } }))
 local farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 1 and farTrack[1].zone == "Ashenvale" and farTrack[1].by == "Spotter Far" and farTrack[1].t == clock - 7200, "someone else's sighting lands in the history by them, even before the bounty arrives")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", hash = "x", t = clock - 9000,
-	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:2", origin = "Spotter Far", seq = 2, prev = "0", t = clock - 9000,
+	data = { target = "Player-9-FARWANTED", zone = "Darkshore", x = 10, y = 10, mapId = 1439 } }))
 farTrack = ns.Tracks:Get("Player-9-FARWANTED")
 check(#farTrack == 2 and farTrack[1].zone == "Ashenvale" and farTrack[2].zone == "Darkshore", "an older sighting arriving later still sorts into place")
-ns.Store:MergeRelayed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", hash = "x", t = clock - 40 * 86400,
-	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } })
+ns.Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Far:3", origin = "Spotter Far", seq = 3, prev = "0", t = clock - 40 * 86400,
+	data = { target = "Player-9-FARWANTED", zone = "Old Place", x = 1, y = 1, mapId = 1 } }))
 ns.Tracks:PruneSpotted()
 check(ns.Store:Get("Spotter Far:3") == nil and ns.Store:Get("Spotter Far:1") ~= nil, "shared sightings over a month old are pruned")
 -- Development builds keep the debug log in the saved data; /wanted netlog shows the weird (!!) lines
@@ -9305,6 +9305,24 @@ end)()
 	V:Want(Store:Get(r.id), true)
 	for _ = 1, 10 do RunTimers() end
 	check(not KB:HasKeys("Off Curve") and SV(r) == nil and not Store:Get(r.id).tampered, "the check drops the key and calls nothing forged")
+end)()
+-- 1.19.2: an altered record (its hash doesn't match, or text where a number goes) is held so its chain moves on, but no
+-- listener acts on it: a "spotted" record with text coordinates once went into the target's history, and the target
+-- file threw formatting it. Odd fields the hash check lets through are kept out of the history too
+;(function()
+	local Store, Tracks = ns.Store, ns.Tracks
+	local victim = "Player-9-7A4B01"
+	Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Odd:1", origin = "Spotter Odd", seq = 1, prev = "0", t = clock - 60,
+		data = { target = victim, zone = "Durotar", x = "abc", y = "abc", mapId = "zzz" } }))
+	check(Store:Get("Spotter Odd:1").tampered and #Tracks:Get(victim) == 0, "a spotted record with text coordinates is held out of sight and lands in no history")
+	Store:MergeRelayed({ kind = "spotted", id = "Spotter Odd:2", origin = "Spotter Odd", seq = 2, prev = Store:Get("Spotter Odd:1").hash, hash = "nope", t = clock - 50,
+		data = { target = victim, zone = "Durotar", x = 10, y = 10, mapId = 1 } })
+	check(Store:Get("Spotter Odd:2").tampered and #Tracks:Get(victim) == 0, "nor one that doesn't match its hash")
+	Store:MergeRelayed(Sealed({ kind = "spotted", id = "Spotter Odd:3", origin = "Spotter Odd", seq = 3, prev = "nope", t = clock - 40,
+		data = { target = victim, zone = true, x = 150, y = 10, mapId = 1 } }))
+	local entries = Tracks:Get(victim)
+	check(#entries == 1 and entries[1].zone == nil and entries[1].x == nil and entries[1].y == nil and entries[1].mapId == 1 and entries[1].by == "Spotter Odd",
+		"a sound record with odd fields keeps only what the file can show")
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

@@ -1249,18 +1249,52 @@ function Store:GetPlayer(guid)
 	return Wanted.db.players[guid]
 end
 
----Finds a player by name (case-insensitive, realm optional).
+---Whether a name is the one given, case-insensitive, with any realm left off.
+local function SameName(name, wanted)
+	return type(name) == "string" and strlower(strmatch(name, "^([^%-]+)") or name) == wanted
+end
+
+---The name the game itself gave a player: the name book's (read on their unit), or the client's own lookup of
+---the GUID. nil when the game never named them here (every name known is a peer's word).
+---@param guid string
+---@return string?
+function Store:GameName(guid)
+	local entry = Wanted.db.names[guid]
+	if type(entry) == "table" and type(entry.n) == "string" and entry.n ~= "" then
+		return entry.n
+	end
+	if GetPlayerInfoByGUID then
+		local ok, _, _, _, _, _, name = pcall(GetPlayerInfoByGUID, guid)
+		if ok and type(name) == "string" and name ~= "" and not (issecretvalue and issecretvalue(name)) then
+			return name
+		end
+	end
+	return nil
+end
+
+---Finds a player by name (case-insensitive, realm optional). A name can be on several players' entries: peers'
+---shared sightings name players as they please, so a bounty typed by name once landed on whichever GUID a peer
+---had given the name last. One the game itself named so wins; among names only peers gave, one alone is taken
+---and several are refused (why says so): the player should target them instead.
 ---@param name string
 ---@return string? guid
 ---@return table? player
+---@return string? why when none: the name is on several players, none of them named so by the game
 function Store:FindPlayerByName(name)
 	name = strlower(strmatch(name, "^([^%-]+)") or name)
+	local foundGuid, foundPlayer, count = nil, nil, 0
 	for guid, player in pairs(Wanted.db.players) do
-		if player.name and strlower(strmatch(player.name, "^([^%-]+)")) == name then
-			return guid, player
+		if SameName(player.name, name) then
+			if SameName(Store:GameName(guid), name) then
+				return guid, player
+			end
+			foundGuid, foundPlayer, count = guid, player, count + 1
 		end
 	end
-	return nil, nil
+	if count > 1 then
+		return nil, nil, "several players have been called that by other Wanted users; target them to be sure"
+	end
+	return foundGuid, foundPlayer
 end
 
 ---Adds a sighting to the bounded ring.

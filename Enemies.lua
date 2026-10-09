@@ -1102,8 +1102,13 @@ end
 ---@param data table
 ---@param sender string
 function Enemies:OnSharedSighting(data, sender)
-	local name = Store:CleanName(data.n)
-	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") or not name then
+	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") then
+		return
+	end
+	-- The name the game read on them here stands; a peer's is taken for a player the game never named (a peer could
+	-- otherwise rename one and hand their name to another, so a bounty typed by name lands on the wrong player)
+	local name = Store:GameName(data.g) or Store:CleanName(data.n)
+	if not name then
 		return
 	end
 	local player = Store:GetPlayer(data.g)

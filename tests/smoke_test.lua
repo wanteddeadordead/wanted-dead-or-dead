@@ -9389,6 +9389,30 @@ end)()
 	for r in Store:Iterator("death") do if r.data.victim == victim and r.data.killer == "Player-2-FRIEND" then death = r end end
 	check(death and death.data.victimGuild == "Old Guild", "with no unit showing them, the saved guild, got "..tostring(death and death.data.victimGuild))
 end)()
+-- 1.19.2: a name typed on the board finds the player the game named so, not whichever GUID a peer gave the name
+-- last: a peer once renamed the real enemy and handed their name to another GUID (the attacker's alt), and a bounty
+-- posted by name landed there. A name only peers gave is taken when one player has it and refused when several do
+;(function()
+	local Store, Enemies, B = ns.Store, ns.Enemies, ns.Bounties
+	-- The game named Player-9-ENEMY "Stabby Mcstab" on their nameplate earlier (the name book holds it)
+	check(Store:GameName("Player-9-ENEMY") == "Stabby Mcstab", "the game's own name for the enemy is known")
+	Enemies:OnSharedSighting({ g = "Player-9-ENEMY", n = "Stabby Mcstabb" }, "Evil Doer")
+	check(Store:GetPlayer("Player-9-ENEMY").name == "Stabby Mcstab", "a peer can't rename a player the game named here")
+	Enemies:OnSharedSighting({ g = "Player-9-A17A1T", n = "Stabby Mcstab", c = "ROGUE", l = 60 }, "Evil Doer")
+	local guid, name = B:ResolveName("Stabby Mcstab")
+	check(guid == "Player-9-ENEMY" and name == "Stabby Mcstab", "the name resolves to the player the game named, got "..tostring(guid))
+	check(select(1, Store:FindPlayerByName("stabby mcstab")) == "Player-9-ENEMY", "case apart")
+	-- A name only peers gave: one player is taken, two are refused
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2C", n = "Rumour Only" }, "Some Friend")
+	check(select(1, Store:FindPlayerByName("Rumour Only")) == "Player-9-0A1B2C", "a name one peer-only player has is found")
+	Enemies:OnSharedSighting({ g = "Player-9-0A1B2D", n = "Rumour Only" }, "Evil Doer")
+	local g, _, why = Store:FindPlayerByName("Rumour Only")
+	check(g == nil and type(why) == "string", "the same name on two peer-only players is refused with a reason: "..tostring(why))
+	ns:RunCommand("post", "10g Rumour Only")
+	check(printed[#printed]:find("Cannot post: several players", 1, true), "/wanted post says why: "..tostring(printed[#printed]))
+	ns:RunCommand("file", "Rumour Only")
+	check(printed[#printed]:find("Several players have been called Rumour Only", 1, true), "so does /wanted file: "..tostring(printed[#printed]))
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

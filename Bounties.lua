@@ -591,6 +591,7 @@ end
 ---@param name string
 ---@return string? guid
 ---@return string? name
+---@return string? why when none, if there's more to say than "not seen" (Store:FindPlayerByName)
 function Bounties:ResolveName(name)
 	name = strtrim(name or "")
 	if name == "" then
@@ -602,8 +603,8 @@ function Bounties:ResolveName(name)
 			return UnitGUID("target"), targetName
 		end
 	end
-	local guid, player = Store:FindPlayerByName(name)
-	return guid, player and player.name
+	local guid, player, why = Store:FindPlayerByName(name)
+	return guid, player and player.name, why
 end
 
 
@@ -1021,9 +1022,9 @@ local function ResolveTarget(nameArg)
 		end
 		return nil, nil, "no name given and no player targeted"
 	end
-	local guid, player = Store:FindPlayerByName(nameArg)
+	local guid, player, why = Store:FindPlayerByName(nameArg)
 	if not guid then
-		return nil, nil, "no player named "..nameArg.." has been seen; target them first"
+		return nil, nil, why or ("no player named "..nameArg.." has been seen; target them first")
 	end
 	return guid, player.name
 end

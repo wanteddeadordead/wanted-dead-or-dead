@@ -27,10 +27,13 @@ local CHAR_KEY_PREFIX = "wanted-char-key-v1\n"
 -- The local seed: event times sampled until this many, hashed a few at a time in the background work
 local POOL_EVENTS = 256
 local POOL_FOLD = 8
--- Events that come often while playing, at times nobody else sees to the microsecond
-local POOL_TRIGGERS = { "COMBAT_LOG_EVENT_UNFILTERED", "CHAT_MSG_CHANNEL", "CHAT_MSG_SAY", "CHAT_MSG_YELL",
-	"CHAT_MSG_GUILD", "CHAT_MSG_WHISPER", "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING", "PLAYER_TARGET_CHANGED",
+-- Events that come often while playing, at times nobody else sees to the microsecond. Not the combat log: registering
+-- COMBAT_LOG_EVENT_UNFILTERED is forbidden on this client (the game blocks it).
+local POOL_TRIGGERS = { "CHAT_MSG_CHANNEL", "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_GUILD", "CHAT_MSG_WHISPER",
+	"CHAT_MSG_ADDON", "CHAT_MSG_SYSTEM", "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING", "PLAYER_TARGET_CHANGED",
 	"UPDATE_MOUSEOVER_UNIT", "CURSOR_CHANGED", "MODIFIER_STATE_CHANGED", "NAME_PLATE_UNIT_ADDED", "BAG_UPDATE" }
+-- And the player's own health, auras and power, which change many times a minute in play
+local POOL_UNIT_TRIGGERS = { "UNIT_HEALTH", "UNIT_AURA", "UNIT_POWER_FREQUENT" }
 
 
 
@@ -194,7 +197,10 @@ function private.StartPool()
 	private.pool = { state = private.Readings(), samples = {}, count = 0 }
 	private.poolFrame = private.poolFrame or CreateFrame("Frame")
 	for _, event in ipairs(POOL_TRIGGERS) do
-		pcall(private.poolFrame.RegisterEvent, private.poolFrame, event)
+		private.poolFrame:RegisterEvent(event)
+	end
+	for _, event in ipairs(POOL_UNIT_TRIGGERS) do
+		private.poolFrame:RegisterUnitEvent(event, "player")
 	end
 	private.poolFrame:SetScript("OnEvent", private.OnPoolEvent)
 	Wanted:Log("Signing: no seed yet; gathering one from event times")

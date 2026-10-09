@@ -107,8 +107,13 @@ function Methods:GetEffectiveScale() return 1 end
 function Methods:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
 function Methods:SetFontString(fs) self._fs = fs end
 function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(self, "LeftButton") end end
+-- Events the client forbids addons to register (the game blocks it, ADDON_ACTION_FORBIDDEN): noted, and a check at the
+-- end fails if any module tried
+FORBIDDEN_EVENTS = { COMBAT_LOG_EVENT_UNFILTERED = true }
+forbiddenRegistrations = {} -- globals: the main chunk is at its limit of locals
 -- As the game's: registering twice is once, and unregistering stops the events
 function Methods:RegisterEvent(e)
+	if FORBIDDEN_EVENTS[e] then forbiddenRegistrations[#forbiddenRegistrations + 1] = e end
 	registry[e] = registry[e] or {}
 	for _, f in ipairs(registry[e]) do if f == self then return end end
 	table.insert(registry[e], self)
@@ -9240,6 +9245,8 @@ end)()
 	check(notices == 1 and bounties == 2 and #Store:GetPending() == 0, "after the fight: one notice, one bounty each: "..notices.." "..bounties)
 	WantedAppSeed = nil
 end)()
+-- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
+check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

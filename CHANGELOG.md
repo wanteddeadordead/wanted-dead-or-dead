@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Signed records: your bounties, raises, withdrawals, hunts, passes, claims, confirmations, payments, marks, links and
+  bounty notices carry a signature made with your character's own key, so nobody can forge them in your name when they
+  pass them on. One made in a fight is signed once the fight is over. New files: quit and restart the game after
+  updating, a /reload isn't enough.
+- Wanted checks other players' signatures, a little at a time and never in a fight: a bounty's details say Signed when
+  its poster's or hunter's signature checks out. A record whose signature doesn't match its player's key is left out,
+  and the bounty's details say how many were (Bad signature). Nothing else changes yet in how records count.
+- Keys: with the desktop app installed your account's key comes from the app; without it, Wanted makes one from a few
+  minutes of play. /wanted key shows yours, and /wanted key reset makes a new one if your saved data was copied.
+- Settings, Display: Check signatures in the background (on). Off, only what a page shows or reads is checked.
+- /wanted bug reports your key, the signing self-test and how many signatures were checked.
+
 ## [1.18.4] - 2026-10-08
 
 - Guild Kill on Sight: the list a guildmate sends when you log in only changes the settings or approves names when

@@ -8994,16 +8994,27 @@ end)()
 	local relayed = Next("raise", { bounty = early.id, amount = 900 })
 	Store:MergeRelayed(relayed)
 	check(Store:Authority(relayed) == "no" and B:GetAmount(early) == amountBefore + 700, "one passed on by someone else doesn't")
-	-- An authority read asks for a check at once: the poster's confirm on a claim
+	-- An authority read asks for a check at once when the record waits on it; one heard from the poster counts already,
+	-- so it's checked in the background (1.19.3)
 	local claim = Sealed({ kind = "claim", id = "Verify Hunter:1", origin = "Verify Hunter", seq = 1, prev = "0", t = clock, data = { bounty = early.id, kill = "x:1", victim = "Player-9-V", killT = clock } })
 	Store:Merge(claim, "Verify Hunter")
 	local confirm = Next("confirm", { claim = claim.id }, seed)
 	db.settings.sigBackground = false
 	Store:Merge(confirm, origin)
 	check(SV(confirm) == nil, "not checked before anything reads it")
-	check(B:GetClaimLevel(claim) == 3, "the confirm counts while it isn't checked yet")
+	check(B:GetClaimLevel(claim) == 3, "the confirm heard from the poster counts while it isn't checked yet")
 	Drain()
-	check(SV(confirm) == true, "reading it got it checked")
+	check(SV(confirm) == nil, "reading it didn't check it first: it counts already")
+	db.settings.sigBackground = true
+	V:BackgroundStep()
+	Drain()
+	check(SV(confirm) == true, "the background checks it")
+	db.settings.sigBackground = false
+	local relayedConfirm = Next("confirm", { claim = claim.id, disputed = true }, seed)
+	Store:MergeRelayed(relayedConfirm)
+	check(B:GetClaimLevel(claim) == 3 and SV(relayedConfirm) == nil, "one passed on waits on its check")
+	Drain()
+	check(SV(relayedConfirm) == true and B:GetClaimLevel(claim) == 0, "reading it got it checked first, and then it decides")
 	-- A record about a bounty of ours is checked as it arrives; nothing is checked in a fight
 	local mine = Store:NewRecord("bounty", { target = "Player-9-MINE", targetName = "Mine", amount = 2000 })
 	local hunterSeed = C:SHA512("verify hunter"):sub(1, 32)

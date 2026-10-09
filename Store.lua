@@ -1170,8 +1170,9 @@ end
 function Store:Authority(record)
 	local answer = private.Authority(record)
 	if answer ~= "no" and Wanted.db.sigChecked[record.id] == nil and Wanted.Verify then
-		-- An authority read: a signature not checked yet is checked next (cheap when there's none)
-		Wanted.Verify:Want(record, true)
+		-- An authority read: a signature not checked yet is checked next when the record waits on it, else in the
+		-- background (one that counts already would only hold up those that don't). Cheap when there's none
+		Wanted.Verify:Want(record, answer == "pending")
 	end
 	return answer
 end

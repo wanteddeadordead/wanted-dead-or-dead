@@ -168,10 +168,10 @@ end
 ---The origin's first key: the authority records already held from it are marked pre (held before it had a key), so a
 ---later release that stops counting its unsigned ones keeps counting these.
 function private.Grandfather(origin)
-	local KINDS = Wanted.Signing.KINDS
+	local KINDS, checked, pre = Wanted.Signing.KINDS, Wanted.db.sigChecked, Wanted.db.sigPre
 	for record in Wanted.Store:OriginIterator(origin) do
-		if KINDS[record.kind] and record.sv == nil then
-			record.pre = true
+		if KINDS[record.kind] and checked[record.id] == nil then
+			pre[record.id] = true
 		end
 	end
 end

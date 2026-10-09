@@ -23,7 +23,7 @@ Wanted.newerVersion = nil
 Wanted.BETA = false
 Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
-Wanted.DB_VERSION = 2
+Wanted.DB_VERSION = 3
 -- Which game world the saved data belongs to. The first time a release for the live game loads beta data,
 -- it keeps the settings and drops the rest (docs/DATA.md). The launch release sets this to "live".
 Wanted.WORLD = "beta"
@@ -135,6 +135,8 @@ local DEFAULTS = {
 	-- This account's signing seed and its characters' public keys (Signing; docs/DATA.md)
 	signing = { pub = {} },
 	keys = {}, -- origin -> { keyedAt, appAt, resetAt, list = { { pk, kid, src, g, firstAt, lastHeard } } }: other players' keys (KeyBook)
+	sigChecked = {}, -- record id -> true (its signature checked out, or it's our own signed record) or false (it failed) (Verify)
+	sigPre = {}, -- record id -> true: an authority record held before its origin's first key was learned (KeyBook)
 }
 
 local private = {
@@ -213,6 +215,18 @@ local MIGRATIONS = {
 		db.homeCheck = nil
 		if type(db.settings) == "table" then
 			db.settings.channelMoves = nil
+		end
+	end,
+	-- 1.19.0: what this client found checking a record's signature is kept outside the record (WantedDB.sigChecked,
+	-- sigPre). A 1.18 client stores records with whatever fields a peer's fill carried, so an sv or pre held on a
+	-- record could be anyone's: cleared.
+	[3] = function(db)
+		if type(db.records) == "table" then
+			for _, record in pairs(db.records) do
+				if type(record) == "table" then
+					record.sv, record.pre = nil, nil
+				end
+			end
 		end
 	end,
 }

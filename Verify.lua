@@ -1,5 +1,5 @@
 -- Wanted: checking other players' signatures. A signed record from an origin whose key is known is checked once and
--- what was found is kept on it (sv: true or false). A bad signature from a known key marks it tampered, so it's never
+-- what was found is kept (WantedDB.sigChecked[id]: true or false). A bad signature from a known key marks it tampered, so it's never
 -- read, like a record altered in transit. Nothing else changes in 1.19.0: unsigned records, and signed ones not
 -- checked yet, count as they always did.
 -- A check takes about 23 ms in the game, so it's done only when wanted, a slice a frame (Crypto:Check), never in a
@@ -101,7 +101,7 @@ end
 ---@return string? sig the signature's base64
 function private.Checkable(record)
 	local sig = record.data and record.data.sig
-	if record.sv ~= nil or record.tampered or type(sig) ~= "string" or #sig ~= Wanted.Signing.SIG_LENGTH
+	if Wanted.db.sigChecked[record.id] ~= nil or record.tampered or type(sig) ~= "string" or #sig ~= Wanted.Signing.SIG_LENGTH
 		or strsub(sig, 1, 1) ~= Wanted.Signing.SIG_VERSION or not Wanted.Signing.KINDS[record.kind]
 		or record.origin == Wanted.Store:GetOrigin() or Wanted.Store:IsTest(record) then
 		return nil
@@ -114,7 +114,7 @@ end
 ---@param record table
 ---@param urgent boolean?
 function Verify:Want(record, urgent)
-	if record.sv ~= nil or type(record.data) ~= "table" or type(record.data.sig) ~= "string" then
+	if type(record.data) ~= "table" or type(record.data.sig) ~= "string" or Wanted.db.sigChecked[record.id] ~= nil then
 		return
 	end
 	local id = record.id
@@ -238,12 +238,12 @@ function private.Start(record, key, sig)
 	return true
 end
 
----Keeps what a check found on the record. A bad signature from a known key: someone forged or changed it, so it's
+---Keeps what a check found (sigChecked). A bad signature from a known key: someone forged or changed it, so it's
 ---tampered, never read.
 function private.Finish(record, key, ok)
 	private.checked = private.checked + 1
-	record.sv = ok == true
-	if record.sv then
+	Wanted.db.sigChecked[record.id] = ok == true
+	if ok == true then
 		return
 	end
 	private.bad = private.bad + 1
@@ -269,9 +269,10 @@ function Verify:Label(record)
 	if type(record) ~= "table" then
 		return nil
 	end
-	if record.sv == true then
+	local checked = Wanted.db.sigChecked[record.id]
+	if checked == true then
 		return "Signed"
-	elseif record.sv == false then
+	elseif checked == false then
 		return "Bad signature"
 	end
 	return nil
@@ -308,8 +309,8 @@ function private.BadIds()
 		return private.badIds
 	end
 	local ids = {}
-	for id, record in pairs(Wanted.db.records) do
-		if record.sv == false then
+	for id, checked in pairs(Wanted.db.sigChecked) do
+		if checked == false and Wanted.db.records[id] then
 			tinsert(ids, id)
 		end
 	end
@@ -317,17 +318,16 @@ function private.BadIds()
 	return ids
 end
 
----Counts for /wanted bug: records held that checked out, that failed, and checks waiting.
+---Counts for /wanted bug: records held that checked out (our own signed ones too), that failed, and checks waiting.
 ---@return number good
 ---@return number bad
 ---@return number waiting
 function Verify:Counts()
 	local good, bad = 0, 0
-	for _, record in pairs(Wanted.db.records) do
-		if record.sv == true then
-			good = good + 1
-		elseif record.sv == false then
-			bad = bad + 1
+	for id, checked in pairs(Wanted.db.sigChecked) do
+		if Wanted.db.records[id] then
+			good = good + (checked == true and 1 or 0)
+			bad = bad + (checked == false and 1 or 0)
 		end
 	end
 	return good, bad, #private.urgent + #private.background

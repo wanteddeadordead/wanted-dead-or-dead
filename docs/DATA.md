@@ -421,15 +421,19 @@ and are pinned:
   the server accepted only from the app of the account the character is confirmed to. They bind with `src = "app"`.
 - A record made in a fight is made and signed when it's over (`WantedDB.signing.pending`).
 
-A received record's `sv` (from 1.19.0) is local, like `live` and `app`: `true` when this client checked its signature
-against a known key of its origin (or it's this client's own signed record), `false` when the signature failed. A failed
-one is also flagged `tampered`, so it's never read. `pre` (from 1.19.0, local) marks an authority record held before
-its origin's first key was learned. Incoming copies drop both. Checks run only out of combat, a slice a frame within the
-work queue's 3 ms, first for records something reads or shows (an authority decision, the board, a bounty's page, a
-record about a bounty the player posted, hunts or claimed) and otherwise one a second in the background. 1.19.0 changes
-no counting rules beyond a failed signature: unsigned records, and signed ones not checked yet or signed by a key not
-known, count as before. A later release is planned to stop counting unsigned or unchecked authority records from origins
-with a known key (except those marked `pre`). Optional new fields: no migration.
+What a signature check found is kept outside the records (layout 3, 1.19.0), because a 1.18 client stores whatever
+fields a peer's fill carries, so a field on a record could be anyone's. `WantedDB.sigChecked[id]` is `true` when this
+client checked the record's signature against a known key of its origin (or it's this client's own signed record) and
+`false` when the signature failed; a failed one is also flagged `tampered`, so it's never read. `WantedDB.sigPre[id]`
+marks an authority record held before its origin's first key was learned. Both are pruned with the records at login.
+The layout 3 migration clears `sv` and `pre` from every held record (fields an earlier 1.19 build kept on records, or a
+peer sent), and incoming records drop them too. Records are sent with their own fields only (`Store:ForWire`: kind, id,
+origin, seq, prev, t, data, hash), never this client's local flags (`live`, `app`, `tampered`, `brokenChain`, `test`).
+Checks run only out of combat, a slice a frame, first for records something reads or shows (an authority decision, the
+board, a bounty's page, a record about a bounty the player posted, hunts or claimed) and otherwise one a second in the
+background. 1.19.0 changes no counting rules beyond a failed signature: unsigned records, and signed ones not checked
+yet or signed by a key not known, count as before. A later release is planned to stop counting unsigned or unchecked
+authority records from origins with a known key (except those in `sigPre`).
 
 ## Fresh start (development builds)
 

@@ -123,6 +123,14 @@ function Store:Prune(now)
 	if pruned > 0 then
 		private.indexFor = nil -- built again on the next walk
 	end
+	-- Signature results go with their records
+	for _, book in ipairs({ Wanted.db.sigChecked, Wanted.db.sigPre }) do
+		for id in pairs(book) do
+			if not records[id] then
+				book[id] = nil
+			end
+		end
+	end
 	Wanted:Log("Store: pruned %d kills, deaths and assists older than %d days; kept %d older ones (your characters', claims', or not yet uploaded); %d records held",
 		pruned, KEEP_SECONDS / 86400, kept, left)
 	private.PrunePlayers(now, targets)
@@ -605,7 +613,7 @@ function private.Create(kind, data, t)
 	if Wanted.Signing.KINDS[kind] then
 		data.sig = Wanted.Signing:Sign(Store:SigningMessage(record))
 		-- Our own signature needs no check
-		record.sv = data.sig and true or nil
+		Wanted.db.sigChecked[record.id] = data.sig and true or nil
 	end
 	chain.seq = seq
 	record.hash = Store:Hash(Canonical(record))
@@ -657,6 +665,21 @@ function private.FinishPending()
 	else
 		Wanted.db.signing.pending[private.origin] = nil
 	end
+end
+
+-- The fields a record has wherever it goes; anything else on a held record is this client's own (live, app, tampered,
+-- brokenChain, test) and never sent
+local WIRE_FIELDS = { "kind", "id", "origin", "seq", "prev", "t", "data", "hash" }
+
+---A record as sent to other players: its own fields only.
+---@param record table
+---@return table
+function Store:ForWire(record)
+	local out = {}
+	for _, field in ipairs(WIRE_FIELDS) do
+		out[field] = record[field]
+	end
+	return out
 end
 
 ---A record as the addon makes them: plain values only, a whole seq of 1 or more, and its id its origin and seq. A
@@ -752,7 +775,8 @@ function private.Insert(record, live, fromApp)
 		return false, "reserved"
 	end
 	record.live, record.app, record.tampered, record.brokenChain = nil, nil, nil, nil
-	-- What this client found checking its signature, and whether it was held before its origin's key was known
+	-- What this client found checking a signature is kept outside the records (WantedDB.sigChecked, sigPre): a peer's
+	-- copy can't carry it in
 	record.sv, record.pre = nil, nil
 	local existing = db.records[record.id]
 	if existing then

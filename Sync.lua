@@ -1048,6 +1048,14 @@ function private.Send(tag, tbl, attempt, target)
 	end
 	-- Every message says which version sent it: the newest version wins (Core)
 	tbl.v = Wanted.VERSION
+	-- Records go out with their own fields only, never what this client worked out about them (1.19.0)
+	if (tag == TAG_LIVE or tag == TAG_FILL) and type(tbl.r) == "table" then
+		local wire = {}
+		for i, record in ipairs(tbl.r) do
+			wire[i] = type(record) == "table" and Store:ForWire(record) or record
+		end
+		tbl.r = wire
+	end
 	if not target and not isSighting and now < private.pausedUntil then
 		private.Drop("paused", 1)
 		return false

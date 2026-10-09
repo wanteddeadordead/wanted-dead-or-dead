@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.19.2] - 2026-10-09
+
 - A sighting shared by another Wanted user can no longer put a player on your Kill on Sight or under a guild bounty
   by naming their guild: only the guild the game shows on the player counts, for alerts, posse calls and the guild
   a kill or death records. Shared guild, class, race and zone names lose escape codes and control characters before

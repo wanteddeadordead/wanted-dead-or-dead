@@ -162,7 +162,12 @@ function private.BountyText(bounties)
 	local hunters = {}
 	for _, bounty in ipairs(bounties) do
 		total = total + Bounties:GetAmount(bounty)
-		tinsert(posters, bounty.origin == Store:GetOrigin() and "you" or bounty.origin)
+		local poster = bounty.origin == Store:GetOrigin() and "you" or bounty.origin
+		-- Its signature checked out (1.19.0)
+		if Wanted.Verify:Label(bounty) == "Signed" then
+			poster = poster.." (signed)"
+		end
+		tinsert(posters, poster)
 		expiry = max(expiry, Bounties:GetExpiry(bounty))
 		for _, hunter in ipairs(Bounties:GetActiveHunters(bounty)) do
 			hunters[hunter] = true

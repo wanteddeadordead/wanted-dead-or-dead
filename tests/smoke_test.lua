@@ -8897,6 +8897,40 @@ end)()
 	local good, bad = V:Counts()
 	check(good >= 5 and bad == 2, "counts for the bug report: "..good.." good, "..bad.." bad")
 end)()
+-- Signing (1.19.0), shown: Signed or Bad signature in a bounty's details, the poster marked signed on its page, and
+-- the bug report's lines
+;(function()
+	local C, V, Store = ns.Crypto, ns.Verify, ns.Store
+	local seed = C:SHA512("shown poster"):sub(1, 32)
+	local origin = "Shown Poster"
+	RunFrames()
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:sp1:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(C:PublicKey(seed)), g = "Player-1-7C7C" }), "CHANNEL", origin, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	local bounty = SignedBy({ kind = "bounty", id = origin..":1", origin = origin, seq = 1, prev = "0", t = clock, data = { target = "Player-9-SHOWN", targetName = "Shown Target", amount = 4000 } }, seed)
+	Store:Merge(bounty, origin)
+	local forged = SignedBy({ kind = "withdraw", id = origin..":2", origin = origin, seq = 2, prev = bounty.hash, t = clock, data = { bounty = bounty.id } }, C:SHA512("someone else"):sub(1, 32))
+	forged.data.sig = "1"..bounty.data.sig:sub(2, 9)..forged.data.sig:sub(10)
+	Store:MergeRelayed(Sealed(forged))
+	ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(bounty))
+	for _ = 1, 40 do RunTimers() end
+	check(bounty.sv == true and forged.tampered, "the bounty checks out, the withdrawal is a forgery")
+	local lines = {}
+	local origLine, origDouble = GameTooltip.AddLine, GameTooltip.AddDoubleLine
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	GameTooltip.AddDoubleLine = function(_, left, right) lines[#lines + 1] = tostring(left).." | "..tostring(right) end
+	ns.Rows:ShowBountyTooltip(NewMock(), ns.Model:GetBountyInfo(bounty))
+	GameTooltip.AddLine, GameTooltip.AddDoubleLine = origLine, origDouble
+	local text = table.concat(lines, "\n")
+	check(text:find("Posted by | "..origin.."\n  | Signed", 1, true), "the details say the bounty is signed: "..text)
+	check(text:find("Bad signature: 1 record about this bounty was forged and left out.", 1, true), "and that a forged record was left out")
+	check(ns.Model:GetBountyInfo(bounty).state == ns.Model.STATE.OPEN, "the forged withdrawal doesn't take it down")
+	ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(bounty))
+	check(_G.WantedTargetFile.bounty:GetText():find(origin.." (signed)", 1, true), "its page marks the poster signed: ".._G.WantedTargetFile.bounty:GetText())
+	local report = ns.Report:Build()
+	check(report:find("Signing: key ", 1, true) and report:find("self-test passed", 1, true) and report:find("Signatures: %d+ keys known for %d+ players; %d+ records checked out, %d+ bad, %d+ waiting"),
+		"the bug report has the signing lines")
+	check(ns.db.settings.sigBackground == true, "background checks are on by default")
+end)()
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

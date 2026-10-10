@@ -1067,7 +1067,9 @@ function private.Send(tag, tbl, attempt, target)
 		end
 		tbl.r = wire
 	end
-	if not target and not isSighting and now < private.pausedUntil then
+	-- Rally positions go out while paused too, like sightings: a leader whose position stopped would be dropped by the
+	-- others, and one who couldn't answer a rival's claim would leave two rallies standing
+	if not target and not isSighting and tag ~= TAG_RALLY and now < private.pausedUntil then
 		private.Drop("paused", 1)
 		return false
 	end
@@ -2377,11 +2379,13 @@ function Sync:SendRaidAd(ad)
 	end
 end
 
----Shares the rally we lead: on the channel, and with toLinks to each realm link heard lately too.
+---Shares the rally we lead: on the channel, and with toLinks to each realm link heard lately too. Returns whether it
+---went out on the channel (or to the guild while locked out of it).
 ---@param rally table
 ---@param toLinks boolean?
+---@return boolean
 function Sync:SendRally(rally, toLinks)
-	private.Send(TAG_RALLY, rally)
+	local sent = private.Send(TAG_RALLY, rally)
 	if toLinks then
 		local now = GetTime()
 		for name, link in pairs(private.links) do
@@ -2390,6 +2394,7 @@ function Sync:SendRally(rally, toLinks)
 			end
 		end
 	end
+	return sent
 end
 
 ---Asks a raid's leader to invite us, or signs us up for a raid that hasn't started: kind "g" going, "i" interested,

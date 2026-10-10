@@ -369,12 +369,15 @@ unset or that page is switched off. A new setting: no migration.
   keeps the app's last epoch. A client with nothing saved (ceiling 1) can follow the server's channel only while the
   server's epoch is at most 4 (it was 1 for the Horde and 0 for the Alliance on 2026-10-08). The app's pointer is never older than the app's last, and replaces one a whisper brought only when
   it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.
-- Rally positions (`L`, `Rally.lua`, from the release after 1.19.3) carry `{ c = claimed (server time), z = zone, m =
-  map id, x, y (map percent), k = class file, f = faction, e = 1 when it ended }`. Passing news like sightings: never
-  stored or saved, never passed on, sent on the channel every 30 s and to realm links every two minutes, and taken
-  only as the sender's own rally (the game names the sender). A claim counts from `c`, but never more than five
-  minutes before this client first heard it; the earlier claim per faction and zone holds, ties going to the name that
-  sorts first. Older versions ignore the tag. Nothing saved: no migration.
+- Rally positions (`L`, `Rally.lua`, from the release after 1.19.3) carry `{ c = claimed (server time), z = zone name
+  (shown only), m = the zone's map id, x, y (map percent on it), k = class file, f = faction, e = 1 when it ended }`.
+  Passing news like sightings: never stored or saved, never passed on, sent on the channel every 30 s (also while sync
+  is paused) and to realm links every two minutes, and taken only as the sender's own rally (the game names the
+  sender, whichever way it came). Zones are told apart by `m`, so every language agrees; a cave's or town's map counts
+  as its zone's, and underground (the continent's map) the leader's last place on the zone stands. A claim counts from
+  `c`, but never more than five minutes before this client first heard it; the earlier claim per faction and zone map
+  holds, ties going to the name that sorts first. A leader answers each later claim once, at most three per rival. An
+  end (`e`) drops only a claim no newer than its `c`. Older versions ignore the tag. Nothing saved: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

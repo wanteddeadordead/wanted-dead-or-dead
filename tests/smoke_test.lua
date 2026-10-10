@@ -1866,6 +1866,13 @@ do
 	clock = clock + 3
 	RunTimers()
 	check(#Sent("WHISPER", "Remembered Pal") == 1, "the remembered links are greeted once the lockdown lifts")
+	-- A raid sign-up the player asked for in a lockdown doesn't go, and they're told
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	local from = #printed
+	check(ns.Sync:SendRaidJoin("Raid Leader", "raid-1", "going") == false and #Sent("WHISPER", "Raid Leader") == 0, "no raid sign-up whispered in a lockdown")
+	local told = false
+	for i = from + 1, #printed do told = told or printed[i]:find("blocks addon whispers", 1, true) ~= nil end
+	check(told, "the player is told their sign-up didn't go")
 	C_ChatInfo.InChatMessagingLockdown = nil
 end
 -- The game can answer a cross-realm whisper minutes late (seen: 72 s, 119 s, and past 2 minutes), all names at once

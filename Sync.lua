@@ -213,6 +213,10 @@ local function Whisper(text, target)
 	return C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", target)
 end
 
+-- Whispers sent because the player asked (a raid sign-up or its roster, a posse join): in a lockdown they're told it
+-- didn't go
+local PLAYER_WHISPERS = { [TAG_RAID_JOIN] = true, [TAG_RAID_WHO] = true, [TAG_POSSE_JOIN] = true }
+
 ---Whether the game's chat messaging lockdown is on (an encounter, a PvP match or a restricted map): its system lines
 ---are secret then, and the game runs no chat filter on a secret line, so a whisper to someone offline would print
 ---"No player named ... is currently playing" for every part. No addon whisper goes out while it's on: records for
@@ -1201,7 +1205,11 @@ function private.Send(tag, tbl, attempt, target)
 		return true
 	end
 	if private.ChatLocked() then
-		-- Not sent, and not counted as sent: the caller keeps what it can (FlushForward) and resyncs after
+		-- Not sent, and not counted as sent: the caller keeps what it can (FlushForward) and resyncs after. What the
+		-- player asked for themself isn't kept: they're told, so they can ask again once it lifts
+		if PLAYER_WHISPERS[tag] then
+			Wanted:Print("The game blocks addon whispers right now (a boss, a PvP match or an instance): try again once you're out.")
+		end
 		return false
 	end
 	for part = 1, total do

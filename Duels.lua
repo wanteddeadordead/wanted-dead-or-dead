@@ -637,17 +637,19 @@ function Duels:Build(side)
 end
 
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the
----record as each of their own builds, and every duel newest first. Records not in the expected shape are passed over.
+---record as each of their own builds (one a talent loadout where the record has one, else one a specialization), and
+---every duel newest first. Records not in the expected shape are passed over.
 ---@return table { won, lost, total, matchups = { { label, class, won, lost, games } }, builds = (the same), recent }
 function Duels:GetSheet()
 	local sheet = { won = 0, lost = 0, total = 0, matchups = {}, builds = {}, recent = {} }
 	local byMatchup, byBuild = {}, {}
-	local function Add(rows, index, side, record)
+	local function Add(rows, index, side, record, key)
 		local label = Duels:Build(side)
-		local row = index[label]
+		key = key or label
+		local row = index[key]
 		if not row then
-			row = { label = label, class = side.class, won = 0, lost = 0, games = 0 }
-			index[label] = row
+			row = { label = label, class = side.class, won = 0, lost = 0, games = 0, loadout = key ~= label and key or nil }
+			index[key] = row
 			tinsert(rows, row)
 		end
 		row.games = row.games + 1
@@ -660,8 +662,25 @@ function Duels:GetSheet()
 			sheet.won = sheet.won + (record.result == "won" and 1 or 0)
 			sheet.lost = sheet.lost + (record.result == "lost" and 1 or 0)
 			Add(sheet.matchups, byMatchup, record.them, record)
-			Add(sheet.builds, byBuild, record.me, record)
+			Add(sheet.builds, byBuild, record.me, record, type(record.me.loadout) == "string" and record.me.loadout or nil)
 			tinsert(sheet.recent, record)
+		end
+	end
+	-- Several builds of one specialization: numbered as first played, "(build unknown)" for duels from before loadouts
+	local perSpec = {}
+	for _, row in ipairs(sheet.builds) do
+		perSpec[row.label] = (perSpec[row.label] or 0) + 1
+	end
+	local numbered = {}
+	for _, row in ipairs(sheet.builds) do
+		if perSpec[row.label] > 1 then
+			local spec = row.label
+			if row.loadout then
+				numbered[spec] = (numbered[spec] or 0) + 1
+				row.label = format("%s (build %d)", spec, numbered[spec])
+			else
+				row.label = spec.." (build unknown)"
+			end
 		end
 	end
 	local function ByGames(a, b)

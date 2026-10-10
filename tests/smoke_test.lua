@@ -10445,6 +10445,19 @@ end)()
 		"the most faced class and spec first: "..tostring(sheet.matchups[1].label))
 	check(#sheet.matchups == 3 and sheet.matchups[3].games == 1, "one row a class and spec ('Mage' with no spec known)")
 	check(sheet.builds[1].games == 2 and #sheet.builds == 2, "the record per own build")
+	-- With loadouts, Your builds is one row a loadout: one specialization's builds numbered as first played
+	local mine = db.duels
+	db.duels = {
+		Duel(clock - 900, "won", "Arms", frost), Duel(clock - 800, "won", "Arms", frost), Duel(clock - 700, "lost", "Arms", frost),
+		Duel(clock - 600, "lost", "Arms", frost), Duel(clock - 500, "won", "Fury", frost),
+	}
+	db.duels[1].me.loadout, db.duels[3].me.loadout, db.duels[4].me.loadout, db.duels[5].me.loadout = "A1", "A2", "A2", "F1"
+	local builds = Duels:GetSheet().builds
+	local labels = {}
+	for _, row in ipairs(builds) do labels[row.label] = row end
+	check(#builds == 4 and builds[1].label == "Arms Warrior (build 2)" and builds[1].lost == 2 and labels["Arms Warrior (build 1)"]
+		and labels["Arms Warrior (build unknown)"] and labels["Fury Warrior"], "one row a loadout: "..builds[1].label)
+	db.duels = mine
 	check(sheet.recent[1].startAt == clock - 100 and #sheet.recent == 4, "recent duels newest first")
 	check(Duels:Opponent(db.duels[2].them) == "Duel Friend" and Duels:Opponent(lock) == "Affliction Warlock", "a Wanted user by name, anyone else by spec and class")
 	ns.UI:Show("duels")

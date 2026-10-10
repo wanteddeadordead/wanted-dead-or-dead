@@ -90,14 +90,9 @@ function W:Button(parent, text, style, width, height, onClick, template)
 	end)
 	button:SetScript("OnEnable", RefreshButton)
 	button:SetScript("OnDisable", RefreshButton)
-	button:SetScript("OnMouseDown", function(self)
-		if self:IsEnabled() then
-			self.label:SetPoint("CENTER", 1, -1)
-		end
-	end)
-	button:SetScript("OnMouseUp", function(self)
-		self.label:SetPoint("CENTER", 0, 0)
-	end)
+	-- The label is the button's font string, so the game moves it while pressed and back on release. Moving it here
+	-- as well left it a little higher after every click.
+	button:SetPushedTextOffset(1, -1)
 	if onClick then
 		button:SetScript("OnClick", onClick)
 	end

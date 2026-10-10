@@ -11,10 +11,19 @@
   talent frame on either side's build, and See gear lists what each of you wore, slot by slot, with your average item
   levels; a clear gear gap is called out at the top. Your opponent's talents are read by inspect when
   nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
-  Wanted shows by name; anyone else as their spec and class. Duels stay on your PC (the Wanted app will upload them
-  later) and are never shared with other players.
+  Wanted shows by name; anyone else as their spec and class. The Wanted app (0.2.42 or later) uploads them with your
+  other data; they are never shared with other players.
 - A duel never counts as a kill, a death or a sighting. Even a duel to the death leaves no kill or death record, no
   "Killed by" warning and no lost kill streak.
+
+## [1.19.4] - 2026-10-10
+
+- No more "No player named ... is currently playing" lines after a /reload or login: the game answers Wanted's hidden
+  whispers late, and Wanted now remembers who it whispered across a reload and hides those answers from the start.
+- No more "No player named ... is currently playing" lines after a duel or fight. During the game's chat lockdown
+  (encounters, PvP matches, some duels) Wanted can't hide that notice, so it sends no hidden whispers then: records
+  for players on other realm names wait, and the links are greeted again once the lockdown lifts.
+- Button and tab labels no longer creep upward each time you click them.
 
 ## [1.19.3] - 2026-10-09
 

@@ -9952,11 +9952,11 @@ end)()
 ;(function()
 	local C, KeyBook = ns.Crypto, ns.KeyBook
 	local pk = C:PublicKey(C:SHA512("duel friend"):sub(1, 32))
-	check(KeyBook:OriginOf("Player-1-D0E1F0") == nil, "a GUID with no key bound names nobody")
-	Fire("CHAT_MSG_ADDON", "WNTD", "H:df:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-D0E1F0" }), "CHANNEL", "Duel Friend", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == nil, "a GUID with no key bound names nobody")
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:df:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-0D0E1F00" }), "CHANNEL", "Duel Friend", nil, nil, nil, ns.Sync:GetInfo().channelName)
 	RunFrames()
-	check(KeyBook:OriginOf("Player-1-D0E1F0") == "Duel Friend", "a hello binds the GUID to the Wanted user: "..tostring(KeyBook:OriginOf("Player-1-D0E1F0")))
-	check(KeyBook:OriginOf("Player-1-5717A6") == nil and KeyBook:OriginOf(nil) == nil, "anyone else names nobody")
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == "Duel Friend", "a hello binds the GUID to the Wanted user: "..tostring(KeyBook:OriginOf("Player-1-0D0E1F00")))
+	check(KeyBook:OriginOf("Player-1-005717A6") == nil and KeyBook:OriginOf(nil) == nil, "anyone else names nobody")
 end)()
 -- Duels: each duel is recorded for the player's own matchup sheet, the opponent named only when they run Wanted
 -- (their GUID bound to a key: the KeyBook test above heard Duel Friend's hello)
@@ -9970,8 +9970,8 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	S.inspectAs = S.theirs.Frost
 	local saved = { GetPlayerInfoByGUID = GetPlayerInfoByGUID }
 	GetPlayerInfoByGUID = function(guid)
-		if guid == "Player-1-D0E1F0" then return "Mage", "MAGE", "Undead", "Scourge", 2, "Duel Friend" end
-		if guid == "Player-1-0BB0" then return "Warlock", "WARLOCK", "Orc", "Orc", 3, "Some Stranger" end
+		if guid == "Player-1-0D0E1F00" then return "Mage", "MAGE", "Undead", "Scourge", 2, "Duel Friend" end
+		if guid == "Player-1-00000BB0" then return "Warlock", "WARLOCK", "Orc", "Orc", 3, "Some Stranger" end
 		return saved.GetPlayerInfoByGUID(guid)
 	end
 	GetRealZoneText = function() return "Durotar" end
@@ -9988,7 +9988,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		if not tree then return 0, nil end
 		return 100 + tab, tree[1], "", 0, "DAMAGER", 1, tree[2]
 	end }
-	GetDuelerInfo = function() return "Player-1-D0E1F0", 60 end
+	GetDuelerInfo = function() return "Player-1-0D0E1F00", 60 end
 	DUEL_WINNER_KNOCKOUT = "%1$s has defeated %2$s in a duel"
 	DUEL_WINNER_RETREAT = "%2$s has fled from %1$s in a duel"
 	local function Hook(name, ...) for _, f in ipairs(globalHooks[name] or {}) do f(...) end end
@@ -9996,10 +9996,10 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	db.duels = {}
 
 	-- They challenge us, we accept and win: a Wanted user, so their name is kept
-	enemyUnits.target = { guid = "Player-1-D0E1F0", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, raceFile = "Scourge", raceName = "Undead", close = true }
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, raceFile = "Scourge", raceName = "Undead", close = true }
 	Fire("DUEL_REQUESTED", "Duel Friend")
 	check(#S.inspected == 1 and S.inspected[1] == "target", "the challenger is inspected for their talents: "..#S.inspected)
-	Fire("INSPECT_READY", "Player-1-D0E1F0")
+	Fire("INSPECT_READY", "Player-1-0D0E1F00")
 	check(S.cleared == 1, "our own inspect is let go once answered: "..S.cleared)
 	local start = clock
 	Hook("AcceptDuel")
@@ -10018,7 +10018,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	check(d.result == "won" and not d.fled and not d.toTheDeath, "we won: "..tostring(d.result))
 	check(d.zone == "Durotar" and type(d.x) == "number" and type(d.y) == "number" and d.mapId == 1, "where it was fought")
 	local them, me = d.them, d.me
-	check(them.name == "Duel Friend" and them.guid == "Player-1-D0E1F0" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
+	check(them.name == "Duel Friend" and them.guid == "Player-1-0D0E1F00" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
 		"a Wanted user is kept by name with class, race and level: "..tostring(them.name))
 	check(them.spec == "Frost" and table.concat(them.talents, "/") == "0/10/41", "their build from the inspect: "..tostring(them.spec))
 	check(them.health == 50 and them.mana == 50, "their health and mana at the end: "..tostring(them.health).." "..tostring(them.mana))
@@ -10026,7 +10026,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		and me.health == 100 and me.mana == nil, "our own side: "..tostring(me.spec).." "..tostring(me.mana))
 
 	-- We challenge a stranger while another addon's inspect is out: ours waits for it. They flee and we lose
-	enemyUnits.target = { guid = "Player-1-0BB0", name = "Some Stranger", faction = "Horde", class = "WARLOCK", level = 58, raceFile = "Orc", close = true }
+	enemyUnits.target = { guid = "Player-1-00000BB0", name = "Some Stranger", faction = "Horde", class = "WARLOCK", level = 58, raceFile = "Orc", close = true }
 	S.inspectAs = S.theirs.Warlock
 	NotifyInspect("mouseover")
 	local asked = #S.inspected
@@ -10036,14 +10036,14 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	Duels:Check()
 	check(#S.inspected == asked + 1, "the inspect goes once the other one has had its time")
 	NotifyInspect("focus")
-	Fire("INSPECT_READY", "Player-1-0BB0")
+	Fire("INSPECT_READY", "Player-1-00000BB0")
 	check(S.cleared == 1, "an inspect someone else took over isn't ours to let go")
 	enemyUnits.target.dueling = true
 	clock = clock + 6
 	Duels:Check()
 	local stranger = clock
 	check(#S.inspected == asked + 3, "and is asked again: "..#S.inspected - asked)
-	Fire("INSPECT_READY", "Player-1-0BB0")
+	Fire("INSPECT_READY", "Player-1-00000BB0")
 	clock = clock + 25
 	enemyUnits.target = nil
 	Fire("CHAT_MSG_SYSTEM", "Test Player has fled from Some Stranger in a duel")
@@ -10052,7 +10052,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	check(#db.duels == 2, "the second duel is recorded")
 	d = db.duels[2]
 	check(d.result == "lost" and d.fled and d.startAt == stranger and d.length == 25, "we fled and lost: "..tostring(d.result).." "..tostring(d.length))
-	check(d.them.name == nil and d.them.guid == "Player-1-0BB0" and d.them.class == "WARLOCK" and d.them.spec == "Affliction",
+	check(d.them.name == nil and d.them.guid == "Player-1-00000BB0" and d.them.class == "WARLOCK" and d.them.spec == "Affliction",
 		"someone who doesn't run Wanted is kept by class and spec, not name: "..tostring(d.them.name))
 	check(d.them.health == 50, "out of sight at the end: their health as last seen")
 
@@ -10064,7 +10064,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 
 	-- At most Duels.MAX kept, the oldest dropped
 	for i = 1, Duels.MAX - 2 do table.insert(db.duels, i, { id = "old:"..i }) end
-	enemyUnits.target = { guid = "Player-1-D0E1F0", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
 	Fire("DUEL_REQUESTED", "Duel Friend")
 	Hook("AcceptDuel")
 	clock = clock + 30
@@ -10083,19 +10083,19 @@ end)()
 	local lastDeath = ns.Enemies:GetLastDeath()
 	ns.Streaks:OnDeath()
 	ns.Streaks:OnKill("Somebody Else")
-	enemyUnits.target = { guid = "Player-1-D0E1F0", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
 	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
 	S.Hook("AcceptDuel")
 	enemyUnits.target.dueling = true
 	clock = clock + 20
 	ns.Duels:Check()
-	check(ns.Duels:Involves("Player-1-D0E1F0") and ns.Duels:Involves("Player-1-ME") and not ns.Duels:Involves("Player-9-ENEMY"),
+	check(ns.Duels:Involves("Player-1-0D0E1F00") and ns.Duels:Involves("Player-1-ME") and not ns.Duels:Involves("Player-9-ENEMY"),
 		"the duel involves the two duellists only")
 	-- We win: the game credits our killing blow, and they die
-	Fire("PARTY_KILL", "Player-1-ME", "Player-1-D0E1F0")
+	Fire("PARTY_KILL", "Player-1-ME", "Player-1-0D0E1F00")
 	enemyUnits.target.dead = true
 	Fire("UNIT_HEALTH", "target")
-	Fire("UNIT_DIED", "Player-1-D0E1F0")
+	Fire("UNIT_DIED", "Player-1-0D0E1F00")
 	Fire("DUEL_FINISHED")
 	RunTimers()
 	check(db.duels[#db.duels].toTheDeath and db.duels[#db.duels].result == "won", "a duel to the death won by the loser's death: "..tostring(db.duels[#db.duels].result))
@@ -10108,7 +10108,7 @@ end)()
 	local recap = C_DeathRecap
 	C_DeathRecap = {
 		GetRecapLink = function() return "|Hdeath:7101|h[Death]|h" end,
-		GetRecapEvents = function() return { { sourceGUID = "Player-1-D0E1F0" } } end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-1-0D0E1F00" } } end,
 	}
 	Fire("PLAYER_DEAD")
 	Fire("UNIT_DIED", "Player-1-ME")
@@ -10120,11 +10120,11 @@ end)()
 	RunTimers()
 	-- Just after, too (the game confirms a death a few seconds later)
 	clock = clock + 5
-	Fire("PARTY_KILL", "Player-1-ME", "Player-1-D0E1F0")
+	Fire("PARTY_KILL", "Player-1-ME", "Player-1-0D0E1F00")
 	RunTimers()
 	check(Count("kill") == kills, "the duel's kill just after it ended isn't one either")
 	clock = clock + 60
-	check(not ns.Duels:Involves("Player-1-D0E1F0") and not ns.Duels:Involves("Player-1-ME"), "a while after the duel, nobody is in it")
+	check(not ns.Duels:Involves("Player-1-0D0E1F00") and not ns.Duels:Involves("Player-1-ME"), "a while after the duel, nobody is in it")
 	enemyUnits.target = nil
 end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
@@ -10137,14 +10137,14 @@ end)()
 	check(ns.UI:IsShown("duels") and OnScreen("Duel someone and it shows up here."), "with no duels the page says how to get one")
 	local function Duel(t, result, mySpec, them) return { id = "Test Player:duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
 		me = { class = "WARRIOR", spec = mySpec, talents = { 31, 20, 0 } }, them = them } end
-	local frost = { guid = "Player-1-D0E1F0", class = "MAGE", spec = "Frost", name = "Duel Friend" }
-	local lock = { guid = "Player-1-0BB0", class = "WARLOCK", spec = "Affliction", race = "Orc", level = 58 }
+	local frost = { guid = "Player-1-0D0E1F00", class = "MAGE", spec = "Frost", name = "Duel Friend" }
+	local lock = { guid = "Player-1-00000BB0", class = "WARLOCK", spec = "Affliction", race = "Orc", level = 58 }
 	db.duels = {
 		{ id = "broken" }, -- a malformed record is passed over
 		Duel(clock - 400, "won", "Arms", frost),
-		Duel(clock - 300, "lost", "Arms", { guid = "Player-1-0CC0", class = "MAGE", spec = "Frost" }),
+		Duel(clock - 300, "lost", "Arms", { guid = "Player-1-00000CC0", class = "MAGE", spec = "Frost" }),
 		Duel(clock - 200, "lost", "Fury", lock),
-		Duel(clock - 100, "none", "Fury", { guid = "Player-1-0DD0", class = "MAGE" }),
+		Duel(clock - 100, "none", "Fury", { guid = "Player-1-00000DD0", class = "MAGE" }),
 	}
 	local sheet = Duels:GetSheet()
 	check(sheet.won == 1 and sheet.lost == 2 and sheet.total == 4, "the record overall: "..sheet.won.."-"..sheet.lost.." of "..sheet.total)

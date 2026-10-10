@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs
+  Frost Mage 3-9", most faced first), how you do as each of your own talent builds, and your recent duels with their
+  result and length (hover one for where it was and both builds). Your opponent's talents are read by inspect when
+  nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
+  Wanted shows by name; anyone else as their spec and class. Duels stay on your PC (the Wanted app will upload them
+  later) and are never shared with other players.
+- A duel never counts as a kill, a death or a sighting. Even a duel to the death leaves no kill or death record, no
+  "Killed by" warning and no lost kill streak.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

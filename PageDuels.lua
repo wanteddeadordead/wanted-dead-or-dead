@@ -268,7 +268,14 @@ function private.ShowCard(duel)
 		Theme:Colorize(result[1], result[2]), private.Length(duel.length), private.When(duel.startAt)))
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
-	local opener = hasReport and type(report.opener) == "string" and ("   "..private.CleanText(report.opener)) or ""
+	local opener = hasReport and type(report.opener) == "string" and private.CleanText(report.opener) or ""
+	-- The opener is often one of the findings too: said once, there
+	for _, f in ipairs(hasReport and type(report.findings) == "table" and report.findings or {}) do
+		if type(f) == "table" and private.CleanText(f.text) == opener then
+			opener = ""
+		end
+	end
+	opener = opener ~= "" and ("   "..opener) or ""
 	if hasReport and report.partial then
 		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
 		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)

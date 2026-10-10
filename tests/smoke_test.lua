@@ -10558,6 +10558,12 @@ end)()
 	-- points where the game gave only the class
 	db.duelReports[duel.id].them.build = { spec = "Feral Combat", points = { 0, 12, 0 }, talents = { "Feral Charge", "Sharpened Claws" } }
 	ns.UI:Show("duels")
+	db.duelReports[duel.id].opener = "Their melee did 51% of the damage you took. You did no damage for 10.0 s while free to act, between 0:08 and 0:18."
+	ns.UI:Show("duels")
+	local openerShown = 0
+	for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find("free to act, between 0:08", 1, true) then openerShown = openerShown + 1 end end
+	check(openerShown == 1, "an opener that's also a finding is said once: "..openerShown)
+	db.duelReports[duel.id].opener = "They opened from stealth."
 	check(OnScreen("Build: Feral Combat (0/12/0): Feral Charge, Sharpened Claws") and OnScreen("vs Feral Combat Druid"),
 		"the card shows their build, and names them by it")
 	check(Duels:Side(duel, "them").spec == "Feral Combat" and duel.them.spec == nil, "the shown spec comes from the report; the record is left as it was")

@@ -231,28 +231,31 @@ function private.BuildCard(container, width)
 	card.title:SetPoint("TOPLEFT", 14, -12)
 	card.back = W:Button(card, "Back", "secondary", 70, 24, function() private.HideCard() end)
 	card.back:SetPoint("TOPRIGHT", -10, -8)
-	card.note = Theme:Text(card, "small", "", C.muted)
-	card.note:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", 0, -6)
-	local graphWidth = max(width - 110, 120)
+	-- Everything under the title scrolls together: the opener, both lanes and the findings with their tips
+	card.scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
+	card.scroll.scrollBarHideable = true
+	card.scroll:SetPoint("TOPLEFT", 0, -38)
+	card.scroll:SetPoint("BOTTOMRIGHT", -26, 8)
+	local body = CreateFrame("Frame", nil, card.scroll)
+	body:SetSize(width - 30, 1)
+	card.scroll:SetScrollChild(body)
+	card.body = body
+	card.note = Theme:Text(body, "small", "", C.muted)
+	card.note:SetPoint("TOPLEFT", 14, 0)
+	card.note:SetWidth(width - 60)
+	card.note:SetJustifyH("LEFT")
+	card.note:SetWordWrap(true)
+	local graphWidth = max(width - 140, 120)
 	card.lanes = {
-		me = private.CreateLane(card, "You", -56, C.green, graphWidth),
-		them = private.CreateLane(card, "Them", -146, C.red, graphWidth),
+		me = private.CreateLane(body, "You", -40, C.green, graphWidth),
+		them = private.CreateLane(body, "Them", -130, C.red, graphWidth),
 	}
-	card.findings = {}
-	local above
-	for i = 1, CARD_FINDINGS do
-		local f = Theme:Text(card, "body", "")
-		if above then
-			f:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -8)
-		else
-			f:SetPoint("TOPLEFT", 14, -236)
-		end
-		f:SetWidth(width - 28)
-		f:SetJustifyH("LEFT")
-		f:SetWordWrap(true)
-		card.findings[i] = f
-		above = f
-	end
+	card.findings = Theme:Text(body, "body", "")
+	card.findings:SetPoint("TOPLEFT", 14, -218)
+	card.findings:SetWidth(width - 60)
+	card.findings:SetJustifyH("LEFT")
+	card.findings:SetWordWrap(true)
+	card.findings:SetSpacing(3)
 	private.card = card
 end
 
@@ -292,17 +295,18 @@ function private.ShowCard(duel)
 		end
 	end
 	local findings = hasReport and type(report.findings) == "table" and report.findings or {}
-	for i, fs in ipairs(card.findings) do
+	local lines = {}
+	for i = 1, CARD_FINDINGS do
 		local f = findings[i]
 		if type(f) == "table" and type(f.text) == "string" then
 			local tip = type(f.tip) == "string" and ("\n"..Theme:Colorize(private.CleanText(f.tip), C.muted)) or ""
-			fs:SetText(i..". "..private.CleanText(f.text)..tip)
-			fs:Show()
-		else
-			fs:SetText("")
-			fs:Hide()
+			lines[#lines + 1] = i..". "..private.CleanText(f.text)..tip
 		end
 	end
+	card.findings:SetText(table.concat(lines, "\n\n"))
+	card.findings:SetShown(#lines > 0)
+	card.body:SetHeight(218 + max(card.findings:GetStringHeight(), 1) + 12)
+	card.scroll:SetVerticalScroll(0)
 	private.list:Hide()
 	private.headerBar:Hide()
 	card:Show()

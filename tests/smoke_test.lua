@@ -10361,6 +10361,35 @@ end)()
 	RunTimers()
 	enemyUnits.target = nil
 end)()
+-- Health and mana the game hides at the duel's end are logged, and ours is read again once the record is written
+;(function()
+	local db, S = ns.db, duelStubs
+	local health, power = UnitHealth, UnitPower
+	local hidden = true
+	UnitHealth = function(unit) if hidden then return SECRET_SPELL end return health(unit) end
+	UnitPower = function(unit, kind) if unit ~= "player" then return SECRET_SPELL end return power(unit, kind) end
+	local powerType = UnitPowerType
+	UnitPowerType = function() return 0 end
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	clock = clock + 60
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Test has defeated Duel Friend in a duel")
+	Fire("DUEL_FINISHED")
+	hidden = false
+	enemyUnits.target = nil
+	RunTimers()
+	local d = db.duels[#db.duels]
+	check(d.endAt == clock and d.me.health == 100 and d.me.mana == 50, "our health and mana read again as the record is written: "..tostring(d.me.health).." "..tostring(d.me.mana))
+	check(d.them.health == nil and d.them.mana == nil, "theirs, hidden and out of view by then, stay unknown")
+	local logged = {}
+	for _, line in ipairs(ns:GetLogLines()) do logged[#logged + 1] = line end
+	logged = table.concat(logged, "\n")
+	check(logged:find("Duels: your health hidden by the game", 1, true) and logged:find("Duels: their health hidden by the game", 1, true)
+		and logged:find("Duels: their mana hidden by the game", 1, true), "what the game hid is logged")
+	UnitHealth, UnitPower, UnitPowerType = health, power, powerType
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

@@ -180,7 +180,7 @@ function Duels:Check()
 	end
 	duel.hostile = hostile
 	if duel.startAt then
-		private.ReadVitals(duel.them, unit)
+		private.ReadVitals(duel, duel.them, unit, "their")
 	end
 	private.TryInspect(duel, unit)
 end
@@ -222,18 +222,40 @@ function private.Learn(duel, unit)
 	end
 end
 
----A unit's health and mana as percentages, where the game lets us read them (mana only for those who use it).
-function private.ReadVitals(into, unit)
-	local health, healthMax = private.Readable(UnitHealth(unit)), private.Readable(UnitHealthMax(unit))
-	if type(health) == "number" and type(healthMax) == "number" and healthMax > 0 then
-		into.health = floor(health / healthMax * 100 + 0.5)
-	end
+---A unit's health and mana as percentages, where the game lets us read them (mana only for those who use it). The
+---game may hide either (a secret value; this client's UnitHealth is documented as always secret): what it hid is
+---logged once a duel, for the in-game tests.
+---@param who string "your" or "their", for the log
+function private.ReadVitals(duel, into, unit, who)
+	local health = private.Percent(duel, who.." health", UnitHealth(unit), UnitHealthMax(unit))
+	into.health = health or into.health
 	if UnitPowerType and UnitPower and UnitPowerMax and private.Readable(UnitPowerType(unit)) == MANA then
-		local mana, manaMax = private.Readable(UnitPower(unit, MANA)), private.Readable(UnitPowerMax(unit, MANA))
-		if type(mana) == "number" and type(manaMax) == "number" and manaMax > 0 then
-			into.mana = floor(mana / manaMax * 100 + 0.5)
-		end
+		into.mana = private.Percent(duel, who.." mana", UnitPower(unit, MANA), UnitPowerMax(unit, MANA)) or into.mana
 	end
+end
+
+---Fills in health or mana not read yet, leaving what was read at the end.
+function private.FillVitals(duel, into, unit, who)
+	if into.health == nil or into.mana == nil then
+		local now = {}
+		private.ReadVitals(duel, now, unit, who)
+		into.health, into.mana = into.health or now.health, into.mana or now.mana
+	end
+end
+
+---A value as a percentage of its maximum, or nil (logged) when the game hides either.
+function private.Percent(duel, what, value, maximum)
+	local readValue, readMax = private.Readable(value), private.Readable(maximum)
+	if type(readValue) == "number" and type(readMax) == "number" and readMax > 0 then
+		return floor(readValue / readMax * 100 + 0.5)
+	end
+	duel.hidden = duel.hidden or {}
+	if not duel.hidden[what] then
+		duel.hidden[what] = true
+		Wanted:Log("Duels: %s %s", what, (readValue == nil and value ~= nil or readMax == nil and maximum ~= nil) and "hidden by the game"
+			or format("unreadable (%s of %s)", type(value), type(maximum)))
+	end
+	return nil
 end
 
 ---A system line: the one that names the duel's winner, if it names us.
@@ -306,10 +328,10 @@ function private.OnFinished()
 	local unit = private.FindUnit(duel)
 	if unit then
 		private.Learn(duel, unit)
-		private.ReadVitals(duel.them, unit)
+		private.ReadVitals(duel, duel.them, unit, "their")
 	end
 	duel.me = {}
-	private.ReadVitals(duel.me, "player")
+	private.ReadVitals(duel, duel.me, "player", "your")
 	-- A duel to the death ends in a death, whatever the lines say
 	duel.deadMe = private.Readable(UnitIsDeadOrGhost("player")) == true
 	duel.deadThem = unit and private.Readable(UnitIsDeadOrGhost(unit)) == true or false
@@ -336,6 +358,12 @@ function private.Finish(duel)
 	local realZone = GetRealZoneText and private.Readable(GetRealZoneText())
 	local origin = Store:GetOrigin()
 	local me = duel.me
+	-- What the game hid at the end is read again a moment later: it may hide it only during the fight
+	private.FillVitals(duel, me, "player", "your")
+	local unit = private.FindUnit(duel)
+	if unit then
+		private.FillVitals(duel, duel.them, unit, "their")
+	end
 	local level = private.Readable(UnitLevel("player"))
 	me.guid = private.Readable(UnitGUID("player"))
 	me.name = Store:CleanName(origin)

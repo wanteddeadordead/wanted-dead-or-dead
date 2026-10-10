@@ -6,9 +6,9 @@
   the creatures you target, mouse over or see nameplates of. Your shared sightings carry it, and on Last hour an enemy
   another Wanted player saw on another shard of your zone is marked "other shard": they aren't where you can meet them.
   Until a creature in the zone has been seen it shows "Shard ?", and nothing is marked.
-- Assists count from your lifetime honorable kills where the game gives them, so the daily reset of today's count no
-  longer loses the first assist after it. A jump in the count that no fight explains (a count read before the game
-  had it) is taken as the new start instead of thousands of assists.
+- Assists count from your lifetime honorable kills as well as today's, and the daily reset of today's count no longer
+  loses the first assist after it. A jump in the count that no fight explains (a count read before the game had it)
+  is taken as the new start instead of thousands of assists.
 
 ## [1.19.3] - 2026-10-09
 

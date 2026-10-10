@@ -2316,7 +2316,7 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	GetPVPLifetimeStats = function() return lifetime, 7 end
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
-	check(#Assists() == 3, "moving to the lifetime count credits nothing")
+	check(#Assists() == 3, "the lifetime count appearing credits nothing")
 	clock = clock + 120
 	ns.Store:NewRecord("death", { deathId = "hk-life", victim = "Player-9-LIFE", victimName = "Life Count", victimFaction = "Alliance", zone = "Undercity" })
 	hkCount, lifetime = 0, lifetime + 1
@@ -2330,10 +2330,17 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
 	check(#Assists() == 4, "a jump in the count far past one fight's HKs credits nothing")
+	-- A lifetime count that lags (only updated later): today's count rising still counts
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-lag", victim = "Player-9-LAG", victimName = "Lagging Count", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 5, "today's count rising is an assist while the lifetime count stays")
 	GetPVPLifetimeStats = function() error("not now") end
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
-	check(#Assists() == 4, "a lifetime count the client won't give falls back to the session count, crediting nothing")
+	check(#Assists() == 5, "a lifetime count the client won't give leaves today's, crediting nothing")
 	GetPVPLifetimeStats = nil
 end)()
 -- The desktop app's account code links this character by itself, once per code

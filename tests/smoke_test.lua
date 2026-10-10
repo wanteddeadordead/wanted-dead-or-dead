@@ -10169,6 +10169,36 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		"a hidden challenger is found as the one attackable player of our faction: "..tostring(d.them.class).." "..tostring(d.them.guid))
 	table.remove(db.duels)
 
+	-- The game won't inspect someone hostile: an opponent not inspected before the fight is asked for right after it
+	local savedCan = CanInspect
+	CanInspect = function(unit) local e = enemyUnits[unit] return e ~= nil and not e.dueling end
+	enemyUnits.target = nil
+	GetDuelerInfo = nil
+	Fire("DUEL_REQUESTED", nil)
+	Hook("AcceptDuel")
+	clock = clock + 3
+	enemyUnits.target = { guid = "Player-1-0000CAFE", name = "Late Look", faction = "Horde", class = "WARLOCK", level = 30, raceFile = "Orc", close = true, dueling = true }
+	S.inspectAs = S.theirs.Warlock
+	local asked = #S.inspected
+	Duels:Check()
+	check(#S.inspected == asked, "no inspect while they're hostile")
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Late has defeated Test in a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	GetDuelerInfo = savedDueler
+	local late = db.duels[#db.duels]
+	check(late.them.guid == "Player-1-0000CAFE" and late.them.spec == nil, "recorded without their build")
+	enemyUnits.target.dueling = false
+	clock = clock + 1
+	Duels:Check()
+	check(#S.inspected == asked + 1, "asked for once they're friendly again, after the duel")
+	Fire("INSPECT_READY", "Player-1-0000CAFE")
+	check(late.them.spec == "Affliction" and late.them.loadout == S.inspectLoadout, "their build lands on the duel's record: "..tostring(late.them.spec))
+	CanInspect = savedCan
+	enemyUnits.target = nil
+	table.remove(db.duels)
+
 	-- A challenge declined is no duel
 	Fire("DUEL_REQUESTED", "Duel Friend")
 	Fire("DUEL_FINISHED")

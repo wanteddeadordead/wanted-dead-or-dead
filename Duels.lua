@@ -42,6 +42,9 @@ local INVOLVED_SECONDS = 30
 local OTHERS_SECONDS = 5
 local INSPECT_TIMEOUT = 5
 local INSPECT_TRIES = 5
+-- The game won't inspect someone hostile, so a duel opponent not inspected before the fight (stealthed, out of view)
+-- is asked for right after it, while they're friendly again and usually still standing there, for this long
+local AFTER_SECONDS = 30
 local CHECK_SECONDS = 1
 local MANA = 0
 -- A talent loadout's import string longer than this isn't kept
@@ -161,6 +164,7 @@ end
 function Duels:Check()
 	local duel = private.duel
 	private.CheckInspectTimeout()
+	private.CheckAfter()
 	if not duel or duel.endAt then
 		return
 	end
@@ -408,6 +412,10 @@ function private.Finish(duel)
 	if Wanted.KeyBook:IsCharacter(wanted, duel.guid) then
 		them.name = Store:CleanName(wanted)
 	end
+	if not duel.inspected and duel.guid then
+		private.after = { guid = duel.guid, them = them, untilAt = GetTime() + AFTER_SECONDS }
+		Wanted:Log("Duels: not inspected during the duel; asking after it")
+	end
 	local list = Wanted.db.duels
 	tinsert(list, {
 		id = format("%s:duel:%d", origin, duel.startAt),
@@ -560,6 +568,23 @@ function private.TryInspect(duel, unit)
 	end
 end
 
+---After a duel whose opponent wasn't inspected: asks for them once they're in view, until AFTER_SECONDS have gone.
+function private.CheckAfter()
+	local after = private.after
+	if not after then
+		return
+	end
+	if GetTime() > after.untilAt then
+		Wanted:Log("Duels: no inspect after the duel either (%s)", after.inspectNote or "not in view")
+		private.after = nil
+		return
+	end
+	local unit = private.FindUnit(after)
+	if unit then
+		private.TryInspect(after, unit)
+	end
+end
+
 ---Logs why the opponent's inspect wasn't asked, once a reason (Check runs every second).
 function private.InspectNote(duel, note)
 	if duel.inspectNote ~= note then
@@ -678,6 +703,21 @@ function private.OnInspectReady(guid)
 	end
 	if inspect.taken then
 		Wanted:Log("Duels: inspect answered after someone else asked one; not read")
+		return
+	end
+	local after = private.after
+	if after and after.guid == guid and not (private.duel and private.duel.guid == guid and not private.duel.endAt) then
+		local afterUnit = private.FindUnit(after)
+		if afterUnit then
+			after.them.spec, after.them.specId = private.InspectSpec(afterUnit)
+			after.them.loadout = private.InspectLoadout(afterUnit)
+			after.them.gear = private.ReadGear(afterUnit)
+			Wanted:Log("Duels: inspect after the duel answered: %s", after.them.spec or "no specialization")
+			private.after = nil
+		else
+			Wanted:Log("Duels: inspect after the duel answered with them out of view; not read")
+		end
+		private.ReleaseInspect()
 		return
 	end
 	local duel = private.duel

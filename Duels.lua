@@ -44,6 +44,8 @@ local INSPECT_TIMEOUT = 5
 local INSPECT_TRIES = 5
 local CHECK_SECONDS = 1
 local MANA = 0
+-- A talent loadout's import string longer than this isn't kept
+local MAX_LOADOUT = 512
 -- The game's lines, in case a client lacks them: %1$s is the winner, %2$s the loser
 local ENDINGS = {
 	{ global = "DUEL_WINNER_KNOCKOUT", text = "%1$s has defeated %2$s in a duel" },
@@ -370,7 +372,8 @@ function private.Finish(duel)
 	me.class = Store:CleanName(private.Readable((select(2, UnitClass("player")))))
 	me.race = Store:CleanName(private.Readable((select(2, UnitRace("player")))))
 	me.level = type(level) == "number" and level > 0 and level or nil
-	me.spec = private.OwnSpec()
+	me.spec, me.specId = private.OwnSpec()
+	me.loadout = private.OwnLoadout()
 	local them = duel.them
 	-- The name only of a Wanted user, and only when the game names the character so too: a hello can claim any GUID
 	them.guid = duel.guid
@@ -425,30 +428,75 @@ function private.SpecName(specId)
 	return type(name) == "string" and name ~= "" and Store:CleanName(name) or nil
 end
 
----The player's own specialization's name ("Arms"), or nil before one is chosen. Forever's talents are retail's: a
----chosen specialization and a talent loadout, not points in three trees.
+---A specialization id the game gave, or nil.
+function private.SpecId(specId)
+	specId = private.Readable(specId)
+	return type(specId) == "number" and specId > 0 and specId or nil
+end
+
+---The player's own specialization: its name ("Arms") and id, or nil before one is chosen. Forever's talents are
+---retail's: a chosen specialization and a talent loadout, not points in three trees.
+---@return string? name
+---@return number? specId
 function private.OwnSpec()
 	local info = C_SpecializationInfo
 	if not (info and info.GetSpecialization and info.GetSpecializationInfo) then
-		return nil
+		return nil, nil
 	end
 	local ok, index = pcall(info.GetSpecialization)
 	index = ok and private.Readable(index)
 	if type(index) ~= "number" or index <= 0 then
-		return nil
+		return nil, nil
 	end
 	local okInfo, specId = pcall(info.GetSpecializationInfo, index)
-	return okInfo and private.SpecName(specId) or nil
+	specId = okInfo and private.SpecId(specId) or nil
+	return private.SpecName(specId), specId
 end
 
----The specialization's name of the unit our inspect was answered for, or nil.
+---The specialization of the unit our inspect was answered for: its name and id, or nil.
+---@return string? name
+---@return number? specId
 function private.InspectSpec(unit)
 	local info = C_SpecializationInfo
 	if not (info and info.GetInspectSpecialization) then
-		return nil
+		return nil, nil
 	end
 	local ok, specId = pcall(info.GetInspectSpecialization, unit)
-	return ok and private.SpecName(specId) or nil
+	specId = ok and private.SpecId(specId) or nil
+	return private.SpecName(specId), specId
+end
+
+---A talent loadout as the game exports it (the import string the talents frame copies), kept only when it is a plain
+---printable string of sane length: no spaces, no escape codes, at most MAX_LOADOUT bytes.
+function private.CleanLoadout(text)
+	text = private.Readable(text)
+	if type(text) ~= "string" or #text > MAX_LOADOUT or not strfind(text, "^[!-{}~]+$") then
+		return nil
+	end
+	return text
+end
+
+---The player's own active talent loadout, or nil.
+function private.OwnLoadout()
+	if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits and C_Traits.GenerateImportString) then
+		return nil
+	end
+	local ok, configID = pcall(C_ClassTalents.GetActiveConfigID)
+	configID = ok and private.Readable(configID)
+	if type(configID) ~= "number" then
+		return nil
+	end
+	local okExport, text = pcall(C_Traits.GenerateImportString, configID)
+	return okExport and private.CleanLoadout(text) or nil
+end
+
+---The talent loadout of the unit our inspect was answered for (read before the inspect is let go), or nil.
+function private.InspectLoadout(unit)
+	if not (C_Traits and C_Traits.GenerateInspectImportString) then
+		return nil
+	end
+	local ok, text = pcall(C_Traits.GenerateInspectImportString, unit)
+	return ok and private.CleanLoadout(text) or nil
 end
 
 ---Asks for the opponent's specialization, unless anyone else's inspect may still be waiting (the inspect window's, another
@@ -512,7 +560,8 @@ function private.OnInspectReady(guid)
 	local duel = private.duel
 	local unit = duel and duel.guid == guid and private.FindUnit(duel)
 	if unit then
-		duel.them.spec = private.InspectSpec(unit)
+		duel.them.spec, duel.them.specId = private.InspectSpec(unit)
+		duel.them.loadout = private.InspectLoadout(unit)
 		duel.inspected = true
 		Wanted:Log("Duels: inspect answered: %s", duel.them.spec or "no specialization")
 	else

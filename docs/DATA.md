@@ -120,14 +120,17 @@ boards; the site takes them only for the account's own characters.
 `WantedDB.duels` (from 1.20.0) is the duels the account's characters fought (`Duels.lua`), oldest first, at most 500
 (the oldest dropped). A new top-level table: no migration. Each is plain values:
 `{ id, startAt, endAt, length, result, fled, toTheDeath, zone, mapId, x, y, me = side, them = side }`, where
-`side = { guid, name, class, race, level, spec, talents, health, mana }`. `id` is `"<origin>:duel:<startAt>"`, stable
+`side = { guid, name, class, race, level, spec, specId, loadout, talents, health, mana }`. `id` is `"<origin>:duel:<startAt>"`, stable
 for the app's uploads to de-duplicate. Times are server times (`GetServerTime()`), `length` seconds. `result` is
 `"won"`, `"lost"` or `"none"` (no winner line: cancelled); `fled` is true when the loser left the duel area;
 `toTheDeath` true for a duel to the death. `zone` is `GetRealZoneText()`, `x`/`y` 0-100 on `mapId`. On a side, `class`
 and `race` are the game's file names (`MAGE`, `Scourge`), `spec` the name of the chosen specialization (Forever's
 talents are retail's: our own from `C_SpecializationInfo.GetSpecialization`, the opponent's from
 `GetInspectSpecialization` after an inspect; nil before one is chosen, or when the opponent's inspect never answered),
-`talents` always nil (kept for a talent loadout later; there are no per-tree points to count), and
+`specId` the game's id for that specialization (the same in every language), `loadout` the talent loadout as the
+game exports it (the import string the talents frame copies: ours from the active config, the opponent's read right
+after their inspect; kept only as a plain printable string without spaces or `|`, at most 512 bytes), `talents` always
+nil (there are no per-tree points to count), and
 `health`/`mana` percentages at the end (mana only for mana users; the opponent's as last seen if out of view, nil
 where the game hides it). `them.name` is kept only when the opponent runs Wanted (a signing key is bound to their
 GUID by the app's list or by a hello whose sender is the game's own name for that character, `KeyBook:OriginOf`, and

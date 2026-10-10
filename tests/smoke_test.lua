@@ -10004,6 +10004,13 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		GetInspectSpecialization = function(unit) return enemyUnits[unit] and S.inspectAs or 0 end,
 	}
 	GetSpecializationNameForSpecID = function(id) return S.specNames[id] end
+	-- Talent loadouts as import strings: ours from the active config, theirs from the inspect
+	S.inspectLoadout = "BUILDFROST456"
+	C_ClassTalents = { GetActiveConfigID = function() return 7 end }
+	C_Traits = {
+		GenerateImportString = function(configID) return configID == 7 and "BUILDMINE123" or "" end,
+		GenerateInspectImportString = function(unit) return enemyUnits[unit] and S.inspectLoadout or "" end,
+	}
 	GetDuelerInfo = function() return "Player-1-0D0E1F00", 60 end
 	DUEL_WINNER_KNOCKOUT = "%1$s has defeated %2$s in a duel"
 	DUEL_WINNER_RETREAT = "%2$s has fled from %1$s in a duel"
@@ -10036,9 +10043,10 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	local them, me = d.them, d.me
 	check(them.name == "Duel Friend" and them.guid == "Player-1-0D0E1F00" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
 		"a Wanted user is kept by name with class, race and level: "..tostring(them.name))
-	check(them.spec == "Frost" and them.talents == nil, "their specialization from the inspect: "..tostring(them.spec))
+	check(them.spec == "Frost" and them.specId == 64 and them.talents == nil and them.loadout == "BUILDFROST456",
+		"their specialization and loadout from the inspect: "..tostring(them.spec).." "..tostring(them.loadout))
 	check(them.health == 50 and them.mana == 50, "their health and mana at the end: "..tostring(them.health).." "..tostring(them.mana))
-	check(me.guid == "Player-1-ME" and me.class == "WARRIOR" and me.race == "Orc" and me.spec == "Arms" and me.talents == nil
+	check(me.guid == "Player-1-ME" and me.class == "WARRIOR" and me.race == "Orc" and me.spec == "Arms" and me.specId == 71 and me.loadout == "BUILDMINE123" and me.talents == nil
 		and me.health == 100 and me.mana == nil, "our own side: "..tostring(me.spec).." "..tostring(me.mana))
 
 	-- We challenge a stranger while another addon's inspect is out: ours waits for it. They flee and we lose
@@ -10389,6 +10397,28 @@ end)()
 	check(logged:find("Duels: your health hidden by the game", 1, true) and logged:find("Duels: their health hidden by the game", 1, true)
 		and logged:find("Duels: their mana hidden by the game", 1, true), "what the game hid is logged")
 	UnitHealth, UnitPower, UnitPowerType = health, power, powerType
+end)()
+-- A loadout that isn't a plain import string of sane length is dropped
+;(function()
+	local db, S = ns.db, duelStubs
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	local inspectAs = S.inspectAs
+	S.inspectAs = S.theirs.Frost
+	for _, bad in ipairs({ "AB|cff00ff00C", string.rep("A", 513), "two words" }) do
+		S.inspectLoadout = bad
+		clock = clock + 60
+		Fire("DUEL_REQUESTED", "Duel Friend")
+		ns.Duels:Check()
+		Fire("INSPECT_READY", "Player-1-0D0E1F00")
+		S.Hook("AcceptDuel")
+		clock = clock + 20
+		Fire("CHAT_MSG_SYSTEM", "Test has defeated Duel Friend in a duel")
+		Fire("DUEL_FINISHED")
+		RunTimers()
+		local d = db.duels[#db.duels]
+		check(d.endAt == clock and d.them.spec == "Frost" and d.them.loadout == nil, "a loadout like "..bad:sub(1, 12).." is dropped")
+	end
+	S.inspectLoadout, S.inspectAs, enemyUnits.target = "BUILDFROST456", inspectAs, nil
 end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()

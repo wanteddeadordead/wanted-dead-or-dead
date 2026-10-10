@@ -1856,6 +1856,16 @@ do
 	C_ChatInfo.InChatMessagingLockdown = function() return false end
 	ns.Sync:Greet("Locked Friend", "Other Realm")
 	check(#Sent("WHISPER", "Locked Friend") == 1, "the greeting goes once the lockdown lifts")
+	-- A lockdown at login skips the remembered links: they're greeted once it lifts
+	ns.db.farPeers["Remembered Pal"] = { realm = "Other Realm", seen = GetServerTime() }
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	ns.Sync:Greet("Another Friend", "Other Realm")
+	check(#Sent("WHISPER", "Remembered Pal") == 0 and #Sent("WHISPER", "Another Friend") == 0, "nothing whispered while locked")
+	C_ChatInfo.InChatMessagingLockdown = function() return false end
+	ns.Sync:Greet("Another Friend", "Other Realm")
+	clock = clock + 3
+	RunTimers()
+	check(#Sent("WHISPER", "Remembered Pal") == 1, "the remembered links are greeted once the lockdown lifts")
 	C_ChatInfo.InChatMessagingLockdown = nil
 end
 -- The game can answer a cross-realm whisper minutes late (seen: 72 s, 119 s, and past 2 minutes), all names at once

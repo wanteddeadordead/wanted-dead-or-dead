@@ -215,7 +215,10 @@ end
 
 ---Whether the game's chat messaging lockdown is on (an encounter, a PvP match or a restricted map): its system lines
 ---are secret then, and the game runs no chat filter on a secret line, so a whisper to someone offline would print
----"No player named ... is currently playing" for every part. Whispers wait until it lifts.
+---"No player named ... is currently playing" for every part. No addon whisper goes out while it's on: records for
+---realm links stay queued, greetings and resyncs are skipped, and once it lifts (seen at the latest by the minute's
+---LinkTick) the remembered links are greeted again and the queue goes out. A lockdown longer than LINK_TIMEOUT ends
+---links on both sides; they come back by those greetings and the directory.
 function private.ChatLocked()
 	if not (C_ChatInfo and C_ChatInfo.InChatMessagingLockdown) then
 		return false
@@ -223,12 +226,25 @@ function private.ChatLocked()
 	local ok, locked = pcall(C_ChatInfo.InChatMessagingLockdown)
 	locked = ok and locked == true
 	if locked ~= private.wasLocked then
+		local was = private.wasLocked
 		private.wasLocked = locked
 		if locked then
-			Wanted:Log("Sync: chat messaging lockdown; whispers wait until it lifts")
+			Wanted:Log("Sync: chat messaging lockdown; addon whispers wait until it lifts")
+		elseif was then
+			Wanted:Log("Sync: chat messaging lockdown lifted; greeting links again")
+			C_Timer.After(2, private.AfterLockdown)
 		end
 	end
 	return locked
+end
+
+---Once the lockdown lifts: what it held back.
+function private.AfterLockdown()
+	if private.ChatLocked() then
+		return
+	end
+	private.GreetRemembered()
+	private.FlushForward()
 end
 
 -- Locked out of the channel (an owner banned us or set a password): sync goes on by whisper links to the
@@ -289,7 +305,7 @@ function Sync:OnLoad()
 	local saved, now, serverNow = Wanted.db.recentWhispers, GetTime(), GetServerTime()
 	if type(saved) == "table" then
 		for name, at in pairs(saved) do
-			if type(name) == "string" and type(at) == "number" and serverNow - at < NOT_FOUND_SECONDS then
+			if type(name) == "string" and type(at) == "number" and serverNow - at >= 0 and serverNow - at < NOT_FOUND_SECONDS then
 				private.whispered[name] = now - (serverNow - at)
 			end
 		end
@@ -1183,6 +1199,10 @@ function private.Send(tag, tbl, attempt, target)
 		end
 		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
 		return true
+	end
+	if private.ChatLocked() then
+		-- Not sent, and not counted as sent: the caller keeps what it can (FlushForward) and resyncs after
+		return false
 	end
 	for part = 1, total do
 		local result = Whisper(parts[part], target)
@@ -2486,8 +2506,8 @@ end
 
 function private.FlushForward()
 	private.forwardDue = false
-	if Wanted:InCombat() then
-		-- Kept until the fight is over (OnCombatEnd)
+	if Wanted:InCombat() or private.ChatLocked() then
+		-- Kept until the fight is over (OnCombatEnd) or the lockdown lifts (AfterLockdown)
 		return
 	end
 	for name, queue in pairs(private.forwardQueue) do
@@ -2504,8 +2524,8 @@ end
 ---Once a minute: each live link hears what we hold (a catch-up the budget cut short carries on), and links
 ---nobody has heard from in a while are dropped.
 function private.LinkTick()
-	-- A resync can wait a minute; a fight can't
-	if Wanted:InCombat() then
+	-- A resync can wait a minute; a fight can't. In a lockdown nothing can be whispered (and this notices it lifting)
+	if Wanted:InCombat() or private.ChatLocked() then
 		return
 	end
 	local now = GetTime()

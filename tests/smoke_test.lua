@@ -10160,6 +10160,31 @@ end)()
 	for r in Store:Iterator("death") do if r.data.victim == "Player-1-ME" and r.data.killer == "Player-9-ENEMY" and r.t == clock then recorded = true end end
 	check(recorded, "and our death is recorded")
 end)()
+-- A duel starts when the opponent turns hostile, not when they already were: /duel on an enemy, or a challenge in a
+-- free-for-all area, is no duel. And a duel the game never finishes is let go
+;(function()
+	local db, S = ns.db, duelStubs
+	local count = #db.duels
+	enemyUnits.target = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 20, dueling = true, close = true }
+	S.Hook("StartDuel", "target", true, true)
+	clock = clock + 5
+	ns.Duels:Check()
+	check(not ns.Duels:Involves("Player-1-ME"), "a challenge to someone already hostile hasn't started a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	check(#db.duels == count, "and records nothing when the game ends it")
+	-- A duel to the death accepted, then nothing more from the game
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 10
+	ns.Duels:Check()
+	check(ns.Duels:Involves("Player-1-ME"), "the duel to the death is on")
+	clock = clock + 16 * 60
+	ns.Duels:Check()
+	check(not ns.Duels:Involves("Player-1-ME") and #db.duels == count, "a duel never finished is let go after a while, unrecorded")
+	enemyUnits.target = nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

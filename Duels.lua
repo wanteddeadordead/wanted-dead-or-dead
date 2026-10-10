@@ -15,7 +15,8 @@ local Duels = Wanted:NewModule("Duels")
 local Store = Wanted.Store
 local private = {
 	frame = CreateFrame("Frame"),
-	-- The duel asked for or under way: { name, guid, requestedAt, startAt, endAt, result, fled, toTheDeath, them }
+	-- The duel asked for or under way: { name, guid, requestedAt, startAt, endAt, result, fled, toTheDeath, them,
+	-- hostile (whether the opponent was attackable when last seen) }
 	-- (them: what's known of the opponent so far, the same fields as a record's)
 	duel = nil,
 	last = nil, -- { guid, endedAt (GetServerTime()), toTheDeath } of the duel fought last (Duels:Involves)
@@ -32,6 +33,8 @@ local COUNTDOWN_SECONDS = 3
 local SETTLE_SECONDS = 2
 -- A challenge nobody answered (no DUEL_FINISHED came) is let go after this long
 local REQUEST_SECONDS = 10 * 60
+-- A duel under way that the game never finished (no DUEL_FINISHED came) is let go after this long
+local DUEL_SECONDS = 15 * 60
 -- Deaths and kills of the two duellists stay out of the records this long after the duel (a duel to the death's
 -- loser dies; the game confirms a death a few seconds later)
 local INVOLVED_SECONDS = 30
@@ -160,7 +163,7 @@ function Duels:Check()
 		return
 	end
 	local now = GetServerTime()
-	if not duel.startAt and now - duel.requestedAt > REQUEST_SECONDS then
+	if (not duel.startAt and now - duel.requestedAt > REQUEST_SECONDS) or (duel.startAt and now - duel.startAt > DUEL_SECONDS) then
 		private.duel = nil
 		return
 	end
@@ -169,9 +172,12 @@ function Duels:Check()
 		return
 	end
 	private.Learn(duel, unit)
-	if not duel.startAt and UnitCanAttack and private.Readable(UnitCanAttack("player", unit)) == true then
+	-- Only the turn from friendly to hostile: someone hostile already (an enemy, a free-for-all area) isn't dueling us
+	local hostile = UnitCanAttack ~= nil and private.Readable(UnitCanAttack("player", unit)) == true
+	if not duel.startAt and hostile and duel.hostile == false then
 		duel.startAt = now
 	end
+	duel.hostile = hostile
 	if duel.startAt then
 		private.ReadVitals(duel.them, unit)
 	end

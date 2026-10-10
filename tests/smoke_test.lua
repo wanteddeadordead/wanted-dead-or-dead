@@ -10075,6 +10075,58 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		"the oldest duel goes past the cap: "..#db.duels.." "..tostring(db.duels[1].id))
 	enemyUnits.target = nil
 end)()
+-- A duel is never a kill, a death, a lost streak or a killer: not even a duel to the death, whose loser really dies
+;(function()
+	local Store, db, S = ns.Store, ns.db, duelStubs
+	local function Count(kind) local n = 0 for _ in Store:Iterator(kind) do n = n + 1 end return n end
+	local kills, deaths, assists = Count("kill"), Count("death"), Count("assist")
+	local lastDeath = ns.Enemies:GetLastDeath()
+	ns.Streaks:OnDeath()
+	ns.Streaks:OnKill("Somebody Else")
+	enemyUnits.target = { guid = "Player-1-D0E1F0", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	enemyUnits.target.dueling = true
+	clock = clock + 20
+	ns.Duels:Check()
+	check(ns.Duels:Involves("Player-1-D0E1F0") and ns.Duels:Involves("Player-1-ME") and not ns.Duels:Involves("Player-9-ENEMY"),
+		"the duel involves the two duellists only")
+	-- We win: the game credits our killing blow, and they die
+	Fire("PARTY_KILL", "Player-1-ME", "Player-1-D0E1F0")
+	enemyUnits.target.dead = true
+	Fire("UNIT_HEALTH", "target")
+	Fire("UNIT_DIED", "Player-1-D0E1F0")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	check(db.duels[#db.duels].toTheDeath and db.duels[#db.duels].result == "won", "a duel to the death won by the loser's death: "..tostring(db.duels[#db.duels].result))
+	check(Count("kill") == kills and Count("death") == deaths and Count("assist") == assists, "winning a duel to the death records no kill or death")
+	-- Next time we lose: our death, the recap naming them
+	enemyUnits.target.dead = false
+	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	local recap = C_DeathRecap
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:7101|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-1-D0E1F0" } } end,
+	}
+	Fire("PLAYER_DEAD")
+	Fire("UNIT_DIED", "Player-1-ME")
+	RunTimers()
+	C_DeathRecap = recap
+	check(Count("death") == deaths and ns.Enemies:GetLastDeath() == lastDeath, "dying in a duel to the death is no death and names no killer")
+	check(select(2, ns.Streaks:GetCounts()) == 1, "and keeps the kill streak")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	-- Just after, too (the game confirms a death a few seconds later)
+	clock = clock + 5
+	Fire("PARTY_KILL", "Player-1-ME", "Player-1-D0E1F0")
+	RunTimers()
+	check(Count("kill") == kills, "the duel's kill just after it ended isn't one either")
+	clock = clock + 60
+	check(not ns.Duels:Involves("Player-1-D0E1F0") and not ns.Duels:Involves("Player-1-ME"), "a while after the duel, nobody is in it")
+	enemyUnits.target = nil
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

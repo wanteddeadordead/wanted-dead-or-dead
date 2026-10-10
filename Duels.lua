@@ -18,6 +18,7 @@ local private = {
 	-- The duel asked for or under way: { name, guid, requestedAt, startAt, endAt, result, fled, toTheDeath, them }
 	-- (them: what's known of the opponent so far, the same fields as a record's)
 	duel = nil,
+	last = nil, -- { guid, endedAt (GetServerTime()) } of the duel that ended last (Duels:Involves)
 	inspect = nil, -- { guid, at (GetTime()), taken }: our inspect waiting for its answer (taken: someone else asked since)
 	asking = false, -- while our own NotifyInspect runs
 	othersAt = -math.huge, -- GetTime() when anyone else last asked for an inspect
@@ -31,6 +32,9 @@ local COUNTDOWN_SECONDS = 3
 local SETTLE_SECONDS = 2
 -- A challenge nobody answered (no DUEL_FINISHED came) is let go after this long
 local REQUEST_SECONDS = 10 * 60
+-- Deaths and kills of the two duellists stay out of the records this long after the duel (a duel to the death's
+-- loser dies; the game confirms a death a few seconds later)
+local INVOLVED_SECONDS = 30
 -- Someone else's inspect gets this long to be answered before ours goes; ours this long before it's given up
 local OTHERS_SECONDS = 5
 local INSPECT_TIMEOUT = 5
@@ -312,6 +316,7 @@ end
 
 ---Writes the record of a duel that was fought. A challenge declined (never started, no winner) leaves nothing.
 function private.Finish(duel)
+	private.last = { guid = duel.guid, endedAt = duel.endAt }
 	if duel.toTheDeath and not duel.result and duel.deadMe ~= duel.deadThem then
 		duel.result = duel.deadThem and "won" or "lost"
 		duel.startAt = duel.startAt or duel.requestedAt
@@ -448,3 +453,25 @@ function private.ReleaseInspect()
 	end
 end
 
+
+
+-- ============================================================================
+-- Reading
+-- ============================================================================
+
+---Whether a player is in the duel under way or one that just ended (the player themself or their opponent): their
+---death or kill then is the duel's, not world PvP.
+---@param guid string?
+---@return boolean
+function Duels:Involves(guid)
+	if type(guid) ~= "string" then
+		return false
+	end
+	local me = UnitGUID("player")
+	local duel = private.duel
+	if duel and duel.startAt and (guid == duel.guid or guid == me) then
+		return true
+	end
+	local last = private.last
+	return last ~= nil and GetServerTime() - last.endedAt <= INVOLVED_SECONDS and (guid == last.guid or guid == me)
+end

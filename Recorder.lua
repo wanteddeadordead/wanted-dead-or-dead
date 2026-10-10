@@ -604,6 +604,11 @@ function private.RecordDeath(guid, name)
 	if not private.InOpenWorld() then
 		return
 	end
+	-- A duel to the death's loser really dies: a duel, not world PvP
+	if Wanted.Duels and Wanted.Duels:Involves(guid) then
+		Wanted:Log("Recorder: %s died in a duel; not recorded", tostring(name))
+		return
+	end
 	local friend = private.friendly[guid]
 	-- Our own death: the death recap may name the player who killed us
 	local killer = guid == private.playerGUID and Wanted.Enemies and Wanted.Enemies:GetLastKiller(OWN_KILLER_SECONDS)
@@ -666,6 +671,11 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 		return
 	end
 	if type(targetGUID) ~= "string" or not strfind(targetGUID, "^Player%-") then
+		return
+	end
+	-- Winning a duel to the death is a killing blow too
+	if Wanted.Duels and Wanted.Duels:Involves(targetGUID) then
+		Wanted:Log("Recorder: a duel's killing blow; not recorded")
 		return
 	end
 	local victim = Store:GetPlayer(targetGUID)

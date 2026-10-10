@@ -599,7 +599,8 @@ function Enemies:NoteWin(guid)
 end
 
 function private.OnPlayerDead()
-	if IsInInstance() then
+	-- Dying in a duel to the death: the opponent isn't a killer to warn about
+	if IsInInstance() or (Wanted.Duels and Wanted.Duels:Involves(UnitGUID("player"))) then
 		return
 	end
 	-- Take the suspects now: the scan keeps running while we wait for the recap

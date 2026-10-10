@@ -1,9 +1,10 @@
 -- Wanted: capture fronts on the maps. On a front's zone map: each point as a circle at its real radius coloured by who
--- holds it (gold where our side looks to be taking it now), the lanes between them coloured up to each lane's front
--- line, the sides' crests on the bases, and a small dot on each point to click for a waypoint. On a continent map, a
--- crest on each front for the side ahead there; on the Azeroth map, one per continent for the side ahead on most of
--- its fronts. On the minimap, a dot for each point in view. The circles and lines take no mouse, so quest and other
--- icons' tooltips still work through them.
+-- holds it, the lanes between them coloured up to each lane's front line, the sides' crests on their flight masters,
+-- and an icon on each point (a tower, an inhibitor crystal, the Nexus keep: our own drawings in Media) to click for a
+-- waypoint. A point its side lost shows grey in its taker's ring; a downed inhibitor its respawn time; a point our side
+-- is taking now a pulsing ring. On a continent map, a crest on each front for the side ahead there; on the Azeroth map,
+-- one per continent for the side ahead on most of its fronts. On the minimap, the icons in view. The circles and lines
+-- take no mouse, so quest and other icons' tooltips still work through them.
 --
 -- The overlay hangs off the map's own canvas through its data provider (as MapPins does), so it moves and zooms with
 -- the map. Holders are the site's (the app's catch-up, read at login); "taking" is our side's channel, provisional.
@@ -19,13 +20,20 @@ CapturesMap.COLORS = COLORS
 -- confirm in game: both are textures of the client's Mainline family.
 local CREST = { Horde = "Interface\\Timer\\Horde-Logo", Alliance = "Interface\\Timer\\Alliance-Logo" }
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+-- Our icons for each kind of point, white to tint, and the ring around one
+local ICONS = {}
+for _, kind in ipairs({ "tower", "inhibitor", "nexus", "ring" }) do
+	ICONS[kind] = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\capture-"..kind
+end
+CapturesMap.ICONS = ICONS
+local GREY = { 0.55, 0.55, 0.55 }
 -- Sizes as a share of the map's width
-local LINE_WIDTH, DOT_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.016, 0.05, 0.04
+local LINE_WIDTH, ICON_SIZE, NEXUS_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.024, 0.034, 0.04, 0.04
 local MAP_TYPE_WORLD = Enum and Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
 -- The minimap's dots: how often they move, and their size in pixels
 local MINIMAP_SECONDS = 0.5
-local MINIMAP_DOT = 10
+local MINIMAP_DOT = 14
 
 
 
@@ -63,12 +71,20 @@ function CapturesMap:Refresh()
 	end
 end
 
----The colour a point shows: gold while our side is taking it, else its holder's.
+---The colour a point shows: its holder's.
 function CapturesMap:ColorOf(point)
-	if Captures:Taking(point) then
-		return COLORS.taking
-	end
 	return COLORS[Captures:Holder(point.id)]
+end
+
+---Dresses an icon texture for a point: its kind's icon in its holder's colour, or grey when its home side lost it (the
+---ring then shows who took it). Returns whether it's lost.
+function CapturesMap:DressIcon(texture, point)
+	local holder = Captures:Holder(point.id)
+	local lost = holder ~= point.home
+	texture:SetTexture(ICONS[Captures:Kind(point)])
+	local color = lost and GREY or COLORS[holder]
+	texture:SetVertexColor(color[1], color[2], color[3], 1)
+	return lost
 end
 
 
@@ -177,6 +193,10 @@ end
 function private.DrawFront(front)
 	local w = private.Size()
 	local yards = Captures.MAP_YARDS[front.mapId]
+	-- Each side's crest on its flight master, in the town behind its Nexus
+	for _, base in ipairs({ front.horde, front.alliance }) do
+		private.Texture(CREST[Captures:Get(base.id).home], base.x, base.y, w * BASE_CREST, w * BASE_CREST, nil, 1, "OVERLAY")
+	end
 	for _, lane in ipairs(front.lanes) do
 		local nodes = { Captures:Get(front.horde.id) }
 		for _, p in ipairs(lane.points) do
@@ -194,55 +214,81 @@ function private.DrawFront(front)
 		if point.front == front then
 			local color = CapturesMap:ColorOf(point)
 			local cw, ch = point.r * 2 / yards[1] * w, point.r * 2 / yards[2] * private.overlay:GetHeight()
-			private.Texture(DISC, point.x, point.y, cw, ch, color, 0.35, "BORDER")
-			if not point.lane then
-				private.Texture(CREST[Captures:Holder(point.id)], point.x, point.y, w * BASE_CREST, w * BASE_CREST, nil, 1, "OVERLAY")
-			end
-			private.Button(point, color)
+			private.Texture(DISC, point.x, point.y, cw, ch, color, 0.3, "BORDER")
+			private.Button(point)
 		end
 	end
 end
 
----The small dot in a point's middle: hover for what it is, click for a waypoint.
-function private.Button(point, color)
+---A point's icon: hover for what it is, click for a waypoint. A ring shows who took a lost point, pulses while our side
+---is taking it, and a downed inhibitor carries its respawn time.
+function private.Button(point)
 	local w, h = private.Size()
 	local button = private.Acquire("buttons", function()
 		local b = CreateFrame("Button", nil, private.overlay)
-		b.dot = b:CreateTexture(nil, "OVERLAY")
-		b.dot:SetAllPoints()
-		b.dot:SetTexture(DISC)
+		b.ring = b:CreateTexture(nil, "ARTWORK")
+		b.ring:SetPoint("CENTER")
+		b.ring:SetTexture(ICONS.ring)
+		b.pulse = b.ring:CreateAnimationGroup()
+		local fade = b.pulse:CreateAnimation("Alpha")
+		fade:SetFromAlpha(1)
+		fade:SetToAlpha(0.2)
+		fade:SetDuration(0.6)
+		b.pulse:SetLooping("BOUNCE")
+		b.icon = b:CreateTexture(nil, "OVERLAY")
+		b.icon:SetAllPoints()
+		b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		b.timer:SetPoint("TOP", b, "BOTTOM", 0, -1)
 		b:SetScript("OnEnter", private.OnEnterPoint)
 		b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		b:SetScript("OnClick", function(self)
 			if Captures:Track(self.point) then
-				Wanted:Print("Waypoint set on %s.", self.point.name)
+				Wanted:Print("Waypoint set on the %s at %s.", Captures:Role(self.point), self.point.name)
 			end
 		end)
 		return b
 	end)
 	button.point = point
 	button:SetFrameLevel(private.overlay:GetFrameLevel() + 2)
-	button:SetSize(w * DOT_SIZE, w * DOT_SIZE)
+	local size = w * (point.lane and ICON_SIZE or NEXUS_SIZE)
+	button:SetSize(size, size)
 	button:ClearAllPoints()
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", point.x / 100 * w, -point.y / 100 * h)
-	button.dot:SetVertexColor(color[1], color[2], color[3], 1)
+	local lost = CapturesMap:DressIcon(button.icon, point)
+	local taking = Captures:Taking(point)
+	local hold = Captures:Hold(point.id)
+	local respawn = lost and hold and hold.r and hold.r - GetServerTime()
+	button.ring:SetSize(size * 1.6, size * 1.6)
+	local ringColor = taking and COLORS.taking or COLORS[Captures:Holder(point.id)]
+	button.ring:SetVertexColor(ringColor[1], ringColor[2], ringColor[3], 1)
+	button.ring:SetShown(lost or taking)
+	if taking then
+		button.pulse:Play()
+	else
+		button.pulse:Stop()
+	end
+	button.timer:SetText(respawn and respawn > 0 and format("%d:%02d", floor(respawn / 60), respawn % 60) or "")
 end
 
+---What a point is, for its tooltip: "Mid Tower, Darrow Hill" and its side; a Nexus as its side's base.
 function private.OnEnterPoint(self)
 	local point = self.point
 	GameTooltip:SetOwner(self, point.x > 50 and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
-	GameTooltip:SetText(point.name, 1, 1, 1)
-	local lane = point.lane and point.front.lanes[point.lane]
-	local kind = not point.lane and "base" or (point.order == 1 or point.order == 4) and "inhibitor" or "outer point"
-	GameTooltip:AddLine(format("%s%s, the %s's %s", lane and lane.name or point.front.zone, lane and " lane" or "", point.home, kind), 0.8, 0.8, 0.8)
+	if point.lane then
+		GameTooltip:SetText(format("%s %s", point.home, Captures:Role(point)), 1, 1, 1)
+		GameTooltip:AddLine(point.name, 0.8, 0.8, 0.8)
+	else
+		GameTooltip:SetText(format("%s: %s base", Captures.TERMS.nexus, point.home), 1, 1, 1)
+		GameTooltip:AddLine(format("On the road into %s, by its flight master", point.name), 0.8, 0.8, 0.8)
+	end
 	GameTooltip:AddLine(Captures:HolderText(point.id), 1, 0.82, 0, true)
 	local hold = Captures:Hold(point.id)
-	if hold and hold.r then
-		GameTooltip:AddLine(format("Goes back to the %s at %s unless its takers hold it.", point.home, date("%H:%M", hold.r)), 0.8, 0.8, 0.8, true)
+	if hold and hold.r and Captures:Holder(point.id) ~= point.home then
+		GameTooltip:AddLine(format("Respawns for the %s at %s unless its takers hold it.", point.home, date("%H:%M", hold.r)), 0.8, 0.8, 0.8, true)
 	end
 	local allies = Captures:Allies(point.id)
 	if allies > 0 then
-		GameTooltip:AddLine(format("%d of your side there now%s (provisional)", allies, Captures:Taking(point) and ", taking it" or ""), 1, 0.8, 0.32)
+		GameTooltip:AddLine(format("%d of your side there now%s (provisional)", allies, Captures:Taking(point) and ", attacking it" or ""), 1, 0.8, 0.32)
 	end
 	GameTooltip:AddLine("Click: set a waypoint", 0.6, 0.62, 0.68)
 	GameTooltip:Show()
@@ -352,12 +398,13 @@ function CapturesMap:UpdateMinimap()
 			else
 				if not dot then
 					dot = Minimap:CreateTexture(nil, "OVERLAY")
-					dot:SetTexture(DISC)
 					dot:SetSize(MINIMAP_DOT, MINIMAP_DOT)
 					dots[point.id] = dot
 				end
-				local color = CapturesMap:ColorOf(point)
-				dot:SetVertexColor(color[1], color[2], color[3], 1)
+				CapturesMap:DressIcon(dot, point)
+				if Captures:Taking(point) then
+					dot:SetVertexColor(COLORS.taking[1], COLORS.taking[2], COLORS.taking[3], 1)
+				end
 				dot:ClearAllPoints()
 				dot:SetPoint("CENTER", Minimap, "CENTER", dx / radius * half, -dy / radius * half)
 				dot:Show()

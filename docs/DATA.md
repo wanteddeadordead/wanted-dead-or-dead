@@ -123,7 +123,7 @@ boards; the site takes them only for the account's own characters.
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
 wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
 players (the `P` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,
-alerts, autoTrack }`, each defaulted at load (autoTrack off). New tables with defaults: no migration. The catch-up's
+alerts, autoTrack }`, each defaulted at load (autoTrack off). `WantedDB.captureSeen` is `{ week, [point id] = "Horde"|"Alliance" }`: who held each point as the addon last showed the site's holds this campaign week, so the next login can tell what changed (towers destroyed, inhibitors down); a new week starts it afresh. New tables with defaults: no migration. The catch-up's
 `points` (`{ [id] = { h = "H"|"A", s, r, t } }`: who holds each point and base, since when, when a taken inhibitor goes
 back, when the site worked it out) is only shown and isn't saved.
 

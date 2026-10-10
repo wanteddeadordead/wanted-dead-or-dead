@@ -1,7 +1,7 @@
--- Wanted: capture fronts, played like a MOBA. Each front is a zone with each side's flight master as its base and three
--- lanes between them, four points to a lane: the two nearer the Horde start the Horde's, the two nearer the Alliance
--- the Alliance's. A side takes a lane's points in order from its own base; holding one of the enemy's inhibitors (the
--- point before their base) opens their base, and taking it wins the front for the week.
+-- Wanted: capture fronts, played like a MOBA. Each front is a zone with each side's base, its Nexus, on the main road into
+-- its flight-master town just outside the guards, and three lanes (Top, Mid, Bot) between them, four points to a lane:
+-- each side's tower and, nearer its Nexus, its inhibitor. A side takes a lane in order from its own end; taking one of
+-- the enemy's inhibitors opens their Nexus, and taking the Nexus wins the front for the week.
 --
 -- wanteddeadordead.com decides who holds what, from several players' apps and the kills there; this client never does.
 -- While the player stands in a point able to fight, the addon counts it every 30 seconds in a presence book the
@@ -12,12 +12,13 @@ local _, Wanted = ...
 local Captures = Wanted:NewModule("Captures")
 local private = {
 	current = nil, -- the point the player is in, as of the last sample
-	toldBlocked = false, -- why the presence doesn't count was said this visit
 	holds = {}, -- point id -> { h = "Horde" | "Alliance", s = since, r = respawn at, t = when the site worked it out }
 	heard = {}, -- point id -> { [sender] = GetTime() } players of our side who said they're there
 	mine = nil, -- { p = point id, at = GetTime() } our own last counted sample
 	sentAt = 0, -- when we last told the channel
 	listeners = {},
+	won = {}, -- front id -> the side that took the other's Nexus this week, by the site's holds
+	blocked = nil, -- why the player's presence doesn't count, at the last sample
 }
 local SAMPLE_SECONDS = 30
 -- A slot is five minutes of game-server time; a sample adds one to the player's count at a point in the slot
@@ -29,14 +30,21 @@ local MAX_ENTRIES = 2000
 -- The site's rules, for what the addon shows (stats/points.go): people a side needs at a point, slots in a row to take
 -- a lane point or a base
 local MIN_PEOPLE = 2
-local CAPTURE_SLOTS, BASE_SLOTS = 2, 3
+local CAPTURE_SLOTS, NEXUS_SLOTS = 2, 4
 -- Our side's players heard at a point count as there this long; we tell the channel at most this often
 local HEARD_SECONDS = 90
 local SEND_SECONDS = 60
 local TOWER_RADIUS, BASE_RADIUS = 40, 50
 Captures.SLOT_SECONDS = SLOT_SECONDS
 Captures.MIN_PEOPLE = MIN_PEOPLE
-Captures.CAPTURE_SLOTS, Captures.BASE_SLOTS = CAPTURE_SLOTS, BASE_SLOTS
+Captures.CAPTURE_SLOTS, Captures.NEXUS_SLOTS = CAPTURE_SLOTS, NEXUS_SLOTS
+-- The words the addon shows, in one place: a side's base is its Nexus (Chris may rename it)
+Captures.TERMS = { nexus = "Nexus", tower = "Tower", inhibitor = "Inhibitor" }
+-- Campaign weeks start at this Tuesday 15:00 UTC plus whole weeks, as the site's (stats.CampaignStart)
+local WEEK_ANCHOR, WEEK = 1790694000, 7 * 24 * 60 * 60
+-- Druid forms that travel (Travel, Aquatic, Flight, Swift Flight Form): presence there doesn't count. Spell ids to
+-- confirm in game
+local TRAVEL_FORMS = { [783] = true, [1066] = true, [33943] = true, [40120] = true }
 
 -- Each zone map's size in yards: width (the world's Y span) and height (its X span), from the game's UiMapAssignment
 -- table as wanteddeadordead.com keeps it (stats.mapWorld), so a point's circle is round on the map
@@ -46,79 +54,80 @@ local MAP_YARDS = {
 	[1440] = { 5766.7, 3843.8 }, -- Ashenvale
 }
 Captures.MAP_YARDS = MAP_YARDS
--- The fronts, as the site holds them (stats.Fronts). Bases on the flight masters (Questie v10 classicNpcDB, matching
--- TaxiNodes); outer points on the game's named areas or a Spirit Healer (NPC 6491); inhibitors halfway to the base
--- unless a graveyard is there. Every position is to be confirmed in game. Lane points run from the Horde base.
+-- The fronts, as the site holds them (stats.Fronts). Each base is a flight master (x, y: Questie v10 classicNpcDB) and its
+-- Nexus (nx, ny) on the town's main approach outside the guards. Lane points run from the Horde Nexus, each on a ground
+-- NPC's spawn (Questie v10) or a Spirit Healer where one is near, else placed by hand on the lane. Every position is to
+-- be confirmed in game.
 Captures.FRONTS = {
 	{ id = "ah", zone = "Arathi Highlands", mapId = 1417,
-		horde = { id = "ah-horde", name = "Hammerfall", x = 73.0, y = 32.7 }, -- flight master Urda (NPC 2851, TaxiNodes 17)
-		alliance = { id = "ah-alliance", name = "Refuge Pointe", x = 45.7, y = 46.1 }, -- flight master Cedrik Prose (NPC 2835, TaxiNodes 16)
+		horde = { id = "ah-horde", name = "Hammerfall", x = 73.02, y = 32.70, nx = 69.14, ny = 33.80 }, -- flight master Urda (NPC 2851); Nexus: Plains Creeper (NPC 2563)
+		alliance = { id = "ah-alliance", name = "Refuge Pointe", x = 45.73, y = 46.10, nx = 51.09, ny = 47.39 }, -- flight master Cedrik Prose (NPC 2835); Nexus: Highland Strider (NPC 2559)
 		lanes = {
-			{ id = "top", name = "North road", points = {
-				{ id = "ah-top-1", name = "North road to Hammerfall", x = 68.3, y = 33.4 }, -- halfway from Hammerfall to Circle of East Binding (derived)
-				{ id = "ah-top-2", name = "Circle of East Binding", x = 63.7, y = 34.0 }, -- area Circle of East Binding (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "ah-top-3", name = "Dabyrie's Farmstead", x = 55.1, y = 39.6 }, -- area Dabyrie's Farmstead (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "ah-top-4", name = "North road to Refuge Pointe", x = 50.4, y = 42.9 }, -- halfway from Dabyrie's Farmstead to Refuge Pointe (derived)
+			{ id = "top", name = "Top", points = {
+				{ id = "ah-top-1", name = "Circle of East Binding", x = 64.90, y = 34.00 }, -- on the lane, placed by hand
+				{ id = "ah-top-2", name = "Circle of East Binding", x = 60.76, y = 35.12 }, -- Fozruk (NPC 2611)
+				{ id = "ah-top-3", name = "Dabyrie's Farmstead", x = 56.55, y = 38.70 }, -- Fardel Dabyrie (NPC 4479)
+				{ id = "ah-top-4", name = "Dabyrie's Farmstead", x = 53.76, y = 40.92 }, -- Lieutenant Valorcall (NPC 2612)
 			} },
-			{ id = "mid", name = "The farms", points = {
-				{ id = "ah-mid-1", name = "Middle road to Hammerfall", x = 67.2, y = 44.6 }, -- halfway from Hammerfall to Go'Shek Farm (derived)
-				{ id = "ah-mid-2", name = "Go'Shek Farm", x = 61.4, y = 56.5 }, -- area Go'Shek Farm (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "ah-mid-3", name = "Arathi graveyard", x = 48.8, y = 55.6 }, -- Spirit Healer (NPC 6491, Questie v10 classicNpcDB)
-				{ id = "ah-mid-4", name = "Middle road to Refuge Pointe", x = 47.2, y = 50.9 }, -- halfway from Arathi graveyard to Refuge Pointe (derived)
+			{ id = "mid", name = "Mid", points = {
+				{ id = "ah-mid-1", name = "near Circle of East Binding", x = 66.11, y = 43.66 }, -- Highland Strider (NPC 2559)
+				{ id = "ah-mid-2", name = "Go'Shek Farm", x = 62.68, y = 52.93 }, -- Hammerfall Grunt (NPC 2619)
+				{ id = "ah-mid-3", name = "near Go'Shek Farm", x = 57.10, y = 56.20 }, -- on the lane, placed by hand
+				{ id = "ah-mid-4", name = "Arathi graveyard", x = 48.84, y = 55.61 }, -- Spirit Healer (NPC 6491)
 			} },
-			{ id = "bot", name = "South", points = {
-				{ id = "ah-bot-1", name = "South road to Hammerfall", x = 69.8, y = 49.9 }, -- halfway from Hammerfall to Witherbark Village (derived)
-				{ id = "ah-bot-2", name = "Witherbark Village", x = 66.7, y = 67.0 }, -- area Witherbark Village (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "ah-bot-3", name = "Boulderfist Hall", x = 54.1, y = 73.7 }, -- area Boulderfist Hall (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "ah-bot-4", name = "South road to Refuge Pointe", x = 49.9, y = 59.9 }, -- halfway from Boulderfist Hall to Refuge Pointe (derived)
+			{ id = "bot", name = "Bot", points = {
+				{ id = "ah-bot-1", name = "near Go'Shek Farm", x = 69.94, y = 50.23 }, -- Plains Creeper (NPC 2563)
+				{ id = "ah-bot-2", name = "Witherbark Village", x = 66.32, y = 64.74 }, -- Witherbark Axe Thrower (NPC 2554)
+				{ id = "ah-bot-3", name = "Boulderfist Hall", x = 57.20, y = 72.10 }, -- on the lane, placed by hand
+				{ id = "ah-bot-4", name = "Boulderfist Hall", x = 50.16, y = 63.87 }, -- Highland Fleshstalker (NPC 2561)
 			} },
 		},
 	},
 	{ id = "hb", zone = "Hillsbrad Foothills", mapId = 1424,
-		horde = { id = "hb-horde", name = "Tarren Mill", x = 60.1, y = 18.6 }, -- flight master Zarise (NPC 2389, TaxiNodes 13)
-		alliance = { id = "hb-alliance", name = "Southshore", x = 49.3, y = 52.3 }, -- flight master Darla Harris (NPC 2432, TaxiNodes 14)
+		horde = { id = "hb-horde", name = "Tarren Mill", x = 60.14, y = 18.62, nx = 55.70, ny = 22.70 }, -- flight master Zarise (NPC 2389); Nexus: on the main approach, placed by hand
+		alliance = { id = "hb-alliance", name = "Southshore", x = 49.34, y = 52.27, nx = 49.85, ny = 44.68 }, -- flight master Darla Harris (NPC 2432); Nexus: Vicious Gray Bear (NPC 2354)
 		lanes = {
-			{ id = "top", name = "West, by the fields", points = {
-				{ id = "hb-top-1", name = "West road to Tarren Mill", x = 51.0, y = 24.3 }, -- halfway from Tarren Mill to West of Darrow Hill (derived)
-				{ id = "hb-top-2", name = "West of Darrow Hill", x = 42.0, y = 30.0 }, -- lane waypoint (placed by hand)
-				{ id = "hb-top-3", name = "Hillsbrad Fields", x = 35.0, y = 44.9 }, -- area Hillsbrad Fields (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "hb-top-4", name = "West road to Southshore", x = 42.1, y = 48.6 }, -- halfway from Hillsbrad Fields to Southshore (derived)
+			{ id = "top", name = "Top", points = {
+				{ id = "hb-top-1", name = "near Darrow Hill", x = 47.61, y = 26.09 }, -- Starving Mountain Lion (NPC 2384)
+				{ id = "hb-top-2", name = "Hillsbrad Fields", x = 40.80, y = 32.60 }, -- on the lane, placed by hand
+				{ id = "hb-top-3", name = "Hillsbrad Fields", x = 35.41, y = 42.01 }, -- Hillsbrad Peasant (NPC 2267)
+				{ id = "hb-top-4", name = "Hillsbrad Fields", x = 42.35, y = 47.48 }, -- Elder Gray Bear (NPC 2356)
 			} },
-			{ id = "mid", name = "The road", points = {
-				{ id = "hb-mid-1", name = "Middle road to Tarren Mill", x = 55.5, y = 26.1 }, -- halfway from Tarren Mill to Darrow Hill (derived)
-				{ id = "hb-mid-2", name = "Darrow Hill", x = 50.9, y = 33.6 }, -- area Darrow Hill (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "hb-mid-3", name = "Southshore road", x = 50.0, y = 43.0 }, -- lane waypoint (placed by hand)
-				{ id = "hb-mid-4", name = "Middle road to Southshore", x = 49.6, y = 47.6 }, -- halfway from Southshore road to Southshore (derived)
+			{ id = "mid", name = "Mid", points = {
+				{ id = "hb-mid-1", name = "near Darrow Hill", x = 54.10, y = 26.90 }, -- on the lane, placed by hand
+				{ id = "hb-mid-2", name = "Darrow Hill", x = 52.30, y = 30.90 }, -- on the lane, placed by hand
+				{ id = "hb-mid-3", name = "Darrow Hill", x = 50.80, y = 35.10 }, -- on the lane, placed by hand
+				{ id = "hb-mid-4", name = "near Darrow Hill", x = 50.30, y = 39.90 }, -- on the lane, placed by hand
 			} },
-			{ id = "bot", name = "East, by the keep", points = {
-				{ id = "hb-bot-1", name = "East road to Tarren Mill", x = 68.5, y = 29.7 }, -- halfway from Tarren Mill to Durnholde Keep (derived)
-				{ id = "hb-bot-2", name = "Durnholde Keep", x = 76.8, y = 40.8 }, -- area Durnholde Keep (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "hb-bot-3", name = "Nethander Stead", x = 63.9, y = 55.4 }, -- area Nethander Stead (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "hb-bot-4", name = "East road to Southshore", x = 56.6, y = 53.8 }, -- halfway from Nethander Stead to Southshore (derived)
+			{ id = "bot", name = "Bot", points = {
+				{ id = "hb-bot-1", name = "Tarren Mill", x = 66.90, y = 28.87 }, -- Gray Bear (NPC 2351)
+				{ id = "hb-bot-2", name = "Durnholde Keep", x = 75.15, y = 37.95 }, -- Syndicate Watchman (NPC 2261)
+				{ id = "hb-bot-3", name = "Nethander Stead", x = 68.72, y = 48.87 }, -- Giant Moss Creeper (NPC 2349)
+				{ id = "hb-bot-4", name = "Nethander Stead", x = 60.16, y = 52.72 }, -- Elder Moss Creeper (NPC 2348)
 			} },
 		},
 	},
 	{ id = "av", zone = "Ashenvale", mapId = 1440,
-		horde = { id = "av-horde", name = "Splintertree Post", x = 73.2, y = 61.6 }, -- flight master Vhulgra (NPC 12616, TaxiNodes 61)
-		alliance = { id = "av-alliance", name = "Astranaar", x = 34.4, y = 48.0 }, -- flight master Daelyshia (NPC 4267, TaxiNodes 28)
+		horde = { id = "av-horde", name = "Splintertree Post", x = 73.18, y = 61.59, nx = 69.70, ny = 60.34 }, -- flight master Vhulgra (NPC 12616); Nexus: Shadethicket Stone Mover (NPC 3782)
+		alliance = { id = "av-alliance", name = "Astranaar", x = 34.41, y = 47.99, nx = 39.50, ny = 48.00 }, -- flight master Daelyshia (NPC 4267); Nexus: on the main approach, placed by hand
 		lanes = {
-			{ id = "top", name = "North, the Howling Vale", points = {
-				{ id = "av-top-1", name = "North road to Splintertree Post", x = 64.7, y = 49.3 }, -- halfway from Splintertree Post to The Howling Vale (derived)
-				{ id = "av-top-2", name = "The Howling Vale", x = 56.1, y = 37.0 }, -- area The Howling Vale (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-top-3", name = "Thistlefur Village", x = 36.9, y = 36.7 }, -- area Thistlefur Village (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-top-4", name = "North road to Astranaar", x = 35.6, y = 42.4 }, -- halfway from Thistlefur Village to Astranaar (derived)
+			{ id = "top", name = "Top", points = {
+				{ id = "av-top-1", name = "Raynewood Retreat", x = 64.37, y = 49.36 }, -- Ghostpaw Alpha (NPC 3825)
+				{ id = "av-top-2", name = "The Howling Vale", x = 57.13, y = 37.94 }, -- Elder Shadowhorn Stag (NPC 3818)
+				{ id = "av-top-3", name = "near Iris Lake", x = 48.00, y = 36.90 }, -- on the lane, placed by hand
+				{ id = "av-top-4", name = "Thistlefur Village", x = 38.45, y = 37.53 }, -- Ashenvale Bear (NPC 3809)
 			} },
-			{ id = "mid", name = "The road", points = {
-				{ id = "av-mid-1", name = "Middle road to Splintertree Post", x = 67.0, y = 56.7 }, -- halfway from Splintertree Post to Raynewood Retreat (derived)
-				{ id = "av-mid-2", name = "Raynewood Retreat", x = 60.9, y = 51.7 }, -- area Raynewood Retreat (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-mid-3", name = "Iris Lake", x = 46.4, y = 46.8 }, -- area Iris Lake (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-mid-4", name = "Astranaar graveyard", x = 40.5, y = 52.8 }, -- Spirit Healer (NPC 6491, Questie v10 classicNpcDB)
+			{ id = "mid", name = "Mid", points = {
+				{ id = "av-mid-1", name = "Raynewood Retreat", x = 63.81, y = 55.18 }, -- Elder Ashenvale Bear (NPC 3810)
+				{ id = "av-mid-2", name = "Raynewood Retreat", x = 57.20, y = 50.40 }, -- on the lane, placed by hand
+				{ id = "av-mid-3", name = "Iris Lake", x = 49.79, y = 48.70 }, -- Shadowhorn Stag (NPC 3817)
+				{ id = "av-mid-4", name = "Astranaar graveyard", x = 40.49, y = 52.76 }, -- Spirit Healer (NPC 6491)
 			} },
-			{ id = "bot", name = "South, the lakes", points = {
-				{ id = "av-bot-1", name = "South road to Splintertree Post", x = 71.2, y = 71.8 }, -- halfway from Splintertree Post to Fallen Sky Lake (derived)
-				{ id = "av-bot-2", name = "Fallen Sky Lake", x = 69.2, y = 81.9 }, -- area Fallen Sky Lake (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-bot-3", name = "Mystral Lake", x = 49.4, y = 73.3 }, -- area Mystral Lake (WorldMapOverlay hit rect, Classic Era 1.15.9)
-				{ id = "av-bot-4", name = "South road to Astranaar", x = 41.9, y = 60.6 }, -- halfway from Mystral Lake to Astranaar (derived)
+			{ id = "bot", name = "Bot", points = {
+				{ id = "av-bot-1", name = "Fallen Sky Lake", x = 70.56, y = 76.28 }, -- Wildthorn Stalker (NPC 3819)
+				{ id = "av-bot-2", name = "near Fallen Sky Lake", x = 62.17, y = 78.76 }, -- Wildthorn Stalker (NPC 3819)
+				{ id = "av-bot-3", name = "Mystral Lake", x = 50.84, y = 75.08 }, -- Krolg (NPC 3897)
+				{ id = "av-bot-4", name = "near Mystral Lake", x = 44.43, y = 62.64 }, -- Shadowhorn Stag (NPC 3817)
 			} },
 		},
 	},
@@ -131,13 +140,13 @@ for _, front in ipairs(Captures.FRONTS) do
 		tinsert(points, p)
 		byId[p.id] = p
 	end
-	Add({ id = front.horde.id, name = front.horde.name, front = front, order = 0, x = front.horde.x, y = front.horde.y, r = BASE_RADIUS, home = "Horde" })
+	Add({ id = front.horde.id, name = front.horde.name, front = front, order = 0, x = front.horde.nx, y = front.horde.ny, r = BASE_RADIUS, home = "Horde" })
 	for l, lane in ipairs(front.lanes) do
 		for i, p in ipairs(lane.points) do
 			Add({ id = p.id, name = p.name, front = front, lane = l, order = i, x = p.x, y = p.y, r = TOWER_RADIUS, home = i <= 2 and "Horde" or "Alliance" })
 		end
 	end
-	Add({ id = front.alliance.id, name = front.alliance.name, front = front, order = 5, x = front.alliance.x, y = front.alliance.y, r = BASE_RADIUS, home = "Alliance" })
+	Add({ id = front.alliance.id, name = front.alliance.name, front = front, order = 5, x = front.alliance.nx, y = front.alliance.ny, r = BASE_RADIUS, home = "Alliance" })
 end
 Captures.POINTS = points
 
@@ -151,6 +160,8 @@ function Captures:OnLoad()
 	-- The presence book, for the app: "point:slot:guid" -> { g = GUID, n = name, p = point id, s = slot, c = samples }
 	Wanted.db.presence = type(Wanted.db.presence) == "table" and Wanted.db.presence or {}
 	private.Prune(GetServerTime())
+	-- What the site last said of each point, as the addon showed it: { week, [id] = holder }, to tell what changed since
+	Wanted.db.captureSeen = type(Wanted.db.captureSeen) == "table" and Wanted.db.captureSeen or {}
 	local settings = Wanted.db.settings
 	settings.captures = type(settings.captures) == "table" and settings.captures or {}
 	local c = settings.captures
@@ -170,15 +181,36 @@ function Captures:Settings()
 	return Wanted.db.settings.captures
 end
 
----Registers a function called when what the addon knows of the points changes (a sample, a peer, the site's holds).
+---Registers a function called when what the addon knows of the points changes (a sample, a peer, the site's holds):
+---func(news), news a list of { kind, point } the site's holds changed since the addon last showed them, or nil.
 function Captures:OnChange(func)
 	tinsert(private.listeners, func)
 end
 
-function private.Changed()
+function private.Changed(news)
 	for _, func in ipairs(private.listeners) do
-		func()
+		func(news)
 	end
+end
+
+---The campaign week that t falls in: when it started.
+function Captures:WeekStart(t)
+	return WEEK_ANCHOR + floor((t - WEEK_ANCHOR) / WEEK) * WEEK
+end
+
+---What a point is called with its role: "Mid Tower", "Bot Inhibitor", "Nexus".
+function Captures:Role(point)
+	if not point.lane then
+		return Captures.TERMS.nexus
+	end
+	local lane = point.front.lanes[point.lane]
+	local inhibitor = point.order == 1 or point.order == 4
+	return lane.name.." "..(inhibitor and Captures.TERMS.inhibitor or Captures.TERMS.tower)
+end
+
+---Its kind: "tower", "inhibitor" or "nexus" (the icons).
+function Captures:Kind(point)
+	return not point.lane and "nexus" or (point.order == 1 or point.order == 4) and "inhibitor" or "tower"
 end
 
 
@@ -224,22 +256,33 @@ function Captures:PointAt(mapId, x, y)
 	return nil
 end
 
----Who holds a point as the site last told the app: its home side until the site says otherwise.
+---Who holds a point as the site last told the app: its home side until the site says otherwise, and again once a taken
+---inhibitor's respawn time has passed (the site will say so too, unless its takers held it since: provisional).
 ---@param id string
 ---@return string "Horde" or "Alliance"
 function Captures:Holder(id)
-	local hold = private.holds[id]
-	return hold and hold.h or (byId[id] and byId[id].home)
+	local hold, point = private.holds[id], byId[id]
+	if not hold or not point then
+		return point and point.home
+	end
+	if hold.r and GetServerTime() >= hold.r and hold.h ~= point.home and not private.won[point.front.id] then
+		return point.home
+	end
+	return hold.h
 end
 
 ---The side that won a front this week (took the other's base), or nil.
 function Captures:Winner(front)
-	if Captures:Holder(front.alliance.id) == "Horde" then
-		return "Horde"
-	elseif Captures:Holder(front.horde.id) == "Alliance" then
-		return "Alliance"
+	return private.won[front.id]
+end
+
+---Works out which fronts the site's holds say are won (a Nexus held by the other side).
+function private.Won()
+	private.won = {}
+	for _, front in ipairs(Captures.FRONTS) do
+		local h, a = private.holds[front.horde.id], private.holds[front.alliance.id]
+		private.won[front.id] = a and a.h == "Horde" and "Horde" or h and h.h == "Alliance" and "Alliance" or nil
 	end
-	return nil
 end
 
 ---A lane's points from the Horde base, as ids (made once: the bar and map ask every second).
@@ -335,8 +378,28 @@ function Captures:Blocked()
 		return "Stealthed"
 	elseif private.Yes(UnitIsAFK, "player") then
 		return "Away"
+	elseif private.TravelForm() then
+		return "In travel form"
 	end
 	return nil
+end
+
+---Whether the player is in a druid form that travels: the active form's spell (GetShapeshiftForm, GetShapeshiftFormInfo).
+function private.TravelForm()
+	if type(GetShapeshiftForm) ~= "function" or type(GetShapeshiftFormInfo) ~= "function" then
+		return false
+	end
+	local ok, index = pcall(GetShapeshiftForm)
+	if not ok or type(index) ~= "number" or (issecretvalue and issecretvalue(index)) or index <= 0 then
+		return false
+	end
+	local okInfo, _, _, _, spellId = pcall(GetShapeshiftFormInfo, index)
+	return okInfo and type(spellId) == "number" and TRAVEL_FORMS[spellId] == true
+end
+
+---Why the player's presence didn't count at the last sample ("Mounted"), or nil.
+function Captures:BlockedReason()
+	return private.blocked
 end
 
 ---The point the player stood in at the last sample, or nil.
@@ -350,25 +413,16 @@ end
 -- Sampling
 -- ============================================================================
 
----Every 30 seconds: notes which point the player is in, says so on the way in, and counts a sample when the
----player's presence can count (and tells our side, at most once a minute).
+---Every 30 seconds: notes which point the player is in and counts a sample when the player's presence can count (and
+---tells our side, at most once a minute). The bar at the top shows it (CapturesHUD).
 function Captures:Sample()
 	local _, x, y, mapId = Wanted.Recorder:GetPosition()
 	local point = Captures:PointAt(mapId, x, y)
-	if point ~= private.current then
-		private.current, private.toldBlocked = point, false
-		if point then
-			Wanted:Print("You're at %s, a capture point in %s. %s", point.name, point.front.zone, private.HolderText(point.id))
-		end
-	end
+	private.current, private.blocked = point, nil
 	if point then
 		local blocked = Captures:Blocked()
 		if blocked then
-			private.mine = nil
-			if not private.toldBlocked then
-				private.toldBlocked = true
-				Wanted:Print("%s: your presence at %s doesn't count until that changes.", blocked, point.name)
-			end
+			private.mine, private.blocked = nil, blocked
 		else
 			local now = GetServerTime()
 			local entry = private.Count(point.id, now)
@@ -485,6 +539,7 @@ end
 ---@param list table?
 function Captures:Take(list)
 	private.holds = {}
+	local news = nil
 	if type(list) == "table" then
 		for id, hold in pairs(list) do
 			if byId[id] and type(hold) == "table" and type(hold.t) == "number" and (hold.h == "H" or hold.h == "A") then
@@ -496,8 +551,46 @@ function Captures:Take(list)
 				}
 			end
 		end
+		private.Won()
+		news = private.News()
+	else
+		private.Won()
 	end
-	private.Changed()
+	private.Changed(news)
+end
+
+---What changed since the addon last showed the site's holds, this week: { { kind, point } }, kind "lost" (one of our
+---points taken), "taken" (one of theirs we took), "respawned" (an inhibitor back with its side), "won" or "beaten" (a
+---front's Nexus). Remembers what it showed.
+function private.News()
+	local seen = Wanted.db.captureSeen
+	local week = Captures:WeekStart(GetServerTime())
+	local fresh = seen.week ~= week
+	if fresh then
+		wipe(seen)
+		seen.week = week
+	end
+	local side = UnitFactionGroup("player")
+	local news = {}
+	for _, point in ipairs(points) do
+		local now = Captures:Holder(point.id)
+		local before = seen[point.id] or point.home
+		if now ~= before and not fresh then
+			local kind
+			if not point.lane then
+				kind = now == side and "won" or "beaten"
+			elseif now == point.home then
+				kind = "respawned"
+			elseif point.home == side then
+				kind = "lost"
+			else
+				kind = "taken"
+			end
+			tinsert(news, { kind = kind, point = point })
+		end
+		seen[point.id] = now
+	end
+	return news
 end
 
 ---What the site last said of a point: { h, s, r, t }, or nil when it hasn't.
@@ -513,7 +606,7 @@ function private.HolderText(id)
 	if not hold then
 		return format("The %s's at the start of the week; wanteddeadordead.com decides who holds it from the players there.", byId[id].home)
 	end
-	return format("Held by the %s when the app last checked (%s).", hold.h, Wanted.Theme:Ago(GetServerTime() - hold.t))
+	return format("Held by the %s when the app last checked (%s).", Captures:Holder(id), Wanted.Theme:Ago(GetServerTime() - hold.t))
 end
 Captures.HolderText = function(_, id) return private.HolderText(id) end
 
@@ -593,7 +686,7 @@ Wanted:RegisterCommand("points", "Lists the capture fronts and who held each poi
 		Wanted:Print("%s: Horde %d, Alliance %d%s", front.zone, horde, alliance, winner and (", won by the "..winner) or "")
 		for _, point in ipairs(points) do
 			if point.front == front then
-				Wanted:Print("  %s %.0f,%.0f: %s", point.name, point.x, point.y, private.HolderText(point.id))
+				Wanted:Print("  %s (%s) %.0f,%.0f: %s", Captures:Role(point), point.name, point.x, point.y, private.HolderText(point.id))
 			end
 		end
 	end

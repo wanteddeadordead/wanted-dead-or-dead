@@ -34,6 +34,11 @@
 - Opening or refreshing the world map in a fight no longer fills the chat with "The client blocked
   Button:SetPassThroughButtons()": Wanted's map markers no longer add a layer of their own to the map's layer table,
   which tainted the game's own markers.
+- Capture points: nine places between the towns of Hillsbrad Foothills, Ashenvale and Arathi Highlands. Standing in
+  one, able to fight (not mounted, flying, on a flight, stealthed, dead or away), counts every 30 seconds in a
+  presence book the desktop app sends to wanteddeadordead.com. The site decides who holds each point from at least two
+  different players' apps and the kills there; one player's addon never decides it. Entering a point says so in chat,
+  with who held it when the app last checked; `/wanted points` lists them. Nothing is sent to other players.
 
 ## [1.23.3] - 2026-10-15
 

@@ -71,6 +71,7 @@ function Catchup:Import()
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
 		Wanted.Challenges:Take(nil, true)
 		Wanted.Duels:TakeReports(nil, nil)
+		Wanted.Captures:Take(nil)
 		return
 	end
 	-- Fight reports the app made of this account's duels, read at every login like the challenges
@@ -107,6 +108,8 @@ function Catchup:Import()
 	if Wanted.GuildKoS then
 		Wanted.GuildKoS:TakeServer(entry.guildKos)
 	end
+	-- Who holds each capture point, as the site worked it out: only shown, so read at every login
+	Wanted.Captures:Take(entry.points)
 	-- Signing keys the server took from the apps of the accounts their characters are confirmed to (1.19.0)
 	Wanted.KeyBook:FromApp(entry.addonKeys, entry.t)
 	if entry.t <= (Wanted.db.catchupT or 0) then

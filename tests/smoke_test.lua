@@ -10127,6 +10127,39 @@ end)()
 	check(not ns.Duels:Involves("Player-1-0D0E1F00") and not ns.Duels:Involves("Player-1-ME"), "a while after the duel, nobody is in it")
 	enemyUnits.target = nil
 end)()
+-- A normal duel ends at 1 health and kills nobody: world PvP around it still counts (an enemy ganking you mid-duel or
+-- just after, or killing your duel partner)
+;(function()
+	local Store, S = ns.Store, duelStubs
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	ns.Duels:Check()
+	check(not ns.Duels:Involves("Player-1-ME") and not ns.Duels:Involves("Player-1-0D0E1F00"), "a normal duel under way involves nobody's death")
+	Fire("CHAT_MSG_SYSTEM", "Test has defeated Duel Friend in a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	enemyUnits.target = nil
+	clock = clock + 10
+	ns.Streaks:OnDeath()
+	ns.Streaks:OnKill("Somebody Else Again")
+	local recap = C_DeathRecap
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:7202|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-9-ENEMY" } } end,
+	}
+	Fire("PLAYER_DEAD")
+	Fire("UNIT_DIED", "Player-1-ME")
+	RunTimers()
+	C_DeathRecap = recap
+	local last = ns.Enemies:GetLastDeath()
+	check(last and last.guid == "Player-9-ENEMY", "an enemy killing us 10 s after a normal duel is named the killer")
+	check(select(2, ns.Streaks:GetCounts()) == 0, "and ends the streak")
+	local recorded = false
+	for r in Store:Iterator("death") do if r.data.victim == "Player-1-ME" and r.data.killer == "Player-9-ENEMY" and r.t == clock then recorded = true end end
+	check(recorded, "and our death is recorded")
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

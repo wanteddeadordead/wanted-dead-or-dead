@@ -18,7 +18,7 @@ local private = {
 	-- The duel asked for or under way: { name, guid, requestedAt, startAt, endAt, result, fled, toTheDeath, them }
 	-- (them: what's known of the opponent so far, the same fields as a record's)
 	duel = nil,
-	last = nil, -- { guid, endedAt (GetServerTime()) } of the duel that ended last (Duels:Involves)
+	last = nil, -- { guid, endedAt (GetServerTime()), toTheDeath } of the duel fought last (Duels:Involves)
 	inspect = nil, -- { guid, at (GetTime()), taken }: our inspect waiting for its answer (taken: someone else asked since)
 	asking = false, -- while our own NotifyInspect runs
 	othersAt = -math.huge, -- GetTime() when anyone else last asked for an inspect
@@ -316,7 +316,6 @@ end
 
 ---Writes the record of a duel that was fought. A challenge declined (never started, no winner) leaves nothing.
 function private.Finish(duel)
-	private.last = { guid = duel.guid, endedAt = duel.endAt }
 	if duel.toTheDeath and not duel.result and duel.deadMe ~= duel.deadThem then
 		duel.result = duel.deadThem and "won" or "lost"
 		duel.startAt = duel.startAt or duel.requestedAt
@@ -324,6 +323,7 @@ function private.Finish(duel)
 	if not duel.startAt or duel.startAt > duel.endAt then
 		return
 	end
+	private.last = { guid = duel.guid, endedAt = duel.endAt, toTheDeath = duel.toTheDeath }
 	local zone, x, y, mapId = Wanted.Recorder:GetPosition()
 	local realZone = GetRealZoneText and private.Readable(GetRealZoneText())
 	local origin = Store:GetOrigin()
@@ -460,8 +460,9 @@ end
 -- Reading
 -- ============================================================================
 
----Whether a player is in the duel under way or one that just ended (the player themself or their opponent): their
----death or kill then is the duel's, not world PvP.
+---Whether a player is in a duel to the death under way or one that just ended (the player themself or their
+---opponent): their death or kill then is the duel's, not world PvP. A normal duel ends at 1 health and kills nobody,
+---so a death during one is world PvP (an enemy ganking the duellists) and counts.
 ---@param guid string?
 ---@return boolean
 function Duels:Involves(guid)
@@ -470,11 +471,11 @@ function Duels:Involves(guid)
 	end
 	local me = UnitGUID("player")
 	local duel = private.duel
-	if duel and duel.startAt and (guid == duel.guid or guid == me) then
+	if duel and duel.startAt and duel.toTheDeath and (guid == duel.guid or guid == me) then
 		return true
 	end
 	local last = private.last
-	return last ~= nil and GetServerTime() - last.endedAt <= INVOLVED_SECONDS and (guid == last.guid or guid == me)
+	return last ~= nil and last.toTheDeath and GetServerTime() - last.endedAt <= INVOLVED_SECONDS and (guid == last.guid or guid == me) or false
 end
 
 ---How a duellist reads: the Wanted user's name, otherwise spec and class ("Frost Mage", or "Mage" with no spec known).

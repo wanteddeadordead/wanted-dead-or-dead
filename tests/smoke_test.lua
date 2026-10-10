@@ -1144,6 +1144,30 @@ WantedDB.records["B:1"] = {}
 ns:LoadSavedData()
 check(WantedDB.records["B:1"], "live data is never dropped again")
 end
+-- Saved data the game failed to load arrives empty (nil, or an empty table): it starts like a first install and
+-- nothing in it reads as a reset. The layout and world are this release's, and this character's hello never says
+-- its keys were reset (kr), so peers add a new key beside the old ones rather than dropping them
+do
+local realFresh = ns.freshInstall
+for _, kind in ipairs({ "nil", "an empty table" }) do
+	WantedDB = kind ~= "nil" and {} or nil
+	ns:LoadSavedData()
+	check(ns.db == WantedDB and WantedDB.version == ns.DB_VERSION and WantedDB.world == ns.WORLD and type(WantedDB.accountMark) == "string",
+		"an empty load ("..kind..") starts on this release's layout")
+	WantedDB.signing.seed = string.rep("ab", 32)
+	local hello = {}
+	ns.Signing:AddToHello(hello)
+	check(hello.k ~= nil and hello.kr == nil, "an empty load ("..kind..") never says the keys were reset")
+end
+-- In the live world an empty load is live data from then on: the next load drops none of it
+ns.WORLD = "live"
+WantedDB = nil
+ns:LoadSavedData()
+WantedDB.records = { ["L:1"] = {} }
+ns:LoadSavedData()
+check(WantedDB.world == "live" and WantedDB.records["L:1"], "after an empty load in the live world, what was saved stays")
+ns.freshInstall = realFresh
+end
 ns.WORLD = "beta"
 WantedDB = realDB
 ns:LoadSavedData()

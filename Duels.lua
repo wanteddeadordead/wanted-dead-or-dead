@@ -664,6 +664,29 @@ function Duels:Build(side)
 	return spec and strlower(spec) ~= strlower(class) and (spec.." "..class) or class
 end
 
+---A duel's side as shown: the record's, with the spec from the app's fight report when the game gave only the class
+---(this client's class-wide spec below the level for a real one): the report reads it from their talent loadout,
+---the tree with the most points. The record itself is left as recorded.
+---@param duel table
+---@param key string "me" or "them"
+---@return table
+function Duels:Side(duel, key)
+	local side = type(duel) == "table" and type(duel[key]) == "table" and duel[key] or {}
+	local report = type(duel) == "table" and Wanted.db.duelReports[duel.id]
+	local build = type(report) == "table" and type(report[key]) == "table" and report[key].build
+	local spec = type(build) == "table" and type(build.spec) == "string" and build.spec or nil
+	local class = type(side.class) == "string" and Wanted.Theme:ClassLabel(side.class) or nil
+	if not spec or (type(side.spec) == "string" and class and strlower(side.spec) ~= strlower(class)) then
+		return side
+	end
+	local shown = {}
+	for k, v in pairs(side) do
+		shown[k] = v
+	end
+	shown.spec = Wanted.Store:CleanName(spec)
+	return shown
+end
+
 -- Race names for duels recorded before the game's own name was kept (its file names: Scourge is Undead)
 local RACE_NAMES = { Scourge = "Undead", NightElf = "Night Elf" }
 
@@ -765,8 +788,8 @@ function Duels:GetSheet()
 			sheet.total = sheet.total + 1
 			sheet.won = sheet.won + (record.result == "won" and 1 or 0)
 			sheet.lost = sheet.lost + (record.result == "lost" and 1 or 0)
-			Add(sheet.matchups, byMatchup, record.them, record)
-			Add(sheet.builds, byBuild, record.me, record, type(record.me.loadout) == "string" and record.me.loadout or nil)
+			Add(sheet.matchups, byMatchup, Duels:Side(record, "them"), record)
+			Add(sheet.builds, byBuild, Duels:Side(record, "me"), record, type(record.me.loadout) == "string" and record.me.loadout or nil)
 			tinsert(sheet.recent, record)
 		end
 	end

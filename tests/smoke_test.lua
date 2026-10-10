@@ -10554,6 +10554,19 @@ end)()
 	check(OnScreen("1. You lost with Gouge, Evasion and Sprint never used.") and OnScreen("Gouge then bandage or reset.")
 		and OnScreen("between 0:08 and 0:18.") and OnScreen("They opened from stealth.") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
 		"the fight card shows the findings with their tips, the control suffered and what was used")
+	-- The app's reading of each talent loadout: the build on the card, and the spec from the tree with the most
+	-- points where the game gave only the class
+	db.duelReports[duel.id].them.build = { spec = "Feral Combat", points = { 0, 12, 0 }, talents = { "Feral Charge", "Sharpened Claws" } }
+	ns.UI:Show("duels")
+	check(OnScreen("Build: Feral Combat (0/12/0): Feral Charge, Sharpened Claws") and OnScreen("vs Feral Combat Druid"),
+		"the card shows their build, and names them by it")
+	check(Duels:Side(duel, "them").spec == "Feral Combat" and duel.them.spec == nil, "the shown spec comes from the report; the record is left as it was")
+	check(Duels:GetSheet().matchups[1].label == "Feral Combat Druid", "the matchup is named by the build too")
+	local keptSpec = duel.them.spec
+	duel.them.spec = "Balance"
+	check(Duels:Side(duel, "them").spec == "Balance", "a real spec from the game wins over the report's")
+	duel.them.spec = keptSpec
+	db.duelReports[duel.id].them.build = nil
 	db.duelReports[duel.id].partial = true
 	ns.UI:Show("duels")
 	check(OnScreen("the combat log ends before the duel did"), "a report made from part of the duel says so")

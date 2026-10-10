@@ -91,11 +91,11 @@ function private.ShowTooltip(row, item)
 		return Duels:Describe(side)..left
 	end
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
-	GameTooltip:SetText(Theme:Plain(Duels:Opponent(duel.them)), 1, 1, 1)
+	GameTooltip:SetText(Theme:Plain(Duels:Opponent(Duels:Side(duel, "them"))), 1, 1, 1)
 	GameTooltip:AddLine(Theme:Plain(duel.zone)..(duel.toTheDeath and ", to the death" or "")..", "..date("%A %b %d, %H:%M", duel.startAt),
 		C.muted[1], C.muted[2], C.muted[3])
-	GameTooltip:AddLine("Them: "..Side(duel.them), 1, 1, 1)
-	GameTooltip:AddLine("You: "..Side(duel.me), 1, 1, 1)
+	GameTooltip:AddLine("Them: "..Side(Duels:Side(duel, "them")), 1, 1, 1)
+	GameTooltip:AddLine("You: "..Side(Duels:Side(duel, "me")), 1, 1, 1)
 	GameTooltip:Show()
 end
 
@@ -202,7 +202,23 @@ function private.FillLane(lane, side, length)
 			used[#used + 1] = private.CleanText(u.spell).." "..private.Clock(u.t)
 		end
 	end
-	lane.used:SetText((#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
+	local build = type(side.build) == "table" and side.build or nil
+	local buildText = ""
+	if build and type(build.spec) == "string" then
+		local points = {}
+		for _, n in ipairs(type(build.points) == "table" and build.points or {}) do
+			if type(n) == "number" then
+				points[#points + 1] = tostring(floor(n))
+			end
+		end
+		local talents = {}
+		for _, t in ipairs(type(build.talents) == "table" and build.talents or {}) do
+			talents[#talents + 1] = private.CleanText(t)
+		end
+		buildText = "Build: "..private.CleanText(build.spec)..(#points > 0 and (" ("..table.concat(points, "/")..")") or "")
+			..(#talents > 0 and (": "..table.concat(talents, ", ")) or "").."\n"
+	end
+	lane.used:SetText(buildText..(#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
 		..(#used > 0 and ("Used: "..table.concat(used, ", ")) or "Used nothing that counts"))
 end
 
@@ -220,7 +236,7 @@ function private.BuildCard(container, width)
 	local graphWidth = max(width - 110, 120)
 	card.lanes = {
 		me = private.CreateLane(card, "You", -56, C.green, graphWidth),
-		them = private.CreateLane(card, "Them", -128, C.red, graphWidth),
+		them = private.CreateLane(card, "Them", -146, C.red, graphWidth),
 	}
 	card.findings = {}
 	local above
@@ -229,7 +245,7 @@ function private.BuildCard(container, width)
 		if above then
 			f:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -8)
 		else
-			f:SetPoint("TOPLEFT", 14, -202)
+			f:SetPoint("TOPLEFT", 14, -236)
 		end
 		f:SetWidth(width - 28)
 		f:SetJustifyH("LEFT")
@@ -248,7 +264,7 @@ function private.ShowCard(duel)
 	end
 	private.cardDuel = duel
 	local result = RESULTS[duel.result] or RESULTS.none
-	card.title:SetText(format("vs %s   %s   %s   %s", Theme:ClassName(Duels:Opponent(duel.them), duel.them.class),
+	card.title:SetText(format("vs %s   %s   %s   %s", Theme:ClassName(Duels:Opponent(Duels:Side(duel, "them")), duel.them.class),
 		Theme:Colorize(result[1], result[2]), private.Length(duel.length), private.When(duel.startAt)))
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
@@ -257,7 +273,7 @@ function private.ShowCard(duel)
 		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
 		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)
 	end
-	card.note:SetText(hasReport and (Duels:Describe(duel.them)..opener)
+	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener)
 		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
 		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
 	for key, lane in pairs(card.lanes) do

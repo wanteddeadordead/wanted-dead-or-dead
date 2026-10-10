@@ -9948,6 +9948,16 @@ end)()
 	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
 	db.settings.sigBackground = true
 end)()
+-- A character's GUID names a Wanted user only when a key is bound to it: heard in their own hello or from the app
+;(function()
+	local C, KeyBook = ns.Crypto, ns.KeyBook
+	local pk = C:PublicKey(C:SHA512("duel friend"):sub(1, 32))
+	check(KeyBook:OriginOf("Player-1-D0E1F0") == nil, "a GUID with no key bound names nobody")
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:df:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-D0E1F0" }), "CHANNEL", "Duel Friend", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(KeyBook:OriginOf("Player-1-D0E1F0") == "Duel Friend", "a hello binds the GUID to the Wanted user: "..tostring(KeyBook:OriginOf("Player-1-D0E1F0")))
+	check(KeyBook:OriginOf("Player-1-5717A6") == nil and KeyBook:OriginOf(nil) == nil, "anyone else names nobody")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

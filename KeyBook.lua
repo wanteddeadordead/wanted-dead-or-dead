@@ -231,6 +231,26 @@ function KeyBook:HasKeys(origin)
 	return type(book) == "table" and type(book.list) == "table" and #book.list > 0
 end
 
+---The Wanted user a character is: the origin a key is bound to that character's GUID under. Only their own hello on
+---the channel or the desktop app's list binds one, so nobody else can claim the name. nil for anyone else.
+---@param guid string?
+---@return string?
+function KeyBook:OriginOf(guid)
+	if type(guid) ~= "string" then
+		return nil
+	end
+	for origin, book in pairs(Wanted.db.keys) do
+		if type(book) == "table" and type(book.list) == "table" then
+			for _, key in ipairs(book.list) do
+				if key.g == guid then
+					return origin
+				end
+			end
+		end
+	end
+	return nil
+end
+
 ---How many origins have keys, and how many keys in all.
 ---@return number origins
 ---@return number keys

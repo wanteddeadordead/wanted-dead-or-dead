@@ -829,6 +829,27 @@ function Duels:TakeReports(reports, t)
 	end
 end
 
+-- The first desktop app that makes fight reports
+Duels.MIN_APP = "0.2.42"
+
+---What stands between this player and fight reports on the app's side, or nil: "none" (no app on this computer),
+---"old" (one older than MIN_APP: it makes no reports), "stopped" (set up, but it wasn't running when the game
+---started). The app's version and when it last ran come from !!WantedLink, read at login and /reload.
+---@return string? state, string? version the app's version when it's set up
+function Duels:AppState()
+	local version = Wanted:AppVersion()
+	if not version then
+		return "none"
+	end
+	if Wanted:IsNewerVersion(Duels.MIN_APP, version) then
+		return "old", version
+	end
+	if Wanted:AppNotRunningFor() then
+		return "stopped", version
+	end
+	return nil, version
+end
+
 ---Where a duel's fight report stands:
 ---"ready" (shown), "nolog" (the app had no combat log for it), "noapp" (no catch-up from the app this login),
 ---"save" (the app's catch-up is older than the duel: a /reload saves the duel for the app to read),

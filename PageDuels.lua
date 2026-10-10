@@ -477,6 +477,7 @@ function private.ShowCard(duel)
 	opener = opener..(gap and ("   "..gap) or "")
 	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener)
 		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
+		or private.AppNote()
 		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
 	for key, lane in pairs(card.lanes) do
 		for _, part in ipairs({ lane.label, lane.graph, lane.strip, lane.used }) do
@@ -522,8 +523,29 @@ function private.HideCard()
 end
 
 
----The notice beside the tabs: the last duel's fight report, while it isn't in yet.
+---What to do about the app, when it's what keeps fight cards away: not installed, too old, or not running.
+function private.AppNote()
+	local state, version = Duels:AppState()
+	if state == "none" then
+		return "Fight cards need the free Wanted app: wanteddeadordead.com/app"
+	elseif state == "old" then
+		return format("Fight cards need Wanted app %s or newer (you have %s): update it from its tray menu or wanteddeadordead.com/app",
+			Duels.MIN_APP, Theme:Plain(version))
+	elseif state == "stopped" then
+		return "Start the Wanted app, then /reload, for fight cards."
+	end
+	return nil
+end
+
+---The notice beside the tabs: the app, when it's what keeps fight cards away, else the last duel's fight report
+---while it isn't in yet.
 function private.ShowReportNote(last)
+	local appNote = last and Duels:ReportState(last) ~= "ready" and private.AppNote()
+	if appNote then
+		private.reportText:SetText(Theme:Colorize(appNote, C.gold))
+		private.reloadButton:Hide()
+		return
+	end
 	local note = last and REPORT_NOTES[(Duels:ReportState(last))]
 	private.reportText:SetText(note and Theme:Colorize(note[1], C.muted) or "")
 	private.reloadButton:SetShown(note and note[2] or false)

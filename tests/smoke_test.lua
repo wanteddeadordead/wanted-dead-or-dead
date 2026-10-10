@@ -10581,6 +10581,19 @@ end)()
 	local duel = { id = "Test Player:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
 		me = { class = "WARRIOR" }, them = { class = "DRUID", level = 21 } }
 	db.duels, db.duelReports = { duel }, {}
+	-- The app, as !!WantedLink tells it: missing, too old, set up but not running, then up to date and running
+	local keptAppInfo = WantedAppInfo
+	WantedAppInfo = nil
+	ns.UI:Show("duels")
+	check(Duels:AppState() == "none" and OnScreen("Fight cards need the free Wanted app: wanteddeadordead.com/app"), "no app: the tab says fight cards need it")
+	WantedAppInfo = { running = "0.2.41", seen = GetServerTime() }
+	ns.UI:Show("duels")
+	check(Duels:AppState() == "old" and OnScreen("need Wanted app 0.2.42 or newer (you have 0.2.41)"), "an app too old to make reports: update it")
+	WantedAppInfo = { running = "0.2.42", seen = 1 } -- last ran long before the game read its file
+	ns.UI:Show("duels")
+	check(Duels:AppState() == "stopped" and OnScreen("Start the Wanted app, then /reload"), "an app not running: start it")
+	WantedAppInfo = { running = "0.2.43", seen = GetServerTime() }
+	check(Duels:AppState() == nil, "an app up to date and running: nothing to say")
 	local function Reload() for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Reload" then return f end end end
 	Duels:TakeReports(nil, nil)
 	ns.UI:Show("duels")
@@ -10736,6 +10749,7 @@ end)()
 	db.duelReports = {}
 	check(Duels:ReportState(duel) == "old", "a duel too long ago isn't waited for")
 	C_UI.Reload = savedReload
+	WantedAppInfo = keptAppInfo
 	db.duels, db.duelReports = kept, keptReports
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)

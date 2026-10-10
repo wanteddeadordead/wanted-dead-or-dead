@@ -206,11 +206,29 @@ local DIRECTORY_SECONDS = GREET_SECONDS -- how often a round runs
 ---@return any result SendAddonMessage's result, or nil when skipped
 local function Whisper(text, target)
 	local off = private.offline[target]
-	if off and GetTime() - off < OFFLINE_SECONDS then
+	if off and GetTime() - off < OFFLINE_SECONDS or private.ChatLocked() then
 		return nil
 	end
 	private.whispered[target] = GetTime()
 	return C_ChatInfo.SendAddonMessage(PREFIX, text, "WHISPER", target)
+end
+
+---Whether the game's chat messaging lockdown is on (an encounter, a PvP match or a restricted map): its system lines
+---are secret then, and the game runs no chat filter on a secret line, so a whisper to someone offline would print
+---"No player named ... is currently playing" for every part. Whispers wait until it lifts.
+function private.ChatLocked()
+	if not (C_ChatInfo and C_ChatInfo.InChatMessagingLockdown) then
+		return false
+	end
+	local ok, locked = pcall(C_ChatInfo.InChatMessagingLockdown)
+	locked = ok and locked == true
+	if locked ~= private.wasLocked then
+		private.wasLocked = locked
+		if locked then
+			Wanted:Log("Sync: chat messaging lockdown; whispers wait until it lifts")
+		end
+	end
+	return locked
 end
 
 -- Locked out of the channel (an owner banned us or set a password): sync goes on by whisper links to the
@@ -2238,7 +2256,8 @@ function Sync:Greet(name, realm)
 	end
 	local now = GetTime()
 	local link = private.links[name]
-	if (link and now - link.heard < LINK_TIMEOUT) or (private.greeted[name] and now - private.greeted[name] < GREET_SECONDS) then
+	if (link and now - link.heard < LINK_TIMEOUT) or (private.greeted[name] and now - private.greeted[name] < GREET_SECONDS)
+		or private.ChatLocked() then
 		return
 	end
 	private.greeted[name] = now

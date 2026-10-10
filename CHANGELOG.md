@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- No more "No player named ... is currently playing" lines after a duel or fight. During the game's chat lockdown
+  (encounters, PvP matches, some duels) Wanted can't hide that notice, so it now holds its hidden whispers to
+  players on other realm names until the lockdown lifts.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

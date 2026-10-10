@@ -1834,6 +1834,17 @@ local hellos = Sent("WHISPER", "Far Friend")
 check(#hellos == 1 and hellos[1].tag == "H" and hellos[1].tbl.r == "Realm" and type(hellos[1].tbl.c) == "table" and not hellos[1].tbl.a, "a realm link starts with a whispered hello carrying our realm")
 check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Far Friend' is currently playing.") == true
 	and chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing.") == false, "the game's 'not online' for someone just greeted is hidden, others aren't")
+-- In the game's chat messaging lockdown its "not online" line is secret and no filter runs on it: nobody is greeted
+-- or whispered until it lifts
+do
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	ns.Sync:Greet("Locked Friend", "Other Realm")
+	check(#Sent("WHISPER", "Locked Friend") == 0, "nobody is greeted during chat messaging lockdown")
+	C_ChatInfo.InChatMessagingLockdown = function() return false end
+	ns.Sync:Greet("Locked Friend", "Other Realm")
+	check(#Sent("WHISPER", "Locked Friend") == 1, "the greeting goes once the lockdown lifts")
+	C_ChatInfo.InChatMessagingLockdown = nil
+end
 -- The game can answer a cross-realm whisper minutes late (seen: 72 s, 119 s, and past 2 minutes), all names at once
 do
 	local before = clock

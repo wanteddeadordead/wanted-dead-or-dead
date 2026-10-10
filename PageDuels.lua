@@ -39,6 +39,11 @@ function private.Length(seconds)
 	return format("%d:%02d", floor(seconds / 60), seconds % 60)
 end
 
+---When a duel was fought, in local time: "Oct 10 13:27".
+function private.When(t)
+	return date("%b %d %H:%M", t)
+end
+
 function private.CreateRow(row)
 	row.cells = {}
 	for i, x in ipairs(COLUMN_X) do
@@ -56,7 +61,7 @@ function private.UpdateRow(row, item)
 		cells[1]:SetText(Theme:ClassName(Duels:Opponent(item.them), item.them.class))
 		cells[2]:SetText(Theme:Colorize(result[1]..(item.fled and " (fled)" or ""), result[2]))
 		cells[3]:SetText(private.Length(item.length))
-		cells[4]:SetText(Theme:Ago(GetServerTime() - item.startAt))
+		cells[4]:SetText(private.When(item.startAt))
 	else
 		cells[1]:SetText(Theme:ClassName(item.label, item.class))
 		cells[2]:SetText(private.Record(item.won, item.lost))
@@ -76,7 +81,8 @@ function private.ShowTooltip(row, item)
 	end
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 	GameTooltip:SetText(Theme:Plain(Duels:Opponent(item.them)), 1, 1, 1)
-	GameTooltip:AddLine(Theme:Plain(item.zone)..(item.toTheDeath and ", to the death" or ""), C.muted[1], C.muted[2], C.muted[3])
+	GameTooltip:AddLine(Theme:Plain(item.zone)..(item.toTheDeath and ", to the death" or "")..", "..date("%A %b %d, %H:%M", item.startAt),
+		C.muted[1], C.muted[2], C.muted[3])
 	GameTooltip:AddLine("Them: "..Side(item.them), 1, 1, 1)
 	GameTooltip:AddLine("You: "..Side(item.me), 1, 1, 1)
 	GameTooltip:Show()

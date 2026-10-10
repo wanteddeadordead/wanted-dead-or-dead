@@ -650,12 +650,14 @@ function Duels:Opponent(side)
 	return Duels:Build(side)
 end
 
----A duellist's class and spec, never their name: "Frost Mage", "Mage" with no spec known.
+---A duellist's class and spec, never their name: "Frost Mage", "Mage" with no spec known. A spec named after its
+---class (this client's specs below the level for a real one: "Rogue") is just the class.
 ---@param side table
 ---@return string
 function Duels:Build(side)
 	local class = type(side) == "table" and type(side.class) == "string" and Wanted.Theme:ClassLabel(side.class) or "Unknown class"
-	return type(side) == "table" and type(side.spec) == "string" and (side.spec.." "..class) or class
+	local spec = type(side) == "table" and type(side.spec) == "string" and side.spec or nil
+	return spec and strlower(spec) ~= strlower(class) and (spec.." "..class) or class
 end
 
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the

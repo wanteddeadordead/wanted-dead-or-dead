@@ -10485,6 +10485,7 @@ end)()
 	db.duels = mine
 	check(sheet.recent[1].startAt == clock - 100 and #sheet.recent == 4, "recent duels newest first")
 	check(Duels:Opponent(db.duels[2].them) == "Duel Friend" and Duels:Opponent(lock) == "Affliction Warlock", "a Wanted user by name, anyone else by spec and class")
+	check(Duels:Build({ class = "ROGUE", spec = "Rogue" }) == "Rogue", "a spec named after its class is just the class: "..Duels:Build({ class = "ROGUE", spec = "Rogue" }))
 	ns.UI:Show("duels")
 	check(OnScreen("1-2"), "the record is on the page")
 	check(OnScreen("Frost Mage"), "the matchup sheet shows class and spec")
@@ -10493,6 +10494,7 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Recent duels" then recentButton = fs._parent end end
 	recentButton:Click()
 	check(OnScreen("Duel Friend") and OnScreen("Affliction Warlock") and OnScreen("No result"), "recent duels name Wanted users and show the rest by spec")
+	check(OnScreen(date("%b %d %H:%M", clock - 100)), "recent duels show the date and time they were fought")
 	local tipLines = {}
 	local addLine = GameTooltip.AddLine
 	GameTooltip.AddLine = function(_, text) tipLines[#tipLines + 1] = text end

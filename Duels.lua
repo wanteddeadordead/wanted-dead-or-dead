@@ -239,6 +239,7 @@ function private.Learn(duel, unit)
 	duel.guid = duel.guid or private.Readable(UnitGUID(unit))
 	them.class = them.class or Store:CleanName(private.Readable((select(2, UnitClass(unit)))))
 	them.race = them.race or Store:CleanName(private.Readable((select(2, UnitRace(unit)))))
+	them.raceName = them.raceName or Store:CleanName(private.Readable((UnitRace(unit))))
 	local level = private.Readable(UnitLevel(unit))
 	-- A skull (-1) isn't a level
 	if type(level) == "number" and level > 0 then
@@ -393,6 +394,7 @@ function private.Finish(duel)
 	me.name = Store:CleanName(origin)
 	me.class = Store:CleanName(private.Readable((select(2, UnitClass("player")))))
 	me.race = Store:CleanName(private.Readable((select(2, UnitRace("player")))))
+	me.raceName = Store:CleanName(private.Readable((UnitRace("player"))))
 	me.level = type(level) == "number" and level > 0 and level or nil
 	me.spec, me.specId = private.OwnSpec()
 	me.loadout = private.OwnLoadout()
@@ -658,6 +660,28 @@ function Duels:Build(side)
 	local class = type(side) == "table" and type(side.class) == "string" and Wanted.Theme:ClassLabel(side.class) or "Unknown class"
 	local spec = type(side) == "table" and type(side.spec) == "string" and side.spec or nil
 	return spec and strlower(spec) ~= strlower(class) and (spec.." "..class) or class
+end
+
+-- Race names for duels recorded before the game's own name was kept (its file names: Scourge is Undead)
+local RACE_NAMES = { Scourge = "Undead", NightElf = "Night Elf" }
+
+---A duellist in full, never their name: "Level 21 Skyborne Druid", "Level 58 Orc Affliction Warlock". Parts the
+---record lacks are left out.
+---@param side table
+---@return string
+function Duels:Describe(side)
+	if type(side) ~= "table" then
+		return Duels:Build(side)
+	end
+	local race = type(side.raceName) == "string" and side.raceName or type(side.race) == "string" and (RACE_NAMES[side.race] or side.race) or nil
+	local level = type(side.level) == "number" and ("Level "..side.level) or nil
+	local parts, all = {}, { level or false, race or false, Duels:Build(side) }
+	for i = 1, 3 do
+		if all[i] then
+			parts[#parts + 1] = all[i]
+		end
+	end
+	return table.concat(parts, " ")
 end
 
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the

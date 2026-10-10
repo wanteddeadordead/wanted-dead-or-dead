@@ -58,7 +58,8 @@ function private.UpdateRow(row, item)
 	local cells = row.cells
 	if private.view == "recent" then
 		local result = RESULTS[item.result] or RESULTS.none
-		cells[1]:SetText(Theme:ClassName(Duels:Opponent(item.them), item.them.class))
+		local level = type(item.them.level) == "number" and Theme:Colorize("  "..item.them.level, C.faint) or ""
+		cells[1]:SetText(Theme:ClassName(Duels:Opponent(item.them), item.them.class)..level)
 		cells[2]:SetText(Theme:Colorize(result[1]..(item.fled and " (fled)" or ""), result[2]))
 		cells[3]:SetText(private.Length(item.length))
 		cells[4]:SetText(private.When(item.startAt))
@@ -77,7 +78,7 @@ function private.ShowTooltip(row, item)
 	end
 	local function Side(side)
 		local left = type(side.health) == "number" and format(", %d%% health", side.health) or ""
-		return Duels:Build(side)..left
+		return Duels:Describe(side)..left
 	end
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 	GameTooltip:SetText(Theme:Plain(Duels:Opponent(item.them)), 1, 1, 1)

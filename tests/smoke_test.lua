@@ -10486,6 +10486,9 @@ end)()
 	check(sheet.recent[1].startAt == clock - 100 and #sheet.recent == 4, "recent duels newest first")
 	check(Duels:Opponent(db.duels[2].them) == "Duel Friend" and Duels:Opponent(lock) == "Affliction Warlock", "a Wanted user by name, anyone else by spec and class")
 	check(Duels:Build({ class = "ROGUE", spec = "Rogue" }) == "Rogue", "a spec named after its class is just the class: "..Duels:Build({ class = "ROGUE", spec = "Rogue" }))
+	check(Duels:Describe({ class = "DRUID", spec = "Druid", race = "Skyborne", raceName = "Skyborne", level = 21 }) == "Level 21 Skyborne Druid"
+		and Duels:Describe(lock) == "Level 58 Orc Affliction Warlock" and Duels:Describe({ class = "MAGE", race = "Scourge" }) == "Undead Mage"
+		and Duels:Describe({}) == "Unknown class", "a duellist in full: level, race, spec and class, what's known: "..Duels:Describe(lock))
 	ns.UI:Show("duels")
 	check(OnScreen("1-2"), "the record is on the page")
 	check(OnScreen("Frost Mage"), "the matchup sheet shows class and spec")
@@ -10495,6 +10498,7 @@ end)()
 	recentButton:Click()
 	check(OnScreen("Duel Friend") and OnScreen("Affliction Warlock") and OnScreen("No result"), "recent duels name Wanted users and show the rest by spec")
 	check(OnScreen(date("%b %d %H:%M", clock - 100)), "recent duels show the date and time they were fought")
+	check(OnScreen("Affliction Warlock  58"), "recent duels show the opponent's level")
 	local tipLines = {}
 	local addLine = GameTooltip.AddLine
 	GameTooltip.AddLine = function(_, text) tipLines[#tipLines + 1] = text end
@@ -10503,7 +10507,7 @@ end)()
 		if type(item) == "table" and item.them and item.them.class == "WARLOCK" and f._scripts.OnEnter then f._scripts.OnEnter(f) end
 	end
 	GameTooltip.AddLine = addLine
-	check(table.concat(tipLines, "\n"):find("Them: Affliction Warlock", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior", 1, true),
+	check(table.concat(tipLines, "\n"):find("Them: Level 58 Orc Affliction Warlock", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior", 1, true),
 		"the tooltip gives both builds: "..table.concat(tipLines, " | "))
 	for _, fs in ipairs(Mock.fontStrings) do check(not tostring(fs._text):find("Player%-1%-"), "no GUID is ever shown: "..tostring(fs._text)) end
 	db.duels = kept

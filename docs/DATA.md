@@ -120,11 +120,11 @@ boards; the site takes them only for the account's own characters.
 `WantedDB.duels` (from 1.20.0) is the duels the account's characters fought (`Duels.lua`), oldest first, at most 500
 (the oldest dropped). A new top-level table: no migration. Each is plain values:
 `{ id, startAt, endAt, length, result, fled, toTheDeath, zone, mapId, x, y, me = side, them = side }`, where
-`side = { guid, name, class, race, level, spec, specId, loadout, talents, health, mana }`. `id` is `"<origin>:duel:<startAt>"`, stable
+`side = { guid, name, class, race, raceName, level, spec, specId, loadout, talents, health, mana }`. `id` is `"<origin>:duel:<startAt>"`, stable
 for the app's uploads to de-duplicate. Times are server times (`GetServerTime()`), `length` seconds. `result` is
 `"won"`, `"lost"` or `"none"` (no winner line: cancelled); `fled` is true when the loser left the duel area;
 `toTheDeath` true for a duel to the death. `zone` is `GetRealZoneText()`, `x`/`y` 0-100 on `mapId`. On a side, `class`
-and `race` are the game's file names (`MAGE`, `Scourge`), `spec` the name of the chosen specialization (Forever's
+and `race` are the game's file names (`MAGE`, `Scourge`), `raceName` the game's own name for the race as shown (`UnitRace`; added in the 1.20.0 tests, absent on the first records), `spec` the name of the chosen specialization (Forever's
 talents are retail's: our own from `C_SpecializationInfo.GetSpecialization`, the opponent's from
 `GetInspectSpecialization` after an inspect; nil before one is chosen, or when the opponent's inspect never answered),
 `specId` the game's id for that specialization (the same in every language), `loadout` the talent loadout as the

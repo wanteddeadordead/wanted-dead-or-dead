@@ -19,8 +19,8 @@ local private = {
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	ownKillTimes = {}, -- GetTime() of each own kill not yet matched to an HK credit
 	assisted = {}, -- deathId -> true once an assist was recorded for it
-	hkCount = nil, -- honorable kills as last read (private.HKCount)
-	hkSource = nil, -- which count that was: "lifetime" or "session"
+	hkLifetime = nil, -- the lifetime honorable kill count as last read (nil: the client didn't give it)
+	hkSession = nil, -- and today's
 	playerGUID = nil,
 	playerFaction = nil,
 	places = nil, -- the named-area grid of one map, see private.ScanPlaces
@@ -72,7 +72,7 @@ local DIRECTIONS = { "east", "northeast", "north", "northwest", "west", "southwe
 function Recorder:OnEnable()
 	private.playerGUID = UnitGUID("player")
 	private.playerFaction = UnitFactionGroup("player")
-	private.hkCount, private.hkSource = private.HKCount()
+	private.hkLifetime, private.hkSession = private.HKCounts()
 	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED", "ZONE_CHANGED_NEW_AREA", "PLAYER_PVP_KILLS_CHANGED" }) do
 		Wanted:Log("Recorder: registering %s", event)
 		private.frame:RegisterEvent(event)
@@ -808,40 +808,39 @@ end
 -- Assists: HK credit without the killing blow
 -- ============================================================================
 
----Honorable kills as the client counts them, and which count: the lifetime one where the client gives it (it never
----resets), else this session's (it starts again at each daily reset). nil where the client says neither.
----@return number?
----@return string? source "lifetime" or "session"
-function private.HKCount()
+---The client's honorable kill counts: lifetime (never resets) and today's (starts again at each daily reset), each nil
+---where the client doesn't give it.
+---@return number? lifetime
+---@return number? session
+function private.HKCounts()
+	local lifetime, session
 	if GetPVPLifetimeStats then
 		local ok, hks = pcall(GetPVPLifetimeStats)
-		hks = ok and private.Readable(hks) or nil
-		if type(hks) == "number" then
-			return hks, "lifetime"
-		end
+		lifetime = ok and type(private.Readable(hks)) == "number" and hks or nil
 	end
-	if not GetPVPSessionStats then
-		return nil
+	if GetPVPSessionStats then
+		local hks = private.Readable(GetPVPSessionStats())
+		session = type(hks) == "number" and hks or nil
 	end
-	local hks = private.Readable(GetPVPSessionStats())
-	return type(hks) == "number" and hks or nil, "session"
+	return lifetime, session
 end
 
----The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw.
+---The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw. New HKs
+---are the larger of what the two counts added, so neither one lagging (or today's resetting) loses any.
 function private.OnHKsChanged()
-	local now, source = private.HKCount()
-	if not now or not private.hkCount or source ~= private.hkSource then
-		private.hkCount, private.hkSource = now, source
-		return
+	local lifetime, session = private.HKCounts()
+	local added = 0
+	if lifetime and private.hkLifetime then
+		added = lifetime - private.hkLifetime
 	end
-	local added = now - private.hkCount
-	if added < 0 and source == "session" then
-		-- The daily reset: every HK since it is new
-		added = now
+	if session and private.hkSession then
+		-- Today's count going down is the daily reset: every HK since it is new
+		local today = session >= private.hkSession and session - private.hkSession or session
+		added = max(added, today)
 	end
-	private.hkCount = now
+	private.hkLifetime, private.hkSession = lifetime, session
 	if added > MAX_HKS_AT_ONCE then
-		Wanted:Log("!! Recorder: the %s HK count jumped by %d; taken as the new start", source, added)
+		Wanted:Log("!! Recorder: the HK count jumped by %d; taken as the new start", added)
 		return
 	end
 	local at = GetServerTime()

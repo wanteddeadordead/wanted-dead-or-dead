@@ -117,6 +117,20 @@ points, honor, hk, season, t }` (Blizzard rank, the season's rank points, Honor 
 season). Written at login and when the rank, honor or bags change. The Wanted app sends them for the Blizzard PvP
 boards; the site takes them only for the account's own characters.
 
+`WantedDB.duels` (from 1.20.0) is the duels the account's characters fought (`Duels.lua`), oldest first, at most 500
+(the oldest dropped). A new top-level table: no migration. Each is plain values:
+`{ id, startAt, endAt, length, result, fled, toTheDeath, zone, mapId, x, y, me = side, them = side }`, where
+`side = { guid, name, class, race, level, spec, talents, health, mana }`. `id` is `"<origin>:duel:<startAt>"`, stable
+for the app's uploads to de-duplicate. Times are server times (`GetServerTime()`), `length` seconds. `result` is
+`"won"`, `"lost"` or `"none"` (no winner line: cancelled); `fled` is true when the loser left the duel area;
+`toTheDeath` true for a duel to the death. `zone` is `GetRealZoneText()`, `x`/`y` 0-100 on `mapId`. On a side, `class`
+and `race` are the game's file names (`MAGE`, `Scourge`), `talents` the points in each tree in the game's order,
+`spec` the name of the tree with the most (nil with none spent, or when the opponent's inspect never answered), and
+`health`/`mana` percentages at the end (mana only for mana users; the opponent's as last seen if out of view, nil
+where the game hides it). `them.name` is kept only when the opponent runs Wanted (a signing key is bound to their
+GUID, `KeyBook:OriginOf`): anyone else is kept by class, spec, race and level, and their GUID only to tell duels
+apart, never shown. Never shared with other players; the Wanted app uploads them with the player's other data.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

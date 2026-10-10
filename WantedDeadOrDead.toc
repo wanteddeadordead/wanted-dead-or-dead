@@ -42,6 +42,7 @@ Challenges.lua
 BlizzRank.lua
 Achievements.lua
 HonorScout.lua
+Duels.lua
 GearCatalog.lua
 PvPCalendar.lua
 Ranks.lua

@@ -179,13 +179,16 @@ top-level table: no migration.
 `WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.
-`WantedDB.presence` (capture points, after 1.19.3) is the account's characters' time at capture points (`Captures.lua`):
+
+`WantedDB.presence` (capture fronts, after 1.19.3) is the account's characters' time at capture points (`Captures.lua`):
 `presence["point:slot:guid"] = { g, n, p, s, c }` (GUID, name as the site names it, point id, slot = game-server time
 / 300, samples 1-10). A sample is added every 30 s while the character stands in a point able to fight. Entries older
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
-wanteddeadordead.com, which takes them only for the account's own characters. Not records: never sent to other
-players. New table with a default: no migration. The catch-up's `points` (`{ [id] = { h = "H"|"A"|"", s, t } }`, who
-held each point when the site last worked it out) is only shown and isn't saved.
+wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
+players (the `P` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,
+alerts, autoTrack }`, each defaulted at load (autoTrack off). New tables with defaults: no migration. The catch-up's
+`points` (`{ [id] = { h = "H"|"A", s, r, t } }`: who holds each point and base, since when, when a taken inhibitor goes
+back, when the site worked it out) is only shown and isn't saved.
 
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.

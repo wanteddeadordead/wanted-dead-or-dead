@@ -10219,6 +10219,32 @@ end)()
 	check(d.them.guid == "Player-1-00000BB0" and d.them.name == nil, "someone else's claim to the GUID doesn't name the opponent: "..tostring(d.them.name))
 	enemyUnits.target = nil
 end)()
+-- The recap of a death in a duel to the death is the duel's: a later death without a recap of its own doesn't blame
+-- the duel opponent
+;(function()
+	local S = duelStubs
+	local recap = C_DeathRecap
+	C_DeathRecap = {
+		GetRecapLink = function() return "|Hdeath:7303|h[Death]|h" end,
+		GetRecapEvents = function() return { { sourceGUID = "Player-1-0D0E1F00" } } end,
+	}
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	clock = clock + 60
+	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	enemyUnits.target = nil
+	clock = clock + 120
+	Fire("PLAYER_DEAD")
+	RunTimers()
+	local last = ns.Enemies:GetLastDeath()
+	check(not (last and last.guid == "Player-1-0D0E1F00"), "a later death doesn't read the duel's recap")
+	C_DeathRecap = recap
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

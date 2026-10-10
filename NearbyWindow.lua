@@ -393,6 +393,10 @@ function private.Create()
 	rally.text:SetWordWrap(false)
 	rally:EnableMouse(true)
 	W:AttachTooltip(rally, "Rally leader", "Your faction's rally leader in this zone, and where they are. They're marked on your world map. A group's leader can lead one: Call for help > Lead the rally here, or /wanted rally.")
+	-- The leader's own Skull and Flare (secure buttons: shown and hidden at layout, out of combat)
+	rally.skull, rally.flare = Wanted.Rally:CreateMarkButtons(rally)
+	rally.flare:SetPoint("RIGHT", -4, 0)
+	rally.skull:SetPoint("RIGHT", rally.flare, "LEFT", -4, 0)
 	rally:Hide()
 	private.rally = rally
 
@@ -745,6 +749,10 @@ function Nearby:Refresh()
 	private.pvp:SetShown(private.Show().pvp ~= false)
 	private.rallyShown = rallyText ~= nil
 	private.rally:SetShown(private.rallyShown)
+	local leading = Wanted.Rally:Mine() ~= nil
+	private.rally.skull:SetShown(leading)
+	private.rally.flare:SetShown(leading)
+	private.rally.text:SetPoint("RIGHT", leading and private.rally.skull or private.rally, leading and "LEFT" or "RIGHT", leading and -4 or -8, 0)
 	if rallyText then
 		private.rally:ClearAllPoints()
 		private.rally:SetPoint("TOPLEFT", 1, -private.Header() + RALLY_HEIGHT + 2)

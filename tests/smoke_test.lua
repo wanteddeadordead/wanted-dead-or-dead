@@ -10690,6 +10690,7 @@ end)()
 	db.duelReports[duel.id].partial = nil
 	local back
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end
+	check(OnScreen("Experimental"), "the fight card is marked experimental")
 	check(back and back:IsShown(), "the card has a way back")
 	back._scripts.OnClick(back)
 	check(not back:GetParent():IsShown(), "Back returns to the list")

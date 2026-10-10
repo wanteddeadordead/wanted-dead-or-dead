@@ -401,6 +401,17 @@ function private.BuildCard(container, width)
 	card.title:SetPoint("TOPLEFT", 14, -12)
 	card.back = W:Button(card, "Back", "secondary", 70, 24, function() private.HideCard() end)
 	card.back:SetPoint("TOPRIGHT", -10, -8)
+	-- Duel coaching is new: its tips are marked so, with a word on where to send a wrong one
+	card.experimental = W:Pill(card)
+	card.experimental:SetPoint("RIGHT", card.back, "LEFT", -8, 0)
+	card.experimental:EnableMouse(true)
+	card.experimental:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:SetText("Experimental", 1, 1, 1)
+		GameTooltip:AddLine("Duel coaching is new: a tip can be wrong. /wanted bug sends us one that is.", C.muted[1], C.muted[2], C.muted[3], true)
+		GameTooltip:Show()
+	end)
+	card.experimental:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	-- Everything under the title scrolls together: the opener, both lanes and the findings with their tips
 	card.scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	card.scroll.scrollBarHideable = true
@@ -445,6 +456,7 @@ function private.ShowCard(duel)
 		Theme:Colorize(result[1], result[2]), private.Length(duel.length), private.When(duel.startAt)))
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
+	card.experimental:Set(hasReport and "Experimental" or nil, C.gold)
 	local opener = hasReport and type(report.opener) == "string" and private.CleanText(report.opener) or ""
 	-- The opener is often one of the findings too: said once, there
 	for _, f in ipairs(hasReport and type(report.findings) == "table" and report.findings or {}) do

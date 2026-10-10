@@ -10198,6 +10198,27 @@ end)()
 	RunTimers()
 	PlayerSpellsFrame, enemyUnits.target = nil, nil
 end)()
+-- A hello can claim any GUID: a duel keeps the Wanted name only when the game names the character so too
+;(function()
+	local C, db, S = ns.Crypto, ns.db, duelStubs
+	local pk = C:PublicKey(C:SHA512("faker"):sub(1, 32))
+	Fire("CHAT_MSG_ADDON", "WNTD", "H:fk:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-00000BB0" }), "CHANNEL", "Faker Person", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	check(ns.KeyBook:OriginOf("Player-1-00000BB0") == "Faker Person", "the hello bound the stranger's GUID")
+	enemyUnits.target = { guid = "Player-1-00000BB0", name = "Some Stranger", faction = "Horde", class = "WARLOCK", level = 58, close = true }
+	clock = clock + 60
+	S.Hook("StartDuel", "target")
+	enemyUnits.target.dueling = true
+	clock = clock + 2
+	ns.Duels:Check()
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Test has defeated Some Stranger in a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	local d = db.duels[#db.duels]
+	check(d.them.guid == "Player-1-00000BB0" and d.them.name == nil, "someone else's claim to the GUID doesn't name the opponent: "..tostring(d.them.name))
+	enemyUnits.target = nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

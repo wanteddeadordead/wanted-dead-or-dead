@@ -9948,6 +9948,253 @@ end)()
 	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
 	db.settings.sigBackground = true
 end)()
+-- Rally leaders: a group's leader claims the rally in their zone (not in a fight, an instance or while another holds
+-- it), their position goes out on the channel, and players of their faction there see it on the map and in Nearby.
+-- Zones are told apart by their map, never their name. The earlier claim holds (a claim counts at most five minutes
+-- before it was first heard), the same second goes to the name that sorts first, and a rally ends on death, leaving
+-- the zone, standing still for half an hour, or five minutes unheard. Only the sender's own rally is taken.
+;(function()
+	local Rally, Sync = ns.Rally, ns.Sync
+	local sent, realSend = {}, Sync.SendRally
+	Sync.SendRally = function(_, tbl, toLinks) sent[#sent + 1] = { tbl = tbl, toLinks = toLinks } return true end
+	-- Zone maps (the stub's have no type), a town's map inside Durotar, and the continent the game falls back to underground
+	local realInfo, realBest = C_Map.GetMapInfo, C_Map.GetBestMapForUnit
+	local maps = { [1] = { name = "Durotar", mapType = 3, parentMapID = 2 }, [10] = { name = "The Barrens", mapType = 3, parentMapID = 2 },
+		[2] = { name = "Kalimdor", mapType = 2 }, [85] = { name = "Orgrimmar Gate", mapType = 5, parentMapID = 1 } }
+	local best = 1
+	C_Map.GetMapInfo = function(id) return maps[id] end
+	C_Map.GetBestMapForUnit = function() return best end
+	local function Hear(sender, tbl)
+		Fire("CHAT_MSG_ADDON", "WNTD", "L:rl"..#sent..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, Sync:GetInfo().channelName)
+	end
+	local function Claim(c, extra)
+		local t = { c = c, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde" }
+		for k, v in pairs(extra or {}) do t[k] = v end
+		return t
+	end
+	local leader = false
+	_G.UnitIsGroupLeader = function(unit) return unit == "player" and leader end
+	check(Rally:Claim():find("group's leader", 1, true) and not Rally:Mine(), "only a group's leader can lead a rally")
+	leader = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(Rally:Claim():find("fight", 1, true) and not Rally:Mine(), "not in a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	local realInstance = IsInInstance
+	IsInInstance = function() return true, "party" end
+	check(Rally:Claim():find("instances", 1, true) and not Rally:Mine(), "not in an instance")
+	IsInInstance = realInstance
+	best = 2
+	check(Rally:Claim():find("isn't known", 1, true) and not Rally:Mine(), "not where no zone map reaches")
+	best = 85
+	check(Rally:Claim() == nil and Rally:Mine() and Rally:Mine().zone == "Durotar" and Rally:Mine().mapId == 1, "a group's leader leads the rally in their zone (a town's map counts as its zone's)")
+	best = 1
+	local first = sent[#sent]
+	check(first.tbl.c == clock and first.tbl.z == "Durotar" and first.tbl.f == "Horde" and first.tbl.m == 1 and first.toLinks and not first.tbl.e
+		and printed[#printed]:find("see you on their map", 1, true), "the claim goes out with its time, zone, map and faction, to the realm links too")
+	check(Rally:Claim():find("already lead", 1, true), "one rally at a time")
+	local mineAt = Rally:Mine().claimed
+	-- A rival's later claim: ours holds, and is said again at once so they stand down, once per claim
+	clock = clock + 10
+	local before = #sent
+	Hear("Late Leader", Claim(clock))
+	Hear("Late Leader", Claim(clock))
+	check(Rally:Mine() and Rally:Here().mine and #sent == before + 1, "a later claim leaves ours, which answers it once")
+	-- A griefer's spam of ever-new later claims is answered a few times, then left to our regular sends
+	before = #sent
+	for i = 1, 10 do Hear("Spam Leader", Claim(clock + i)) end
+	check(Rally:Mine() and #sent == before + 3, "a rival's many claims are answered three times at most: "..(#sent - before))
+	-- Messages that make no sense, or from the other faction, are dropped
+	Hear("Odd One", Claim(clock + 3600))
+	Hear("Odd Two", Claim(clock, { x = 500 }))
+	Hear("Odd Three", Claim(0 / 0))
+	Hear("Odd Four", Claim(clock - 100, { f = "Alliance" }))
+	Hear("Odd Five", Claim(clock, { z = "" }))
+	Hear("Odd Six", Claim(clock - 100, { m = 1 / 0 }))
+	Hear("Odd Seven", Claim(clock - 100, { m = -1 }))
+	check(Rally:Holder(1).mine, "nonsense and the other faction's rallies take nothing")
+	-- Another language's zone name is the same zone: its map says so
+	Hear("Foreign Leader", Claim(clock, { z = "Durotar (fr)" }))
+	check(Rally:Holder(1).mine and #sent > before + 3, "a rival under another zone name on the same map is the same zone")
+	-- An earlier claim (both heard as they were made) ends ours
+	Hear("Early Leader", Claim(mineAt - 5))
+	check(not Rally:Mine() and Rally:Here() and Rally:Here().name == "Early Leader" and sent[#sent].tbl.e == 1
+		and printed[#printed - 1]:find("before you", 1, true) and printed[#printed]:find("Early Leader leads the rally in Durotar (50, 60)", 1, true),
+		"an earlier claim in our zone ends ours, the others are told, and who leads now is said")
+	-- An end late in the queue doesn't hide a newer claim; the end of the claim held does
+	Hear("Early Leader", { e = 1, f = "Horde", c = mineAt - 60 })
+	check(Rally:Here().name == "Early Leader", "an end for an older claim leaves the newer one")
+	Hear("Early Leader", { e = 1, f = "Horde", c = mineAt - 5 })
+	check(Rally:Here().name ~= "Early Leader", "an ended rally is dropped at once")
+	for _, name in ipairs({ "Late Leader", "Spam Leader", "Foreign Leader" }) do Hear(name, { e = 1, f = "Horde", c = clock + 30 }) end
+	Hear("Alpha Leader", Claim(clock - 1))
+	Hear("Beta Leader", Claim(clock - 1))
+	check(Rally:Here().name == "Alpha Leader", "the same second goes to the name that sorts first")
+	-- A made-up early claim counts from at most five minutes before it was first heard
+	clock = clock + 600
+	Hear("Alpha Leader", Claim(clock - 601))
+	Hear("Beta Leader", Claim(clock - 601))
+	Hear("Forger", Claim(1))
+	check(Rally:Here().name == "Alpha Leader", "a claim heard for the first time can't go back further than five minutes")
+	-- Shown on the map and in Nearby while fresh (redrawn once for a burst of news)
+	RunTimers()
+	ns.MapPins:Refresh()
+	local pinned
+	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
+	check(pinned == "Alpha Leader", "the rally leader is marked on the map: "..tostring(pinned))
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	local line
+	for _, fs in ipairs(Mock.fontStrings) do local t = rawget(fs, "_text") if type(t) == "string" and t:find("Rally:", 1, true) then line = t end end
+	check(line and line:find("Alpha Leader", 1, true) and line:find("50, 60", 1, true), "Nearby shows the rally leader and where: "..tostring(line))
+	-- Heard in a fight: taken at once, not held until it's over
+	Fire("PLAYER_REGEN_DISABLED")
+	Hear("Alpha Leader", Claim(clock - 601, { x = 51 }))
+	check(Rally:Here().x == 51, "a rally position heard in a fight is taken at once")
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	-- Five minutes unheard: gone
+	clock = clock + 301
+	Rally:Tick()
+	check(Rally:Here() == nil, "a rally not heard for five minutes has gone")
+	ns.MapPins:Refresh()
+	pinned = nil
+	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
+	check(pinned == nil, "and its marker with it")
+	-- Ours ends when we die, leave the zone, or stand still for half an hour; underground it keeps its zone and place
+	check(Rally:Claim() == nil and Rally:Mine(), "the zone is free to claim again")
+	Fire("PLAYER_DEAD")
+	check(not Rally:Mine() and sent[#sent].tbl.e == 1, "dying ends our rally")
+	Rally:Claim()
+	best = 2
+	Fire("ZONE_CHANGED_NEW_AREA")
+	Rally:Tick()
+	check(Rally:Mine() and Rally:Mine().mapId == 1 and sent[#sent].tbl.m == 1 and sent[#sent].tbl.x == 44.6, "underground (the continent's map) the rally keeps its zone, map and place")
+	best = 10
+	Fire("ZONE_CHANGED_NEW_AREA")
+	best = 1
+	check(not Rally:Mine(), "leaving the zone ends it")
+	Rally:Claim()
+	for _ = 1, 59 do clock = clock + 30 Rally:Tick() end
+	check(Rally:Mine(), "standing still for under half an hour keeps it")
+	clock = clock + 30
+	Rally:Tick()
+	check(not Rally:Mine() and printed[#printed]:find("haven't moved", 1, true), "half an hour standing still ends it")
+	-- A claim that couldn't go out says so
+	Sync.SendRally = function() return false end
+	Rally:Claim()
+	check(Rally:Mine() and printed[#printed]:find("couldn't be shared yet", 1, true), "a claim not sent doesn't say others see it")
+	Rally:End()
+	Sync.SendRally, _G.UnitIsGroupLeader = realSend, nil
+	C_Map.GetMapInfo, C_Map.GetBestMapForUnit = realInfo, realBest
+	RunTimers()
+end)()
+-- The rally message itself: on the channel, while sync is paused too (a leader who couldn't answer a rival would
+-- leave two rallies standing), only from the leader's client, and passed on by nobody
+;(function()
+	local Rally, Sync = ns.Rally, ns.Sync
+	local realInfo = C_Map.GetMapInfo
+	C_Map.GetMapInfo = function(id) return id == 1 and { name = "Durotar", mapType = 3 } or nil end
+	_G.UnitIsGroupLeader = function() return true end
+	local syncPrivate
+	for i = 1, 60 do
+		local name, value = debug.getupvalue(Sync.Status, i)
+		if name == "private" then syncPrivate = value break end
+		if not name then break end
+	end
+	check(syncPrivate and syncPrivate.pausedUntil, "Sync's state is reachable")
+	local realPause = syncPrivate.pausedUntil
+	syncPrivate.pausedUntil = clock + 600
+	addonSent = {}
+	Rally:Claim()
+	clock = clock + 5
+	RunTimers()
+	local onChannel = 0
+	for _, m in ipairs(addonSent) do if m.text:sub(1, 2) == "L:" and m.chatType == "CHANNEL" then onChannel = onChannel + 1 end end
+	check(onChannel == 1 and printed[#printed]:find("see you on their map", 1, true), "the claim goes out on the channel while sync is paused: "..onChannel)
+	Rally:End()
+	syncPrivate.pausedUntil = realPause
+	_G.UnitIsGroupLeader = nil
+	C_Map.GetMapInfo = realInfo
+end)()
+-- Skull and Flare: secure buttons the game runs itself, set up out of combat only. Skull marks the target with the
+-- skull when it's a bounty or Kill on Sight enemy and we lead or assist the group (its action sits under the button
+-- name the game switches to only for a target we can attack, so in a fight it never marks anyone else); Flare places a
+-- world marker for the rally leader. Not set up, a click says why; in a fight Skull only says it can't change.
+;(function()
+	local Rally = ns.Rally
+	local skull, flare = _G.WantedRallySkullButton, _G.WantedRallyFlareButton
+	check(skull and flare and skull:GetAttribute("marker") == 8 and skull:GetAttribute("unit") == "target" and skull:GetAttribute("action") == "set"
+		and skull:GetAttribute("harmbutton") == "skull" and flare:GetAttribute("marker") == 1,
+		"the Skull and Flare buttons are made, named for /click, with the skull for attackable targets and a world marker")
+	local realInfo = C_Map.GetMapInfo
+	C_Map.GetMapInfo = function(id) return id == 1 and { name = "Durotar", mapType = 3 } or nil end
+	local role = nil
+	_G.UnitIsGroupLeader = function() return role == "leader" end
+	_G.UnitIsGroupAssistant = function() return role == "assist" end
+	_G.UnitCanAttack = function(_, unit) local e = enemyUnits[unit] return e ~= nil and (e.faction or "Alliance") ~= "Horde" end
+	local said = #printed
+	enemyUnits.target = { guid = "Player-9-SKULL1", name = "Skull Target", class = "ROGUE", level = 20 }
+	Fire("PLAYER_TARGET_CHANGED")
+	check(skull:GetAttribute("type-skull") == nil and skull:GetAttribute("type") == nil, "not the group's leader or an assistant: Skull does nothing")
+	skull._scripts.PostClick(skull, "LeftButton")
+	check(#printed == said + 1 and printed[#printed]:find("leader or assistants", 1, true), "and a click says why: "..tostring(printed[#printed]))
+	role = "assist"
+	Fire("PLAYER_TARGET_CHANGED")
+	check(skull:GetAttribute("type-skull") == nil and skull.why:find("no bounty", 1, true), "a target with no bounty and not on Kill on Sight isn't marked: "..tostring(skull.why))
+	-- An enemy we can't attack (not flagged, a sanctuary) never sets it up: the game's click would do nothing
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
+	local realCanAttack = UnitCanAttack
+	_G.UnitCanAttack = function() return false end
+	Fire("PLAYER_TARGET_CHANGED")
+	check(skull:GetAttribute("type-skull") == nil and skull.why:find("can't attack", 1, true), "a Kill on Sight enemy we can't attack isn't set up: "..tostring(skull.why))
+	_G.UnitCanAttack = realCanAttack
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
+	-- Put on Kill on Sight while targeted: set up again without a target change
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == "raidtarget" and skull:GetAttribute("type") == nil,
+		"our target put on Kill on Sight: Skull marks it, under the attackable-target button only")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == nil, "taken off Kill on Sight: Skull does nothing again")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
+	RunTimers()
+	said = #printed
+	skull._scripts.PostClick(skull, "LeftButton")
+	check(#printed == said, "a click that marks says nothing")
+	-- In a fight the game forbids changes: it stays as it was, and a click that can't act says only that
+	inCombat = true
+	enemyUnits.target = { guid = "Player-9-SKULL2", name = "Plain Target", class = "ROGUE", level = 20, faction = "Horde" }
+	Fire("PLAYER_TARGET_CHANGED")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == "raidtarget", "nothing is changed in a fight")
+	skull._scripts.PostClick(skull, "LeftButton")
+	check(#printed == said + 1 and printed[#printed]:find("can't be changed in a fight", 1, true), "a click in a fight on a target we can't attack says why, plainly: "..tostring(printed[#printed]))
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	check(skull:GetAttribute("type-skull") == nil, "and it's set up again when the fight ends")
+	enemyUnits.target = nil
+	-- Flare is for the rally leader
+	role = "leader"
+	Fire("GROUP_ROSTER_UPDATE")
+	check(flare:GetAttribute("type") == nil and flare.why:find("rally leader", 1, true), "Flare waits for a rally")
+	check(Rally:Claim() == nil and flare:GetAttribute("type") == "worldmarker", "leading the rally, Flare places a world marker")
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	check(skull:IsShown() and flare:IsShown(), "the leader's rally line shows Skull and Flare")
+	Rally:End()
+	check(flare:GetAttribute("type") == nil, "the rally over, Flare does nothing")
+	RunTimers()
+	ns.NearbyWindow:Refresh()
+	check(not skull:IsShown() and not flare:IsShown(), "and the buttons go")
+	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant, _G.UnitCanAttack = nil, nil, nil
+	C_Map.GetMapInfo = realInfo
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

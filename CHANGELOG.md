@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Rally leaders. A group's leader can lead the rally in their zone (Call for help > Lead the rally here, or
+  `/wanted rally`): Wanted players of their faction in that zone see them on the world map and at the top of the
+  Nearby window, and get one chat line saying who leads and where. One per faction per zone: the earlier claim holds.
+  Not in a fight or an instance. It ends when the leader dies, leaves the zone, ends it (`/wanted rally end`) or
+  stands still for half an hour, and others drop one they haven't heard from for five minutes. A /reload ends it.
+- The rally leader's line in Nearby has Skull (puts the skull on your target when it's an enemy with a bounty or on
+  Kill on Sight) and Flare (click, then click the ground for a world marker). For a group's leader or assistants; a
+  click that can't act says why. They're set up out of combat, so in a fight they stay as they were when it began,
+  though Skull never marks a target you can't attack.
+  Bind them with a macro: `/click WantedRallySkullButton` or `/click WantedRallyFlareButton`.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

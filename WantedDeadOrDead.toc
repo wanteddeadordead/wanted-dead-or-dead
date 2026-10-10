@@ -60,6 +60,7 @@ Toast.lua
 Streaks.lua
 Posse.lua
 Raids.lua
+Rally.lua
 UI.lua
 Rows.lua
 EnemyMenu.lua

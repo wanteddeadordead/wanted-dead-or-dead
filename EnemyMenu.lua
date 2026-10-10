@@ -163,6 +163,18 @@ function EnemyMenu:ShowHelpMenu(anchor)
 	if IsInGuild and IsInGuild() then
 		tinsert(items, { text = "Your guild", onClick = function() EnemyMenu:CallForHelp("GUILD") end })
 	end
+	-- Rally leader (Rally): a group's leader marks themselves for their faction in this zone
+	tinsert(items, "-")
+	if Wanted.Rally:Mine() then
+		tinsert(items, { text = "End your rally", onClick = function() Wanted.Rally:End("Your rally has ended.") end })
+	else
+		tinsert(items, { text = "Lead the rally here", color = C.gold, onClick = function()
+			local why = Wanted.Rally:Claim()
+			if why then
+				Wanted:Print("%s", why)
+			end
+		end })
+	end
 	W:Menu(items, anchor)
 end
 

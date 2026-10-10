@@ -10071,6 +10071,8 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	GetInventoryItemLink = function(unit, slot)
 		if slot == 1 then return unit == "player" and "|cff1eff00|Hitem:200::::::::20:::::|h[My Cap]|h|r" or "|cff0070dd|Hitem:300::::::::30:::::|h[Their Helm]|h|r" end
 		if slot == 4 then return "|cffffffff|Hitem:999::::|h[Shirt]|h|r" end
+		-- A random-suffix green: a long item string with bonus fields
+		if slot == 5 then return "|cff1eff00|Hitem:15372::::::-12:1234567890:22:1488::11:6:1716:6654:7890:12345:10353:10352:1:28:4512:2:9:22:10:1488:::::::::::::::::::::::::::::|h[Chestpiece of the Bear]|h|r" end
 	end
 	-- They challenge us, we accept and win: a Wanted user, so their name is kept
 	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, raceFile = "Scourge", raceName = "Undead", close = true }
@@ -10097,6 +10099,7 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	local them, me = d.them, d.me
 	check(them.name == "Duel Friend" and them.guid == "Player-1-0D0E1F00" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
 		"a Wanted user is kept by name with class, race and level: "..tostring(them.name))
+	check(them.gear and them.gear.items[5] and #them.gear.items[5] > 60 and me.gear and me.gear.items[5], "a long random-suffix item string is kept")
 	check(them.gear and them.gear.items[1] == "item:300::::::::30:::::" and not them.gear.items[4] and me.gear and me.gear.items[1] == "item:200::::::::20:::::",
 		"both sides' gear is kept as item strings by slot, no shirt")
 	GetInventoryItemLink = S.savedLink

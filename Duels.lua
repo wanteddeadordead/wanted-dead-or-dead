@@ -597,9 +597,19 @@ function private.ReadGear(unit)
 	for _, slot in ipairs(GEAR_SLOTS) do
 		local ok, link = pcall(GetInventoryItemLink, unit, slot)
 		link = ok and private.Readable(link) or nil
-		local item = type(link) == "string" and strmatch(link, "|H(item:[%d:%-]+)|h") or nil
-		if item and #item <= 120 then
+		-- The item part of the link: digits, colons and the odd letter (random suffixes and bonuses make it long), never
+		-- a "|" (an escape code) and at most 255 bytes
+		local item = type(link) == "string" and strmatch(link, "|H(item:[%w:%-]+)|h") or nil
+		if item and #item <= 255 then
 			items[slot], any = item, true
+		elseif type(link) == "string" then
+			-- Worn but not kept: say what its link looked like, for the in-game tests
+			Wanted:Log("Duels: slot %d's item link not kept (%d bytes): %s", slot, #link, (gsub(strsub(link, 1, 60), "|", "!")))
+		elseif ok and link == nil and private.Readable(UnitExists(unit)) then
+			local raw = select(2, pcall(GetInventoryItemLink, unit, slot))
+			if raw ~= nil then
+				Wanted:Log("Duels: slot %d's item link hidden by the game", slot)
+			end
 		end
 	end
 	return any and { items = items } or nil

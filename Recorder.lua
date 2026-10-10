@@ -606,7 +606,7 @@ function private.RecordDeath(guid, name)
 	end
 	-- A duel to the death's loser really dies: a duel, not world PvP
 	if Wanted.Duels and Wanted.Duels:Involves(guid) then
-		Wanted:Log("Recorder: %s died in a duel; not recorded", tostring(name))
+		Wanted:Log("Recorder: a death in a duel; not recorded")
 		return
 	end
 	local friend = private.friendly[guid]

@@ -10330,6 +10330,37 @@ end)()
 	end
 	enemyUnits.target = nil
 end)()
+-- Each inspect, and why one wasn't asked, is in the log for the next in-game test (once a reason, not every second)
+;(function()
+	local S = duelStubs
+	local function Count(text) local n = 0 for _, line in ipairs(ns:GetLogLines()) do if line:find(text, 1, true) then n = n + 1 end end return n end
+	local before = {}
+	for _, text in ipairs({ "Duels: inspect skipped: opponent not in view", "Duels: inspect skipped: the game won't inspect them (CanInspect)" }) do before[text] = Count(text) end
+	local function Logged(text) return Count(text) - (before[text] or 0) end
+	local canInspect = CanInspect
+	CanInspect = function() return false end
+	enemyUnits.target = nil
+	clock = clock + 60
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	ns.Duels:Check()
+	check(Logged("Duels: inspect skipped: opponent not in view") == 1, "an opponent out of view is logged once")
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	ns.Duels:Check()
+	ns.Duels:Check()
+	check(Logged("Duels: inspect skipped: the game won't inspect them (CanInspect)") == 1, "the game refusing the inspect is logged once")
+	CanInspect = canInspect
+	ns.Duels:Check()
+	check(Logged("Duels: inspect asked (try 1)") >= 1, "the inspect asked is logged")
+	clock = clock + 10
+	ns.Duels:Check()
+	check(Logged("Duels: inspect timed out") >= 1, "an inspect not answered is logged")
+	ns.Duels:Check()
+	Fire("INSPECT_READY", "Player-1-0D0E1F00")
+	check(Logged("Duels: inspect answered: Frost") >= 1, "the answer is logged with the specialization")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	enemyUnits.target = nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

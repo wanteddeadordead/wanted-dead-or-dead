@@ -167,6 +167,9 @@ function Duels:Check()
 	end
 	local unit = private.FindUnit(duel)
 	if not unit then
+		if not duel.inspected then
+			private.InspectNote(duel, "skipped: opponent not in view (target, focus, mouseover or a nameplate)")
+		end
 		return
 	end
 	private.Learn(duel, unit)
@@ -423,18 +426,23 @@ end
 ---Asks for the opponent's specialization, unless anyone else's inspect may still be waiting (the inspect window's, another
 ---addon's): the game answers one at a time, and ours would take theirs.
 function private.TryInspect(duel, unit)
-	if duel.inspected or private.inspect or (duel.inspectTries or 0) >= INSPECT_TRIES or not duel.guid then
+	if duel.inspected or private.inspect then
 		return
 	end
-	if GetTime() - private.othersAt < OTHERS_SECONDS or private.PlayerInspecting() then
-		return
-	end
-	if not (NotifyInspect and CanInspect) then
-		return
+	if (duel.inspectTries or 0) >= INSPECT_TRIES then
+		return private.InspectNote(duel, format("given up after %d tries", INSPECT_TRIES))
+	elseif not duel.guid then
+		return private.InspectNote(duel, "skipped: no GUID for the opponent")
+	elseif GetTime() - private.othersAt < OTHERS_SECONDS then
+		return private.InspectNote(duel, "skipped: someone else's inspect may be waiting")
+	elseif private.PlayerInspecting() then
+		return private.InspectNote(duel, "skipped: the inspect window or talents frame is open")
+	elseif not (NotifyInspect and CanInspect) then
+		return private.InspectNote(duel, "skipped: no inspect functions in this client")
 	end
 	local ok, can = pcall(CanInspect, unit, false)
 	if not ok or not private.Readable(can) then
-		return
+		return private.InspectNote(duel, "skipped: the game won't inspect them (CanInspect)")
 	end
 	duel.inspectTries = (duel.inspectTries or 0) + 1
 	private.asking = true
@@ -442,6 +450,18 @@ function private.TryInspect(duel, unit)
 	private.asking = false
 	if asked then
 		private.inspect = { guid = duel.guid, at = GetTime() }
+		duel.inspectNote = nil
+		Wanted:Log("Duels: inspect asked (try %d)", duel.inspectTries)
+	else
+		private.InspectNote(duel, "NotifyInspect failed")
+	end
+end
+
+---Logs why the opponent's inspect wasn't asked, once a reason (Check runs every second).
+function private.InspectNote(duel, note)
+	if duel.inspectNote ~= note then
+		duel.inspectNote = note
+		Wanted:Log("Duels: inspect %s", note)
 	end
 end
 
@@ -454,7 +474,11 @@ end
 ---The game's answer to an inspect. Read only when it's ours: after someone else's question the data is theirs.
 function private.OnInspectReady(guid)
 	local inspect = private.inspect
-	if not inspect or inspect.taken or private.Readable(guid) ~= inspect.guid then
+	if not inspect or private.Readable(guid) ~= inspect.guid then
+		return
+	end
+	if inspect.taken then
+		Wanted:Log("Duels: inspect answered after someone else asked one; not read")
 		return
 	end
 	local duel = private.duel
@@ -462,6 +486,9 @@ function private.OnInspectReady(guid)
 	if unit then
 		duel.them.spec = private.InspectSpec(unit)
 		duel.inspected = true
+		Wanted:Log("Duels: inspect answered: %s", duel.them.spec or "no specialization")
+	else
+		Wanted:Log("Duels: inspect answered with the opponent out of view; not read")
 	end
 	private.ReleaseInspect()
 end
@@ -469,6 +496,7 @@ end
 ---An inspect not answered in time is given up.
 function private.CheckInspectTimeout()
 	if private.inspect and GetTime() - private.inspect.at > INSPECT_TIMEOUT then
+		Wanted:Log("Duels: inspect timed out%s", private.inspect.taken and " (someone else asked one since)" or "")
 		private.ReleaseInspect()
 	end
 end

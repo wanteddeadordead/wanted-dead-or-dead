@@ -1,5 +1,5 @@
 -- Wanted: duels. Each duel the player fights is kept for their own matchup sheet: who it was against (class, race,
--- level and talent build, by inspect), their own build, who won, how long it took, where, and how much health and
+-- level and specialization, by inspect), their own specialization, who won, how long it took, where, and how much health and
 -- mana each side had left. The opponent's name is kept only when they run Wanted; anyone else is their class and
 -- spec ("Frost Mage"), with the GUID kept only to tell duels apart. Kept in WantedDB.duels for the desktop app, never
 -- shared with other players, and never a kill, a death or a sighting.
@@ -43,8 +43,6 @@ local OTHERS_SECONDS = 5
 local INSPECT_TIMEOUT = 5
 local INSPECT_TRIES = 5
 local CHECK_SECONDS = 1
--- Talent trees read at most
-local MAX_TREES = 4
 local MANA = 0
 -- The game's lines, in case a client lacks them: %1$s is the winner, %2$s the loser
 local ENDINGS = {
@@ -155,7 +153,7 @@ function private.Begin(name, guid, toTheDeath)
 end
 
 ---Once a second while a duel is asked for or on: finds the opponent's unit, notes when the fight starts (they turn
----hostile) and their health and mana as last seen, and asks for their talents until the game answers.
+---hostile) and their health and mana as last seen, and asks for their specialization until the game answers.
 function Duels:Check()
 	local duel = private.duel
 	private.CheckInspectTimeout()
@@ -341,7 +339,7 @@ function private.Finish(duel)
 	me.class = Store:CleanName(private.Readable((select(2, UnitClass("player")))))
 	me.race = Store:CleanName(private.Readable((select(2, UnitRace("player")))))
 	me.level = type(level) == "number" and level > 0 and level or nil
-	me.talents, me.spec = private.ReadTalents(false)
+	me.spec = private.OwnSpec()
 	local them = duel.them
 	-- The name only of a Wanted user, and only when the game names the character so too: a hello can claim any GUID
 	them.guid = duel.guid
@@ -369,47 +367,63 @@ function private.Finish(duel)
 		tremove(list, 1)
 	end
 	Wanted.UI:Refresh()
-	Wanted:Log("Duels: %s a duel against %s %s", duel.result or "no result in", tostring(them.spec), tostring(them.class))
+	Wanted:Log("Duels: %s a duel against %s", duel.result or "no result in", Duels:Build(them))
 end
 
 
 
 -- ============================================================================
--- Talents
+-- Specialization
 -- ============================================================================
 
----Points in each talent tree, and the name of the tree with the most ("Frost"; nil with no points spent), for the
----player or the unit last inspected.
----@param isInspect boolean
----@return number[]? points
----@return string? spec
-function private.ReadTalents(isInspect)
+---The name of a specialization by its id ("Frost"), or nil.
+function private.SpecName(specId)
+	specId = private.Readable(specId)
+	if type(specId) ~= "number" or specId <= 0 then
+		return nil
+	end
+	local name
+	if GetSpecializationNameForSpecID then
+		local ok, found = pcall(GetSpecializationNameForSpecID, specId)
+		name = ok and private.Readable(found) or nil
+	end
+	if not name and GetSpecializationInfoByID then
+		local ok, _, found = pcall(GetSpecializationInfoByID, specId)
+		name = ok and private.Readable(found) or nil
+	end
+	return type(name) == "string" and name ~= "" and Store:CleanName(name) or nil
+end
+
+---The player's own specialization's name ("Arms"), or nil before one is chosen. Forever's talents are retail's: a
+---chosen specialization and a talent loadout, not points in three trees.
+function private.OwnSpec()
 	local info = C_SpecializationInfo
-	if not (info and info.GetSpecializationInfo) then
-		return nil, nil
+	if not (info and info.GetSpecialization and info.GetSpecializationInfo) then
+		return nil
 	end
-	local points, spec, most = {}, nil, 0
-	for tree = 1, MAX_TREES do
-		local ok, _, name, _, _, _, _, spent = pcall(info.GetSpecializationInfo, tree, isInspect)
-		name, spent = ok and private.Readable(name), ok and private.Readable(spent)
-		if type(name) ~= "string" or type(spent) ~= "number" then
-			break
-		end
-		tinsert(points, spent)
-		if spent > most then
-			spec, most = name, spent
-		end
+	local ok, index = pcall(info.GetSpecialization)
+	index = ok and private.Readable(index)
+	if type(index) ~= "number" or index <= 0 then
+		return nil
 	end
-	if #points == 0 then
-		return nil, nil
-	end
-	return points, Store:CleanName(spec)
+	local okInfo, specId = pcall(info.GetSpecializationInfo, index)
+	return okInfo and private.SpecName(specId) or nil
 end
 
----Asks for the opponent's talents, unless anyone else's inspect may still be waiting (the inspect window's, another
+---The specialization's name of the unit our inspect was answered for, or nil.
+function private.InspectSpec(unit)
+	local info = C_SpecializationInfo
+	if not (info and info.GetInspectSpecialization) then
+		return nil
+	end
+	local ok, specId = pcall(info.GetInspectSpecialization, unit)
+	return ok and private.SpecName(specId) or nil
+end
+
+---Asks for the opponent's specialization, unless anyone else's inspect may still be waiting (the inspect window's, another
 ---addon's): the game answers one at a time, and ours would take theirs.
 function private.TryInspect(duel, unit)
-	if duel.them.talents or private.inspect or (duel.inspectTries or 0) >= INSPECT_TRIES or not duel.guid then
+	if duel.inspected or private.inspect or (duel.inspectTries or 0) >= INSPECT_TRIES or not duel.guid then
 		return
 	end
 	if GetTime() - private.othersAt < OTHERS_SECONDS or private.PlayerInspecting() then
@@ -444,8 +458,10 @@ function private.OnInspectReady(guid)
 		return
 	end
 	local duel = private.duel
-	if duel and duel.guid == guid then
-		duel.them.talents, duel.them.spec = private.ReadTalents(true)
+	local unit = duel and duel.guid == guid and private.FindUnit(duel)
+	if unit then
+		duel.them.spec = private.InspectSpec(unit)
+		duel.inspected = true
 	end
 	private.ReleaseInspect()
 end

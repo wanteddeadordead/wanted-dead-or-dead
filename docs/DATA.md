@@ -124,8 +124,10 @@ boards; the site takes them only for the account's own characters.
 for the app's uploads to de-duplicate. Times are server times (`GetServerTime()`), `length` seconds. `result` is
 `"won"`, `"lost"` or `"none"` (no winner line: cancelled); `fled` is true when the loser left the duel area;
 `toTheDeath` true for a duel to the death. `zone` is `GetRealZoneText()`, `x`/`y` 0-100 on `mapId`. On a side, `class`
-and `race` are the game's file names (`MAGE`, `Scourge`), `talents` the points in each tree in the game's order,
-`spec` the name of the tree with the most (nil with none spent, or when the opponent's inspect never answered), and
+and `race` are the game's file names (`MAGE`, `Scourge`), `spec` the name of the chosen specialization (Forever's
+talents are retail's: our own from `C_SpecializationInfo.GetSpecialization`, the opponent's from
+`GetInspectSpecialization` after an inspect; nil before one is chosen, or when the opponent's inspect never answered),
+`talents` always nil (kept for a talent loadout later; there are no per-tree points to count), and
 `health`/`mana` percentages at the end (mana only for mana users; the opponent's as last seen if out of view, nil
 where the game hides it). `them.name` is kept only when the opponent runs Wanted (a signing key is bound to their
 GUID by the app's list or by a hello whose sender is the game's own name for that character, `KeyBook:OriginOf`, and

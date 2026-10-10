@@ -9979,8 +9979,9 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	local Duels, db = ns.Duels, ns.db
 	local S = duelStubs
 	S.inspected, S.cleared = {}, 0
-	S.mine = { { "Arms", 31 }, { "Fury", 20 }, { "Protection", 0 } }
-	S.theirs = { Frost = { { "Arcane", 0 }, { "Fire", 10 }, { "Frost", 41 } }, Warlock = { { "Affliction", 30 }, { "Demonology", 21 }, { "Destruction", 0 } } }
+	-- Forever's talents are retail's: a chosen specialization, read by its id
+	S.specNames = { [71] = "Arms", [64] = "Frost", [265] = "Affliction" }
+	S.mine, S.theirs = 71, { Frost = 64, Warlock = 265 }
 	S.inspectAs = S.theirs.Frost
 	local saved = { GetPlayerInfoByGUID = GetPlayerInfoByGUID }
 	GetPlayerInfoByGUID = function(guid)
@@ -9997,11 +9998,12 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	-- As the game's: hooks on NotifyInspect run for every caller, Wanted included
 	NotifyInspect = function(unit) S.inspected[#S.inspected + 1] = unit for _, f in ipairs(globalHooks.NotifyInspect or {}) do f(unit) end end
 	ClearInspectPlayer = function() S.cleared = S.cleared + 1 end
-	C_SpecializationInfo = { GetSpecializationInfo = function(tab, isInspect)
-		local tree = (isInspect and S.inspectAs or S.mine)[tab]
-		if not tree then return 0, nil end
-		return 100 + tab, tree[1], "", 0, "DAMAGER", 1, tree[2]
-	end }
+	C_SpecializationInfo = {
+		GetSpecialization = function() return 1 end,
+		GetSpecializationInfo = function(index) if index == 1 then return S.mine, S.specNames[S.mine], "", 0, "DAMAGER", 1, 0 end return 0, nil end,
+		GetInspectSpecialization = function(unit) return enemyUnits[unit] and S.inspectAs or 0 end,
+	}
+	GetSpecializationNameForSpecID = function(id) return S.specNames[id] end
 	GetDuelerInfo = function() return "Player-1-0D0E1F00", 60 end
 	DUEL_WINNER_KNOCKOUT = "%1$s has defeated %2$s in a duel"
 	DUEL_WINNER_RETREAT = "%2$s has fled from %1$s in a duel"
@@ -10034,9 +10036,9 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	local them, me = d.them, d.me
 	check(them.name == "Duel Friend" and them.guid == "Player-1-0D0E1F00" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
 		"a Wanted user is kept by name with class, race and level: "..tostring(them.name))
-	check(them.spec == "Frost" and table.concat(them.talents, "/") == "0/10/41", "their build from the inspect: "..tostring(them.spec))
+	check(them.spec == "Frost" and them.talents == nil, "their specialization from the inspect: "..tostring(them.spec))
 	check(them.health == 50 and them.mana == 50, "their health and mana at the end: "..tostring(them.health).." "..tostring(them.mana))
-	check(me.guid == "Player-1-ME" and me.class == "WARRIOR" and me.race == "Orc" and me.spec == "Arms" and table.concat(me.talents, "/") == "31/20/0"
+	check(me.guid == "Player-1-ME" and me.class == "WARRIOR" and me.race == "Orc" and me.spec == "Arms" and me.talents == nil
 		and me.health == 100 and me.mana == nil, "our own side: "..tostring(me.spec).." "..tostring(me.mana))
 
 	-- We challenge a stranger while another addon's inspect is out: ours waits for it. They flee and we lose
@@ -10064,6 +10066,10 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	Fire("DUEL_FINISHED")
 	RunTimers()
 	check(#db.duels == 2, "the second duel is recorded")
+	for _, line in ipairs(ns:GetLogLines()) do check(not line:find("against nil", 1, true), "the duel's log line says what it knows: "..line) end
+	local logged = false
+	for _, line in ipairs(ns:GetLogLines()) do if line:find("Duels: lost a duel against Affliction Warlock", 1, true) then logged = true end end
+	check(logged, "the duel's log line gives the opponent's spec and class")
 	d = db.duels[2]
 	check(d.result == "lost" and d.fled and d.startAt == stranger and d.length == 25, "we fled and lost: "..tostring(d.result).." "..tostring(d.length))
 	check(d.them.name == nil and d.them.guid == "Player-1-00000BB0" and d.them.class == "WARLOCK" and d.them.spec == "Affliction",
@@ -10367,7 +10373,7 @@ end)()
 		if type(item) == "table" and item.them and item.them.class == "WARLOCK" and f._scripts.OnEnter then f._scripts.OnEnter(f) end
 	end
 	GameTooltip.AddLine = addLine
-	check(table.concat(tipLines, "\n"):find("Them: Affliction Warlock (talents unknown)", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior (31/20/0)", 1, true),
+	check(table.concat(tipLines, "\n"):find("Them: Affliction Warlock", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior", 1, true),
 		"the tooltip gives both builds: "..table.concat(tipLines, " | "))
 	for _, fs in ipairs(Mock.fontStrings) do check(not tostring(fs._text):find("Player%-1%-"), "no GUID is ever shown: "..tostring(fs._text)) end
 	db.duels = kept

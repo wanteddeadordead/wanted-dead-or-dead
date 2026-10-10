@@ -65,15 +65,14 @@ function private.UpdateRow(row, item)
 	end
 end
 
----A recent duel's details: where, both builds and what each had left.
+---A recent duel's details: where, both specializations and what each had left.
 function private.ShowTooltip(row, item)
 	if private.view ~= "recent" then
 		return
 	end
 	local function Side(side)
-		local talents = type(side.talents) == "table" and table.concat(side.talents, "/") or "talents unknown"
 		local left = type(side.health) == "number" and format(", %d%% health", side.health) or ""
-		return format("%s (%s)%s", Duels:Build(side), talents, left)
+		return Duels:Build(side)..left
 	end
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 	GameTooltip:SetText(Theme:Plain(Duels:Opponent(item.them)), 1, 1, 1)

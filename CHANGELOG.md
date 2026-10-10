@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Capture points: nine places between the towns of Hillsbrad Foothills, Ashenvale and Arathi Highlands. Standing in
+  one, able to fight (not mounted, flying, on a flight, stealthed, dead or away), counts every 30 seconds in a
+  presence book the desktop app sends to wanteddeadordead.com. The site decides who holds each point from at least two
+  different players' apps and the kills there; one player's addon never decides it. Entering a point says so in chat,
+  with who held it when the app last checked; `/wanted points` lists them. Nothing is sent to other players.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

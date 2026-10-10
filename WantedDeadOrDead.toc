@@ -40,6 +40,7 @@ Bridge.lua
 Catchup.lua
 Challenges.lua
 BlizzRank.lua
+Captures.lua
 Achievements.lua
 HonorScout.lua
 GearCatalog.lua

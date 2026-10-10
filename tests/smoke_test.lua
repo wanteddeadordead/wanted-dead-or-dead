@@ -9948,6 +9948,128 @@ end)()
 	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
 	db.settings.sigBackground = true
 end)()
+-- Rally leaders: a group's leader claims the rally in their zone (not in a fight, an instance or while another holds
+-- it), their position goes out on the channel, and players of their faction there see it on the map and in Nearby.
+-- The earlier claim holds (a claim counts at most five minutes before it was first heard), the same second goes to
+-- the name that sorts first, and a rally ends on death, leaving the zone, standing still for half an hour, or five
+-- minutes unheard. Only the leader's own client speaks for a rally: the sender the game names is the leader.
+;(function()
+	local Rally, Sync = ns.Rally, ns.Sync
+	local sent, realSend = {}, Sync.SendRally
+	Sync.SendRally = function(_, tbl, toLinks) sent[#sent + 1] = { tbl = tbl, toLinks = toLinks } end
+	local function Hear(sender, tbl)
+		Fire("CHAT_MSG_ADDON", "WNTD", "L:rl"..#sent..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, Sync:GetInfo().channelName)
+	end
+	local function Claim(c, extra)
+		local t = { c = c, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde" }
+		for k, v in pairs(extra or {}) do t[k] = v end
+		return t
+	end
+	local leader = false
+	_G.UnitIsGroupLeader = function(unit) return unit == "player" and leader end
+	check(Rally:Claim():find("group's leader", 1, true) and not Rally:Mine(), "only a group's leader can lead a rally")
+	leader = true
+	Fire("PLAYER_REGEN_DISABLED")
+	check(Rally:Claim():find("fight", 1, true) and not Rally:Mine(), "not in a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	local realInstance = IsInInstance
+	IsInInstance = function() return true, "party" end
+	check(Rally:Claim():find("instances", 1, true) and not Rally:Mine(), "not in an instance")
+	IsInInstance = realInstance
+	check(Rally:Claim() == nil and Rally:Mine() and Rally:Mine().zone == "Durotar", "a group's leader leads the rally in their zone")
+	local first = sent[#sent]
+	check(first.tbl.c == clock and first.tbl.z == "Durotar" and first.tbl.f == "Horde" and first.tbl.m == 1 and first.toLinks and not first.tbl.e,
+		"the claim goes out with its time, zone, map and faction, to the realm links too")
+	check(Rally:Claim():find("already lead", 1, true), "one rally at a time")
+	local mineAt = Rally:Mine().claimed
+	-- A rival's later claim: ours holds, and is said again at once so they stand down
+	clock = clock + 10
+	local before = #sent
+	Hear("Late Leader", Claim(clock))
+	check(Rally:Mine() and Rally:Here().mine and #sent == before + 1, "a later claim leaves ours, which is answered at once")
+	-- Messages that make no sense, or from the other faction, are dropped
+	Hear("Odd One", Claim(clock + 3600))
+	Hear("Odd Two", Claim(clock, { x = 500 }))
+	Hear("Odd Three", Claim(0 / 0))
+	Hear("Odd Four", Claim(clock - 100, { f = "Alliance" }))
+	Hear("Odd Five", Claim(clock, { z = "" }))
+	check(Rally:Holder("Durotar").mine, "nonsense and the other faction's rallies take nothing")
+	-- An earlier claim (both heard as they were made) ends ours
+	Hear("Early Leader", Claim(mineAt - 5))
+	check(not Rally:Mine() and Rally:Here() and Rally:Here().name == "Early Leader" and sent[#sent].tbl.e == 1
+		and printed[#printed - 1]:find("before you", 1, true) and printed[#printed]:find("Early Leader leads the rally in Durotar (50, 60)", 1, true),
+		"an earlier claim in our zone ends ours, the others are told, and who leads now is said")
+	-- The same second: the name that sorts first
+	Hear("Early Leader", { e = 1, f = "Horde" })
+	check(Rally:Here().name == "Late Leader", "an ended rally is dropped at once")
+	Hear("Alpha Leader", Claim(clock - 1))
+	Hear("Beta Leader", Claim(clock - 1))
+	check(Rally:Here().name == "Alpha Leader", "the same second goes to the name that sorts first")
+	-- A made-up early claim counts from at most five minutes before it was first heard
+	clock = clock + 600
+	Hear("Alpha Leader", Claim(clock - 601))
+	Hear("Beta Leader", Claim(clock - 601))
+	Hear("Forger", Claim(1))
+	check(Rally:Here().name == "Alpha Leader", "a claim heard for the first time can't go back further than five minutes")
+	-- Shown on the map and in Nearby while fresh
+	ns.MapPins:Refresh()
+	local pinned
+	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
+	check(pinned == "Alpha Leader", "the rally leader is marked on the map: "..tostring(pinned))
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	local line
+	for _, fs in ipairs(Mock.fontStrings) do local t = rawget(fs, "_text") if type(t) == "string" and t:find("Rally:", 1, true) then line = t end end
+	check(line and line:find("Alpha Leader", 1, true) and line:find("50, 60", 1, true), "Nearby shows the rally leader and where: "..tostring(line))
+	-- Heard in a fight: taken at once, not held until it's over
+	Fire("PLAYER_REGEN_DISABLED")
+	Hear("Alpha Leader", Claim(clock - 601, { x = 51 }))
+	check(Rally:Here().x == 51, "a rally position heard in a fight is taken at once")
+	Fire("PLAYER_REGEN_ENABLED")
+	clock = clock + 10
+	RunTimers()
+	-- Five minutes unheard: gone
+	clock = clock + 301
+	Rally:Tick()
+	check(Rally:Here() == nil, "a rally not heard for five minutes has gone")
+	ns.MapPins:Refresh()
+	pinned = nil
+	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
+	check(pinned == nil, "and its marker with it")
+	-- Ours ends when we die, leave the zone, or stand still for half an hour
+	check(Rally:Claim() == nil and Rally:Mine(), "the zone is free to claim again")
+	Fire("PLAYER_DEAD")
+	check(not Rally:Mine() and sent[#sent].tbl.e == 1, "dying ends our rally")
+	Rally:Claim()
+	local realZone = GetZoneText
+	GetZoneText = function() return "The Barrens" end
+	Fire("ZONE_CHANGED_NEW_AREA")
+	GetZoneText = realZone
+	check(not Rally:Mine(), "leaving the zone ends it")
+	Rally:Claim()
+	for _ = 1, 59 do clock = clock + 30 Rally:Tick() end
+	check(Rally:Mine(), "standing still for under half an hour keeps it")
+	clock = clock + 30
+	Rally:Tick()
+	check(not Rally:Mine() and printed[#printed]:find("haven't moved", 1, true), "half an hour standing still ends it")
+	Sync.SendRally, _G.UnitIsGroupLeader = realSend, nil
+end)()
+-- The rally message itself: on the channel, only from the leader's client, and passed on by nobody
+;(function()
+	local Rally, Sync = ns.Rally, ns.Sync
+	_G.UnitIsGroupLeader = function() return true end
+	addonSent = {}
+	Rally:Claim()
+	clock = clock + 5
+	RunTimers()
+	local onChannel = 0
+	for _, m in ipairs(addonSent) do if m.text:sub(1, 2) == "L:" and m.chatType == "CHANNEL" then onChannel = onChannel + 1 end end
+	check(onChannel == 1, "the claim goes out on the channel: "..onChannel)
+	Rally:End()
+	_G.UnitIsGroupLeader = nil
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

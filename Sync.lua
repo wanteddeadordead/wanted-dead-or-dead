@@ -120,6 +120,10 @@ local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
+-- A rally leader's position (Rally): { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it
+-- ended }. Passing news like sightings, sent by the leader's own client only (the game names the sender, which is the
+-- leader): on the channel, and now and then to realm links; never stored, never passed on. Older versions ignore it.
+local TAG_RALLY = "L"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
@@ -137,7 +141,7 @@ local SIGHTING_QUEUE_SECONDS = 15
 local MAX_DEFERRED_MESSAGES = 300
 local MAX_DEFERRED_PER_SENDER = 50
 -- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
-local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
+local SEND_PRIORITY = { R = 1, S = 2, L = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
 -- A cap on what any one sender may push at us, and a pause when our own queue overflows two minutes running
 -- Sightings have their own budget and never trigger the pause, so a big fight can't hold up bounties, kills and
@@ -1205,8 +1209,8 @@ function private.Enqueue(item)
 	private.Drain()
 end
 
----Where the next message to send is in the queue: the first one, except that in a fight only sightings (and
----messages already part sent) go. Nil when everything left is held.
+---Where the next message to send is in the queue: the first one, except that in a fight only sightings, rally
+---positions (and messages already part sent) go. Nil when everything left is held.
 ---@return number?
 function private.NextToSend()
 	local outbox = private.outbox
@@ -1214,7 +1218,7 @@ function private.NextToSend()
 		return outbox[1] and 1 or nil
 	end
 	for i, item in ipairs(outbox) do
-		if item.tag == TAG_SIGHTINGS or item.next > 1 then
+		if item.tag == TAG_SIGHTINGS or item.tag == TAG_RALLY or item.next > 1 then
 			return i
 		end
 	end
@@ -1242,10 +1246,10 @@ function private.Drain()
 			wipe(outbox)
 			private.outboxParts = 0
 			return
-		elseif item.tag == TAG_SIGHTINGS and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
+		elseif (item.tag == TAG_SIGHTINGS or item.tag == TAG_RALLY) and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
 			tremove(outbox, at)
 			private.outboxParts = private.outboxParts - #item.parts
-			private.Drop("stale sightings", 1)
+			private.Drop(item.tag == TAG_RALLY and "stale rally" or "stale sightings", 1)
 		elseif private.tokens < 1 then
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
 		else
@@ -1700,8 +1704,9 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		private.partial[key] = nil
 		payload = table.concat(partial.parts, "", 1, total)
 	end
-	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
-	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+	-- Sightings and rally positions are news only while fresh; everything else waits out a fight (and any backlog, to
+	-- keep order)
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and tag ~= TAG_RALLY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
 		local waiting = private.deferred[sender] or 0
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
@@ -1785,6 +1790,13 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		if taken and viaLink and private.links[sender] and tbl.fw == nil and not tbl.x and private.channelId then
 			tbl.fw = 1
 			private.Send(TAG_RAID, tbl)
+		end
+		return
+	end
+	-- A rally leader's position, from the leader: the sender is who the game says sent it, whichever way it came
+	if tag == TAG_RALLY then
+		if Wanted.Rally then
+			Wanted.Rally:OnMessage(tbl, sender)
 		end
 		return
 	end
@@ -2362,6 +2374,21 @@ function Sync:SendRaidAd(ad)
 	private.Send(TAG_RAID, ad)
 	for name in pairs(private.links) do
 		private.Send(TAG_RAID, ad, nil, name)
+	end
+end
+
+---Shares the rally we lead: on the channel, and with toLinks to each realm link heard lately too.
+---@param rally table
+---@param toLinks boolean?
+function Sync:SendRally(rally, toLinks)
+	private.Send(TAG_RALLY, rally)
+	if toLinks then
+		local now = GetTime()
+		for name, link in pairs(private.links) do
+			if now - (link.heard or 0) < LINK_TIMEOUT then
+				private.Send(TAG_RALLY, rally, nil, name)
+			end
+		end
 	end
 end
 

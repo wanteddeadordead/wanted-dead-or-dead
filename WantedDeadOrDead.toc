@@ -95,5 +95,7 @@ PagePoster.lua
 WhatsNew.lua
 MapPins.lua
 MapPins.xml
+CapturesMap.lua
+CapturesHUD.lua
 Minimap.lua
 OptionsPanel.lua

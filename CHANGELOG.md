@@ -2,11 +2,19 @@
 
 ## [Unreleased]
 
-- Capture points: nine places between the towns of Hillsbrad Foothills, Ashenvale and Arathi Highlands. Standing in
-  one, able to fight (not mounted, flying, on a flight, stealthed, dead or away), counts every 30 seconds in a
-  presence book the desktop app sends to wanteddeadordead.com. The site decides who holds each point from at least two
-  different players' apps and the kills there; one player's addon never decides it. Entering a point says so in chat,
-  with who held it when the app last checked; `/wanted points` lists them. Nothing is sent to other players.
+- Capture fronts: Arathi Highlands, Hillsbrad Foothills and Ashenvale played like a MOBA. Each side's flight master is
+  its base, with three lanes of four points between them; you take a lane's points in order from your own base, holding
+  one of the enemy's inhibitors opens their base, and taking it wins the front for the week. wanteddeadordead.com
+  decides who holds what from at least two different players' apps and the kills there; one player's addon never does.
+  - Standing in a point able to fight (not mounted, flying, on a flight, stealthed, dead or away) counts every 30 s in a
+    presence book the desktop app sends the site, and tells your side's channel.
+  - On the world map: each point at its real size coloured by who holds it, the lanes coloured up to each front line,
+    crests on the bases, and a crest per front on the continent and Azeroth maps. Click a point for a waypoint. Points
+    also show on the minimap (switch in the minimap's tracking menu).
+  - In a front's zone, a bar at the top shows each lane, and a capture bar shows your side's progress while you stand in
+    a point (provisional: the site decides). Alerts when your side gathers at a point, or enemies are close at yours.
+  - `/wanted points` lists them; Settings > Sharing has the switches, and an optional waypoint on the nearest point to
+    attack.
 
 ## [1.19.3] - 2026-10-09
 

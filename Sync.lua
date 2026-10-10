@@ -120,6 +120,10 @@ local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
+-- A player standing at a capture point (Captures): { p = point id, s = slot, c = samples }. Passing news like
+-- sightings: on the channel (or the guild's) only, from the player it's about, never stored, relayed or counted; the
+-- addon only shows it as what its side is doing there now. Older versions ignore it.
+local TAG_POINT = "P"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
@@ -1700,8 +1704,9 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		private.partial[key] = nil
 		payload = table.concat(partial.parts, "", 1, total)
 	end
-	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
-	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+	-- Sightings and capture point news are news only while fresh; everything else waits out a fight (and any backlog,
+	-- to keep order)
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and tag ~= TAG_POINT and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
 		local waiting = private.deferred[sender] or 0
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
@@ -1790,6 +1795,12 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	end
 	if viaLink then
 		private.HandleLinkMessage(tag, tbl, sender)
+		return
+	end
+	if tag == TAG_POINT then
+		if (channel == "CHANNEL" or channel == "GUILD") and Wanted.Captures then
+			Wanted.Captures:OnPeer(tbl, sender)
+		end
 		return
 	end
 	if tag == TAG_ENEMY or tag == TAG_SIGHTINGS then
@@ -2386,6 +2397,12 @@ end
 ---@param roster table
 function Sync:SendRaidRoster(to, roster)
 	return private.Send(TAG_RAID_ROSTER, roster, nil, to)
+end
+
+---Tells our side we're standing at a capture point: { p, s, c } (Captures). On the channel only, never to realm links.
+---@param presence table
+function Sync:SendPoint(presence)
+	return private.Send(TAG_POINT, presence)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

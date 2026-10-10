@@ -10281,6 +10281,26 @@ end)()
 	RunTimers()
 	enemyUnits.target = nil
 end)()
+-- A duel names the opponent only when the game's own name for their character is the Wanted user's, whatever the
+-- key's source
+;(function()
+	local db, S = ns.db, duelStubs
+	local saved = GetPlayerInfoByGUID
+	GetPlayerInfoByGUID = function(guid) if guid == "Player-1-00A0F00D" then return "Priest", "PRIEST", "Orc", "Orc", 2, "App Smith" end return saved(guid) end
+	enemyUnits.target = { guid = "Player-1-00A0F00D", name = "App Smith", faction = "Horde", class = "PRIEST", level = 60, close = true }
+	clock = clock + 60
+	S.Hook("StartDuel", "target")
+	enemyUnits.target.dueling = true
+	clock = clock + 2
+	ns.Duels:Check()
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Test has defeated App Smith in a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	local d = db.duels[#db.duels]
+	check(d.them.guid == "Player-1-00A0F00D" and d.them.name == nil, "an app key for another character of the same first name doesn't name the opponent: "..tostring(d.them.name))
+	GetPlayerInfoByGUID, enemyUnits.target = saved, nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

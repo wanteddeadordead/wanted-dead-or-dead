@@ -262,12 +262,6 @@ function private.OnSystemLine(text)
 	end
 end
 
----A character's first name to compare, lower case: "Duel Friend", "Duel" and "Duel-Realm" are all "duel".
-function private.FirstName(name)
-	name = private.Readable(name)
-	return type(name) == "string" and strmatch(strlower(name), "^[^%s%-]+") or nil
-end
-
 ---Our own names as the game may write them in a system line: the first name, with the surname, and as a sender.
 function private.MyNames()
 	local name, surname = UnitName("player")
@@ -352,8 +346,7 @@ function private.Finish(duel)
 	-- The name only of a Wanted user, and only when the game names the character so too: a hello can claim any GUID
 	them.guid = duel.guid
 	local wanted = Wanted.KeyBook:OriginOf(duel.guid)
-	local gameName = duel.guid and select(6, GetPlayerInfoByGUID(duel.guid))
-	if private.FirstName(wanted) and private.FirstName(wanted) == private.FirstName(gameName) then
+	if Wanted.KeyBook:IsCharacter(wanted, duel.guid) then
 		them.name = Store:CleanName(wanted)
 	end
 	local list = Wanted.db.duels

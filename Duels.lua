@@ -358,6 +358,7 @@ function private.Finish(duel)
 	while #list > Duels.MAX do
 		tremove(list, 1)
 	end
+	Wanted.UI:Refresh()
 	Wanted:Log("Duels: %s a duel against %s %s", duel.result or "no result in", tostring(them.spec), tostring(them.class))
 end
 
@@ -474,4 +475,65 @@ function Duels:Involves(guid)
 	end
 	local last = private.last
 	return last ~= nil and GetServerTime() - last.endedAt <= INVOLVED_SECONDS and (guid == last.guid or guid == me)
+end
+
+---How a duellist reads: the Wanted user's name, otherwise spec and class ("Frost Mage", or "Mage" with no spec known).
+---@param side table a record's me or them
+---@return string
+function Duels:Opponent(side)
+	if type(side) ~= "table" then
+		return "?"
+	end
+	if type(side.name) == "string" then
+		return side.name
+	end
+	return Duels:Build(side)
+end
+
+---A duellist's class and spec, never their name: "Frost Mage", "Mage" with no spec known.
+---@param side table
+---@return string
+function Duels:Build(side)
+	local class = type(side) == "table" and type(side.class) == "string" and Wanted.Theme:ClassLabel(side.class) or "Unknown class"
+	return type(side) == "table" and type(side.spec) == "string" and (side.spec.." "..class) or class
+end
+
+---The player's duels added up: the record overall, the record against each class and spec (most faced first), the
+---record as each of their own builds, and every duel newest first. Records not in the expected shape are passed over.
+---@return table { won, lost, total, matchups = { { label, class, won, lost, games } }, builds = (the same), recent }
+function Duels:GetSheet()
+	local sheet = { won = 0, lost = 0, total = 0, matchups = {}, builds = {}, recent = {} }
+	local byMatchup, byBuild = {}, {}
+	local function Add(rows, index, side, record)
+		local label = Duels:Build(side)
+		local row = index[label]
+		if not row then
+			row = { label = label, class = side.class, won = 0, lost = 0, games = 0 }
+			index[label] = row
+			tinsert(rows, row)
+		end
+		row.games = row.games + 1
+		row.won = row.won + (record.result == "won" and 1 or 0)
+		row.lost = row.lost + (record.result == "lost" and 1 or 0)
+	end
+	for _, record in ipairs(Wanted.db.duels) do
+		if type(record) == "table" and type(record.me) == "table" and type(record.them) == "table" and type(record.startAt) == "number" then
+			sheet.total = sheet.total + 1
+			sheet.won = sheet.won + (record.result == "won" and 1 or 0)
+			sheet.lost = sheet.lost + (record.result == "lost" and 1 or 0)
+			Add(sheet.matchups, byMatchup, record.them, record)
+			Add(sheet.builds, byBuild, record.me, record)
+			tinsert(sheet.recent, record)
+		end
+	end
+	local function ByGames(a, b)
+		if a.games ~= b.games then
+			return a.games > b.games
+		end
+		return a.label < b.label
+	end
+	sort(sheet.matchups, ByGames)
+	sort(sheet.builds, ByGames)
+	sort(sheet.recent, function(a, b) return a.startAt > b.startAt end)
+	return sheet
 end

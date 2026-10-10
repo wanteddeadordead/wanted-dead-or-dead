@@ -82,6 +82,7 @@ PageHotspots.lua
 PageChallenges.lua
 PageRank.lua
 PageGear.lua
+PageDuels.lua
 PageCalendar.lua
 PageWeb.lua
 PageSettings.lua

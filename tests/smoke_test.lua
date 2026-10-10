@@ -7301,7 +7301,7 @@ end)()
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home" }) do
+		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
@@ -7311,7 +7311,7 @@ end)()
 	end
 	UI:Show("challenges")
 	local tabs = UI:Tabs()
-	check(table.concat(tabs.labels, ", ") == "Challenges, Leaderboards, Calendar, Rank, Gear", "Progress's tabs: "..table.concat(tabs.labels, ", "))
+	check(table.concat(tabs.labels, ", ") == "Challenges, Leaderboards, Calendar, Rank, Gear, Duels", "Progress's tabs: "..table.concat(tabs.labels, ", "))
 	-- Enemies opens on Hotspots (where they are right now, which its badge counts)
 	UI:Show("enemies")
 	check(table.concat(UI:Tabs().labels, ", ") == "Hotspots, Enemies, Guild KoS, Activity", "Enemies' tabs: "..table.concat(UI:Tabs().labels, ", "))
@@ -10126,6 +10126,54 @@ end)()
 	clock = clock + 60
 	check(not ns.Duels:Involves("Player-1-D0E1F0") and not ns.Duels:Involves("Player-1-ME"), "a while after the duel, nobody is in it")
 	enemyUnits.target = nil
+end)()
+-- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
+;(function()
+	local db, Duels = ns.db, ns.Duels
+	local kept = db.duels
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	db.duels = {}
+	ns.UI:Show("duels")
+	check(ns.UI:IsShown("duels") and OnScreen("Duel someone and it shows up here."), "with no duels the page says how to get one")
+	local function Duel(t, result, mySpec, them) return { id = "Test Player:duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
+		me = { class = "WARRIOR", spec = mySpec, talents = { 31, 20, 0 } }, them = them } end
+	local frost = { guid = "Player-1-D0E1F0", class = "MAGE", spec = "Frost", name = "Duel Friend" }
+	local lock = { guid = "Player-1-0BB0", class = "WARLOCK", spec = "Affliction", race = "Orc", level = 58 }
+	db.duels = {
+		{ id = "broken" }, -- a malformed record is passed over
+		Duel(clock - 400, "won", "Arms", frost),
+		Duel(clock - 300, "lost", "Arms", { guid = "Player-1-0CC0", class = "MAGE", spec = "Frost" }),
+		Duel(clock - 200, "lost", "Fury", lock),
+		Duel(clock - 100, "none", "Fury", { guid = "Player-1-0DD0", class = "MAGE" }),
+	}
+	local sheet = Duels:GetSheet()
+	check(sheet.won == 1 and sheet.lost == 2 and sheet.total == 4, "the record overall: "..sheet.won.."-"..sheet.lost.." of "..sheet.total)
+	check(sheet.matchups[1].label == "Frost Mage" and sheet.matchups[1].won == 1 and sheet.matchups[1].lost == 1 and sheet.matchups[1].games == 2,
+		"the most faced class and spec first: "..tostring(sheet.matchups[1].label))
+	check(#sheet.matchups == 3 and sheet.matchups[3].games == 1, "one row a class and spec ('Mage' with no spec known)")
+	check(sheet.builds[1].games == 2 and #sheet.builds == 2, "the record per own build")
+	check(sheet.recent[1].startAt == clock - 100 and #sheet.recent == 4, "recent duels newest first")
+	check(Duels:Opponent(db.duels[2].them) == "Duel Friend" and Duels:Opponent(lock) == "Affliction Warlock", "a Wanted user by name, anyone else by spec and class")
+	ns.UI:Show("duels")
+	check(OnScreen("1-2"), "the record is on the page")
+	check(OnScreen("Frost Mage"), "the matchup sheet shows class and spec")
+	-- The recent duels, with a tooltip of where and both builds
+	local recentButton
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Recent duels" then recentButton = fs._parent end end
+	recentButton:Click()
+	check(OnScreen("Duel Friend") and OnScreen("Affliction Warlock") and OnScreen("No result"), "recent duels name Wanted users and show the rest by spec")
+	local tipLines = {}
+	local addLine = GameTooltip.AddLine
+	GameTooltip.AddLine = function(_, text) tipLines[#tipLines + 1] = text end
+	for _, f in ipairs(Mock.created) do
+		local item = rawget(f, "item")
+		if type(item) == "table" and item.them and item.them.class == "WARLOCK" and f._scripts.OnEnter then f._scripts.OnEnter(f) end
+	end
+	GameTooltip.AddLine = addLine
+	check(table.concat(tipLines, "\n"):find("Them: Affliction Warlock (talents unknown)", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior (31/20/0)", 1, true),
+		"the tooltip gives both builds: "..table.concat(tipLines, " | "))
+	for _, fs in ipairs(Mock.fontStrings) do check(not tostring(fs._text):find("Player%-1%-"), "no GUID is ever shown: "..tostring(fs._text)) end
+	db.duels = kept
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

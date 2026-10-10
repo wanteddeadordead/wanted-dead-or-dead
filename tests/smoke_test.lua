@@ -1255,6 +1255,24 @@ check(ns.Store:GetPlayer("Player-9-OLDCLIENT") ~= nil, "a single sighting from a
 		sent = sent or (payload and ns.Sync:Decode(payload))
 	end
 	check(sent and sent.sh == B and sent.s[1].g == "Player-9-SHARDOUT", "a sightings batch carries our shard")
+	-- Seen in one zone, sent after we moved to the next: no shard rather than the new zone's
+	local function SentShard()
+		for _, m in ipairs(addonSent) do
+			local payload = m.text:match("^S:[^:]+:1/1:(.+)$")
+			local decoded = payload and ns.Sync:Decode(payload)
+			if decoded then return decoded, decoded.sh end
+		end
+	end
+	addonSent = {}
+	ns.Sync:QueueSighting({ g = "Player-9-SHARDMOVE", n = "Shard Move" }, true)
+	Fire("ZONE_CHANGED_NEW_AREA")
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT")
+	clock = clock + 3 -- the channel's allowance for this extra part (the tests after count on what's left)
+	RunTimers()
+	local moved, movedShard = SentShard()
+	check(moved and moved.s[1].g == "Player-9-SHARDMOVE" and movedShard == nil, "a sighting queued before a zone change goes without a shard")
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for _ = 1, 15 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
 	-- Theirs: another shard of this zone is marked, our own shard, another zone or no shard (older versions) isn't
 	local function Shared(guid, sh, mapId)
 		Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { sh = sh, s = { { g = guid, n = "Shard Test", z = "Durotar", m = mapId or 1, x = 10, y = 10 } } }),
@@ -1287,9 +1305,14 @@ check(ns.Store:GetPlayer("Player-9-OLDCLIENT") ~= nil, "a single sighting from a
 	Fire("ZONE_CHANGED_NEW_AREA")
 	ns.NearbyWindow:Refresh()
 	check(Shard:Get() == nil and not Shard:IsOther(A, 1) and OnScreen("^Shard %?$"), "a new zone's shard is unknown until a creature there is seen")
-	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT")
+	local guard = "Creature-0-4615-1-497-3296-00000000AA"
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT", guard)
 	local realGetTime = GetTime
-	GetTime = function() return clock + 11 * 60 end
+	GetTime = function() return clock + 9 * 60 end
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT", guard)
+	GetTime = function() return clock + 15 * 60 end
+	check(Shard:Get() == A, "the same creature looked at again keeps the shard known")
+	GetTime = function() return clock + 20 * 60 end
 	check(Shard:Get() == nil, "a shard not confirmed for ten minutes is unknown")
 	GetTime = realGetTime
 	Fire("ZONE_CHANGED_NEW_AREA")

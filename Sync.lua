@@ -1378,7 +1378,8 @@ function Sync:QueueSighting(data, urgent)
 		return
 	end
 	local queued = private.sightingQueue[data.g]
-	private.sightingQueue[data.g] = { data = data, urgent = urgent or (queued and queued.urgent) or false, t = now }
+	-- sh: our shard when it was seen (Shard), so a zone change before the batch goes can't put it on the new zone's
+	private.sightingQueue[data.g] = { data = data, urgent = urgent or (queued and queued.urgent) or false, t = now, sh = Wanted.Shard:Get() }
 	private.ScheduleFlush(urgent and SIGHTING_URGENT_SECONDS or SIGHTING_BATCH_SECONDS)
 end
 
@@ -1428,12 +1429,18 @@ function private.FlushSightings()
 		return a.t > b.t
 	end)
 	local batch = {}
+	local shard = Wanted.Shard:Get()
 	for i = 1, min(#list, MAX_SIGHTINGS_PER_BATCH) do
 		batch[i] = list[i].data
+		if list[i].sh ~= shard then
+			-- Seen on another shard than ours now: the batch says no shard rather than a wrong one
+			shard = nil
+		end
 		-- Sent or not, this news is used up: a dropped batch isn't worth sending late
 		private.sightingQueue[list[i].data.g] = nil
 	end
-	if private.Send(TAG_SIGHTINGS, { s = batch }) then
+	-- sh: our shard of the zone, so a peer on another shard of it can tell these enemies aren't on theirs (Shard)
+	if private.Send(TAG_SIGHTINGS, { s = batch, sh = shard }) then
 		for _, data in ipairs(batch) do
 			private.recentSightings[data.g] = now
 		end
@@ -1805,7 +1812,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			if type(data) == "table" and type(data.g) == "string" then
 				private.recentSightings[data.g] = now
 				if Wanted.Enemies then
-					Wanted.Enemies:OnSharedSighting(data, sender)
+					Wanted.Enemies:OnSharedSighting(data, sender, tbl.sh)
 				end
 			end
 		end

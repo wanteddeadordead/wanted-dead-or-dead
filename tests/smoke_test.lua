@@ -203,7 +203,7 @@ function UnitName(unit) if unit == "player" then return "Test", "Player" end ret
 function UnitFactionGroup(unit) if unit and enemyUnits[unit] then return enemyUnits[unit].faction or "Alliance" end return "Horde" end
 function UnitGUID(unit) if unit == "player" then return "Player-1-ME" end local e = enemyUnits[unit] return e and e.guid end
 function UnitExists(unit) return enemyUnits[unit] ~= nil end
-function UnitIsPlayer(unit) return enemyUnits[unit] ~= nil end
+function UnitIsPlayer(unit) local e = enemyUnits[unit] return e ~= nil and not e.npc end
 function GetRealmName() return "Realm" end
 function GetNormalizedRealmName() return "Realm" end
 function RegionalUniqueNamesEnabled() return true end
@@ -1144,6 +1144,30 @@ WantedDB.records["B:1"] = {}
 ns:LoadSavedData()
 check(WantedDB.records["B:1"], "live data is never dropped again")
 end
+-- Saved data the game failed to load arrives empty (nil, or an empty table): it starts like a first install and
+-- nothing in it reads as a reset. The layout and world are this release's, and this character's hello never says
+-- its keys were reset (kr), so peers add a new key beside the old ones rather than dropping them
+do
+local realFresh = ns.freshInstall
+for _, kind in ipairs({ "nil", "an empty table" }) do
+	WantedDB = kind ~= "nil" and {} or nil
+	ns:LoadSavedData()
+	check(ns.db == WantedDB and WantedDB.version == ns.DB_VERSION and WantedDB.world == ns.WORLD and type(WantedDB.accountMark) == "string",
+		"an empty load ("..kind..") starts on this release's layout")
+	WantedDB.signing.seed = string.rep("ab", 32)
+	local hello = {}
+	ns.Signing:AddToHello(hello)
+	check(hello.k ~= nil and hello.kr == nil, "an empty load ("..kind..") never says the keys were reset")
+end
+-- In the live world an empty load is live data from then on: the next load drops none of it
+ns.WORLD = "live"
+WantedDB = nil
+ns:LoadSavedData()
+WantedDB.records = { ["L:1"] = {} }
+ns:LoadSavedData()
+check(WantedDB.world == "live" and WantedDB.records["L:1"], "after an empty load in the live world, what was saved stays")
+ns.freshInstall = realFresh
+end
 ns.WORLD = "beta"
 WantedDB = realDB
 ns:LoadSavedData()
@@ -1180,6 +1204,122 @@ check(ns.Sync:GetInfo().stats.skipped == skippedBefore + 1, "an enemy someone ju
 -- A first-version single sighting is still understood
 Fire("CHAT_MSG_ADDON", "WNTD", Message("E", { g = "Player-9-OLDCLIENT", n = "Old Client", z = "Durotar", m = 1, x = 40, y = 40 }), "CHANNEL", "Older Player", nil, nil, nil, "WantedNetHorde")
 check(ns.Store:GetPlayer("Player-9-OLDCLIENT") ~= nil, "a single sighting from an older client is stored")
+-- Shards: this client's shard of the zone comes from the GUIDs of the creatures it looks at, and goes with its shared
+-- sightings; one shared from another shard of the same zone is marked on Last hour
+;(function()
+	local Shard = ns.Shard
+	local startClock = clock -- put back at the end: the tests after count seconds from here
+	check(Shard:ParseGUID("Creature-0-4615-1-497-3123-0000123ABC") == "4615-1-497", "a creature's GUID names its shard")
+	check(Shard:ParseGUID("Vehicle-0-4621-0-507-5624-0004C97619") == "4621-0-507", "so does a vehicle's")
+	for _, bad in ipairs({ "Player-4613-015669D9", "Pet-0-4615-1-544-1863-0102C1A2B3", "Creature-0-4615-1", "Creature-0-x-1-497-3123-00AB", 42, false }) do
+		check(Shard:ParseGUID(bad) == nil, "no shard in "..tostring(bad))
+	end
+	local A, B = "4615-1-497", "4621-1-544"
+	Fire("ZONE_CHANGED_NEW_AREA")
+	check(Shard:Get() == nil, "no shard known before a creature is seen")
+	local n = 0
+	local function Look(key, unit, event, guid)
+		n = n + 1
+		local was = enemyUnits[unit]
+		enemyUnits[unit] = { guid = guid or format("Creature-0-%s-%d-%010X", key, 3000 + n, n), npc = true }
+		Fire(event, unit)
+		enemyUnits[unit] = was
+	end
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT")
+	check(Shard:Get() == A, "a creature under the mouse gives the shard")
+	Look(A, "target", "PLAYER_TARGET_CHANGED")
+	Look(A, "softenemy", "PLAYER_SOFT_ENEMY_CHANGED")
+	Look(A, "softinteract", "PLAYER_SOFT_INTERACT_CHANGED")
+	Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED")
+	check(Shard:Get() == A, "one creature from over a zone border doesn't change it")
+	for _ = 1, 5 do
+		Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED", "Creature-0-4621-1-544-3000-0000000001")
+	end
+	check(Shard:Get() == A, "the same creature seen again counts once")
+	for _ = 1, 8 do
+		Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED")
+	end
+	check(Shard:Get() == B, "most of the creatures lately on another shard: that's ours now")
+	check(Shard:IsOther(A, 1) and not Shard:IsOther(B, 1), "a peer on another shard of our zone is on another shard")
+	check(not Shard:IsOther(A, 10), "one in another zone isn't compared")
+	for _, bad in ipairs({ "junk", string.rep("1", 40), "1-2", false }) do
+		check(not Shard:IsOther(bad, 1), "a shard that isn't one is never another: "..tostring(bad))
+	end
+	-- Our shared sightings say our shard
+	addonSent = {}
+	ns.Sync:QueueSighting({ g = "Player-9-SHARDOUT", n = "Shard Out" }, true)
+	RunTimers()
+	local sent
+	for _, m in ipairs(addonSent) do
+		local payload = m.text:match("^S:[^:]+:1/1:(.+)$")
+		sent = sent or (payload and ns.Sync:Decode(payload))
+	end
+	check(sent and sent.sh == B and sent.s[1].g == "Player-9-SHARDOUT", "a sightings batch carries our shard")
+	-- Seen in one zone, sent after we moved to the next: no shard rather than the new zone's
+	local function SentShard()
+		for _, m in ipairs(addonSent) do
+			local payload = m.text:match("^S:[^:]+:1/1:(.+)$")
+			local decoded = payload and ns.Sync:Decode(payload)
+			if decoded then return decoded, decoded.sh end
+		end
+	end
+	addonSent = {}
+	ns.Sync:QueueSighting({ g = "Player-9-SHARDMOVE", n = "Shard Move" }, true)
+	Fire("ZONE_CHANGED_NEW_AREA")
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT")
+	clock = clock + 3 -- the channel's allowance for this extra part (the tests after count on what's left)
+	RunTimers()
+	local moved, movedShard = SentShard()
+	check(moved and moved.s[1].g == "Player-9-SHARDMOVE" and movedShard == nil, "a sighting queued before a zone change goes without a shard")
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for _ = 1, 15 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	-- Theirs: another shard of this zone is marked, our own shard, another zone or no shard (older versions) isn't
+	local function Shared(guid, sh, mapId)
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { sh = sh, s = { { g = guid, n = "Shard Test", z = "Durotar", m = mapId or 1, x = 10, y = 10 } } }),
+			"CHANNEL", "Shard Friend", nil, nil, nil, "WantedNetHorde")
+	end
+	clock = clock + 1 -- the newest on Last hour, so on its first rows
+	Shared("Player-9-FARSHARD", A)
+	Shared("Player-9-SAMESHARD", B)
+	Shared("Player-9-ZONESHARD", A, 10)
+	Shared("Player-9-NOSHARD", nil)
+	check(ns.Enemies:Describe("Player-9-FARSHARD").otherShard == true, "a sighting from another shard of our zone is marked")
+	check(not ns.Enemies:Describe("Player-9-SAMESHARD").otherShard and not ns.Enemies:Describe("Player-9-ZONESHARD").otherShard
+		and not ns.Enemies:Describe("Player-9-NOSHARD").otherShard, "one from our shard, another zone, or an older version isn't")
+	-- The Nearby window: our shard in the PvP strip, and the mark on Last hour
+	local function OnScreen(pattern)
+		for _, fs in ipairs(Mock.fontStrings) do
+			if type(fs._text) == "string" and fs._text:find(pattern) then return fs._text end
+		end
+	end
+	ns.db.settings.detect.tab = "hour"
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	check(OnScreen("other shard"), "Last hour marks the sighting from another shard")
+	check(OnScreen("^Shard 544$"), "the Nearby window shows our shard")
+	-- Seen since on our shard (shared, or by us): no longer marked
+	clock = clock + 1
+	Shared("Player-9-FARSHARD", B)
+	check(not ns.Enemies:Describe("Player-9-FARSHARD").otherShard, "a later sighting on our shard clears the mark")
+	-- Unknown: a new zone, or nothing seen for long
+	Fire("ZONE_CHANGED_NEW_AREA")
+	ns.NearbyWindow:Refresh()
+	check(Shard:Get() == nil and not Shard:IsOther(A, 1) and OnScreen("^Shard %?$"), "a new zone's shard is unknown until a creature there is seen")
+	local guard = "Creature-0-4615-1-497-3296-00000000AA"
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT", guard)
+	local realGetTime = GetTime
+	GetTime = function() return clock + 9 * 60 end
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT", guard)
+	GetTime = function() return clock + 15 * 60 end
+	check(Shard:Get() == A, "the same creature looked at again keeps the shard known")
+	GetTime = function() return clock + 20 * 60 end
+	check(Shard:Get() == nil, "a shard not confirmed for ten minutes is unknown")
+	GetTime = realGetTime
+	Fire("ZONE_CHANGED_NEW_AREA")
+	clock = startClock
+	ns.db.settings.detect.tab = "nearby"
+	ns.NearbyWindow:Refresh()
+end)()
 -- The game throttles a message: it waits, and is sent again a few seconds later
 addonSent = {}
 throttleNext = 1
@@ -2187,6 +2327,58 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	ns.Store:NewRecord("death", { deathId = "hk-much-later", victim = "Player-9-LATER", victimName = "Much Later", victimFaction = "Alliance", zone = "Undercity" })
 	RunTimers()
 	check(#Assists() == 2, "a death long after gives up waiting HKs nothing")
+	-- The session count starts again at each daily reset: the HK that comes first after it still counts
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-reset", victim = "Player-9-RESET", victimName = "After Reset", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 3, "an HK just after the session count's daily reset is an assist")
+	-- Only today's count credits assists. The lifetime one may move in its own event, lag, or jump at the daily
+	-- calculation (the client's honor system is Vanilla's: GetPVPLifetimeStats also gives the highest rank): it's logged
+	local lifetime = 500
+	GetPVPLifetimeStats = function() return lifetime, 7 end
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 3, "the lifetime count appearing credits nothing")
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-split", victim = "Player-9-SPLIT", victimName = "Split Event", victimFaction = "Alliance", zone = "Undercity" })
+	ns.Store:NewRecord("death", { deathId = "hk-split2", victim = "Player-9-SPLIT2", victimName = "Split Other", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	lifetime = lifetime + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "one HK whose two counts change in separate events is one assist")
+	-- A lagging lifetime count catching up credits nothing (hk-split2 is still there to take a false one)
+	lifetime = lifetime + 3
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "the lifetime count catching up credits nothing")
+	-- The daily calculation: today's count back to 0 and yesterday's added to lifetime. No assist; the first real HK
+	-- after it is one
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-daily", victim = "Player-9-DAILY", victimName = "Daily Calc", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount, lifetime = 0, lifetime + 7
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "the daily calculation's jump credits nothing")
+	hkCount = 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 5, "the first HK after the daily calculation is an assist")
+	-- A count read before the game had it (0 at login) then the real one: a jump, not a thousand HKs
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-jump", victim = "Player-9-JUMP", victimName = "Big Jump", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = hkCount + 1000
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 5, "a jump in the count far past one fight's HKs credits nothing")
+	GetPVPLifetimeStats = function() error("not now") end
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 5, "a lifetime count the client won't give changes nothing")
+	GetPVPLifetimeStats = nil
 end)()
 -- The desktop app's account code links this character by itself, once per code
 ;(function()

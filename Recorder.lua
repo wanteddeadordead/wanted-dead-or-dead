@@ -19,7 +19,8 @@ local private = {
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	ownKillTimes = {}, -- GetTime() of each own kill not yet matched to an HK credit
 	assisted = {}, -- deathId -> true once an assist was recorded for it
-	hkCount = nil, -- honorable kills this session, as last read
+	hkSession = nil, -- today's honorable kill count as last read (nil: the client didn't give it)
+	hkLifetime = nil, -- the lifetime one, only logged (OnHKsChanged)
 	playerGUID = nil,
 	playerFaction = nil,
 	places = nil, -- the named-area grid of one map, see private.ScanPlaces
@@ -53,6 +54,9 @@ local ASSIST_DELAY = 2
 -- The addon sees a death on its next nameplate check, a few seconds after the game credits the HK (Chris's client,
 -- 2026-09-28: every HK came 1 to 4 s before the death was seen): an unmatched HK is tried again this often, this many times
 local ASSIST_RETRY_SECONDS, ASSIST_RETRIES = 1, 8
+-- More new HKs than this at once isn't a fight: a count read before the game had it (the lifetime count is in the
+-- thousands), taken as the new starting point
+local MAX_HKS_AT_ONCE = 10
 local MAX_LOG_LINES = 20
 local UNITS = { "target", "mouseover" }
 -- The zone map is read in a grid this many cells across for its named areas
@@ -68,7 +72,7 @@ local DIRECTIONS = { "east", "northeast", "north", "northwest", "west", "southwe
 function Recorder:OnEnable()
 	private.playerGUID = UnitGUID("player")
 	private.playerFaction = UnitFactionGroup("player")
-	private.hkCount = private.SessionHKs()
+	private.hkLifetime, private.hkSession = private.HKCounts()
 	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "CHAT_MSG_COMBAT_HONOR_GAIN", "PARTY_KILL", "UNIT_DIED", "ZONE_CHANGED_NEW_AREA", "PLAYER_PVP_KILLS_CHANGED" }) do
 		Wanted:Log("Recorder: registering %s", event)
 		private.frame:RegisterEvent(event)
@@ -804,24 +808,44 @@ end
 -- Assists: HK credit without the killing blow
 -- ============================================================================
 
----Honorable kills this session, or nil where the client doesn't say.
-function private.SessionHKs()
-	if not GetPVPSessionStats then
-		return nil
+---The client's honorable kill counts: lifetime (never resets) and today's (starts again at each daily reset), each nil
+---where the client doesn't give it.
+---@return number? lifetime
+---@return number? session
+function private.HKCounts()
+	local lifetime, session
+	if GetPVPLifetimeStats then
+		local ok, hks = pcall(GetPVPLifetimeStats)
+		lifetime = ok and type(private.Readable(hks)) == "number" and hks or nil
 	end
-	local hks = private.Readable(GetPVPSessionStats())
-	return type(hks) == "number" and hks or nil
+	if GetPVPSessionStats then
+		local hks = private.Readable(GetPVPSessionStats())
+		session = type(hks) == "number" and hks or nil
+	end
+	return lifetime, session
 end
 
----The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw.
+---The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw. Only today's
+---count is counted: the lifetime one may change in an event of its own, lag behind, or take in yesterday's at the
+---daily calculation (this client's honor is Vanilla's), and every false HK would be an assist. Its changes are only
+---logged, until the game shows how it moves.
 function private.OnHKsChanged()
-	local now = private.SessionHKs()
-	if not now or not private.hkCount then
-		private.hkCount = now
+	local lifetime, session = private.HKCounts()
+	if lifetime and private.hkLifetime and lifetime ~= private.hkLifetime then
+		Wanted:Log("Recorder: lifetime HKs %d -> %d (today's %s -> %s)", private.hkLifetime, lifetime, tostring(private.hkSession), tostring(session))
+	end
+	private.hkLifetime = lifetime
+	if not session or not private.hkSession then
+		private.hkSession = session
 		return
 	end
-	local added = now - private.hkCount
-	private.hkCount = now
+	-- Today's count going down is the daily reset: every HK since it is new
+	local added = session >= private.hkSession and session - private.hkSession or session
+	private.hkSession = session
+	if added > MAX_HKS_AT_ONCE then
+		Wanted:Log("!! Recorder: today's HK count jumped by %d; taken as the new start", added)
+		return
+	end
 	local at = GetServerTime()
 	for _ = 1, added do
 		C_Timer.After(ASSIST_DELAY, function() private.CreditHK(at, 0) end)

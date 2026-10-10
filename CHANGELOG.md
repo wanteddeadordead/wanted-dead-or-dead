@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- The Nearby window shows which shard of the zone you're on ("Shard 497", at the right of your PvP status), read from
+  the creatures you target, mouse over or see nameplates of. Your shared sightings carry it, and on Last hour an enemy
+  another Wanted player saw on another shard of your zone is marked "other shard": they aren't where you can meet them.
+  Until a creature in the zone has been seen it shows "Shard ?", and nothing is marked.
+- The daily reset of today's honorable kill count no longer loses the first assist after it. A jump in the count that
+  no fight explains (a count read before the game had it) is taken as the new start instead of thousands of assists.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

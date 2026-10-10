@@ -7,6 +7,7 @@
 - No more "No player named ... is currently playing" lines after a duel or fight. During the game's chat lockdown
   (encounters, PvP matches, some duels) Wanted can't hide that notice, so it sends no hidden whispers then: records
   for players on other realm names wait, and the links are greeted again once the lockdown lifts.
+- Button and tab labels no longer creep upward each time you click them.
 
 ## [1.19.3] - 2026-10-09
 

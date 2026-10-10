@@ -10120,41 +10120,55 @@ end)()
 	C_Map.GetMapInfo = realInfo
 end)()
 -- Skull and Flare: secure buttons the game runs itself, set up out of combat only. Skull marks the target with the
--- skull when it's a bounty or Kill on Sight enemy and we lead or assist the group; Flare places a world marker for the
--- rally leader. Not set up, a click says why; in a fight they stay as they were.
+-- skull when it's a bounty or Kill on Sight enemy and we lead or assist the group (its action sits under the button
+-- name the game switches to only for a target we can attack, so in a fight it never marks anyone else); Flare places a
+-- world marker for the rally leader. Not set up, a click says why; in a fight Skull only says it can't change.
 ;(function()
 	local Rally = ns.Rally
 	local skull, flare = _G.WantedRallySkullButton, _G.WantedRallyFlareButton
 	check(skull and flare and skull:GetAttribute("marker") == 8 and skull:GetAttribute("unit") == "target" and skull:GetAttribute("action") == "set"
-		and flare:GetAttribute("marker") == 1, "the Skull and Flare buttons are made, named for /click, with the skull and a world marker")
+		and skull:GetAttribute("harmbutton") == "skull" and flare:GetAttribute("marker") == 1,
+		"the Skull and Flare buttons are made, named for /click, with the skull for attackable targets and a world marker")
 	local realInfo = C_Map.GetMapInfo
 	C_Map.GetMapInfo = function(id) return id == 1 and { name = "Durotar", mapType = 3 } or nil end
 	local role = nil
 	_G.UnitIsGroupLeader = function() return role == "leader" end
 	_G.UnitIsGroupAssistant = function() return role == "assist" end
+	_G.UnitCanAttack = function(_, unit) local e = enemyUnits[unit] return e ~= nil and (e.faction or "Alliance") ~= "Horde" end
 	local said = #printed
 	enemyUnits.target = { guid = "Player-9-SKULL1", name = "Skull Target", class = "ROGUE", level = 20 }
 	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type") == nil, "not the group's leader or an assistant: Skull does nothing")
+	check(skull:GetAttribute("type-skull") == nil and skull:GetAttribute("type") == nil, "not the group's leader or an assistant: Skull does nothing")
 	skull._scripts.PostClick(skull, "LeftButton")
 	check(#printed == said + 1 and printed[#printed]:find("leader or assistants", 1, true), "and a click says why: "..tostring(printed[#printed]))
 	role = "assist"
 	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type") == nil and skull.why:find("no bounty", 1, true), "a target with no bounty and not on Kill on Sight isn't marked: "..tostring(skull.why))
+	check(skull:GetAttribute("type-skull") == nil and skull.why:find("no bounty", 1, true), "a target with no bounty and not on Kill on Sight isn't marked: "..tostring(skull.why))
+	-- Put on Kill on Sight while targeted: set up again without a target change
 	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
-	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type") == "raidtarget", "an assistant with a Kill on Sight target: Skull marks it")
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == "raidtarget" and skull:GetAttribute("type") == nil,
+		"our target put on Kill on Sight: Skull marks it, under the attackable-target button only")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == nil, "taken off Kill on Sight: Skull does nothing again")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
+	RunTimers()
 	said = #printed
 	skull._scripts.PostClick(skull, "LeftButton")
 	check(#printed == said, "a click that marks says nothing")
-	-- In a fight the game forbids changes: it stays as it was until the fight ends
+	-- In a fight the game forbids changes: it stays as it was, and a click that can't act says only that
 	inCombat = true
-	enemyUnits.target = { guid = "Player-9-SKULL2", name = "Plain Target", class = "ROGUE", level = 20 }
+	enemyUnits.target = { guid = "Player-9-SKULL2", name = "Plain Target", class = "ROGUE", level = 20, faction = "Horde" }
 	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type") == "raidtarget", "nothing is changed in a fight")
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
+	check(skull:GetAttribute("type-skull") == "raidtarget", "nothing is changed in a fight")
+	skull._scripts.PostClick(skull, "LeftButton")
+	check(#printed == said + 1 and printed[#printed]:find("can't be changed in a fight", 1, true), "a click in a fight on a target we can't attack says why, plainly: "..tostring(printed[#printed]))
 	inCombat = false
 	Fire("PLAYER_REGEN_ENABLED")
-	check(skull:GetAttribute("type") == nil, "and it's set up again when the fight ends")
+	check(skull:GetAttribute("type-skull") == nil, "and it's set up again when the fight ends")
 	enemyUnits.target = nil
 	-- Flare is for the rally leader
 	role = "leader"
@@ -10169,8 +10183,7 @@ end)()
 	RunTimers()
 	ns.NearbyWindow:Refresh()
 	check(not skull:IsShown() and not flare:IsShown(), "and the buttons go")
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
-	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant = nil, nil
+	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant, _G.UnitCanAttack = nil, nil, nil
 	C_Map.GetMapInfo = realInfo
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)

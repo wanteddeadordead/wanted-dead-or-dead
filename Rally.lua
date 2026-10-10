@@ -10,7 +10,8 @@
 -- The rally leader's line in Nearby has two buttons: Skull puts the skull on your target when it's a bounty or Kill on
 -- Sight enemy, and Flare starts placing a world marker. The game lets only a click do either, so they're secure
 -- buttons the game runs itself (no addon code in between), set up out of combat: in a fight they stay as they were
--- when it began. Both are for a group's leader or assistants, and have names for a macro: /click WantedRallySkullButton
+-- when it began, except that Skull only ever acts on a target we can attack (the game checks that at the click).
+-- Both are for a group's leader or assistants, and have names for a macro: /click WantedRallySkullButton
 -- or /click WantedRallyFlareButton.
 
 local _, Wanted = ...
@@ -29,6 +30,7 @@ local private = {
 	markFrame = CreateFrame("Frame"),
 	skull = nil, -- the Skull and Flare buttons, once the Nearby window has made them
 	flare = nil,
+	armPending = false,
 }
 local SEND_SECONDS = 30 -- the leader's position goes out this often
 local LINK_EVERY = 4 -- and every fourth time (two minutes) to the realm links too, whose budget is smaller
@@ -44,6 +46,20 @@ local CHANGE_SECONDS = 0.5 -- redraws for rally news are put together this long
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 local SKULL = 8 -- the skull raid target icon
 local FLARE_MARKER = 1 -- the world marker Flare places
+-- Skull's action is under this button name, which the game switches a click to only when the target is one we can
+-- attack (the "harmbutton" remapping in SecureTemplates.lua); a click on anyone else finds no action
+local SKULL_BUTTON = "skull"
+local SKULL_TYPE = "type-"..SKULL_BUTTON
+local ARM_SECONDS = 0.5 -- a change of what our target is worth sets the buttons up again after this long
+local IN_FIGHT = "Skull can't be changed in a fight: it stays as it was set up before the fight began, and marks only an enemy you can attack."
+
+---A value the game may keep secret, or nil when it does.
+local function Readable(value)
+	if issecretvalue and issecretvalue(value) then
+		return nil
+	end
+	return value
+end
 
 function Rally:OnEnable()
 	for _, event in ipairs({ "PLAYER_DEAD", "ZONE_CHANGED_NEW_AREA", "PLAYER_LOGOUT" }) do
@@ -66,6 +82,13 @@ function Rally:OnEnable()
 		private.markFrame:RegisterEvent(event)
 	end
 	private.markFrame:SetScript("OnEvent", function() private.Arm() end)
+	-- Our target put on or taken off Kill on Sight, or a bounty on them posted, raised, withdrawn or paid
+	Wanted.Enemies:OnChange(function(event, entry)
+		if event == "lists" or (type(entry) == "table" and entry.guid ~= nil and entry.guid == Readable(UnitGUID("target"))) then
+			private.ArmSoon()
+		end
+	end)
+	Store:OnRecord("*", function() private.ArmSoon() end)
 end
 
 -- ============================================================================
@@ -246,14 +269,6 @@ end
 -- Skull and Flare
 -- ============================================================================
 
----A value the game may keep secret, or nil when it does.
-local function Readable(value)
-	if issecretvalue and issecretvalue(value) then
-		return nil
-	end
-	return value
-end
-
 ---Why Skull can't mark our target now, or nil.
 ---@return string?
 function Rally:SkullWhyNot()
@@ -292,11 +307,14 @@ function Rally:CreateMarkButtons(parent)
 	if not private.skull then
 		private.skull = private.MarkButton(parent, "Skull", "WantedRallySkullButton", "Skull your target",
 			"Puts the skull on your target when it's an enemy with a bounty or on Kill on Sight. For a group's leader or assistants. Bind it with a macro: /click WantedRallySkullButton")
+		private.skull:SetAttribute("harmbutton", SKULL_BUTTON)
 		private.skull:SetAttribute("unit", "target")
 		private.skull:SetAttribute("marker", SKULL)
 		private.skull:SetAttribute("action", "set")
+		private.skull.typeAttribute = SKULL_TYPE
 		private.flare = private.MarkButton(parent, "Flare", "WantedRallyFlareButton", "Flare",
 			"Click, then click the ground: a world marker there for your group to rally on. For the rally leader. Bind it with a macro: /click WantedRallyFlareButton")
+		private.flare.typeAttribute = "type"
 		private.flare:SetAttribute("marker", FLARE_MARKER)
 		private.flare:SetAttribute("action", "set")
 		private.Arm()
@@ -311,9 +329,15 @@ function private.MarkButton(parent, text, name, title, tip)
 	button:RegisterForClicks("AnyUp")
 	button:SetAttribute("useOnKeyDown", false)
 	W:AttachTooltip(button, title, tip)
-	-- Not set up to act (why was said when it was set): say why rather than nothing happening
+	-- Not set up to act: say why rather than nothing happening. In a fight what was said when it was set up may no
+	-- longer hold (another target), so Skull says only that it can't change then
 	button:HookScript("PostClick", function(self)
-		if not self:GetAttribute("type") and self.why then
+		local armed = self:GetAttribute(self.typeAttribute) ~= nil
+		if self == private.skull and InCombatLockdown() then
+			if not armed or not Readable(UnitCanAttack("player", "target")) then
+				Wanted:Print("%s", IN_FIGHT)
+			end
+		elseif not armed and self.why then
 			Wanted:Print("%s", self.why)
 		end
 	end)
@@ -328,8 +352,20 @@ function private.Arm()
 	end
 	for button, why in pairs({ [private.skull] = Rally:SkullWhyNot() or false, [private.flare] = Rally:FlareWhyNot() or false }) do
 		button.why = why or nil
-		button:SetAttribute("type", not why and (button == private.skull and "raidtarget" or "worldmarker") or nil)
+		button:SetAttribute(button.typeAttribute, not why and (button == private.skull and "raidtarget" or "worldmarker") or nil)
 	end
+end
+
+---Sets the buttons up again shortly, out of combat (news about our target comes in bursts: a catch-up, a raid).
+function private.ArmSoon()
+	if private.armPending or not private.skull or InCombatLockdown() then
+		return
+	end
+	private.armPending = true
+	C_Timer.After(ARM_SECONDS, function()
+		private.armPending = false
+		private.Arm()
+	end)
 end
 
 -- ============================================================================

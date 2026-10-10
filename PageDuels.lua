@@ -220,14 +220,20 @@ local GEAR_ROW = 22
 ---The gear panel: both sides' items slot by slot (icon, item level, name in its quality's colour, the game's tooltip
 ---on hover), in place of the card's body.
 function private.BuildGearPanel(card, width)
-	local panel = CreateFrame("Frame", nil, card)
-	panel:SetPoint("TOPLEFT", 0, -38)
-	panel:SetPoint("BOTTOMRIGHT", -8, 8)
-	panel:Hide()
+	-- Scrolls inside the card: seventeen slots a side are taller than the room under the title
+	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
+	frame.scrollBarHideable = true
+	frame:SetPoint("TOPLEFT", 0, -38)
+	frame:SetPoint("BOTTOMRIGHT", -26, 8)
+	frame:Hide()
+	local panel = CreateFrame("Frame", nil, frame)
+	panel:SetSize(width - 30, 34 + #Duels.GEAR_SLOTS * GEAR_ROW)
+	frame:SetScrollChild(panel)
+	panel.frame = frame
 	panel.back = W:Button(panel, "Back to the fight", "secondary", 140, 22, function() private.HideGear() end)
-	panel.back:SetPoint("TOPRIGHT", 0, 0)
+	panel.back:SetPoint("TOPRIGHT", -4, 0)
 	panel.columns = {}
-	local columnWidth = floor((width - 40) / 2)
+	local columnWidth = floor((width - 70) / 2)
 	for c, key in ipairs({ "me", "them" }) do
 		local column = { rows = {} }
 		column.title = Theme:Text(panel, "body", "")
@@ -294,12 +300,13 @@ function private.ShowGear()
 	private.FillGearColumn(card.gearPanel.columns.me, "You", duel.me and duel.me.gear)
 	private.FillGearColumn(card.gearPanel.columns.them, "Them", duel.them and duel.them.gear)
 	card.scroll:Hide()
-	card.gearPanel:Show()
+	card.gearPanel.frame:SetVerticalScroll(0)
+	card.gearPanel.frame:Show()
 end
 
 function private.HideGear()
 	if private.card then
-		private.card.gearPanel:Hide()
+		private.card.gearPanel.frame:Hide()
 		private.card.scroll:Show()
 	end
 end

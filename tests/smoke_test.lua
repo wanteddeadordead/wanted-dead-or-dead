@@ -10540,11 +10540,11 @@ end)()
 	ns.UI:Show("duels")
 	check(Duels:ReportState(duel) == "ready" and db.duelReports["Someone:duel:1"] == nil and not Reload():IsShown(), "a report in: no notice; reports for duels not kept are dropped")
 	-- The fight card: a click on the duel in its open matchup shows the report in place of the list
-	db.duelReports[duel.id] = { t = clock, len = 26.9,
-		me = { dmg = 326, hp = { 0, 100, 12, 60, 26, 0 }, cc = { { n = "Bash", s = 11.9, e = 13.9, x = "expired" } }, used = { { n = "Evasion", t = 15.7 } } },
-		them = { dmg = 636, hp = { 0, 100, 20, 48.7 }, cc = {}, used = {} },
-		findings = { { r = "unused", text = "You lost with Gouge, Evasion and Sprint never used.", tip = "Gouge then bandage or reset." },
-			{ r = "race", text = "Their melee did 51% of the damage you took. You did no damage for 10.0 s while free to act, between 0:08 and 0:18." } } }
+	db.duelReports[duel.id] = { v = 1, len = 26.9, opener = "They opened from stealth.",
+		me = { dmg = 326, hp = { { 0, 100 }, { 12, 60 }, { 26, 0 } }, cc = { { spell = "Bash", from = 11.9, to = 13.9, how = "expired" } }, cds = { { spell = "Evasion", t = 15.7 } } },
+		them = { dmg = 636, hp = { { 0, 100 }, { 20, 48.7 } }, cc = {}, cds = {} },
+		findings = { { rule = "unused", text = "You lost with Gouge, Evasion and Sprint never used.", weight = 0.7, tip = "Gouge then bandage or reset." },
+			{ rule = "race", weight = 0.5, text = "Their melee did 51% of the damage you took. You did no damage for 10.0 s while free to act, between 0:08 and 0:18." } } }
 	ns.UI:Show("duels")
 	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
 	local matchup = Row(function(item) return item.label == "Druid" end)
@@ -10552,7 +10552,7 @@ end)()
 	local duelRow = Row(function(item) return item.duel == duel end)
 	duelRow._scripts.OnClick(duelRow, "LeftButton")
 	check(OnScreen("1. You lost with Gouge, Evasion and Sprint never used.") and OnScreen("Gouge then bandage or reset.")
-		and OnScreen("between 0:08 and 0:18.") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
+		and OnScreen("between 0:08 and 0:18.") and OnScreen("They opened from stealth.") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
 		"the fight card shows the findings with their tips, the control suffered and what was used")
 	local back
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end

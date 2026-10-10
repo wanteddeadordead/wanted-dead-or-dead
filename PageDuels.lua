@@ -166,19 +166,18 @@ function private.CreateLane(card, label, y, color, graphWidth)
 	return lane
 end
 
----Fills a lane from one side of a report: health as the last reading at each bar's moment, control as gold marks
----across the fight, and what they used and when.
+---Fills a lane from one side of a report (v1): health as the last reading at each bar's moment ({ t, pct } pairs),
+---control as gold marks across the fight, and the answers they used and when.
 function private.FillLane(lane, side, length)
 	side = type(side) == "table" and side or {}
 	local hp = type(side.hp) == "table" and side.hp or {}
 	length = (type(length) == "number" and length > 0) and length or 1
-	local point = 1
-	local pct = 100
+	local point, pct = 1, 100
 	for i = 1, CARD_BARS do
 		local at = length * (i - 0.5) / CARD_BARS
-		while type(hp[point]) == "number" and type(hp[point + 1]) == "number" and hp[point] <= at do
-			pct = hp[point + 1]
-			point = point + 2
+		while type(hp[point]) == "table" and type(hp[point][1]) == "number" and type(hp[point][2]) == "number" and hp[point][1] <= at do
+			pct = hp[point][2]
+			point = point + 1
 		end
 		lane.bars[i]:SetHeight(max(GRAPH_HEIGHT * min(max(pct, 0), 100) / 100, 1))
 	end
@@ -186,21 +185,21 @@ function private.FillLane(lane, side, length)
 	local controls = {}
 	for i, mark in ipairs(lane.marks) do
 		local c = cc[i]
-		if type(c) == "table" and type(c.s) == "number" and type(c.e) == "number" then
-			local from, to = min(max(c.s / length, 0), 1), min(max(c.e / length, 0), 1)
+		if type(c) == "table" and type(c.from) == "number" and type(c.to) == "number" then
+			local from, to = min(max(c.from / length, 0), 1), min(max(c.to / length, 0), 1)
 			mark:ClearAllPoints()
 			mark:SetPoint("TOPLEFT", from * lane.width, 0)
 			mark:SetWidth(max((to - from) * lane.width, 2))
 			mark:Show()
-			controls[#controls + 1] = format("%s %.1f s", private.CleanText(c.n), c.e - c.s)
+			controls[#controls + 1] = format("%s %.1f s", private.CleanText(c.spell), c.to - c.from)
 		else
 			mark:Hide()
 		end
 	end
 	local used = {}
-	for _, u in ipairs(type(side.used) == "table" and side.used or {}) do
+	for _, u in ipairs(type(side.cds) == "table" and side.cds or {}) do
 		if type(u) == "table" then
-			used[#used + 1] = private.CleanText(u.n).." "..private.Clock(u.t)
+			used[#used + 1] = private.CleanText(u.spell).." "..private.Clock(u.t)
 		end
 	end
 	lane.used:SetText((#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
@@ -253,7 +252,10 @@ function private.ShowCard(duel)
 		Theme:Colorize(result[1], result[2]), private.Length(duel.length), private.When(duel.startAt)))
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
-	card.note:SetText(hasReport and Duels:Describe(duel.them) or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
+	local opener = hasReport and type(report.opener) == "string" and ("   "..private.CleanText(report.opener)) or ""
+	card.note:SetText(hasReport and (Duels:Describe(duel.them)..opener)
+		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
+		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
 	for key, lane in pairs(card.lanes) do
 		for _, part in ipairs({ lane.label, lane.graph, lane.strip, lane.used }) do
 			part:SetShown(hasReport)

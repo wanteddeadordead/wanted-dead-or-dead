@@ -2187,6 +2187,37 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	ns.Store:NewRecord("death", { deathId = "hk-much-later", victim = "Player-9-LATER", victimName = "Much Later", victimFaction = "Alliance", zone = "Undercity" })
 	RunTimers()
 	check(#Assists() == 2, "a death long after gives up waiting HKs nothing")
+	-- The session count starts again at each daily reset: the HK that comes first after it still counts
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-reset", victim = "Player-9-RESET", victimName = "After Reset", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 3, "an HK just after the session count's daily reset is an assist")
+	-- Where the client has the lifetime count (it never resets), that's the one counted
+	local lifetime = 500
+	GetPVPLifetimeStats = function() return lifetime, 7 end
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 3, "moving to the lifetime count credits nothing")
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-life", victim = "Player-9-LIFE", victimName = "Life Count", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount, lifetime = 0, lifetime + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "the lifetime count rising is an assist, whatever the session count did")
+	-- A count read before the game had it (0 at login) then the real one: a jump, not a thousand HKs
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-jump", victim = "Player-9-JUMP", victimName = "Big Jump", victimFaction = "Alliance", zone = "Undercity" })
+	lifetime = lifetime + 1000
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "a jump in the count far past one fight's HKs credits nothing")
+	GetPVPLifetimeStats = function() error("not now") end
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "a lifetime count the client won't give falls back to the session count, crediting nothing")
+	GetPVPLifetimeStats = nil
 end)()
 -- The desktop app's account code links this character by itself, once per code
 ;(function()

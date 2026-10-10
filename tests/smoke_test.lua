@@ -10113,6 +10113,14 @@ end)()
 		"the site's holders are taken, unknown points and sides left out")
 	check(Warned("Enemy inhibitor down") and not Warned("Your tower"), "the biggest news is the alert: "..table.concat(warned, "; "))
 	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
+	-- The announcement frame (CapturesHUD.xml, from Blizzard's template, which registers the BG system events) has them
+	-- all unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
+	local announceEvents = { CHAT_MSG_BG_SYSTEM_ALLIANCE = true, CHAT_MSG_BG_SYSTEM_HORDE = true }
+	local realAnnounceFrame = WantedCaptureAnnounceFrame
+	WantedCaptureAnnounceFrame = { UnregisterAllEvents = function() wipe(announceEvents) end }
+	ns.CapturesHUD:OnLoad()
+	check(next(announceEvents) == nil, "the announcement frame listens to nothing of the game's")
+	WantedCaptureAnnounceFrame = realAnnounceFrame
 	-- At login the catch-up is read (Catchup) before the HUD is enabled (it comes later in the .toc): the news waits, and
 	-- what the addon showed isn't marked until the HUD takes it
 	local tocOrder, at = {}, 0

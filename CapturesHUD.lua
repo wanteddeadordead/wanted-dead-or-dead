@@ -55,11 +55,16 @@ local LANE_ICON = 14
 -- Lifecycle
 -- ============================================================================
 
-function CapturesHUD:OnEnable()
-	-- Our announcement frame shows only what Wanted gives it, never the game's own BG messages
+---At load, before anything else and also on a Normal-ruleset character where Wanted stays idle: our announcement frame
+---(made from Blizzard's template, which registers the BG system message events) shows only what Wanted gives it, never
+---the game's own messages.
+function CapturesHUD:OnLoad()
 	if WantedCaptureAnnounceFrame then
 		WantedCaptureAnnounceFrame:UnregisterAllEvents()
 	end
+end
+
+function CapturesHUD:OnEnable()
 	C_Timer.NewTicker(UPDATE_SECONDS, Wanted:Timed("Captures bar", function() CapturesHUD:Update() end))
 	Captures:OnChange(function(fresh)
 		private.dirty = true

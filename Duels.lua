@@ -208,7 +208,29 @@ function private.FindUnit(duel)
 			end
 		end
 	end
-	return nil
+	if duel.guid then
+		return nil
+	end
+	-- Neither GUID nor name known (this client may hide the challenger's name, and has no GetDuelerInfo): once the
+	-- duel is accepted, the one player of our own faction we can attack is the opponent. A stealthed rogue is found
+	-- once they show. Two or more such players (a free-for-all area) and nobody is guessed.
+	if not duel.startAt then
+		return nil
+	end
+	local mine, found, seen = private.Readable(UnitFactionGroup("player")), nil, {}
+	for _, unit in ipairs(units) do
+		local guid = private.Readable(UnitIsPlayer(unit)) and private.Readable(UnitGUID(unit)) or nil
+		if guid and not seen[guid] and not private.Readable(UnitIsUnit(unit, "player"))
+			and mine and private.Readable(UnitFactionGroup(unit)) == mine
+			and UnitCanAttack ~= nil and private.Readable(UnitCanAttack("player", unit)) == true then
+			seen[guid] = true
+			if found then
+				return nil
+			end
+			found = unit
+		end
+	end
+	return found
 end
 
 ---What the opponent's unit shows: GUID, class, race and level.

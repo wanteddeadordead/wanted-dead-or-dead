@@ -10084,6 +10084,31 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 		"someone who doesn't run Wanted is kept by class and spec, not name: "..tostring(d.them.name))
 	check(d.them.health == 50, "out of sight at the end: their health as last seen")
 
+	-- The game hides the challenger's name and gives no GUID; they're a stealthed rogue of our own faction. Once they
+	-- show as the one same-faction player we can attack, they're the opponent
+	local savedDueler = GetDuelerInfo
+	GetDuelerInfo = nil
+	enemyUnits.target = nil
+	Fire("DUEL_REQUESTED", nil)
+	Hook("AcceptDuel")
+	clock = clock + 3
+	Duels:Check()
+	enemyUnits.mouseover = { guid = "Player-1-0000F00D", name = "Some Bystander", faction = "Horde", class = "PRIEST", level = 20, close = true }
+	enemyUnits.target = { guid = "Player-1-0000BEEF", name = "Sneaky Orc", faction = "Horde", class = "ROGUE", level = 25, raceFile = "Orc", close = true, dueling = true }
+	clock = clock + 5
+	Duels:Check()
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Sneaky has defeated Test in a duel")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	GetDuelerInfo = savedDueler
+	enemyUnits.target, enemyUnits.mouseover = nil, nil
+	check(#db.duels == 3, "the duel with a hidden challenger is recorded")
+	d = db.duels[3]
+	check(d.result == "lost" and d.them.guid == "Player-1-0000BEEF" and d.them.class == "ROGUE" and d.them.race == "Orc" and d.them.level == 25,
+		"a hidden challenger is found as the one attackable player of our faction: "..tostring(d.them.class).." "..tostring(d.them.guid))
+	table.remove(db.duels)
+
 	-- A challenge declined is no duel
 	Fire("DUEL_REQUESTED", "Duel Friend")
 	Fire("DUEL_FINISHED")

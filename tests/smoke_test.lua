@@ -10691,7 +10691,24 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "See gear" and f:IsShown() then seeGear = f end end
 	check(seeGear ~= nil, "a See gear button")
 	seeGear._scripts.OnClick(seeGear)
-	check(OnScreen("Blue Helm") and OnScreen("Big Axe") and OnScreen("Green Boots") and OnScreen("Chest (empty)"), "the gear panel lists both sides' items slot by slot")
+	-- A paper doll like the character window: their items in their slots, the summary in the middle, a You/Them toggle
+	local function DollItems()
+		local by = {}
+		for _, f in ipairs(Mock.created) do
+			local slot = rawget(f, "slot")
+			if type(slot) == "number" and rawget(f, "icon") and f:IsShown() then by[slot] = rawget(f, "item") or false end
+		end
+		return by
+	end
+	local doll = DollItems()
+	check(doll[1] == "item:100::::" and doll[8] == "item:101::::" and doll[16] == "item:102::::" and doll[5] == false,
+		"the doll puts their items in their slots, empty slots empty")
+	check(OnScreen("Item level 7.1") and OnScreen("2 blue, 1 green"), "the middle gives their item level and qualities")
+	local youButton
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "You" and fs._parent and rawget(fs._parent, "key") == "me" then youButton = fs._parent end end
+	youButton:Click()
+	doll = DollItems()
+	check(doll[1] == "item:103::::" and doll[16] == false, "the toggle shows your own gear")
 	C_Item = savedItem
 	duel.me.gear, duel.them.gear = nil, nil
 	ns.UI:Show("duels")

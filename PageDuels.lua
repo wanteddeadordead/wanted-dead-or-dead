@@ -212,84 +212,159 @@ function private.GearGap(duel)
 	return nil
 end
 
-local SLOT_LABELS = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet",
-	[9] = "Wrist", [10] = "Hands", [11] = "Finger", [12] = "Finger", [13] = "Trinket", [14] = "Trinket", [15] = "Back",
-	[16] = "Main hand", [17] = "Off hand", [18] = "Ranged" }
-local GEAR_ROW = 22
+local SLOT_LABELS = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [4] = "Shirt", [5] = "Chest", [6] = "Waist", [7] = "Legs",
+	[8] = "Feet", [9] = "Wrist", [10] = "Hands", [11] = "Finger", [12] = "Finger", [13] = "Trinket", [14] = "Trinket",
+	[15] = "Back", [16] = "Main hand", [17] = "Off hand", [18] = "Ranged", [19] = "Tabard" }
+-- The character window's own layout: its slot names (for the game's empty-slot art), left column, right column, and
+-- the weapons along the bottom
+local SLOT_NAMES = { [1] = "HeadSlot", [2] = "NeckSlot", [3] = "ShoulderSlot", [4] = "ShirtSlot", [5] = "ChestSlot",
+	[6] = "WaistSlot", [7] = "LegsSlot", [8] = "FeetSlot", [9] = "WristSlot", [10] = "HandsSlot", [11] = "Finger0Slot",
+	[12] = "Finger1Slot", [13] = "Trinket0Slot", [14] = "Trinket1Slot", [15] = "BackSlot", [16] = "MainHandSlot",
+	[17] = "SecondaryHandSlot", [18] = "RangedSlot", [19] = "TabardSlot" }
+local DOLL_LEFT = { 1, 2, 3, 15, 5, 4, 19, 9 }
+local DOLL_RIGHT = { 10, 6, 7, 8, 11, 12, 13, 14 }
+local DOLL_BOTTOM = { 16, 17, 18 }
+local SLOT_SIZE, SLOT_GAP = 36, 5
 
----The gear panel: both sides' items slot by slot (icon, item level, name in its quality's colour, the game's tooltip
----on hover), in place of the card's body.
+---The game's empty-slot picture for a slot, as the character window shows it.
+function private.EmptySlotTexture(slot)
+	local info = C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo or GetInventorySlotInfo
+	if info and SLOT_NAMES[slot] then
+		local ok, _, texture = pcall(info, SLOT_NAMES[slot])
+		if ok and texture then
+			return texture
+		end
+	end
+	return 136516 -- the plain empty slot
+end
+
+---One slot of the paper doll: the item's icon in a border of its quality, its level, the game's tooltip on hover.
+function private.CreateDollSlot(panel, slot)
+	local button = CreateFrame("Button", nil, panel)
+	button:SetSize(SLOT_SIZE, SLOT_SIZE)
+	button.slot = slot
+	button.icon = button:CreateTexture(nil, "ARTWORK")
+	button.icon:SetAllPoints()
+	button.border = button:CreateTexture(nil, "OVERLAY")
+	button.border:SetPoint("TOPLEFT", -2, 2)
+	button.border:SetPoint("BOTTOMRIGHT", 2, -2)
+	button.border:SetColorTexture(1, 1, 1, 0)
+	button.level = Theme:Text(button, "tiny", "")
+	button.level:SetPoint("BOTTOMRIGHT", -2, 2)
+	button:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		if self.item then
+			GameTooltip:SetHyperlink(self.item)
+		else
+			GameTooltip:SetText(SLOT_LABELS[self.slot] or "", 1, 1, 1)
+			GameTooltip:AddLine("Nothing worn here", C.muted[1], C.muted[2], C.muted[3])
+		end
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	return button
+end
+
+---The gear panel: a paper doll laid out like the character window, for you or for them (a toggle), with the
+---average item level and the count by quality in the middle where the character would stand.
 function private.BuildGearPanel(card, width)
-	-- Scrolls inside the card: seventeen slots a side are taller than the room under the title
+	-- Scrolls inside the card when the card is shorter than the doll
 	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	frame.scrollBarHideable = true
 	frame:SetPoint("TOPLEFT", 0, -38)
 	frame:SetPoint("BOTTOMRIGHT", -26, 8)
 	frame:Hide()
+	local dollHeight = #DOLL_LEFT * (SLOT_SIZE + SLOT_GAP)
 	local panel = CreateFrame("Frame", nil, frame)
-	panel:SetSize(width - 30, 34 + #Duels.GEAR_SLOTS * GEAR_ROW)
+	panel:SetSize(width - 30, 40 + dollHeight + SLOT_SIZE + 20)
 	frame:SetScrollChild(panel)
 	panel.frame = frame
 	panel.back = W:Button(panel, "Back to the fight", "secondary", 140, 22, function() private.HideGear() end)
 	panel.back:SetPoint("TOPRIGHT", -4, 0)
-	panel.columns = {}
-	local columnWidth = floor((width - 70) / 2)
-	for c, key in ipairs({ "me", "them" }) do
-		local column = { rows = {} }
-		column.title = Theme:Text(panel, "body", "")
-		column.title:SetPoint("TOPLEFT", 14 + (c - 1) * (columnWidth + 12), -6)
-		for i, slot in ipairs(Duels.GEAR_SLOTS) do
-			local row = CreateFrame("Button", nil, panel)
-			row:SetSize(columnWidth, GEAR_ROW - 2)
-			row:SetPoint("TOPLEFT", 14 + (c - 1) * (columnWidth + 12), -30 - (i - 1) * GEAR_ROW)
-			row.icon = row:CreateTexture(nil, "ARTWORK")
-			row.icon:SetSize(GEAR_ROW - 4, GEAR_ROW - 4)
-			row.icon:SetPoint("LEFT")
-			row.text = Theme:Text(row, "small", "")
-			row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-			row.text:SetPoint("RIGHT")
-			row.text:SetJustifyH("LEFT")
-			row.text:SetWordWrap(false)
-			row.slot = slot
-			row:SetScript("OnEnter", function(self)
-				if self.item then
-					GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-					GameTooltip:SetHyperlink(self.item)
-					GameTooltip:Show()
-				end
-			end)
-			row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-			column.rows[i] = row
-		end
-		panel.columns[key] = column
+	panel.sideToggle = W:Segmented(panel, { { key = "them", label = "Them" }, { key = "me", label = "You" } }, function(key)
+		private.gearSide = key
+		private.FillDoll()
+	end, 90)
+	panel.sideToggle:SetPoint("TOPLEFT", 14, 0)
+	local dollWidth = min(width - 60, 420)
+	local left, top = floor((width - 30 - dollWidth) / 2), -36
+	panel.slots = {}
+	for i, slot in ipairs(DOLL_LEFT) do
+		local b = private.CreateDollSlot(panel, slot)
+		b:SetPoint("TOPLEFT", left, top - (i - 1) * (SLOT_SIZE + SLOT_GAP))
+		panel.slots[slot] = b
 	end
+	for i, slot in ipairs(DOLL_RIGHT) do
+		local b = private.CreateDollSlot(panel, slot)
+		b:SetPoint("TOPLEFT", left + dollWidth - SLOT_SIZE, top - (i - 1) * (SLOT_SIZE + SLOT_GAP))
+		panel.slots[slot] = b
+	end
+	local bottomLeft = left + floor((dollWidth - #DOLL_BOTTOM * (SLOT_SIZE + SLOT_GAP)) / 2)
+	for i, slot in ipairs(DOLL_BOTTOM) do
+		local b = private.CreateDollSlot(panel, slot)
+		b:SetPoint("TOPLEFT", bottomLeft + (i - 1) * (SLOT_SIZE + SLOT_GAP), top - dollHeight - 6)
+		panel.slots[slot] = b
+	end
+	panel.summary = Theme:Text(panel, "body", "")
+	panel.summary:SetPoint("TOP", panel, "TOPLEFT", left + dollWidth / 2, top - dollHeight / 2 + 30)
+	panel.summary:SetWidth(dollWidth - 2 * SLOT_SIZE - 30)
+	panel.summary:SetJustifyH("CENTER")
+	panel.summary:SetWordWrap(true)
 	card.gearPanel = panel
 end
 
----Fills one column of the gear panel from a side's recorded gear.
-function private.FillGearColumn(column, label, gear)
+---Fills the paper doll with one side's recorded gear.
+function private.FillDoll()
+	local card, duel = private.card, private.cardDuel
+	if not (card and duel) then
+		return
+	end
+	local panel = card.gearPanel
+	local key = private.gearSide or "them"
+	local side = type(duel[key]) == "table" and duel[key] or {}
+	local gear = side.gear
 	local items = type(gear) == "table" and type(gear.items) == "table" and gear.items or {}
-	local score = Duels:GearScore(gear)
-	column.title:SetText(label..(score and format("   item level %.1f", score.ilvl) or (next(items) and "" or "   not seen")))
-	for _, row in ipairs(column.rows) do
-		local item = items[row.slot]
-		row.item = item
-		local name, quality, level
-		if item and C_Item and C_Item.GetItemInfo then
-			name = C_Item.GetItemInfo(item)
+	for slot, button in pairs(panel.slots) do
+		local item = items[slot]
+		button.item = item
+		local level, quality
+		if item then
 			level, quality = Duels:ItemLevel(item)
+			local icon = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(tonumber(strmatch(item, "^item:(%d+)")) or 0)
+			button.icon:SetTexture(icon or 134400)
+			button.icon:SetDesaturated(false)
+		else
+			button.icon:SetTexture(private.EmptySlotTexture(slot))
 		end
-		local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(tonumber(strmatch(item, "^item:(%d+)")) or 0)
-		row.icon:SetTexture(icon or 134400)
-		row.icon:SetAlpha(item and 1 or 0.25)
 		local r, g, b = 1, 1, 1
-		if quality and C_Item.GetItemQualityColor then
+		if quality and C_Item and C_Item.GetItemQualityColor then
 			r, g, b = C_Item.GetItemQualityColor(quality)
 		end
-		local text = item and ((level and (level.."  ") or "")..(name or "loading...")) or Theme:Colorize(SLOT_LABELS[row.slot].." (empty)", C.faint)
-		row.text:SetText(text)
-		row.text:SetTextColor(r, g, b)
+		button.border:SetColorTexture(r, g, b, item and quality and quality >= 2 and 0.6 or 0)
+		button.border:SetDrawLayer("BACKGROUND")
+		button.level:SetText(level and tostring(level) or "")
 	end
+	local score = Duels:GearScore(gear)
+	local who = key == "me" and "You" or Duels:Describe(Duels:Side(duel, "them"))
+	local lines = { who }
+	if score then
+		lines[#lines + 1] = format("Item level %.1f", score.ilvl)
+		local counts = {}
+		for q = 5, 2, -1 do
+			if score.quality[q] then
+				counts[#counts + 1] = score.quality[q].." "..QUALITY_NAMES[q]
+			end
+		end
+		if #counts > 0 then
+			lines[#lines + 1] = table.concat(counts, ", ")
+		end
+	elseif next(items) then
+		lines[#lines + 1] = "Loading item levels..."
+	else
+		lines[#lines + 1] = key == "me" and "Not recorded for this duel" or "Not seen (the addon couldn't inspect them)"
+	end
+	panel.summary:SetText(table.concat(lines, "\n"))
+	panel.sideToggle:Select(key, true)
 end
 
 function private.ShowGear()
@@ -297,8 +372,8 @@ function private.ShowGear()
 	if not (card and duel) then
 		return
 	end
-	private.FillGearColumn(card.gearPanel.columns.me, "You", duel.me and duel.me.gear)
-	private.FillGearColumn(card.gearPanel.columns.them, "Them", duel.them and duel.them.gear)
+	private.gearSide = "them"
+	private.FillDoll()
 	card.scroll:Hide()
 	card.gearPanel.frame:SetVerticalScroll(0)
 	card.gearPanel.frame:Show()

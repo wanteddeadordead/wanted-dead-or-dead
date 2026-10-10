@@ -687,7 +687,7 @@ end
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the
 ---record as each of their own builds (one a talent loadout where the record has one, else one a specialization), and
 ---every duel newest first. Records not in the expected shape are passed over.
----@return table { won, lost, total, matchups = { { label, class, won, lost, games } }, builds = (the same), recent }
+---@return table { won, lost, total, matchups = { { label, class, won, lost, games, duels (newest first) } }, builds = (the same), recent }
 function Duels:GetSheet()
 	local sheet = { won = 0, lost = 0, total = 0, matchups = {}, builds = {}, recent = {} }
 	local byMatchup, byBuild = {}, {}
@@ -696,10 +696,11 @@ function Duels:GetSheet()
 		key = key or label
 		local row = index[key]
 		if not row then
-			row = { label = label, class = side.class, won = 0, lost = 0, games = 0, loadout = key ~= label and key or nil }
+			row = { label = label, class = side.class, won = 0, lost = 0, games = 0, loadout = key ~= label and key or nil, duels = {} }
 			index[key] = row
 			tinsert(rows, row)
 		end
+		tinsert(row.duels, record)
 		row.games = row.games + 1
 		row.won = row.won + (record.result == "won" and 1 or 0)
 		row.lost = row.lost + (record.result == "lost" and 1 or 0)
@@ -739,6 +740,12 @@ function Duels:GetSheet()
 	end
 	sort(sheet.matchups, ByGames)
 	sort(sheet.builds, ByGames)
-	sort(sheet.recent, function(a, b) return a.startAt > b.startAt end)
+	local function Newest(a, b) return a.startAt > b.startAt end
+	sort(sheet.recent, Newest)
+	for _, rows in ipairs({ sheet.matchups, sheet.builds }) do
+		for _, row in ipairs(rows) do
+			sort(row.duels, Newest)
+		end
+	end
 	return sheet
 end

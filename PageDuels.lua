@@ -1,5 +1,5 @@
--- Wanted: your duels, a tab of Progress. Your record, how you do against each class and spec, how you do as each of
--- your own builds, and the duels themselves, newest first. An opponent who runs Wanted shows by name; anyone else as
+-- Wanted: your duels, a tab of Progress. Your record, how you do against each class and spec (a click opens a matchup
+-- to its duels, newest first), and how you do as each of your own builds. An opponent who runs Wanted shows by name; anyone else as
 -- their spec and class ("Frost Mage").
 
 local _, Wanted = ...
@@ -8,14 +8,13 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Duels = Wanted.Duels
-local private = { view = "matchups" }
+local private = { view = "matchups", open = {} }
 local ROW_HEIGHT = 32
 local LIST_TOP = 146
 local COLUMN_X = { 16, 300, 420, 520 }
 local HEADERS = {
 	matchups = { "Opponent", "Won-lost", "Duels", "Won" },
 	builds = { "Your build", "Won-lost", "Duels", "Won" },
-	recent = { "Opponent", "Result", "Length", "When" },
 }
 local RESULTS = {
 	won = { "Won", C.green },
@@ -56,24 +55,27 @@ end
 
 function private.UpdateRow(row, item)
 	local cells = row.cells
-	if private.view == "recent" then
-		local result = RESULTS[item.result] or RESULTS.none
-		local level = type(item.them.level) == "number" and Theme:Colorize("  "..item.them.level, C.faint) or ""
-		cells[1]:SetText(Theme:ClassName(Duels:Opponent(item.them), item.them.class)..level)
-		cells[2]:SetText(Theme:Colorize(result[1]..(item.fled and " (fled)" or ""), result[2]))
-		cells[3]:SetText(private.Length(item.length))
-		cells[4]:SetText(private.When(item.startAt))
-	else
-		cells[1]:SetText(Theme:ClassName(item.label, item.class))
-		cells[2]:SetText(private.Record(item.won, item.lost))
-		cells[3]:SetText(tostring(item.games))
-		cells[4]:SetText(private.Share(item.won, item.games))
+	local duel = item.duel
+	if duel then
+		-- One duel of an open matchup: when, the result, how long, and the opponent's level
+		local result = RESULTS[duel.result] or RESULTS.none
+		cells[1]:SetText(Theme:Colorize("    "..private.When(duel.startAt), C.muted))
+		cells[2]:SetText(Theme:Colorize(result[1]..(duel.fled and " (fled)" or ""), result[2]))
+		cells[3]:SetText(private.Length(duel.length))
+		cells[4]:SetText(type(duel.them.level) == "number" and Theme:Colorize("Level "..duel.them.level, C.faint) or "")
+		return
 	end
+	local mark = private.view == "matchups" and Theme:Colorize(private.open[item.label] and "- " or "+ ", C.faint) or ""
+	cells[1]:SetText(mark..Theme:ClassName(item.label, item.class))
+	cells[2]:SetText(private.Record(item.won, item.lost))
+	cells[3]:SetText(tostring(item.games))
+	cells[4]:SetText(private.Share(item.won, item.games))
 end
 
----A recent duel's details: where, both specializations and what each had left.
+---One duel's details: where and when, both sides in full and what each had left.
 function private.ShowTooltip(row, item)
-	if private.view ~= "recent" then
+	local duel = item.duel
+	if not duel then
 		return
 	end
 	local function Side(side)
@@ -81,12 +83,20 @@ function private.ShowTooltip(row, item)
 		return Duels:Describe(side)..left
 	end
 	GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
-	GameTooltip:SetText(Theme:Plain(Duels:Opponent(item.them)), 1, 1, 1)
-	GameTooltip:AddLine(Theme:Plain(item.zone)..(item.toTheDeath and ", to the death" or "")..", "..date("%A %b %d, %H:%M", item.startAt),
+	GameTooltip:SetText(Theme:Plain(Duels:Opponent(duel.them)), 1, 1, 1)
+	GameTooltip:AddLine(Theme:Plain(duel.zone)..(duel.toTheDeath and ", to the death" or "")..", "..date("%A %b %d, %H:%M", duel.startAt),
 		C.muted[1], C.muted[2], C.muted[3])
-	GameTooltip:AddLine("Them: "..Side(item.them), 1, 1, 1)
-	GameTooltip:AddLine("You: "..Side(item.me), 1, 1, 1)
+	GameTooltip:AddLine("Them: "..Side(duel.them), 1, 1, 1)
+	GameTooltip:AddLine("You: "..Side(duel.me), 1, 1, 1)
 	GameTooltip:Show()
+end
+
+---A click on a matchup opens it to its duels, or closes it.
+function private.OnClick(item)
+	if private.view == "matchups" and not item.duel then
+		private.open[item.label] = not private.open[item.label] or nil
+		private.Refresh()
+	end
 end
 
 function private.Refresh()
@@ -107,7 +117,16 @@ function private.Refresh()
 		label:SetText(strupper(HEADERS[private.view][i]))
 	end
 	local empty, hint = "No duels yet.", "Duel someone and it shows up here."
-	private.list:SetItems(private.view == "recent" and sheet.recent or sheet[private.view], empty, hint)
+	local items = {}
+	for _, row in ipairs(sheet[private.view]) do
+		tinsert(items, row)
+		if private.view == "matchups" and private.open[row.label] then
+			for _, duel in ipairs(row.duels) do
+				tinsert(items, { duel = duel })
+			end
+		end
+	end
+	private.list:SetItems(items, empty, hint)
 end
 
 UI:RegisterPage("duels", {
@@ -132,7 +151,6 @@ UI:RegisterPage("duels", {
 		local segment = W:Segmented(container, {
 			{ key = "matchups", label = "Matchups" },
 			{ key = "builds", label = "Your builds" },
-			{ key = "recent", label = "Recent duels" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
@@ -157,6 +175,7 @@ UI:RegisterPage("duels", {
 		list:SetPoint("TOPLEFT", 0, -LIST_TOP)
 		list:SetPoint("TOPRIGHT", 0, -LIST_TOP)
 		list.onEnter = private.ShowTooltip
+		list.onClick = private.OnClick
 		private.list = list
 	end,
 	refresh = private.Refresh,

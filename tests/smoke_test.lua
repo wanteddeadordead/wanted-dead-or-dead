@@ -10492,20 +10492,19 @@ end)()
 	ns.UI:Show("duels")
 	check(OnScreen("1-2"), "the record is on the page")
 	check(OnScreen("Frost Mage"), "the matchup sheet shows class and spec")
-	-- The recent duels, with a tooltip of where and both builds
-	local recentButton
-	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Recent duels" then recentButton = fs._parent end end
-	recentButton:Click()
-	check(OnScreen("Duel Friend") and OnScreen("Affliction Warlock") and OnScreen("No result"), "recent duels name Wanted users and show the rest by spec")
-	check(OnScreen(date("%b %d %H:%M", clock - 100)), "recent duels show the date and time they were fought")
-	check(OnScreen("Affliction Warlock  58"), "recent duels show the opponent's level")
+	-- No separate list of duels: a click opens a matchup to its duels, with a tooltip of where, when and both sides
+	for _, fs in ipairs(Mock.fontStrings) do check(fs._text ~= "Recent duels", "no Recent duels tab: the matchups open to their duels") end
+	check(not OnScreen(date("%b %d %H:%M", clock - 200)), "a closed matchup shows no duels")
+	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
+	local warlockRow = Row(function(item) return item.label == "Affliction Warlock" end)
+	warlockRow._scripts.OnClick(warlockRow, "LeftButton")
+	check(OnScreen(date("%b %d %H:%M", clock - 200)) and OnScreen("Level 58") and OnScreen("Lost"), "an open matchup lists its duels: when, result and the opponent's level")
+	check(not OnScreen(date("%b %d %H:%M", clock - 400)), "only that matchup's duels")
 	local tipLines = {}
 	local addLine = GameTooltip.AddLine
 	GameTooltip.AddLine = function(_, text) tipLines[#tipLines + 1] = text end
-	for _, f in ipairs(Mock.created) do
-		local item = rawget(f, "item")
-		if type(item) == "table" and item.them and item.them.class == "WARLOCK" and f._scripts.OnEnter then f._scripts.OnEnter(f) end
-	end
+	local duelRow = Row(function(item) return item.duel and item.duel.them.class == "WARLOCK" end)
+	duelRow._scripts.OnEnter(duelRow)
 	GameTooltip.AddLine = addLine
 	check(table.concat(tipLines, "\n"):find("Them: Level 58 Orc Affliction Warlock", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior", 1, true),
 		"the tooltip gives both builds: "..table.concat(tipLines, " | "))

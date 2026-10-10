@@ -157,7 +157,8 @@ Captures.POINTS = points
 -- ============================================================================
 
 function Captures:OnLoad()
-	-- The presence book, for the app: "point:slot:guid" -> { g = GUID, n = name, p = point id, s = slot, c = samples }
+	-- The presence book, for the app: "point:slot:guid" -> { g = GUID, n = name, f = side, p = point id, s = slot,
+	-- c = samples }
 	Wanted.db.presence = type(Wanted.db.presence) == "table" and Wanted.db.presence or {}
 	private.Prune(GetServerTime())
 	-- What the site last said of each point, as the addon showed it: { week, [id] = holder }, to tell what changed since
@@ -182,14 +183,14 @@ function Captures:Settings()
 end
 
 ---Registers a function called when what the addon knows of the points changes (a sample, a peer, the site's holds):
----func(news), news a list of { kind, point } the site's holds changed since the addon last showed them, or nil.
+---func(fresh), fresh true when the site's holds just came in (their news waits in Captures:TakeNews).
 function Captures:OnChange(func)
 	tinsert(private.listeners, func)
 end
 
-function private.Changed(news)
+function private.Changed(fresh)
 	for _, func in ipairs(private.listeners) do
-		func(news)
+		func(fresh)
 	end
 end
 
@@ -450,7 +451,7 @@ function private.Count(pointId, now)
 	local book = Wanted.db.presence
 	local entry = book[key]
 	if not entry then
-		entry = { g = guid, n = Wanted.Store:GetOrigin(), p = pointId, s = slot, c = 0 }
+		entry = { g = guid, n = Wanted.Store:GetOrigin(), f = UnitFactionGroup("player"), p = pointId, s = slot, c = 0 }
 		book[key] = entry
 	end
 	entry.c = min(entry.c + 1, MAX_SAMPLES)
@@ -539,7 +540,6 @@ end
 ---@param list table?
 function Captures:Take(list)
 	private.holds = {}
-	local news = nil
 	if type(list) == "table" then
 		for id, hold in pairs(list) do
 			if byId[id] and type(hold) == "table" and type(hold.t) == "number" and (hold.h == "H" or hold.h == "A") then
@@ -552,24 +552,41 @@ function Captures:Take(list)
 			end
 		end
 		private.Won()
-		news = private.News()
+		-- Held until the HUD takes it: the catch-up is read at login before the HUD is enabled (Catchup comes first in
+		-- the .toc), and what the addon showed is only marked once it's shown
+		private.pending = private.News()
 	else
 		private.Won()
 	end
-	private.Changed(news)
+	private.Changed(type(list) == "table")
+end
+
+---The news of the site's last holds, once: { { kind, point } }, or nil when there's none waiting. Marks what the addon
+---showed, so the next login tells only what changed since.
+function Captures:TakeNews()
+	local news = private.pending
+	private.pending = nil
+	if not news then
+		return nil
+	end
+	local seen = Wanted.db.captureSeen
+	local week = Captures:WeekStart(GetServerTime())
+	if seen.week ~= week then
+		wipe(seen)
+		seen.week = week
+	end
+	for _, point in ipairs(points) do
+		seen[point.id] = Captures:Holder(point.id)
+	end
+	return news
 end
 
 ---What changed since the addon last showed the site's holds, this week: { { kind, point } }, kind "lost" (one of our
 ---points taken), "taken" (one of theirs we took), "respawned" (an inhibitor back with its side), "won" or "beaten" (a
----front's Nexus). Remembers what it showed.
+---front's Nexus). Nothing in a week the addon hasn't shown yet. Changes nothing (Captures:TakeNews marks it shown).
 function private.News()
 	local seen = Wanted.db.captureSeen
-	local week = Captures:WeekStart(GetServerTime())
-	local fresh = seen.week ~= week
-	if fresh then
-		wipe(seen)
-		seen.week = week
-	end
+	local fresh = seen.week ~= Captures:WeekStart(GetServerTime())
 	local side = UnitFactionGroup("player")
 	local news = {}
 	for _, point in ipairs(points) do
@@ -588,7 +605,6 @@ function private.News()
 			end
 			tinsert(news, { kind = kind, point = point })
 		end
-		seen[point.id] = now
 	end
 	return news
 end

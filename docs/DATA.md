@@ -118,8 +118,8 @@ season). Written at login and when the rank, honor or bags change. The Wanted ap
 boards; the site takes them only for the account's own characters.
 
 `WantedDB.presence` (capture fronts, after 1.19.3) is the account's characters' time at capture points (`Captures.lua`):
-`presence["point:slot:guid"] = { g, n, p, s, c }` (GUID, name as the site names it, point id, slot = game-server time
-/ 300, samples 1-10). A sample is added every 30 s while the character stands in a point able to fight. Entries older
+`presence["point:slot:guid"] = { g, n, f, p, s, c }` (GUID, name as the site names it, side "Horde" or "Alliance", point
+id, slot = game-server time / 300, samples 1-10; the app sends only entries on the side it catches up for). A sample is added every 30 s while the character stands in a point able to fight. Entries older
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
 wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
 players (the `P` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,

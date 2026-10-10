@@ -97,5 +97,6 @@ MapPins.lua
 MapPins.xml
 CapturesMap.lua
 CapturesHUD.lua
+CapturesHUD.xml
 Minimap.lua
 OptionsPanel.lua

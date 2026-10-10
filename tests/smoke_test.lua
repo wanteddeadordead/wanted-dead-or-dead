@@ -10009,7 +10009,7 @@ end)()
 	check(#lines == printedBefore and C:Current() == P("hb-mid-2"), "entering says nothing in chat: the bar shows it")
 	local slot = math.floor(clock / C.SLOT_SECONDS)
 	local key = "hb-mid-2:"..slot..":Player-1-ME"
-	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].g == "Player-1-ME" and db.presence[key].n == ns.Store:GetOrigin(),
+	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].g == "Player-1-ME" and db.presence[key].n == ns.Store:GetOrigin() and db.presence[key].f == "Horde",
 		"a sample is counted for this character, point and slot")
 	check(#told == 1 and told[1].p == "hb-mid-2" and told[1].s == slot and told[1].c == 1, "our side is told")
 	Sample()
@@ -10076,11 +10076,13 @@ end)()
 	mapId, px, py = 1424, 0.523, 0.309
 	-- Like a battleground's: "Towers: N" a side, the tower icon from the widgets' atlas, under the top-centre widgets; the
 	-- capture bar's spark at the holder's end; the map icons from POIIcons by index; announcements in the BG system's way
-	local realTexture, realRaid, realUtil, realTop = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame
+	local realTexture, realRaid, realUtil, realTop, realAnnounce = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame
 	local atlases, announced, poi = {}, {}, {}
 	C_Texture = { GetAtlasInfo = function(name) return { width = 32, height = 32, name = name } end }
 	C_Minimap.GetPOITextureCoords = function(i) poi[#poi + 1] = i return 0, 0.1, 0, 0.1 end
-	RaidWarningFrame = { AddMessage = function(_, text, _, _, kind) announced[#announced + 1] = text.."|"..tostring(kind) end }
+	-- Our own frame from the RaidWarning template; the game's own is never touched
+	WantedCaptureAnnounceFrame = { AddMessage = function(_, text, color, _, kind) announced[#announced + 1] = text.."|"..tostring(kind).."|"..tostring(color and color.r) end }
+	RaidWarningFrame = { AddMessage = function() error("the global RaidWarningFrame was used") end }
 	RaidWarningUtil = { MessageType = { BGSystem = 3 } }
 	UIWidgetTopCenterContainerFrame = NewMock()
 	local realSetAtlas = Methods.SetAtlas
@@ -10097,8 +10099,8 @@ end)()
 	ns.CapturesHUD.TestAlert = nil
 	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
 	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Eight")
-	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3", 1, true), "announced as a battleground does: "..table.concat(announced, "; "))
-	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop
+	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3|1", 1, true), "announced as a battleground does, gold without the chat colours: "..table.concat(announced, "; "))
+	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop, realAnnounce
 	C_Minimap.GetPOITextureCoords = nil
 	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
 	-- The site's holders at login, and what changed since the addon last showed them, in the MOBA way
@@ -10111,6 +10113,25 @@ end)()
 		"the site's holders are taken, unknown points and sides left out")
 	check(Warned("Enemy inhibitor down") and not Warned("Your tower"), "the biggest news is the alert: "..table.concat(warned, "; "))
 	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
+	-- At login the catch-up is read (Catchup) before the HUD is enabled (it comes later in the .toc): the news waits, and
+	-- what the addon showed isn't marked until the HUD takes it
+	local tocOrder, at = {}, 0
+	for line in io.lines(ADDON.."WantedDeadOrDead.toc") do at = at + 1 tocOrder[line:gsub("\r", "")] = at end
+	check(tocOrder["Catchup.lua"] < tocOrder["CapturesHUD.lua"], "the catch-up comes before the HUD")
+	local realTake, realDeliver = C.TakeNews, ns.CapturesHUD.DeliverNews
+	ns.CapturesHUD.DeliverNews = function() end -- not enabled yet
+	local seenBefore = db.captureSeen["hb-bot-2"]
+	warned = {}
+	C:Take({ ["hb-bot-2"] = { h = "A", t = clock }, ["hb-top-2"] = { h = "A", t = clock } })
+	check(#warned == 0 and db.captureSeen["hb-bot-2"] == seenBefore, "nothing shown or marked before the HUD is there")
+	ns.CapturesHUD.DeliverNews = realDeliver
+	ns.CapturesHUD:DeliverNews()
+	check(Warned("Your tower has been destroyed") and db.captureSeen["hb-bot-2"] == "Alliance", "the HUD shows the waiting news and marks it: "..table.concat(warned, "; "))
+	warned = {}
+	ns.CapturesHUD:DeliverNews()
+	check(#warned == 0, "once")
+	C.TakeNews = realTake
+	C:Take({ ["hb-mid-3"] = { h = "H", s = clock - 900, t = clock - 7200 }, ["hb-mid-4"] = { h = "H", s = clock - 300, r = clock + 1200, t = clock - 7200 } })
 	-- Its respawn time passing brings it back (provisionally), once
 	warned = {}
 	clock = clock + 1201

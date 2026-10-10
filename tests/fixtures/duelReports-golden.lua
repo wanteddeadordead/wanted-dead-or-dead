@@ -31,6 +31,21 @@ return {
 },
 ["len"] = 29.3,
 ["me"] = {
+["build"] = {
+["points"] = {
+[1] = 0,
+[2] = 12,
+[3] = 0,
+},
+["spec"] = "Combat",
+["talents"] = {
+[1] = "Improved Eviscerate",
+[2] = "Improved Sinister Strike",
+[3] = "Lightning Reflexes",
+[4] = "Precision",
+[5] = "Improved Sprint",
+},
+},
 ["cc"] = {
 [1] = {
 ["from"] = 12.6,
@@ -196,6 +211,21 @@ return {
 },
 ["len"] = 26.7,
 ["me"] = {
+["build"] = {
+["points"] = {
+[1] = 0,
+[2] = 12,
+[3] = 0,
+},
+["spec"] = "Combat",
+["talents"] = {
+[1] = "Improved Eviscerate",
+[2] = "Improved Sinister Strike",
+[3] = "Lightning Reflexes",
+[4] = "Precision",
+[5] = "Improved Sprint",
+},
+},
 ["cc"] = {
 [1] = {
 ["from"] = 11.7,
@@ -336,6 +366,21 @@ return {
 },
 ["opener"] = "They found you in stealth and opened from stealth: 74 damage (12% of your health) before your first action at 0:00.",
 ["them"] = {
+["build"] = {
+["points"] = {
+[1] = 0,
+[2] = 12,
+[3] = 0,
+},
+["spec"] = "Feral Combat",
+["talents"] = {
+[1] = "Feral Charge",
+[2] = "Heart of the Wild",
+[3] = "Feral Swiftness",
+[4] = "Thick Hide",
+[5] = "Sharpened Claws",
+},
+},
 ["cc"] = {
 },
 ["cds"] = {

@@ -10599,7 +10599,10 @@ end)()
 			ns.UI:Show("duels")
 			local row = Row(function(item) return item.duel == d end)
 			if not row then
-				local matchup = Row(function(item) return item.label == "Druid" end)
+				local matchup = Row(function(item)
+					for _, x in ipairs(item.duels or {}) do if x == d then return true end end
+					return false
+				end)
 				matchup._scripts.OnClick(matchup, "LeftButton")
 				row = Row(function(item) return item.duel == d end)
 			end
@@ -10608,6 +10611,7 @@ end)()
 				check(OnScreen(i..". "..f.text), "the card shows the app's finding: "..f.text)
 			end
 			check(#golden[d.id].me.hp > 1 and type(golden[d.id].me.hp[1][2]) == "number", "health comes as { t, pct } pairs")
+			check(OnScreen("Build: Combat (0/12/0): Improved Eviscerate"), "the card shows the build the app decoded from the loadout")
 		end
 		db.duels, db.duelReports = keptDuels, keptReportsHere
 		ns.UI:Show("duels")

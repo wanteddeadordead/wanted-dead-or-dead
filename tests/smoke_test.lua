@@ -9948,14 +9948,28 @@ end)()
 	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
 	db.settings.sigBackground = true
 end)()
--- A character's GUID names a Wanted user only when a key is bound to it: heard in their own hello or from the app
+-- A character's GUID names a Wanted user only when a key is bound to it and the binding is proven: the app's list (the
+-- server checked the account), or a hello whose sender is the name the game itself gives the GUID's character. A hello
+-- can carry any GUID
 ;(function()
 	local C, KeyBook = ns.Crypto, ns.KeyBook
 	local pk = C:PublicKey(C:SHA512("duel friend"):sub(1, 32))
 	check(KeyBook:OriginOf("Player-1-0D0E1F00") == nil, "a GUID with no key bound names nobody")
 	Fire("CHAT_MSG_ADDON", "WNTD", "H:df:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-0D0E1F00" }), "CHANNEL", "Duel Friend", nil, nil, nil, ns.Sync:GetInfo().channelName)
 	RunFrames()
-	check(KeyBook:OriginOf("Player-1-0D0E1F00") == "Duel Friend", "a hello binds the GUID to the Wanted user: "..tostring(KeyBook:OriginOf("Player-1-0D0E1F00")))
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == nil, "a hello alone, the game not naming the character, names nobody")
+	local gameNames = { ["Player-1-0D0E1F00"] = "Duel Friend" }
+	local saved = GetPlayerInfoByGUID
+	GetPlayerInfoByGUID = function(guid) if gameNames[guid] then return "Mage", "MAGE", "Undead", "Scourge", 2, gameNames[guid] end return saved(guid) end
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == "Duel Friend", "the hello's sender is the game's name for the GUID: a Wanted user")
+	gameNames["Player-1-0D0E1F00"] = "Duel"
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == "Duel Friend", "the game may give the first name only")
+	gameNames["Player-1-0D0E1F00"] = "Someone Else"
+	check(KeyBook:OriginOf("Player-1-0D0E1F00") == nil, "a hello claiming another character's GUID names nobody")
+	gameNames["Player-1-0D0E1F00"] = "Duel Friend"
+	GetPlayerInfoByGUID = saved
+	KeyBook:FromApp({ { n = "App Friend", g = "Player-1-00A0F00D", k = C:Base64(C:PublicKey(C:SHA512("app friend"):sub(1, 32))) } }, clock)
+	check(KeyBook:OriginOf("Player-1-00A0F00D") == "App Friend", "the app's list proves the binding")
 	check(KeyBook:OriginOf("Player-1-005717A6") == nil and KeyBook:OriginOf(nil) == nil, "anyone else names nobody")
 end)()
 -- Duels: each duel is recorded for the player's own matchup sheet, the opponent named only when they run Wanted
@@ -10209,7 +10223,7 @@ end)()
 	local pk = C:PublicKey(C:SHA512("faker"):sub(1, 32))
 	Fire("CHAT_MSG_ADDON", "WNTD", "H:fk:1/1:"..ns.Sync:Encode({ c = {}, k = C:Base64(pk), g = "Player-1-00000BB0" }), "CHANNEL", "Faker Person", nil, nil, nil, ns.Sync:GetInfo().channelName)
 	RunFrames()
-	check(ns.KeyBook:OriginOf("Player-1-00000BB0") == "Faker Person", "the hello bound the stranger's GUID")
+	check(ns.KeyBook:OriginOf("Player-1-00000BB0") == nil, "a hello claiming the stranger's GUID names nobody")
 	enemyUnits.target = { guid = "Player-1-00000BB0", name = "Some Stranger", faction = "Horde", class = "WARLOCK", level = 58, close = true }
 	clock = clock + 60
 	S.Hook("StartDuel", "target")

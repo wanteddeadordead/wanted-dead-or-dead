@@ -486,7 +486,7 @@ UI:RegisterPage("challenges", {
 	end,
 	menuLabel = "Progress",
 	tabLabel = "Challenges",
-	tabs = { "challenges", "hunters", "calendar", "rank", "gear" },
+	tabs = { "challenges", "hunters", "calendar", "rank", "gear", "duels" },
 	build = function(container, width, height)
 		private.BuildEmpty(container, width)
 		private.BuildDaily(container)

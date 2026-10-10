@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs
+  Frost Mage 3-9", most faced first), how you do as each of your own talent builds. Click a matchup to see its duels:
+  when, the result, how long and the opponent's level (hover one for where, and both sides' level, race and build). Fight
+  reports from the Wanted app reach the game at a /reload: the Duels tab says when your last duel's report is due and
+  gives a Reload button. Click a duel for its fight card: both sides' health through the fight, the control you
+  suffered, what each of you used, and up to five tips, each with what to try next time. See talent tree opens the game's
+  talent frame on either side's build, and See gear lists what each of you wore, slot by slot, with your average item
+  levels; a clear gear gap is called out at the top. Your opponent's talents are read by inspect when
+  nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
+  Wanted shows by name; anyone else as their spec and class. Duels stay on your PC (the Wanted app will upload them
+  later) and are never shared with other players.
+- A duel never counts as a kill, a death or a sighting. Even a duel to the death leaves no kill or death record, no
+  "Killed by" warning and no lost kill streak.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

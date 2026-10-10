@@ -231,6 +231,46 @@ function KeyBook:HasKeys(origin)
 	return type(book) == "table" and type(book.list) == "table" and #book.list > 0
 end
 
+---The Wanted user a character is: the origin a key is bound to that character's GUID under, when the binding is
+---proven. A hello can carry any GUID, so a key heard live counts only when the game's own name for the GUID's character
+---is the origin; the app's list counts as it is (the server took the key from the account the character is confirmed
+---to). nil for anyone else.
+---@param guid string?
+---@return string?
+function KeyBook:OriginOf(guid)
+	if type(guid) ~= "string" then
+		return nil
+	end
+	for origin, book in pairs(Wanted.db.keys) do
+		if type(book) == "table" and type(book.list) == "table" then
+			for _, key in ipairs(book.list) do
+				if key.g == guid and (key.src == "app" or KeyBook:IsCharacter(origin, guid)) then
+					return origin
+				end
+			end
+		end
+	end
+	return nil
+end
+
+---Whether the game's own name for a GUID's character is this origin ("First Last", or "Name-Realm" elsewhere). The
+---game may give the first name only. false when the game can't name the character (not seen this session).
+---@param origin string?
+---@param guid string?
+---@return boolean
+function KeyBook:IsCharacter(origin, guid)
+	if type(origin) ~= "string" or type(guid) ~= "string" then
+		return false
+	end
+	local _, _, _, _, _, name = GetPlayerInfoByGUID(guid)
+	if type(name) ~= "string" or (issecretvalue and issecretvalue(name)) or name == "" then
+		return false
+	end
+	name = strlower(strmatch(name, "^([^%-]+)") or name)
+	origin = strlower(strmatch(origin, "^([^%-]+)") or origin)
+	return name == origin or (not strfind(name, " ") and name == strmatch(origin, "^(%S+)"))
+end
+
 ---How many origins have keys, and how many keys in all.
 ---@return number origins
 ---@return number keys

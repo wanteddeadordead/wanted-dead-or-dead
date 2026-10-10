@@ -70,8 +70,11 @@ function Catchup:Import()
 	local entry = type(all) == "table" and all[Wanted.db.accountMark]
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
 		Wanted.Challenges:Take(nil, true)
+		Wanted.Duels:TakeReports(nil, nil)
 		return
 	end
+	-- Fight reports the app made of this account's duels, read at every login like the challenges
+	Wanted.Duels:TakeReports(entry.duelReports, entry.t)
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
 	private.LookUpUnnamed(entry.unnamed)
 	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over

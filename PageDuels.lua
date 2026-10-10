@@ -101,8 +101,9 @@ end
 
 -- What the notice beside the tabs says about the last duel's fight report, and whether a reload would help
 local REPORT_NOTES = {
-	save = { "Your last duel isn't saved for the Wanted app yet.", true },
-	reading = { "The Wanted app is reading your last duel from the combat log. Reload in a minute.", true },
+	-- A /reload saves the duel and writes out the game's combat log together, so the app reads both at once
+	save = { "Reload to send your last duel to the Wanted app.", true },
+	reading = { "Reload once more to load your last duel's fight report.", true },
 	noapp = { "Fight reports need the Wanted app running on this PC." },
 	nolog = { "No combat log for your last duel, so no fight report." },
 }

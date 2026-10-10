@@ -10144,6 +10144,15 @@ end)()
 	role = "assist"
 	Fire("PLAYER_TARGET_CHANGED")
 	check(skull:GetAttribute("type-skull") == nil and skull.why:find("no bounty", 1, true), "a target with no bounty and not on Kill on Sight isn't marked: "..tostring(skull.why))
+	-- An enemy we can't attack (not flagged, a sanctuary) never sets it up: the game's click would do nothing
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
+	local realCanAttack = UnitCanAttack
+	_G.UnitCanAttack = function() return false end
+	Fire("PLAYER_TARGET_CHANGED")
+	check(skull:GetAttribute("type-skull") == nil and skull.why:find("can't attack", 1, true), "a Kill on Sight enemy we can't attack isn't set up: "..tostring(skull.why))
+	_G.UnitCanAttack = realCanAttack
+	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
+	RunTimers()
 	-- Put on Kill on Sight while targeted: set up again without a target change
 	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
 	RunTimers()

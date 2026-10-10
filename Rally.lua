@@ -279,8 +279,13 @@ function Rally:SkullWhyNot()
 		return "Target a bounty or Kill on Sight enemy first."
 	end
 	local guid = Readable(UnitGUID("target"))
-	if not guid or not Readable(UnitIsPlayer("target")) or not Readable(UnitIsEnemy("player", "target")) then
+	if not guid or not Readable(UnitIsPlayer("target")) then
 		return "Skull is for enemy players with a bounty or on Kill on Sight."
+	end
+	-- The game's click only marks a target we can attack (harmbutton): one we can't (not flagged, in a sanctuary)
+	-- would leave the button looking ready while doing nothing
+	if not Readable(UnitCanAttack("player", "target")) then
+		return "You can't attack your target right now (not flagged, or in a sanctuary), so Skull can't mark them."
 	end
 	local d = Wanted.Enemies:Describe(guid)
 	if not d.kos and d.bounty <= 0 then

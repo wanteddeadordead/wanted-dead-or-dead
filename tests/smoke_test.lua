@@ -10116,8 +10116,13 @@ end)()
 	C_DeathRecap = recap
 	check(Count("death") == deaths and ns.Enemies:GetLastDeath() == lastDeath, "dying in a duel to the death is no death and names no killer")
 	check(select(2, ns.Streaks:GetCounts()) == 1, "and keeps the kill streak")
+	-- No winner line for a duel to the death: who is dead says who lost
+	local isDead = UnitIsDeadOrGhost
+	UnitIsDeadOrGhost = function(unit) if unit == "player" then return true end return isDead(unit) end
 	Fire("DUEL_FINISHED")
 	RunTimers()
+	UnitIsDeadOrGhost = isDead
+	check(db.duels[#db.duels].toTheDeath and db.duels[#db.duels].result == "lost", "the duel to the death we died in is lost: "..tostring(db.duels[#db.duels].result))
 	-- Just after, too (the game confirms a death a few seconds later)
 	clock = clock + 5
 	Fire("PARTY_KILL", "Player-1-ME", "Player-1-0D0E1F00")

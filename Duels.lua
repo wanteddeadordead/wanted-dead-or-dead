@@ -318,11 +318,12 @@ function private.OnFinished()
 	-- A duel to the death ends in a death, whatever the lines say
 	duel.deadMe = private.Readable(UnitIsDeadOrGhost("player")) == true
 	duel.deadThem = unit and private.Readable(UnitIsDeadOrGhost(unit)) == true or false
+	-- Written even if a new challenge came meanwhile
 	C_Timer.After(SETTLE_SECONDS, function()
 		if private.duel == duel then
 			private.duel = nil
-			private.Finish(duel)
 		end
+		private.Finish(duel)
 	end)
 end
 

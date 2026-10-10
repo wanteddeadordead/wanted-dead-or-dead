@@ -10164,7 +10164,7 @@ end)()
 -- free-for-all area, is no duel. And a duel the game never finishes is let go
 ;(function()
 	local db, S = ns.db, duelStubs
-	local count = #db.duels
+	local newest = db.duels[#db.duels]
 	enemyUnits.target = { guid = "Player-9-ENEMY", name = "Stabby Mcstab", class = "ROGUE", level = 20, dueling = true, close = true }
 	S.Hook("StartDuel", "target", true, true)
 	clock = clock + 5
@@ -10172,7 +10172,7 @@ end)()
 	check(not ns.Duels:Involves("Player-1-ME"), "a challenge to someone already hostile hasn't started a duel")
 	Fire("DUEL_FINISHED")
 	RunTimers()
-	check(#db.duels == count, "and records nothing when the game ends it")
+	check(db.duels[#db.duels] == newest, "and records nothing when the game ends it")
 	-- A duel to the death accepted, then nothing more from the game
 	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
 	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Duel Friend")
@@ -10182,7 +10182,7 @@ end)()
 	check(ns.Duels:Involves("Player-1-ME"), "the duel to the death is on")
 	clock = clock + 16 * 60
 	ns.Duels:Check()
-	check(not ns.Duels:Involves("Player-1-ME") and #db.duels == count, "a duel never finished is let go after a while, unrecorded")
+	check(not ns.Duels:Involves("Player-1-ME") and db.duels[#db.duels] == newest, "a duel never finished is let go after a while, unrecorded")
 	enemyUnits.target = nil
 end)()
 -- The talents frame showing someone's talents is an inspect of the player's own: ours waits
@@ -10244,6 +10244,23 @@ end)()
 	local last = ns.Enemies:GetLastDeath()
 	check(not (last and last.guid == "Player-1-0D0E1F00"), "a later death doesn't read the duel's recap")
 	C_DeathRecap = recap
+end)()
+-- A new challenge straight after a duel doesn't lose it
+;(function()
+	local db, S = ns.db, duelStubs
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	clock = clock + 60
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	Fire("CHAT_MSG_SYSTEM", "Test has defeated Duel Friend in a duel")
+	Fire("DUEL_FINISHED")
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	RunTimers()
+	check(db.duels[#db.duels].endAt == clock and db.duels[#db.duels].result == "won", "the duel is recorded though a challenge came within the settle")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	enemyUnits.target = nil
 end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()

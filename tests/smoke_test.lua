@@ -10539,6 +10539,26 @@ end)()
 	Duels:TakeReports({ [duel.id] = { v = 1, findings = {} }, ["Someone:duel:1"] = { v = 1 } }, clock)
 	ns.UI:Show("duels")
 	check(Duels:ReportState(duel) == "ready" and db.duelReports["Someone:duel:1"] == nil and not Reload():IsShown(), "a report in: no notice; reports for duels not kept are dropped")
+	-- The fight card: a click on the duel in its open matchup shows the report in place of the list
+	db.duelReports[duel.id] = { t = clock, len = 26.9,
+		me = { dmg = 326, hp = { 0, 100, 12, 60, 26, 0 }, cc = { { n = "Bash", s = 11.9, e = 13.9, x = "expired" } }, used = { { n = "Evasion", t = 15.7 } } },
+		them = { dmg = 636, hp = { 0, 100, 20, 48.7 }, cc = {}, used = {} },
+		findings = { { r = "unused", text = "You lost with Gouge, Evasion and Sprint never used.", tip = "Gouge then bandage or reset." },
+			{ r = "race", text = "Their melee did 51% of the damage you took." } } }
+	ns.UI:Show("duels")
+	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
+	local matchup = Row(function(item) return item.label == "Druid" end)
+	matchup._scripts.OnClick(matchup, "LeftButton")
+	local duelRow = Row(function(item) return item.duel == duel end)
+	duelRow._scripts.OnClick(duelRow, "LeftButton")
+	check(OnScreen("1. You lost with Gouge, Evasion and Sprint never used.") and OnScreen("Gouge then bandage or reset.")
+		and OnScreen("2. Their melee did 51%") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
+		"the fight card shows the findings with their tips, the control suffered and what was used")
+	local back
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end
+	check(back and back:IsShown(), "the card has a way back")
+	back._scripts.OnClick(back)
+	check(not back:GetParent():IsShown(), "Back returns to the list")
 	Duels:TakeReports(nil, nil)
 	check(Duels:ReportState(duel) == "ready", "a report taken in stays when a later login has no catch-up")
 	db.duelReports[duel.id] = { noLog = true, why = "log missing" }

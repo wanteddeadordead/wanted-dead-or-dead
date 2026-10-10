@@ -16,6 +16,14 @@ local HEADERS = {
 	matchups = { "Opponent", "Won-lost", "Duels", "Won" },
 	builds = { "Your build", "Won-lost", "Duels", "Won" },
 }
+-- What the notice beside the tabs says about the last duel's fight report, and whether a reload would help
+local REPORT_NOTES = {
+	-- A /reload saves the duel and writes out the game's combat log together, so the app reads both at once
+	save = { "Reload to send your last duel to the Wanted app.", true },
+	reading = { "Reload once more to load your last duel's fight report.", true },
+	noapp = { "Fight reports need the Wanted app running on this PC." },
+	nolog = { "No combat log for your last duel, so no fight report." },
+}
 local RESULTS = {
 	won = { "Won", C.green },
 	lost = { "Lost", C.red },
@@ -91,22 +99,192 @@ function private.ShowTooltip(row, item)
 	GameTooltip:Show()
 end
 
----A click on a matchup opens it to its duels, or closes it.
+---A click on a matchup opens it to its duels, or closes it; a click on a duel shows its fight card.
 function private.OnClick(item)
-	if private.view == "matchups" and not item.duel then
+	if item.duel then
+		private.ShowCard(item.duel)
+	elseif private.view == "matchups" then
 		private.open[item.label] = not private.open[item.label] or nil
 		private.Refresh()
 	end
 end
 
--- What the notice beside the tabs says about the last duel's fight report, and whether a reload would help
-local REPORT_NOTES = {
-	-- A /reload saves the duel and writes out the game's combat log together, so the app reads both at once
-	save = { "Reload to send your last duel to the Wanted app.", true },
-	reading = { "Reload once more to load your last duel's fight report.", true },
-	noapp = { "Fight reports need the Wanted app running on this PC." },
-	nolog = { "No combat log for your last duel, so no fight report." },
-}
+
+
+-- ============================================================================
+-- The fight card: one duel as the Wanted app read it from the combat log (Duels:ReportState)
+-- ============================================================================
+
+local CARD_BARS = 40 -- health as this many bars across the fight
+local GRAPH_HEIGHT = 34
+local CARD_FINDINGS = 5
+local CC_MARKS = 8
+
+---"0:15" from seconds into the fight.
+function private.Clock(seconds)
+	seconds = max(floor((tonumber(seconds) or 0) + 0.5), 0)
+	return format("%d:%02d", floor(seconds / 60), seconds % 60)
+end
+
+---One side's lane on the card: a label, health bars, a strip of the control it suffered, what it used.
+function private.CreateLane(card, label, y, color, graphWidth)
+	local lane = { bars = {}, marks = {}, color = color, width = graphWidth }
+	lane.label = Theme:Text(card, "small", label, C.muted)
+	lane.label:SetPoint("TOPLEFT", 14, y - 10)
+	lane.graph = CreateFrame("Frame", nil, card)
+	lane.graph:SetPoint("TOPLEFT", 80, y)
+	lane.graph:SetSize(graphWidth, GRAPH_HEIGHT)
+	Theme:Fill(lane.graph, C.panelAlt or C.panel)
+	local barWidth = graphWidth / CARD_BARS
+	for i = 1, CARD_BARS do
+		local bar = lane.graph:CreateTexture(nil, "ARTWORK")
+		bar:SetColorTexture(color[1], color[2], color[3], 0.85)
+		bar:SetPoint("BOTTOMLEFT", (i - 1) * barWidth, 0)
+		bar:SetWidth(max(barWidth - 1, 1))
+		lane.bars[i] = bar
+	end
+	lane.strip = CreateFrame("Frame", nil, card)
+	lane.strip:SetPoint("TOPLEFT", lane.graph, "BOTTOMLEFT", 0, -3)
+	lane.strip:SetSize(graphWidth, 5)
+	for i = 1, CC_MARKS do
+		local mark = lane.strip:CreateTexture(nil, "ARTWORK")
+		mark:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 0.9)
+		mark:SetPoint("TOPLEFT")
+		mark:SetHeight(5)
+		lane.marks[i] = mark
+	end
+	lane.used = Theme:Text(card, "small", "", C.faint)
+	lane.used:SetPoint("TOPLEFT", lane.strip, "BOTTOMLEFT", 0, -4)
+	lane.used:SetWidth(graphWidth)
+	lane.used:SetJustifyH("LEFT")
+	lane.used:SetWordWrap(true)
+	return lane
+end
+
+---Fills a lane from one side of a report: health as the last reading at each bar's moment, control as gold marks
+---across the fight, and what they used and when.
+function private.FillLane(lane, side, length)
+	side = type(side) == "table" and side or {}
+	local hp = type(side.hp) == "table" and side.hp or {}
+	length = (type(length) == "number" and length > 0) and length or 1
+	local point = 1
+	local pct = 100
+	for i = 1, CARD_BARS do
+		local at = length * (i - 0.5) / CARD_BARS
+		while type(hp[point]) == "number" and type(hp[point + 1]) == "number" and hp[point] <= at do
+			pct = hp[point + 1]
+			point = point + 2
+		end
+		lane.bars[i]:SetHeight(max(GRAPH_HEIGHT * min(max(pct, 0), 100) / 100, 1))
+	end
+	local cc = type(side.cc) == "table" and side.cc or {}
+	local controls = {}
+	for i, mark in ipairs(lane.marks) do
+		local c = cc[i]
+		if type(c) == "table" and type(c.s) == "number" and type(c.e) == "number" then
+			local from, to = min(max(c.s / length, 0), 1), min(max(c.e / length, 0), 1)
+			mark:ClearAllPoints()
+			mark:SetPoint("TOPLEFT", from * lane.width, 0)
+			mark:SetWidth(max((to - from) * lane.width, 2))
+			mark:Show()
+			controls[#controls + 1] = format("%s %.1f s", Theme:Plain(c.n), c.e - c.s)
+		else
+			mark:Hide()
+		end
+	end
+	local used = {}
+	for _, u in ipairs(type(side.used) == "table" and side.used or {}) do
+		if type(u) == "table" then
+			used[#used + 1] = Theme:Plain(u.n).." "..private.Clock(u.t)
+		end
+	end
+	lane.used:SetText((#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
+		..(#used > 0 and ("Used: "..table.concat(used, ", ")) or "Used nothing that counts"))
+end
+
+function private.BuildCard(container, width)
+	local card = W:Card(container)
+	card:SetPoint("TOPLEFT", 0, -LIST_TOP + 26)
+	card:SetPoint("BOTTOMRIGHT")
+	card:Hide()
+	card.title = Theme:Text(card, "body", "")
+	card.title:SetPoint("TOPLEFT", 14, -12)
+	card.back = W:Button(card, "Back", "secondary", 70, 24, function() private.HideCard() end)
+	card.back:SetPoint("TOPRIGHT", -10, -8)
+	card.note = Theme:Text(card, "small", "", C.muted)
+	card.note:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", 0, -6)
+	local graphWidth = max(width - 110, 120)
+	card.lanes = {
+		me = private.CreateLane(card, "You", -56, C.green, graphWidth),
+		them = private.CreateLane(card, "Them", -128, C.red, graphWidth),
+	}
+	card.findings = {}
+	local above
+	for i = 1, CARD_FINDINGS do
+		local f = Theme:Text(card, "body", "")
+		if above then
+			f:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -8)
+		else
+			f:SetPoint("TOPLEFT", 14, -202)
+		end
+		f:SetWidth(width - 28)
+		f:SetJustifyH("LEFT")
+		f:SetWordWrap(true)
+		card.findings[i] = f
+		above = f
+	end
+	private.card = card
+end
+
+---Shows a duel's fight card in place of the list.
+function private.ShowCard(duel)
+	local card = private.card
+	if not card then
+		return
+	end
+	private.cardDuel = duel
+	local result = RESULTS[duel.result] or RESULTS.none
+	card.title:SetText(format("vs %s   %s   %s   %s", Theme:ClassName(Duels:Opponent(duel.them), duel.them.class),
+		Theme:Colorize(result[1], result[2]), private.Length(duel.length), private.When(duel.startAt)))
+	local state, report = Duels:ReportState(duel)
+	local hasReport = state == "ready"
+	card.note:SetText(hasReport and Duels:Describe(duel.them) or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
+	for key, lane in pairs(card.lanes) do
+		for _, part in ipairs({ lane.label, lane.graph, lane.strip, lane.used }) do
+			part:SetShown(hasReport)
+		end
+		if hasReport then
+			private.FillLane(lane, report[key], report.len)
+		end
+	end
+	local findings = hasReport and type(report.findings) == "table" and report.findings or {}
+	for i, fs in ipairs(card.findings) do
+		local f = findings[i]
+		if type(f) == "table" and type(f.text) == "string" then
+			local tip = type(f.tip) == "string" and ("\n"..Theme:Colorize(Theme:Plain(f.tip), C.muted)) or ""
+			fs:SetText(i..". "..Theme:Plain(f.text)..tip)
+			fs:Show()
+		else
+			fs:SetText("")
+			fs:Hide()
+		end
+	end
+	private.list:Hide()
+	private.headerBar:Hide()
+	card:Show()
+end
+
+function private.HideCard()
+	private.cardDuel = nil
+	if private.card then
+		private.card:Hide()
+	end
+	if private.list then
+		private.list:Show()
+		private.headerBar:Show()
+	end
+end
+
 
 ---The notice beside the tabs: the last duel's fight report, while it isn't in yet.
 function private.ShowReportNote(last)
@@ -144,6 +322,9 @@ function private.Refresh()
 		end
 	end
 	private.list:SetItems(items, empty, hint)
+	if private.cardDuel then
+		private.ShowCard(private.cardDuel)
+	end
 end
 
 UI:RegisterPage("duels", {
@@ -170,6 +351,7 @@ UI:RegisterPage("duels", {
 			{ key = "builds", label = "Your builds" },
 		}, function(key)
 			private.view = key
+			private.HideCard()
 			private.Refresh()
 		end, 150)
 		segment:SetPoint("TOPLEFT", 0, -84)
@@ -185,6 +367,7 @@ UI:RegisterPage("duels", {
 		private.reportText:SetWordWrap(true)
 
 		local headerBar = CreateFrame("Frame", nil, container)
+		private.headerBar = headerBar
 		headerBar:SetPoint("TOPLEFT", 0, -LIST_TOP + 26)
 		headerBar:SetPoint("TOPRIGHT", 0, -LIST_TOP + 26)
 		headerBar:SetHeight(24)
@@ -203,6 +386,7 @@ UI:RegisterPage("duels", {
 		list.onEnter = private.ShowTooltip
 		list.onClick = private.OnClick
 		private.list = list
+		private.BuildCard(container, width)
 	end,
 	refresh = private.Refresh,
 })

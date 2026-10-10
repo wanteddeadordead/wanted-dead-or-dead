@@ -6,7 +6,8 @@
   Frost Mage 3-9", most faced first), how you do as each of your own talent builds. Click a matchup to see its duels:
   when, the result, how long and the opponent's level (hover one for where, and both sides' level, race and build). Fight
   reports from the Wanted app reach the game at a /reload: the Duels tab says when your last duel's report is due and
-  gives a Reload button. Your opponent's talents are read by inspect when
+  gives a Reload button. Click a duel for its fight card: both sides' health through the fight, the control you
+  suffered, what each of you used, and up to five tips, each with what to try next time. Your opponent's talents are read by inspect when
   nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
   Wanted shows by name; anyone else as their spec and class. Duels stay on your PC (the Wanted app will upload them
   later) and are never shared with other players.

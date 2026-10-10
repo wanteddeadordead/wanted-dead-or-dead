@@ -10074,6 +10074,33 @@ end)()
 	ns.CapturesHUD:Update()
 	check(not bar:IsShown(), "no bar outside a front")
 	mapId, px, py = 1424, 0.523, 0.309
+	-- Like a battleground's: "Towers: N" a side, the tower icon from the widgets' atlas, under the top-centre widgets; the
+	-- capture bar's spark at the holder's end; the map icons from POIIcons by index; announcements in the BG system's way
+	local realTexture, realRaid, realUtil, realTop = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame
+	local atlases, announced, poi = {}, {}, {}
+	C_Texture = { GetAtlasInfo = function(name) return { width = 32, height = 32, name = name } end }
+	C_Minimap.GetPOITextureCoords = function(i) poi[#poi + 1] = i return 0, 0.1, 0, 0.1 end
+	RaidWarningFrame = { AddMessage = function(_, text, _, _, kind) announced[#announced + 1] = text.."|"..tostring(kind) end }
+	RaidWarningUtil = { MessageType = { BGSystem = 3 } }
+	UIWidgetTopCenterContainerFrame = NewMock()
+	local realSetAtlas = Methods.SetAtlas
+	Methods.SetAtlas = function(self, name) atlases[#atlases + 1] = name self._atlas = name end
+	clock = clock + 1 -- back in Hillsbrad: a new reading of where we are
+	ns.CapturesHUD:Update()
+	check(_G.WantedCaptureBar:IsShown() and _G.WantedCaptureBar._point[2] == UIWidgetTopCenterContainerFrame,
+		"the HUD hangs under the game's top-centre widgets")
+	local hud = _G.WantedCaptureBar
+	check(hud.alliance.text._text == "Towers: 6" and hud.horde.text._text == "Towers: 6", "each side's towers: "..tostring(hud.alliance.text._text))
+	check(hud.alliance.icon._atlas == "alliance_tower-icon" and hud.horde.icon._atlas == "horde_tower-icon", "the widgets' tower icons")
+	check(poi[1] == 13 and poi[2] == 10 and poi[3] == 11 and poi[4] == 15, "the lane row: the Horde's graveyard (inhibitor) and tower, the Alliance's tower and graveyard: "..table.concat(poi, ",", 1, 4))
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	ns.CapturesHUD.TestAlert = nil
+	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
+	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Eight")
+	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3", 1, true), "announced as a battleground does: "..table.concat(announced, "; "))
+	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop
+	C_Minimap.GetPOITextureCoords = nil
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
 	-- The site's holders at login, and what changed since the addon last showed them, in the MOBA way
 	db.captureSeen = {}
 	C:Take({})
@@ -10112,7 +10139,7 @@ end)()
 	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
 	local lostTower
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
-	check(lostTower and lostTower.ring:IsShown() and lostTower.icon._texture:find("capture%-tower"), "a lost tower shows its taker's ring")
+	check(lostTower and lostTower.icon._texture == "Interface\\Minimap\\POIIcons", "a tower shows the battlegrounds' tower icon")
 	waypoint = nil
 	buttons[1]:Click()
 	check(waypoint and waypoint.uiMapID == 1424 and superTracked == true, "clicking a point sets and tracks a waypoint")

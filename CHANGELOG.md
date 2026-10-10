@@ -9,13 +9,15 @@
   least two different players' apps and the kills there; one player's addon never does.
   - Standing in a point able to fight (not mounted, flying, on a flight, in travel form, stealthed, dead or away)
     counts every 30 s in a presence book the desktop app sends the site, and tells your side's channel.
-  - On the world map: tower, inhibitor and Nexus icons in their holder's colour (grey where their side lost them), each
-    point's circle, the lanes coloured up to each front line, crests on the flight masters, and a crest per front on the
-    continent and Azeroth maps. Click a point for a waypoint. The icons also show on the minimap (switch in the
-    minimap's tracking menu).
-  - In a front's zone, a bar at the top shows each lane, and a capture bar your side's progress while you stand in a
-    point (provisional: the site decides). Alerts the MOBA way: towers destroyed, inhibitors down and respawned, your
-    side attacking, a Nexus under attack.
+  - On the world map, as Alterac Valley's map shows its towers and graveyards: the game's tower icon for a tower and its
+    graveyard icon for an inhibitor, in their holder's colour, grey once their side lost them, flashing while your side
+    is taking them; each side's crest for its Nexus; each point's circle, the lanes coloured up to each front line, and
+    a crest per front on the continent and Azeroth maps. Click a point for a waypoint. The icons also show on the
+    minimap (switch in the minimap's tracking menu).
+  - In a front's zone, a battleground-style display under the game's own: "Towers: N" for each side and a Top / Mid /
+    Bot row, and the battlegrounds' capture bar under the minimap while you stand in a point (provisional: the site
+    decides). Announcements in the middle of the screen as in a battleground: towers destroyed, inhibitors down and
+    respawned, your side attacking, a Nexus under attack.
   - `/wanted points` lists them; Settings > Sharing has the switches, and an optional waypoint on the nearest point to
     attack.
 

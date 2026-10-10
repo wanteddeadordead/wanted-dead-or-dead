@@ -1,8 +1,9 @@
 -- Wanted: capture fronts on the maps. On a front's zone map: each point as a circle at its real radius coloured by who
 -- holds it, the lanes between them coloured up to each lane's front line, the sides' crests on their flight masters,
--- and an icon on each point (a tower, an inhibitor crystal, the Nexus keep: our own drawings in Media) to click for a
--- waypoint. A point its side lost shows grey in its taker's ring; a downed inhibitor its respawn time; a point our side
--- is taking now a pulsing ring. On a continent map, a crest on each front for the side ahead there; on the Azeroth map,
+-- and an icon on each point to click for a waypoint, as Alterac Valley's map shows its towers and graveyards: the
+-- game's own POI icons, a tower for a tower and a graveyard for an inhibitor in its side's colour, grey once its side
+-- lost it, the half-coloured "assaulted" icon flashing while our side is taking it; a Nexus as its side's crest. A
+-- downed inhibitor shows its respawn time. On a continent map, a crest on each front for the side ahead there; on the Azeroth map,
 -- one per continent for the side ahead on most of its fronts. On the minimap, the icons in view. The circles and lines
 -- take no mouse, so quest and other icons' tooltips still work through them.
 --
@@ -20,13 +21,17 @@ CapturesMap.COLORS = COLORS
 -- confirm in game: both are textures of the client's Mainline family.
 local CREST = { Horde = "Interface\\Timer\\Horde-Logo", Alliance = "Interface\\Timer\\Alliance-Logo" }
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
--- Our icons for each kind of point, white to tint, and the ring around one
-local ICONS = {}
-for _, kind in ipairs({ "tower", "inhibitor", "nexus", "ring" }) do
-	ICONS[kind] = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\capture-"..kind
-end
-CapturesMap.ICONS = ICONS
-local GREY = { 0.55, 0.55, 0.55 }
+-- The battlegrounds' map icons (Interface\\Minimap\\POIIcons, by index through C_Minimap.GetPOITextureCoords, as
+-- Blizzard's SharedMapPoiTemplates draw them; the indices are Alterac Valley's, read off the texture as the Forever
+-- CDN has it): each side's tower and graveyard, the grey ones nobody holds, and the half-coloured ones a side is
+-- assaulting. A Nexus is its side's crest (atlases AllianceSymbol / HordeSymbol, in the client's atlas table).
+local POI_FILE = "Interface\\Minimap\\POIIcons"
+local POI = {
+	tower = { Alliance = 11, Horde = 10, lost = 6, assaulted = { Alliance = 9, Horde = 12 } },
+	inhibitor = { Alliance = 15, Horde = 13, lost = 8, assaulted = { Alliance = 4, Horde = 14 } },
+}
+CapturesMap.POI = POI
+local NEXUS_ATLAS = { Alliance = "AllianceSymbol", Horde = "HordeSymbol" }
 -- Sizes as a share of the map's width
 local LINE_WIDTH, ICON_SIZE, NEXUS_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.024, 0.034, 0.04, 0.04
 local MAP_TYPE_WORLD = Enum and Enum.UIMapType and Enum.UIMapType.World or 1
@@ -76,15 +81,28 @@ function CapturesMap:ColorOf(point)
 	return COLORS[Captures:Holder(point.id)]
 end
 
----Dresses an icon texture for a point: its kind's icon in its holder's colour, or grey when its home side lost it (the
----ring then shows who took it). Returns whether it's lost.
-function CapturesMap:DressIcon(texture, point)
+---Sets a texture to a point's battleground icon: its side's tower or graveyard, the grey one once its side lost it, the
+---assaulted one while our side is taking it; a Nexus as its side's crest, greyed once taken. Returns whether its side
+---lost it, and whether our side is taking it.
+function CapturesMap:SetIcon(texture, point)
 	local holder = Captures:Holder(point.id)
 	local lost = holder ~= point.home
-	texture:SetTexture(ICONS[Captures:Kind(point)])
-	local color = lost and GREY or COLORS[holder]
-	texture:SetVertexColor(color[1], color[2], color[3], 1)
-	return lost
+	local attacker = Captures:Taking(point) and UnitFactionGroup("player") or nil
+	texture:SetVertexColor(1, 1, 1, 1)
+	local kind = Captures:Kind(point)
+	if kind == "nexus" then
+		texture:SetAtlas(NEXUS_ATLAS[point.home])
+		texture:SetDesaturated(lost)
+		return lost, attacker ~= nil
+	end
+	local set = POI[kind]
+	local index = attacker and set.assaulted[attacker] or lost and set.lost or set[holder]
+	texture:SetTexture(POI_FILE)
+	if C_Minimap and C_Minimap.GetPOITextureCoords then
+		texture:SetTexCoord(C_Minimap.GetPOITextureCoords(index))
+	end
+	texture:SetDesaturated(false)
+	return lost, attacker ~= nil
 end
 
 
@@ -220,23 +238,21 @@ function private.DrawFront(front)
 	end
 end
 
----A point's icon: hover for what it is, click for a waypoint. A ring shows who took a lost point, pulses while our side
----is taking it, and a downed inhibitor carries its respawn time.
+---A point's icon: hover for what it is, click for a waypoint. It flashes while our side is taking it, and a downed
+---inhibitor carries its respawn time.
 function private.Button(point)
 	local w, h = private.Size()
 	local button = private.Acquire("buttons", function()
 		local b = CreateFrame("Button", nil, private.overlay)
-		b.ring = b:CreateTexture(nil, "ARTWORK")
-		b.ring:SetPoint("CENTER")
-		b.ring:SetTexture(ICONS.ring)
-		b.pulse = b.ring:CreateAnimationGroup()
-		local fade = b.pulse:CreateAnimation("Alpha")
-		fade:SetFromAlpha(1)
-		fade:SetToAlpha(0.2)
-		fade:SetDuration(0.6)
-		b.pulse:SetLooping("BOUNCE")
 		b.icon = b:CreateTexture(nil, "OVERLAY")
 		b.icon:SetAllPoints()
+		-- The flash the battlegrounds' assaulted icons have: an alpha bounce, run by the game, nothing per frame
+		b.flash = b.icon:CreateAnimationGroup()
+		local fade = b.flash:CreateAnimation("Alpha")
+		fade:SetFromAlpha(1)
+		fade:SetToAlpha(0.25)
+		fade:SetDuration(0.5)
+		b.flash:SetLooping("BOUNCE")
 		b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		b.timer:SetPoint("TOP", b, "BOTTOM", 0, -1)
 		b:SetScript("OnEnter", private.OnEnterPoint)
@@ -254,19 +270,14 @@ function private.Button(point)
 	button:SetSize(size, size)
 	button:ClearAllPoints()
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", point.x / 100 * w, -point.y / 100 * h)
-	local lost = CapturesMap:DressIcon(button.icon, point)
-	local taking = Captures:Taking(point)
+	local lost, taking = CapturesMap:SetIcon(button.icon, point)
+	if taking then
+		button.flash:Play()
+	else
+		button.flash:Stop()
+	end
 	local hold = Captures:Hold(point.id)
 	local respawn = lost and hold and hold.r and hold.r - GetServerTime()
-	button.ring:SetSize(size * 1.6, size * 1.6)
-	local ringColor = taking and COLORS.taking or COLORS[Captures:Holder(point.id)]
-	button.ring:SetVertexColor(ringColor[1], ringColor[2], ringColor[3], 1)
-	button.ring:SetShown(lost or taking)
-	if taking then
-		button.pulse:Play()
-	else
-		button.pulse:Stop()
-	end
 	button.timer:SetText(respawn and respawn > 0 and format("%d:%02d", floor(respawn / 60), respawn % 60) or "")
 end
 
@@ -401,10 +412,7 @@ function CapturesMap:UpdateMinimap()
 					dot:SetSize(MINIMAP_DOT, MINIMAP_DOT)
 					dots[point.id] = dot
 				end
-				CapturesMap:DressIcon(dot, point)
-				if Captures:Taking(point) then
-					dot:SetVertexColor(COLORS.taking[1], COLORS.taking[2], COLORS.taking[3], 1)
-				end
+				CapturesMap:SetIcon(dot, point)
 				dot:ClearAllPoints()
 				dot:SetPoint("CENTER", Minimap, "CENTER", dx / radius * half, -dy / radius * half)
 				dot:Show()

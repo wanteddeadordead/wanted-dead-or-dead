@@ -19,8 +19,8 @@ local private = {
 	recentOwnKill = {}, -- guid -> time of the player's own kill (kill event and honor message both report it)
 	ownKillTimes = {}, -- GetTime() of each own kill not yet matched to an HK credit
 	assisted = {}, -- deathId -> true once an assist was recorded for it
-	hkLifetime = nil, -- the lifetime honorable kill count as last read (nil: the client didn't give it)
-	hkSession = nil, -- and today's
+	hkSession = nil, -- today's honorable kill count as last read (nil: the client didn't give it)
+	hkLifetime = nil, -- the lifetime one, only logged (OnHKsChanged)
 	playerGUID = nil,
 	playerFaction = nil,
 	places = nil, -- the named-area grid of one map, see private.ScanPlaces
@@ -825,22 +825,25 @@ function private.HKCounts()
 	return lifetime, session
 end
 
----The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw. New HKs
----are the larger of what the two counts added, so neither one lagging (or today's resetting) loses any.
+---The HK count changed: each new HK that isn't our own killing blow is an assist on a death we just saw. Only today's
+---count is counted: the lifetime one may change in an event of its own, lag behind, or take in yesterday's at the
+---daily calculation (this client's honor is Vanilla's), and every false HK would be an assist. Its changes are only
+---logged, until the game shows how it moves.
 function private.OnHKsChanged()
 	local lifetime, session = private.HKCounts()
-	local added = 0
-	if lifetime and private.hkLifetime then
-		added = lifetime - private.hkLifetime
+	if lifetime and private.hkLifetime and lifetime ~= private.hkLifetime then
+		Wanted:Log("Recorder: lifetime HKs %d -> %d (today's %s -> %s)", private.hkLifetime, lifetime, tostring(private.hkSession), tostring(session))
 	end
-	if session and private.hkSession then
-		-- Today's count going down is the daily reset: every HK since it is new
-		local today = session >= private.hkSession and session - private.hkSession or session
-		added = max(added, today)
+	private.hkLifetime = lifetime
+	if not session or not private.hkSession then
+		private.hkSession = session
+		return
 	end
-	private.hkLifetime, private.hkSession = lifetime, session
+	-- Today's count going down is the daily reset: every HK since it is new
+	local added = session >= private.hkSession and session - private.hkSession or session
+	private.hkSession = session
 	if added > MAX_HKS_AT_ONCE then
-		Wanted:Log("!! Recorder: the HK count jumped by %d; taken as the new start", added)
+		Wanted:Log("!! Recorder: today's HK count jumped by %d; taken as the new start", added)
 		return
 	end
 	local at = GetServerTime()

@@ -2311,36 +2311,50 @@ check(#LinkRecords() == 1, "a malformed code makes no record")
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
 	check(#Assists() == 3, "an HK just after the session count's daily reset is an assist")
-	-- Where the client has the lifetime count (it never resets), that's the one counted
+	-- Only today's count credits assists. The lifetime one may move in its own event, lag, or jump at the daily
+	-- calculation (the client's honor system is Vanilla's: GetPVPLifetimeStats also gives the highest rank): it's logged
 	local lifetime = 500
 	GetPVPLifetimeStats = function() return lifetime, 7 end
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
 	check(#Assists() == 3, "the lifetime count appearing credits nothing")
 	clock = clock + 120
-	ns.Store:NewRecord("death", { deathId = "hk-life", victim = "Player-9-LIFE", victimName = "Life Count", victimFaction = "Alliance", zone = "Undercity" })
-	hkCount, lifetime = 0, lifetime + 1
+	ns.Store:NewRecord("death", { deathId = "hk-split", victim = "Player-9-SPLIT", victimName = "Split Event", victimFaction = "Alliance", zone = "Undercity" })
+	ns.Store:NewRecord("death", { deathId = "hk-split2", victim = "Player-9-SPLIT2", victimName = "Split Other", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount = hkCount + 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	lifetime = lifetime + 1
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
-	check(#Assists() == 4, "the lifetime count rising is an assist, whatever the session count did")
+	check(#Assists() == 4, "one HK whose two counts change in separate events is one assist")
+	-- A lagging lifetime count catching up credits nothing (hk-split2 is still there to take a false one)
+	lifetime = lifetime + 3
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "the lifetime count catching up credits nothing")
+	-- The daily calculation: today's count back to 0 and yesterday's added to lifetime. No assist; the first real HK
+	-- after it is one
+	clock = clock + 120
+	ns.Store:NewRecord("death", { deathId = "hk-daily", victim = "Player-9-DAILY", victimName = "Daily Calc", victimFaction = "Alliance", zone = "Undercity" })
+	hkCount, lifetime = 0, lifetime + 7
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 4, "the daily calculation's jump credits nothing")
+	hkCount = 1
+	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
+	RunTimers()
+	check(#Assists() == 5, "the first HK after the daily calculation is an assist")
 	-- A count read before the game had it (0 at login) then the real one: a jump, not a thousand HKs
 	clock = clock + 120
 	ns.Store:NewRecord("death", { deathId = "hk-jump", victim = "Player-9-JUMP", victimName = "Big Jump", victimFaction = "Alliance", zone = "Undercity" })
-	lifetime = lifetime + 1000
+	hkCount = hkCount + 1000
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
-	check(#Assists() == 4, "a jump in the count far past one fight's HKs credits nothing")
-	-- A lifetime count that lags (only updated later): today's count rising still counts
-	clock = clock + 120
-	ns.Store:NewRecord("death", { deathId = "hk-lag", victim = "Player-9-LAG", victimName = "Lagging Count", victimFaction = "Alliance", zone = "Undercity" })
-	hkCount = hkCount + 1
-	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
-	RunTimers()
-	check(#Assists() == 5, "today's count rising is an assist while the lifetime count stays")
+	check(#Assists() == 5, "a jump in the count far past one fight's HKs credits nothing")
 	GetPVPLifetimeStats = function() error("not now") end
 	Fire("PLAYER_PVP_KILLS_CHANGED", "player")
 	RunTimers()
-	check(#Assists() == 5, "a lifetime count the client won't give leaves today's, crediting nothing")
+	check(#Assists() == 5, "a lifetime count the client won't give changes nothing")
 	GetPVPLifetimeStats = nil
 end)()
 -- The desktop app's account code links this character by itself, once per code

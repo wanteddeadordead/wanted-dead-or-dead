@@ -10575,7 +10575,8 @@ end)()
 	-- "See talent tree" opens the game's talent frame on the recorded loadout, as a talent build link does
 	local opened
 	local savedUtil, savedLockdown = PlayerSpellsUtil, InCombatLockdown
-	PlayerSpellsUtil = { InspectLoadout = function(data) opened = data end }
+	-- As the game does: the talent frame is a center panel, and showing it closes every UISpecialFrames window
+	PlayerSpellsUtil = { InspectLoadout = function(data) opened = data ns.UI:GetFrame():Hide() end }
 	duel.them.loadout, duel.them.specId, duel.them.level = "CwcBwNjScCzs", 1484, 21
 	ns.UI:Show("duels")
 	local tree
@@ -10583,6 +10584,7 @@ end)()
 	check(tree ~= nil, "a side with a recorded loadout has a See talent tree button")
 	tree._scripts.OnClick(tree)
 	check(opened == "1484:21:CwcBwNjScCzs", "it opens the game's talent frame on that loadout: "..tostring(opened))
+	check(ns.UI:GetFrame():IsShown() and OnScreen("Build: Feral Combat"), "the Wanted window the game closed is open again, on the same card")
 	opened = nil
 	InCombatLockdown = function() return true end
 	tree._scripts.OnClick(tree)

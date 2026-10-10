@@ -181,6 +181,9 @@ function private.ShowTree(loadout, specId, level)
 		Wanted:Print("The talent tree opens once you're out of combat.")
 		return
 	end
+	-- The talent frame is a "center" panel: showing it closes every frame on UISpecialFrames, this window included.
+	-- It's opened again beside it, on the same card
+	local wasShown = UI:GetFrame():IsShown()
 	local ok = pcall(function()
 		if not PlayerSpellsFrame and PlayerSpellsFrame_LoadUI then
 			PlayerSpellsFrame_LoadUI()
@@ -192,6 +195,9 @@ function private.ShowTree(loadout, specId, level)
 			ShowUIPanel(PlayerSpellsFrame)
 		end
 	end)
+	if wasShown and not UI:GetFrame():IsShown() then
+		UI:GetFrame():Show()
+	end
 	if not ok then
 		Wanted:Print("The game couldn't show that talent tree.")
 	end

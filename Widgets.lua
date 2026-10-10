@@ -65,8 +65,9 @@ local function RefreshButton(button)
 end
 
 ---@param template string? e.g. "SecureActionButtonTemplate" for a button that runs a macro
-function W:Button(parent, text, style, width, height, onClick, template)
-	local button = CreateFrame("Button", nil, parent, template)
+---@param name string? a global name, for a button a macro clicks (/click)
+function W:Button(parent, text, style, width, height, onClick, template, name)
+	local button = CreateFrame("Button", name, parent, template)
 	button:SetSize(width or 96, height or 26)
 	Theme:Skin(button, C.transparent, C.transparent)
 	button.label = Theme:Text(button, "body", text)

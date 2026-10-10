@@ -10185,6 +10185,19 @@ end)()
 	check(not ns.Duels:Involves("Player-1-ME") and #db.duels == count, "a duel never finished is let go after a while, unrecorded")
 	enemyUnits.target = nil
 end)()
+-- The talents frame showing someone's talents is an inspect of the player's own: ours waits
+;(function()
+	local S = duelStubs
+	PlayerSpellsFrame = { IsInspecting = function() return true end }
+	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, close = true }
+	local asked = #S.inspected
+	clock = clock + 60
+	Fire("DUEL_REQUESTED", "Duel Friend")
+	check(#S.inspected == asked, "no inspect while the talents frame is inspecting someone")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	PlayerSpellsFrame, enemyUnits.target = nil, nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

@@ -408,7 +408,7 @@ function private.TryInspect(duel, unit)
 	if duel.them.talents or private.inspect or (duel.inspectTries or 0) >= INSPECT_TRIES or not duel.guid then
 		return
 	end
-	if GetTime() - private.othersAt < OTHERS_SECONDS or (InspectFrame and InspectFrame:IsShown()) then
+	if GetTime() - private.othersAt < OTHERS_SECONDS or private.PlayerInspecting() then
 		return
 	end
 	if not (NotifyInspect and CanInspect) then
@@ -425,6 +425,12 @@ function private.TryInspect(duel, unit)
 	if asked then
 		private.inspect = { guid = duel.guid, at = GetTime() }
 	end
+end
+
+---Whether the player is looking at someone's inspect: the inspect window, or the talents frame showing another
+---player's talents (Blizzard's inspect window doesn't let its inspect go then either).
+function private.PlayerInspecting()
+	return (InspectFrame and InspectFrame:IsShown()) or (PlayerSpellsFrame and PlayerSpellsFrame.IsInspecting and PlayerSpellsFrame:IsInspecting()) or false
 end
 
 ---The game's answer to an inspect. Read only when it's ours: after someone else's question the data is theirs.
@@ -452,7 +458,7 @@ end
 function private.ReleaseInspect()
 	local inspect = private.inspect
 	private.inspect = nil
-	if not inspect or inspect.taken or (InspectFrame and InspectFrame:IsShown()) then
+	if not inspect or inspect.taken or private.PlayerInspecting() then
 		return
 	end
 	if ClearInspectPlayer then

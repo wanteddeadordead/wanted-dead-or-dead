@@ -40,6 +40,7 @@ Bridge.lua
 Catchup.lua
 Challenges.lua
 BlizzRank.lua
+Captures.lua
 Achievements.lua
 HonorScout.lua
 GearCatalog.lua
@@ -94,5 +95,8 @@ PagePoster.lua
 WhatsNew.lua
 MapPins.lua
 MapPins.xml
+CapturesMap.lua
+CapturesHUD.lua
+CapturesHUD.xml
 Minimap.lua
 OptionsPanel.lua

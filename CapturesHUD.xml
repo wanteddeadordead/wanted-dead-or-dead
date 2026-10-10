@@ -1,0 +1,19 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<!-- The capture fronts' announcements, in the middle of the screen as a battleground's are: our own frame from
+	     Blizzard's RaidWarningFrameTemplate, set up as the Commentator's event alerts are (Blizzard_Commentator's
+	     CommentatorEventAlertsFrame), for the BG system message type only, where RaidWarningFrame sits. The global
+	     RaidWarningFrame is never touched. Its events are unregistered in CapturesHUD.lua: it shows only what Wanted
+	     gives it. -->
+	<Frame name="WantedCaptureAnnounceFrame" inherits="RaidWarningFrameTemplate" parent="UIParent" frameStrata="HIGH" toplevel="true">
+		<KeyValues>
+			<KeyValue key="maxMessageSlots" value="2" type="number"/>
+			<KeyValue key="maxTotalLines" value="4" type="number"/>
+			<KeyValue key="messageTypes" value="RaidWarningUtil.MessageTypes.BGSystem" type="global"/>
+			<KeyValue key="defaultDisplayTime" value="5" type="number"/>
+			<KeyValue key="maxTextHeight" value="25" type="number"/>
+		</KeyValues>
+		<Anchors>
+			<Anchor point="TOP" x="0" y="-182"/>
+		</Anchors>
+	</Frame>
+</Ui>

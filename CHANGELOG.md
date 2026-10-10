@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+- Capture fronts: Arathi Highlands, Hillsbrad Foothills and Ashenvale played like a MOBA. Each side's Nexus stands on
+  the road into its flight-master town, just outside the guards; three lanes (Top, Mid, Bot) run between them, each with
+  each side's tower and inhibitor. Take a lane in order, the enemy's tower then their inhibitor; one inhibitor down
+  opens their Nexus, and taking it wins the front for the week. wanteddeadordead.com decides who holds what from at
+  least two different players' apps and the kills there; one player's addon never does.
+  - Standing in a point able to fight (not mounted, flying, on a flight, in travel form, stealthed, dead or away)
+    counts every 30 s in a presence book the desktop app sends the site, and tells your side's channel.
+  - On the world map, as Alterac Valley's map shows its towers and graveyards: the game's tower icon for a tower and its
+    graveyard icon for an inhibitor, in their holder's colour, grey once their side lost them, flashing while your side
+    is taking them; each side's crest for its Nexus; each point's circle, the lanes coloured up to each front line, and
+    a crest per front on the continent and Azeroth maps. Click a point for a waypoint. The icons also show on the
+    minimap (switch in the minimap's tracking menu).
+  - In a front's zone, a battleground-style display under the game's own: "Towers: N" for each side and a Top / Mid /
+    Bot row, and the battlegrounds' capture bar under the minimap while you stand in a point (provisional: the site
+    decides). Announcements in the middle of the screen as in a battleground: towers destroyed, inhibitors down and
+    respawned, your side attacking, a Nexus under attack.
+  - `/wanted points` lists them; Settings > Sharing has the switches, and an optional waypoint on the nearest point to
+    attack.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

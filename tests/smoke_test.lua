@@ -348,7 +348,8 @@ cvars = {}
 function GetCVar(name) return cvars[name] end
 function SetCVar(name, value) cvars[name] = value end
 local menus = {}
-Menu = { ModifyMenu = function(tag, f) menus[tag] = f end }
+-- Every module adding to a menu adds to it: the menu runs each in turn
+Menu = { ModifyMenu = function(tag, f) local prev = menus[tag] menus[tag] = prev and function(...) prev(...) f(...) end or f end }
 local chatSent = {}
 addonSent = {}
 -- Chat filters (the realm links hide "No player named ..." for someone just greeted)
@@ -950,7 +951,7 @@ pin:OnMouseEnter()
 pin:OnMouseLeave()
 -- Show / hide from the map's filter menu
 local checkbox
-local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = { text = text, isSelected = isSelected, setSelected = setSelected } end }
+local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = checkbox or { text = text, isSelected = isSelected, setSelected = setSelected } end }
 menus.MENU_WORLD_MAP_TRACKING(nil, root)
 check(checkbox and checkbox.text == "Enemy sightings" and checkbox.isSelected(), "map filter menu has a checked Enemy sightings entry")
 checkbox.setSelected()
@@ -9947,6 +9948,292 @@ end)()
 	for _ = 1, 30 do RunTimers() end
 	check(SV(genuine) ~= false and not genuine.tampered and Store:Authority(genuine) == "ok", "what the check found of the forgery isn't written under the genuine record")
 	db.settings.sigBackground = true
+end)()
+-- Capture fronts: a sample every 30 s while the player stands in a point able to fight, kept in the presence book for
+-- the app and told to our side; the holders as the site told the app; lanes taken in order; the map, minimap, bar,
+-- waypoints and alerts
+;(function()
+	local C, db = ns.Captures, ns.db
+	local real = { C_Map = C_Map, IsMounted = IsMounted, UnitIsAFK = UnitIsAFK, IsStealthed = IsStealthed, SendPoint = ns.Sync.SendPoint,
+		Warn = ns.Alerts.Warn, GetMapID = WorldMapFrame.GetMapID, GetCanvas = WorldMapFrame.GetCanvas, IsShown = WorldMapFrame.IsShown,
+		C_Minimap = C_Minimap, UiMapPoint = UiMapPoint, C_SuperTrack = C_SuperTrack, CountNearby = ns.Enemies.CountNearby,
+		GetShapeshiftForm = GetShapeshiftForm, GetShapeshiftFormInfo = GetShapeshiftFormInfo, PlaySound = PlaySound }
+	local mapId, px, py = 1424, 0.523, 0.309 -- Hillsbrad's Mid Tower on the Horde's side
+	local waypoint, superTracked
+	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
+		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end,
+		CanSetUserWaypointOnMap = function() return true end, SetUserWaypoint = function(p) waypoint = p return true end,
+		HasUserWaypoint = function() return waypoint ~= nil end, GetUserWaypoint = function() return waypoint end,
+		GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end }
+	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
+	C_SuperTrack = { SetSuperTrackedUserWaypoint = function(on) superTracked = on end }
+	C_Minimap = { GetViewRadius = function() return 200 end }
+	local mounted, afk, form = false, false, 0
+	IsMounted = function() return mounted end
+	UnitIsAFK = function() return afk end
+	IsStealthed = function() return false end
+	GetShapeshiftForm = function() return form end
+	GetShapeshiftFormInfo = function(i) return "icon", true, true, i == 3 and 783 or 768 end
+	local told, sounds = {}, {}
+	ns.Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
+	PlaySound = function(kit) sounds[#sounds + 1] = kit end
+	-- The game's sounds the alerts use (SoundKitConstants)
+	for name, id in pairs({ RAID_WARNING = 8959, PVP_THROUGH_QUEUE = 8459, IG_PVP_UPDATE = 4574, PVP_ENTER_QUEUE = 8458, RAID_BOSS_EMOTE_WARNING = 12197 }) do SOUNDKIT[name] = SOUNDKIT[name] or id end
+	local warned = {}
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
+	ns.Enemies.CountNearby = function() return 0 end -- nobody near until the enemies check below
+	local function Warned(text) for _, w in ipairs(warned) do if w:find(text, 1, true) then return true end end return false end
+	-- Three fronts of three lanes of four points, and two Nexuses each; the words in one place
+	check(#C.FRONTS == 3 and #C.POINTS == 42, "three fronts, 42 points: "..#C.POINTS)
+	check(C.TERMS.nexus == "Nexus" and C:Role(C:Get("hb-mid-2")) == "Mid Tower" and C:Role(C:Get("hb-mid-4")) == "Mid Inhibitor" and C:Role(C:Get("hb-horde")) == "Nexus",
+		"towers, inhibitors and the Nexus")
+	-- The circle is measured in yards: 39 yards east of the Mid Tower's middle is in, 41 out (Hillsbrad is 3,200 yards wide)
+	check(C:PointAt(1424, 52.3, 30.9).id == "hb-mid-2", "the tower's middle is in it")
+	check(C:PointAt(1424, 52.3 + 39 / 32, 30.9), "39 yards east is in")
+	check(C:PointAt(1424, 52.3 + 41 / 32, 30.9) == nil, "41 yards east is out")
+	check(C:PointAt(1424, 52.3, 30.9 + 41 / 21.333) == nil, "41 yards south is out: the map is shorter than it is wide")
+	check(C:PointAt(1424, 55.7, 22.7).id == "hb-horde", "the Horde's Nexus is on the road into Tarren Mill")
+	check(C:PointAt(1424, 60.14, 18.62) == nil, "not among Tarren Mill's guards at the flight master")
+	check(C:PointAt(1411, 50.9, 33.7) == nil and C:PointAt(nil, 50, 50) == nil, "other maps have no points")
+	-- Every point starts with its half; lanes are taken in order from your own end
+	C:Take(nil)
+	local P = function(id) return C:Get(id) end
+	check(C:Holder("hb-mid-2") == "Horde" and C:Holder("hb-mid-3") == "Alliance" and C:Holder("hb-alliance") == "Alliance", "points start with their half")
+	check(C:CanAttack("Horde", P("hb-mid-3")) and not C:CanAttack("Horde", P("hb-mid-4")) and not C:CanAttack("Horde", P("hb-mid-2")),
+		"the Horde attacks the Alliance's tower first")
+	check(C:CanAttack("Alliance", P("hb-mid-2")) and not C:CanAttack("Horde", P("hb-alliance")), "and the Alliance the Horde's; no Nexus yet")
+	db.presence = {}
+	local printedBefore = #ns:CapturePrints(function() end)
+	local function Sample() clock = clock + 30 return ns:CapturePrints(function() C:Sample() end) end
+	local lines = Sample()
+	check(#lines == printedBefore and C:Current() == P("hb-mid-2"), "entering says nothing in chat: the bar shows it")
+	local slot = math.floor(clock / C.SLOT_SECONDS)
+	local key = "hb-mid-2:"..slot..":Player-1-ME"
+	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].g == "Player-1-ME" and db.presence[key].n == ns.Store:GetOrigin() and db.presence[key].f == "Horde",
+		"a sample is counted for this character, point and slot")
+	check(#told == 1 and told[1].p == "hb-mid-2" and told[1].s == slot and told[1].c == 1, "our side is told")
+	Sample()
+	check(#told == 1, "at most once a minute")
+	clock = slot * C.SLOT_SECONDS + C.SLOT_SECONDS + 1
+	db.presence = {}
+	mounted = true
+	Sample()
+	check(C:BlockedReason() == "Mounted", "mounted: presence doesn't count")
+	mounted = false
+	form = 3 -- Travel Form
+	Sample()
+	check(C:BlockedReason() == "In travel form", "a travel form doesn't count either")
+	form = 1 -- Cat Form does
+	afk = setmetatable({}, {}) -- a secret answer can't rule it out
+	local realSecret = issecretvalue
+	issecretvalue = function(v) return type(v) == "table" end
+	Sample()
+	check(C:BlockedReason() == "Away", "a secret AFK counts as away")
+	issecretvalue, afk = realSecret, false
+	local counted = 0
+	for _, e in pairs(db.presence) do counted = counted + e.c end
+	check(counted == 0, "nothing counted while blocked: "..counted)
+	for _ = 1, 25 do Sample() end
+	local most = 0
+	for _, e in pairs(db.presence) do most = math.max(most, e.c) end
+	check(most == 10, "a slot holds at most 10 samples: "..most)
+	-- Our side at a point, from the channel: shown only, and only when well formed
+	slot = math.floor(clock / C.SLOT_SECONDS)
+	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally One")
+	C:OnPeer({ p = "hb-mid-3", s = slot - 5, c = 4 }, "Ally Two")
+	C:OnPeer({ p = "nowhere", s = slot, c = 4 }, "Ally Three")
+	C:OnPeer({ p = "hb-mid-3", s = slot, c = 40 }, "Ally Four")
+	check(C:Allies("hb-mid-3") == 1 and not C:Taking(P("hb-mid-3")), "one of us heard there, not taking it")
+	warned, sounds = {}, {}
+	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally Two")
+	check(C:Allies("hb-mid-3") == 2 and C:Taking(P("hb-mid-3")), "two of us there: taking it")
+	check(Warned("Your side is attacking the enemy Mid Tower") and #sounds == 1, "an alert says so, with a sound: "..table.concat(warned, "; "))
+	C:OnPeer({ p = "hb-mid-4", s = slot, c = 4 }, "Ally Two")
+	check(C:Allies("hb-mid-3") == 1 and C:Allies("hb-mid-4") == 1, "one sender is at one point")
+	-- The bar at the top while in the front, the capture bar while in a point
+	ns.CapturesHUD:Update()
+	local bar = _G.WantedCaptureBar
+	check(bar and bar:IsShown() and bar.title._text == "Hillsbrad Foothills" and bar.rows[2].label._text == "Mid", "the front's bar shows")
+	check(bar.capture:IsShown() and bar.capture.text._text:find("Holding the Horde Mid Tower", 1, true), "holding our own point: "..bar.capture.text._text)
+	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally Two")
+	px, py = 0.508, 0.351 -- the Alliance's Mid Tower
+	Sample()
+	ns.CapturesHUD:Update()
+	check(bar.capture.text._text:find("Taking the Alliance Mid Tower", 1, true), "taking theirs with two of us: "..bar.capture.text._text)
+	px, py = 0.503, 0.399 -- its inhibitor
+	Sample()
+	ns.CapturesHUD:Update()
+	check(bar.capture.text._text:find("take the lane before it first", 1, true), "the inhibitor waits: "..bar.capture.text._text)
+	mounted = true
+	Sample()
+	ns.CapturesHUD:Update()
+	check(bar.capture.text._text:find("Mounted, so you don't count here", 1, true), "the bar says why presence doesn't count: "..bar.capture.text._text)
+	mounted = false
+	mapId = 1411
+	Sample()
+	ns.CapturesHUD:Update()
+	check(not bar:IsShown(), "no bar outside a front")
+	mapId, px, py = 1424, 0.523, 0.309
+	-- Like a battleground's: "Towers: N" a side, the tower icon from the widgets' atlas, under the top-centre widgets; the
+	-- capture bar's spark at the holder's end; the map icons from POIIcons by index; announcements in the BG system's way
+	local realTexture, realRaid, realUtil, realTop, realAnnounce = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame
+	local atlases, announced, poi = {}, {}, {}
+	C_Texture = { GetAtlasInfo = function(name) return { width = 32, height = 32, name = name } end }
+	C_Minimap.GetPOITextureCoords = function(i) poi[#poi + 1] = i return 0, 0.1, 0, 0.1 end
+	-- Our own frame from the RaidWarning template; the game's own is never touched
+	WantedCaptureAnnounceFrame = { AddMessage = function(_, text, color, _, kind) announced[#announced + 1] = text.."|"..tostring(kind).."|"..tostring(color and color.r) end }
+	RaidWarningFrame = { AddMessage = function() error("the global RaidWarningFrame was used") end }
+	RaidWarningUtil = { MessageType = { BGSystem = 3 } }
+	UIWidgetTopCenterContainerFrame = NewMock()
+	local realSetAtlas = Methods.SetAtlas
+	Methods.SetAtlas = function(self, name) atlases[#atlases + 1] = name self._atlas = name end
+	clock = clock + 1 -- back in Hillsbrad: a new reading of where we are
+	ns.CapturesHUD:Update()
+	check(_G.WantedCaptureBar:IsShown() and _G.WantedCaptureBar._point[2] == UIWidgetTopCenterContainerFrame,
+		"the HUD hangs under the game's top-centre widgets")
+	local hud = _G.WantedCaptureBar
+	check(hud.alliance.text._text == "Towers: 6" and hud.horde.text._text == "Towers: 6", "each side's towers: "..tostring(hud.alliance.text._text))
+	check(hud.alliance.icon._atlas == "alliance_tower-icon" and hud.horde.icon._atlas == "horde_tower-icon", "the widgets' tower icons")
+	check(poi[1] == 13 and poi[2] == 10 and poi[3] == 11 and poi[4] == 15, "the lane row: the Horde's graveyard (inhibitor) and tower, the Alliance's tower and graveyard: "..table.concat(poi, ",", 1, 4))
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	ns.CapturesHUD.TestAlert = nil
+	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
+	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Eight")
+	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3|1", 1, true), "announced as a battleground does, gold without the chat colours: "..table.concat(announced, "; "))
+	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop, realAnnounce
+	C_Minimap.GetPOITextureCoords = nil
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
+	-- The site's holders at login, and what changed since the addon last showed them, in the MOBA way
+	db.captureSeen = {}
+	C:Take({})
+	warned = {}
+	C:Take({ ["hb-mid-3"] = { h = "H", s = clock - 900, t = clock - 7200 }, ["hb-mid-4"] = { h = "H", s = clock - 300, r = clock + 1200, t = clock - 7200 },
+		["hb-top-2"] = { h = "A", t = clock - 7200 }, ["nowhere"] = { h = "H", t = clock }, ["hb-top-3"] = { h = "X", t = clock } })
+	check(C:Holder("hb-mid-4") == "Horde" and C:Hold("hb-mid-4").r == clock + 1200 and C:Holder("hb-top-3") == "Alliance" and C:Hold("nowhere") == nil,
+		"the site's holders are taken, unknown points and sides left out")
+	check(Warned("Enemy inhibitor down") and not Warned("Your tower"), "the biggest news is the alert: "..table.concat(warned, "; "))
+	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
+	-- The announcement frame (CapturesHUD.xml, from Blizzard's template, which registers the BG system events) has them
+	-- all unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
+	local announceEvents = { CHAT_MSG_BG_SYSTEM_ALLIANCE = true, CHAT_MSG_BG_SYSTEM_HORDE = true }
+	local realAnnounceFrame = WantedCaptureAnnounceFrame
+	WantedCaptureAnnounceFrame = { UnregisterAllEvents = function() wipe(announceEvents) end }
+	ns.CapturesHUD:OnLoad()
+	check(next(announceEvents) == nil, "the announcement frame listens to nothing of the game's")
+	WantedCaptureAnnounceFrame = realAnnounceFrame
+	-- At login the catch-up is read (Catchup) before the HUD is enabled (it comes later in the .toc): the news waits, and
+	-- what the addon showed isn't marked until the HUD takes it
+	local tocOrder, at = {}, 0
+	for line in io.lines(ADDON.."WantedDeadOrDead.toc") do at = at + 1 tocOrder[line:gsub("\r", "")] = at end
+	check(tocOrder["Catchup.lua"] < tocOrder["CapturesHUD.lua"], "the catch-up comes before the HUD")
+	local realTake, realDeliver = C.TakeNews, ns.CapturesHUD.DeliverNews
+	ns.CapturesHUD.DeliverNews = function() end -- not enabled yet
+	local seenBefore = db.captureSeen["hb-bot-2"]
+	warned = {}
+	C:Take({ ["hb-bot-2"] = { h = "A", t = clock }, ["hb-top-2"] = { h = "A", t = clock } })
+	check(#warned == 0 and db.captureSeen["hb-bot-2"] == seenBefore, "nothing shown or marked before the HUD is there")
+	ns.CapturesHUD.DeliverNews = realDeliver
+	ns.CapturesHUD:DeliverNews()
+	check(Warned("Your tower has been destroyed") and db.captureSeen["hb-bot-2"] == "Alliance", "the HUD shows the waiting news and marks it: "..table.concat(warned, "; "))
+	warned = {}
+	ns.CapturesHUD:DeliverNews()
+	check(#warned == 0, "once")
+	C.TakeNews = realTake
+	C:Take({ ["hb-mid-3"] = { h = "H", s = clock - 900, t = clock - 7200 }, ["hb-mid-4"] = { h = "H", s = clock - 300, r = clock + 1200, t = clock - 7200 } })
+	-- Its respawn time passing brings it back (provisionally), once
+	warned = {}
+	clock = clock + 1201
+	ns.CapturesHUD:Update()
+	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Inhibitor respawned"), "the inhibitor respawns: "..table.concat(warned, "; "))
+	warned = {}
+	ns.CapturesHUD:Update()
+	check(#warned == 0, "and says so once")
+	C:Take({ ["hb-alliance"] = { h = "H", s = clock, t = clock } })
+	check(C:Winner(C.FRONTS[2]) == "Horde" and not C:CanAttack("Alliance", P("hb-mid-2")), "taking the Nexus wins the front; nothing more to take")
+	check(Warned("Victory: the enemy Nexus has fallen"), "and says so: "..table.concat(warned, "; "))
+	C:Take({ ["hb-mid-2"] = { h = "A", s = clock - 900, t = clock - 7200 } })
+	lines = ns:CapturePrints(function() ns:RunCommand("points", "") end)
+	check(#lines == #C.POINTS + #C.FRONTS and lines[1]:find("Arathi Highlands", 1, true) and table.concat(lines, "\n"):find("Mid Tower (", 1, true),
+		"/wanted points lists every front and point")
+	-- The world map: circles, lane lines, crests and an icon on each point of the front's map
+	local canvas = NewMock()
+	canvas._w, canvas._h = 1002, 668
+	WorldMapFrame.GetCanvas = function() return canvas end
+	WorldMapFrame.GetMapID = function() return 1424 end
+	WorldMapFrame.IsShown = function() return true end
+	local before = #Mock.created
+	ns.CapturesMap:Refresh()
+	local buttons = {}
+	for i = before + 1, #Mock.created do if rawget(Mock.created[i], "point") then buttons[#buttons + 1] = Mock.created[i] end end
+	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
+	local lostTower
+	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
+	check(lostTower and lostTower.icon._texture == "Interface\\Minimap\\POIIcons", "a tower shows the battlegrounds' tower icon")
+	waypoint = nil
+	buttons[1]:Click()
+	check(waypoint and waypoint.uiMapID == 1424 and superTracked == true, "clicking a point sets and tracks a waypoint")
+	buttons[1]._scripts.OnEnter(buttons[1])
+	WorldMapFrame.GetMapID = function() return 1415 end
+	ns.CapturesMap:Refresh()
+	WorldMapFrame.GetMapID = function() return 947 end
+	C_Map.GetMapInfo = function(id) if id == 947 then return { mapType = 1 } end return { mapType = 3, parentMapID = 1415 } end
+	ns.CapturesMap:Refresh()
+	-- The minimap's icons, and its tracking menu's switch
+	ns.CapturesMap:UpdateMinimap()
+	local root = {}
+	root.CreateDivider = function() end
+	root.CreateCheckbox = function(_, text, isSelected, setSelected) if text:find("Capture points", 1, true) then root.box = { isSelected, setSelected } end end
+	menus.MENU_MINIMAP_TRACKING(nil, root)
+	check(root.box and root.box[1](), "the minimap's tracking menu has the capture points, on")
+	root.box[2]()
+	check(not C:Settings().minimap, "and turns them off")
+	C:Settings().minimap = true
+	-- Auto-tracking replaces only our own waypoint
+	C:Settings().autoTrack = true
+	waypoint = { uiMapID = 1424, position = { x = 0.9, y = 0.9 } } -- the player's own
+	C:AutoTrack()
+	check(waypoint.position.x == 0.9, "the player's own waypoint stays")
+	waypoint = nil
+	C:AutoTrack()
+	check(waypoint and waypoint.uiMapID == 1424, "with none, the nearest point to attack is tracked")
+	C:Settings().autoTrack = false
+	-- Enemies close while standing on our own point
+	C:Take(nil)
+	warned = {}
+	ns.Enemies.CountNearby = function() return 3 end
+	clock = clock + 30
+	C:Sample()
+	check(Warned("Your tower is under attack"), "enemies at our tower warn: "..table.concat(warned, "; "))
+	-- A P message on the channel from the player it's about counts them there; the same from a guild member too
+	local heardBefore = C:Allies("ah-top-3")
+	slot = math.floor(clock / C.SLOT_SECONDS)
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:pt1:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "CHANNEL", "Ally Five", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:pt2:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "GUILD", "Ally Six")
+	RunFrames()
+	check(C:Allies("ah-top-3") == heardBefore + 2, "P messages count their senders there: "..C:Allies("ah-top-3"))
+	-- The catch-up passes the holders at every login
+	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, points = { ["av-mid-3"] = { h = "H", s = clock - 60, r = clock + 60, t = clock } } } }
+	ns.Catchup:Import()
+	check(C:Holder("av-mid-3") == "Horde" and C:Hold("av-mid-3").r == clock + 60 and C:Hold("hb-mid-2") == nil, "the catch-up's holders replace the last ones")
+	-- Old, malformed and excess entries go at load
+	db.presence = {
+		old = { g = "Player-1-ME", n = "Test", p = "hb-mid-2", s = math.floor((clock - 4 * 86400) / 300), c = 4 },
+		bad = { g = "Player-1-ME", n = "Test", p = "nowhere", s = slot, c = 4 },
+		junk = "x",
+	}
+	for i = 1, 2005 do db.presence["k"..i] = { g = "Player-1-ME", n = "Test", p = "av-mid-3", s = slot - 700 + math.floor(i / 3), c = 1 } end
+	C:OnLoad()
+	local n = 0
+	for _ in pairs(db.presence) do n = n + 1 end
+	check(n == 2000 and not db.presence.old and not db.presence.bad and not db.presence.junk and not db.presence.k1 and not db.presence.k2 and db.presence.k2005,
+		"pruning keeps 2,000 of the newest well-formed entries: "..n)
+	db.presence = {}
+	C:Take(nil)
+	C_Map, IsMounted, UnitIsAFK, IsStealthed, ns.Sync.SendPoint, ns.Alerts.Warn = real.C_Map, real.IsMounted, real.UnitIsAFK, real.IsStealthed, real.SendPoint, real.Warn
+	WorldMapFrame.GetMapID, WorldMapFrame.GetCanvas, WorldMapFrame.IsShown = real.GetMapID, real.GetCanvas, real.IsShown
+	C_Minimap, UiMapPoint, C_SuperTrack, ns.Enemies.CountNearby = real.C_Minimap, real.UiMapPoint, real.C_SuperTrack, real.CountNearby
+	GetShapeshiftForm, GetShapeshiftFormInfo, PlaySound = real.GetShapeshiftForm, real.GetShapeshiftFormInfo, real.PlaySound
+	ns.CapturesHUD:Update()
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

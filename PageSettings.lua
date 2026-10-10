@@ -310,6 +310,14 @@ function private.BuildSharing(panel, width)
 	local link = W:CopyBox(proof, 360, Wanted.Proof.DISCORD_URL)
 	link:SetPoint("TOPLEFT", 16, -84)
 
+	local captures = private.Card(panel, -460, 150, "Capture fronts", width)
+	local Settings = function() return Wanted.Captures:Settings() end
+	private.Toggle(captures, Settings, "map", "Show capture fronts on the world map", "Each point at its real size, coloured by who holds it, and the lanes between them. Click a point for a waypoint.", 16, -38, function() Wanted.CapturesMap:Refresh() end)
+	private.Toggle(captures, Settings, "minimap", "Show capture points on the minimap", "Also in the minimap's tracking menu.", 16, -62, function() Wanted.CapturesMap:UpdateMinimap() end)
+	private.Toggle(captures, Settings, "bar", "Show the capture bar in a front's zone", "Points each side holds by lane at the top of the screen, and your side's progress while you stand in a point.", 16, -86, function() Wanted.CapturesHUD:Update() end)
+	private.Toggle(captures, Settings, "alerts", "Warn about capture points near me", "When your side gathers at a point in your zone, or enemies are close while you stand in one.", 440, -38)
+	private.Toggle(captures, Settings, "autoTrack", "Keep a waypoint on the nearest point to attack", "In a front's zone. Only ever replaces a waypoint Wanted set, never your own.", 440, -62, function() Wanted.Captures:AutoTrack() end)
+
 	local iconLabel = Theme:Text(display, "small", "Class icons")
 	iconLabel:SetPoint("TOPLEFT", 360, -20)
 	local previous = nil

@@ -8,8 +8,8 @@ return {
 },
 [2] = {
 ["rule"] = "own-break",
-["text"] = "Your Sleep on them was broken by your own Backstab after 4.0 s, with 16.0 s of its 20.0 s left.",
-["tip"] = "Any damage breaks it: with 16.0 s left and 10% health, a bandage (6 to 8 s) fits before the first hit.",
+["text"] = "Your Sleep on them was broken by your own Backstab after 4.0 s; it can last up to 20.0 s.",
+["tip"] = "Any damage breaks it: with up to 16.0 s left and 10% health, a bandage (6 to 8 s) fits before the first hit.",
 ["weight"] = 0.82,
 },
 [3] = {

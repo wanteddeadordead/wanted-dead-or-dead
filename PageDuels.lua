@@ -99,11 +99,27 @@ function private.OnClick(item)
 	end
 end
 
+-- What the notice beside the tabs says about the last duel's fight report, and whether a reload would help
+local REPORT_NOTES = {
+	save = { "Your last duel isn't saved for the Wanted app yet.", true },
+	reading = { "The Wanted app is reading your last duel from the combat log. Reload in a minute.", true },
+	noapp = { "Fight reports need the Wanted app running on this PC." },
+	nolog = { "No combat log for your last duel, so no fight report." },
+}
+
+---The notice beside the tabs: the last duel's fight report, while it isn't in yet.
+function private.ShowReportNote(last)
+	local note = last and REPORT_NOTES[(Duels:ReportState(last))]
+	private.reportText:SetText(note and Theme:Colorize(note[1], C.muted) or "")
+	private.reloadButton:SetShown(note and note[2] or false)
+end
+
 function private.Refresh()
 	if not private.list then
 		return
 	end
 	local sheet = Duels:GetSheet()
+	private.ShowReportNote(sheet.recent[1])
 	private.recordTile.value:SetText(private.Record(sheet.won, sheet.lost))
 	private.recordTile.note:SetText(sheet.total > 0 and private.Share(sheet.won, sheet.total).." won" or "")
 	local top = sheet.matchups[1]
@@ -157,6 +173,15 @@ UI:RegisterPage("duels", {
 		end, 150)
 		segment:SetPoint("TOPLEFT", 0, -84)
 		segment:Select(private.view, true)
+
+		-- The game hands the app's fight reports to the addon only at a /reload: a button for it while one is due
+		private.reloadButton = W:Button(container, "Reload", "secondary", 80, 26, function() C_UI.Reload() end)
+		private.reloadButton:SetPoint("TOPRIGHT", 0, -84)
+		private.reportText = Theme:Text(container, "small", "")
+		private.reportText:SetPoint("LEFT", segment, "RIGHT", 16, 0)
+		private.reportText:SetPoint("RIGHT", private.reloadButton, "LEFT", -12, 0)
+		private.reportText:SetJustifyH("RIGHT")
+		private.reportText:SetWordWrap(true)
 
 		local headerBar = CreateFrame("Frame", nil, container)
 		headerBar:SetPoint("TOPLEFT", 0, -LIST_TOP + 26)

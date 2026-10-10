@@ -10511,6 +10511,44 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do check(not tostring(fs._text):find("Player%-1%-"), "no GUID is ever shown: "..tostring(fs._text)) end
 	db.duels = kept
 end)()
+-- Fight reports come from the app's catch-up, read only at a /reload: the Duels tab says where the last one stands,
+-- with a Reload button while one would help
+;(function()
+	local db, Duels = ns.db, ns.Duels
+	local kept, keptReports = db.duels, db.duelReports
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	local reloads = 0
+	C_UI = C_UI or {}
+	local savedReload = C_UI.Reload
+	C_UI.Reload = function() reloads = reloads + 1 end
+	local duel = { id = "Test Player:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
+		me = { class = "WARRIOR" }, them = { class = "DRUID", level = 21 } }
+	db.duels, db.duelReports = { duel }, {}
+	local function Reload() for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Reload" then return f end end end
+	Duels:TakeReports(nil, nil)
+	ns.UI:Show("duels")
+	check(Duels:ReportState(duel) == "noapp" and OnScreen("need the Wanted app") and not Reload():IsShown(), "no app: fight reports need it, no reload offered")
+	Duels:TakeReports({}, clock - 100)
+	ns.UI:Show("duels")
+	check(Duels:ReportState(duel) == "save" and OnScreen("isn't saved for the Wanted app yet") and Reload():IsShown(), "the app's catch-up is older than the duel: reload to save it")
+	Reload()._scripts.OnClick(Reload())
+	check(reloads == 1, "the button reloads the UI")
+	Duels:TakeReports({}, clock)
+	ns.UI:Show("duels")
+	check(Duels:ReportState(duel) == "reading" and OnScreen("reading your last duel") and Reload():IsShown(), "the app has the duel, its report isn't in yet")
+	Duels:TakeReports({ [duel.id] = { v = 1, findings = {} }, ["Someone:duel:1"] = { v = 1 } }, clock)
+	ns.UI:Show("duels")
+	check(Duels:ReportState(duel) == "ready" and db.duelReports["Someone:duel:1"] == nil and not Reload():IsShown(), "a report in: no notice; reports for duels not kept are dropped")
+	Duels:TakeReports(nil, nil)
+	check(Duels:ReportState(duel) == "ready", "a report taken in stays when a later login has no catch-up")
+	db.duelReports[duel.id] = { noLog = true, why = "log missing" }
+	check(Duels:ReportState(duel) == "nolog", "a duel the app had no log for")
+	duel.endAt = clock - 25 * 3600
+	db.duelReports = {}
+	check(Duels:ReportState(duel) == "old", "a duel too long ago isn't waited for")
+	C_UI.Reload = savedReload
+	db.duels, db.duelReports = kept, keptReports
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

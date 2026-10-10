@@ -55,6 +55,8 @@ local ENDINGS = {
 function Duels:OnLoad()
 	-- Duel records, oldest first (docs/DATA.md)
 	Wanted.db.duels = type(Wanted.db.duels) == "table" and Wanted.db.duels or {}
+	-- Fight reports the desktop app made from the combat log, by duel id (docs/DATA.md)
+	Wanted.db.duelReports = type(Wanted.db.duelReports) == "table" and Wanted.db.duelReports or {}
 end
 
 function Duels:OnEnable()
@@ -682,6 +684,59 @@ function Duels:Describe(side)
 		end
 	end
 	return table.concat(parts, " ")
+end
+
+-- ============================================================================
+-- Fight reports
+-- ============================================================================
+
+-- A report is only read the next /reload after the app made it; one older than this is no longer asked for
+local REPORT_WAIT_SECONDS = 24 * 60 * 60
+
+---Takes in the fight reports from the app's catch-up (each login): kept by duel id, for duels still kept.
+---@param reports table? the catch-up's duelReports
+---@param t number? when the app wrote the catch-up (nil: no catch-up from the app at all)
+function Duels:TakeReports(reports, t)
+	private.appT = type(t) == "number" and t or nil
+	local kept, ids = Wanted.db.duelReports, {}
+	for _, duel in ipairs(Wanted.db.duels) do
+		if type(duel) == "table" and type(duel.id) == "string" then
+			ids[duel.id] = true
+		end
+	end
+	if type(reports) == "table" then
+		for id, report in pairs(reports) do
+			if type(id) == "string" and ids[id] and type(report) == "table" then
+				kept[id] = report
+			end
+		end
+	end
+	for id in pairs(kept) do
+		if not ids[id] then
+			kept[id] = nil
+		end
+	end
+end
+
+---Where a duel's fight report stands:
+---"ready" (shown), "nolog" (the app had no combat log for it), "noapp" (no catch-up from the app this login),
+---"save" (the app's catch-up is older than the duel: a /reload saves the duel for the app to read),
+---"reading" (the app has had the duel but its report isn't in yet: the log reaches the disk minutes late), or
+---"old" (too long ago to wait for).
+---@param duel table
+---@return string state, table? report
+function Duels:ReportState(duel)
+	local report = type(duel) == "table" and Wanted.db.duelReports[duel.id]
+	if type(report) == "table" then
+		return report.noLog and "nolog" or "ready", report
+	end
+	if type(duel) ~= "table" or type(duel.endAt) ~= "number" or GetServerTime() - duel.endAt > REPORT_WAIT_SECONDS then
+		return "old"
+	end
+	if not private.appT then
+		return "noapp"
+	end
+	return private.appT < duel.endAt and "save" or "reading"
 end
 
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the

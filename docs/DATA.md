@@ -137,6 +137,11 @@ GUID by the app's list or by a hello whose sender is the game's own name for tha
 the game's name for the opponent is that Wanted user's): anyone else is kept by class, spec, race and level, and their GUID only to tell duels
 apart, never shown. Never shared with other players; the Wanted app uploads them with the player's other data.
 
+`WantedDB.duelReports` (from 1.20.0) is the fight reports the desktop app made of those duels from the combat log,
+keyed by duel `id`, taken from the app's catch-up (`duelReports`) at each login and kept only for duels still in
+`WantedDB.duels`. A new top-level table: no migration. A report is the app's (shape in the network repo's duel
+coaching PR); `{ noLog = true, why }` marks a duel the app had no combat log for.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

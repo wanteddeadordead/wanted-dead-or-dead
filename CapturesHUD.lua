@@ -4,13 +4,21 @@
 -- points as the map's battleground icons. While the player stands in a point, the battlegrounds' capture bar under the
 -- minimap (the CaptureBar widget's "factions" art: Alliance fill left, Horde right, the spark moving as a side takes
 -- it): how far our side is toward taking it, as our side's channel tells it (provisional; the site decides), or why the
--- player's presence doesn't count. Announcements in the middle of the screen the way a battleground's are
--- (RaidWarningFrame's BG system messages), worded the MOBA way. Our own plain frames: nothing protected, safe in combat.
+-- player's presence doesn't count. Announcements in the middle of the screen the way a battleground's are, on our own
+-- frame made from Blizzard's RaidWarningFrameTemplate (CapturesHUD.xml), worded the MOBA way. Our own frames only,
+-- nothing protected and nothing of Blizzard's touched: safe in combat.
 
 local _, Wanted = ...
 local CapturesHUD = Wanted:NewModule("CapturesHUD")
 local Captures = Wanted.Captures
-local private = { bar = nil, takingSince = {}, alerted = {}, holders = {} }
+local private = {
+	bar = nil,
+	takingSince = {},
+	alerted = {},
+	holders = {},
+	shownFront = nil, -- the front the widget was last placed and dressed for
+	dirty = true, -- something changed since the widget was last drawn
+}
 local UPDATE_SECONDS = 1
 local ICON, GAP = 16, 3
 -- One live alert per point and kind this often, and enemies counted as an attack on our point from this many
@@ -48,17 +56,31 @@ local LANE_ICON = 14
 -- ============================================================================
 
 function CapturesHUD:OnEnable()
+	-- Our announcement frame shows only what Wanted gives it, never the game's own BG messages
+	if WantedCaptureAnnounceFrame then
+		WantedCaptureAnnounceFrame:UnregisterAllEvents()
+	end
 	C_Timer.NewTicker(UPDATE_SECONDS, Wanted:Timed("Captures bar", function() CapturesHUD:Update() end))
-	Captures:OnChange(function(news)
-		if news then
+	Captures:OnChange(function(fresh)
+		private.dirty = true
+		if fresh then
 			-- The site's holds just came in: what they changed is news of its own, not a respawn seen live
 			private.CheckRespawns(true)
-			if #news > 0 then
-				private.TellNews(news)
-			end
+			CapturesHUD:DeliverNews()
 		end
 		private.CheckLive()
 	end)
+	-- The catch-up read at login came before this module was enabled: its news waits for us
+	private.CheckRespawns(true)
+	CapturesHUD:DeliverNews()
+end
+
+---Announces the news of the site's last holds, if any waits.
+function CapturesHUD:DeliverNews()
+	local news = Captures:TakeNews()
+	if news and #news > 0 then
+		private.TellNews(news)
+	end
 end
 
 
@@ -185,7 +207,9 @@ function private.Place(bar)
 	end
 end
 
----Shows the HUD for the front the player is in, or hides it; and notes inhibitors respawning as their time comes.
+---Shows the HUD for the front the player is in, or hides it; and notes inhibitors respawning as their time comes. The
+---widget is placed and given its art when the player comes into a front, and redrawn only when something changed;
+---each second only the capture bar's spark and line move, and only when they changed.
 function CapturesHUD:Update()
 	private.CheckRespawns()
 	local _, _, _, mapId = Wanted.Recorder:GetPosition()
@@ -196,23 +220,30 @@ function CapturesHUD:Update()
 			private.bar:Hide()
 			private.bar.capture:Hide()
 		end
+		private.shownFront = nil
 		return
 	end
 	local bar = private.bar or private.Build()
-	private.Place(bar)
-	local horde, alliance = private.Towers(front)
-	for side, half in pairs({ Alliance = bar.alliance, Horde = bar.horde }) do
-		private.Atlas(half.icon, TOWER_ATLAS[side], Wanted.CapturesMap.COLORS[side], 42, 42)
+	if front ~= private.shownFront then
+		private.shownFront, private.dirty = front, true
+		private.Place(bar)
+		for side, half in pairs({ Alliance = bar.alliance, Horde = bar.horde }) do
+			private.Atlas(half.icon, TOWER_ATLAS[side], Wanted.CapturesMap.COLORS[side], 42, 42)
+		end
 	end
-	bar.alliance.text:SetText(format("Towers: %d", alliance))
-	bar.horde.text:SetText(format("Towers: %d", horde))
-	local winner = Captures:Winner(front)
-	bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner) or front.zone)
-	for row, lane in ipairs(front.lanes) do
-		local r = bar.rows[row]
-		r.label:SetText(lane.name)
-		for i, p in ipairs(lane.points) do
-			Wanted.CapturesMap:SetIcon(r.icons[i], Captures:Get(p.id))
+	if private.dirty then
+		private.dirty = false
+		local horde, alliance = private.Towers(front)
+		bar.alliance.text:SetText(format("Towers: %d", alliance))
+		bar.horde.text:SetText(format("Towers: %d", horde))
+		local winner = Captures:Winner(front)
+		bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner) or front.zone)
+		for row, lane in ipairs(front.lanes) do
+			local r = bar.rows[row]
+			r.label:SetText(lane.name)
+			for i, p in ipairs(lane.points) do
+				Wanted.CapturesMap:SetIcon(r.icons[i], Captures:Get(p.id))
+			end
 		end
 	end
 	private.UpdateCapture(bar.capture)
@@ -234,10 +265,23 @@ function private.Towers(front)
 	return horde, alliance
 end
 
----Puts the capture bar's spark at a place along it, 0 (the Alliance's end, on the left) to 1 (the Horde's).
+---Puts the capture bar's spark at a place along it, 0 (the Alliance's end, on the left) to 1 (the Horde's), moving it
+---only when it moved a pixel.
 function private.Spark(capture, at)
-	capture.spark:ClearAllPoints()
-	capture.spark:SetPoint("CENTER", capture, "LEFT", BAR_OFFSET + BAR_WIDTH * min(max(at, 0), 1), 0)
+	local x = floor(BAR_OFFSET + BAR_WIDTH * min(max(at, 0), 1) + 0.5)
+	if capture.sparkX ~= x then
+		capture.sparkX = x
+		capture.spark:ClearAllPoints()
+		capture.spark:SetPoint("CENTER", capture, "LEFT", x, 0)
+	end
+end
+
+---Sets the line under the capture bar, only when it changed.
+function private.Line(capture, text)
+	if capture.line ~= text then
+		capture.line = text
+		capture.text:SetText(text)
+	end
 end
 
 ---The capture bar while the player stands in a point: the spark at its holder's end, moving toward the middle and on to
@@ -254,26 +298,29 @@ function private.UpdateCapture(capture)
 	local allies = Captures:Allies(point.id)
 	local name = format("%s %s", point.home, Captures:Role(point))
 	local blocked = Captures:BlockedReason()
-	capture.left:SetDesaturated(blocked ~= nil)
-	capture.right:SetDesaturated(blocked ~= nil)
+	if capture.blocked ~= (blocked ~= nil) then
+		capture.blocked = blocked ~= nil
+		capture.left:SetDesaturated(capture.blocked)
+		capture.right:SetDesaturated(capture.blocked)
+	end
 	if blocked then
 		private.Spark(capture, from)
-		capture.text:SetText(format("%s: %s, so you don't count here", name, blocked))
+		private.Line(capture, format("%s: %s, so you don't count here", name, blocked))
 	elseif holder == side then
 		private.Spark(capture, from)
-		capture.text:SetText(format("Holding the %s: %d of your side here", name, allies))
+		private.Line(capture, format("Holding the %s: %d of your side here", name, allies))
 	elseif not Captures:CanAttack(side, point) then
 		private.Spark(capture, from)
-		capture.text:SetText(format("%s: take the lane before it first", name))
+		private.Line(capture, format("%s: take the lane before it first", name))
 	else
 		local need = (point.lane and Captures.CAPTURE_SLOTS or Captures.NEXUS_SLOTS) * Captures.SLOT_SECONDS
 		local since = private.takingSince[point.id]
 		local done = since and min(GetTime() - since, need) or 0
 		private.Spark(capture, from + (1 - 2 * from) * done / need)
 		if allies < Captures.MIN_PEOPLE then
-			capture.text:SetText(format("%s: %d of your side here, %d needed", name, allies, Captures.MIN_PEOPLE))
+			private.Line(capture, format("%s: %d of your side here, %d needed", name, allies, Captures.MIN_PEOPLE))
 		else
-			capture.text:SetText(format("Taking the %s: %d:%02d of %d:00 (provisional)", name, floor(done / 60), floor(done % 60), need / 60))
+			private.Line(capture, format("Taking the %s: %d:%02d of %d:00 (provisional)", name, floor(done / 60), floor(done % 60), need / 60))
 		end
 	end
 	capture:Show()
@@ -296,17 +343,25 @@ end
 -- Alerts
 -- ============================================================================
 
----Announces in the middle of the screen as a battleground does (RaidWarningFrame's BG system messages, in that side's
----colour) and plays its sound: key from ALERTS, what (the role, for the title), sub (where, in chat). Falls back to
----Wanted's own warning when the frame isn't there.
+-- The colour an announcement falls back on when the chat colours aren't there: the game's gold
+local GOLD = { r = 1, g = 0.82, b = 0 }
+
+---Announces in the middle of the screen as a battleground does: on our own frame from Blizzard's RaidWarningFrameTemplate
+---(WantedCaptureAnnounceFrame, CapturesHUD.xml, BG system messages only), in that side's BG system colour, and plays its
+---sound: key from ALERTS, what (the role, for the title), sub (where, in chat). Falls back to Wanted's own warning when
+---the frame isn't there.
 function private.Alert(key, what, sub)
 	local alert = ALERTS[key]
 	local side = UnitFactionGroup("player")
 	local colorSide = alert[2] == "ours" and side or alert[2] == "theirs" and (side == "Horde" and "Alliance" or "Horde") or nil
 	local text = format(alert[1], what or "")
 	local info = ChatTypeInfo and ChatTypeInfo[colorSide == "Alliance" and "BG_SYSTEM_ALLIANCE" or colorSide == "Horde" and "BG_SYSTEM_HORDE" or "BG_SYSTEM_NEUTRAL"]
-	local shown = RaidWarningFrame and RaidWarningFrame.AddMessage and RaidWarningUtil and RaidWarningUtil.MessageType
-		and pcall(RaidWarningFrame.AddMessage, RaidWarningFrame, text, info, nil, RaidWarningUtil.MessageType.BGSystem)
+	if type(info) ~= "table" or type(info.r) ~= "number" or type(info.g) ~= "number" or type(info.b) ~= "number" then
+		info = GOLD
+	end
+	local frame = WantedCaptureAnnounceFrame
+	local shown = frame and frame.AddMessage and RaidWarningUtil and RaidWarningUtil.MessageType
+		and pcall(frame.AddMessage, frame, text, info, nil, RaidWarningUtil.MessageType.BGSystem)
 	if not shown then
 		local C = Wanted.CapturesMap.COLORS
 		Wanted.Alerts:Warn(text, sub, colorSide and C[colorSide] or Wanted.Theme.C.white)
@@ -391,6 +446,9 @@ function private.CheckRespawns(quiet)
 		local holder = Captures:Holder(point.id)
 		local before = private.holders[point.id]
 		private.holders[point.id] = holder
+		if before and before ~= holder then
+			private.dirty = true
+		end
 		if not quiet and before and before ~= holder and holder == point.home and Captures:Kind(point) == "inhibitor" and Captures:Settings().alerts and Wanted.Alerts then
 			private.Alert("respawned", nil, private.Where(point))
 		end

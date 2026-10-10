@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Button and tab labels no longer creep upward each time you click them.
+
 ## [1.19.3] - 2026-10-09
 
 - A record passed on by another player in the name of someone whose signing key you know counts only once its

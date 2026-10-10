@@ -3,13 +3,13 @@ return {
 ["findings"] = {
 [1] = {
 ["rule"] = "opener",
-["text"] = "They opened from stealth: 398 damage (63% of your health) before your first action at 0:05.",
+["text"] = "They opened from stealth: 398 damage (63% of your health) before your first action at 0:17.",
 ["weight"] = 0.95,
 },
 [2] = {
 ["rule"] = "own-break",
 ["text"] = "Your Sleep on them was broken by your own Backstab after 4.0 s, with 16.0 s of its 20.0 s left.",
-["tip"] = "Damage breaks it: use the time to bandage, eat, reset or line up your opener before you hit.",
+["tip"] = "Any damage breaks it: with 16.0 s left and 10% health, a bandage (6 to 8 s) fits before the first hit.",
 ["weight"] = 0.82,
 },
 [3] = {
@@ -25,8 +25,8 @@ return {
 },
 [5] = {
 ["rule"] = "damage",
-["text"] = "Their melee did 51% of the damage you took (338). You did no damage for 4.1 s while free to act.",
-["weight"] = 0.37,
+["text"] = "Their melee did 51% of the damage you took (338).",
+["weight"] = 0.33,
 },
 },
 ["len"] = 29.3,
@@ -109,7 +109,7 @@ return {
 },
 },
 },
-["opener"] = "They opened from stealth: 398 damage (63% of your health) before your first action at 0:05.",
+["opener"] = "They opened from stealth: 398 damage (63% of your health) before your first action at 0:17.",
 ["them"] = {
 ["cc"] = {
 [1] = {
@@ -128,30 +128,34 @@ return {
 [2] = 100,
 },
 [2] = {
+[1] = 12.6,
+[2] = 100,
+},
+[3] = {
 [1] = 17.1,
 [2] = 97.6,
 },
-[3] = {
+[4] = {
 [1] = 18.3,
 [2] = 95.4,
 },
-[4] = {
+[5] = {
 [1] = 18.8,
 [2] = 93.8,
 },
-[5] = {
+[6] = {
 [1] = 23.7,
 [2] = 92.3,
 },
-[6] = {
+[7] = {
 [1] = 24.1,
 [2] = 91.5,
 },
-[7] = {
+[8] = {
 [1] = 28.3,
 [2] = 86.7,
 },
-[8] = {
+[9] = {
 [1] = 28.3,
 [2] = 84.6,
 },
@@ -180,8 +184,8 @@ return {
 },
 [4] = {
 ["rule"] = "interrupts",
-["text"] = "Their cast went through out of Kick's reach (5 yd): they got away to cast.",
-["tip"] = "Stay on them when they back off: a caster backing away is about to cast.",
+["text"] = "Their cast went through out of Kick's reach (5 yd): Regrowth at 0:24, 19 yd away.",
+["tip"] = "Kick needs you within 5 yd of the caster.",
 ["weight"] = 0.45,
 },
 [5] = {
@@ -229,7 +233,7 @@ return {
 [2] = 74.5,
 },
 [7] = {
-[1] = 1.3,
+[1] = 1.4,
 [2] = 73.4,
 },
 [8] = {
@@ -351,7 +355,7 @@ return {
 [2] = 97.1,
 },
 [3] = {
-[1] = 1.3,
+[1] = 1.4,
 [2] = 96.1,
 },
 [4] = {

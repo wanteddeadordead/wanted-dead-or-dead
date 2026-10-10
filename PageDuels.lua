@@ -253,6 +253,10 @@ function private.ShowCard(duel)
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
 	local opener = hasReport and type(report.opener) == "string" and ("   "..private.CleanText(report.opener)) or ""
+	if hasReport and report.partial then
+		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
+		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)
+	end
 	card.note:SetText(hasReport and (Duels:Describe(duel.them)..opener)
 		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
 		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))

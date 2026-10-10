@@ -10554,6 +10554,10 @@ end)()
 	check(OnScreen("1. You lost with Gouge, Evasion and Sprint never used.") and OnScreen("Gouge then bandage or reset.")
 		and OnScreen("between 0:08 and 0:18.") and OnScreen("They opened from stealth.") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
 		"the fight card shows the findings with their tips, the control suffered and what was used")
+	db.duelReports[duel.id].partial = true
+	ns.UI:Show("duels")
+	check(OnScreen("the combat log ends before the duel did"), "a report made from part of the duel says so")
+	db.duelReports[duel.id].partial = nil
 	local back
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end
 	check(back and back:IsShown(), "the card has a way back")

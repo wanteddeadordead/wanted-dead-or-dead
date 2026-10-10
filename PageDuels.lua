@@ -120,6 +120,11 @@ local GRAPH_HEIGHT = 34
 local CARD_FINDINGS = 5
 local CC_MARKS = 8
 
+---A report's text as shown: no control characters or "|" (the game's escape codes), at most the app's 300 bytes.
+function private.CleanText(text)
+	return type(text) == "string" and strsub((gsub(text, "[%c|]", "")), 1, 300) or ""
+end
+
 ---"0:15" from seconds into the fight.
 function private.Clock(seconds)
 	seconds = max(floor((tonumber(seconds) or 0) + 0.5), 0)
@@ -187,7 +192,7 @@ function private.FillLane(lane, side, length)
 			mark:SetPoint("TOPLEFT", from * lane.width, 0)
 			mark:SetWidth(max((to - from) * lane.width, 2))
 			mark:Show()
-			controls[#controls + 1] = format("%s %.1f s", Theme:Plain(c.n), c.e - c.s)
+			controls[#controls + 1] = format("%s %.1f s", private.CleanText(c.n), c.e - c.s)
 		else
 			mark:Hide()
 		end
@@ -195,7 +200,7 @@ function private.FillLane(lane, side, length)
 	local used = {}
 	for _, u in ipairs(type(side.used) == "table" and side.used or {}) do
 		if type(u) == "table" then
-			used[#used + 1] = Theme:Plain(u.n).." "..private.Clock(u.t)
+			used[#used + 1] = private.CleanText(u.n).." "..private.Clock(u.t)
 		end
 	end
 	lane.used:SetText((#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
@@ -261,8 +266,8 @@ function private.ShowCard(duel)
 	for i, fs in ipairs(card.findings) do
 		local f = findings[i]
 		if type(f) == "table" and type(f.text) == "string" then
-			local tip = type(f.tip) == "string" and ("\n"..Theme:Colorize(Theme:Plain(f.tip), C.muted)) or ""
-			fs:SetText(i..". "..Theme:Plain(f.text)..tip)
+			local tip = type(f.tip) == "string" and ("\n"..Theme:Colorize(private.CleanText(f.tip), C.muted)) or ""
+			fs:SetText(i..". "..private.CleanText(f.text)..tip)
 			fs:Show()
 		else
 			fs:SetText("")

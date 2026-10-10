@@ -14,6 +14,20 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.20.0",
+		note = "This one is about getting better at fighting. Duel someone and Wanted now keeps the fight: who you faced, "
+			.."their spec, talents and gear, and how it went.\n\n"
+			.."With the Wanted app running, you also get a fight card for each duel: what happened, second by second, "
+			.."and a few tips on what to try next time.",
+		lines = {
+			"A Duels tab under Progress: your record against each class and spec, and as each of your own builds.",
+			"Click a duel for its fight card: both sides' health, the control you took, what each of you used, and tips.",
+			"See talent tree and See gear show exactly what your opponent was running.",
+			"Fight cards come from the Wanted app reading your combat log. Get it at wanteddeadordead.com/app.",
+			"Duels never count as kills, deaths or kill streaks.",
+		},
+	},
+	{
 		version = "1.19.0",
 		note = "This one is about trust. Bounties run on your word: when a poster confirms a kill or pays a hunter, "
 			.."everyone's addon has to believe it really came from them, and until now another player could fake that. "

@@ -10680,6 +10680,10 @@ end)()
 	duel.me.gear, duel.them.gear = nil, nil
 	ns.UI:Show("duels")
 	db.duelReports[duel.id].them.build = nil
+	db.duelReports[duel.id].mode = "tournament"
+	ns.UI:Show("duels")
+	check(OnScreen("Tournament rules"), "a report made under the tournament's rules is tagged")
+	db.duelReports[duel.id].mode = nil
 	db.duelReports[duel.id].partial = true
 	ns.UI:Show("duels")
 	check(OnScreen("the combat log ends before the duel did"), "a report made from part of the duel says so")

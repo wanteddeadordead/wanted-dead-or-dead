@@ -457,6 +457,10 @@ function private.ShowCard(duel)
 		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
 		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)
 	end
+	-- Made under the Forever Open's rules (the app's tournament setting): its tips follow them
+	if hasReport and report.mode == "tournament" then
+		opener = "   "..Theme:Colorize("Tournament rules", C.gold)..opener
+	end
 	local gap = private.GearGap(duel)
 	opener = opener..(gap and ("   "..gap) or "")
 	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener)

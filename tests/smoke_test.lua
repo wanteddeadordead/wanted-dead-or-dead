@@ -10301,6 +10301,29 @@ end)()
 	check(d.them.guid == "Player-1-00A0F00D" and d.them.name == nil, "an app key for another character of the same first name doesn't name the opponent: "..tostring(d.them.name))
 	GetPlayerInfoByGUID, enemyUnits.target = saved, nil
 end)()
+-- The debug log (which /wanted bug can send) never names a duel opponent who doesn't run Wanted, even when they die in
+-- a duel to the death
+;(function()
+	local S = duelStubs
+	enemyUnits.target = { guid = "Player-1-00000BB0", name = "Some Stranger", faction = "Horde", class = "WARLOCK", level = 58, close = true }
+	local dueler = GetDuelerInfo
+	GetDuelerInfo = function() return "Player-1-00000BB0", 58 end
+	clock = clock + 60
+	Fire("DUEL_TO_THE_DEATH_REQUESTED", "Some Stranger")
+	GetDuelerInfo = dueler
+	S.Hook("AcceptDuel")
+	clock = clock + 20
+	Fire("PARTY_KILL", "Player-1-ME", "Player-1-00000BB0")
+	enemyUnits.target.dead = true
+	Fire("UNIT_HEALTH", "target")
+	Fire("UNIT_DIED", "Player-1-00000BB0")
+	Fire("DUEL_FINISHED")
+	RunTimers()
+	for _, line in ipairs(ns:GetLogLines()) do
+		check(not line:find("Some Stranger", 1, true) and not line:find("00000BB0", 1, true), "the log names the duel opponent: "..line)
+	end
+	enemyUnits.target = nil
+end)()
 -- The Duels page: the record, the matchup sheet by class and spec, the record per own build, and recent duels
 ;(function()
 	local db, Duels = ns.db, ns.Duels

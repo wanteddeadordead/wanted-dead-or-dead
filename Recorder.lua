@@ -541,6 +541,11 @@ function private.OnUnitDied(guid)
 	if not guid or type(guid) ~= "string" or not strfind(guid, "^Player%-") then
 		return
 	end
+	-- A duel to the death's loser: not world PvP, and not named in the log
+	if Wanted.Duels and Wanted.Duels:Involves(guid) then
+		Wanted:Log("Recorder: UNIT_DIED in a duel; not recorded")
+		return
+	end
 	local player = Store:GetPlayer(guid)
 	if player and player.faction and player.faction ~= private.playerFaction then
 		private.ConfirmDeath(guid, player.name)

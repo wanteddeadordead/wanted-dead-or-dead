@@ -10559,6 +10559,36 @@ end)()
 	check(back and back:IsShown(), "the card has a way back")
 	back._scripts.OnClick(back)
 	check(not back:GetParent():IsShown(), "Back returns to the list")
+	-- The app's own output (tests/fixtures/duelReports-golden.lua: the network repo's report of two real duels, the
+	-- character's name replaced): every finding of each shows on its card, and every health point is read
+	do
+		local golden = dofile(ADDON.."tests/fixtures/duelReports-golden.lua")
+		local keptDuels, keptReportsHere = db.duels, db.duelReports
+		db.duels, db.duelReports = {}, {}
+		for id in pairs(golden) do
+			local at = tonumber(id:match(":duel:(%d+)$"))
+			tinsert(db.duels, { id = id, startAt = at, endAt = at + 27, length = 27, result = "lost", zone = "Durotar",
+				me = { class = "ROGUE" }, them = { class = "DRUID", level = 21 } })
+		end
+		Duels:TakeReports(golden, clock)
+		for _, d in ipairs(db.duels) do
+			check(Duels:ReportState(d) == "ready", "the app's report is taken in: "..d.id)
+			ns.UI:Show("duels")
+			local row = Row(function(item) return item.duel == d end)
+			if not row then
+				local matchup = Row(function(item) return item.label == "Druid" end)
+				matchup._scripts.OnClick(matchup, "LeftButton")
+				row = Row(function(item) return item.duel == d end)
+			end
+			row._scripts.OnClick(row, "LeftButton")
+			for i, f in ipairs(golden[d.id].findings) do
+				check(OnScreen(i..". "..f.text), "the card shows the app's finding: "..f.text)
+			end
+			check(#golden[d.id].me.hp > 1 and type(golden[d.id].me.hp[1][2]) == "number", "health comes as { t, pct } pairs")
+		end
+		db.duels, db.duelReports = keptDuels, keptReportsHere
+		ns.UI:Show("duels")
+	end
 	Duels:TakeReports(nil, nil)
 	check(Duels:ReportState(duel) == "ready", "a report taken in stays when a later login has no catch-up")
 	db.duelReports[duel.id] = { noLog = true, why = "log missing" }

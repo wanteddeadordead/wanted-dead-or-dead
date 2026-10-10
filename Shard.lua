@@ -11,8 +11,9 @@ local _, Wanted = ...
 local Shard = Wanted:NewModule("Shard")
 local private = {
 	frame = CreateFrame("Frame"),
-	votes = {}, -- the last creatures looked at in this zone, oldest first: { guid, key, t }
+	votes = {}, -- the last creatures looked at in this zone, oldest first: { guid, key }
 	voted = {}, -- guid -> true for the creatures in votes
+	seenAt = nil, -- GetTime() a creature of this zone was last looked at, counted before or not
 	counts = {}, -- scratch for Get: key -> creatures
 }
 -- How many creatures the shard is taken from
@@ -60,6 +61,7 @@ function private.OnEvent(_, event, unit)
 		-- Each zone has its own shards
 		wipe(private.votes)
 		wipe(private.voted)
+		private.seenAt = nil
 		return
 	end
 	-- In an instance there are no shards to meet anyone on, and unit identity is secret
@@ -89,24 +91,30 @@ function Shard:ParseGUID(guid)
 	return server.."-"..map.."-"..zone
 end
 
----Counts the shard of the creature on a unit, once per creature.
+---Counts the shard of the creature on a unit, once per creature. One counted before still confirms the shard is
+---current: standing among the same guards for a long while keeps it known.
 function private.Look(unit)
 	if not unit then
 		return
 	end
 	local guid = UnitGUID(unit)
-	if (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" or private.voted[guid] then
+	if (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" then
+		return
+	end
+	if private.voted[guid] then
+		private.seenAt = GetTime()
 		return
 	end
 	local key = Shard:ParseGUID(guid)
 	if not key then
 		return
 	end
+	private.seenAt = GetTime()
 	local votes = private.votes
 	if #votes >= VOTES then
 		private.voted[tremove(votes, 1).guid] = nil
 	end
-	tinsert(votes, { guid = guid, key = key, t = GetTime() })
+	tinsert(votes, { guid = guid, key = key })
 	private.voted[guid] = true
 end
 
@@ -114,8 +122,7 @@ end
 ---@return string?
 function Shard:Get()
 	local votes = private.votes
-	local newest = votes[#votes]
-	if not newest or GetTime() - newest.t > STALE_SECONDS then
+	if not votes[1] or GetTime() - (private.seenAt or 0) > STALE_SECONDS then
 		return nil
 	end
 	local counts, best = wipe(private.counts), nil

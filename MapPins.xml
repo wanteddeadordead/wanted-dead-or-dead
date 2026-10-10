@@ -27,4 +27,31 @@
 			</Layer>
 		</Layers>
 	</Frame>
+	<!-- A rally leader of your faction: a larger dot in their class colour with a gold edge and an R. Behaviour is in
+	     MapPins.lua. -->
+	<Frame name="WantedDeadOrDeadRallyPinTemplate" mixin="WantedDeadOrDeadRallyPinMixin" enableMouseMotion="true" virtual="true">
+		<Size x="20" y="20"/>
+		<Layers>
+			<Layer level="BORDER">
+				<Texture parentKey="Border" setAllPoints="true">
+					<Color r="1" g="0.8" b="0.32" a="1"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Dot">
+					<Anchors>
+						<Anchor point="TOPLEFT" x="2" y="-2"/>
+						<Anchor point="BOTTOMRIGHT" x="-2" y="2"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="OVERLAY">
+				<FontString parentKey="Label" inherits="GameFontNormalSmall" text="R">
+					<Anchors>
+						<Anchor point="CENTER" x="0" y="0"/>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+	</Frame>
 </Ui>

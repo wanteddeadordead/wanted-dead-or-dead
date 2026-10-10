@@ -106,6 +106,7 @@ function Methods:GetCenter() return 0, 0 end
 function Methods:GetEffectiveScale() return 1 end
 function Methods:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
 function Methods:SetFontString(fs) self._fs = fs end
+function Methods:SetPushedTextOffset(x, y) self._pushed = { x, y } end
 function Methods:Click() if self._scripts.OnClick then self._scripts.OnClick(self, "LeftButton") end end
 -- Events the client forbids addons to register (the game blocks it, ADDON_ACTION_FORBIDDEN): noted, and a check at the
 -- end fails if any module tried
@@ -449,6 +450,12 @@ local function ConfirmDialog(value)
 end
 
 local function check(cond, msg) if not cond then error("CHECK FAILED: "..msg, 2) end end
+do
+	-- A button's label moves only by the game's pushed offset: no script of ours moves it too (each click left it higher)
+	local b = W:Button(UIParent, "Press", "secondary", 80, 26)
+	check(b._pushed and b._pushed[1] == 1 and b._pushed[2] == -1 and not b._scripts.OnMouseDown and not b._scripts.OnMouseUp,
+		"a button's label is moved only by the game's pushed text offset")
+end
 
 -- Gives a hand-made record the hash its contents make, as its origin's addon would (Store.lua's Canonical), so it
 -- isn't flagged as altered

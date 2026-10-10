@@ -158,12 +158,43 @@ function private.CreateLane(card, label, y, color, graphWidth)
 		mark:SetHeight(5)
 		lane.marks[i] = mark
 	end
+	-- Opens Blizzard's own talent frame on this side's build, as a talent build link does
+	lane.tree = W:Button(card, "See talent tree", "secondary", 120, 22, function()
+		private.ShowTree(lane.loadout, lane.specId, lane.level)
+	end)
+	lane.tree:SetPoint("BOTTOMRIGHT", lane.graph, "TOPRIGHT", 0, 4)
 	lane.used = Theme:Text(card, "small", "", C.faint)
 	lane.used:SetPoint("TOPLEFT", lane.strip, "BOTTOMLEFT", 0, -4)
 	lane.used:SetWidth(graphWidth)
 	lane.used:SetJustifyH("LEFT")
 	lane.used:SetWordWrap(true)
 	return lane
+end
+
+---Opens the game's talent frame showing a recorded loadout (out of combat only: the talent frame is a protected
+---panel). This client has the talent build link's own handler; without it, the frame is told the loadout directly.
+function private.ShowTree(loadout, specId, level)
+	if type(loadout) ~= "string" or loadout == "" then
+		return
+	end
+	if InCombatLockdown() then
+		Wanted:Print("The talent tree opens once you're out of combat.")
+		return
+	end
+	local ok = pcall(function()
+		if not PlayerSpellsFrame and PlayerSpellsFrame_LoadUI then
+			PlayerSpellsFrame_LoadUI()
+		end
+		if PlayerSpellsUtil and PlayerSpellsUtil.InspectLoadout then
+			PlayerSpellsUtil.InspectLoadout(format("%d:%d:%s", tonumber(specId) or 0, tonumber(level) or 0, loadout))
+		else
+			PlayerSpellsFrame:SetInspectString(loadout, tonumber(level))
+			ShowUIPanel(PlayerSpellsFrame)
+		end
+	end)
+	if not ok then
+		Wanted:Print("The game couldn't show that talent tree.")
+	end
 end
 
 ---Fills a lane from one side of a report (v1): health as the last reading at each bar's moment ({ t, pct } pairs),
@@ -242,16 +273,16 @@ function private.BuildCard(container, width)
 	card.body = body
 	card.note = Theme:Text(body, "small", "", C.muted)
 	card.note:SetPoint("TOPLEFT", 14, 0)
-	card.note:SetWidth(width - 60)
+	card.note:SetWidth(width - 60 - 130) -- clear of the first lane's "See talent tree" button
 	card.note:SetJustifyH("LEFT")
 	card.note:SetWordWrap(true)
 	local graphWidth = max(width - 140, 120)
 	card.lanes = {
 		me = private.CreateLane(body, "You", -40, C.green, graphWidth),
-		them = private.CreateLane(body, "Them", -130, C.red, graphWidth),
+		them = private.CreateLane(body, "Them", -150, C.red, graphWidth),
 	}
 	card.findings = Theme:Text(body, "body", "")
-	card.findings:SetPoint("TOPLEFT", 14, -218)
+	card.findings:SetPoint("TOPLEFT", 14, -244)
 	card.findings:SetWidth(width - 60)
 	card.findings:SetJustifyH("LEFT")
 	card.findings:SetWordWrap(true)
@@ -293,6 +324,10 @@ function private.ShowCard(duel)
 		if hasReport then
 			private.FillLane(lane, report[key], report.len)
 		end
+		-- The loadout is the duel record's own (the addon read it by inspect), shown whether or not a report came
+		local side = type(duel[key]) == "table" and duel[key] or {}
+		lane.loadout, lane.specId, lane.level = side.loadout, side.specId, side.level
+		lane.tree:SetShown(hasReport and type(side.loadout) == "string" and side.loadout ~= "")
 	end
 	local findings = hasReport and type(report.findings) == "table" and report.findings or {}
 	local lines = {}
@@ -305,7 +340,7 @@ function private.ShowCard(duel)
 	end
 	card.findings:SetText(table.concat(lines, "\n\n"))
 	card.findings:SetShown(#lines > 0)
-	card.body:SetHeight(218 + max(card.findings:GetStringHeight(), 1) + 12)
+	card.body:SetHeight(244 + max(card.findings:GetStringHeight(), 1) + 12)
 	card.scroll:SetVerticalScroll(0)
 	private.list:Hide()
 	private.headerBar:Hide()

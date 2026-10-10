@@ -10572,6 +10572,23 @@ end)()
 	duel.them.spec = "Balance"
 	check(Duels:Side(duel, "them").spec == "Balance", "a real spec from the game wins over the report's")
 	duel.them.spec = keptSpec
+	-- "See talent tree" opens the game's talent frame on the recorded loadout, as a talent build link does
+	local opened
+	local savedUtil, savedLockdown = PlayerSpellsUtil, InCombatLockdown
+	PlayerSpellsUtil = { InspectLoadout = function(data) opened = data end }
+	duel.them.loadout, duel.them.specId, duel.them.level = "CwcBwNjScCzs", 1484, 21
+	ns.UI:Show("duels")
+	local tree
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "See talent tree" and f:IsShown() then tree = f end end
+	check(tree ~= nil, "a side with a recorded loadout has a See talent tree button")
+	tree._scripts.OnClick(tree)
+	check(opened == "1484:21:CwcBwNjScCzs", "it opens the game's talent frame on that loadout: "..tostring(opened))
+	opened = nil
+	InCombatLockdown = function() return true end
+	tree._scripts.OnClick(tree)
+	check(opened == nil, "not in combat: the talent frame is protected")
+	PlayerSpellsUtil, InCombatLockdown = savedUtil, savedLockdown
+	duel.them.loadout, duel.them.specId, duel.them.level = nil, nil, nil
 	db.duelReports[duel.id].them.build = nil
 	db.duelReports[duel.id].partial = true
 	ns.UI:Show("duels")

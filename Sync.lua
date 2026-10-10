@@ -282,6 +282,42 @@ local HOSTILE_NOTICES_SELF = {
 -- Lifecycle
 -- ============================================================================
 
+---The game answers a whisper to someone offline late (a minute or more), often after a /reload: who was whispered
+---in the last NOT_FOUND_SECONDS is saved at logout and taken back here, and the filter that hides those answers is set
+---up now, before login, so it's in place when they arrive.
+function Sync:OnLoad()
+	local saved, now, serverNow = Wanted.db.recentWhispers, GetTime(), GetServerTime()
+	if type(saved) == "table" then
+		for name, at in pairs(saved) do
+			if type(name) == "string" and type(at) == "number" and serverNow - at < NOT_FOUND_SECONDS then
+				private.whispered[name] = now - (serverNow - at)
+			end
+		end
+	end
+	Wanted.db.recentWhispers = nil
+	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
+	if addFilter then
+		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
+	end
+end
+
+---Who was whispered in the last NOT_FOUND_SECONDS, by server time, for the next load (Sync:OnLoad).
+function private.SaveRecentWhispers()
+	local saved, now, serverNow, count = {}, GetTime(), GetServerTime(), 0
+	for _, names in ipairs({ private.whispered, private.greeted }) do
+		for name, t in pairs(names) do
+			if now - t < NOT_FOUND_SECONDS and count < 200 then
+				local at = serverNow - floor(now - t)
+				if not saved[name] or saved[name] < at then
+					count = count + (saved[name] and 0 or 1)
+					saved[name] = at
+				end
+			end
+		end
+	end
+	Wanted.db.recentWhispers = next(saved) and saved or nil
+end
+
 function Sync:OnEnable()
 	private.faction = UnitFactionGroup("player") or ""
 	private.channelName, private.epoch = private.MainName(), 0
@@ -332,7 +368,7 @@ function Sync:OnEnable()
 	C_Timer.After(25, private.AskPointer)
 	local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
 	if addFilter then
-		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
+		-- (CHAT_MSG_SYSTEM's filter is set up in Sync:OnLoad, before login)
 		-- The channel's joins, leaves and owner changes are nobody's business: it only carries addon data
 		addFilter("CHAT_MSG_CHANNEL_NOTICE", private.HideChannelNotice)
 		addFilter("CHAT_MSG_CHANNEL_NOTICE_USER", private.HideChannelNotice)
@@ -458,6 +494,7 @@ function private.OnEvent(_, event, ...)
 		private.OnPasswordRequest(...)
 	elseif event == "PLAYER_LOGOUT" then
 		private.UnmuteAll()
+		private.SaveRecentWhispers()
 	elseif event == "CHAT_MSG_SYSTEM" then
 		private.OnSystemMessage(...)
 	elseif event == "CHAT_MSG_CHANNEL_NOTICE" or event == "CHAT_MSG_CHANNEL_NOTICE_USER" then

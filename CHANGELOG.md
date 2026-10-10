@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- No more "No player named ... is currently playing" lines after a /reload or login: the game answers Wanted's hidden
+  whispers late, and Wanted now remembers who it whispered across a reload and hides those answers from the start.
 - No more "No player named ... is currently playing" lines after a duel or fight. During the game's chat lockdown
   (encounters, PvP matches, some duels) Wanted can't hide that notice, so it now holds its hidden whispers to
   players on other realm names until the lockdown lifts.

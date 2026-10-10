@@ -360,10 +360,16 @@ function private.Create()
 	pvp.dot = pvp:CreateTexture(nil, "ARTWORK")
 	pvp.dot:SetSize(7, 7)
 	pvp.dot:SetPoint("LEFT", 10, 0)
+	-- Your shard of the zone at the right (Shard); the status stops short of it
+	pvp.shard = Theme:Text(pvp, "tiny", "", C.faint)
+	pvp.shard:SetPoint("RIGHT", -8, 0)
 	pvp.text = Theme:Text(pvp, "small", "")
 	pvp.text:SetPoint("LEFT", pvp.dot, "RIGHT", 7, 0)
+	pvp.text:SetPoint("RIGHT", pvp.shard, "LEFT", -6, 0)
+	pvp.text:SetJustifyH("LEFT")
+	pvp.text:SetWordWrap(false)
 	pvp:EnableMouse(true)
-	W:AttachTooltip(pvp, "Your PvP status", "Whether enemy players can attack you. When the flag is wearing off, how long until it's gone. Hide it in Settings > Nearby window.")
+	W:AttachTooltip(pvp, "Your PvP status", "Whether enemy players can attack you. When the flag is wearing off, how long until it's gone. Hide it in Settings > Nearby window.\n\nShard: which copy of this zone you're on, read from the creatures around you (? until one is seen). Last hour marks enemies another Wanted player saw on another shard of it: they aren't where you can meet them.")
 	local elapsed = PVP_UPDATE_SECONDS
 	pvp:SetScript("OnUpdate", function(_, delta)
 		elapsed = elapsed + delta
@@ -638,6 +644,7 @@ function Nearby:Refresh()
 	end
 	-- Just the count: "(2 in sight)" didn't fit beside the buttons, and shaded rows already show who's gone
 	private.title:SetText(format("%s  %s", label, Theme:Colorize(tostring(#items), C.muted)))
+	private.pvp.shard:SetText(Wanted.Shard:Label())
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)
@@ -881,6 +888,10 @@ function private.Draw(row, info)
 	if row.compact and show.state and info.nearby and not info.inSight and not info.active then
 		tinsert(rightParts, Theme:Colorize(format("%ds", info.goneFor or 0), C.faint))
 	end
+	-- Compact rows have no second line: the shard mark goes here
+	if row.compact and info.otherShard then
+		tinsert(rightParts, Theme:Colorize("other shard", C.amber))
+	end
 	local levelText = ""
 	if show.level then
 		levelText = info.level and tostring(info.level) or (info.skull and "??" or "")
@@ -909,6 +920,9 @@ function private.Draw(row, info)
 		elseif info.lastSeen then
 			tinsert(sub, Theme:Ago(now - info.lastSeen))
 		end
+	end
+	if info.otherShard then
+		tinsert(sub, Theme:Colorize("other shard", C.amber))
 	end
 	if info.stealthed then
 		tinsert(sub, Theme:Colorize(strlower(info.stealthKind or "stealth"), C.amber))

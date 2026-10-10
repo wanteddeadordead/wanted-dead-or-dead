@@ -20,6 +20,7 @@ local private = {
 	removals = {}, -- times of recent nameplate removals (many at once is a loading screen, not stealth)
 	lastShared = {}, -- guid -> time we last shared a sighting of them
 	newShared = {}, -- sender -> { minute, count } players never seen here their shared sightings added this minute
+	otherShard = {}, -- guid -> server time of their latest sighting, shared from another shard of our zone (Shard)
 	targeters = {}, -- guid -> true for enemies targeting us now
 	described = {}, -- guid -> the description GetNearby last gave, filled again in place
 	lastRecapId = nil,
@@ -325,6 +326,12 @@ function private.Prune(now)
 	for guid, t in pairs(private.lastShared) do
 		if now - t > SHARE_EVERY then
 			private.lastShared[guid] = nil
+		end
+	end
+	local serverNow = GetServerTime()
+	for guid, t in pairs(private.otherShard) do
+		if serverNow - t > LAST_HOUR then
+			private.otherShard[guid] = nil
 		end
 	end
 	private.PruneRemovals(now)
@@ -874,6 +881,8 @@ function private.Fill(d, guid)
 	d.detections = stats.detections or 0
 	d.bounty = bounty
 	d.firstSeen = entry and entry.firstSeen
+	-- Their latest sighting was shared from another shard of our zone: they aren't where we can meet them
+	d.otherShard = not entry and private.otherShard[guid] ~= nil and private.otherShard[guid] == player.lastSeen
 	return d
 end
 
@@ -1101,7 +1110,8 @@ end
 ---A sighting another Wanted user shared.
 ---@param data table
 ---@param sender string
-function Enemies:OnSharedSighting(data, sender)
+---@param shard any the sender's shard of their zone, as they said (Shard)
+function Enemies:OnSharedSighting(data, sender, shard)
 	if type(data.g) ~= "string" or not strfind(data.g, "^Player%-") then
 		return
 	end
@@ -1147,6 +1157,8 @@ function Enemies:OnSharedSighting(data, sender)
 		seenBy = sender,
 	})
 	Store:AddSighting(data.g, zone, x, y, mapId, sender)
+	-- Seen on another shard of our zone: marked while this stays their latest sighting (Fill)
+	private.otherShard[data.g] = Wanted.Shard:IsOther(shard, mapId) and GetServerTime() or nil
 	-- p: the sender is calling a posse against them (Posse); the caller is the sender, whom the game names
 	local posse = type(data.p) == "table" and { why = type(data.p.k) == "string" and data.p.k or "wanted" } or nil
 	Fire("shared", { guid = data.g, name = name, by = sender, zone = zone, x = x, y = y, stealthed = data.s == true or nil, posse = posse })

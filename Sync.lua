@@ -1433,7 +1433,8 @@ function private.FlushSightings()
 		-- Sent or not, this news is used up: a dropped batch isn't worth sending late
 		private.sightingQueue[list[i].data.g] = nil
 	end
-	if private.Send(TAG_SIGHTINGS, { s = batch }) then
+	-- sh: our shard of the zone, so a peer on another shard of it can tell these enemies aren't on theirs (Shard)
+	if private.Send(TAG_SIGHTINGS, { s = batch, sh = Wanted.Shard:Get() }) then
 		for _, data in ipairs(batch) do
 			private.recentSightings[data.g] = now
 		end
@@ -1805,7 +1806,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			if type(data) == "table" and type(data.g) == "string" then
 				private.recentSightings[data.g] = now
 				if Wanted.Enemies then
-					Wanted.Enemies:OnSharedSighting(data, sender)
+					Wanted.Enemies:OnSharedSighting(data, sender, tbl.sh)
 				end
 			end
 		end

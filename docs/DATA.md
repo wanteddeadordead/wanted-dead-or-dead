@@ -128,7 +128,7 @@ and `race` are the game's file names (`MAGE`, `Scourge`), `talents` the points i
 `spec` the name of the tree with the most (nil with none spent, or when the opponent's inspect never answered), and
 `health`/`mana` percentages at the end (mana only for mana users; the opponent's as last seen if out of view, nil
 where the game hides it). `them.name` is kept only when the opponent runs Wanted (a signing key is bound to their
-GUID, `KeyBook:OriginOf`): anyone else is kept by class, spec, race and level, and their GUID only to tell duels
+GUID, `KeyBook:OriginOf`, and the game gives the character the same first name): anyone else is kept by class, spec, race and level, and their GUID only to tell duels
 apart, never shown. Never shared with other players; the Wanted app uploads them with the player's other data.
 
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:

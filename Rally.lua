@@ -6,11 +6,18 @@
 -- minutes (logged off, or out of reach). A rally is only ever taken as its sender's own: the game names who sent each
 -- message, and nobody passes one on. Nothing is saved: a /reload ends the rally, and the others drop it as they stop
 -- hearing it.
+--
+-- The rally leader's line in Nearby has two buttons: Skull puts the skull on your target when it's a bounty or Kill on
+-- Sight enemy, and Flare starts placing a world marker. The game lets only a click do either, so they're secure
+-- buttons the game runs itself (no addon code in between), set up out of combat: in a fight they stay as they were
+-- when it began. Both are for a group's leader or assistants, and have names for a macro: /click WantedRallySkullButton
+-- or /click WantedRallyFlareButton.
 
 local _, Wanted = ...
 local Rally = Wanted:NewModule("Rally")
 local Store = Wanted.Store
 local Sync = Wanted.Sync
+local W = Wanted.Widgets
 local private = {
 	mine = nil, -- the rally we lead: { claimed (server time), zone, mapId, x, y, moved (GetTime), sends }
 	leaders = {}, -- sender -> { name, claimed, firstHeard, heard (server time), zone, mapId, x, y, class } others' rallies
@@ -19,6 +26,9 @@ local private = {
 	answers = {}, -- sender -> how many of their claims we've answered while leading this rally
 	changePending = false,
 	frame = CreateFrame("Frame"),
+	markFrame = CreateFrame("Frame"),
+	skull = nil, -- the Skull and Flare buttons, once the Nearby window has made them
+	flare = nil,
 }
 local SEND_SECONDS = 30 -- the leader's position goes out this often
 local LINK_EVERY = 4 -- and every fourth time (two minutes) to the realm links too, whose budget is smaller
@@ -32,6 +42,8 @@ local MAX_ZONE = 60
 local MAX_MAP_ID = 2 ^ 31
 local CHANGE_SECONDS = 0.5 -- redraws for rally news are put together this long
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
+local SKULL = 8 -- the skull raid target icon
+local FLARE_MARKER = 1 -- the world marker Flare places
 
 function Rally:OnEnable()
 	for _, event in ipairs({ "PLAYER_DEAD", "ZONE_CHANGED_NEW_AREA", "PLAYER_LOGOUT" }) do
@@ -50,6 +62,10 @@ function Rally:OnEnable()
 		end
 	end)
 	C_Timer.NewTicker(SEND_SECONDS, function() Rally:Tick() end)
+	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "PLAYER_REGEN_ENABLED" }) do
+		private.markFrame:RegisterEvent(event)
+	end
+	private.markFrame:SetScript("OnEvent", function() private.Arm() end)
 end
 
 -- ============================================================================
@@ -131,6 +147,7 @@ function Rally:Claim()
 	private.mine = { claimed = GetServerTime(), zone = zone, mapId = mapId, x = x, y = y, moved = GetTime(), sends = 0 }
 	wipe(private.answered)
 	wipe(private.answers)
+	private.Arm()
 	if private.Send() then
 		Wanted:Print("You lead the rally in %s. Wanted players of your faction there see you on their map and in Nearby until you die, leave the zone or end it (/wanted rally end).", zone)
 	else
@@ -148,6 +165,7 @@ function Rally:End(why)
 	end
 	private.Send(true)
 	private.mine = nil
+	private.Arm()
 	if why then
 		Wanted:Print("%s", why)
 	end
@@ -207,13 +225,111 @@ function private.Send(ended)
 		e = ended and 1 or nil }, ended or mine.sends % LINK_EVERY == 1) and true or false
 end
 
----Whether we lead our group. The game keeps it secret in instances, where rallies aren't allowed anyway.
-function private.IsGroupLeader()
-	if not IsInGroup() or not UnitIsGroupLeader then
+---Whether we lead our group (with assistant, or are one of its assistants). The game keeps both secret in
+---instances, where rallies aren't allowed anyway.
+function private.IsGroupLeader(assistant)
+	if not IsInGroup() then
 		return false
 	end
-	local ok, leader = pcall(UnitIsGroupLeader, "player")
-	return ok and not (issecretvalue and issecretvalue(leader)) and leader == true
+	for _, check in ipairs({ UnitIsGroupLeader or false, assistant and UnitIsGroupAssistant or false }) do
+		if check then
+			local ok, yes = pcall(check, "player")
+			if ok and not (issecretvalue and issecretvalue(yes)) and yes == true then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- ============================================================================
+-- Skull and Flare
+-- ============================================================================
+
+---A value the game may keep secret, or nil when it does.
+local function Readable(value)
+	if issecretvalue and issecretvalue(value) then
+		return nil
+	end
+	return value
+end
+
+---Why Skull can't mark our target now, or nil.
+---@return string?
+function Rally:SkullWhyNot()
+	if not private.IsGroupLeader(true) then
+		return "Only a group's leader or assistants can mark targets."
+	end
+	if not Readable(UnitExists("target")) then
+		return "Target a bounty or Kill on Sight enemy first."
+	end
+	local guid = Readable(UnitGUID("target"))
+	if not guid or not Readable(UnitIsPlayer("target")) or not Readable(UnitIsEnemy("player", "target")) then
+		return "Skull is for enemy players with a bounty or on Kill on Sight."
+	end
+	local d = Wanted.Enemies:Describe(guid)
+	if not d.kos and d.bounty <= 0 then
+		return format("%s has no bounty and isn't on Kill on Sight.", d.name ~= "?" and d.name or "Your target")
+	end
+end
+
+---Why Flare can't place a world marker now, or nil.
+---@return string?
+function Rally:FlareWhyNot()
+	if not private.mine then
+		return "Flare is for the rally leader: lead the rally here first."
+	end
+	if not private.IsGroupLeader(true) then
+		return "Only a group's leader or assistants can place world markers."
+	end
+end
+
+---Makes the Skull and Flare buttons, for the Nearby window's rally line (out of combat, once).
+---@param parent table
+---@return table skull
+---@return table flare
+function Rally:CreateMarkButtons(parent)
+	if not private.skull then
+		private.skull = private.MarkButton(parent, "Skull", "WantedRallySkullButton", "Skull your target",
+			"Puts the skull on your target when it's an enemy with a bounty or on Kill on Sight. For a group's leader or assistants. Bind it with a macro: /click WantedRallySkullButton")
+		private.skull:SetAttribute("unit", "target")
+		private.skull:SetAttribute("marker", SKULL)
+		private.skull:SetAttribute("action", "set")
+		private.flare = private.MarkButton(parent, "Flare", "WantedRallyFlareButton", "Flare",
+			"Click, then click the ground: a world marker there for your group to rally on. For the rally leader. Bind it with a macro: /click WantedRallyFlareButton")
+		private.flare:SetAttribute("marker", FLARE_MARKER)
+		private.flare:SetAttribute("action", "set")
+		private.Arm()
+	end
+	return private.skull, private.flare
+end
+
+function private.MarkButton(parent, text, name, title, tip)
+	local button = W:Button(parent, text, "chip", 44, 16, nil, "SecureActionButtonTemplate", name)
+	button.label:SetFontObject(Wanted.Theme.Fonts.small)
+	-- Act on release whatever "cast on key down" says, as the Nearby rows do
+	button:RegisterForClicks("AnyUp")
+	button:SetAttribute("useOnKeyDown", false)
+	W:AttachTooltip(button, title, tip)
+	-- Not set up to act (why was said when it was set): say why rather than nothing happening
+	button:HookScript("PostClick", function(self)
+		if not self:GetAttribute("type") and self.why then
+			Wanted:Print("%s", self.why)
+		end
+	end)
+	return button
+end
+
+---Sets Skull and Flare up for what they may do now: the game's action, or none and why not. Out of combat only (the
+---game forbids it in a fight); a change then waits for the fight to end.
+function private.Arm()
+	if not private.skull or InCombatLockdown() then
+		return
+	end
+	for button, why in pairs({ [private.skull] = Rally:SkullWhyNot() or false, [private.flare] = Rally:FlareWhyNot() or false }) do
+		button.why = why or nil
+		button:SetAttribute("type", not why and (button == private.skull and "raidtarget" or "worldmarker") or nil)
+	end
 end
 
 -- ============================================================================

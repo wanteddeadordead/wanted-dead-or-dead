@@ -117,6 +117,10 @@ points, honor, hk, season, t }` (Blizzard rank, the season's rank points, Honor 
 season). Written at login and when the rank, honor or bags change. The Wanted app sends them for the Blizzard PvP
 boards; the site takes them only for the account's own characters.
 
+`WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
+written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
+playing" answers after a /reload stay hidden. A new top-level table: no migration.
+
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
 An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is

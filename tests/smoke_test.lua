@@ -1834,6 +1834,47 @@ local hellos = Sent("WHISPER", "Far Friend")
 check(#hellos == 1 and hellos[1].tag == "H" and hellos[1].tbl.r == "Realm" and type(hellos[1].tbl.c) == "table" and not hellos[1].tbl.a, "a realm link starts with a whispered hello carrying our realm")
 check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Far Friend' is currently playing.") == true
 	and chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Someone Else' is currently playing.") == false, "the game's 'not online' for someone just greeted is hidden, others aren't")
+-- The game answers a whisper to someone offline late, often after a /reload: who was whispered is saved at logout,
+-- taken back at load, and the filter is there before login
+do
+	Fire("PLAYER_LOGOUT")
+	check(type(ns.db.recentWhispers) == "table" and ns.db.recentWhispers["Far Friend"], "who was just whispered is saved at logout")
+	ns.db.recentWhispers = { ["Before Reload"] = GetServerTime() - 60, ["Long Ago"] = GetServerTime() - 3600 }
+	ns.Sync:OnLoad()
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Before Reload' is currently playing.") == true,
+		"a late answer to a whisper from before the reload is hidden")
+	check(chatFilters.CHAT_MSG_SYSTEM(nil, "CHAT_MSG_SYSTEM", "No player named 'Long Ago' is currently playing.") == false,
+		"one whispered long before isn't")
+	check(ns.db.recentWhispers == nil, "the saved list is taken once")
+end
+-- In the game's chat messaging lockdown its "not online" line is secret and no filter runs on it: nobody is greeted
+-- or whispered until it lifts
+do
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	ns.Sync:Greet("Locked Friend", "Other Realm")
+	check(#Sent("WHISPER", "Locked Friend") == 0, "nobody is greeted during chat messaging lockdown")
+	C_ChatInfo.InChatMessagingLockdown = function() return false end
+	ns.Sync:Greet("Locked Friend", "Other Realm")
+	check(#Sent("WHISPER", "Locked Friend") == 1, "the greeting goes once the lockdown lifts")
+	-- A lockdown at login skips the remembered links: they're greeted once it lifts
+	ns.db.farPeers["Remembered Pal"] = { realm = "Other Realm", seen = GetServerTime() }
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	ns.Sync:Greet("Another Friend", "Other Realm")
+	check(#Sent("WHISPER", "Remembered Pal") == 0 and #Sent("WHISPER", "Another Friend") == 0, "nothing whispered while locked")
+	C_ChatInfo.InChatMessagingLockdown = function() return false end
+	ns.Sync:Greet("Another Friend", "Other Realm")
+	clock = clock + 3
+	RunTimers()
+	check(#Sent("WHISPER", "Remembered Pal") == 1, "the remembered links are greeted once the lockdown lifts")
+	-- A raid sign-up the player asked for in a lockdown doesn't go, and they're told
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	local from = #printed
+	check(ns.Sync:SendRaidJoin("Raid Leader", "raid-1", "going") == false and #Sent("WHISPER", "Raid Leader") == 0, "no raid sign-up whispered in a lockdown")
+	local told = false
+	for i = from + 1, #printed do told = told or printed[i]:find("blocks addon whispers", 1, true) ~= nil end
+	check(told, "the player is told their sign-up didn't go")
+	C_ChatInfo.InChatMessagingLockdown = nil
+end
 -- The game can answer a cross-realm whisper minutes late (seen: 72 s, 119 s, and past 2 minutes), all names at once
 do
 	local before = clock

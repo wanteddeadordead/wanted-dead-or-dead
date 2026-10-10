@@ -10018,6 +10018,12 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	S.Hook = Hook
 	db.duels = {}
 
+	-- What each side wears is read from the inspect (them) and at the end (us): item strings only, no names
+	S.savedLink = GetInventoryItemLink
+	GetInventoryItemLink = function(unit, slot)
+		if slot == 1 then return unit == "player" and "|cff1eff00|Hitem:200::::::::20:::::|h[My Cap]|h|r" or "|cff0070dd|Hitem:300::::::::30:::::|h[Their Helm]|h|r" end
+		if slot == 4 then return "|cffffffff|Hitem:999::::|h[Shirt]|h|r" end
+	end
 	-- They challenge us, we accept and win: a Wanted user, so their name is kept
 	enemyUnits.target = { guid = "Player-1-0D0E1F00", name = "Duel Friend", faction = "Horde", class = "MAGE", level = 60, raceFile = "Scourge", raceName = "Undead", close = true }
 	Fire("DUEL_REQUESTED", "Duel Friend")
@@ -10043,6 +10049,9 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	local them, me = d.them, d.me
 	check(them.name == "Duel Friend" and them.guid == "Player-1-0D0E1F00" and them.class == "MAGE" and them.race == "Scourge" and them.level == 60,
 		"a Wanted user is kept by name with class, race and level: "..tostring(them.name))
+	check(them.gear and them.gear.items[1] == "item:300::::::::30:::::" and not them.gear.items[4] and me.gear and me.gear.items[1] == "item:200::::::::20:::::",
+		"both sides' gear is kept as item strings by slot, no shirt")
+	GetInventoryItemLink = S.savedLink
 	check(them.spec == "Frost" and them.specId == 64 and them.talents == nil and them.loadout == "BUILDFROST456",
 		"their specialization and loadout from the inspect: "..tostring(them.spec).." "..tostring(them.loadout))
 	check(them.health == 50 and them.mana == 50, "their health and mana at the end: "..tostring(them.health).." "..tostring(them.mana))
@@ -10591,6 +10600,37 @@ end)()
 	check(opened == nil, "not in combat: the talent frame is protected")
 	PlayerSpellsUtil, InCombatLockdown = savedUtil, savedLockdown
 	duel.them.loadout, duel.them.specId, duel.them.level = nil, nil, nil
+	-- Gear: each side's items as the inspect saw them, scored the game's way, with a headline when one side wore clearly
+	-- better, and a panel listing them slot by slot
+	local savedItem = C_Item
+	local itemDB = { [100] = { "Blue Helm", 3, 30, "INVTYPE_HEAD" }, [101] = { "Green Boots", 2, 20, "INVTYPE_FEET" },
+		[102] = { "Big Axe", 3, 32, "INVTYPE_2HWEAPON" }, [103] = { "Grey Shirt", 0, 1, "INVTYPE_HEAD" } }
+	local loaded = true
+	C_Item = {
+		GetItemInfo = function(item) local id = tonumber(item:match("^item:(%d+)")) local e = itemDB[id]
+			if not e or not loaded then return nil end return e[1], nil, e[2], e[3], nil, nil, nil, nil, e[4] end,
+		GetItemIconByID = function() return 135000 end,
+		GetItemQualityColor = function() return 0, 0.5, 1 end,
+		RequestLoadItemDataByID = function() end,
+	}
+	duel.me.gear = { items = { [1] = "item:103::::", [8] = "item:101::::" } }
+	duel.them.gear = { items = { [1] = "item:100::::", [8] = "item:101::::", [16] = "item:102::::" } }
+	local them = Duels:GearScore(duel.them.gear)
+	check(them and them.ilvl == math.floor((30 + 20 + 32 + 32) / 16 * 10 + 0.5) / 10 and them.twoHander and them.quality[3] == 2,
+		"gear is scored over sixteen slots, empty ones as 0 and a two-hander in both hands: "..tostring(them and them.ilvl))
+	loaded = false
+	check(Duels:GearScore(duel.them.gear) == nil, "no score while an item isn't loaded yet")
+	loaded = true
+	ns.UI:Show("duels")
+	check(OnScreen("They out-geared you: average item level") and OnScreen("Gear: item level"), "a clear gear gap is a headline, and each side's gear is on the card")
+	local seeGear
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "See gear" and f:IsShown() then seeGear = f end end
+	check(seeGear ~= nil, "a See gear button")
+	seeGear._scripts.OnClick(seeGear)
+	check(OnScreen("Blue Helm") and OnScreen("Big Axe") and OnScreen("Green Boots") and OnScreen("Chest (empty)"), "the gear panel lists both sides' items slot by slot")
+	C_Item = savedItem
+	duel.me.gear, duel.them.gear = nil, nil
+	ns.UI:Show("duels")
 	db.duelReports[duel.id].them.build = nil
 	db.duelReports[duel.id].partial = true
 	ns.UI:Show("duels")

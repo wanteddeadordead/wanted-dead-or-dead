@@ -400,6 +400,7 @@ function private.Finish(duel)
 	me.level = type(level) == "number" and level > 0 and level or nil
 	me.spec, me.specId = private.OwnSpec()
 	me.loadout = private.OwnLoadout()
+	me.gear = private.ReadGear("player")
 	local them = duel.them
 	-- The name only of a Wanted user, and only when the game names the character so too: a hello can claim any GUID
 	them.guid = duel.guid
@@ -574,6 +575,92 @@ function private.PlayerInspecting()
 end
 
 ---The game's answer to an inspect. Read only when it's ours: after someone else's question the data is theirs.
+-- ============================================================================
+-- Gear
+-- ============================================================================
+
+-- The slots an item level is averaged over, the game's own way: the sixteen worn slots (no shirt, tabard or ranged),
+-- an empty one counting 0, and a two-hander filling the off hand too
+local SCORE_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }
+-- Every slot kept for the gear panel (ranged too)
+local GEAR_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }
+Duels.GEAR_SLOTS = GEAR_SLOTS
+
+---What a unit wears, as item strings by slot ("item:<id>:..."), read while the unit is inspected (or is the player).
+---Only the item part of each link is kept: no names, no colours.
+---@return table? { items = { [slot] = itemString } }
+function private.ReadGear(unit)
+	if not GetInventoryItemLink then
+		return nil
+	end
+	local items, any = {}, false
+	for _, slot in ipairs(GEAR_SLOTS) do
+		local ok, link = pcall(GetInventoryItemLink, unit, slot)
+		link = ok and private.Readable(link) or nil
+		local item = type(link) == "string" and strmatch(link, "|H(item:[%d:%-]+)|h") or nil
+		if item and #item <= 120 then
+			items[slot], any = item, true
+		end
+	end
+	return any and { items = items } or nil
+end
+
+---An item's level and quality, or nil while the game hasn't loaded it (it's asked to).
+function private.ItemInfo(item)
+	if not (C_Item and C_Item.GetItemInfo) then
+		return nil
+	end
+	local _, _, quality, level, _, _, _, _, equipLoc = C_Item.GetItemInfo(item)
+	if C_Item.GetDetailedItemLevelInfo then
+		local ok, actual = pcall(C_Item.GetDetailedItemLevelInfo, item)
+		level = ok and private.Readable(actual) or level
+	end
+	if type(level) ~= "number" or type(quality) ~= "number" then
+		local id = tonumber(strmatch(item, "^item:(%d+)"))
+		if id and C_Item.RequestLoadItemDataByID then
+			pcall(C_Item.RequestLoadItemDataByID, id)
+		end
+		return nil
+	end
+	return level, quality, equipLoc
+end
+
+---An item's level and quality, or nil while the game hasn't loaded it (it's asked to).
+function Duels:ItemLevel(item)
+	local level, quality = private.ItemInfo(item)
+	return level, quality
+end
+
+---A side's gear summed up: the average item level (the game's way, SCORE_SLOTS) and how many items of each quality,
+---or nil while any item isn't loaded yet.
+---@return table? { ilvl, worn, quality = { [quality] = count } }
+function Duels:GearScore(gear)
+	local items = type(gear) == "table" and type(gear.items) == "table" and gear.items or nil
+	if not items then
+		return nil
+	end
+	local total, worn, quality = 0, 0, {}
+	local twoHander = false
+	for _, slot in ipairs(GEAR_SLOTS) do
+		local item = items[slot]
+		if type(item) == "string" then
+			local level, q, equipLoc = private.ItemInfo(item)
+			if not level then
+				return nil
+			end
+			worn = worn + 1
+			quality[q] = (quality[q] or 0) + 1
+			if slot ~= 18 then
+				total = total + level
+			end
+			if slot == 16 and equipLoc == "INVTYPE_2HWEAPON" and not items[17] then
+				twoHander, total = true, total + level
+			end
+		end
+	end
+	return { ilvl = floor(total / #SCORE_SLOTS * 10 + 0.5) / 10, worn = worn, quality = quality, twoHander = twoHander }
+end
+
 function private.OnInspectReady(guid)
 	local inspect = private.inspect
 	if not inspect or private.Readable(guid) ~= inspect.guid then
@@ -588,6 +675,7 @@ function private.OnInspectReady(guid)
 	if unit then
 		duel.them.spec, duel.them.specId = private.InspectSpec(unit)
 		duel.them.loadout = private.InspectLoadout(unit)
+		duel.them.gear = private.ReadGear(unit)
 		duel.inspected = true
 		Wanted:Log("Duels: inspect answered: %s", duel.them.spec or "no specialization")
 	else

@@ -163,12 +163,145 @@ function private.CreateLane(card, label, y, color, graphWidth)
 		private.ShowTree(lane.loadout, lane.specId, lane.level)
 	end)
 	lane.tree:SetPoint("BOTTOMRIGHT", lane.graph, "TOPRIGHT", 0, 4)
+	-- What they wore, item by item, in the card's gear panel
+	lane.gearButton = W:Button(card, "See gear", "secondary", 90, 22, function()
+		private.ShowGear()
+	end)
+	lane.gearButton:SetPoint("RIGHT", lane.tree, "LEFT", -6, 0)
 	lane.used = Theme:Text(card, "small", "", C.faint)
 	lane.used:SetPoint("TOPLEFT", lane.strip, "BOTTOMLEFT", 0, -4)
 	lane.used:SetWidth(graphWidth)
 	lane.used:SetJustifyH("LEFT")
 	lane.used:SetWordWrap(true)
 	return lane
+end
+
+local QUALITY_NAMES = { [0] = "grey", [1] = "white", [2] = "green", [3] = "blue", [4] = "purple", [5] = "orange" }
+
+---"Gear: item level 24.5 (3 blue, 10 green)", or what's known.
+function private.GearText(gear)
+	if type(gear) ~= "table" then
+		return nil
+	end
+	local score = Duels:GearScore(gear)
+	if not score then
+		return "Gear: loading item levels..."
+	end
+	local counts = {}
+	for q = 5, 2, -1 do
+		if score.quality[q] then
+			counts[#counts + 1] = score.quality[q].." "..QUALITY_NAMES[q]
+		end
+	end
+	return format("Gear: item level %.1f%s", score.ilvl, #counts > 0 and (" ("..table.concat(counts, ", ")..")") or "")
+end
+
+---A headline when one side wore clearly better gear (3 or more average item levels): it explains a lot of a fight.
+function private.GearGap(duel)
+	local mine = Duels:GearScore(type(duel.me) == "table" and duel.me.gear)
+	local theirs = Duels:GearScore(type(duel.them) == "table" and duel.them.gear)
+	if not (mine and theirs) then
+		return nil
+	end
+	local gap = theirs.ilvl - mine.ilvl
+	if gap >= 3 then
+		return Theme:Colorize(format("They out-geared you: average item level %.1f to your %.1f.", theirs.ilvl, mine.ilvl), C.red)
+	elseif gap <= -3 then
+		return Theme:Colorize(format("You out-geared them: average item level %.1f to their %.1f.", mine.ilvl, theirs.ilvl), C.green)
+	end
+	return nil
+end
+
+local SLOT_LABELS = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet",
+	[9] = "Wrist", [10] = "Hands", [11] = "Finger", [12] = "Finger", [13] = "Trinket", [14] = "Trinket", [15] = "Back",
+	[16] = "Main hand", [17] = "Off hand", [18] = "Ranged" }
+local GEAR_ROW = 22
+
+---The gear panel: both sides' items slot by slot (icon, item level, name in its quality's colour, the game's tooltip
+---on hover), in place of the card's body.
+function private.BuildGearPanel(card, width)
+	local panel = CreateFrame("Frame", nil, card)
+	panel:SetPoint("TOPLEFT", 0, -38)
+	panel:SetPoint("BOTTOMRIGHT", -8, 8)
+	panel:Hide()
+	panel.back = W:Button(panel, "Back to the fight", "secondary", 140, 22, function() private.HideGear() end)
+	panel.back:SetPoint("TOPRIGHT", 0, 0)
+	panel.columns = {}
+	local columnWidth = floor((width - 40) / 2)
+	for c, key in ipairs({ "me", "them" }) do
+		local column = { rows = {} }
+		column.title = Theme:Text(panel, "body", "")
+		column.title:SetPoint("TOPLEFT", 14 + (c - 1) * (columnWidth + 12), -6)
+		for i, slot in ipairs(Duels.GEAR_SLOTS) do
+			local row = CreateFrame("Button", nil, panel)
+			row:SetSize(columnWidth, GEAR_ROW - 2)
+			row:SetPoint("TOPLEFT", 14 + (c - 1) * (columnWidth + 12), -30 - (i - 1) * GEAR_ROW)
+			row.icon = row:CreateTexture(nil, "ARTWORK")
+			row.icon:SetSize(GEAR_ROW - 4, GEAR_ROW - 4)
+			row.icon:SetPoint("LEFT")
+			row.text = Theme:Text(row, "small", "")
+			row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+			row.text:SetPoint("RIGHT")
+			row.text:SetJustifyH("LEFT")
+			row.text:SetWordWrap(false)
+			row.slot = slot
+			row:SetScript("OnEnter", function(self)
+				if self.item then
+					GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+					GameTooltip:SetHyperlink(self.item)
+					GameTooltip:Show()
+				end
+			end)
+			row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+			column.rows[i] = row
+		end
+		panel.columns[key] = column
+	end
+	card.gearPanel = panel
+end
+
+---Fills one column of the gear panel from a side's recorded gear.
+function private.FillGearColumn(column, label, gear)
+	local items = type(gear) == "table" and type(gear.items) == "table" and gear.items or {}
+	local score = Duels:GearScore(gear)
+	column.title:SetText(label..(score and format("   item level %.1f", score.ilvl) or (next(items) and "" or "   not seen")))
+	for _, row in ipairs(column.rows) do
+		local item = items[row.slot]
+		row.item = item
+		local name, quality, level
+		if item and C_Item and C_Item.GetItemInfo then
+			name = C_Item.GetItemInfo(item)
+			level, quality = Duels:ItemLevel(item)
+		end
+		local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(tonumber(strmatch(item, "^item:(%d+)")) or 0)
+		row.icon:SetTexture(icon or 134400)
+		row.icon:SetAlpha(item and 1 or 0.25)
+		local r, g, b = 1, 1, 1
+		if quality and C_Item.GetItemQualityColor then
+			r, g, b = C_Item.GetItemQualityColor(quality)
+		end
+		local text = item and ((level and (level.."  ") or "")..(name or "loading...")) or Theme:Colorize(SLOT_LABELS[row.slot].." (empty)", C.faint)
+		row.text:SetText(text)
+		row.text:SetTextColor(r, g, b)
+	end
+end
+
+function private.ShowGear()
+	local card, duel = private.card, private.cardDuel
+	if not (card and duel) then
+		return
+	end
+	private.FillGearColumn(card.gearPanel.columns.me, "You", duel.me and duel.me.gear)
+	private.FillGearColumn(card.gearPanel.columns.them, "Them", duel.them and duel.them.gear)
+	card.scroll:Hide()
+	card.gearPanel:Show()
+end
+
+function private.HideGear()
+	if private.card then
+		private.card.gearPanel:Hide()
+		private.card.scroll:Show()
+	end
 end
 
 ---Opens the game's talent frame showing a recorded loadout (out of combat only: the talent frame is a protected
@@ -205,7 +338,7 @@ end
 
 ---Fills a lane from one side of a report (v1): health as the last reading at each bar's moment ({ t, pct } pairs),
 ---control as gold marks across the fight, and the answers they used and when.
-function private.FillLane(lane, side, length)
+function private.FillLane(lane, side, length, gearText)
 	side = type(side) == "table" and side or {}
 	local hp = type(side.hp) == "table" and side.hp or {}
 	length = (type(length) == "number" and length > 0) and length or 1
@@ -255,7 +388,7 @@ function private.FillLane(lane, side, length)
 		buildText = "Build: "..private.CleanText(build.spec)..(#points > 0 and (" ("..table.concat(points, "/")..")") or "")
 			..(#talents > 0 and (": "..table.concat(talents, ", ")) or "").."\n"
 	end
-	lane.used:SetText(buildText..(#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
+	lane.used:SetText(buildText..(gearText and (gearText.."\n") or "")..(#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
 		..(#used > 0 and ("Used: "..table.concat(used, ", ")) or "Used nothing that counts"))
 end
 
@@ -293,6 +426,7 @@ function private.BuildCard(container, width)
 	card.findings:SetJustifyH("LEFT")
 	card.findings:SetWordWrap(true)
 	card.findings:SetSpacing(3)
+	private.BuildGearPanel(card, width)
 	private.card = card
 end
 
@@ -301,6 +435,9 @@ function private.ShowCard(duel)
 	local card = private.card
 	if not card then
 		return
+	end
+	if private.cardDuel ~= duel then
+		private.HideGear()
 	end
 	private.cardDuel = duel
 	local result = RESULTS[duel.result] or RESULTS.none
@@ -320,6 +457,8 @@ function private.ShowCard(duel)
 		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
 		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)
 	end
+	local gap = private.GearGap(duel)
+	opener = opener..(gap and ("   "..gap) or "")
 	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener)
 		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
 		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
@@ -328,12 +467,13 @@ function private.ShowCard(duel)
 			part:SetShown(hasReport)
 		end
 		if hasReport then
-			private.FillLane(lane, report[key], report.len)
+			private.FillLane(lane, report[key], report.len, private.GearText(type(duel[key]) == "table" and duel[key].gear))
 		end
 		-- The loadout is the duel record's own (the addon read it by inspect), shown whether or not a report came
 		local side = type(duel[key]) == "table" and duel[key] or {}
 		lane.loadout, lane.specId, lane.level = side.loadout, side.specId, side.level
 		lane.tree:SetShown(hasReport and type(side.loadout) == "string" and side.loadout ~= "")
+		lane.gearButton:SetShown(hasReport and key == "them" and ((duel.me and duel.me.gear) or (duel.them and duel.them.gear)) and true or false)
 	end
 	local findings = hasReport and type(report.findings) == "table" and report.findings or {}
 	local lines = {}
@@ -354,6 +494,7 @@ function private.ShowCard(duel)
 end
 
 function private.HideCard()
+	private.HideGear()
 	private.cardDuel = nil
 	if private.card then
 		private.card:Hide()

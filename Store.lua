@@ -372,15 +372,40 @@ end
 -- player whose saved data is lost (a reinstall, a new PC) still has their old records on the network, and the server
 -- keeps the first record under an id, so a chain starting at the base again lost every record it made under the old
 -- ids. A chain restarted later starts past the earlier one unless that made more than ten records a second between
--- the two starts. MAX_SEQ (2^31 - 1) is reached about 6.8 years after the epoch, in October 2032.
+-- the two starts. MAX_SEQ (2^31 - 1) is reached about 6.8 years after the epoch, in October 2032: from then a fresh
+-- chain starts TIME_SEQ_HEADROOM under it, and restarts can collide again until the epoch or the rate changes.
 local TIME_SEQ_EPOCH = 1767225600
 local TIME_SEQ_PER_SECOND = 10
+-- No chain gets anywhere near this many records; anything past it is made up (and too big to write as a whole number)
+local MAX_SEQ = 2 ^ 31 - 1
+-- Room a fresh chain leaves itself under MAX_SEQ
+local TIME_SEQ_HEADROOM = 1000000
+-- How far past the clock's number a peer's restart may be: a minute of clocks disagreeing
+local TIME_SEQ_LEEWAY = 60 * TIME_SEQ_PER_SECOND
 
----Our own chain with no records yet: at the server clock's number, or the base before the epoch. start is the seq
----its first record will have.
+---The clock's number now: ten a second since the epoch, never under the base.
+function private.ClockSeq()
+	return max(Store:SeqBase(), floor((GetServerTime() - TIME_SEQ_EPOCH) * TIME_SEQ_PER_SECOND))
+end
+
+---Our own chain with no records yet: at the clock's number (ClockSeq), or the base when the clock is before the
+---epoch, and under MAX_SEQ with room to grow. start is the seq its first record will have.
 function private.NewOwnChain()
-	local seq = max(Store:SeqBase(), floor((GetServerTime() - TIME_SEQ_EPOCH) * TIME_SEQ_PER_SECOND))
+	local seq = private.ClockSeq()
+	if seq == Store:SeqBase() then
+		Wanted:Log("!! Store: the server clock (%s) is before the chain epoch; a fresh chain starts at the base", tostring(GetServerTime()))
+	elseif seq > MAX_SEQ - TIME_SEQ_HEADROOM then
+		seq = MAX_SEQ - TIME_SEQ_HEADROOM
+		Wanted:Log("!! Store: the clock's number is past the highest seq; a fresh chain starts at %d", seq)
+	end
 	return { seq = seq, lastHash = "0", start = seq + 1 }
+end
+
+---Whether a peer's chain may be marked as started again at seq (prev "0"): not a chain of this account's characters
+---(the saved data is the account's, and theirs are only ever their own), and no further than the clock has got to.
+function private.MayRestart(origin, seq)
+	local own = private.own or private.BuildOwn()
+	return origin ~= private.origin and not own.origins[origin] and seq <= private.ClockSeq() + 1 + TIME_SEQ_LEEWAY
 end
 
 ---The seq just before an origin's chain started: where it started again (start, our own fresh chain or a restart a
@@ -394,11 +419,13 @@ end
 
 ---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
 ---moves on to there, so this client stops asking for records nobody has, and continues from prev (the first
----record's predecessor) or from an unknown one.
+---record's predecessor) or from an unknown one. A first record with prev "0" there marks the chain as started again
+---(start) only when the origin itself said so (sender).
 ---@param origin string
 ---@param seq number
 ---@param prev string?
-function Store:SkipTo(origin, seq, prev)
+---@param sender string? who said where the chain starts
+function Store:SkipTo(origin, seq, prev, sender)
 	local db = Wanted.db
 	local chain = db.chains[origin]
 	if not chain then
@@ -415,7 +442,7 @@ function Store:SkipTo(origin, seq, prev)
 	end
 	chain.seq = seq - 1
 	chain.lastHash = type(prev) == "string" and prev or UNKNOWN_HASH
-	if prev == "0" then
+	if prev == "0" and sender == origin and private.MayRestart(origin, seq) then
 		-- The first record there started the chain again
 		chain.start = seq
 	end
@@ -557,6 +584,13 @@ end
 function Store:OnEnable()
 	private.origin = Store:GetOrigin()
 	Wanted:Log("Store: origin %s", private.origin)
+	-- A start or first that isn't a number (saved data edited by hand) is as good as missing
+	for _, chain in pairs(Wanted.db.chains) do
+		if type(chain) == "table" then
+			chain.start = type(chain.start) == "number" and chain.start or nil
+			chain.first = type(chain.first) == "number" and chain.first or nil
+		end
+	end
 	Wanted.db.chains[private.origin] = Wanted.db.chains[private.origin] or private.NewOwnChain()
 	private.ownChain = Wanted.db.chains[private.origin]
 	Store:NoteCharacter(UnitGUID("player"), private.origin)
@@ -849,9 +883,6 @@ function Store:IsWellFormed(r)
 	return private.IsFinite(r.t)
 end
 
--- No chain gets anywhere near this many records; anything past it is made up (and too big to write as a whole number)
-local MAX_SEQ = 2 ^ 31 - 1
-
 ---Whether a value is a seq a chain can have: a whole number from 1 to MAX_SEQ.
 ---@param n any
 ---@return boolean
@@ -1004,10 +1035,11 @@ function private.Insert(record, live, fromApp, sender, checked)
 		chain = private.NewChain()
 		db.chains[record.origin] = chain
 	end
-	if record.prev == "0" and record.seq > chain.seq + 1 and (live or fromApp) and record.origin ~= private.origin
-		and not record.tampered then
+	if record.prev == "0" and record.seq > chain.seq + 1 and live and not record.tampered
+		and private.MayRestart(record.origin, record.seq) and not private.IsPrunable(record) then
 		-- The origin started its chain again (its saved data was lost: NewOwnChain) past where we hold it, said by the
-		-- origin itself or the app's catch-up: the chain moves on to it rather than asking for the numbers between
+		-- origin itself (the app's catch-up isn't its word: the server takes anyone's upload of anyone's record): the
+		-- chain moves on to it rather than asking for the numbers between
 		Wanted:Log("Store: %s's chain starts again at %d", record.origin, record.seq)
 		chain.seq = record.seq - 1
 		chain.lastHash = "0"
@@ -1443,7 +1475,8 @@ function private.NoteFirst(chain, record)
 	if not chain or type(record.t) ~= "number" then
 		return
 	end
-	if record.seq == Store:SeqBase() + 1 or (record.seq == chain.start and (not chain.first or record.t < chain.first)) then
+	if record.seq == Store:SeqBase() + 1
+		or (record.seq == chain.start and (not chain.first or record.t < chain.first) and not private.IsPrunable(record)) then
 		chain.first = record.t
 	end
 end

@@ -1920,11 +1920,11 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 				if seq then
 					local prev
 					for _, record in ipairs(tbl.r) do
-						if type(record) == "table" and record.origin == origin and record.seq == seq then
+						if Store:IsWellFormed(record) and record.origin == origin and record.seq == seq then
 							prev = record.prev
 						end
 					end
-					Store:SkipTo(origin, seq, prev)
+					Store:SkipTo(origin, seq, prev, sender)
 				end
 			end
 		end
@@ -2239,11 +2239,11 @@ function private.SkipPruned(tbl, sender)
 				if from and to and Store:GetChainSeq(origin) >= from then
 					local prev
 					for _, record in ipairs(tbl.r) do
-						if type(record) == "table" and record.origin == origin and record.seq == to then
+						if Store:IsWellFormed(record) and record.origin == origin and record.seq == to then
 							prev = record.prev
 						end
 					end
-					Store:SkipTo(origin, to, prev)
+					Store:SkipTo(origin, to, prev, sender)
 				end
 			end
 		end

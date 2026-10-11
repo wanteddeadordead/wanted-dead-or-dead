@@ -7500,6 +7500,11 @@ end)()
 	clock = EPOCH - 100
 	S:FreshStart()
 	check(S:GetChainSeq(origin) == S:SeqBase(), "a clock before the epoch: the base")
+	-- Past October 2032 the clock's number is past the highest seq: a fresh chain starts under it with room to grow
+	clock = EPOCH + 215000000
+	S:FreshStart()
+	check(S:GetChainSeq(origin) == 2 ^ 31 - 1 - 1000000, "a clock past the highest seq: under it, with room")
+	clock = EPOCH - 100
 	ns.WORLD = "live"
 	S:FreshStart()
 	check(S:GetChainSeq(origin) == 1000000, "the live base, before the epoch")
@@ -7520,35 +7525,38 @@ end)()
 	db.chains[origin] = nil
 	S:OnEnable()
 	check(S:GetChainSeq(origin) == start and db.chains[origin].start == start + 1, "no saved chain at login: one by the clock")
-	-- Our old records, back from the app's catch-up after the restart, are kept as ours from before it: not a rewritten
-	-- history, and our chain stays where it is
-	local ownOld = Sealed({ kind = "mark", id = origin..":5", origin = origin, seq = 5, prev = "00001234", t = clock - 3600, data = { target = "Player-9-OWNOLD" } })
-	check(S:MergeRelayed(ownOld, true) and not S:Get(ownOld.id).brokenChain and S:GetChainSeq(origin) == start,
-		"our old record from the app is kept unflagged, our chain stays at the restart")
 	-- Another player's chain still starts at the base, and their first record follows on
 	check(S:GetChainSeq("Never Seen") == S:SeqBase(), "a peer's chain we've no record of stands at the base")
-	local peerFirst = Sealed({ kind = "mark", id = "Base Peer:1", origin = "Base Peer", seq = 1, prev = "0", t = clock, data = { target = "Player-9-BASEPEER" } })
-	check(S:Merge(peerFirst, "Base Peer") and S:GetChainSeq("Base Peer") == 1 and db.chains["Base Peer"].start == nil, "a peer's first record at the base follows on")
-	-- A peer holding a player's old chain (Peta at 3) hears the restarted one: prev "0", far past it
-	local function Peta(seq, prev, t)
-		return Sealed({ kind = "mark", id = "Peta Dicted:"..format("%d", seq), origin = "Peta Dicted", seq = seq, prev = prev, t = t or clock, data = { target = "Player-9-PETA"..seq } })
+	local chan = ns.Sync:GetInfo().channelName
+	local function Hear(tag, tbl, sender) Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, chan) RunTimers() end
+	local function Rec(who, seq, prev, t, kind)
+		return Sealed({ kind = kind or "mark", id = who..":"..format("%d", seq), origin = who, seq = seq, prev = prev, t = t or clock,
+			data = kind == "kill" and { victim = "Player-9-VICTIM"..seq } or { target = "Player-9-"..seq } })
 	end
-	local old1 = Peta(1, "0", clock - 600)
-	local old2 = Peta(2, old1.hash, clock - 500)
-	local old3 = Peta(3, old2.hash, clock - 400)
-	for _, r in ipairs({ old1, old2, old3 }) do S:Merge(r, "Peta Dicted") end
+	local function Forget(who)
+		db.chains[who] = nil
+		for id, r in pairs(db.records) do if r.origin == who then db.records[id] = nil end end
+	end
+	Hear("R", { r = { Rec("Base Peer", 1, "0") } }, "Base Peer")
+	check(S:GetChainSeq("Base Peer") == 1 and db.chains["Base Peer"].start == nil, "a peer's first record at the base follows on")
+	-- A peer holding a player's old chain (Peta at 3) hears the restarted one from Peta: prev "0", far past it
+	local old1 = Rec("Peta Dicted", 1, "0", clock - 600)
+	local old2 = Rec("Peta Dicted", 2, old1.hash, clock - 500)
+	local old3 = Rec("Peta Dicted", 3, old2.hash, clock - 400)
+	Hear("R", { r = { old1, old2, old3 } }, "Peta Dicted")
 	check(S:GetChainSeq("Peta Dicted") == 3 and S:GetFirstSeen("Peta Dicted") == clock - 600, "Peta's old chain is held")
-	local restart = Peta(start + 1, "0")
+	local restart = Rec("Peta Dicted", start + 1, "0")
 	ClearSent()
-	check(S:Merge(restart, "Peta Dicted"), "the restarted chain's first record is taken")
-	check(S:GetChainSeq("Peta Dicted") == start + 1 and db.chains["Peta Dicted"].start == start + 1 and not S:Get(restart.id).brokenChain,
+	Hear("R", { r = { restart } }, "Peta Dicted")
+	check(S:Get(restart.id) and S:GetChainSeq("Peta Dicted") == start + 1 and db.chains["Peta Dicted"].start == start + 1 and not S:Get(restart.id).brokenChain,
 		"the chain moves on to the restart, not held ahead of a gap: "..S:GetChainSeq("Peta Dicted"))
 	check(S:GetFirstSeen("Peta Dicted") == clock - 600, "Peta is still first seen at the old chain's start")
-	local restart2 = Peta(start + 2, restart.hash)
-	check(S:Merge(restart2, "Peta Dicted") and S:GetChainSeq("Peta Dicted") == start + 2 and not S:Get(restart2.id).brokenChain, "and follows on from it")
+	local restart2 = Rec("Peta Dicted", start + 2, restart.hash)
+	Hear("R", { r = { restart2 } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == start + 2 and not S:Get(restart2.id).brokenChain, "and follows on from it")
 	-- Peta's hello asks only for what follows the restart, nothing of the numbers between
-	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = { ["Peta Dicted"] = start + 5 }, v = ns.VERSION }), "CHANNEL", "Peta Dicted", nil, nil, nil, ns.Sync:GetInfo().channelName)
-	RunTimers() RunTimers()
+	Hear("H", { c = { ["Peta Dicted"] = start + 5 }, v = ns.VERSION }, "Peta Dicted")
+	RunTimers()
 	local asked
 	for _, m in ipairs(Sent("CHANNEL")) do
 		if m.tag == "N" and m.tbl.n and m.tbl.n["Peta Dicted"] then asked = m.tbl.n["Peta Dicted"] end
@@ -7556,35 +7564,80 @@ end)()
 	check(asked == start + 3, "Peta's hello asks for what follows the restart only: "..tostring(asked))
 	-- An old record of Peta's that reaches us later (a fill for someone else) is from before the restart: kept, not a
 	-- rewritten history
-	local old4 = Peta(4, old3.hash, clock - 300)
-	check(S:MergeRelayed(old4, nil, "Some Peer") and not S:Get(old4.id).brokenChain and S:GetChainSeq("Peta Dicted") == start + 2,
+	local old4 = Rec("Peta Dicted", 4, old3.hash, clock - 300)
+	Hear("F", { r = { old4 } }, "Some Peer")
+	check(S:Get(old4.id) and not S:Get(old4.id).brokenChain and S:GetChainSeq("Peta Dicted") == start + 2,
 		"an old record from before the restart is kept unflagged, the chain stays")
 	-- A peer that never heard of Peta, hearing the restart first, holds it as Peta's first
-	local fresh = Peta(start + 1, "0")
-	db.chains["Peta Dicted"] = nil
-	for id, r in pairs(db.records) do if r.origin == "Peta Dicted" then db.records[id] = nil end end
-	check(S:Merge(fresh, "Peta Dicted") and S:GetChainSeq("Peta Dicted") == start + 1 and S:GetFirstSeen("Peta Dicted") == clock,
+	Forget("Peta Dicted")
+	Hear("R", { r = { Rec("Peta Dicted", start + 1, "0") } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == start + 1 and S:GetFirstSeen("Peta Dicted") == clock,
 		"a restart heard first: the chain jumps to it and Peta is first seen then")
-	-- The app's catch-up (the server checked who sent it) moves a chain on to a restart the same way; old records and
-	-- the restart come in one batch
-	db.chains["Peta Dicted"] = nil
-	for id, r in pairs(db.records) do if r.origin == "Peta Dicted" then db.records[id] = nil end end
-	S:MergeRelayed(Peta(1, "0", clock - 600), true)
-	check(S:MergeRelayed(Peta(start + 1, "0"), true) and S:GetChainSeq("Peta Dicted") == start + 1, "the app's catch-up moves the chain on to a restart")
-	-- One relayed by another player alone doesn't: it's held ahead of the gap until Peta's own word
-	db.chains["Peta Dicted"] = nil
-	for id, r in pairs(db.records) do if r.origin == "Peta Dicted" then db.records[id] = nil end end
-	S:MergeRelayed(Peta(1, "0", clock - 600), nil, "Some Peer")
-	S:MergeRelayed(Peta(start + 1, "0"), nil, "Some Peer")
-	check(S:GetChainSeq("Peta Dicted") == 1, "a restart relayed by someone else doesn't move the chain")
-	db.chains["Never Restarted"] = nil
-	S:MergeRelayed(Sealed({ kind = "mark", id = "Never Restarted:5", origin = "Never Restarted", seq = 5, prev = "0", t = clock - 99999, data = { target = "Player-9-NR" } }), nil, "Some Peer")
-	check(S:GetFirstSeen("Never Restarted") == nil, "nor does it say when its origin was first seen")
-	-- Peta's answer to the request says where its chain starts, and the chain moves on there
-	Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { Peta(start + 1, "0") }, p = { ["Peta Dicted"] = start + 1 } }), "CHANNEL", "Peta Dicted", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	-- Peta's own fill answering a request says where its chain starts, and the chain moves on there
+	Forget("Peta Dicted")
+	Hear("R", { r = { old1 } }, "Peta Dicted")
+	Hear("F", { r = { Rec("Peta Dicted", start + 1, "0") }, p = { ["Peta Dicted"] = start + 1 } }, "Peta Dicted")
 	check(S:GetChainSeq("Peta Dicted") == start + 1 and db.chains["Peta Dicted"].start == start + 1, "Peta's own fill moves the chain on to the restart")
-	db.chains["Peta Dicted"] = nil
-	for id, r in pairs(db.records) do if r.origin == "Peta Dicted" then db.records[id] = nil end end
+	Forget("Peta Dicted")
+	-- A restart relayed by another player, of an origin that hasn't said how far its chain reaches, is further than the
+	-- chain is known to reach: not taken, and the chain stays
+	Hear("R", { r = { Rec("Quiet One", 1, "0", clock - 600) } }, "Quiet One")
+	Hear("F", { r = { Rec("Quiet One", start + 1, "0") } }, "Some Peer")
+	check(S:GetChainSeq("Quiet One") == 1 and not S:Get("Quiet One:"..format("%d", start + 1)) and db.chains["Quiet One"].start == nil,
+		"a restart relayed by someone else is refused, the chain stays")
+	-- The app's catch-up is no one's word for a restart: the server takes any key's upload of any origin's record. It's
+	-- held ahead of the gap until the origin's own hello or fill
+	Forget("Quiet One")
+	Hear("R", { r = { Rec("Quiet One", 1, "0", clock - 600) } }, "Quiet One")
+	local forged = Rec("Quiet One", start + 1, "0")
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1, records = { forged } } }
+	ns.Catchup:Import()
+	RunFrames()
+	WantedAppCatchup = nil
+	check(S:Get(forged.id) and S:GetChainSeq("Quiet One") == 1 and db.chains["Quiet One"].start == nil, "a restart from the app's catch-up is held, the chain stays")
+	Forget("Quiet One")
+	-- Peta can't move her chain past where the clock has got to (a minute's leeway)
+	Hear("R", { r = { Rec("Far Ahead", 1, "0", clock - 600) } }, "Far Ahead")
+	Hear("R", { r = { Rec("Far Ahead", start + 1 + 601, "0") } }, "Far Ahead")
+	check(S:GetChainSeq("Far Ahead") == 1 and db.chains["Far Ahead"].start == nil, "a live restart past the clock doesn't move the chain")
+	Hear("R", { r = { Rec("Far Ahead", start + 1 + 600, "0") } }, "Far Ahead")
+	check(db.chains["Far Ahead"].start == start + 1 + 600, "one within a minute of it does")
+	Forget("Far Ahead")
+	-- A restart that would be pruned at once (a kill too old to keep) moves neither the chain nor when they were first seen
+	Hear("R", { r = { Rec("Old Kill", 1, "0", clock - 600) } }, "Old Kill")
+	db.chains["Old Kill"].first = nil
+	Hear("R", { r = { Rec("Old Kill", start + 1, "0", clock - S.KEEP_SECONDS - 3600, "kill") } }, "Old Kill")
+	check(S:GetChainSeq("Old Kill") == 1 and db.chains["Old Kill"].start == nil and S:GetFirstSeen("Old Kill") == nil,
+		"a restart too old to keep moves neither the chain nor first seen")
+	Forget("Old Kill")
+	-- A relayer's fill saying the chain starts at a made-up first record with prev "0" may skip the chain as any skip
+	-- does, but doesn't mark a restart: only the origin says that
+	Hear("R", { r = { Rec("Said Far", 1, "0", clock - 600) } }, "Said Far")
+	Hear("H", { c = { ["Said Far"] = start + 1 }, v = ns.VERSION }, "Said Far")
+	Hear("F", { r = { Rec("Said Far", start + 1, "0") }, p = { ["Said Far"] = start + 1 } }, "Some Peer")
+	check(db.chains["Said Far"].start == nil, "a relayer's fill doesn't mark a restart")
+	Forget("Said Far")
+	-- An alt of this account (the saved data is the account's) never has its chain moved this way
+	S:NoteCharacter("Player-1-ALTRESTART", "Alt Restart", clock)
+	Hear("R", { r = { Rec("Alt Restart", 1, "0", clock - 600) } }, "Alt Restart")
+	Hear("R", { r = { Rec("Alt Restart", start + 1, "0") } }, "Alt Restart")
+	check(S:GetChainSeq("Alt Restart") == 1 and db.chains["Alt Restart"].start == nil, "an alt's chain isn't moved by a restart")
+	Forget("Alt Restart")
+	db.characters["Player-1-ALTRESTART"] = nil
+	S:NoteCharacter(UnitGUID("player"), origin)
+	-- A start or first that isn't a number (hand-edited saved data) is dropped at login, and the hello still goes out
+	db.chains["Garbled"] = { seq = 5, lastHash = "x", start = "junk", first = {} }
+	S:OnEnable()
+	check(db.chains["Garbled"].start == nil and db.chains["Garbled"].first == nil, "a start or first that isn't a number is dropped")
+	ClearSent()
+	-- (the send queue's allowance comes back with time)
+	clock = clock + 10
+	SlashCmdList.WANTED("synctest")
+	RunTimers()
+	local garbledHello
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then garbledHello = m.tbl end end
+	check(garbledHello, "and the hello still goes out")
+	db.chains["Garbled"] = nil
 	-- Big numbers go out whole: the hello carries our seq as the same number, never 2.3e+08, and the largest seq a
 	-- chain may have survives a message. A fresh own chain with no record yet isn't in it: nothing to ask us for
 	ClearSent()

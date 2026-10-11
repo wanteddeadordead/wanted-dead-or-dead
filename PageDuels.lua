@@ -678,7 +678,9 @@ function private.ShowCard(duel)
 	if not card then
 		return
 	end
-	if private.cardDuel ~= duel then
+	-- Another duel opens at its top; the same one redrawn (the window's refresh) stays where it was
+	local another = private.cardDuel ~= duel or not card:IsShown()
+	if another then
 		private.HideGear()
 		private.HideTimeline()
 	end
@@ -737,7 +739,9 @@ function private.ShowCard(duel)
 	card.findings:SetText(table.concat(lines, "\n\n"))
 	card.findings:SetShown(#lines > 0)
 	card.body:SetHeight(244 + max(card.findings:GetStringHeight(), 1) + 12)
-	card.scroll:SetVerticalScroll(0)
+	if another then
+		card.scroll:SetVerticalScroll(0)
+	end
 	private.list:Hide()
 	private.headerBar:Hide()
 	card:Show()

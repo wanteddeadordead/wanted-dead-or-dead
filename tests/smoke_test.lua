@@ -55,6 +55,8 @@ Mock.__index = function(t, k)
 end
 function Methods:SetScript(name, f) self._scripts[name] = f end
 function Methods:GetScript(name) return self._scripts[name] end
+function Methods:SetVerticalScroll(v) self._vscroll = v Mock.lastScrolled = self end
+function Methods:GetVerticalScroll() return self._vscroll or 0 end
 function Methods:HookScript(name, f) local old = self._scripts[name] self._scripts[name] = function(...) if old then old(...) end f(...) end end
 function Methods:Show() self._shown = true if self._scripts.OnShow then self._scripts.OnShow(self) end end
 function Methods:Hide() self._shown = false if self._scripts.OnHide then self._scripts.OnHide(self) end end
@@ -10841,6 +10843,7 @@ end)()
 		and lines[10].spell == "You" and lines[10].text == "died",
 		"what each event says: "..tostring(lines[3].text).." / "..tostring(lines[5].text).." / "..tostring(lines[8].text))
 	ns.UI:Show("duels")
+	local cardScroll = Mock.lastScrolled -- the card's own, drawn just now
 	local timelineButton = Button("Timeline")
 	check(timelineButton:IsShown(), "a report with a timeline has a Timeline button")
 	timelineButton._scripts.OnClick(timelineButton)
@@ -10870,6 +10873,9 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end
 	check(OnScreen("Experimental"), "the fight card is marked experimental")
 	check(back and back:IsShown(), "the card has a way back")
+	cardScroll:SetVerticalScroll(80)
+	ns.UI:Show("duels")
+	check(cardScroll:GetVerticalScroll() == 80, "a refresh keeps the open card where it was scrolled")
 	back._scripts.OnClick(back)
 	check(not back:GetParent():IsShown(), "Back returns to the list")
 	-- The app's own output (tests/fixtures/duelReports-golden.lua: the network repo's report of two real duels, the

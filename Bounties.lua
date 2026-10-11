@@ -847,15 +847,25 @@ local NEW_WITNESS_SECONDS = 24 * 60 * 60
 local LOYAL_WITNESS_CLAIMS = 3
 
 ---Whether a witness is new: their first record came less than a day before the kill, or we hold so few of
----their records that we can't tell they've been around. The first record's time is kept with their chain, as the
----record itself may be pruned.
+---their records that we can't tell they've been around, or their chain is numbered by the clock (a fresh one,
+---Store:ClockSeq) past where the clock stood a day before the kill, so it started within the day. The first record's
+---time is kept with their chain, as the record itself may be pruned; a chain may have started at the base and again
+---later (start), and the earliest counts.
 function private.IsNewWitness(origin, killT)
-	local first = Store:Get(origin..":"..(Store:SeqBase() + 1))
-	local firstT = first and first.t or Store:GetFirstSeen(origin)
+	local firstT = Store:GetFirstSeen(origin)
+	for _, seq in ipairs({ Store:SeqBase() + 1, Store:GetChainBase(origin) + 1 }) do
+		local first = Store:Get(origin..":"..seq)
+		-- A restart's first record dated before its own number is made up
+		if first and type(first.t) == "number" and (not firstT or first.t < firstT)
+			and (seq == Store:SeqBase() + 1 or Store:IsDatedAfterItsNumber(seq, first.t)) then
+			firstT = first.t
+		end
+	end
 	if firstT then
 		return killT - firstT < NEW_WITNESS_SECONDS
 	end
-	return Store:GetChainSeq(origin) - Store:SeqBase() < 10
+	local seq, dayBefore = Store:GetChainSeq(origin), Store:ClockSeq(killT - NEW_WITNESS_SECONDS)
+	return seq - Store:SeqBase() < 10 or (dayBefore > Store:SeqBase() and seq >= dayBefore)
 end
 
 ---The hunter a witness only ever backs up, when every claim they've witnessed (at least a few) is one hunter's.

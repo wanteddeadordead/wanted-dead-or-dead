@@ -9,6 +9,7 @@ local W = Wanted.Widgets
 local C = Theme.C
 local private = { frame = nil }
 local LOG_LINES = 40
+local MAX_PROBLEM_LINES = 5 -- this session's newest problems a bug's log carries ahead of the recent lines
 local MIN_NAME = 2 -- shorter names aren't looked for
 -- Reports waiting for the app (docs/DATA.md): the most kept, how long one waits, and the most each part may be (letters;
 -- the log in bytes)
@@ -146,7 +147,8 @@ function private.Scrub(line, names)
 	return line
 end
 
----The report text: versions, settings that matter, network state, problems this session, recent log.
+---The report text: versions, settings that matter, network state, problems this session, recent log. No longer
+---shown (Report a bug only sends); kept for the tests, which read what it gathers.
 ---@return string
 function Report:Build()
 	local lines = {}
@@ -288,20 +290,43 @@ function Report:QueueTip(duel, finding, text)
 	})
 end
 
----Queues a bug report: what the player said and the last 40 log lines (other players' names left out), oldest
----first, the oldest dropped past 8 KB.
+---Queues a bug report: what the player said and a log of at most 40 lines and 8 KB (each line and its break, as the
+---app and the server count it), other players' names left out. This session's newest problems the recent lines
+---don't have come first, then the recent lines, oldest first; the oldest recent lines go first to make room.
 ---@param text string
 ---@return string? id
 function Report:QueueBug(text)
 	local names = private.KnownNames()
-	local log, bytes = {}, 0
+	local log, logged = {}, {}
 	for _, line in ipairs(Wanted:GetLogLines(LOG_LINES)) do
 		line = private.Scrub(line, names)
 		tinsert(log, line)
-		bytes = bytes + #line
+		logged[line] = true
 	end
-	while #log > 0 and bytes > MAX_LOG_BYTES do
-		bytes = bytes - #tremove(log, 1)
+	-- A problem is logged as "<time> Problem: <text>" too: one still in the recent lines isn't sent twice
+	local problems, all = {}, Wanted:GetProblems()
+	for i = #all, 1, -1 do
+		local at, what = strmatch(all[i], "^(%S+) (.*)$")
+		local line = private.Scrub(format("%s Problem: %s", at or "", what or all[i]), names)
+		if #problems < MAX_PROBLEM_LINES and not logged[line] then
+			tinsert(problems, 1, line)
+		end
+	end
+	local bytes = 0
+	for _, line in ipairs(problems) do
+		bytes = bytes + #line + 1
+	end
+	for _, line in ipairs(log) do
+		bytes = bytes + #line + 1
+	end
+	while #log > 0 and (#problems + #log > LOG_LINES or bytes > MAX_LOG_BYTES) do
+		bytes = bytes - #tremove(log, 1) - 1
+	end
+	while #problems > 0 and bytes > MAX_LOG_BYTES do
+		bytes = bytes - #tremove(problems, 1) - 1
+	end
+	for i, line in ipairs(problems) do
+		tinsert(log, i, line)
 	end
 	return Report:Queue({ kind = "bug", text = text, log = log })
 end
@@ -432,24 +457,9 @@ end
 -- Report window
 -- ============================================================================
 
-local function ReadOnlyBox(parent, getText)
-	local box = CreateFrame("EditBox", nil, parent)
-	box:SetAutoFocus(false)
-	box:SetFontObject(Theme.Fonts.small)
-	box:SetScript("OnEscapePressed", box.ClearFocus)
-	box:SetScript("OnTextChanged", function(self, userInput)
-		if userInput then
-			self:SetText(getText())
-			self:HighlightText()
-		end
-	end)
-	box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-	return box
-end
-
 function private.Create()
 	local frame = CreateFrame("Frame", "WantedBugReport", UIParent)
-	frame:SetSize(620, 446)
+	frame:SetSize(620, 156)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:SetToplevel(true)
@@ -483,36 +493,17 @@ function private.Create()
 	appNote:SetPoint("TOPLEFT", 20, -84)
 	appNote:SetPoint("RIGHT", -20, 0)
 	appNote:SetWordWrap(true)
-	local label = W:SectionLabel(frame, "Report (nothing personal: versions, settings, errors and the recent log)")
-	label:SetPoint("TOPLEFT", 20, -130)
-	local holder = CreateFrame("Frame", nil, frame)
-	holder:SetPoint("TOPLEFT", 20, -148)
-	holder:SetPoint("BOTTOMRIGHT", -20, 52)
-	Theme:Skin(holder, C.input, C.border)
-	local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
-	scroll:SetPoint("TOPLEFT", 8, -8)
-	scroll:SetPoint("BOTTOMRIGHT", -28, 8)
-	local reportBox = ReadOnlyBox(scroll, function() return private.text or "" end)
-	reportBox:SetMultiLine(true)
-	reportBox:SetWidth(540)
-	scroll:SetScrollChild(reportBox)
-	local refresh = W:Button(frame, "Refresh", "ghost", 90, 28, function() Report:Show() end)
-	refresh:SetPoint("BOTTOMLEFT", 20, 14)
 	local note = Theme:Text(frame, "tiny", "Also useful: a screenshot, and the exact red error text if the game showed one.")
-	note:SetPoint("LEFT", refresh, "RIGHT", 12, 0)
-	frame.reportBox = reportBox
+	note:SetPoint("BOTTOMLEFT", 20, 18)
 	frame.appNote = appNote
 	private.frame = frame
 end
 
----Opens the report window with a fresh report.
+---Opens the report window, saying where a report goes from here.
 function Report:Show()
 	if not private.frame then
 		private.Create()
 	end
-	private.text = Report:Build()
-	private.frame.reportBox:SetText(private.text)
-	private.frame.reportBox:SetCursorPosition(0)
 	local text, color = private.AppText()
 	private.frame.appNote:SetText(text)
 	private.frame.appNote:SetTextColor(color[1], color[2], color[3])

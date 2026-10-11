@@ -11012,15 +11012,31 @@ end)()
 	-- A duel id that doesn't name its character: the tip goes in this one's
 	check(Report:QueueTip({ id = "odd", me = {}, them = {} }, { text = "x" }, "") == "Test Player:report:"..clock, "a duel id without a character falls back to this one")
 	-- A bug: the player's words and the last 40 log lines, oldest first, held to 8 KB
+	local problems = ns:GetProblems()
+	local earlierProblems = { unpack(problems) }
+	for i = #problems, 1, -1 do problems[i] = nil end
 	for i = 1, 50 do ns:Log("report test line %d", i) end
 	local bug = db.reports[Report:QueueBug("It broke")]
 	check(bug.kind == "bug" and bug.text == "It broke" and #bug.log == 40 and bug.log[40]:find("report test line 50", 1, true)
 		and bug.log[1]:find("report test line 11", 1, true) and bug.duelId == nil, "a bug report carries the last 40 log lines, oldest first")
+	-- This session's problems the recent lines have scrolled past come first (names left out); one still in them
+	-- isn't sent twice
+	ns:NoteProblem("ADDON_ACTION_BLOCKED from Nell Ward")
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	ns:NoteProblem("a fresh problem")
+	bug = db.reports[Report:QueueBug("It broke again")]
+	local fresh = 0
+	for _, line in ipairs(bug.log) do fresh = fresh + (line:find("a fresh problem", 1, true) and 1 or 0) end
+	check(#bug.log == 40 and bug.log[1]:find("^%S+ Problem: ADDON_ACTION_BLOCKED from <name>$") and bug.log[2]:find("report test line 13", 1, true)
+		and bug.log[40]:find("Problem: a fresh problem", 1, true) and fresh == 1, "a bug report's log starts with the problems it scrolled past: "..bug.log[1])
 	for i = 1, 40 do ns:Log("%s %d", string.rep("x", 300), i) end
 	local big = db.reports[Report:QueueBug("Long log")]
 	local bytes = 0
-	for _, line in ipairs(big.log) do bytes = bytes + #line end
-	check(bytes <= 8192 and #big.log < 40 and big.log[#big.log]:find(" 40$"), "the log is held to 8 KB, the oldest lines dropped: "..bytes)
+	for _, line in ipairs(big.log) do bytes = bytes + #line + 1 end
+	check(bytes <= 8192 and #big.log < 40 and big.log[1]:find("Problem: ADDON_ACTION_BLOCKED", 1, true) and big.log[#big.log]:find(" 40$"),
+		"the log is held to 8 KB with its breaks, the oldest recent lines dropped and the problems kept: "..bytes)
+	for i = #problems, 1, -1 do problems[i] = nil end
+	for i, problem in ipairs(earlierProblems) do problems[i] = problem end
 	-- The catch-up's reportsReceived lets them go, at every login, even a catch-up already taken in
 	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, "Someone:report:1", 7 } } }
 	ns.Catchup:Import()

@@ -6064,6 +6064,7 @@ end)()
 		{ id = 272604, name = "Premier High Warlord's Greatsword", q = 4, level = 60, class = 2, sub = 8, slot = "INVTYPE_2HWEAPON", costs = { { AV, 20 }, { "Honor Points", 22500 } }, needs = { "Requires Level 60", "Requires Grand Marshal / High Warlord (Rank 14)" } },
 		{ id = 272449, name = "Scout's Tabard", q = 1, level = 0, class = 4, sub = 0, slot = "INVTYPE_TABARD", price = 10000, costs = {}, needs = { "Requires Private/Scout (Rank 1)" } },
 		{ id = 17034, name = "Maple Seed", q = 1, level = 0, class = 7, sub = 0, slot = "INVTYPE_NON_EQUIP_IGNORE", price = 200, costs = {}, needs = {} },
+		{ id = 252857, name = "Pattern: Mender's Leather Bracers", q = 2, level = 0, class = 9, sub = 1, slot = "INVTYPE_NON_EQUIP_IGNORE", price = 500, costs = {}, needs = { "Requires Leatherworking (75)" } },
 		{ id = 999001, name = "Premier Lamellar Breastplate", q = 3, level = 55, class = 4, sub = 4, slot = "INVTYPE_CHEST", costs = { { "Honor Points", 9350 } }, needs = { "Requires Level 55" } },
 	}
 	local byID = {}
@@ -6097,6 +6098,13 @@ end)()
 	check(items[275240] and items[275240].rank == 8, "a seal's rank comes from its tooltip")
 	check(items[272449] and items[272449].rank == 1, "a rank item with no honor (the tabard) is kept")
 	check(not items[17034], "a vendor's other goods aren't")
+	check(not items[252857], "a profession's skill in brackets is no rank: patterns aren't PvP gear")
+	-- What earlier versions took in that way goes at load: a vendor that sells nothing for honor is no rank vendor
+	items[900001] = { honor = 0, rank = 75, vendor = "Pawani", name = "Pattern: Old Mistake", marks = {} }
+	items[900002] = { honor = 0, rank = 12, vendor = "Pawani", name = "Pattern: Other Mistake", marks = {} }
+	ns.GearCatalog:OnLoad()
+	items = ns.GearCatalog:Items()
+	check(not items[900001] and not items[900002] and items[272474] and items[272449], "profession items taken in by earlier versions are dropped; the rank vendor's stay, the tabard too")
 	check(items[999002] and items[999002].classes[1] == "Druid", "another class's set is kept, with its class")
 	local mine, names = ns.GearCatalog:ForMe(), {}
 	for i, item in ipairs(mine) do names[i] = item.entry.name end

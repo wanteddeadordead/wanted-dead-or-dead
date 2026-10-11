@@ -14,6 +14,8 @@
   nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
   Wanted shows by name; anyone else as their spec and class. The Wanted app (0.2.42 or later) uploads them with your
   other data; they are never shared with other players.
+- The Gear tab lists only the rank vendors' PvP gear again: profession trainers' and cooks' patterns and recipes
+  ("Requires Leatherworking (75)") were read as ranked items; the ones already listed are cleared.
 - A duel never counts as a kill, a death or a sighting. Even a duel to the death leaves no kill or death record, no
   "Killed by" warning and no lost kill streak.
 

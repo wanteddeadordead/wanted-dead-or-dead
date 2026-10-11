@@ -22,7 +22,7 @@ Wanted.WHATS_NEW = {
 		lines = {
 			"A Duels tab under Progress: your record against each class and spec, and as each of your own builds.",
 			"Click a duel for its fight card: both sides' health, the control you took, what each of you used, and tips.",
-			"See talent tree and See gear show exactly what your opponent was running.",
+			"Timeline replays the fight cast by cast; See talent tree and See gear show what your opponent ran.",
 			"Fight cards come from the Wanted app reading your combat log (experimental: /wanted bug tells us about a wrong tip).",
 			"Duels never count as kills, deaths or kill streaks.",
 		},

@@ -392,6 +392,7 @@ function private.ShowGear()
 	if not (card and duel) then
 		return
 	end
+	private.HideTimeline()
 	private.gearSide = "them"
 	private.FillDoll()
 	card.scroll:Hide()
@@ -403,6 +404,119 @@ function private.HideGear()
 	if private.card then
 		private.card.gearPanel.frame:Hide()
 		private.card.scroll:Show()
+	end
+end
+
+-- ============================================================================
+-- The timeline: every cast, blow and control of the fight, in order (Duels:Timeline)
+-- ============================================================================
+
+local TIMELINE_ROW = 20
+local TIMELINE_TOP = 34
+
+function private.BuildTimelinePanel(card, width)
+	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
+	frame.scrollBarHideable = true
+	frame:SetPoint("TOPLEFT", 0, -38)
+	frame:SetPoint("BOTTOMRIGHT", -26, 8)
+	frame:Hide()
+	local panel = CreateFrame("Frame", nil, frame)
+	panel:SetSize(width - 30, TIMELINE_TOP)
+	frame:SetScrollChild(panel)
+	panel.frame = frame
+	panel.back = W:Button(panel, "Back to the fight", "secondary", 140, 22, function() private.HideTimeline() end)
+	panel.back:SetPoint("TOPRIGHT", -4, 0)
+	panel.filter = W:Segmented(panel, { { key = "all", label = "Both" }, { key = "mine", label = "You" }, { key = "theirs", label = "Them" } }, function(key)
+		private.timelineFilter = key
+		private.FillTimeline()
+	end, 80)
+	panel.filter:SetPoint("TOPLEFT", 14, 0)
+	panel.note = Theme:Text(panel, "small", "", C.muted)
+	panel.note:SetJustifyH("LEFT")
+	panel.width = width - 30
+	panel.rows = {}
+	card.timelinePanel = panel
+end
+
+---The nth line of the timeline, made once: the time, whose, the spell's icon and name, and what it did.
+function private.TimelineRow(panel, i)
+	local row = panel.rows[i]
+	if row then
+		return row
+	end
+	row = CreateFrame("Frame", nil, panel)
+	row:SetHeight(TIMELINE_ROW)
+	row:SetPoint("TOPLEFT", 0, -TIMELINE_TOP - (i - 1) * TIMELINE_ROW)
+	row:SetPoint("TOPRIGHT", 0, -TIMELINE_TOP - (i - 1) * TIMELINE_ROW)
+	row.clock = Theme:Text(row, "small", "", C.muted)
+	row.clock:SetPoint("LEFT", 14, 0)
+	row.who = Theme:Text(row, "small", "")
+	row.who:SetPoint("LEFT", 56, 0)
+	row.icon = row:CreateTexture(nil, "ARTWORK")
+	row.icon:SetSize(16, 16)
+	row.icon:SetPoint("LEFT", 104, 0)
+	row.text = Theme:Text(row, "small", "")
+	row.text:SetPoint("LEFT", 126, 0)
+	row.text:SetPoint("RIGHT", -8, 0)
+	row.text:SetJustifyH("LEFT")
+	row.text:SetWordWrap(false)
+	panel.rows[i] = row
+	return row
+end
+
+---Fills the timeline with the open duel's events, both sides' or one's.
+function private.FillTimeline()
+	local card, duel = private.card, private.cardDuel
+	if not (card and duel) then
+		return
+	end
+	local panel = card.timelinePanel
+	local _, report = Duels:ReportState(duel)
+	local lines, cut = Duels:Timeline(report)
+	local filter = private.timelineFilter or "all"
+	local n = 0
+	for _, line in ipairs(lines or {}) do
+		if filter == "all" or (filter == "mine") == line.mine then
+			n = n + 1
+			local row = private.TimelineRow(panel, n)
+			row.clock:SetText(line.clock)
+			row.who:SetText(line.mine and Theme:Colorize("You", C.green) or Theme:Colorize("Them", C.red))
+			row.icon:SetTexture(line.icon)
+			row.icon:SetShown(line.icon ~= nil)
+			local what = line.text ~= "" and ("  "..Theme:Colorize(line.text, line.low and C.red or C.muted)) or ""
+			row.text:SetText(Theme:Plain(line.spell)..what)
+			row:Show()
+		end
+	end
+	for i = n + 1, #panel.rows do
+		panel.rows[i].text:SetText("")
+		panel.rows[i]:Hide()
+	end
+	panel.note:ClearAllPoints()
+	panel.note:SetPoint("TOPLEFT", 14, -TIMELINE_TOP - n * TIMELINE_ROW - 6)
+	panel.note:SetText(n == 0 and "Nothing here." or cut and "The fight ran long: its timeline ends here." or "")
+	panel:SetHeight(TIMELINE_TOP + n * TIMELINE_ROW + 30)
+	panel.filter:Select(filter, true)
+end
+
+function private.ShowTimeline()
+	local card = private.card
+	if not (card and private.cardDuel) then
+		return
+	end
+	private.HideGear()
+	private.timelineFilter = "all"
+	private.FillTimeline()
+	card.scroll:Hide()
+	card.timelinePanel.frame:SetVerticalScroll(0)
+	card.timelinePanel.frame:Show()
+end
+
+function private.HideTimeline()
+	local card = private.card
+	if card and card.timelinePanel and card.timelinePanel.frame:IsShown() then
+		card.timelinePanel.frame:Hide()
+		card.scroll:Show()
 	end
 end
 
@@ -514,6 +628,9 @@ function private.BuildCard(container, width)
 		GameTooltip:Show()
 	end)
 	card.experimental:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	-- Every cast, blow and control of the fight, in order (the newest reports carry it)
+	card.timelineButton = W:Button(card, "Timeline", "secondary", 90, 24, function() private.ShowTimeline() end)
+	card.timelineButton:SetPoint("RIGHT", card.experimental, "LEFT", -8, 0)
 	-- Everything under the title scrolls together: the opener, both lanes and the findings with their tips
 	card.scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	card.scroll.scrollBarHideable = true
@@ -540,6 +657,7 @@ function private.BuildCard(container, width)
 	card.findings:SetWordWrap(true)
 	card.findings:SetSpacing(3)
 	private.BuildGearPanel(card, width)
+	private.BuildTimelinePanel(card, width)
 	private.card = card
 end
 
@@ -551,6 +669,7 @@ function private.ShowCard(duel)
 	end
 	if private.cardDuel ~= duel then
 		private.HideGear()
+		private.HideTimeline()
 	end
 	private.cardDuel = duel
 	local result = RESULTS[duel.result] or RESULTS.none
@@ -559,6 +678,7 @@ function private.ShowCard(duel)
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
 	card.experimental:Set(hasReport and "Experimental" or nil, C.gold)
+	card.timelineButton:SetShown(hasReport and Duels:Timeline(report) ~= nil)
 	local opener = hasReport and type(report.opener) == "string" and private.CleanText(report.opener) or ""
 	-- The opener is often one of the findings too: said once, there
 	for _, f in ipairs(hasReport and type(report.findings) == "table" and report.findings or {}) do
@@ -614,6 +734,7 @@ end
 
 function private.HideCard()
 	private.HideGear()
+	private.HideTimeline()
 	private.cardDuel = nil
 	if private.card then
 		private.card:Hide()

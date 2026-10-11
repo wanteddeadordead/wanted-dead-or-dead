@@ -10818,6 +10818,38 @@ end)()
 	ns.UI:Show("duels")
 	check(OnScreen("the combat log ends before the duel did"), "a report made from part of the duel says so")
 	db.duelReports[duel.id].partial = nil
+	-- The timeline: every cast, blow and control in order, from the app's "t,w,k,id,amt,a,b" (the newest reports)
+	local function Button(text) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == text and f._scripts.OnClick then return f end end end
+	ns.UI:Show("duels")
+	check(not Button("Timeline"):IsShown(), "a report without a timeline has no Timeline button")
+	local savedSpell = C_Spell
+	local names = { [1752] = "Sinister Strike", [5211] = "Bash", [8925] = "Moonfire", [8938] = "Regrowth", [1766] = "Kick", [5171] = "Slice and Dice" }
+	C_Spell = { GetSpellName = function(id) return names[id] end, GetSpellTexture = function(id) return names[id] and 136000 + id or nil end }
+	db.duelReports[duel.id].events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1.8,t,h,6603,50,28,c", "5.5,m,c,5171,,,",
+		"11.7,t,x,5211,,13.7,expired", "13.5,t,s,8938,,,", "13.9,m,i,1766,,8938,", "17.8,t,k,8925,34,4,26.7", "26.3,t,e,8938,182,,",
+		"30,m,D,0,,,", "bad", "1,x,h,1,1,," }
+	local lines = Duels:Timeline(db.duelReports[duel.id])
+	check(#lines == 10, "each well-formed event is a line, a malformed one is passed over: "..#lines)
+	check(lines[1].spell == "Sinister Strike" and lines[1].text == "hit them for 30, them at 96%" and lines[1].clock == "0:00" and lines[1].icon == 137752
+		and lines[2].spell == "Melee" and lines[2].text == "parried" and lines[3].text == "hit you for 50 (crit), you at 28%" and lines[3].low
+		and not lines[1].low and lines[4].text == "" and lines[5].text == "on you for 2.0 s, ran out" and lines[6].text == "begins casting"
+		and lines[7].text == "interrupted Regrowth" and lines[8].text == "4 ticks, 34 damage (to 0:26)" and lines[9].text == "healed 182"
+		and lines[10].spell == "You" and lines[10].text == "died",
+		"what each event says: "..tostring(lines[3].text).." / "..tostring(lines[5].text).." / "..tostring(lines[8].text))
+	ns.UI:Show("duels")
+	local timelineButton = Button("Timeline")
+	check(timelineButton:IsShown(), "a report with a timeline has a Timeline button")
+	timelineButton._scripts.OnClick(timelineButton)
+	check(OnScreen("Sinister Strike  hit them for 30, them at 96%") and OnScreen("Regrowth  begins casting") and OnScreen("0:11") and OnScreen("Them"),
+		"the timeline lists both sides' events in order")
+	local youFilter
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "You" and fs._parent and rawget(fs._parent, "key") == "mine" then youFilter = fs._parent end end
+	youFilter:Click()
+	check(OnScreen("Sinister Strike") and not OnScreen("Regrowth  begins casting"), "You shows only your own")
+	Button("Back to the fight")._scripts.OnClick(Button("Back to the fight"))
+	check(OnScreen("Build: Feral Combat") or OnScreen("Gear:") or OnScreen("Used"), "back to the fight card")
+	C_Spell = savedSpell
+	db.duelReports[duel.id].events = nil
 	local back
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Back" then back = f end end
 	check(OnScreen("Experimental"), "the fight card is marked experimental")

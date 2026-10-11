@@ -140,7 +140,10 @@ apart, never shown. Never shared with other players; the Wanted app uploads them
 `WantedDB.duelReports` (from 1.20.0) is the fight reports the desktop app made of those duels from the combat log,
 keyed by duel `id`, taken from the app's catch-up (`duelReports`) at each login and kept only for duels still in
 `WantedDB.duels`. A new top-level table: no migration. A report is the app's (shape in the network repo's duel
-coaching PR); `{ noLog = true, why }` marks a duel the app had no combat log for.
+coaching PR); `{ noLog = true, why }` marks a duel the app had no combat log for. The app's newest 20 reports also carry the
+fight's timeline, `events = { "t,w,k,id,amt,a,b", ... }` (one event a string, at most about 12 KB a report, layout in
+the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` when it was too long to send whole;
+an older report comes back from the app without them, so the saved file holds at most 20 timelines.
 
 `WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently

@@ -886,6 +886,102 @@ function Duels:Points(duel, key)
 	return table.concat(parts, "/")
 end
 
+-- ============================================================================
+-- Timeline
+-- ============================================================================
+
+-- A melee swing's spell (the game's Auto Attack): the app gives swings this id
+local MELEE_SPELL = 6603
+local MISS_WORDS = { MISS = "missed", DODGE = "dodged", PARRY = "parried", BLOCK = "blocked", RESIST = "resisted",
+	IMMUNE = "immune", ABSORB = "absorbed", EVADE = "evaded", REFLECT = "reflected", DEFLECT = "deflected" }
+local CONTROL_ENDS = { expired = "ran out", broken = "broken by damage", dispelled = "dispelled", freed = "broken free",
+	["fight end"] = "until the end" }
+
+---A spell's name as the game knows it, "Melee" for a swing.
+function private.SpellName(id)
+	if id == MELEE_SPELL then
+		return "Melee"
+	end
+	local name = C_Spell and C_Spell.GetSpellName and private.Readable(select(2, pcall(C_Spell.GetSpellName, id)))
+	return type(name) == "string" and name ~= "" and name or ("Spell "..id)
+end
+
+---A spell's icon, or nil.
+function private.SpellIcon(id)
+	local icon = C_Spell and C_Spell.GetSpellTexture and private.Readable(select(2, pcall(C_Spell.GetSpellTexture, id)))
+	return (type(icon) == "number" or type(icon) == "string") and icon or nil
+end
+
+---"0:07" from seconds.
+local function Clock(seconds)
+	seconds = max(floor(seconds), 0)
+	return format("%d:%02d", floor(seconds / 60), seconds % 60)
+end
+
+---One event of a report's timeline (the app's "t,w,k,id,amt,a,b") as a line: when, whose, the spell and what it did.
+---@return table? { t, mine, spell, icon, text, low (true when it left you under 30% health) }
+function private.TimelineLine(event)
+	if type(event) ~= "string" or #event > 120 then
+		return nil
+	end
+	local f = { strsplit(",", event) }
+	local t, who, kind, id = tonumber(f[1]), f[2], f[3], tonumber(f[4])
+	if not (t and (who == "m" or who == "t") and type(kind) == "string" and id) then
+		return nil
+	end
+	local amount, a, b = tonumber(f[5]), f[6] or "", f[7] or ""
+	local mine = who == "m"
+	local target = mine and "them" or "you"
+	local line = { t = t, mine = mine, spell = private.SpellName(id), icon = private.SpellIcon(id) }
+	if kind == "c" then
+		line.text = ""
+	elseif kind == "s" then
+		line.text = "begins casting"
+	elseif kind == "h" and amount then
+		local health = tonumber(a)
+		line.text = format("hit %s for %d%s", target, amount, b == "c" and " (crit)" or "")
+		if health then
+			line.text = line.text..format(", %s at %d%%", target, health)
+			line.low = not mine and health < 30
+		end
+	elseif kind == "m" then
+		line.text = MISS_WORDS[a] or "didn't land"
+	elseif (kind == "k" or kind == "e") and amount then
+		local verb = kind == "k" and "damage" or "healed"
+		local ticks, last = tonumber(a), tonumber(b)
+		if ticks and last then
+			line.text = format("%d %s, %d %s (to %s)", ticks, ticks == 1 and "tick" or "ticks", amount, verb, Clock(last))
+		else
+			line.text = kind == "e" and format("healed %d", amount) or format("%d damage", amount)
+		end
+	elseif kind == "x" then
+		local stop = tonumber(a)
+		line.text = format("on %s%s%s", target, stop and format(" for %.1f s", max(stop - t, 0)) or "", CONTROL_ENDS[b] and (", "..CONTROL_ENDS[b]) or "")
+	elseif kind == "i" or kind == "d" then
+		local other = tonumber(a)
+		line.text = (kind == "i" and "interrupted " or "dispelled ")..(other and private.SpellName(other) or "a spell")
+	elseif kind == "D" then
+		line.spell, line.icon, line.text = mine and "You" or "They", nil, "died"
+	else
+		return nil
+	end
+	line.clock = Clock(t)
+	return line
+end
+
+---A fight report's timeline as lines, in time order, or nil when it has none: the newest reports carry one.
+---@return table? lines, boolean? cut (the app left out the fight's end: too long)
+function Duels:Timeline(report)
+	if type(report) ~= "table" or type(report.events) ~= "table" then
+		return nil
+	end
+	local lines = {}
+	for _, event in ipairs(report.events) do
+		lines[#lines + 1] = private.TimelineLine(event)
+	end
+	return lines, report.eventsCut == true
+end
+
 -- Race names for duels recorded before the game's own name was kept (its file names: Scourge is Undead)
 local RACE_NAMES = { Scourge = "Undead", NightElf = "Night Elf" }
 

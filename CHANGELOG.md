@@ -8,7 +8,8 @@
   players' addons move on to the new numbers instead of waiting for the ones in between. Players who keep their
   saved data are not affected. If you play one character on two PCs, each with its own saved data, the records made
   on the PC that kept the old numbers reach only the players online at the time, and the website through that PC's
-  Wanted app.
+  Wanted app. A player who reinstalled within the last day may show as a new witness ("new to the network") on a
+  claim, for players who only heard of them through others: a warning, not a reason to trust anyone more.
 
 ## [1.20.0] - 2026-10-11
 

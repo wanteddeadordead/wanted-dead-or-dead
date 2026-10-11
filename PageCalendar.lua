@@ -160,15 +160,29 @@ function private.RefreshGrid()
 			cell.number:SetText(day)
 			cell.number:SetTextColor(unpack(isToday and C.white or C.muted))
 			Theme:SetBorderColor(cell, isToday and C.accent or C.border)
-			for i, line in ipairs(cell.lines) do
-				local e = named[i]
-				Theme:FitText(line, cell.textWidth, e and e.labels or { "" })
-				if e then
+			-- Each line names one event; one that would read the same as a line above (two parts of one event shortened
+			-- to its name) is left to the tooltip
+			local used, index = 0, 1
+			while used < CELL_LINES and index <= #named do
+				local e, line = named[index], cell.lines[used + 1]
+				index = index + 1
+				Theme:FitText(line, cell.textWidth, e.labels)
+				local same = false
+				for i = 1, used do
+					same = same or cell.lines[i]:GetText() == line:GetText()
+				end
+				if not same then
 					local color = KIND_COLORS[e.kind] or C.text
 					line:SetTextColor(color[1], color[2], color[3])
+					used = used + 1
 				end
 			end
-			cell.more:SetText(#named > CELL_LINES and "+"..(#named - CELL_LINES) or "")
+			for i = used + 1, CELL_LINES do
+				Theme:FitText(cell.lines[i], cell.textWidth, { "" })
+			end
+			-- Those not reached for want of room are in the tooltip
+			local left = #named - index + 1
+			cell.more:SetText(left > 0 and "+"..left or "")
 			cell:Show()
 		else
 			cell.events = nil

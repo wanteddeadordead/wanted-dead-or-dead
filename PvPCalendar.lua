@@ -268,9 +268,9 @@ function private.Labels(text, short, kind)
 		tinsert(labels, starts and "Starts" or "Ends")
 	elseif kind == "game" and short == "Launch day" then
 		tinsert(labels, "Launch")
-	elseif kind == "event" and strfind(text, ": .") then
-		-- "Forever Open: check-in", "Check-in"
-		tinsert(labels, (gsub(strmatch(text, ": (.+)$"), "^%l", strupper)))
+	elseif kind == "event" and strfind(text, ".: ") then
+		-- "Forever Open: check-in", "Forever Open": the event's name (a day's box shows it once)
+		tinsert(labels, (strmatch(text, "^(.-): ")))
 	elseif strfind(short, " ") then
 		tinsert(labels, (strmatch(short, "^(%S+)")))
 	end

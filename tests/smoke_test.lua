@@ -5658,6 +5658,7 @@ end)()
 	local raw = {
 		{ id = 1, title = "Forever Open: check-in", startsAt = checkInAt, endsAt = checkInAt + 3600, location = "Raider.IO, then Orgrimmar",
 			link = "https://raider.io", kind = "tournament" },
+		{ id = 7, title = "Forever Open: qualifiers", startsAt = checkInAt + 1800, kind = "tournament" }, -- the same local day in every zone tested
 		{ id = 2, title = "Forever Open: finals", startsAt = finalsDay, endsAt = finalsDay + 22 * 3600, allDay = true, kind = "tournament" },
 		{ id = 3, title = "Bad |cffff0000link|r", startsAt = checkInAt + 86400 * 3, link = "javascript:alert(1)", location = "", kind = "event" },
 		{ id = 4, title = "Long over", startsAt = clock - 5 * 86400, kind = "event" },
@@ -5668,10 +5669,10 @@ end)()
 	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = raw } }
 	ns.Catchup:Import()
 	local saved = ns.db.calendarEvents
-	check(type(saved) == "table" and saved.t == clock and #saved.list == 3, "three good, coming events kept: "..(saved and #saved.list or 0))
+	check(type(saved) == "table" and saved.t == clock and #saved.list == 4, "four good, coming events kept: "..(saved and #saved.list or 0))
 	check(saved.list[1].title == "Forever Open: check-in" and saved.list[1].link == "https://raider.io" and saved.list[1].kind == "tournament",
 		"the check-in, with its link")
-	check(saved.list[3].title == "Bad link" and saved.list[3].link == nil and saved.list[3].location == nil,
+	check(saved.list[4].title == "Bad link" and saved.list[4].link == nil and saved.list[4].location == nil,
 		"no escape codes, no link that isn't http(s), no empty location")
 	local function Events(t, utc)
 		local d = date(utc and "!*t" or "*t", t)
@@ -5682,7 +5683,7 @@ end)()
 		return out
 	end
 	local checkIn = Events(checkInAt)["Forever Open: check-in"]
-	check(checkIn and table.concat(checkIn.labels, "|") == "Forever Open: check-in|Check-in", "on its local day, shortened to after the colon")
+	check(checkIn and table.concat(checkIn.labels, "|") == "Forever Open: check-in|Forever Open", "on its local day, shortened to the event's name")
 	check(checkIn.detail.lines[2] == "Raider.IO, then Orgrimmar" and checkIn.detail.lines[3] == "https://raider.io", "its location and link, as text")
 	local finals = Events(finalsDay, true)["Forever Open: finals"]
 	check(finals, "the all-day finals on their own (UTC) date")
@@ -5740,13 +5741,20 @@ end)()
 	local said = table.concat(lines, "\n")
 	check(said:find("Forever Open: check-in", 1, true) and said:find("Raider.IO, then Orgrimmar", 1, true) and said:find("https://raider.io", 1, true),
 		"the tooltip names it, where and the link: "..said)
+	check(said:find("Forever Open: qualifiers", 1, true), "and the qualifiers that day, in full: "..said)
+	-- The day's box names the event once, by its name before the colon
+	local boxed = {}
+	for _, line in ipairs(cell.lines) do
+		if line._text ~= "" then boxed[#boxed + 1] = line._text end
+	end
+	check(table.concat(boxed, "|") == "Forever Open" and cell.more._text == "", "the day's box says Forever Open once: "..table.concat(boxed, "|").." "..cell.more._text)
 	-- An older app (no events) keeps them; an older catch-up changes nothing; a newer empty list clears them
 	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 5, records = {} } }
 	ns.Catchup:Import()
-	check(#ns.db.calendarEvents.list == 3, "no events from an older app keeps them")
+	check(#ns.db.calendarEvents.list == 4, "no events from an older app keeps them")
 	WantedAppCatchup = { [ns.db.accountMark] = { t = clock - 5, records = {}, events = {} } }
 	ns.Catchup:Import()
-	check(#ns.db.calendarEvents.list == 3, "an older catch-up changes nothing")
+	check(#ns.db.calendarEvents.list == 4, "an older catch-up changes nothing")
 	-- At most 20
 	local many = {}
 	for i = 1, 30 do many[i] = { id = i, title = "Event "..i, startsAt = clock + i * 3600, kind = "event" } end

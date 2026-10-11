@@ -10993,7 +10993,7 @@ end)()
 	-- From the fight card: "Something not right?" under a tip asks, then queues it and says where it goes
 	db.duels = { duel }
 	db.duelReports = { [duel.id] = { v = 1, len = 30, me = { hp = {} }, them = { hp = {} }, findings = { finding, { rule = "race", text = "You did no damage for 10 s." } } } }
-	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	ns.UI:Show("duels")
 	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
 	local matchup = Row(function(item) return item.label == "Shadow Priest" end)
@@ -11013,18 +11013,23 @@ end)()
 		"Send queues that finding's tip with the player's words")
 	check(OnScreen("Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."), "and says it goes at the app's next sync")
 	dialog.confirm:Click()
-	WantedAppInfo = { running = "0.2.45", seen = 1 }
+	WantedAppInfo = { running = "0.2.46", seen = 1 }
 	links[1]:Click()
 	dialog.confirm:Click()
 	check(Report:CountQueued() == 2 and OnScreen("The Wanted app isn't running, so it waits until you start it"), "with the app not running, the report waits for it")
 	dialog.confirm:Click()
+	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	links[1]:Click()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 3 and OnScreen("It waits until the Wanted app is updated to 0.2.46 or newer (you have 0.2.45)"), "with an app too old to send reports, the report waits for an update")
+	dialog.confirm:Click()
 	WantedAppInfo = nil
 	Report:AskAboutBug()
 	dialog.confirm:Click()
-	check(Report:CountQueued() == 2 and OnScreen("Say what happened first."), "a bug report needs the player's words")
+	check(Report:CountQueued() == 3 and OnScreen("Say what happened first."), "a bug report needs the player's words")
 	dialog.area:SetText("The board is empty")
 	dialog.confirm:Click()
-	check(Report:CountQueued() == 3 and OnScreen("waits until the Wanted app runs on this PC"), "with no app, the report waits for it to be set up")
+	check(Report:CountQueued() == 4 and OnScreen("waits until the Wanted app runs on this PC"), "with no app, the report waits for it to be set up")
 	dialog.confirm:Click()
 	-- The report window's own button opens the same question
 	ns.Report:Show()

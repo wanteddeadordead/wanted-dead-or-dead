@@ -290,10 +290,17 @@ function Report:TakeReceived(ids)
 	end
 end
 
----What happens to a report now, by whether the app is running.
+-- The first desktop app that sends reports on
+Report.MIN_APP = "0.2.46"
+
+---What happens to a report now, by whether the app is set up, new enough and running.
 function private.SentText()
-	if not Wanted:AppVersion() then
+	local version = Wanted:AppVersion()
+	if not version then
 		return "Thanks. It waits until the Wanted app runs on this PC (wanteddeadordead.com/app), then goes to the developers after a /reload or logout."
+	elseif Wanted:IsNewerVersion(Report.MIN_APP, version) then
+		return format("Thanks. It waits until the Wanted app is updated to %s or newer (you have %s): update it from its tray menu, then it goes to the developers after a /reload or logout.",
+			Report.MIN_APP, Theme:Plain(version))
 	elseif Wanted:AppNotRunningFor() then
 		return "Thanks. The Wanted app isn't running, so it waits until you start it, then goes to the developers after a /reload or logout."
 	end

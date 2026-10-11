@@ -130,6 +130,7 @@ local DEFAULTS = {
 	syncChannelState = { mainRefused = false, mainOpen = false, at = 0, epoch = 0 }, -- what the main channel last did, for the app
 	channel = nil, -- { name, realm, members, t }: the sync channel's size as the game last said (read by the app)
 	posterShots = {}, -- { t, who, l, top, r, b }: poster pictures for the app to upload (Poster)
+	reports = {}, -- "<origin>:report:<at>" -> a wrong tip or a bug the player reported, for the app to send on (Report)
 	ignore = {}, -- guid -> { name, t }
 	enemyStats = {}, -- guid -> { wins, losses, detections, first, last }
 	-- This account's signing seed and its characters' public keys (Signing; docs/DATA.md)

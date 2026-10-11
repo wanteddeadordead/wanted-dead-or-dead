@@ -10933,6 +10933,117 @@ end)()
 	WantedAppInfo = keptAppInfo
 	db.duels, db.duelReports = kept, keptReports
 end)()
+-- Reports for the developers: a duel tip that looks wrong or a bug waits in WantedDB.reports for the app to send on,
+-- and leaves the queue when the app's catch-up says it was received
+;(function()
+	local db, Report, Duels = ns.db, ns.Report, ns.Duels
+	local keptDuels, keptReports, keptAppInfo = db.duels, db.duelReports, WantedAppInfo
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	db.reports = {}
+	local duel = { id = "Test Player:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
+		me = { class = "ROGUE", spec = "Combat", level = 24 }, them = { class = "PRIEST", spec = "Shadow", level = 25 } }
+	local finding = { rule = "pws", text = "Their Power Word: Shield absorbed 400.", tip = "Save Kick for the shield.", weight = 0.6 }
+	-- A tip: its fields, the player's words without escape codes, an id of the character and the time
+	local id = Report:QueueTip(duel, finding, "The |cffff0000tip|r is\nwrong about |Hitem:19019::::|h[Thunderfury]|h ")
+	local r = db.reports[id]
+	check(id == "Test Player:report:"..clock and r and r.kind == "tip" and r.at == clock and r.character == "Test Player"
+		and r.addonVersion == tostring(ns.VERSION) and r.id == nil, "a tip report is queued under <character>:report:<at>: "..tostring(id))
+	check(r.text == "The tip is wrong about [Thunderfury]", "the player's words lose the game's escape codes: "..tostring(r.text))
+	check(r.duelId == duel.id and r.rule == "pws" and r.tip == "Save Kick for the shield." and r.finding == "Their Power Word: Shield absorbed 400."
+		and r.myClass == "ROGUE" and r.mySpec == "Combat" and r.theirClass == "PRIEST" and r.theirSpec == "Shadow" and r.myLevel == 24 and r.log == nil,
+		"the tip report carries the duel, the rule, the tip and finding, and both sides' classes and specs")
+	-- A second in the same second takes the next free one
+	local id2 = Report:QueueTip(duel, { text = "No tip here." }, nil)
+	check(id2 == "Test Player:report:"..(clock + 1) and db.reports[id2].tip == "No tip here." and db.reports[id2].text == "" and db.reports[id] == r,
+		"a second report in the same second gets the next id, and a finding without a tip sends its text: "..tostring(id2))
+	-- Limits: the text 500 bytes, the tip and finding 1000, never cut inside a letter
+	local id3 = Report:QueueTip(duel, { text = string.rep("f", 1500), tip = string.rep("t", 1500) }, "a"..string.rep("\195\169", 300))
+	local long = db.reports[id3]
+	check(id3 == "Test Player:report:"..(clock + 2) and #long.text == 499 and long.text:sub(-2) == "\195\169" and #long.tip == 1000 and #long.finding == 1000,
+		"the text is held to 500 bytes, whole letters only, the tip and finding to 1000: "..#long.text)
+	-- A bug: the player's words and the last 40 log lines, oldest first, held to 8 KB
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	local bug = db.reports[Report:QueueBug("It broke")]
+	check(bug.kind == "bug" and bug.text == "It broke" and #bug.log == 40 and bug.log[40]:find("report test line 50", 1, true)
+		and bug.log[1]:find("report test line 11", 1, true) and bug.duelId == nil, "a bug report carries the last 40 log lines, oldest first")
+	for i = 1, 40 do ns:Log("%s %d", string.rep("x", 300), i) end
+	local big = db.reports[Report:QueueBug("Long log")]
+	local bytes = 0
+	for _, line in ipairs(big.log) do bytes = bytes + #line end
+	check(bytes <= 8192 and #big.log < 40 and big.log[#big.log]:find(" 40$"), "the log is held to 8 KB, the oldest lines dropped: "..bytes)
+	-- The catch-up's reportsReceived lets them go, at every login, even a catch-up already taken in
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, "Someone:report:1", 7 } } }
+	ns.Catchup:Import()
+	check(db.reports[id] == nil and db.reports[id2] == nil and db.reports[id3] ~= nil, "reports the app received leave the queue")
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2 } } }
+	ns.Catchup:Import()
+	check(db.reports[id3] ~= nil, "the same list again changes nothing")
+	-- Pruning at load: older than 30 days goes, and anything malformed
+	db.reports = { ["A:report:1"] = { kind = "bug", at = clock - 31 * 86400 }, ["A:report:2"] = { kind = "bug", at = clock - 29 * 86400 }, ["A:report:3"] = "junk" }
+	Report:OnLoad()
+	check(db.reports["A:report:1"] == nil and db.reports["A:report:2"] ~= nil and db.reports["A:report:3"] == nil, "reports older than 30 days are dropped at load")
+	-- At most 20 wait: the next is refused, and the player told why
+	db.reports = {}
+	for i = 1, 20 do db.reports["A:report:"..i] = { kind = "bug", at = clock } end
+	check(Report:IsQueueFull() and Report:QueueBug("one more") == nil and Report:CountQueued() == 20, "a 21st report is refused")
+	Report:AskAboutBug()
+	check(OnScreen("20 reports are already waiting for the Wanted app"), "the player is told the queue is full")
+	_G.WantedDialog.frame.confirm:Click()
+	db.reports = {}
+	-- From the fight card: "Something not right?" under a tip asks, then queues it and says where it goes
+	db.duels = { duel }
+	db.duelReports = { [duel.id] = { v = 1, len = 30, me = { hp = {} }, them = { hp = {} }, findings = { finding, { rule = "race", text = "You did no damage for 10 s." } } } }
+	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	ns.UI:Show("duels")
+	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
+	local matchup = Row(function(item) return item.label == "Shadow Priest" end)
+	matchup._scripts.OnClick(matchup, "LeftButton")
+	local duelRow = Row(function(item) return item.duel == duel end)
+	duelRow._scripts.OnClick(duelRow, "LeftButton")
+	local links = {}
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Something not right?" and f:IsShown() then links[#links + 1] = f end end
+	check(#links == 2 and OnScreen("1. Their Power Word: Shield absorbed 400.") and OnScreen("2. You did no damage"), "each finding on the card has a Something not right? link: "..#links)
+	links[2]:Click()
+	local dialog = _G.WantedDialog.frame
+	check(OnScreen("Tell the developers what looks wrong with this tip"), "the link asks what looks wrong")
+	dialog.area:SetText("It said Kick, but I had none")
+	dialog.confirm:Click()
+	local _, sent = next(db.reports)
+	check(sent and sent.kind == "tip" and sent.rule == "race" and sent.finding == "You did no damage for 10 s." and sent.text == "It said Kick, but I had none",
+		"Send queues that finding's tip with the player's words")
+	check(OnScreen("Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."), "and says it goes at the app's next sync")
+	dialog.confirm:Click()
+	WantedAppInfo = { running = "0.2.45", seen = 1 }
+	links[1]:Click()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 2 and OnScreen("The Wanted app isn't running, so it waits until you start it"), "with the app not running, the report waits for it")
+	dialog.confirm:Click()
+	WantedAppInfo = nil
+	Report:AskAboutBug()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 2 and OnScreen("Say what happened first."), "a bug report needs the player's words")
+	dialog.area:SetText("The board is empty")
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 3 and OnScreen("waits until the Wanted app runs on this PC"), "with no app, the report waits for it to be set up")
+	dialog.confirm:Click()
+	-- The report window's own button opens the same question
+	ns.Report:Show()
+	local send
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
+	send:Click()
+	check(OnScreen("What happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
+	_G.WantedDialog.frame.cancel:Click()
+	_G.WantedBugReport:Hide()
+	-- Saved data from before reports gets an empty queue (a new key: no layout change)
+	local realDB = WantedDB
+	WantedDB = { version = 3, settings = {} }
+	ns:LoadSavedData()
+	check(type(WantedDB.reports) == "table" and next(WantedDB.reports) == nil and WantedDB.version == ns.DB_VERSION, "saved data without reports starts an empty queue")
+	WantedDB = realDB
+	ns:LoadSavedData()
+	db.reports = {}
+	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -145,6 +145,19 @@ fight's timeline, `events = { "t,w,k,id,amt,a,b", ... }` (one event a string, at
 the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` when it was too long to send whole;
 an older report comes back from the app without them, so the saved file holds at most 20 timelines.
 
+`WantedDB.reports` (added after 1.20.0) is what the player reported for the desktop app to send on to the developers
+(`Report.lua`), keyed `"<origin>:report:<at>"` (`Store:GetOrigin()`, the time sent): `{ kind = "tip"|"bug", at,
+character, text, addonVersion }`, where `at` is whole server seconds (`GetServerTime()`; a second report in the same
+second takes the next free one), `character` the key's origin, `text` the player's words on one line without the game's
+escape codes (at most 500 bytes) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
+adds `duelId`, the finding's `rule`, `tip` (the finding's tip, or its text without one) and `finding` (its text), each
+at most 1,000 bytes, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
+`"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: the last 40 log lines, oldest first, with
+other players' names left out as in the copied report, the oldest dropped past 8 KB. At most 20 wait (the player is
+told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the
+catch-up as `reportsReceived = { id, ... }`, read at every login (taken in or not) and dropped from the queue. A new
+top-level table: no migration.
+
 `WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.

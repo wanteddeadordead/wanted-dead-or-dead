@@ -11,7 +11,7 @@
   suffered, what each of you used, and up to five tips, each with what to try next time (experimental: tell us about a wrong tip with /wanted bug). Fight cards need the Wanted app 0.2.42 or newer:
   the Duels tab says when it's missing, too old or not running. Timeline lists the whole fight in order:
   every cast, hit, miss, control, interrupt and heal of both sides, with each hit's damage and the health it left
-  (your newest 20 duels). See talent tree opens the game's
+  (your newest 20 duels); hover a line for its spell's tooltip. See talent tree opens the game's
   talent frame on either side's build, and See gear lists what each of you wore, slot by slot, with your average item
   levels; a clear gear gap is called out at the top. Your opponent's talents are read by inspect when
   nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs

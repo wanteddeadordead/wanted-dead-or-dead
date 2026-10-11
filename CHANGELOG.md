@@ -6,7 +6,9 @@
   claims. Wanted used to number your records from 1 again, the same ids as your old records already on the network,
   so the network kept the old ones and dropped the new. A fresh start now numbers them from the time, and other
   players' addons move on to the new numbers instead of waiting for the ones in between. Players who keep their
-  saved data are not affected.
+  saved data are not affected. If you play one character on two PCs, each with its own saved data, the records made
+  on the PC that kept the old numbers reach only the players online at the time, and the website through that PC's
+  Wanted app.
 
 ## [1.20.0] - 2026-10-11
 

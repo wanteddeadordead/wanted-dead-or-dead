@@ -306,16 +306,25 @@ Chain restarts (from the release after 1.20.0): a client that has no saved chain
 data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since
 2026-01-01 00:00 UTC, or at the world's base if that is higher, instead of at the base. The player's old records are
 still on the network and the server keeps the first record under an id, so a chain starting at the base again lost
-every record it made under its old ids. A restarted chain's first record has `prev = "0"` like any chain's first. The
-chain keeps `start`, the seq of that first record. A peer that holds the origin's chain behind a record with
-`prev = "0"` past it, heard from the origin itself or brought by the app's catch-up, moves the chain on to it and keeps
-`start` too, rather than asking for the numbers between; so does a skip (`p` or `g`) onto such a record. A record of
-the origin's from before `start` (its old chain) that arrives later is kept, not flagged as a rewritten history. `first`
-also takes the time of a restarted chain's first record when no earlier first record is known. A chain with no `start`
-began at the base, as before; the hello leaves out a chain with no record past its start. Seqs stay at or under
-2^31 - 1, which the clock reaches in October 2032. An optional new field: no migration. Saved chains are kept as they
-are, so an existing player's chain carries on from where it was; only a fresh own chain starts by the clock. Other
-players' chains still start at the base.
+every record it made under its old ids. The number is held 1,000,000 under 2^31 - 1, which the clock passes in October
+2032; from then restarts can collide again until the epoch or the rate changes. A restarted chain's first record has
+`prev = "0"` like any chain's first. The chain keeps `start`, the seq of that first record. A peer that holds the
+origin's chain behind a record with `prev = "0"` past it, heard from the origin itself, moves the chain on to it and
+keeps `start` too, rather than asking for the numbers between; so does a skip (`p` or `g`) onto such a record sent by
+the origin. Neither happens for a record from the app's catch-up (the server takes anyone's upload of any origin's
+record) or relayed by another player, for one of this account's characters (the saved data is the account's), for a
+seq more than a minute past the clock's number, or for a record that would be pruned at once; such a record is held
+ahead of the gap until the origin's own hello or fill. A record of the origin's from before `start` (its old chain)
+that arrives later is kept, not flagged as a rewritten history. `first` also takes the time of the record at `start`
+when no earlier first record is known. A chain with no `start` began at the base, as before; the hello leaves out a
+chain with no record past its start. A `start` or `first` that isn't a number is dropped at login. An optional new
+field: no migration. Saved chains are kept as they are, so an existing player's chain carries on from where it was;
+only a fresh own chain starts by the clock. Other players' chains still start at the base.
+
+A character played on two PCs, each with its own saved data, has two chains: the one still on the old numbers goes on
+from them after the other has restarted by the clock. Peers that moved on to the restart hold that PC's new records
+as from before the restart, but never ask for them, so they reach only the players online when they're made, and the
+website through that PC's app.
 
 `bounty` records (from 0.1.0-beta.8) can also carry the poster's notes on the target: `class`, `race`,
 `faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target

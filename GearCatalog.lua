@@ -30,6 +30,28 @@ local CLASSES = {
 function GearCatalog:OnLoad()
 	Wanted.db.pvpGear = type(Wanted.db.pvpGear) == "table" and Wanted.db.pvpGear or {}
 	Wanted.db.gearGoals = type(Wanted.db.gearGoals) == "table" and Wanted.db.gearGoals or {}
+	private.DropProfessionItems()
+end
+
+---Up to 1.20.0 a profession's skill in a tooltip ("Requires Leatherworking (75)") was read as a rank, so trainers'
+---and cooks' patterns and recipes came in as PvP gear. They cost no honor, and nothing their vendor sells does:
+---every item of such a vendor goes. A rank vendor sells for honor, so its items stay.
+function private.DropProfessionItems()
+	for _, items in pairs(Wanted.db.pvpGear) do
+		if type(items) == "table" then
+			local honorVendors = {}
+			for _, entry in pairs(items) do
+				if type(entry) == "table" and (tonumber(entry.honor) or 0) > 0 then
+					honorVendors[entry.vendor or ""] = true
+				end
+			end
+			for itemID, entry in pairs(items) do
+				if type(entry) ~= "table" or ((tonumber(entry.honor) or 0) == 0 and not honorVendors[entry.vendor or ""]) then
+					items[itemID] = nil
+				end
+			end
+		end
+	end
 end
 
 function GearCatalog:OnEnable()
@@ -79,7 +101,12 @@ function private.Requirements(index)
 	for _, line in ipairs(type(tip) == "table" and tip.lines or {}) do
 		local text = line.leftText
 		if type(text) == "string" and private.Readable(text) then
-			rank = rank or tonumber(strmatch(text, "%(%a* ?(%d+)%)"))
+			-- Only a rank line names one: "Requires Sergeant (Rank 3)", a word and a rank of 1 to 14 in brackets. A
+			-- profession's skill is a bare number ("Requires Leatherworking (75)"): no rank
+			local bracket = tonumber(strmatch(text, "%(%a+ (%d+)%)"))
+			if bracket and bracket >= 1 and bracket <= 14 then
+				rank = rank or bracket
+			end
 			local allowed = strmatch(text, classesPattern)
 			if allowed then
 				classes = {}

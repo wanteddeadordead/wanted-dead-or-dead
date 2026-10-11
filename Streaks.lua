@@ -42,7 +42,10 @@ function Streaks:OnEnable()
 	end)
 	private.frame:RegisterEvent("PLAYER_DEAD")
 	private.frame:SetScript("OnEvent", function()
-		Streaks:OnDeath()
+		-- Losing a duel to the death doesn't end a world PvP streak
+		if not (Wanted.Duels and Wanted.Duels:Involves(UnitGUID("player"))) then
+			Streaks:OnDeath()
+		end
 	end)
 end
 

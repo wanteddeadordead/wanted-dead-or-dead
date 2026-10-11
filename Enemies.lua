@@ -602,6 +602,12 @@ function private.OnPlayerDead()
 	if IsInInstance() then
 		return
 	end
+	-- Dying in a duel to the death: the opponent isn't a killer to warn about. Its recap is noted as read, so a later
+	-- death without a recap of its own doesn't take it
+	if Wanted.Duels and Wanted.Duels:Involves(UnitGUID("player")) then
+		C_Timer.After(RECAP_DELAYS[#RECAP_DELAYS], function() private.lastRecapId = private.RecapId() end)
+		return
+	end
 	-- Take the suspects now: the scan keeps running while we wait for the recap
 	local suspects = {}
 	local now = GetTime()

@@ -35,16 +35,27 @@ local function NameByte(byte)
 	return byte ~= nil and (byte >= 128 or byte == 39 or (byte >= 65 and byte <= 90) or (byte >= 97 and byte <= 122))
 end
 
----The names Wanted knows, longest first: players seen, every record's origin, the guild roster, the lists, this
----character's own. Each with its realm cut off as well.
+---The names Wanted knows, as a set: players seen, the name book, every record's origin and key, realm links, the
+---guild roster, the lists, this character's own. Each with its realm cut off as well, and its first name alone (the
+---combat log often gives only that), marked "first".
+---@return table name -> true or "first"
 function private.KnownNames()
 	local set = {}
+	local function Keep(name, first)
+		if #name >= MIN_NAME and set[name] ~= true then
+			set[name] = first or true
+		end
+	end
 	local function Add(name)
 		if type(name) == "string" and not (issecretvalue and issecretvalue(name)) then
-			set[name] = true
+			Keep(name)
 			local bare = strmatch(name, "^([^%-]+)%-")
 			if bare then
-				set[bare] = true
+				Keep(bare)
+			end
+			local first = strmatch(name, "^([^%s%-]+)[%s%-]")
+			if first then
+				Keep(first, "first")
 			end
 		end
 	end
@@ -52,8 +63,13 @@ function private.KnownNames()
 	for _, player in pairs(type(db.players) == "table" and db.players or {}) do
 		Add(type(player) == "table" and player.name)
 	end
-	for origin in pairs(type(db.chains) == "table" and db.chains or {}) do
-		Add(origin)
+	for _, entry in pairs(type(db.names) == "table" and db.names or {}) do
+		Add(type(entry) == "table" and entry.n)
+	end
+	for _, book in ipairs({ db.chains, db.keys, db.farPeers }) do
+		for origin in pairs(type(book) == "table" and book or {}) do
+			Add(origin)
+		end
 	end
 	for _, list in ipairs({ db.kos, db.ignore }) do
 		for _, entry in pairs(type(list) == "table" and list or {}) do
@@ -77,18 +93,19 @@ function private.KnownNames()
 	for _, m in ipairs(ok and type(members) == "table" and members or {}) do
 		Add(m.name)
 	end
-	Add(Wanted.Store and Wanted.Store:GetOrigin())
-	local names = {}
-	for name in pairs(set) do
-		if #name >= MIN_NAME then
-			tinsert(names, name)
+	if Wanted.Sync then
+		for name in pairs(Wanted.Sync:GetLinks()) do
+			Add(name)
+		end
+		for _, name in ipairs(Wanted.Sync:DirectoryNames()) do
+			Add(name)
 		end
 	end
-	sort(names, function(a, b) return #a > #b end)
-	return names
+	Add(Wanted.Store and Wanted.Store:GetOrigin())
+	return set
 end
 
--- Where the log puts a name Wanted may never have stored: the sender in Sync's own formats (any name), each as a
+-- Where the log puts a name Wanted may never have stored, by the formats that put one there (any name), each as a
 -- pattern whose captures are what comes before the name and, if anything, what comes after it
 local SENDER_FORMATS = {
 	"(received %d+ bytes from )[^<]-( %(self%))",
@@ -97,44 +114,112 @@ local SENDER_FORMATS = {
 	"(received %d+ bytes from )[^<]-( in the guild)$",
 	"(handling %u+ from )[^<]-( %(realm link%))$",
 	"(handling %u+ from )[^<]-$",
-	"(message from )[^<]-$",
+	"(message from )[^<(,:;]-$",
 	"(part %d+/%d+ from )[^<]-( doesn't fit)",
 	"(record %S+ from )[^<]-(: )",
+	"( on guild ).+$",
 }
 -- The words a "First Surname" name follows in the log's formats ("killed by", "UNIT_DIED for", "Sync: ... says"); not
 -- "in", which comes before a zone, or a duel's "against", which comes before a class
 local NAME_MARKERS = { "from", "to", "by", "for", "with", "of", "as", "on", "one against", "killer", "origin", "greeting",
-	"told", "notice [%u_]+", "Sync:", "Posse:", "Enemies:", "Recorder:", "Bridge:", "GuildKoS:", "KeyBook:", "Version:",
-	"Store:", "Verify:" }
-local NAME_PAIR = "[%u\128-\255][%l\128-\255'][%a\128-\255]* [%u\128-\255][%l\128-\255'][%a\128-\255]*%f[^%w\128-\255]"
+	"told", "notice [%u_]+", "realm link", "may not %l+", "sender name", "Sync:", "Posse:", "Enemies:", "Recorder:",
+	"Bridge:", "GuildKoS:", "KeyBook:", "Version:", "Store:", "Verify:" }
+-- Lines whose words after a marker are never a player: a blocked action's code places and trail, a vendor
+local NO_NAME_LINES = { "ADDON_ACTION_%u+:", "GearCatalog: " }
+local PAIR = "[%u\128-\255][%l\128-\255'][%a\128-\255]* [%u\128-\255][%l\128-\255'][%a\128-\255]*"
+local NAME_PAIR = PAIR.."%f[^%w\128-\255]"
 
----A line with other players left out: GUIDs (any case), the names Wanted knows (with a realm or not), the sender in
----Sync's formats and any "First Surname" after a word that comes before a name, any other "Name-Realm", and this
----realm's name. The log names whoever a message came from or was about; the report shouldn't.
-function private.Scrub(line, names)
-	line = gsub(line, "[Pp][Ll][Aa][Yy][Ee][Rr]%-%d+%-%x+", "Player-?")
-	for _, name in ipairs(names) do
-		local from = 1
-		while true do
-			local first, last = strfind(line, name, from, true)
-			if not first then
-				break
-			end
-			if NameByte(line:byte(first - 1)) or NameByte(line:byte(last + 1)) then
-				from = last + 1 -- part of a longer word
-			else
-				line = strsub(line, 1, first - 1).."<name>"..strsub(line, last + 1)
-				from = first + 6
-			end
+---Whether the text from first to last stands where the log puts a name: after a marker, and not in front of another
+---capitalised word.
+local function NameStands(line, first, last)
+	if strfind(line, "^ [%u\128-\255]", last + 1) then
+		return false
+	end
+	local before = strsub(line, 1, first - 1)
+	for _, marker in ipairs(NAME_MARKERS) do
+		if strfind(before, "%f[%w]"..marker.." $") then
+			return true
 		end
 	end
-	-- Names never stored, found by where they stand in the line
+	return false
+end
+
+---A line with the names in a set left out: each run of up to three words (letters, apostrophes, accented letters)
+---that is one, or is one followed by "'s", becomes <name>. A first name alone only where a name stands (after a
+---marker) and not in front of another capitalised word: "Night Elf" and "Posse:" stay though a "Night Hunter" and a
+---"Posse Rider" are known. Word by word, so thousands of known names cost no more.
+local function ScrubKnown(line, names)
+	local words, i = {}, 1
+	while i <= #line do
+		if NameByte(line:byte(i)) then
+			local j = i
+			while NameByte(line:byte(j + 1)) do
+				j = j + 1
+			end
+			tinsert(words, { i, j })
+			i = j + 1
+		else
+			i = i + 1
+		end
+	end
+	local out, at, k = {}, 1, 1
+	while k <= #words do
+		local found
+		for span = 3, 1, -1 do
+			local last = words[k + span - 1]
+			local together = last ~= nil
+			for w = k, k + span - 2 do
+				together = together and words[w + 1][1] == words[w][2] + 2 and line:byte(words[w][2] + 1) == 32
+			end
+			if together then
+				local text = strsub(line, words[k][1], last[2])
+				local bare = strsub(text, -2) == "'s" and strsub(text, 1, -3)
+				if names[text] == true or (names[text] and NameStands(line, words[k][1], last[2])) then
+					found = { span, last[2] }
+				elseif bare and (names[bare] == true or (names[bare] and NameStands(line, words[k][1], last[2] - 2))) then
+					found = { span, last[2] - 2 }
+				end
+				if found then
+					break
+				end
+			end
+		end
+		if found then
+			tinsert(out, strsub(line, at, words[k][1] - 1))
+			tinsert(out, "<name>")
+			at = found[2] + 1
+			k = k + found[1]
+		else
+			k = k + 1
+		end
+	end
+	tinsert(out, strsub(line, at))
+	return table.concat(out)
+end
+
+---A line with other players left out: GUIDs (any case), the names Wanted knows (with a realm or not), names in the
+---formats that put one there and any "First Surname" after a word that comes before a name, record ids ("Name:12"),
+---any other "Name-Realm", and this realm's name. The log names whoever a message came from or was about; the report
+---shouldn't.
+function private.Scrub(line, names)
+	line = gsub(line, "[Pp][Ll][Aa][Yy][Ee][Rr]%-%d+%-%x+", "Player-?")
+	-- Names never stored, found by where they stand in the line. An honor message the addon couldn't read is the
+	-- game's text, names and all.
+	line = gsub(line, "(honor message not understood: ).*$", "%1<text>")
 	for _, pattern in ipairs(SENDER_FORMATS) do
 		line = gsub(line, pattern, function(before, after) return before.."<name>"..(after or "") end)
 	end
-	for _, marker in ipairs(NAME_MARKERS) do
+	local named = true
+	for _, pattern in ipairs(NO_NAME_LINES) do
+		named = named and not strfind(line, pattern)
+	end
+	for _, marker in ipairs(named and NAME_MARKERS or {}) do
 		line = gsub(line, "(%f[%w]"..marker.." )"..NAME_PAIR, "%1<name>")
 	end
+	-- "First Surname-Realm" whole, and record ids ("First Surname:12"), anywhere
+	line = gsub(line, "%f[%a\128-\255]"..PAIR.."%-[%u\128-\255][%w\128-\255]*", "<name>")
+	line = gsub(line, "%f[%a\128-\255]"..PAIR.."(:%w)", "<name>%1")
+	line = ScrubKnown(line, names)
 	-- A name with a realm, known or not, and a realm after a name left out
 	line = gsub(line, "<name>%-[%w\128-\255']+", "<name>")
 	line = gsub(line, "[%w\128-\255']+%-[%u\128-\255][%w\128-\255']*", function(token)

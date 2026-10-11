@@ -7841,7 +7841,7 @@ end)()
 		"Recorder: our death, killed by Mira Holt",
 		"Recorder: UNIT_DIED for Pell Grant (Human), one of ours",
 		"KeyBook: learned a key for Ada Finch (live)",
-		"Sync: realm link with Juno Reyes on Other",
+		"Sync: realm link with Juno Reyes on Distant",
 		"Recorder: death of Ivo Marsh in Hillsbrad Foothills",
 		"Login as Rhea Stone (Horde)",
 		"Bounties: posted 5g on Cass Doyle",
@@ -7866,12 +7866,72 @@ end)()
 		check(not report:find(leak, 1, true), "the report leaves out "..leak)
 	end
 	for _, kept in ipairs({ "on WantedNetHorde", "by whisper", "(realm link)", "for claim c1", "(Human), one of ours",
-		"on Other", "in Hillsbrad Foothills", "calls one against <name> in Stranglethorn Vale", "YOU_JOINED <name> by <name>",
+		"on Distant", "in Hillsbrad Foothills", "calls one against <name> in Stranglethorn Vale", "YOU_JOINED <name> by <name>",
 		"<name>'s records before 4", "won a duel against Shadow Priest", "Hotspots: Hillsbrad Foothills rising",
 		"party kill by <name> of <name> in Duskwood", "Sync: told <name> to update", "win against Player-?" }) do
 		check(report:find(kept, 1, true), "the report keeps "..kept)
 	end
 	ns.db.players["Player-9-0C3"] = nil
+end)()
+-- More names a report leaves out: the name book, key origins and realm links (and each one's first name alone, as
+-- the combat log gives it), names after words that only come before one in a format, record ids, guilds; counts,
+-- reasons, spells and vendors stay
+;(function()
+	local db, now = ns.db, GetServerTime()
+	db.names["Player-9-NB1"] = { n = "Reaux Darkcloud", t = now }
+	local hadKeys = db.keys["Kell Varn"]
+	db.keys["Kell Varn"] = hadKeys or { list = {} }
+	db.farPeers["Ferro Lusk"] = { realm = "Distant", seen = now }
+	ns.Sync:GetLinks()["Lyle Moss"] = { realm = "Distant", since = 0, sent = 0, received = 0 }
+	ns.Sync:TakeDirectory({ { n = "Dirk Hale", r = "Distant" } })
+	local lines = {
+		"Recorder: our death, killed by Reaux",
+		"Recorder: UNIT_DIED for Reaux (Human), one of ours",
+		"Recorder: honor kill of Reaux (nil) in Durotar",
+		"Recorder: assist on Reaux in Durotar",
+		"Posse: Reaux calls one against Kell in Ashenvale",
+		"Bridge: hello to Reaux (Horde, community)",
+		"Sync: Ferro isn't online (the game says)",
+		"Sync: realm link Dirk is offline; link ended",
+		"Sync: realm link with Lyle Moss went quiet; dropped",
+		"Sync: realm link Juno Reyes is offline; link ended",
+		"!! GuildKoS: Abe Cole may not remove Cole Dunn; ignored",
+		"Recorder: honor message not understood: Mira Holt dies, honorable kill Rank: Private",
+		"Store: sender name Sid Vance differs from origin Tad Wolfe but records exist; keeping origin",
+		"!! Store: kill record Una Pike:12 doesn't match its hash (altered)",
+		"!! Store: record Vera Lund-Distant:13 doesn't follow Vera Lund-Distant's previous record (broken chain)",
+		"Bounties: started hunting Wes Hart:7",
+		"Payments: prefilled 5g to Yuri Bell for claim Xan Moor:9",
+		"Verify: kill record Zara Quinn:3 checked out with Zara Quinn's key k1: taken in",
+		"Bounties: posted 5g on guild Blood Pact",
+		"Bounties: posted 5g on guild the riders",
+		"!! Bridge: parts of a message from Abel Stone stopped coming (2 of 5)",
+		"!! Bridge: ignored a message from Abel Stone (Alliance, Horde): not the other faction on this ruleset",
+		"!! Sync: badly framed message from Odd",
+		"GearCatalog: 4 PvP items from Captain Foo",
+		"Problem: ADDON_ACTION_BLOCKED: CastSpellByName() (in combat) from Nearby.lua:20; last: Cast with Lesser Heal",
+	}
+	for _, line in ipairs(lines) do ns:Log(line) end
+	local report = ns.Report:Build()
+	for _, leak in ipairs({ "Reaux", "Kell", "Ferro", "Dirk", "Lyle", "Juno", "Reyes", "Abe", "Cole", "Mira", "Holt", "Sid",
+		"Tad", "Una", "Vera", "Wes", "Xan", "Yuri", "Zara", "Blood Pact", "riders", "Abel", "Odd" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	for _, kept in ipairs({ "killed by <name>", "UNIT_DIED for <name> (Human)", "honor kill of <name> (nil) in Durotar",
+		"assist on <name> in Durotar", "Posse: <name> calls one against <name> in Ashenvale", "hello to <name> (Horde, community)",
+		"Sync: <name> isn't online (the game says)", "realm link <name> is offline; link ended", "realm link with <name> went quiet",
+		"<name> may not remove <name>; ignored", "honor message not understood: <text>",
+		"sender name <name> differs from origin <name> but", "kill record <name>:12 doesn't match",
+		"record <name>:13 doesn't follow <name>'s previous record", "hunting <name>:7", "to <name> for claim <name>:9",
+		"record <name>:3 checked out with <name>'s key k1", "posted 5g on guild <name>",
+		"parts of a message from <name> stopped coming (2 of 5)",
+		"ignored a message from <name> (Alliance, Horde): not the other faction", "badly framed message from <name>",
+		"4 PvP items from Captain Foo", "last: Cast with Lesser Heal" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
+	db.names["Player-9-NB1"], db.keys["Kell Varn"], db.farPeers["Ferro Lusk"] = nil, hadKeys, nil
+	ns.Sync:GetLinks()["Lyle Moss"] = nil
+	ns.Sync:TakeDirectory({})
 end)()
 -- Officer ranks when the game won't show a rank's permissions: only the guild master's rank counts (never every
 -- rank), it's said once in the log, and the Guild Kill on Sight page says so

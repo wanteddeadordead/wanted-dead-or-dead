@@ -306,6 +306,7 @@ local HOSTILE_NOTICES_SELF = {
 ---in the last NOT_FOUND_SECONDS is saved at logout and taken back here, and the filter that hides those answers is set
 ---up now, before login, so it's in place when they arrive.
 function Sync:OnLoad()
+	private.msgCounter = private.FirstMessageCounter()
 	local saved, now, serverNow = Wanted.db.recentWhispers, GetTime(), GetServerTime()
 	if type(saved) == "table" then
 		for name, at in pairs(saved) do
@@ -319,6 +320,18 @@ function Sync:OnLoad()
 	if addFilter then
 		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
 	end
+end
+
+---Where this session's message ids start (msgCounter counts round 46655 ids, base 36 up to "zzz"). Every client
+---starting at 1 gave another player's first messages the ids of ours, read as our echo: the session's clocks (the
+---server's, and the client's to the millisecond) are mixed with whatever randomness the client gives, since
+---math.random may not be seeded.
+function private.FirstMessageCounter()
+	local mix = GetServerTime() + floor(GetTime() * 1000) + math.random(0, 46654)
+	if type(fastrandom) == "function" then
+		mix = mix + fastrandom(0, 46654)
+	end
+	return mix % 46655
 end
 
 ---Who was whispered in the last NOT_FOUND_SECONDS, by server time, for the next load (Sync:OnLoad).

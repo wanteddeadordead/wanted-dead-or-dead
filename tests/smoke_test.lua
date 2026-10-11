@@ -7751,6 +7751,23 @@ end)()
 	SameId(LastSent(), origin, { c = {}, v = ns.VERSION })
 	check(S:GetOrigin() == origin and db.chains[origin] and db.chains["Test-Elsewhere"] == nil, "and our echo under our full name corrects it back")
 	db.chains["Other Player"], db.chains["Hello Chain"] = nil, nil
+	-- Each session numbers its messages from its own start, even where math.random isn't seeded: not every client from 1
+	local realRandom, realFast = math.random, fastrandom
+	math.random, fastrandom = function() return 0 end, nil
+	local function FirstId(t)
+		local realGetTime, realServerTime = GetTime, GetServerTime
+		GetTime, GetServerTime = function() return t end, function() return 1790000000 + floor(t) end
+		ns.Sync:OnLoad()
+		GetTime, GetServerTime = realGetTime, realServerTime
+		return LastSent():match(":(%w+)$")
+	end
+	-- (math.random stubbed to one value: the start then follows the session's clocks alone)
+	local first = FirstId(5000.25)
+	local again = FirstId(5000.25)
+	local second = FirstId(5007.5)
+	math.random, fastrandom = realRandom, realFast
+	check(first == again, "a session's first message id comes from when it started: "..tostring(first).." "..tostring(again))
+	check(first ~= "1" and second ~= "1" and first ~= second, "each session's message ids start somewhere of their own: "..tostring(first).." "..tostring(second))
 	S:FreshStart()
 end)()
 -- Another player's shared sighting is checked before anything uses it: a position is two numbers 0 to 100 or nothing,

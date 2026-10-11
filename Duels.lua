@@ -948,7 +948,7 @@ function private.TimelineLine(event)
 			line.low = not mine and health < 30
 		end
 	elseif kind == "m" then
-		line.text = MISS_WORDS[a] or "didn't land"
+		line.text = (MISS_WORDS[a] or "didn't land")..(amount and a == "ABSORB" and (" "..amount) or "") -- what a shield took
 	elseif (kind == "k" or kind == "e") and amount then
 		local verb = kind == "k" and "damage" or "healed"
 		local ticks, last = tonumber(a), tonumber(b)

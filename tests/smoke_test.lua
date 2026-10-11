@@ -10827,8 +10827,10 @@ end)()
 	C_Spell = { GetSpellName = function(id) return names[id] end, GetSpellTexture = function(id) return names[id] and 136000 + id or nil end }
 	db.duelReports[duel.id].events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1.8,t,h,6603,50,28,c", "5.5,m,c,5171,,,",
 		"11.7,t,x,5211,,13.7,expired", "13.5,t,s,8938,,,", "13.9,m,i,1766,,8938,", "17.8,t,k,8925,34,4,26.7", "26.3,t,e,8938,182,,",
-		"30,m,D,0,,,", "bad", "1,x,h,1,1,,", "5.7,t,h,6603,20,6,,p" }
+		"30,m,D,0,,,", "bad", "1,x,h,1,1,,", "5.7,t,h,6603,20,6,,p", "6,m,m,1752,94,ABSORB," }
 	local lines = Duels:Timeline(db.duelReports[duel.id])
+	check(#lines == 12 and lines[12].text == "absorbed 94", "a blow a shield took says how much: "..tostring(lines[12].text))
+	table.remove(lines)
 	check(#lines == 11 and lines[11].spell == "Melee (pet)" and lines[11].text == "hit you for 20, you at 6%", "a pet's or totem's is marked")
 	table.remove(lines)
 	check(#lines == 10, "each well-formed event is a line, a malformed one is passed over: "..#lines)

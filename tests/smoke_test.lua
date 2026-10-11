@@ -7625,13 +7625,51 @@ end)()
 	Forget("Alt Restart")
 	db.characters["Player-1-ALTRESTART"] = nil
 	S:NoteCharacter(UnitGUID("player"), origin)
+	-- A restart record can't be older than its own number: one heard live with a made-up old time moves neither the
+	-- chain nor when they were first seen (an alt made to look long established)
+	Hear("R", { r = { Rec("Backdated", 1, "0", clock - 600) } }, "Backdated")
+	Hear("R", { r = { Rec("Backdated", start + 1, "0", clock - 5 * 86400) } }, "Backdated")
+	check(S:GetChainSeq("Backdated") == 1 and db.chains["Backdated"].start == nil and S:GetFirstSeen("Backdated") == clock - 600,
+		"a restart dated before its own number moves neither the chain nor first seen")
+	Forget("Backdated")
+	-- Nor, skipped to by its origin's own fill, does it say when they were first seen
+	Hear("R", { r = { Rec("Backdated", 1, "0", clock - 600) } }, "Backdated")
+	Hear("F", { r = { Rec("Backdated", start + 1, "0", clock - 5 * 86400) }, p = { Backdated = start + 1 } }, "Backdated")
+	check(S:GetFirstSeen("Backdated") == clock - 600, "a backdated restart skipped to by its origin's fill leaves first seen")
+	Forget("Backdated")
+	-- A witness whose chain we only know from a third player's fill, past the start, with no first record: a chain
+	-- numbered by the clock past where it stood a day before the kill started within the day, so they're new. One
+	-- numbered from the base with plenty of records isn't
+	local function Witnessed(witness, killT)
+		local victim = "Player-9-WITNESSED"
+		local claim = S:InsertTest("claim", "Some Hunter", { bounty = "b-witnessed", victim = victim, victimName = "Witnessed", zone = "Ashenvale", killT = killT }, killT)
+		S:InsertTest("death", witness, { victim = victim, victimName = "Witnessed", zone = "Ashenvale" }, killT + 1)
+		for _, w in ipairs(ns.Bounties:GetClaimWarnings(claim)) do
+			if w:find(witness.." is new to the network", 1, true) then return "new" end
+		end
+		return "not new"
+	end
+	Hear("H", { c = { ["Fresh Alt"] = start + 5 }, v = ns.VERSION }, "Peer One")
+	Hear("H", { c = { ["Fresh Alt"] = start + 5 }, v = ns.VERSION }, "Peer Two")
+	local relayed = { r = { Rec("Fresh Alt", start + 3, "abcd1234"), Rec("Fresh Alt", start + 4, "x"), Rec("Fresh Alt", start + 5, "y") }, p = { ["Fresh Alt"] = start + 3 } }
+	relayed.r[2].prev = relayed.r[1].hash Sealed(relayed.r[2])
+	relayed.r[3].prev = relayed.r[2].hash Sealed(relayed.r[3])
+	Hear("F", relayed, "Peer One")
+	Hear("F", relayed, "Peer One")
+	check(S:GetChainSeq("Fresh Alt") == start + 5 and db.chains["Fresh Alt"].start == nil and S:GetFirstSeen("Fresh Alt") == nil,
+		"a chain known only from a relayer's fill: past the start, no start, no first: "..S:GetChainSeq("Fresh Alt"))
+	check(Witnessed("Fresh Alt", clock) == "new", "its origin witnessing a kill is new to the network")
+	db.chains["Base Veteran"] = { seq = 400, lastHash = "x" }
+	check(Witnessed("Base Veteran", clock) == "not new", "a base-numbered chain with plenty of records isn't")
+	db.chains["Base Veteran"] = nil
+	Forget("Fresh Alt")
 	-- A start or first that isn't a number (hand-edited saved data) is dropped at login, and the hello still goes out
 	db.chains["Garbled"] = { seq = 5, lastHash = "x", start = "junk", first = {} }
 	S:OnEnable()
 	check(db.chains["Garbled"].start == nil and db.chains["Garbled"].first == nil, "a start or first that isn't a number is dropped")
 	ClearSent()
 	-- (the send queue's allowance comes back with time)
-	clock = clock + 10
+	clock = clock + 60
 	SlashCmdList.WANTED("synctest")
 	RunTimers()
 	local garbledHello

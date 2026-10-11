@@ -383,15 +383,24 @@ local TIME_SEQ_HEADROOM = 1000000
 -- How far past the clock's number a peer's restart may be: a minute of clocks disagreeing
 local TIME_SEQ_LEEWAY = 60 * TIME_SEQ_PER_SECOND
 
----The clock's number now: ten a second since the epoch, never under the base.
-function private.ClockSeq()
-	return max(Store:SeqBase(), floor((GetServerTime() - TIME_SEQ_EPOCH) * TIME_SEQ_PER_SECOND))
+---The clock's number at a time (default now): ten a second since the epoch, never under the base. A chain numbered by
+---the clock and past ClockSeq(t) started after t.
+---@param t number?
+---@return number
+function Store:ClockSeq(t)
+	return max(Store:SeqBase(), floor(((t or GetServerTime()) - TIME_SEQ_EPOCH) * TIME_SEQ_PER_SECOND))
+end
+
+---Whether a restart record is no older than its own number (a minute of clocks disagreeing): its seq says when its
+---chain started, so an earlier time is made up (an alt made to look long established).
+function private.DatedAfterItsNumber(record)
+	return type(record.t) == "number" and record.t >= TIME_SEQ_EPOCH + (record.seq - 1) / TIME_SEQ_PER_SECOND - 60
 end
 
 ---Our own chain with no records yet: at the clock's number (ClockSeq), or the base when the clock is before the
 ---epoch, and under MAX_SEQ with room to grow. start is the seq its first record will have.
 function private.NewOwnChain()
-	local seq = private.ClockSeq()
+	local seq = Store:ClockSeq()
 	if seq == Store:SeqBase() then
 		Wanted:Log("!! Store: the server clock (%s) is before the chain epoch; a fresh chain starts at the base", tostring(GetServerTime()))
 	elseif seq > MAX_SEQ - TIME_SEQ_HEADROOM then
@@ -405,7 +414,7 @@ end
 ---(the saved data is the account's, and theirs are only ever their own), and no further than the clock has got to.
 function private.MayRestart(origin, seq)
 	local own = private.own or private.BuildOwn()
-	return origin ~= private.origin and not own.origins[origin] and seq <= private.ClockSeq() + 1 + TIME_SEQ_LEEWAY
+	return origin ~= private.origin and not own.origins[origin] and seq <= Store:ClockSeq() + 1 + TIME_SEQ_LEEWAY
 end
 
 ---The seq just before an origin's chain started: where it started again (start, our own fresh chain or a restart a
@@ -1036,7 +1045,7 @@ function private.Insert(record, live, fromApp, sender, checked)
 		db.chains[record.origin] = chain
 	end
 	if record.prev == "0" and record.seq > chain.seq + 1 and live and not record.tampered
-		and private.MayRestart(record.origin, record.seq) and not private.IsPrunable(record) then
+		and private.MayRestart(record.origin, record.seq) and private.DatedAfterItsNumber(record) and not private.IsPrunable(record) then
 		-- The origin started its chain again (its saved data was lost: NewOwnChain) past where we hold it, said by the
 		-- origin itself (the app's catch-up isn't its word: the server takes anyone's upload of anyone's record): the
 		-- chain moves on to it rather than asking for the numbers between
@@ -1476,7 +1485,8 @@ function private.NoteFirst(chain, record)
 		return
 	end
 	if record.seq == Store:SeqBase() + 1
-		or (record.seq == chain.start and (not chain.first or record.t < chain.first) and not private.IsPrunable(record)) then
+		or (record.seq == chain.start and (not chain.first or record.t < chain.first) and private.DatedAfterItsNumber(record)
+			and not private.IsPrunable(record)) then
 		chain.first = record.t
 	end
 end

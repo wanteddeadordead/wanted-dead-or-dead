@@ -145,6 +145,25 @@ fight's timeline, `events = { "t,w,k,id,amt,a,b", ... }` (one event a string, at
 the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` when it was too long to send whole;
 an older report comes back from the app without them, so the saved file holds at most 20 timelines.
 
+`WantedDB.reports` (added after 1.20.0) is what the player reported for the desktop app to send on to the developers
+(`Report.lua`), keyed `"<character>:report:<at>"`: `{ kind = "tip"|"bug", at,
+character, text, addonVersion }`, where `at` is whole server seconds (`GetServerTime()`; a second report in the same
+second takes the next free one), `character` the key's prefix: for a tip the character who fought the duel (its `id`
+before `":duel:"`, as the app's own tip reports name it; `Store:GetOrigin()` if the id doesn't parse), for a bug the
+character logged in. `text` is the player's words on one line without the game's escape codes (at most 500 letters,
+counted in UTF-8 as the app and the server count them) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
+adds `duelId`, the finding's `rule` (at most 64 letters), `tip` (the finding's tip, or its text without one) and
+`finding` (its text), each at most 1,000 letters, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
+`"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: a 4-line header (game client, build, locale,
+faction and level; detection settings; the app and the network; signing and the self-test), then up to 5 of this
+session's newest problems the recent lines don't have (`"<time> Problem: <text>"`), then the recent log lines, oldest
+first. At most 40 lines and 8 KB in all (a line and its break): the oldest recent lines are dropped first, keeping
+room for the problems, and if it's still over 8 KB the problems are dropped too, oldest first. Other players' names
+are left out throughout. At most 20 wait (the player is
+told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the
+catch-up as `reportsReceived = { id, ... }`, read at every login (taken in or not) and dropped from the queue. A new
+top-level table: no migration.
+
 `WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.

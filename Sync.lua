@@ -2626,6 +2626,16 @@ function Sync:GreetDirectory()
 	end
 end
 
+---The names in the directory, for a bug report to leave out.
+---@return string[]
+function Sync:DirectoryNames()
+	local names = {}
+	for _, entry in ipairs(private.directory) do
+		tinsert(names, entry.name)
+	end
+	return names
+end
+
 ---How the directory is doing: names held, and how many of their realm names have a live link.
 ---@return table { names, realms, linked }
 function Sync:GetDirectory()

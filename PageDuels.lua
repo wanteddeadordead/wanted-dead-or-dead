@@ -138,6 +138,8 @@ end
 local CARD_BARS = 40 -- health as this many bars across the fight
 local GRAPH_HEIGHT = 34
 local CARD_FINDINGS = 5
+local FINDING_GAP = 10 -- between one finding's report link and the next finding
+local REPORT_LINK_HEIGHT = 18
 local CC_MARKS = 8
 
 ---A report's text as shown: no control characters or "|" (the game's escape codes), at most the app's 300 bytes.
@@ -636,7 +638,7 @@ function private.BuildCard(container, width)
 	card.experimental:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
 		GameTooltip:SetText("Experimental", 1, 1, 1)
-		GameTooltip:AddLine("Duel coaching is new: a tip can be wrong. /wanted bug sends us one that is.", C.muted[1], C.muted[2], C.muted[3], true)
+		GameTooltip:AddLine("Duel coaching is new: a tip can be wrong. \"Something not right?\" under a tip sends it to us.", C.muted[1], C.muted[2], C.muted[3], true)
 		GameTooltip:Show()
 	end)
 	card.experimental:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -662,12 +664,28 @@ function private.BuildCard(container, width)
 		me = private.CreateLane(body, "You", -40, C.green, graphWidth),
 		them = private.CreateLane(body, "Them", -150, C.red, graphWidth),
 	}
-	card.findings = Theme:Text(body, "body", "")
-	card.findings:SetPoint("TOPLEFT", 14, -244)
-	card.findings:SetWidth(width - 60)
-	card.findings:SetJustifyH("LEFT")
-	card.findings:SetWordWrap(true)
-	card.findings:SetSpacing(3)
+	-- Each finding with its tip, and a link under it to tell the developers it looks wrong
+	card.findings = {}
+	for i = 1, CARD_FINDINGS do
+		local slot = {}
+		slot.text = Theme:Text(body, "body", "")
+		if i == 1 then
+			slot.text:SetPoint("TOPLEFT", 14, -244)
+		else
+			slot.text:SetPoint("TOPLEFT", card.findings[i - 1].report, "BOTTOMLEFT", 6, -FINDING_GAP)
+		end
+		slot.text:SetWidth(width - 60)
+		slot.text:SetJustifyH("LEFT")
+		slot.text:SetWordWrap(true)
+		slot.text:SetSpacing(3)
+		slot.report = W:Button(body, "Something not right?", "ghost", 120, REPORT_LINK_HEIGHT, function()
+			Wanted.Report:AskAboutTip(private.cardDuel, slot.finding)
+		end)
+		slot.report.label:SetFontObject(Theme.Fonts.small)
+		slot.report:SetWidth(slot.report.label:GetStringWidth() + 12)
+		slot.report:SetPoint("TOPLEFT", slot.text, "BOTTOMLEFT", -6, -2)
+		card.findings[i] = slot
+	end
 	private.BuildGearPanel(card, width)
 	private.BuildTimelinePanel(card, width)
 	private.card = card
@@ -730,17 +748,26 @@ function private.ShowCard(duel)
 		lane.gearButton:SetShown(hasReport and key == "them" and ((duel.me and duel.me.gear) or (duel.them and duel.them.gear)) and true or false)
 	end
 	local findings = hasReport and type(report.findings) == "table" and report.findings or {}
-	local lines = {}
+	local shown, height = 0, 1
 	for i = 1, CARD_FINDINGS do
 		local f = findings[i]
 		if type(f) == "table" and type(f.text) == "string" then
+			shown = shown + 1
+			local slot = card.findings[shown]
 			local tip = type(f.tip) == "string" and ("\n"..Theme:Colorize(private.CleanText(f.tip), C.muted)) or ""
-			lines[#lines + 1] = i..". "..private.CleanText(f.text)..tip
+			slot.text:SetText(i..". "..private.CleanText(f.text)..tip)
+			slot.finding = f
+			height = height + slot.text:GetStringHeight() + 2 + REPORT_LINK_HEIGHT + FINDING_GAP
 		end
 	end
-	card.findings:SetText(table.concat(lines, "\n\n"))
-	card.findings:SetShown(#lines > 0)
-	card.body:SetHeight(244 + max(card.findings:GetStringHeight(), 1) + 12)
+	for i, slot in ipairs(card.findings) do
+		slot.text:SetShown(i <= shown)
+		slot.report:SetShown(i <= shown)
+		if i > shown then
+			slot.finding = nil
+		end
+	end
+	card.body:SetHeight(244 + height + 12)
 	if another then
 		card.scroll:SetVerticalScroll(0)
 	end

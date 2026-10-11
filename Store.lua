@@ -667,11 +667,17 @@ function Store:GetOrigin()
 end
 
 ---Whether a sender's name can be this character's: our name, with our surname when both carry one (this client's
----"First Last"), on any realm ("Name-Realm"). Another player can send a message under an id we just used.
+---"First Last"), with no realm or on our realm ("Name-Realm"; any realm when the game gives no normalized name for
+---ours: only that one is compared, as the origin may be corrected from another spelling of it). Another player can
+---send a message under an id we just used.
 ---@param sender string
 ---@return boolean
 function Store:IsOwnName(sender)
 	if type(sender) ~= "string" then
+		return false
+	end
+	local realm, ours = strmatch(sender, "%-(.*)$"), GetNormalizedRealmName and GetNormalizedRealmName()
+	if realm and type(ours) == "string" and ours ~= "" and realm ~= ours then
 		return false
 	end
 	local name, surname = UnitName("player")

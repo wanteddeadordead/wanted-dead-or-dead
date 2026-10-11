@@ -7486,14 +7486,14 @@ end)()
 	check(S:IsWellFormed(S:ForWire(first)), "and is well formed")
 	-- Before any record of our own, the origin may still be corrected, and the corrected one's chain starts by the clock too
 	S:FreshStart()
-	S:LearnOrigin("Test-Corrected")
-	check(S:GetOrigin() == "Test-Corrected" and S:GetChainSeq("Test-Corrected") == start and db.chains["Test-Corrected"].start == start + 1,
+	S:LearnOrigin("Test-Realm")
+	check(S:GetOrigin() == "Test-Realm" and S:GetChainSeq("Test-Realm") == start and db.chains["Test-Realm"].start == start + 1,
 		"a corrected origin's fresh chain starts by the clock too")
 	S:LearnOrigin(origin)
-	check(S:GetOrigin() == origin and db.chains["Test-Corrected"] == nil, "and back")
+	check(S:GetOrigin() == origin and db.chains["Test-Realm"] == nil, "and back")
 	-- Once a record exists, the origin stays
 	S:NewRecord("mark", { target = "Player-9-RESTART2", name = "Restart Two" })
-	S:LearnOrigin("Test-Corrected")
+	S:LearnOrigin("Test-Realm")
 	check(S:GetOrigin() == origin, "a time-started chain with a record keeps its origin")
 	-- Before the epoch (a wrong clock) a fresh chain starts at the base, and the live world's base still holds
 	local keptClock = clock
@@ -7746,10 +7746,19 @@ end)()
 	S:LearnOrigin("Other Player")
 	check(S:GetOrigin() == origin, "nor is another name told to the store")
 	-- Our own echo under our name on another realm still corrects the origin, and back again
-	SameId(LastSent(), "Test-Elsewhere", { c = {}, v = ns.VERSION })
-	check(S:GetOrigin() == "Test-Elsewhere" and db.chains["Test-Elsewhere"] and db.chains[origin] == nil, "our echo under our name on a realm corrects the origin")
+	SameId(LastSent(), "Test-Realm", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == "Test-Realm" and db.chains["Test-Realm"] and db.chains[origin] == nil, "our echo under our name on a realm corrects the origin")
 	SameId(LastSent(), origin, { c = {}, v = ns.VERSION })
-	check(S:GetOrigin() == origin and db.chains[origin] and db.chains["Test-Elsewhere"] == nil, "and our echo under our full name corrects it back")
+	check(S:GetOrigin() == origin and db.chains[origin] and db.chains["Test-Realm"] == nil, "and our echo under our full name corrects it back")
+	-- Our own echo can't carry another realm than ours; without our realm's normalized name, any realm passes as before
+	check(not S:IsOwnName("Test-OtherRealm") and S:IsOwnName("Test-Realm") and S:IsOwnName("Test") and S:IsOwnName("Test Player-Realm"),
+		"our name on another realm isn't us; on ours, or with no realm, it is")
+	SameId(LastSent(), "Test-OtherRealm", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin], "an echo under our name on another realm doesn't correct the origin")
+	local realRealm = GetNormalizedRealmName
+	GetNormalizedRealmName = function() return nil end
+	check(S:IsOwnName("Test-OtherRealm") and S:IsOwnName("Test"), "with no normalized realm, any realm passes")
+	GetNormalizedRealmName = realRealm
 	db.chains["Other Player"], db.chains["Hello Chain"] = nil, nil
 	-- Each session numbers its messages from its own start, even where math.random isn't seeded: not every client from 1
 	local realRandom, realFast = math.random, fastrandom

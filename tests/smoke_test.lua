@@ -7829,6 +7829,50 @@ end)()
 	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
 	ns.db.players["Player-9-0C1"], ns.db.players["Player-9-0C2"] = nil, nil
 end)()
+-- A name Wanted never stored ("First Surname", this client's names) is left out too, by where the log puts it: the
+-- sender in Sync's formats and a name after the words that come before one; zones, classes and channels stay
+;(function()
+	ns.db.players["Player-9-0C3"] = { name = "Kept Known", faction = "Alliance" }
+	local lines = {
+		"Sync: received 249 bytes from Reaux Darkcloud on WantedNetHorde",
+		"Sync: received 12 bytes from Solo by whisper",
+		"Sync: handling R from Odd Name (realm link)",
+		"Payments: sending 5g to Tomas Vane for claim c1",
+		"Recorder: our death, killed by Mira Holt",
+		"Recorder: UNIT_DIED for Pell Grant (Human), one of ours",
+		"KeyBook: learned a key for Ada Finch (live)",
+		"Sync: realm link with Juno Reyes on Other",
+		"Recorder: death of Ivo Marsh in Hillsbrad Foothills",
+		"Login as Rhea Stone (Horde)",
+		"Bounties: posted 5g on Cass Doyle",
+		"Posse: Vic Lane calls one against Nell Ward in Stranglethorn Vale",
+		"Sync: channel notice YOU_JOINED Ola Berg by Uma Kline",
+		"Enemies: death, killer Tess Moor (melee)",
+		"Store: origin corrected from Lio Park to Rudi Senn",
+		"Sync: greeting Bo Lindqvist (Other) as a realm link",
+		"Sync: told Gus Ernst to update",
+		"Store: Fen Akers's records before 4 are gone from the network",
+		"Recorder: party kill by Kept Known of Zed Quill in Duskwood",
+		"Duels: won a duel against Shadow Priest",
+		"Hotspots: Hillsbrad Foothills rising, 4 from 1",
+		"Enemies: win against Player-9-0ABCDEF",
+	}
+	for _, line in ipairs(lines) do ns:Log(line) end
+	local report = ns.Report:Build()
+	check(report:find("Sync: received 249 bytes from <name> on WantedNetHorde", 1, true), "the leaked line reads from <name>")
+	for _, leak in ipairs({ "Reaux", "Darkcloud", "Solo", "Odd Name", "Tomas", "Mira", "Pell", "Ada Finch", "Juno", "Ivo",
+		"Rhea", "Cass", "Vic Lane", "Nell", "Ola", "Uma", "Tess", "Lio", "Rudi", "Bo Lindqvist", "Gus", "Fen", "Akers",
+		"Kept Known", "Zed" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	for _, kept in ipairs({ "on WantedNetHorde", "by whisper", "(realm link)", "for claim c1", "(Human), one of ours",
+		"on Other", "in Hillsbrad Foothills", "calls one against <name> in Stranglethorn Vale", "YOU_JOINED <name> by <name>",
+		"<name>'s records before 4", "won a duel against Shadow Priest", "Hotspots: Hillsbrad Foothills rising",
+		"party kill by <name> of <name> in Duskwood", "Sync: told <name> to update", "win against Player-?" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
+	ns.db.players["Player-9-0C3"] = nil
+end)()
 -- Officer ranks when the game won't show a rank's permissions: only the guild master's rank counts (never every
 -- rank), it's said once in the log, and the Guild Kill on Sight page says so
 ;(function()

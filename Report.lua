@@ -88,8 +88,29 @@ function private.KnownNames()
 	return names
 end
 
----A line with other players left out: GUIDs (any case), the names Wanted knows (with a realm or not), any other
----"Name-Realm", and this realm's name. The log names whoever a message came from or was about; the report shouldn't.
+-- Where the log puts a name Wanted may never have stored: the sender in Sync's own formats (any name), each as a
+-- pattern whose captures are what comes before the name and, if anything, what comes after it
+local SENDER_FORMATS = {
+	"(received %d+ bytes from )[^<]-( %(self%))",
+	"(received %d+ bytes from )[^<]-( on [^ ]+)$",
+	"(received %d+ bytes from )[^<]-( by whisper)$",
+	"(received %d+ bytes from )[^<]-( in the guild)$",
+	"(handling %u+ from )[^<]-( %(realm link%))$",
+	"(handling %u+ from )[^<]-$",
+	"(message from )[^<]-$",
+	"(part %d+/%d+ from )[^<]-( doesn't fit)",
+	"(record %S+ from )[^<]-(: )",
+}
+-- The words a "First Surname" name follows in the log's formats ("killed by", "UNIT_DIED for", "Sync: ... says"); not
+-- "in", which comes before a zone, or a duel's "against", which comes before a class
+local NAME_MARKERS = { "from", "to", "by", "for", "with", "of", "as", "on", "one against", "killer", "origin", "greeting",
+	"told", "notice [%u_]+", "Sync:", "Posse:", "Enemies:", "Recorder:", "Bridge:", "GuildKoS:", "KeyBook:", "Version:",
+	"Store:", "Verify:" }
+local NAME_PAIR = "[%u\128-\255][%l\128-\255'][%a\128-\255]* [%u\128-\255][%l\128-\255'][%a\128-\255]*%f[^%w\128-\255]"
+
+---A line with other players left out: GUIDs (any case), the names Wanted knows (with a realm or not), the sender in
+---Sync's formats and any "First Surname" after a word that comes before a name, any other "Name-Realm", and this
+---realm's name. The log names whoever a message came from or was about; the report shouldn't.
 function private.Scrub(line, names)
 	line = gsub(line, "[Pp][Ll][Aa][Yy][Ee][Rr]%-%d+%-%x+", "Player-?")
 	for _, name in ipairs(names) do
@@ -106,6 +127,13 @@ function private.Scrub(line, names)
 				from = first + 6
 			end
 		end
+	end
+	-- Names never stored, found by where they stand in the line
+	for _, pattern in ipairs(SENDER_FORMATS) do
+		line = gsub(line, pattern, function(before, after) return before.."<name>"..(after or "") end)
+	end
+	for _, marker in ipairs(NAME_MARKERS) do
+		line = gsub(line, "(%f[%w]"..marker.." )"..NAME_PAIR, "%1<name>")
 	end
 	-- A name with a realm, known or not, and a realm after a name left out
 	line = gsub(line, "<name>%-[%w\128-\255']+", "<name>")

@@ -6,6 +6,8 @@
   words, or none) and sends the tip to the developers, with the duel's classes, specs and your level.
 - Report a bug can now send the report itself: Send to the developers asks what happened and sends it with Wanted's
   recent log (other players' names left out). Copying it for GitHub still works.
+- A report's log leaves out the names of players Wanted never stored as well, by where the log puts a name ("from",
+  "killed by" and the like).
 - Neither goes straight away: the Wanted app (0.2.46 or newer) passes reports on the next time it syncs, after a
   /reload or logout. Up to 20 wait for it, each for 30 days.
 

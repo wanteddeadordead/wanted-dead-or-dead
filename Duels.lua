@@ -949,14 +949,15 @@ function private.TimelineLine(event)
 		end
 	elseif kind == "m" then
 		line.text = (MISS_WORDS[a] or "didn't land")..(amount and a == "ABSORB" and (" "..amount) or "") -- what a shield took
-	elseif (kind == "k" or kind == "e") and amount then
-		local verb = kind == "k" and "damage" or "healed"
-		local ticks, last = tonumber(a), tonumber(b)
-		if ticks and last then
-			line.text = format("%d %s, %d %s (to %s)", ticks, ticks == 1 and "tick" or "ticks", amount, verb, Clock(last))
-		else
-			line.text = kind == "e" and format("healed %d", amount) or format("%d damage", amount)
+	elseif kind == "k" and amount then
+		local health = tonumber(a)
+		line.text = format("ticked %s for %d%s", target, amount, b == "c" and " (crit)" or "")
+		if health then
+			line.text = line.text..format(", %s at %d%%", target, health)
+			line.low = not mine and health < 30
 		end
+	elseif kind == "e" and amount then
+		line.text = format("healed %d%s", amount, a == "t" and " (tick)" or "")
 	elseif kind == "x" then
 		local stop = tonumber(a)
 		line.text = format("on %s%s%s", target, stop and format(" for %.1f s", max(stop - t, 0)) or "", CONTROL_ENDS[b] and (", "..CONTROL_ENDS[b]) or "")
@@ -985,8 +986,8 @@ function Duels:Timeline(report)
 	return lines, report.eventsCut == true
 end
 
--- A use of a spell: it went off, landed, missed, controlled, interrupted or dispelled. Ticks and heals over time follow
--- a use, so they count only for a spell seen no other way (a proc's).
+-- A use of a spell: it went off, landed, missed, controlled, interrupted or dispelled. Ticks and heals follow a use, so
+-- a spell seen only by them (a proc's) counts as used once.
 local USE_KINDS = { c = true, h = true, m = true, x = true, i = true, d = true }
 
 ---What one side used in a fight, from its report's timeline: each spell once, in the order first used, with how often
@@ -996,25 +997,23 @@ function Duels:SpellsUsed(report, mine)
 	if type(report) ~= "table" or type(report.events) ~= "table" then
 		return nil
 	end
-	local order, uses, groups = {}, {}, {}
+	local order, uses = {}, {}
 	for _, event in ipairs(report.events) do
 		local f = type(event) == "string" and { strsplit(",", event) } or {}
 		local kind, id = f[3], tonumber(f[4])
 		if (f[2] == "m") == mine and (f[2] == "m" or f[2] == "t") and id and id ~= MELEE_SPELL and f[8] ~= "p"
 			and (USE_KINDS[kind] or kind == "k" or kind == "e") then
 			if not uses[id] then
-				order[#order + 1], uses[id], groups[id] = id, 0, 0
+				order[#order + 1], uses[id] = id, 0
 			end
 			if USE_KINDS[kind] then
 				uses[id] = uses[id] + 1
-			else
-				groups[id] = groups[id] + 1
 			end
 		end
 	end
 	local out = {}
 	for _, id in ipairs(order) do
-		local n = uses[id] > 0 and uses[id] or groups[id]
+		local n = uses[id] > 0 and uses[id] or 1
 		out[#out + 1] = private.SpellName(id)..(n > 1 and (" x"..n) or "")
 	end
 	return out

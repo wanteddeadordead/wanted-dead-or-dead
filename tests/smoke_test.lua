@@ -10828,28 +10828,28 @@ end)()
 	local names = { [1752] = "Sinister Strike", [5211] = "Bash", [8925] = "Moonfire", [8938] = "Regrowth", [1766] = "Kick", [5171] = "Slice and Dice" }
 	C_Spell = { GetSpellName = function(id) return names[id] end, GetSpellTexture = function(id) return names[id] and 136000 + id or nil end }
 	db.duelReports[duel.id].events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1.8,t,h,6603,50,28,c", "5.5,m,c,5171,,,",
-		"11.7,t,x,5211,,13.7,expired", "13.5,t,s,8938,,,", "13.9,m,i,1766,,8938,", "17.8,t,k,8925,34,4,26.7", "26.3,t,e,8938,182,,",
+		"11.7,t,x,5211,,13.7,expired", "13.5,t,s,8938,,,", "13.9,m,i,1766,,8938,", "17.8,t,k,8925,9,62,c", "26.3,t,e,8938,182,,", "29.3,t,e,8938,40,t,",
 		"30,m,D,0,,,", "bad", "1,x,h,1,1,,", "5.7,t,h,6603,20,6,,p", "6,m,m,1752,94,ABSORB," }
 	-- What each used, from the timeline: every spell once with how often, melee and cast starts left out, a cast's
-	-- ticks or heal the same use, a spell seen only by its ticks or heals used once a group
-	local usedReport = { events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1,t,c,8925,,,", "1.2,t,k,8925,34,4,13",
+	-- ticks or heals the same use, a spell seen only by its ticks or heals used once
+	local usedReport = { events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1,t,c,8925,,,", "1.2,t,k,8925,9,90,",
 		"2,m,m,1752,94,ABSORB,", "3,t,x,5211,,5,expired", "4,m,c,5171,,,", "5,t,s,8938,,,", "5.1,m,i,1766,,8938,", "8,t,s,8938,,,",
-		"9.5,t,c,8938,,,", "10,t,e,8938,40,3,16", "11,m,h,6603,20,50,", "12,m,e,8938,30,2,14", "30,m,D,0,,," } }
+		"9.5,t,c,8938,,,", "10,t,e,8938,40,t,", "11,m,h,6603,20,50,", "12,m,e,8938,30,t,", "15,m,e,8938,30,t,", "16,t,k,8925,9,85,", "30,m,D,0,,," } }
 	local mineUsed, theirsUsed = Duels:SpellsUsed(usedReport, true), Duels:SpellsUsed(usedReport, false)
 	check(table.concat(mineUsed, ", ") == "Sinister Strike x2, Slice and Dice, Kick, Regrowth", "what you used, in order, with counts: "..table.concat(mineUsed, ", "))
 	check(table.concat(theirsUsed, ", ") == "Moonfire, Bash, Regrowth", "what they used: "..table.concat(theirsUsed, ", "))
 	check(Duels:SpellsUsed({}, true) == nil, "no timeline, no list")
 	local lines = Duels:Timeline(db.duelReports[duel.id])
-	check(#lines == 12 and lines[12].text == "absorbed 94", "a blow a shield took says how much: "..tostring(lines[12].text))
+	check(#lines == 13 and lines[13].text == "absorbed 94", "a blow a shield took says how much: "..tostring(lines[13].text))
 	table.remove(lines)
-	check(#lines == 11 and lines[11].spell == "Melee (pet)" and lines[11].text == "hit you for 20, you at 6%", "a pet's or totem's is marked")
+	check(#lines == 12 and lines[12].spell == "Melee (pet)" and lines[12].text == "hit you for 20, you at 6%", "a pet's or totem's is marked")
 	table.remove(lines)
-	check(#lines == 10, "each well-formed event is a line, a malformed one is passed over: "..#lines)
+	check(#lines == 11, "each well-formed event is a line, a malformed one is passed over: "..#lines)
 	check(lines[1].spell == "Sinister Strike" and lines[1].text == "hit them for 30, them at 96%" and lines[1].clock == "0:00" and lines[1].icon == 137752
 		and lines[2].spell == "Melee" and lines[2].text == "parried" and lines[3].text == "hit you for 50 (crit), you at 28%" and lines[3].low
 		and not lines[1].low and lines[4].text == "" and lines[5].text == "on you for 2.0 s, ran out" and lines[6].text == "begins casting"
-		and lines[7].text == "interrupted Regrowth" and lines[8].text == "4 ticks, 34 damage (to 0:26)" and lines[9].text == "healed 182"
-		and lines[10].spell == "You" and lines[10].text == "died",
+		and lines[7].text == "interrupted Regrowth" and lines[8].text == "ticked you for 9 (crit), you at 62%" and lines[9].text == "healed 182"
+		and lines[10].text == "healed 40 (tick)" and lines[11].spell == "You" and lines[11].text == "died",
 		"what each event says: "..tostring(lines[3].text).." / "..tostring(lines[5].text).." / "..tostring(lines[8].text))
 	ns.UI:Show("duels")
 	local cardScroll = Mock.lastScrolled -- the card's own, drawn just now

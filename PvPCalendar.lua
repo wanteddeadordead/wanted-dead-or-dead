@@ -66,21 +66,40 @@ end
 -- The site's events
 -- ============================================================================
 
----Text from the site, safe to show: a string, no escape codes, trimmed and cut to a length. nil otherwise.
+-- The game's escape codes, taken out whole from the site's text: colours, textures, links, atlases, newlines
+local ESCAPES = { "|c%x%x%x%x%x%x%x%x", "|r", "|T.-|t", "|H.-|h", "|h", "|K.-|k", "|A.-|a", "|n" }
+-- One UTF-8 character
+local UTF8_CHAR = "[%z\1-\127\194-\244][\128-\191]*"
+
+---Text from the site, safe to show: a string, its escape codes taken out, trimmed and cut to a number of characters
+---(at a character's edge, as the site counts them); a bar left over shows as one ("||"). nil otherwise.
 function private.Text(value, maxLength)
 	if type(value) ~= "string" then
 		return nil
 	end
-	local text = strtrim((gsub(value, "[|%c]", "")))
+	local text = value
+	for _, code in ipairs(ESCAPES) do
+		text = gsub(text, code, "")
+	end
+	text = strtrim((gsub(text, "%c", "")))
 	if text == "" then
 		return nil
 	end
-	return strsub(text, 1, maxLength)
+	local count, cutAt = 0, #text
+	for from, to in gmatch(text, "()"..UTF8_CHAR.."()") do
+		count = count + 1
+		if count > maxLength then
+			cutAt = from - 1
+			break
+		end
+		cutAt = to - 1
+	end
+	return (gsub(strtrim(strsub(text, 1, cutAt)), "|", "||"))
 end
 
----A time in Unix seconds, or nil.
+---A time in Unix seconds the game's clock can hold (below 2^31), or nil.
 function private.Time(value)
-	if type(value) ~= "number" or value ~= value or value < 1 or value ~= floor(value) then
+	if type(value) ~= "number" or value ~= value or value < 1 or value >= 2 ^ 31 or value ~= floor(value) then
 		return nil
 	end
 	return value
@@ -92,7 +111,7 @@ function private.EventEnd(e)
 end
 
 ---One of the catch-up's events, checked field by field: { id, title, startsAt, endsAt, allDay, location, link, kind },
----or nil without a title or a start. A link is kept only when it's http(s).
+---or nil without a title or a start, or with an end that can't be read. A link is kept only when it's http(s).
 function private.CleanEvent(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -102,10 +121,10 @@ function private.CleanEvent(raw)
 		endsAt = private.Time(raw.endsAt), allDay = raw.allDay == true or nil, location = private.Text(raw.location, MAX_EVENT_TEXT),
 		link = private.Text(raw.link, MAX_EVENT_LINK), kind = raw.kind == "tournament" and "tournament" or "event",
 	}
-	if not e.title or not e.startsAt or (e.endsAt and e.endsAt < e.startsAt) then
+	if not e.title or not e.startsAt or (raw.endsAt ~= nil and not e.endsAt) or (e.endsAt and e.endsAt < e.startsAt) then
 		return nil
 	end
-	if e.link and not (strfind(e.link, "^https?://[^%s/]") and not strfind(e.link, "%s")) then
+	if e.link and not (strfind(strlower(e.link), "^https?://[^%s/]") and not strfind(e.link, "%s")) then
 		e.link = nil
 	end
 	return e

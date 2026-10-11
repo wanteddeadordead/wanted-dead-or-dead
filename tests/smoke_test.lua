@@ -5657,7 +5657,7 @@ end)()
 		{ id = 1, title = "Forever Open: check-in", startsAt = checkInAt, endsAt = checkInAt + 3600, location = "Raider.IO, then Orgrimmar",
 			link = "https://raider.io", kind = "tournament" },
 		{ id = 2, title = "Forever Open: finals", startsAt = finalsDay, endsAt = finalsDay + 22 * 3600, allDay = true, kind = "tournament" },
-		{ id = 3, title = "Bad |cffff0000link", startsAt = checkInAt + 86400 * 3, link = "javascript:alert(1)", location = "", kind = "event" },
+		{ id = 3, title = "Bad |cffff0000link|r", startsAt = checkInAt + 86400 * 3, link = "javascript:alert(1)", location = "", kind = "event" },
 		{ id = 4, title = "Long over", startsAt = clock - 5 * 86400, kind = "event" },
 		{ id = 5, startsAt = checkInAt },
 		{ id = 6, title = "Ends before it starts", startsAt = checkInAt, endsAt = checkInAt - 1, kind = "event" },
@@ -5669,7 +5669,7 @@ end)()
 	check(type(saved) == "table" and saved.t == clock and #saved.list == 3, "three good, coming events kept: "..(saved and #saved.list or 0))
 	check(saved.list[1].title == "Forever Open: check-in" and saved.list[1].link == "https://raider.io" and saved.list[1].kind == "tournament",
 		"the check-in, with its link")
-	check(saved.list[3].title == "Bad cffff0000link" and saved.list[3].link == nil and saved.list[3].location == nil,
+	check(saved.list[3].title == "Bad link" and saved.list[3].link == nil and saved.list[3].location == nil,
 		"no escape codes, no link that isn't http(s), no empty location")
 	local function Events(t, utc)
 		local d = date(utc and "!*t" or "*t", t)
@@ -5681,14 +5681,27 @@ end)()
 	end
 	local checkIn = Events(checkInAt)["Forever Open: check-in"]
 	check(checkIn and table.concat(checkIn.labels, "|") == "Forever Open: check-in|Check-in", "on its local day, shortened to after the colon")
-	local local1, local2 = date("*t", checkInAt), date("*t", checkInAt + 3600)
-	local function Clock(d) local h = d.hour % 12 return format("%d:%02d %s", h == 0 and 12 or h, d.min, d.hour < 12 and "AM" or "PM") end
-	check(checkIn.detail.lines[1] == "Tournament, "..Clock(local1).." - "..Clock(local2), "its local times: "..tostring(checkIn.detail.lines[1]))
 	check(checkIn.detail.lines[2] == "Raider.IO, then Orgrimmar" and checkIn.detail.lines[3] == "https://raider.io", "its location and link, as text")
 	local finals = Events(finalsDay, true)["Forever Open: finals"]
-	local finalsEnd = date("*t", finalsDay + 22 * 3600)
-	check(finals and finals.detail.lines[1] == "Tournament, start time not announced, ends "..(finalsEnd.day ~= date("!*t", finalsDay).day
-		and format("%d/%02d ", finalsEnd.month, finalsEnd.day) or "")..Clock(finalsEnd), "all day on its own date: "..tostring(finals and finals.detail.lines[1]))
+	check(finals, "the all-day finals on their own (UTC) date")
+	-- The tooltip's times are the player's: written out for the zones the suite is run in (TZ=UTC, Asia/Tokyo,
+	-- America/New_York, Europe/Berlin), where the check-in may cross midnight and the finals end the next day
+	local function Wall(d) return os.time({ year = d.year, month = d.month, day = d.day, hour = d.hour, min = d.min, isdst = false }) end
+	local offset = (Wall(date("*t", checkInAt)) - Wall(date("!*t", checkInAt))) / 3600
+	local LITERAL = {
+		[0] = { "Tournament, 2:00 PM - 3:00 PM", "Tournament, start time not announced, ends 10:00 PM" },
+		[9] = { "Tournament, 11:00 PM - 10/18 12:00 AM", "Tournament, start time not announced, ends 10/19 7:00 AM" },
+		[-4] = { "Tournament, 10:00 AM - 11:00 AM", "Tournament, start time not announced, ends 6:00 PM" },
+		[2] = { "Tournament, 4:00 PM - 5:00 PM", "Tournament, start time not announced, ends 10/19 12:00 AM" },
+	}
+	local want = LITERAL[offset]
+	if want then
+		check(checkIn.detail.lines[1] == want[1], "the check-in's local times (UTC"..offset.."): "..tostring(checkIn.detail.lines[1]))
+		check(finals.detail.lines[1] == want[2], "the finals' local end (UTC"..offset.."): "..tostring(finals.detail.lines[1]))
+	else
+		check(strfind(checkIn.detail.lines[1], "^Tournament, %d+:%d%d [AP]M %- ") and strfind(finals.detail.lines[1], "^Tournament, start time not announced, ends "),
+			"local times in an untested zone (UTC"..offset.."): "..checkIn.detail.lines[1].." / "..finals.detail.lines[1])
+	end
 	local upcoming = {}
 	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = e.kind end
 	check(upcoming["Forever Open: check-in"] == "event" and upcoming["Forever Open: finals"] == "event", "coming up")
@@ -5745,6 +5758,19 @@ end)()
 	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = {} } }
 	ns.Catchup:Import()
 	check(#ns.db.calendarEvents.list == 0, "an empty list leaves none")
+	-- Text is cut by characters at a character's edge, as the site counts; escape codes go whole and a lone bar shows
+	-- as one; a link's scheme in any case; times the game can't hold are refused
+	ns.PvPCalendar:TakeEvents({
+		{ id = 1, title = string.rep("é", 85), startsAt = checkInAt, location = string.rep("a", 79).."é", link = "HTTPS://Raider.IO/x", kind = "event" },
+		{ id = 2, title = "|Tinterface\\icons\\x:0|t|Hitem:19019|h[Thunderfury]|h |Kq1|k|Aatlas|a A | B|n", startsAt = checkInAt + 1, kind = "event" },
+		{ id = 3, title = "Too late", startsAt = 2 ^ 31, kind = "event" },
+		{ id = 4, title = "Never", startsAt = checkInAt, endsAt = math.huge, kind = "event" },
+	}, clock + 1)
+	local cut, codes = ns.db.calendarEvents.list[1], ns.db.calendarEvents.list[2]
+	check(#ns.db.calendarEvents.list == 2, "times past 2^31 and infinity refused: "..#ns.db.calendarEvents.list)
+	check(cut.title == string.rep("é", 80) and cut.location == string.rep("a", 79).."é", "80 characters, not bytes: "..#cut.title.." bytes")
+	check(cut.link == "HTTPS://Raider.IO/x", "an upper-case scheme is a link too")
+	check(codes.title == "[Thunderfury]  A || B", "escape codes taken out whole, a lone bar kept as one: "..codes.title)
 	ns.db.calendarEvents = { t = 1, list = "junk" }
 	ns.PvPCalendar:OnLoad()
 	check(type(ns.db.calendarEvents.list) == "table", "unreadable saved events start empty")

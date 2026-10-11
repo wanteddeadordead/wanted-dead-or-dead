@@ -97,7 +97,8 @@ calendar, from the app's catch-up (`events`, app 0.2.47), for the calendar page.
 `list` holds at most 20, soonest first, each `{ id, title, startsAt, endsAt, allDay, location, link, kind }`: Unix
 seconds, `endsAt` nil when none is given, `allDay` true when the start time isn't announced (`startsAt` is then
 midnight UTC of its date, shown on that date), `kind` `"event"` or `"tournament"`, and `link` only an http(s) address,
-shown as text. Each is checked field by field; title and location are cut to 80 characters, escape codes taken out. A
+shown as text. Each is checked field by field: title and location are cut to 80 characters (not bytes), the game's
+escape codes taken out whole and a bar left over kept as `||`; times must be below 2^31; a link's scheme may be any case. A
 catch-up with a list replaces them (an empty list leaves none); one without (an older app) keeps them. An event is
 dropped 2 days after it ends (its end, else the end of its day when all day, else its start). They aren't sent to other
 players. A new key: no migration.

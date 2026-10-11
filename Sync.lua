@@ -1704,7 +1704,9 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	local isSelf = false
 	if not viaLink then
 		local echoTag, echoId = strmatch(text, "^(%u):(%w+):")
+		-- Under our name only: another player's message can carry an id we just used
 		isSelf = echoTag and private.ownMessages[echoTag..":"..echoId] and now - private.ownMessages[echoTag..":"..echoId] < 30
+			and Store:IsOwnName(sender)
 		if isSelf then
 			private.ownMessages[echoTag..":"..echoId] = nil
 			Store:LearnOrigin(sender)

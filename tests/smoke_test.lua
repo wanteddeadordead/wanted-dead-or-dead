@@ -7486,14 +7486,14 @@ end)()
 	check(S:IsWellFormed(S:ForWire(first)), "and is well formed")
 	-- Before any record of our own, the origin may still be corrected, and the corrected one's chain starts by the clock too
 	S:FreshStart()
-	S:LearnOrigin("Corrected Name")
-	check(S:GetOrigin() == "Corrected Name" and S:GetChainSeq("Corrected Name") == start and db.chains["Corrected Name"].start == start + 1,
+	S:LearnOrigin("Test-Corrected")
+	check(S:GetOrigin() == "Test-Corrected" and S:GetChainSeq("Test-Corrected") == start and db.chains["Test-Corrected"].start == start + 1,
 		"a corrected origin's fresh chain starts by the clock too")
 	S:LearnOrigin(origin)
-	check(S:GetOrigin() == origin and db.chains["Corrected Name"] == nil, "and back")
+	check(S:GetOrigin() == origin and db.chains["Test-Corrected"] == nil, "and back")
 	-- Once a record exists, the origin stays
 	S:NewRecord("mark", { target = "Player-9-RESTART2", name = "Restart Two" })
-	S:LearnOrigin("Corrected Name")
+	S:LearnOrigin("Test-Corrected")
 	check(S:GetOrigin() == origin, "a time-started chain with a record keeps its origin")
 	-- Before the epoch (a wrong clock) a fresh chain starts at the base, and the live world's base still holds
 	local keptClock = clock
@@ -7704,6 +7704,53 @@ end)()
 	local far = Sealed({ kind = "mark", id = "Far Restart:"..format("%d", biggest), origin = "Far Restart", seq = biggest, prev = "0", t = clock, data = { target = "Player-9-FAR" } })
 	check(S:IsWellFormed(far) and not S:IsWellFormed(Sealed({ kind = "mark", id = "Far Restart:2147483648", origin = "Far Restart", seq = biggest + 1, prev = "0", t = clock, data = { target = "Player-9-FAR" } })),
 		"a seq up to 2^31 - 1 is well formed, and none past it")
+	S:FreshStart()
+end)()
+-- Our own messages are known by their id coming back, but another player's message can carry the same id (every
+-- client numbers its messages, and a fresh session used to start at 1): it is only our echo when it's under our name
+-- (our name and surname, or our name on another realm), so another player never becomes our origin, nor takes our
+-- chain, and their message is read as theirs
+;(function()
+	local S, db = ns.Store, ns.db
+	S:FreshStart()
+	local origin = S:GetOrigin()
+	local chan = ns.Sync:GetInfo().channelName
+	local function LastSent()
+		ClearSent()
+		clock = clock + 120
+		SlashCmdList.WANTED("synctest")
+		RunTimers()
+		for i = #addonSent, 1, -1 do
+			local prefix = addonSent[i].text:match("^(H:%w+):")
+			if prefix then return prefix end
+		end
+	end
+	local function SameId(prefix, sender, tbl)
+		Fire("CHAT_MSG_ADDON", "WNTD", prefix..":1/1:"..LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(LibSerialize:Serialize(tbl))),
+			"CHANNEL", sender, nil, nil, nil, chan)
+	end
+	db.chains["Other Player"] = { seq = 77, lastHash = "abc" }
+	local ourChain = db.chains[origin]
+	check(ourChain and S:GetChainSeq(origin) == S:GetChainBase(origin), "a fresh own chain, no record yet")
+	-- Another player's hello under the id we just used: read as theirs, our origin and chain stay
+	SameId(LastSent(), "Other Player", { c = { ["Hello Chain"] = 5 }, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] == ourChain and db.chains["Other Player"].seq == 77,
+		"another player's message under our id leaves our origin and chain: "..S:GetOrigin())
+	RunTimers() RunTimers()
+	local asked
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" and m.tbl.n and m.tbl.n["Hello Chain"] then asked = true end end
+	check(asked, "and their hello is read as theirs")
+	-- Our first name with another surname is another player too
+	SameId(LastSent(), "Test Other", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] == ourChain, "our first name with another surname isn't us")
+	S:LearnOrigin("Other Player")
+	check(S:GetOrigin() == origin, "nor is another name told to the store")
+	-- Our own echo under our name on another realm still corrects the origin, and back again
+	SameId(LastSent(), "Test-Elsewhere", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == "Test-Elsewhere" and db.chains["Test-Elsewhere"] and db.chains[origin] == nil, "our echo under our name on a realm corrects the origin")
+	SameId(LastSent(), origin, { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] and db.chains["Test-Elsewhere"] == nil, "and our echo under our full name corrects it back")
+	db.chains["Other Player"], db.chains["Hello Chain"] = nil, nil
 	S:FreshStart()
 end)()
 -- Another player's shared sighting is checked before anything uses it: a position is two numbers 0 to 100 or nothing,

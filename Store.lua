@@ -666,11 +666,31 @@ function Store:GetOrigin()
 	return name.."-"..gsub(realm, "[%s%-]", "")
 end
 
+---Whether a sender's name can be this character's: our name, with our surname when both carry one (this client's
+---"First Last"), on any realm ("Name-Realm"). Another player can send a message under an id we just used.
+---@param sender string
+---@return boolean
+function Store:IsOwnName(sender)
+	if type(sender) ~= "string" then
+		return false
+	end
+	local name, surname = UnitName("player")
+	if type(surname) ~= "string" or surname == "" then
+		surname = private.origin and strmatch(private.origin, "^[^ %-]+ ([^%-]+)")
+	end
+	local first, last = strmatch(gsub(sender, "%-.*$", ""), "^([^ ]+) ?(.*)$")
+	return first ~= nil and first == name and (last == "" or not surname or last == surname)
+end
+
 ---Corrects the origin once the client has shown how it names us as a sender (our own message echoed back).
----Only allowed before any record of our own exists, since ids embed it.
+---Only allowed before any record of our own exists, since ids embed it, and only to a name that can be ours.
 ---@param sender string
 function Store:LearnOrigin(sender)
 	if sender == private.origin then
+		return
+	end
+	if not Store:IsOwnName(sender) then
+		Wanted:Log("!! Store: sender name %s can't be ours (origin %s); keeping origin", tostring(sender), tostring(private.origin))
 		return
 	end
 	if private.ownChain and private.ownChain.seq > Store:GetChainBase(private.origin) then

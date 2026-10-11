@@ -716,7 +716,7 @@ local function CreateDialog()
 	-- A click below the last line still puts the cursor in the box
 	areaBox:EnableMouse(true)
 	areaBox:SetScript("OnMouseDown", function() area:SetFocus() end)
-	frame.area, frame.areaBox = area, areaBox
+	frame.area, frame.areaBox, frame.areaScroll = area, areaBox, areaScroll
 	-- A choice above the input (options.choice): a label and a dropdown
 	frame.choiceLabel = Theme:Text(frame, "small", "", C.muted)
 	frame.choice = W:Choice(frame, 260, {}, function(key)
@@ -834,6 +834,8 @@ function W:Dialog(options)
 		-- The dialog's width less its margins and the scroll bar's room
 		frame.area:SetWidth((options.width or 400) - 40 - 24)
 		frame.area:SetMaxLetters(options.input.maxLetters or 255)
+		-- At the top, whatever the last dialog's box was scrolled to
+		frame.areaScroll:SetVerticalScroll(0)
 		frame.area:SetText(options.input.value or "")
 		frame.areaBox:Show()
 	elseif options.input then

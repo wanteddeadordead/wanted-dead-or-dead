@@ -10627,6 +10627,45 @@ end)()
 	check(table.concat(tipLines, "\n"):find("Them: Level 58 Orc Affliction Warlock", 1, true) and table.concat(tipLines, "\n"):find("You: Fury Warrior", 1, true),
 		"the tooltip gives both builds: "..table.concat(tipLines, " | "))
 	for _, fs in ipairs(Mock.fontStrings) do check(not tostring(fs._text):find("Player%-1%-"), "no GUID is ever shown: "..tostring(fs._text)) end
+
+	-- A build is its loadout as it grew: a point added at a level-up keeps its row, a respec starts another. Real
+	-- loadouts (Combat 0/12/0, then the 13th point finishing a talent's ranks)
+	local twelve, thirteen = "CAdBkTaYRSJGlt4cRvsNaqXwhMAAA8AYwAAAAfA", "CAdBkTaYRSJGlt4cRvsNaqXwhMAAAMYwAAAAfA"
+	check(Duels:AddsTo(twelve, thirteen) and not Duels:AddsTo(thirteen, twelve) and Duels:AddsTo(twelve, twelve), "a point added is the same build; one taken out isn't")
+	check(not Duels:AddsTo(twelve, "A1") and not Duels:AddsTo("A1", "A2") and not Duels:AddsTo(twelve, "CAdBkTaYRSJGlt4cRvsNaqXwhMAAA8AYw!AAAfA"),
+		"a loadout that can't be read is its own build")
+	local keptReports = db.duelReports
+	local function Rogue(at, result, loadout, points)
+		local d = { id = "Test:duel:"..at, startAt = at, length = 20, result = result, zone = "Durotar",
+			me = { class = "ROGUE", spec = "Rogue", specId = 1488, level = 22, loadout = loadout }, them = { class = "WARRIOR", spec = "Arms", level = 30 } }
+		if points then db.duelReports[d.id] = { v = 1, me = { build = { spec = "Combat", points = points } } } end
+		return d
+	end
+	db.duelReports = {}
+	db.duels = { Rogue(clock - 900, "lost"), Rogue(clock - 800, "won", twelve, { 0, 12, 0 }), Rogue(clock - 700, "lost", twelve, { 0, 12, 0 }),
+		Rogue(clock - 600, "lost", thirteen, { 0, 13, 0 }), Rogue(clock - 500, "lost", thirteen) }
+	builds = Duels:GetSheet().builds
+	check(#builds == 2 and builds[1].label == "Combat Rogue (0/13/0)" and builds[1].games == 4 and builds[1].won == 1 and builds[1].loadout == thirteen
+		and builds[2].label == "Rogue" and builds[2].games == 1, "a level-up keeps the build's row, named by its newest points: "..tostring(builds[1].label))
+	ns.UI:Show("duels")
+	local buildsTab = nil
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Your builds" and f._scripts.OnClick then buildsTab = f end end
+	buildsTab._scripts.OnClick(buildsTab, "LeftButton")
+	local function Shown(match) local f = Row(match) return f ~= nil and f._shown ~= false end
+	check(OnScreen("Combat Rogue (0/13/0)") and not Shown(function(item) return item.tree ~= nil end), "the builds, closed")
+	local buildRow = Row(function(item) return item.label == "Combat Rogue (0/13/0)" end)
+	buildRow._scripts.OnClick(buildRow, "LeftButton")
+	check(Shown(function(item) return item.tree ~= nil end) and OnScreen(date("%b %d %H:%M", clock - 800).."  vs Arms Warrior") and OnScreen("0/12/0"),
+		"an open build lists its duels, who each was against and its points then")
+	local opened
+	local keptUtil = PlayerSpellsUtil
+	PlayerSpellsUtil = { InspectLoadout = function(s) opened = s end }
+	local treeRow = Row(function(item) return item.tree ~= nil end)
+	treeRow._scripts.OnClick(treeRow, "LeftButton")
+	PlayerSpellsUtil = keptUtil
+	check(opened == "1488:22:"..thirteen, "See talent tree opens the build as it is now: "..tostring(opened))
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Matchups" and f._scripts.OnClick then f._scripts.OnClick(f, "LeftButton") end end
+	db.duelReports = keptReports
 	db.duels = kept
 end)()
 -- Fight reports come from the app's catch-up, read only at a /reload: the Duels tab says where the last one stands,

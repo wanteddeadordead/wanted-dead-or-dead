@@ -3,8 +3,9 @@
 ## [Unreleased]
 
 - Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs
-  Frost Mage 3-9", most faced first), how you do as each of your own talent builds. Click a matchup to see its duels:
-  when, the result, how long and the opponent's level (hover one for where, and both sides' level, race and build). Fight
+  Frost Mage 3-9", most faced first), how you do as each of your own talent builds (a build keeps its row as you add points
+  when you level, and a respec starts a new one; each is named by its points, "Combat Rogue (0/13/0)"). Click a matchup
+  to see its duels: when, the result, how long and the opponent's level; click a build for its duels and See talent tree (hover one for where, and both sides' level, race and build). Fight
   reports from the Wanted app reach the game at a /reload: the Duels tab says when your last duel's report is due and
   gives a Reload button. Click a duel for its fight card: both sides' health through the fight, the control you
   suffered, what each of you used, and up to five tips, each with what to try next time (experimental: tell us about a wrong tip with /wanted bug). Fight cards need the Wanted app 0.2.42 or newer:

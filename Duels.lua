@@ -865,6 +865,27 @@ function Duels:Side(duel, key)
 	return shown
 end
 
+---A side's points in each tree as the app's fight report read them from its talents: "0/13/0", or nil without one.
+---@param duel table
+---@param key string "me" or "them"
+---@return string?
+function Duels:Points(duel, key)
+	local report = type(duel) == "table" and Wanted.db.duelReports[duel.id]
+	local build = type(report) == "table" and type(report[key]) == "table" and report[key].build
+	local points = type(build) == "table" and type(build.points) == "table" and build.points or nil
+	if not points or #points == 0 then
+		return nil
+	end
+	local parts = {}
+	for i, n in ipairs(points) do
+		if type(n) ~= "number" then
+			return nil
+		end
+		parts[i] = tostring(floor(n))
+	end
+	return table.concat(parts, "/")
+end
+
 -- Race names for duels recorded before the game's own name was kept (its file names: Scourge is Undead)
 local RACE_NAMES = { Scourge = "Undead", NightElf = "Night Elf" }
 
@@ -961,13 +982,111 @@ function Duels:ReportState(duel)
 	return private.appT < duel.endAt and "save" or "reading"
 end
 
+-- ============================================================================
+-- Talent loadouts
+-- ============================================================================
+
+-- The import string's base64 (Blizzard_ClassTalentImportExport.lua): each character six bits, lowest bit first
+local LOADOUT_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local LOADOUT_VALUES = {}
+for i = 1, #LOADOUT_ALPHABET do
+	LOADOUT_VALUES[string.byte(LOADOUT_ALPHABET, i)] = i - 1
+end
+
+---A loadout's nodes, read without the class's tree: a header of the version (8 bits), spec id (16) and tree hash
+---(128), then for each node of the tree in order: selected (1); if so purchased (1), and if purchased partly ranked
+---(1) with its ranks (6), then a choice (1) with its index (2). Each node says which bits follow, so two loadouts of
+---one tree can be compared node by node. Nodes past the string's end are unselected.
+---@return table? { spec, hash, nodes = { [i] = false | { granted = true } | { rank = ranks or nil (all), choice } } }
+function private.ReadLoadout(s)
+	if type(s) ~= "string" or s == "" or #s > 200 then
+		return nil
+	end
+	local values = {}
+	for i = 1, #s do
+		values[i] = LOADOUT_VALUES[string.byte(s, i)]
+		if not values[i] then
+			return nil
+		end
+	end
+	local pos, total = 0, #s * 6
+	local function Take(width)
+		if pos + width > total then
+			pos = total + 1
+			return 0
+		end
+		local v = 0
+		for k = 0, width - 1 do
+			local at = pos + k
+			v = v + floor(values[floor(at / 6) + 1] / 2 ^ (at % 6)) % 2 * 2 ^ k
+		end
+		pos = pos + width
+		return v
+	end
+	local _, spec = Take(8), Take(16)
+	local hash = {}
+	for i = 1, 16 do
+		hash[i] = Take(8)
+	end
+	local nodes = {}
+	while pos < total do
+		local node = false
+		if Take(1) == 1 then
+			if Take(1) == 0 then
+				node = { granted = true }
+			else
+				node = {}
+				if Take(1) == 1 then
+					node.rank = Take(6)
+				end
+				if Take(1) == 1 then
+					node.choice = Take(2)
+				end
+			end
+		end
+		nodes[#nodes + 1] = node
+	end
+	if pos > total then
+		return nil
+	end
+	return { spec = spec, hash = table.concat(hash, "."), nodes = nodes }
+end
+
+---Whether one loadout is another with points added: every talent of the first still taken, at the same or a higher
+---rank and the same choice. A point moved or taken out (a respec) is a different build.
+---@param old string
+---@param new string
+---@return boolean
+function Duels:AddsTo(old, new)
+	if old == new then
+		return type(old) == "string"
+	end
+	local a, b = private.ReadLoadout(old), private.ReadLoadout(new)
+	if not (a and b) or a.spec ~= b.spec or a.hash ~= b.hash then
+		return false
+	end
+	for i, was in ipairs(a.nodes) do
+		local now = b.nodes[i]
+		if was then
+			if not now or (now.granted and not was.granted) or (was.choice ~= now.choice) then
+				return false
+			end
+			-- No rank means all of them
+			if not was.granted and (was.rank == nil and now.rank ~= nil or was.rank and now.rank and now.rank < was.rank) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
 ---The player's duels added up: the record overall, the record against each class and spec (most faced first), the
 ---record as each of their own builds (one a talent loadout where the record has one, else one a specialization), and
 ---every duel newest first. Records not in the expected shape are passed over.
 ---@return table { won, lost, total, matchups = { { label, class, won, lost, games, duels (newest first) } }, builds = (the same), recent }
 function Duels:GetSheet()
 	local sheet = { won = 0, lost = 0, total = 0, matchups = {}, builds = {}, recent = {} }
-	local byMatchup, byBuild = {}, {}
+	local byMatchup, byBuild, withLoadout = {}, {}, {}
 	local function Add(rows, index, side, record, key)
 		local label = Duels:Build(side)
 		key = key or label
@@ -988,8 +1107,51 @@ function Duels:GetSheet()
 			sheet.won = sheet.won + (record.result == "won" and 1 or 0)
 			sheet.lost = sheet.lost + (record.result == "lost" and 1 or 0)
 			Add(sheet.matchups, byMatchup, Duels:Side(record, "them"), record)
-			Add(sheet.builds, byBuild, Duels:Side(record, "me"), record, type(record.me.loadout) == "string" and record.me.loadout or nil)
+			if type(record.me.loadout) == "string" then
+				tinsert(withLoadout, record)
+			else
+				Add(sheet.builds, byBuild, Duels:Side(record, "me"), record)
+			end
 			tinsert(sheet.recent, record)
+		end
+	end
+	-- A build is its loadout as it grew: points added since (a level gained) keep its row; a respec starts a new one
+	sort(withLoadout, function(a, b) return a.startAt < b.startAt end)
+	for _, record in ipairs(withLoadout) do
+		local loadout, row = record.me.loadout, nil
+		for _, r in ipairs(sheet.builds) do
+			if r.loadout and Duels:AddsTo(r.loadout, loadout) then
+				row = r
+				break
+			end
+		end
+		if not row then
+			row = { won = 0, lost = 0, games = 0, duels = {} }
+			tinsert(sheet.builds, row)
+		end
+		row.loadout, row.newest = loadout, record
+		tinsert(row.duels, record)
+		row.games = row.games + 1
+		row.won = row.won + (record.result == "won" and 1 or 0)
+		row.lost = row.lost + (record.result == "lost" and 1 or 0)
+	end
+	-- Named by its newest duel with a fight report (its spec read from the talents, and its points), else its newest
+	for _, row in ipairs(sheet.builds) do
+		if row.newest then
+			local named = row.newest
+			for i = #row.duels, 1, -1 do
+				local record = row.duels[i]
+				if record.me.loadout == row.loadout and Duels:Points(record, "me") then
+					named = record
+					break
+				end
+			end
+			local side = Duels:Side(named, "me")
+			row.label, row.class, row.points = Duels:Build(side), side.class, Duels:Points(named, "me")
+			row.specId, row.level = row.newest.me.specId, row.newest.me.level
+			if row.points then
+				row.label = row.label.." ("..row.points..")"
+			end
 		end
 	end
 	-- Several builds of one specialization: numbered as first played, "(build unknown)" for duels from before loadouts

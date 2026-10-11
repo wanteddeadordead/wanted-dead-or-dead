@@ -64,16 +64,31 @@ end
 function private.UpdateRow(row, item)
 	local cells = row.cells
 	local duel = item.duel
-	if duel then
-		-- One duel of an open matchup: when, the result, how long, and the opponent's level
-		local result = RESULTS[duel.result] or RESULTS.none
-		cells[1]:SetText(Theme:Colorize("    "..private.When(duel.startAt), C.muted))
-		cells[2]:SetText(Theme:Colorize(result[1]..(duel.fled and " (fled)" or ""), result[2]))
-		cells[3]:SetText(private.Length(duel.length))
-		cells[4]:SetText(type(duel.them.level) == "number" and Theme:Colorize("Level "..duel.them.level, C.faint) or "")
+	if item.tree then
+		-- An open build's first line: its talents in the game's own talent frame
+		cells[1]:SetText(Theme:Colorize("    See talent tree", C.gold))
+		for i = 2, 4 do
+			cells[i]:SetText("")
+		end
 		return
 	end
-	local mark = private.view == "matchups" and Theme:Colorize(private.open[item.label] and "- " or "+ ", C.faint) or ""
+	if duel then
+		-- One duel of an open row: when, the result, how long, and the opponent's level (in a matchup) or who it was
+		-- against and your points then (in a build)
+		local result = RESULTS[duel.result] or RESULTS.none
+		local when = "    "..private.When(duel.startAt)
+		local last = type(duel.them.level) == "number" and Theme:Colorize("Level "..duel.them.level, C.faint) or ""
+		if private.view == "builds" then
+			when = when.."  vs "..Duels:Build(Duels:Side(duel, "them"))
+			last = Theme:Colorize(Duels:Points(duel, "me") or "", C.faint)
+		end
+		cells[1]:SetText(Theme:Colorize(when, C.muted))
+		cells[2]:SetText(Theme:Colorize(result[1]..(duel.fled and " (fled)" or ""), result[2]))
+		cells[3]:SetText(private.Length(duel.length))
+		cells[4]:SetText(last)
+		return
+	end
+	local mark = Theme:Colorize(private.open[private.view..item.label] and "- " or "+ ", C.faint)
 	cells[1]:SetText(mark..Theme:ClassName(item.label, item.class))
 	cells[2]:SetText(private.Record(item.won, item.lost))
 	cells[3]:SetText(tostring(item.games))
@@ -99,12 +114,17 @@ function private.ShowTooltip(row, item)
 	GameTooltip:Show()
 end
 
----A click on a matchup opens it to its duels, or closes it; a click on a duel shows its fight card.
+---A click on a matchup or build opens it to its duels, or closes it; a click on a duel shows its fight card, on See
+---talent tree the build's newest loadout in the game's talent frame.
 function private.OnClick(item)
-	if item.duel then
+	if item.tree then
+		local row = item.tree
+		private.ShowTree(row.loadout, row.specId, row.level)
+	elseif item.duel then
 		private.ShowCard(item.duel)
-	elseif private.view == "matchups" then
-		private.open[item.label] = not private.open[item.label] or nil
+	else
+		local key = private.view..item.label
+		private.open[key] = not private.open[key] or nil
 		private.Refresh()
 	end
 end
@@ -655,7 +675,10 @@ function private.Refresh()
 	local items = {}
 	for _, row in ipairs(sheet[private.view]) do
 		tinsert(items, row)
-		if private.view == "matchups" and private.open[row.label] then
+		if private.open[private.view..row.label] then
+			if row.loadout then
+				tinsert(items, { tree = row })
+			end
 			for _, duel in ipairs(row.duels) do
 				tinsert(items, { duel = duel })
 			end

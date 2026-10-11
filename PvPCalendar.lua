@@ -1,5 +1,6 @@
 -- Wanted: what the PvP page's calendar shows, one month at a time. Blizzard's PvP season as the game tells it
--- (Challenges:ReadSeason), Wanted's season and the weekly challenge reset from the catch-up, and the holidays in the
+-- (Challenges:ReadSeason), Wanted's season and the weekly challenge reset from the catch-up, the events the operator
+-- puts on wanteddeadordead.com's calendar (from the catch-up, kept in WantedDB.calendarEvents), and the holidays in the
 -- game's own calendar, the PvP ones (battleground weekends) marked. Dates are the player's local dates.
 
 local _, Wanted = ...
@@ -13,7 +14,12 @@ local WEEK = 7 * 24 * 60 * 60
 local MAX_DAY_EVENTS = 8 -- the game's events read per day, at most
 local MAX_UPCOMING = 10
 -- The order a day's events are listed in: Wanted's and Blizzard's dates before the game's holidays
-local KIND_ORDER = { raid = -1, game = 0, pvpseason = 1, wanted = 2, weekly = 3, pvpholiday = 4, holiday = 5 }
+local KIND_ORDER = { raid = -1, game = 0, event = 1, pvpseason = 2, wanted = 3, weekly = 4, pvpholiday = 5, holiday = 6 }
+-- The site's events: the most kept, their text's longest (the site's limits), and how long one stays after it ends
+local MAX_EVENTS = 20
+local MAX_EVENT_TEXT = 80
+local MAX_EVENT_LINK = 200
+local EVENT_KEEP_SECONDS = 2 * 24 * 60 * 60
 -- WoW Forever's own dates, from Blizzard's beta schedule (forum post, BlizzCon 2026): the beta ends on October 21,
 -- 2026 (no time given: that day everywhere), and the game launches on November 4, 2026 at 3:00 p.m. PST
 local BETA_ENDS = { year = 2026, month = 10, day = 21 }
@@ -21,6 +27,16 @@ local LAUNCH_AT = Wanted.LAUNCH_AT -- 2026-11-04 23:00 UTC
 -- The game marks no holiday as PvP (every one is event type Other on Forever, build 70205); its battleground
 -- weekends are titled "Call to Arms: <battleground>"
 local BATTLEGROUND_WEEKEND = "^Call to Arms: "
+
+function PvPCalendar:OnLoad()
+	-- { t = the catch-up's time, list = { { id, title, startsAt, endsAt, allDay, location, link, kind }, ... } }
+	local saved = Wanted.db.calendarEvents
+	if type(saved) ~= "table" or type(saved.list) ~= "table" or type(saved.t) ~= "number" then
+		saved = { t = 0, list = {} }
+	end
+	Wanted.db.calendarEvents = saved
+	private.DropPastEvents()
+end
 
 function PvPCalendar:OnEnable()
 	local frame = CreateFrame("Frame")
@@ -44,6 +60,138 @@ function PvPCalendar:Open()
 	end
 	private.opened = true
 	pcall(C_Calendar.OpenCalendar)
+end
+
+-- ============================================================================
+-- The site's events
+-- ============================================================================
+
+-- The game's escape codes, taken out whole from the site's text: colours, textures, links, atlases, newlines
+local ESCAPES = { "|c%x%x%x%x%x%x%x%x", "|r", "|T.-|t", "|H.-|h", "|h", "|K.-|k", "|A.-|a", "|n" }
+-- One UTF-8 character
+local UTF8_CHAR = "[%z\1-\127\194-\244][\128-\191]*"
+
+---Text from the site, safe to show: a string, its escape codes taken out, trimmed and cut to a number of characters
+---(at a character's edge, as the site counts them); a bar left over shows as one ("||"). nil otherwise.
+function private.Text(value, maxLength)
+	if type(value) ~= "string" then
+		return nil
+	end
+	local text = value
+	for _, code in ipairs(ESCAPES) do
+		text = gsub(text, code, "")
+	end
+	text = strtrim((gsub(text, "%c", "")))
+	if text == "" then
+		return nil
+	end
+	local count, cutAt = 0, #text
+	for from, to in gmatch(text, "()"..UTF8_CHAR.."()") do
+		count = count + 1
+		if count > maxLength then
+			cutAt = from - 1
+			break
+		end
+		cutAt = to - 1
+	end
+	return (gsub(strtrim(strsub(text, 1, cutAt)), "|", "||"))
+end
+
+---A time in Unix seconds the game's clock can hold (below 2^31), or nil.
+function private.Time(value)
+	if type(value) ~= "number" or value ~= value or value < 1 or value >= 2 ^ 31 or value ~= floor(value) then
+		return nil
+	end
+	return value
+end
+
+---When an event is over: its end, else the end of its day when all day, else its start.
+function private.EventEnd(e)
+	return e.endsAt or (e.allDay and e.startsAt + 24 * 60 * 60) or e.startsAt
+end
+
+---One of the catch-up's events, checked field by field: { id, title, startsAt, endsAt, allDay, location, link, kind },
+---or nil without a title or a start, or with an end that can't be read. A link is kept only when it's http(s).
+function private.CleanEvent(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local e = {
+		id = private.Time(raw.id), title = private.Text(raw.title, MAX_EVENT_TEXT), startsAt = private.Time(raw.startsAt),
+		endsAt = private.Time(raw.endsAt), allDay = raw.allDay == true or nil, location = private.Text(raw.location, MAX_EVENT_TEXT),
+		link = private.Text(raw.link, MAX_EVENT_LINK), kind = raw.kind == "tournament" and "tournament" or "event",
+	}
+	if not e.title or not e.startsAt or (raw.endsAt ~= nil and not e.endsAt) or (e.endsAt and e.endsAt < e.startsAt) then
+		return nil
+	end
+	if e.link and not (strfind(strlower(e.link), "^https?://[^%s/]") and not strfind(e.link, "%s")) then
+		e.link = nil
+	end
+	return e
+end
+
+---Forgets the events that ended over EVENT_KEEP_SECONDS ago.
+function private.DropPastEvents()
+	local list, kept = Wanted.db.calendarEvents.list, {}
+	local cutoff = GetServerTime() - EVENT_KEEP_SECONDS
+	for _, e in ipairs(list) do
+		if type(e) == "table" and type(e.startsAt) == "number" and private.EventEnd(e) >= cutoff then
+			tinsert(kept, e)
+		end
+	end
+	Wanted.db.calendarEvents.list = kept
+end
+
+---Takes the events from this login's catch-up (Catchup:Import): a list replaces the ones kept, unless the catch-up is
+---older than theirs; none (an older app, or the site couldn't read them) keeps them. Past ones go either way.
+---@param raw any entry.events as the app wrote it
+---@param t number the catch-up's time
+function PvPCalendar:TakeEvents(raw, t)
+	local saved = Wanted.db.calendarEvents
+	if type(raw) == "table" and type(t) == "number" and t >= saved.t then
+		local list = {}
+		for i = 1, #raw do
+			local e = private.CleanEvent(raw[i])
+			if e then
+				tinsert(list, e)
+			end
+		end
+		sort(list, function(a, b) return a.startsAt < b.startsAt end)
+		for i = #list, MAX_EVENTS + 1, -1 do
+			list[i] = nil
+		end
+		saved.t, saved.list = t, list
+		Wanted:Log("PvPCalendar: %d events from the site", #list)
+	end
+	private.DropPastEvents()
+end
+
+---What the tooltip says about one of the site's events, under its title: the kind and local times, the location and
+---the link (as text: the game opens no web links).
+function private.EventLines(e)
+	local function Clock(t)
+		local d = date("*t", t)
+		return private.Clock({ hour = d.hour, minute = d.min })
+	end
+	local function EndClock(dayOf)
+		local d, from = date("*t", e.endsAt), date(e.allDay and "!*t" or "*t", dayOf)
+		local sameDay = d.year == from.year and d.month == from.month and d.day == from.day
+		return (sameDay and "" or format("%d/%02d ", d.month, d.day))..Clock(e.endsAt)
+	end
+	local when
+	if e.allDay then
+		when = "start time not announced"..(e.endsAt and ", ends "..EndClock(e.startsAt) or "")
+	else
+		when = Clock(e.startsAt)..(e.endsAt and " - "..EndClock(e.startsAt) or "")
+	end
+	local lines = { (e.kind == "tournament" and "Tournament, " or "Event, ")..when }
+	if e.location then
+		tinsert(lines, e.location)
+	end
+	if e.link then
+		tinsert(lines, e.link)
+	end
+	return lines
 end
 
 ---Today's local date.
@@ -120,6 +268,9 @@ function private.Labels(text, short, kind)
 		tinsert(labels, starts and "Starts" or "Ends")
 	elseif kind == "game" and short == "Launch day" then
 		tinsert(labels, "Launch")
+	elseif kind == "event" and strfind(text, ".: ") then
+		-- "Forever Open: check-in", "Forever Open": the event's name (a day's box shows it once)
+		tinsert(labels, (strmatch(text, "^(.-): ")))
 	elseif strfind(short, " ") then
 		tinsert(labels, (strmatch(short, "^(%S+)")))
 	end
@@ -184,10 +335,10 @@ function PvPCalendar:Launched()
 end
 
 ---A month's events by day, WoW Forever's, Wanted's and Blizzard's first: days[day] = { { text, short, kind }, ... },
----kinds "raid", "game", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a day's box and
----labels its shorter forms, longest first;
+---kinds "raid", "game", "event", "pvpseason", "wanted", "weekly", "pvpholiday" and "holiday"; short is the label for a
+---day's box and labels its shorter forms, longest first;
 ---running marks a day between a holiday's first and last; detail is a holiday's { seq, begins, ends, range,
----description } from the game.
+---description } from the game, or a site event's { lines } for its tooltip.
 ---@param year number
 ---@param month number
 ---@return table<number, table[]>
@@ -245,6 +396,13 @@ function PvPCalendar:GetMonth(year, month)
 				AddAt(t, "Weekly reset", "weekly")
 			end
 			t = t + WEEK
+		end
+	end
+	-- The site's events: on their local day, or an all-day one on its own date (the site keeps it at midnight UTC)
+	for _, e in ipairs(Wanted.db.calendarEvents.list) do
+		local d = date(e.allDay and "!*t" or "*t", e.startsAt)
+		if d.year == year and d.month == month then
+			Add(d.day, e.title, "event", nil, nil, { lines = private.EventLines(e) })
 		end
 	end
 	-- Our world PvP raid, and the ones we're going to or interested in

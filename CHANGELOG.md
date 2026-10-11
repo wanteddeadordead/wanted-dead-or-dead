@@ -26,6 +26,10 @@
   coming back. Before your first record of the session, that could switch your identity to theirs and lose your
   record chain. Messages are now numbered from a different point each session, and a message is only treated as
   your own when it comes under your name.
+- The calendar shows events from wanteddeadordead.com, such as the Forever Open tournament, in pink: its name on its
+  day, and in the tooltip its time in your time zone, where it is and its web address. They're on Coming up too.
+  Events come with the Wanted app (0.2.47 or newer) and are kept until 2 days after they end, so they stay when the
+  app isn't running.
 
 ## [1.20.0] - 2026-10-11
 

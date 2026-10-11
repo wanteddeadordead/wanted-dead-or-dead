@@ -1,5 +1,5 @@
 -- Wanted: the calendar, a tab of Home. The season calendar: Blizzard's PvP season and this week's rank cap as the game tells them,
--- Wanted's season and weekly challenge reset, and the game's holidays (battleground weekends marked), on a month grid
+-- Wanted's season and weekly challenge reset, the site's events, and the game's holidays (battleground weekends marked), on a month grid
 -- with what's coming up beside it. Arenas aren't on WoW Forever yet.
 
 local _, Wanted = ...
@@ -18,11 +18,12 @@ local CELL_LINES = 2 -- events starting or ending written in a day's box; the re
 local WEEKDAYS = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }
 local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
 	"November", "December" }
--- Seven kinds, seven colours that don't pass for each other: battleground weekends are purple, as amber sat too close
--- to the Wanted season's gold; world PvP raids are teal
+-- Eight kinds, eight colours that don't pass for each other: battleground weekends are purple, as amber sat too close
+-- to the Wanted season's gold; world PvP raids are teal; the site's events (tournaments) pink
 local BATTLEGROUND_PURPLE = { 0.74, 0.52, 1 }
 local RAID_TEAL = { 0.3, 0.85, 0.8 }
-local KIND_COLORS = { raid = RAID_TEAL, game = C.green, pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue,
+local EVENT_PINK = { 1, 0.5, 0.75 }
+local KIND_COLORS = { raid = RAID_TEAL, game = C.green, event = EVENT_PINK, pvpseason = C.accentHover, wanted = C.gold, weekly = C.blue,
 	pvpholiday = BATTLEGROUND_PURPLE, holiday = C.muted }
 
 
@@ -95,6 +96,10 @@ function private.ShowDayTooltip(cell)
 		if d.description and not e.running then
 			GameTooltip:AddLine(d.description, C.muted[1], C.muted[2], C.muted[3], true)
 		end
+		-- A site event's times, location and link
+		for _, line in ipairs(d.lines or {}) do
+			GameTooltip:AddLine(line, C.muted[1], C.muted[2], C.muted[3], true)
+		end
 	end
 	GameTooltip:Show()
 end
@@ -155,15 +160,29 @@ function private.RefreshGrid()
 			cell.number:SetText(day)
 			cell.number:SetTextColor(unpack(isToday and C.white or C.muted))
 			Theme:SetBorderColor(cell, isToday and C.accent or C.border)
-			for i, line in ipairs(cell.lines) do
-				local e = named[i]
-				Theme:FitText(line, cell.textWidth, e and e.labels or { "" })
-				if e then
+			-- Each line names one event; one that would read the same as a line above (two parts of one event shortened
+			-- to its name) is left to the tooltip
+			local used, index = 0, 1
+			while used < CELL_LINES and index <= #named do
+				local e, line = named[index], cell.lines[used + 1]
+				index = index + 1
+				Theme:FitText(line, cell.textWidth, e.labels)
+				local same = false
+				for i = 1, used do
+					same = same or cell.lines[i]:GetText() == line:GetText()
+				end
+				if not same then
 					local color = KIND_COLORS[e.kind] or C.text
 					line:SetTextColor(color[1], color[2], color[3])
+					used = used + 1
 				end
 			end
-			cell.more:SetText(#named > CELL_LINES and "+"..(#named - CELL_LINES) or "")
+			for i = used + 1, CELL_LINES do
+				Theme:FitText(cell.lines[i], cell.textWidth, { "" })
+			end
+			-- Those not reached for want of room are in the tooltip
+			local left = #named - index + 1
+			cell.more:SetText(left > 0 and "+"..left or "")
 			cell:Show()
 		else
 			cell.events = nil
@@ -286,13 +305,14 @@ UI:RegisterPage("calendar", {
 		private.noSeasonNote:SetWidth(SIDE_WIDTH - 28)
 		private.noSeasonNote:SetWordWrap(true)
 		local legend = {
-			{ "WoW Forever", "game" }, { "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
+			{ "WoW Forever", "game" }, { "Event", "event" }, { "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
 			{ "Battleground weekend", "pvpholiday" }, { "Other holiday", "holiday" },
 		}
 		for i, item in ipairs(legend) do
 			local key = Theme:Text(side, "tiny", item[1], KIND_COLORS[item[2]])
-			-- Above the arena note, which wraps to two lines
-			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 14 + 34)
+			-- Above the arena note, which wraps to two lines, 12 apart: seven lines stay clear of Coming up full (10 rows) and
+			-- its launch note on two
+			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 12 + 30)
 		end
 		local arenas = Theme:Text(side, "tiny", "Arena seasons: not on WoW Forever yet.", C.faint)
 		arenas:SetPoint("BOTTOMLEFT", 14, 12)

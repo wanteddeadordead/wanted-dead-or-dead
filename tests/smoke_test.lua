@@ -5649,6 +5649,149 @@ end)()
 	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
 	ns.Challenges:Take(nil)
 end)()
+-- Events the operator puts on the calendar (wanteddeadordead.com /admin), from the app's catch-up: checked, kept in
+-- saved data (at most 20), shown as their own kind with their local times, location and link, and dropped 2 days after
+-- they end
+;(function()
+	-- Its catch-ups are from a later clock: once their queued work is done, the last one taken in goes back, or later
+	-- tests' catch-ups would be skipped as already taken in
+	local realClock, realCatchupT = clock, ns.db.catchupT
+	clock = os.time({ year = 2026, month = 10, day = 10, hour = 12 })
+	local checkInAt, finalsDay = 1792245600, 1792281600 -- 2026-10-17 14:00 UTC; 2026-10-18 00:00 UTC
+	local raw = {
+		{ id = 1, title = "Forever Open: check-in", startsAt = checkInAt, endsAt = checkInAt + 3600, location = "Raider.IO, then Orgrimmar",
+			link = "https://raider.io", kind = "tournament" },
+		{ id = 7, title = "Forever Open: qualifiers", startsAt = checkInAt + 1800, kind = "tournament" }, -- the same local day in every zone tested
+		{ id = 2, title = "Forever Open: finals", startsAt = finalsDay, endsAt = finalsDay + 22 * 3600, allDay = true, kind = "tournament" },
+		{ id = 3, title = "Bad |cffff0000link|r", startsAt = checkInAt + 86400 * 3, link = "javascript:alert(1)", location = "", kind = "event" },
+		{ id = 4, title = "Long over", startsAt = clock - 5 * 86400, kind = "event" },
+		{ id = 5, startsAt = checkInAt },
+		{ id = 6, title = "Ends before it starts", startsAt = checkInAt, endsAt = checkInAt - 1, kind = "event" },
+		"junk",
+	}
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = raw } }
+	ns.Catchup:Import()
+	local saved = ns.db.calendarEvents
+	check(type(saved) == "table" and saved.t == clock and #saved.list == 4, "four good, coming events kept: "..(saved and #saved.list or 0))
+	check(saved.list[1].title == "Forever Open: check-in" and saved.list[1].link == "https://raider.io" and saved.list[1].kind == "tournament",
+		"the check-in, with its link")
+	check(saved.list[4].title == "Bad link" and saved.list[4].link == nil and saved.list[4].location == nil,
+		"no escape codes, no link that isn't http(s), no empty location")
+	local function Events(t, utc)
+		local d = date(utc and "!*t" or "*t", t)
+		local out = {}
+		for _, e in ipairs(ns.PvPCalendar:GetMonth(d.year, d.month)[d.day] or {}) do
+			if e.kind == "event" then out[e.text] = e end
+		end
+		return out
+	end
+	local checkIn = Events(checkInAt)["Forever Open: check-in"]
+	check(checkIn and table.concat(checkIn.labels, "|") == "Forever Open: check-in|Forever Open", "on its local day, shortened to the event's name")
+	check(checkIn.detail.lines[2] == "Raider.IO, then Orgrimmar" and checkIn.detail.lines[3] == "https://raider.io", "its location and link, as text")
+	local finals = Events(finalsDay, true)["Forever Open: finals"]
+	check(finals, "the all-day finals on their own (UTC) date")
+	-- The tooltip's times are the player's: written out for the zones the suite is run in (TZ=UTC, Asia/Tokyo,
+	-- America/New_York, Europe/Berlin), where the check-in may cross midnight and the finals end the next day
+	local function Wall(d) return os.time({ year = d.year, month = d.month, day = d.day, hour = d.hour, min = d.min, isdst = false }) end
+	local offset = (Wall(date("*t", checkInAt)) - Wall(date("!*t", checkInAt))) / 3600
+	local LITERAL = {
+		[0] = { "Tournament, 2:00 PM - 3:00 PM", "Tournament, start time not announced, ends 10:00 PM" },
+		[9] = { "Tournament, 11:00 PM - 10/18 12:00 AM", "Tournament, start time not announced, ends 10/19 7:00 AM" },
+		[-4] = { "Tournament, 10:00 AM - 11:00 AM", "Tournament, start time not announced, ends 6:00 PM" },
+		[2] = { "Tournament, 4:00 PM - 5:00 PM", "Tournament, start time not announced, ends 10/19 12:00 AM" },
+	}
+	local want = LITERAL[offset]
+	if want then
+		check(checkIn.detail.lines[1] == want[1], "the check-in's local times (UTC"..offset.."): "..tostring(checkIn.detail.lines[1]))
+		check(finals.detail.lines[1] == want[2], "the finals' local end (UTC"..offset.."): "..tostring(finals.detail.lines[1]))
+	else
+		check(strfind(checkIn.detail.lines[1], "^Tournament, %d+:%d%d [AP]M %- ") and strfind(finals.detail.lines[1], "^Tournament, start time not announced, ends "),
+			"local times in an untested zone (UTC"..offset.."): "..checkIn.detail.lines[1].." / "..finals.detail.lines[1])
+	end
+	local upcoming = {}
+	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = e.kind end
+	check(upcoming["Forever Open: check-in"] == "event" and upcoming["Forever Open: finals"] == "event", "coming up")
+	-- The page: the title in the day's box, the rest in its tooltip
+	ns.UI:Show("calendar")
+	local cell
+	for _, f in ipairs(Mock.created) do
+		for _, e in ipairs(rawget(f, "events") or {}) do
+			if e.text == "Forever Open: check-in" then cell = f end
+		end
+	end
+	if not cell then
+		for _ = 1, 12 do
+			local nextMonth
+			for _, f in ipairs(Mock.created) do
+				if f._kind == "Button" and rawget(f, "label") and f.label._text == ">" then nextMonth = f end
+			end
+			if not nextMonth then break end
+			nextMonth._scripts.OnClick(nextMonth)
+			for _, f in ipairs(Mock.created) do
+				for _, e in ipairs(rawget(f, "events") or {}) do
+					if e.text == "Forever Open: check-in" then cell = f end
+				end
+			end
+			if cell then break end
+		end
+	end
+	check(cell, "the check-in's day on the grid")
+	local lines = {}
+	local origAdd = GameTooltip.AddLine
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	cell._scripts.OnEnter(cell)
+	GameTooltip.AddLine = origAdd
+	local said = table.concat(lines, "\n")
+	check(said:find("Forever Open: check-in", 1, true) and said:find("Raider.IO, then Orgrimmar", 1, true) and said:find("https://raider.io", 1, true),
+		"the tooltip names it, where and the link: "..said)
+	check(said:find("Forever Open: qualifiers", 1, true), "and the qualifiers that day, in full: "..said)
+	-- The day's box names the event once, by its name before the colon
+	local boxed = {}
+	for _, line in ipairs(cell.lines) do
+		if line._text ~= "" then boxed[#boxed + 1] = line._text end
+	end
+	check(table.concat(boxed, "|") == "Forever Open" and cell.more._text == "", "the day's box says Forever Open once: "..table.concat(boxed, "|").." "..cell.more._text)
+	-- An older app (no events) keeps them; an older catch-up changes nothing; a newer empty list clears them
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 5, records = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 4, "no events from an older app keeps them")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock - 5, records = {}, events = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 4, "an older catch-up changes nothing")
+	-- At most 20
+	local many = {}
+	for i = 1, 30 do many[i] = { id = i, title = "Event "..i, startsAt = clock + i * 3600, kind = "event" } end
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 10, records = {}, events = many } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 20 and ns.db.calendarEvents.list[20].title == "Event 20", "at most 20, soonest first")
+	-- Two days after they end, they're dropped, app or no app
+	clock = clock + 30 * 3600 + 2 * 86400 + 60
+	ns.PvPCalendar:OnLoad()
+	check(#ns.db.calendarEvents.list == 0, "past ones dropped 2 days after: "..#ns.db.calendarEvents.list)
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 0, "an empty list leaves none")
+	-- Text is cut by characters at a character's edge, as the site counts; escape codes go whole and a lone bar shows
+	-- as one; a link's scheme in any case; times the game can't hold are refused
+	ns.PvPCalendar:TakeEvents({
+		{ id = 1, title = string.rep("é", 85), startsAt = checkInAt, location = string.rep("a", 79).."é", link = "HTTPS://Raider.IO/x", kind = "event" },
+		{ id = 2, title = "|Tinterface\\icons\\x:0|t|Hitem:19019|h[Thunderfury]|h |Kq1|k|Aatlas|a A | B|n", startsAt = checkInAt + 1, kind = "event" },
+		{ id = 3, title = "Too late", startsAt = 2 ^ 31, kind = "event" },
+		{ id = 4, title = "Never", startsAt = checkInAt, endsAt = math.huge, kind = "event" },
+	}, clock + 1)
+	local cut, codes = ns.db.calendarEvents.list[1], ns.db.calendarEvents.list[2]
+	check(#ns.db.calendarEvents.list == 2, "times past 2^31 and infinity refused: "..#ns.db.calendarEvents.list)
+	check(cut.title == string.rep("é", 80) and cut.location == string.rep("a", 79).."é", "80 characters, not bytes: "..#cut.title.." bytes")
+	check(cut.link == "HTTPS://Raider.IO/x", "an upper-case scheme is a link too")
+	check(codes.title == "[Thunderfury]  A || B", "escape codes taken out whole, a lone bar kept as one: "..codes.title)
+	ns.db.calendarEvents = { t = 1, list = "junk" }
+	ns.PvPCalendar:OnLoad()
+	check(type(ns.db.calendarEvents.list) == "table", "unreadable saved events start empty")
+	ns.db.calendarEvents = nil
+	ns.PvPCalendar:OnLoad()
+	RunFrames()
+	clock, ns.db.catchupT = realClock, realCatchupT
+end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
 -- 0, or never set) aren't measured here.

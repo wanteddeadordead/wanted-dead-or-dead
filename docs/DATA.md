@@ -92,6 +92,17 @@ game tells it (`GetCurrentArenaSeason()`, the PvP rank track's `weekNumber`, `cu
 Read 15 seconds after login and each hour. Season 0 or week -1 means no season is running. The Wanted app sends it
 to wanteddeadordead.com, whose seasons follow the game's. Nothing reads it back.
 
+`WantedDB.calendarEvents` (from 1.21.0) is `{ t, list }`: the events the operator put on wanteddeadordead.com's
+calendar, from the app's catch-up (`events`, app 0.2.47), for the calendar page. `t` is the catch-up they came in;
+`list` holds at most 20, soonest first, each `{ id, title, startsAt, endsAt, allDay, location, link, kind }`: Unix
+seconds, `endsAt` nil when none is given, `allDay` true when the start time isn't announced (`startsAt` is then
+midnight UTC of its date, shown on that date), `kind` `"event"` or `"tournament"`, and `link` only an http(s) address,
+shown as text. Each is checked field by field: title and location are cut to 80 characters (not bytes), the game's
+escape codes taken out whole and a bar left over kept as `||`; times must be below 2^31; a link's scheme may be any case. A
+catch-up with a list replaces them (an empty list leaves none); one without (an older app) keeps them. An event is
+dropped 2 days after it ends (its end, else the end of its day when all day, else its start). They aren't sent to other
+players. A new key: no migration.
+
 `WantedDB.pvpGear` (from 1.10.0) is the rank vendors' PvP gear, per faction: `pvpGear[faction][itemID] = { name,
 quality, icon, slot, class, subclass, level, rank, classes, honor, marks = { [markItemID] = count }, price, vendor,
 seen }`. Kept when a rank vendor opens (every item that costs Honor Points or needs a rank; all classes, read with the

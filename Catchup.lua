@@ -87,6 +87,8 @@ function Catchup:Import()
 	private.TakeRequests(entry.requests)
 	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
 	Wanted.Challenges:Take(entry.challenges)
+	-- Events on the calendar from wanteddeadordead.com (app 0.2.47), kept in saved data
+	Wanted.PvPCalendar:TakeEvents(entry.events, entry.t)
 	-- Blizzard PvP ranks other Wanted players shared, from the site (app with addon 1.10.0)
 	if Wanted.BlizzRank then
 		Wanted.BlizzRank:Take(entry.blizzRanks)

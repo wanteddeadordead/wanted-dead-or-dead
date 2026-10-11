@@ -855,7 +855,9 @@ function private.IsNewWitness(origin, killT)
 	local firstT = Store:GetFirstSeen(origin)
 	for _, seq in ipairs({ Store:SeqBase() + 1, Store:GetChainBase(origin) + 1 }) do
 		local first = Store:Get(origin..":"..seq)
-		if first and type(first.t) == "number" and (not firstT or first.t < firstT) then
+		-- A restart's first record dated before its own number is made up
+		if first and type(first.t) == "number" and (not firstT or first.t < firstT)
+			and (seq == Store:SeqBase() + 1 or Store:IsDatedAfterItsNumber(seq, first.t)) then
 			firstT = first.t
 		end
 	end

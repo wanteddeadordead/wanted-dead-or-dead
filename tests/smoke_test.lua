@@ -7641,7 +7641,7 @@ end)()
 	-- numbered by the clock past where it stood a day before the kill started within the day, so they're new. One
 	-- numbered from the base with plenty of records isn't
 	local function Witnessed(witness, killT)
-		local victim = "Player-9-WITNESSED"
+		local victim = "Player-9-WITNESSED-"..witness -- each its own kill: another witness would vouch for it
 		local claim = S:InsertTest("claim", "Some Hunter", { bounty = "b-witnessed", victim = victim, victimName = "Witnessed", zone = "Ashenvale", killT = killT }, killT)
 		S:InsertTest("death", witness, { victim = victim, victimName = "Witnessed", zone = "Ashenvale" }, killT + 1)
 		for _, w in ipairs(ns.Bounties:GetClaimWarnings(claim)) do
@@ -7663,6 +7663,14 @@ end)()
 	check(Witnessed("Base Veteran", clock) == "not new", "a base-numbered chain with plenty of records isn't")
 	db.chains["Base Veteran"] = nil
 	Forget("Fresh Alt")
+	-- A made-up alt answering a request itself, its chain starting at a first record dated 400 days back: no start, and
+	-- still new as a witness
+	Hear("F", { r = { Rec("Sybil Alt", start + 1, "0", clock - 400 * 86400) }, p = { ["Sybil Alt"] = start + 1 } }, "Sybil Alt")
+	check(db.chains["Sybil Alt"].start == nil and S:GetFirstSeen("Sybil Alt") == nil, "a skip to a backdated first record marks no start")
+	check(Witnessed("Sybil Alt", clock) == "new", "and its origin witnessing a kill is new to the network")
+	db.chains["Sybil Alt"] = { seq = start + 1, lastHash = "x", start = start + 1 }
+	check(Witnessed("Sybil Alt", clock) == "new", "a backdated record at a known start doesn't count as a first record either")
+	Forget("Sybil Alt")
 	-- A start or first that isn't a number (hand-edited saved data) is dropped at login, and the hello still goes out
 	db.chains["Garbled"] = { seq = 5, lastHash = "x", start = "junk", first = {} }
 	S:OnEnable()

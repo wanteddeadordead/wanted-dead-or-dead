@@ -391,10 +391,13 @@ function Store:ClockSeq(t)
 	return max(Store:SeqBase(), floor(((t or GetServerTime()) - TIME_SEQ_EPOCH) * TIME_SEQ_PER_SECOND))
 end
 
----Whether a restart record is no older than its own number (a minute of clocks disagreeing): its seq says when its
----chain started, so an earlier time is made up (an alt made to look long established).
-function private.DatedAfterItsNumber(record)
-	return type(record.t) == "number" and record.t >= TIME_SEQ_EPOCH + (record.seq - 1) / TIME_SEQ_PER_SECOND - 60
+---Whether a restart record (seq, made at t) is no older than its own number (a minute of clocks disagreeing): its
+---seq says when its chain started, so an earlier time is made up (an alt made to look long established).
+---@param seq number
+---@param t any
+---@return boolean
+function Store:IsDatedAfterItsNumber(seq, t)
+	return type(t) == "number" and t >= TIME_SEQ_EPOCH + (seq - 1) / TIME_SEQ_PER_SECOND - 60
 end
 
 ---Our own chain with no records yet: at the clock's number (ClockSeq), or the base when the clock is before the
@@ -429,12 +432,13 @@ end
 ---A peer's history for an origin starts at seq: everything before was pruned everywhere it asked. The chain
 ---moves on to there, so this client stops asking for records nobody has, and continues from prev (the first
 ---record's predecessor) or from an unknown one. A first record with prev "0" there marks the chain as started again
----(start) only when the origin itself said so (sender).
+---(start) only when the origin itself said so (sender), and the record (made at t) isn't dated before its number.
 ---@param origin string
 ---@param seq number
 ---@param prev string?
 ---@param sender string? who said where the chain starts
-function Store:SkipTo(origin, seq, prev, sender)
+---@param t number? when the first record there was made
+function Store:SkipTo(origin, seq, prev, sender, t)
 	local db = Wanted.db
 	local chain = db.chains[origin]
 	if not chain then
@@ -449,9 +453,12 @@ function Store:SkipTo(origin, seq, prev, sender)
 	if type(prev) ~= "string" and held then
 		prev = held.prev
 	end
+	if t == nil and held then
+		t = held.t
+	end
 	chain.seq = seq - 1
 	chain.lastHash = type(prev) == "string" and prev or UNKNOWN_HASH
-	if prev == "0" and sender == origin and private.MayRestart(origin, seq) then
+	if prev == "0" and sender == origin and private.MayRestart(origin, seq) and Store:IsDatedAfterItsNumber(seq, t) then
 		-- The first record there started the chain again
 		chain.start = seq
 	end
@@ -1045,7 +1052,7 @@ function private.Insert(record, live, fromApp, sender, checked)
 		db.chains[record.origin] = chain
 	end
 	if record.prev == "0" and record.seq > chain.seq + 1 and live and not record.tampered
-		and private.MayRestart(record.origin, record.seq) and private.DatedAfterItsNumber(record) and not private.IsPrunable(record) then
+		and private.MayRestart(record.origin, record.seq) and Store:IsDatedAfterItsNumber(record.seq, record.t) and not private.IsPrunable(record) then
 		-- The origin started its chain again (its saved data was lost: NewOwnChain) past where we hold it, said by the
 		-- origin itself (the app's catch-up isn't its word: the server takes anyone's upload of anyone's record): the
 		-- chain moves on to it rather than asking for the numbers between
@@ -1485,7 +1492,7 @@ function private.NoteFirst(chain, record)
 		return
 	end
 	if record.seq == Store:SeqBase() + 1
-		or (record.seq == chain.start and (not chain.first or record.t < chain.first) and private.DatedAfterItsNumber(record)
+		or (record.seq == chain.start and (not chain.first or record.t < chain.first) and Store:IsDatedAfterItsNumber(record.seq, record.t)
 			and not private.IsPrunable(record)) then
 		chain.first = record.t
 	end

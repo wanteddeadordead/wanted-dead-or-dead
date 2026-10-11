@@ -14,6 +14,18 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.21.0",
+		note = "Something not right? Tell us from inside the game. Every duel tip now has a \"Something not right?\" link, and "
+			.."Report a bug sends your report straight to us through the Wanted app, with other players' names left out.\n\n"
+			.."The calendar also shows events from wanteddeadordead.com, starting with the Forever Open on October 17 and 18.",
+		lines = {
+			"\"Something not right?\" under a duel tip sends that tip to us, with what you think is wrong.",
+			"Report a bug (title bar or /wanted bug) now sends straight to us through the Wanted app: no more copying.",
+			"The calendar shows the site's events, like the Forever Open, in your local time (Wanted app 0.2.47 or newer).",
+			"Reinstalled the addon or lost your saved data? Your new kills and deaths no longer clash with your old ones.",
+		},
+	},
+	{
 		version = "1.20.0",
 		note = "This one is about getting better at fighting. Duel someone and Wanted now keeps the fight: who you faced, "
 			.."their spec, talents and gear, and how it went.\n\n"

@@ -11,7 +11,8 @@ local C = Theme.C
 local private = { frame = nil }
 local LOG_LINES = 40
 local MIN_NAME = 2 -- shorter names aren't looked for
--- Reports waiting for the app (docs/DATA.md): the most kept, how long one waits, and the most each part may be (bytes)
+-- Reports waiting for the app (docs/DATA.md): the most kept, how long one waits, and the most each part may be (letters;
+-- the log in bytes)
 local MAX_QUEUED = 20
 local REPORT_KEEP_SECONDS = 30 * 24 * 60 * 60
 local MAX_TEXT = 500
@@ -174,20 +175,23 @@ end
 -- ============================================================================
 
 ---Text as it's sent: on one line, without control characters or the game's escape codes (a link pasted in keeps
----its "[Name]"; any other "|" goes), at most maxBytes and never cut inside a letter.
+---its "[Name]"; icons, atlases and the like go whole, and any other "|"), at most maxLetters letters (UTF-8, as the
+---app and the server count them, never cut inside one).
 ---@return string
-function private.Clip(text, maxBytes)
+function private.Clip(text, maxLetters)
 	if type(text) ~= "string" then
 		return ""
 	end
 	text = gsub(gsub(text, "|c%x%x%x%x%x%x%x%x", ""), "|r", "")
 	text = gsub(gsub(text, "|H.-|h(.-)|h", "%1"), "|T.-|t", "")
+	text = gsub(gsub(text, "|A.-|a", ""), "|K.-|k", "")
 	text = strtrim((gsub(gsub(gsub(text, "|", ""), "[\r\n]+", " "), "%c", "")))
-	if #text > maxBytes then
-		local cutInside = (text:byte(maxBytes + 1) or 0) >= 128 and text:byte(maxBytes + 1) < 192
-		text = strsub(text, 1, maxBytes)
-		if cutInside then
-			text = gsub(text, "[\192-\255][\128-\191]*$", "")
+	-- Each letter starts with a byte that isn't a UTF-8 continuation byte
+	local letters = 0
+	for at in gmatch(text, "()[^\128-\191]") do
+		letters = letters + 1
+		if letters > maxLetters then
+			return strsub(text, 1, at - 1)
 		end
 	end
 	return text
@@ -208,14 +212,15 @@ function Report:IsQueueFull()
 end
 
 ---Puts a report in the queue for the app, under an id no other report has.
----@param report table kind and its fields; text, at, character and addonVersion are filled in here
+---@param report table kind and its fields, and character when it isn't this one; text, at, character and
+---addonVersion are filled in here
 ---@return string? id nil when the queue is full
 function Report:Queue(report)
 	local queue = Wanted.db.reports
 	if Report:IsQueueFull() then
 		return nil
 	end
-	local character = Wanted.Store:GetOrigin()
+	local character = report.character or Wanted.Store:GetOrigin()
 	local at = floor(GetServerTime())
 	while queue[character..":report:"..at] do
 		at = at + 1
@@ -228,7 +233,8 @@ function Report:Queue(report)
 	return id
 end
 
----Queues a duel tip the player says looks wrong, with the duel's classes, specs and level.
+---Queues a duel tip the player says looks wrong, with the duel's classes, specs and level, in the name of the
+---character who fought it (the account's duels are all listed on any of its characters).
 ---@param duel table
 ---@param finding table the report's finding the tip belongs to
 ---@param text string? what the player said
@@ -241,6 +247,7 @@ function Report:QueueTip(duel, finding, text)
 	end
 	return Report:Queue({
 		kind = "tip",
+		character = type(duel.id) == "string" and strmatch(duel.id, "^(.+):duel:%d+$") or nil,
 		text = text,
 		duelId = duel.id,
 		rule = type(finding.rule) == "string" and private.Clip(finding.rule, MAX_RULE) or nil,
@@ -307,18 +314,29 @@ function private.SentText()
 	return "Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."
 end
 
----Tells the player the queue is full.
+---Tells the player the queue is full, and what gets the app sending.
 function private.ShowFull()
+	local version = Wanted:AppVersion()
+	local todo = "Start the app and /reload"
+	if not version then
+		todo = "Get the app (wanteddeadordead.com/app), start it and /reload"
+	elseif Wanted:IsNewerVersion(Report.MIN_APP, version) then
+		todo = format("Update the app to %s or newer from its tray menu (you have %s) and /reload", Report.MIN_APP, Theme:Plain(version))
+	end
 	W:Dialog({
 		title = "Reports waiting",
-		text = format("%d reports are already waiting for the Wanted app to send them. Start the app and /reload, then you can send more.", MAX_QUEUED),
+		text = format("%d reports are already waiting for the Wanted app to send them. %s, then you can send more.", MAX_QUEUED, todo),
 		confirmLabel = "OK",
 	})
 end
 
 ---Asks what's wrong, then queues the report and says where it goes.
----@param options table title, text, validate (as W:Dialog's), queue(text) -> id?
+---@param options table title, text, validate, over (as W:Dialog's), queue(text) -> id?
 function private.Ask(options)
+	-- A second click while it asks does nothing (it would wait its turn behind this one)
+	if W:IsDialogShown() then
+		return
+	end
 	if Report:IsQueueFull() then
 		private.ShowFull()
 		return
@@ -327,6 +345,7 @@ function private.Ask(options)
 		title = options.title,
 		text = options.text,
 		width = 440,
+		over = options.over,
 		input = { multiline = true, maxLetters = MAX_TEXT },
 		confirmLabel = "Send",
 		validate = options.validate,
@@ -355,6 +374,7 @@ end
 function Report:AskAboutBug()
 	private.Ask({
 		title = "Send to the developers",
+		over = private.frame,
 		text = "What happened, and what did you expect? Wanted's last 40 log lines go with it, other players' names left out.",
 		validate = function(text)
 			return private.Clip(text, MAX_TEXT) == "" and "Say what happened first." or nil

@@ -146,12 +146,14 @@ the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` w
 an older report comes back from the app without them, so the saved file holds at most 20 timelines.
 
 `WantedDB.reports` (added after 1.20.0) is what the player reported for the desktop app to send on to the developers
-(`Report.lua`), keyed `"<origin>:report:<at>"` (`Store:GetOrigin()`, the time sent): `{ kind = "tip"|"bug", at,
+(`Report.lua`), keyed `"<character>:report:<at>"`: `{ kind = "tip"|"bug", at,
 character, text, addonVersion }`, where `at` is whole server seconds (`GetServerTime()`; a second report in the same
-second takes the next free one), `character` the key's origin, `text` the player's words on one line without the game's
-escape codes (at most 500 bytes) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
-adds `duelId`, the finding's `rule`, `tip` (the finding's tip, or its text without one) and `finding` (its text), each
-at most 1,000 bytes, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
+second takes the next free one), `character` the key's prefix: for a tip the character who fought the duel (its `id`
+before `":duel:"`, as the app's own tip reports name it; `Store:GetOrigin()` if the id doesn't parse), for a bug the
+character logged in. `text` is the player's words on one line without the game's escape codes (at most 500 letters,
+counted in UTF-8 as the app and the server count them) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
+adds `duelId`, the finding's `rule` (at most 64 letters), `tip` (the finding's tip, or its text without one) and
+`finding` (its text), each at most 1,000 letters, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
 `"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: the last 40 log lines, oldest first, with
 other players' names left out as in the copied report, the oldest dropped past 8 KB. At most 20 wait (the player is
 told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the

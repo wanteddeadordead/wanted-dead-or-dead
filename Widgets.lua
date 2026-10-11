@@ -689,21 +689,34 @@ local function CreateDialog()
 	frame.input.onEnter = function()
 		frame.confirm:Click()
 	end
-	-- A box for a longer text (input.multiline): the dialog's full width, wrapping over a few lines; Enter still confirms
-	local area = CreateFrame("EditBox", nil, frame)
+	-- A box for a longer text (input.multiline): the dialog's full width, wrapping over a few lines and scrolling past
+	-- them (the game's scrolling edit box functions keep the cursor in view); Enter still confirms
+	local areaBox = CreateFrame("Frame", nil, frame)
+	Theme:Skin(areaBox, C.input, C.border)
+	areaBox:Hide()
+	local areaScroll = CreateFrame("ScrollFrame", nil, areaBox, "UIPanelScrollFrameTemplate")
+	areaScroll.scrollBarHideable = true
+	areaScroll:SetPoint("TOPLEFT")
+	areaScroll:SetPoint("BOTTOMRIGHT", -24, 0)
+	local area = CreateFrame("EditBox", nil, areaScroll)
 	area:SetMultiLine(true)
 	area:SetAutoFocus(false)
 	area:SetFontObject(Theme.Fonts.body)
 	area:SetTextInsets(9, 9, 7, 7)
 	area:SetMaxLetters(255)
-	Theme:Skin(area, C.input, C.border)
+	area:SetHeight(AREA_HEIGHT)
+	areaScroll:SetScrollChild(area)
+	area:SetScript("OnCursorChanged", ScrollingEdit_OnCursorChanged)
+	area:SetScript("OnUpdate", function(self, elapsed) ScrollingEdit_OnUpdate(self, elapsed, areaScroll) end)
 	area:SetScript("OnEnterPressed", function() frame.confirm:Click() end)
 	area:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 		blocker:Hide()
 	end)
-	area:Hide()
-	frame.area = area
+	-- A click below the last line still puts the cursor in the box
+	areaBox:EnableMouse(true)
+	areaBox:SetScript("OnMouseDown", function() area:SetFocus() end)
+	frame.area, frame.areaBox = area, areaBox
 	-- A choice above the input (options.choice): a label and a dropdown
 	frame.choiceLabel = Theme:Text(frame, "small", "", C.muted)
 	frame.choice = W:Choice(frame, 260, {}, function(key)
@@ -744,7 +757,7 @@ end
 
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), maxLetters
----(of a multiline box, default 255) }, width
+---(of a multiline box, default 255) }, over (a window to centre on, rather than the Wanted window or the screen), width
 ---(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
@@ -794,6 +807,11 @@ function W:Dialog(options)
 		dialog._bg:SetShown(false)
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
 	end
+	-- Opened from another window (the bug report): over it
+	if options.over and options.over:IsShown() then
+		frame:ClearAllPoints()
+		frame:SetPoint("CENTER", options.over, "CENTER")
+	end
 	frame.options, frame.decided, dialog.host = options, false, host
 	local accent = options.confirmStyle == "danger" and C.red or C.accent
 	frame.bar:SetColorTexture(accent[1], accent[2], accent[3], 1)
@@ -805,17 +823,19 @@ function W:Dialog(options)
 	frame.confirm:SetStyle(options.confirmStyle == "danger" and "danger" or (options.confirmStyle or "primary"))
 	frame:SetWidth(options.width or 400)
 	frame.input:ClearAllPoints()
-	frame.area:Hide()
+	frame.areaBox:Hide()
 	local area = options.input and options.input.multiline
 	if area then
 		frame.input:Hide()
-		frame.area:ClearAllPoints()
-		frame.area:SetPoint("BOTTOMLEFT", 20, 56)
-		frame.area:SetPoint("BOTTOMRIGHT", -20, 56)
-		frame.area:SetHeight(AREA_HEIGHT)
+		frame.areaBox:ClearAllPoints()
+		frame.areaBox:SetPoint("BOTTOMLEFT", 20, 56)
+		frame.areaBox:SetPoint("BOTTOMRIGHT", -20, 56)
+		frame.areaBox:SetHeight(AREA_HEIGHT)
+		-- The dialog's width less its margins and the scroll bar's room
+		frame.area:SetWidth((options.width or 400) - 40 - 24)
 		frame.area:SetMaxLetters(options.input.maxLetters or 255)
 		frame.area:SetText(options.input.value or "")
-		frame.area:Show()
+		frame.areaBox:Show()
 	elseif options.input then
 		frame.input:SetPoint("BOTTOMLEFT", 20, 56)
 		frame.input.placeholder:SetText(options.input.placeholder or "")

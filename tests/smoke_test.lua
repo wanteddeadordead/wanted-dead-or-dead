@@ -159,6 +159,9 @@ MailFrame._shown = false
 local printed = {}
 function Methods:AddMessage(msg) printed[#printed + 1] = msg end
 UISpecialFrames = {}
+-- The game's scrolling edit box functions (Blizzard_SharedXML InputBoxTemplates.lua): keep the cursor in view
+ScrollingEdit_OnCursorChanged = function(self, _, y, _, h) self.cursorOffset, self.cursorHeight = y, h end
+ScrollingEdit_OnUpdate = function() end
 local function Fire(event, ...)
 	for _, frame in ipairs(registry[event] or {}) do
 		frame._scripts.OnEvent(frame, event, ...)
@@ -10940,27 +10943,30 @@ end)()
 	local keptDuels, keptReports, keptAppInfo = db.duels, db.duelReports, WantedAppInfo
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	db.reports = {}
-	local duel = { id = "Test Player:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
+	-- A duel another of the account's characters fought: the tip goes in its name
+	local duel = { id = "Alt Char:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
 		me = { class = "ROGUE", spec = "Combat", level = 24 }, them = { class = "PRIEST", spec = "Shadow", level = 25 } }
 	local finding = { rule = "pws", text = "Their Power Word: Shield absorbed 400.", tip = "Save Kick for the shield.", weight = 0.6 }
-	-- A tip: its fields, the player's words without escape codes, an id of the character and the time
-	local id = Report:QueueTip(duel, finding, "The |cffff0000tip|r is\nwrong about |Hitem:19019::::|h[Thunderfury]|h ")
+	-- A tip: its fields, the player's words without escape codes, an id of the duel's character and the time
+	local id = Report:QueueTip(duel, finding, "The |cffff0000tip|r is|TInterface\\Icons\\Spell_Nature_Bloodlust:0|t\nwrong|Ashop-icon:12:12|a about |Kq12|k|Hitem:19019::::|h[Thunderfury]|h ")
 	local r = db.reports[id]
-	check(id == "Test Player:report:"..clock and r and r.kind == "tip" and r.at == clock and r.character == "Test Player"
-		and r.addonVersion == tostring(ns.VERSION) and r.id == nil, "a tip report is queued under <character>:report:<at>: "..tostring(id))
+	check(id == "Alt Char:report:"..clock and r and r.kind == "tip" and r.at == clock and r.character == "Alt Char"
+		and r.addonVersion == tostring(ns.VERSION) and r.id == nil, "a tip report is queued under the duel's <character>:report:<at>: "..tostring(id))
 	check(r.text == "The tip is wrong about [Thunderfury]", "the player's words lose the game's escape codes: "..tostring(r.text))
 	check(r.duelId == duel.id and r.rule == "pws" and r.tip == "Save Kick for the shield." and r.finding == "Their Power Word: Shield absorbed 400."
 		and r.myClass == "ROGUE" and r.mySpec == "Combat" and r.theirClass == "PRIEST" and r.theirSpec == "Shadow" and r.myLevel == 24 and r.log == nil,
 		"the tip report carries the duel, the rule, the tip and finding, and both sides' classes and specs")
 	-- A second in the same second takes the next free one
 	local id2 = Report:QueueTip(duel, { text = "No tip here." }, nil)
-	check(id2 == "Test Player:report:"..(clock + 1) and db.reports[id2].tip == "No tip here." and db.reports[id2].text == "" and db.reports[id] == r,
+	check(id2 == "Alt Char:report:"..(clock + 1) and db.reports[id2].tip == "No tip here." and db.reports[id2].text == "" and db.reports[id] == r,
 		"a second report in the same second gets the next id, and a finding without a tip sends its text: "..tostring(id2))
-	-- Limits: the text 500 bytes, the tip and finding 1000, never cut inside a letter
-	local id3 = Report:QueueTip(duel, { text = string.rep("f", 1500), tip = string.rep("t", 1500) }, "a"..string.rep("\195\169", 300))
+	-- Limits in letters, as the app and server count them: the text 500, the tip and finding 1000
+	local id3 = Report:QueueTip(duel, { text = string.rep("f", 1500), tip = string.rep("\195\169", 1500) }, "a"..string.rep("\195\169", 600))
 	local long = db.reports[id3]
-	check(id3 == "Test Player:report:"..(clock + 2) and #long.text == 499 and long.text:sub(-2) == "\195\169" and #long.tip == 1000 and #long.finding == 1000,
-		"the text is held to 500 bytes, whole letters only, the tip and finding to 1000: "..#long.text)
+	check(id3 == "Alt Char:report:"..(clock + 2) and #long.text == 999 and long.text:sub(-2) == "\195\169" and #long.tip == 2000 and #long.finding == 1000,
+		"the text is held to 500 letters, whole letters only, the tip and finding to 1000: "..#long.text)
+	-- A duel id that doesn't name its character: the tip goes in this one's
+	check(Report:QueueTip({ id = "odd", me = {}, them = {} }, { text = "x" }, "") == "Test Player:report:"..clock, "a duel id without a character falls back to this one")
 	-- A bug: the player's words and the last 40 log lines, oldest first, held to 8 KB
 	for i = 1, 50 do ns:Log("report test line %d", i) end
 	local bug = db.reports[Report:QueueBug("It broke")]
@@ -10975,9 +10981,10 @@ end)()
 	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, "Someone:report:1", 7 } } }
 	ns.Catchup:Import()
 	check(db.reports[id] == nil and db.reports[id2] == nil and db.reports[id3] ~= nil, "reports the app received leave the queue")
-	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2 } } }
+	local id4 = Report:QueueTip(duel, finding, "later")
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, id4 } } }
 	ns.Catchup:Import()
-	check(db.reports[id3] ~= nil, "the same list again changes nothing")
+	check(db.reports[id4] == nil and db.reports[id3] ~= nil, "the next login's list: one received since leaves, ids already gone change nothing, one not listed stays")
 	-- Pruning at load: older than 30 days goes, and anything malformed
 	db.reports = { ["A:report:1"] = { kind = "bug", at = clock - 31 * 86400 }, ["A:report:2"] = { kind = "bug", at = clock - 29 * 86400 }, ["A:report:3"] = "junk" }
 	Report:OnLoad()
@@ -10986,8 +10993,13 @@ end)()
 	db.reports = {}
 	for i = 1, 20 do db.reports["A:report:"..i] = { kind = "bug", at = clock } end
 	check(Report:IsQueueFull() and Report:QueueBug("one more") == nil and Report:CountQueued() == 20, "a 21st report is refused")
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	Report:AskAboutBug()
-	check(OnScreen("20 reports are already waiting for the Wanted app"), "the player is told the queue is full")
+	check(OnScreen("20 reports are already waiting for the Wanted app to send them. Start the app and /reload"), "the player is told the queue is full")
+	_G.WantedDialog.frame.confirm:Click()
+	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	Report:AskAboutBug()
+	check(OnScreen("Update the app to 0.2.46 or newer from its tray menu (you have 0.2.45) and /reload"), "with an app too old to send them, update it")
 	_G.WantedDialog.frame.confirm:Click()
 	db.reports = {}
 	-- From the fight card: "Something not right?" under a tip asks, then queues it and says where it goes
@@ -11037,7 +11049,12 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
 	send:Click()
 	check(OnScreen("What happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
+	local realDialog, asked = ns.Widgets.Dialog, 0
+	ns.Widgets.Dialog = function(...) asked = asked + 1 return realDialog(...) end
+	send:Click()
+	ns.Widgets.Dialog = realDialog
 	_G.WantedDialog.frame.cancel:Click()
+	check(asked == 0, "a second click while it asks doesn't queue another")
 	_G.WantedBugReport:Hide()
 	-- Saved data from before reports gets an empty queue (a new key: no layout change)
 	local realDB = WantedDB

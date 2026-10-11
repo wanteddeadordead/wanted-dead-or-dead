@@ -232,6 +232,30 @@ function private.Scrub(line, names)
 	return line
 end
 
+---The top of a bug report's log, at most 4 lines: the game, the settings that matter, the app and network, signing.
+---@return string[]
+function private.Header()
+	local lines = {}
+	local version, build = GetBuildInfo()
+	tinsert(lines, format("Game client %s (build %s), locale %s; %s, level %s", tostring(version), tostring(build),
+		tostring(GetLocale and GetLocale() or "?"), tostring(UnitFactionGroup("player")), tostring(UnitLevel("player"))))
+	local detect = Wanted.db and Wanted.db.settings.detect or {}
+	tinsert(lines, format("Detection %s, alerts %s, sound %s, share %s, timeout %ss", tostring(detect.enabled), tostring(detect.alerts),
+		tostring(detect.sound), tostring(detect.share), tostring(detect.timeout)))
+	local app = Wanted:AppVersion()
+	app = not app and "none" or Wanted:IsNewerVersion(Report.MIN_APP, app) and app.." (too old for reports)"
+		or Wanted:AppNotRunningFor() and app.." (not running)" or app.." (running)"
+	local info = Wanted.Sync and Wanted.Sync:GetInfo()
+	tinsert(lines, format("Wanted app %s; network %s", app, info and format("channel %s, %d peers%s",
+		info.channelId and ("#"..info.channelId) or "not joined", info.peers, info.paused and ", PAUSED" or "") or "off"))
+	if Wanted.Signing and Wanted.db then
+		local _, kid = Wanted.Signing:PublicKey()
+		tinsert(lines, format("Signing: %s, self-test %s", kid and format("key %s (%s seed)", kid, tostring(Wanted.Signing:Source())) or "no key yet",
+			Wanted.Crypto:SelfTestText()))
+	end
+	return lines
+end
+
 ---The report text: versions, settings that matter, network state, problems this session, recent log. No longer
 ---shown (Report a bug only sends); kept for the tests, which read what it gathers.
 ---@return string
@@ -240,12 +264,10 @@ function Report:Build()
 	local function Add(fmt, ...)
 		tinsert(lines, select("#", ...) > 0 and format(fmt, ...) or fmt)
 	end
-	local version, build = GetBuildInfo()
 	Add("Wanted: Dead or... Dead %s%s%s", tostring(Wanted.VERSION), Wanted.BETA and " (beta)" or "", Wanted.newerVersion and (", newer version seen: "..Wanted.newerVersion) or "")
-	Add("Game client %s (build %s), locale %s", tostring(version), tostring(build), tostring(GetLocale and GetLocale() or "?"))
-	Add("Faction %s, level %s, zone %s", tostring(UnitFactionGroup("player")), tostring(UnitLevel("player")), tostring(GetZoneText()))
-	local detect = Wanted.db and Wanted.db.settings.detect or {}
-	Add("Detection %s, alerts %s, sound %s, share %s, timeout %ss", tostring(detect.enabled), tostring(detect.alerts), tostring(detect.sound), tostring(detect.share), tostring(detect.timeout))
+	for _, line in ipairs(private.Header()) do
+		Add(line)
+	end
 	local info = Wanted.Sync and Wanted.Sync:GetInfo()
 	if info then
 		local stats = info.stats
@@ -257,9 +279,7 @@ function Report:Build()
 	end
 	if Wanted.Store and Wanted.db then
 		Add("Records flagged: %d tampered (never used), %d broken chain (never a witness)", Wanted.Store:CountFlagged())
-		-- Signing (1.19.0): this character's key, the self-test, the keys known and what checks found
-		local _, kid = Wanted.Signing:PublicKey()
-		Add("Signing: %s, self-test %s", kid and format("key %s (%s seed)", kid, tostring(Wanted.Signing:Source())) or "no key yet", Wanted.Crypto:SelfTestText())
+		-- Signing (1.19.0): the keys known and what checks found (this character's key and the self-test are in the header)
 		local origins, keys = Wanted.KeyBook:Count()
 		local good, bad, waiting = Wanted.Verify:Counts()
 		Add("Signatures: %d keys known for %d players; %d records checked out, %d bad, %d waiting", keys, origins, good, bad, waiting)
@@ -376,44 +396,59 @@ function Report:QueueTip(duel, finding, text)
 end
 
 ---Queues a bug report: what the player said and a log of at most 40 lines and 8 KB (each line and its break, as the
----app and the server count it), other players' names left out. This session's newest problems the recent lines
----don't have come first, then the recent lines, oldest first; the oldest recent lines go first to make room.
+---app and the server count it), other players' names left out. A 4-line header comes first, then up to 5 of this
+---session's newest problems the recent lines don't have, then the recent lines, oldest first. The recent lines are
+---trimmed first, oldest first, leaving room for the problems; problems are dropped too, oldest first, if it's still
+---over 8 KB.
 ---@param text string
 ---@return string? id
 function Report:QueueBug(text)
 	local names = private.KnownNames()
-	local log, logged = {}, {}
+	local head, bytes = {}, 0
+	for _, line in ipairs(private.Header()) do
+		line = private.Scrub(line, names)
+		tinsert(head, line)
+		bytes = bytes + #line + 1
+	end
+	-- The newest problems, as logged ("<time> Problem: <text>"): room is kept for all of them before the recent lines
+	-- are trimmed, then only those the recent lines left don't have are sent
+	local candidates, all = {}, Wanted:GetProblems()
+	for i = #all, max(1, #all - MAX_PROBLEM_LINES + 1), -1 do
+		local at, what = strmatch(all[i], "^(%S+) (.*)$")
+		local line = private.Scrub(format("%s Problem: %s", at or "", what or all[i]), names)
+		tinsert(candidates, 1, line)
+		bytes = bytes + #line + 1
+	end
+	local log = {}
 	for _, line in ipairs(Wanted:GetLogLines(LOG_LINES)) do
 		line = private.Scrub(line, names)
 		tinsert(log, line)
+		bytes = bytes + #line + 1
+	end
+	while #log > 0 and (#head + #candidates + #log > LOG_LINES or bytes > MAX_LOG_BYTES) do
+		bytes = bytes - #tremove(log, 1) - 1
+	end
+	local logged, problems = {}, {}
+	for _, line in ipairs(log) do
 		logged[line] = true
 	end
-	-- A problem is logged as "<time> Problem: <text>" too: one still in the recent lines isn't sent twice
-	local problems, all = {}, Wanted:GetProblems()
-	for i = #all, 1, -1 do
-		local at, what = strmatch(all[i], "^(%S+) (.*)$")
-		local line = private.Scrub(format("%s Problem: %s", at or "", what or all[i]), names)
-		if #problems < MAX_PROBLEM_LINES and not logged[line] then
-			tinsert(problems, 1, line)
+	for _, line in ipairs(candidates) do
+		if logged[line] then
+			bytes = bytes - #line - 1
+		else
+			tinsert(problems, line)
 		end
-	end
-	local bytes = 0
-	for _, line in ipairs(problems) do
-		bytes = bytes + #line + 1
-	end
-	for _, line in ipairs(log) do
-		bytes = bytes + #line + 1
-	end
-	while #log > 0 and (#problems + #log > LOG_LINES or bytes > MAX_LOG_BYTES) do
-		bytes = bytes - #tremove(log, 1) - 1
 	end
 	while #problems > 0 and bytes > MAX_LOG_BYTES do
 		bytes = bytes - #tremove(problems, 1) - 1
 	end
-	for i, line in ipairs(problems) do
-		tinsert(log, i, line)
+	local out = head
+	for _, list in ipairs({ problems, log }) do
+		for _, line in ipairs(list) do
+			tinsert(out, line)
+		end
 	end
-	return Report:Queue({ kind = "bug", text = text, log = log })
+	return Report:Queue({ kind = "bug", text = text, log = out })
 end
 
 ---Lets go the reports the app says it has sent on (the catch-up's reportsReceived, read at every login).
@@ -528,7 +563,7 @@ function Report:AskAboutBug()
 	private.Ask({
 		title = "Send to the developers",
 		over = private.frame,
-		text = "What happened, and what did you expect? Wanted's last 40 log lines go with it, other players' names left out.",
+		text = "What happened, and what did you expect? Wanted's recent log goes with it, with your game and settings, other players' names left out.",
 		validate = function(text)
 			return private.Clip(text, MAX_TEXT) == "" and "Say what happened first." or nil
 		end,

@@ -154,9 +154,12 @@ character logged in. `text` is the player's words on one line without the game's
 counted in UTF-8 as the app and the server count them) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
 adds `duelId`, the finding's `rule` (at most 64 letters), `tip` (the finding's tip, or its text without one) and
 `finding` (its text), each at most 1,000 letters, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
-`"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: up to 5 of this session's newest problems
-the recent lines don't have (`"<time> Problem: <text>"`), then the recent log lines, oldest first, at most 40 lines and
-8 KB in all (a line and its break), the oldest recent lines dropped first, with other players' names left out. At most 20 wait (the player is
+`"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: a 4-line header (game client, build, locale,
+faction and level; detection settings; the app and the network; signing and the self-test), then up to 5 of this
+session's newest problems the recent lines don't have (`"<time> Problem: <text>"`), then the recent log lines, oldest
+first. At most 40 lines and 8 KB in all (a line and its break): the oldest recent lines are dropped first, keeping
+room for the problems, and if it's still over 8 KB the problems are dropped too, oldest first. Other players' names
+are left out throughout. At most 20 wait (the player is
 told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the
 catch-up as `reportsReceived = { id, ... }`, read at every login (taken in or not) and dropped from the queue. A new
 top-level table: no migration.

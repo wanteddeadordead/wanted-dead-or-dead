@@ -11075,26 +11075,45 @@ end)()
 	local problems = ns:GetProblems()
 	local earlierProblems = { unpack(problems) }
 	for i = #problems, 1, -1 do problems[i] = nil end
+	-- A short header first (the game, settings, the app and network, signing), then the recent lines
 	for i = 1, 50 do ns:Log("report test line %d", i) end
 	local bug = db.reports[Report:QueueBug("It broke")]
-	check(bug.kind == "bug" and bug.text == "It broke" and #bug.log == 40 and bug.log[40]:find("report test line 50", 1, true)
-		and bug.log[1]:find("report test line 11", 1, true) and bug.duelId == nil, "a bug report carries the last 40 log lines, oldest first")
-	-- This session's problems the recent lines have scrolled past come first (names left out); one still in them
-	-- isn't sent twice
-	ns:NoteProblem("ADDON_ACTION_BLOCKED from Nell Ward")
+	check(bug.kind == "bug" and bug.text == "It broke" and #bug.log == 40 and bug.duelId == nil
+		and bug.log[1]:find("^Game client 1%.60%.1 %(build %S+%), locale %S+; %S+, level %S+$")
+		and bug.log[2]:find("^Detection ") and bug.log[3]:find("^Wanted app none; network ") and bug.log[4]:find("^Signing: ")
+		and bug.log[5]:find("report test line 15", 1, true) and bug.log[40]:find("report test line 50", 1, true),
+		"a bug report's log is a 4-line header and the last 36 log lines, oldest first: "..bug.log[1].." / "..bug.log[3])
+	-- This session's problems the recent lines have scrolled past come after the header (names left out); one still
+	-- in them isn't sent twice
+	ns:NoteProblem("a lost problem from Nell Ward")
 	for i = 1, 50 do ns:Log("report test line %d", i) end
 	ns:NoteProblem("a fresh problem")
 	bug = db.reports[Report:QueueBug("It broke again")]
-	local fresh = 0
-	for _, line in ipairs(bug.log) do fresh = fresh + (line:find("a fresh problem", 1, true) and 1 or 0) end
-	check(#bug.log == 40 and bug.log[1]:find("^%S+ Problem: ADDON_ACTION_BLOCKED from <name>$") and bug.log[2]:find("report test line 13", 1, true)
-		and bug.log[40]:find("Problem: a fresh problem", 1, true) and fresh == 1, "a bug report's log starts with the problems it scrolled past: "..bug.log[1])
+	local function Count(log, text)
+		local n = 0
+		for _, line in ipairs(log) do n = n + (line:find(text, 1, true) and 1 or 0) end
+		return n
+	end
+	check(#bug.log == 39 and bug.log[5]:find("^%S+ Problem: a lost problem from <name>$") and bug.log[6]:find("report test line 18", 1, true)
+		and bug.log[39]:find("Problem: a fresh problem", 1, true) and Count(bug.log, "a fresh problem") == 1,
+		"a bug report's log has the problems it scrolled past after the header: "..bug.log[5])
+	-- The newest problem is never lost to trimming: six problems, five scrolled out and the sixth the second recent
+	-- line, which trimming drops; the newest five go after the header
+	for i = #problems, 1, -1 do problems[i] = nil end
+	for i = 1, 5 do ns:NoteProblem("problem P"..i) end
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	ns:NoteProblem("problem P6")
+	for i = 1, 38 do ns:Log("report test line %d", 100 + i) end
+	bug = db.reports[Report:QueueBug("Six problems")]
+	check(#bug.log == 40 and bug.log[5]:find("problem P2$") and bug.log[9]:find("problem P6$") and Count(bug.log, "problem P6") == 1
+		and Count(bug.log, "problem P1") == 0 and bug.log[10]:find("report test line 108", 1, true) and bug.log[40]:find("report test line 138", 1, true),
+		"the newest five problems go after the header, the sixth kept though its log line was trimmed: "..bug.log[9])
 	for i = 1, 40 do ns:Log("%s %d", string.rep("x", 300), i) end
 	local big = db.reports[Report:QueueBug("Long log")]
 	local bytes = 0
 	for _, line in ipairs(big.log) do bytes = bytes + #line + 1 end
-	check(bytes <= 8192 and #big.log < 40 and big.log[1]:find("Problem: ADDON_ACTION_BLOCKED", 1, true) and big.log[#big.log]:find(" 40$"),
-		"the log is held to 8 KB with its breaks, the oldest recent lines dropped and the problems kept: "..bytes)
+	check(bytes <= 8192 and #big.log < 40 and big.log[1]:find("^Game client") and big.log[9]:find("problem P6$") and big.log[#big.log]:find(" 40$"),
+		"the log is held to 8 KB with its breaks, the oldest recent lines dropped and the header and problems kept: "..bytes)
 	for i = #problems, 1, -1 do problems[i] = nil end
 	for i, problem in ipairs(earlierProblems) do problems[i] = problem end
 	-- The catch-up's reportsReceived lets them go, at every login, even a catch-up already taken in

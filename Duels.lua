@@ -918,7 +918,7 @@ local function Clock(seconds)
 	return format("%d:%02d", floor(seconds / 60), seconds % 60)
 end
 
----One event of a report's timeline (the app's "t,w,k,id,amt,a,b") as a line: when, whose, the spell and what it did.
+---One event of a report's timeline (the app's "t,w,k,id,amt,a,b", ",p" after a pet's or totem's) as a line: when, whose, the spell and what it did.
 ---@return table? { t, mine, spell, icon, text, low (true when it left you under 30% health) }
 function private.TimelineLine(event)
 	if type(event) ~= "string" or #event > 120 then
@@ -933,6 +933,9 @@ function private.TimelineLine(event)
 	local mine = who == "m"
 	local target = mine and "them" or "you"
 	local line = { t = t, mine = mine, spell = private.SpellName(id), icon = private.SpellIcon(id) }
+	if f[8] == "p" then
+		line.spell = line.spell.." (pet)" -- their pet's or totem's
+	end
 	if kind == "c" then
 		line.text = ""
 	elseif kind == "s" then

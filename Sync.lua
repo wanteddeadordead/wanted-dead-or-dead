@@ -1549,7 +1549,7 @@ function private.GetHaveTable()
 	local cutoff = GetServerTime() - HAVE_ACTIVE_SECONDS
 	local active = {}
 	for origin, chain in pairs(Wanted.db.chains) do
-		if chain.seq > Store:SeqBase() and (origin == own or Store:GetLastActive(origin) >= cutoff) then
+		if chain.seq > Store:GetChainBase(origin) and (origin == own or Store:GetLastActive(origin) >= cutoff) then
 			tinsert(active, origin)
 		end
 	end

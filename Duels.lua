@@ -45,6 +45,8 @@ local INSPECT_TRIES = 5
 -- The game won't inspect someone hostile, so a duel opponent not inspected before the fight (stealthed, out of view)
 -- is asked for right after it, while they're friendly again and usually still standing there, for this long
 local AFTER_SECONDS = 30
+-- An inspect's item links come in over a moment after it answers: slots read without one are read again this much later
+local GEAR_RETRY_SECONDS = 1
 local CHECK_SECONDS = 1
 local MANA = 0
 -- A talent loadout's import string longer than this isn't kept
@@ -618,7 +620,7 @@ function private.ReadGear(unit)
 	if not GetInventoryItemLink then
 		return nil
 	end
-	local items, any = {}, false
+	local items, any, partial = {}, false, nil
 	for _, slot in ipairs(GEAR_SLOTS) do
 		local ok, link = pcall(GetInventoryItemLink, unit, slot)
 		link = ok and private.Readable(link) or nil
@@ -632,12 +634,48 @@ function private.ReadGear(unit)
 			Wanted:Log("Duels: slot %d's item link not kept (%d bytes): %s", slot, #link, (gsub(strsub(link, 1, 60), "|", "!")))
 		elseif ok and link == nil and private.Readable(UnitExists(unit)) then
 			local raw = select(2, pcall(GetInventoryItemLink, unit, slot))
-			if raw ~= nil then
+			-- An inspected player's links come in over a moment after the inspect answers; the item's id comes first
+			local id = GetInventoryItemID and private.Readable(select(2, pcall(GetInventoryItemID, unit, slot)))
+			if type(id) == "number" then
+				items[slot], any, partial = "item:"..id, true, true
+			elseif raw ~= nil then
 				Wanted:Log("Duels: slot %d's item link hidden by the game", slot)
 			end
 		end
 	end
-	return any and { items = items } or nil
+	return any and { items = items, partial = partial } or nil
+end
+
+---Fills in a gear read from an inspect whose links weren't all in yet, once more after GEAR_RETRY_SECONDS while the
+---inspect is still ours, then lets the inspect go. Slots that only had an item id get the full link when it's in.
+---@param them table the side whose gear it is
+function private.FinishGear(them, guid)
+	local gear = them.gear
+	if not (gear and gear.partial and private.inspect and C_Timer and C_Timer.After) then
+		private.ReleaseInspect()
+		return
+	end
+	local inspect = private.inspect
+	inspect.answered = true -- not timed out while we wait
+	C_Timer.After(GEAR_RETRY_SECONDS, function()
+		if private.inspect ~= inspect or inspect.taken then
+			Wanted:Log("Duels: gear not read again (the inspect isn't ours any more)")
+			if private.inspect == inspect then
+				private.ReleaseInspect() -- someone else's now: only forgotten, not cleared
+			end
+			return
+		end
+		local unit = private.FindUnit({ guid = guid })
+		local again = unit and private.ReadGear(unit)
+		if again then
+			for slot, item in pairs(again.items) do
+				gear.items[slot] = item
+			end
+			gear.partial = again.partial
+		end
+		Wanted:Log("Duels: gear read again: %s", not unit and "out of view" or gear.partial and "some links still missing" or "complete")
+		private.ReleaseInspect()
+	end)
 end
 
 ---An item's level and quality, or nil while the game hasn't loaded it (it's asked to).
@@ -714,10 +752,11 @@ function private.OnInspectReady(guid)
 			after.them.gear = private.ReadGear(afterUnit)
 			Wanted:Log("Duels: inspect after the duel answered: %s", after.them.spec or "no specialization")
 			private.after = nil
+			private.FinishGear(after.them, guid)
 		else
 			Wanted:Log("Duels: inspect after the duel answered with them out of view; not read")
+			private.ReleaseInspect()
 		end
-		private.ReleaseInspect()
 		return
 	end
 	local duel = private.duel
@@ -728,15 +767,16 @@ function private.OnInspectReady(guid)
 		duel.them.gear = private.ReadGear(unit)
 		duel.inspected = true
 		Wanted:Log("Duels: inspect answered: %s", duel.them.spec or "no specialization")
+		private.FinishGear(duel.them, guid)
 	else
 		Wanted:Log("Duels: inspect answered with the opponent out of view; not read")
+		private.ReleaseInspect()
 	end
-	private.ReleaseInspect()
 end
 
 ---An inspect not answered in time is given up.
 function private.CheckInspectTimeout()
-	if private.inspect and GetTime() - private.inspect.at > INSPECT_TIMEOUT then
+	if private.inspect and not private.inspect.answered and GetTime() - private.inspect.at > INSPECT_TIMEOUT then
 		Wanted:Log("Duels: inspect timed out%s", private.inspect.taken and " (someone else asked one since)" or "")
 		private.ReleaseInspect()
 	end

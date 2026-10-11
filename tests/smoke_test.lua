@@ -10201,8 +10201,28 @@ duelStubs = {} -- a global: the main chunk is at its limit of locals
 	clock = clock + 1
 	Duels:Check()
 	check(#S.inspected == asked + 1, "asked for once they're friendly again, after the duel")
+	-- Their links come in over a moment: a slot with only its item id keeps the id, and is read again a second later
+	local savedLink2, savedID = GetInventoryItemLink, GetInventoryItemID
+	local linked = { [1] = true }
+	GetInventoryItemLink = function(unit, slot)
+		if unit ~= "player" and linked[slot] then return "|cff0070dd|Hitem:"..(slot * 100).."::::::::30:::::|h[Item]|h|r" end
+	end
+	GetInventoryItemID = function(unit, slot) if unit ~= "player" and (slot == 1 or slot == 5 or slot == 7) then return slot * 100 end end
+	local cleared = S.cleared
 	Fire("INSPECT_READY", "Player-1-0000CAFE")
 	check(late.them.spec == "Affliction" and late.them.loadout == S.inspectLoadout, "their build lands on the duel's record: "..tostring(late.them.spec))
+	local g = late.them.gear
+	check(g and g.items[1] == "item:100::::::::30:::::" and g.items[5] == "item:500" and g.items[7] == "item:700" and g.partial and not g.items[3],
+		"a slot whose link isn't in yet keeps its item id")
+	check(S.cleared == cleared, "the inspect is kept while the gear is read again")
+	clock = clock + 6
+	Duels:Check()
+	check(S.cleared == cleared, "an answered inspect doesn't time out while the gear waits")
+	linked[5] = true
+	RunTimers()
+	check(g.items[5] == "item:500::::::::30:::::" and g.items[7] == "item:700" and g.partial, "read again: links that came in replace the ids")
+	check(S.cleared == cleared + 1, "then the inspect is let go")
+	GetInventoryItemLink, GetInventoryItemID = savedLink2, savedID
 	CanInspect = savedCan
 	enemyUnits.target = nil
 	table.remove(db.duels)

@@ -493,7 +493,7 @@ function private.Create()
 	appNote:SetPoint("TOPLEFT", 20, -84)
 	appNote:SetPoint("RIGHT", -20, 0)
 	appNote:SetWordWrap(true)
-	local note = Theme:Text(frame, "tiny", "Also useful: a screenshot, and the exact red error text if the game showed one.")
+	local note = Theme:Text(frame, "tiny", "Say what you were doing, and the exact red error text if the game showed one.")
 	note:SetPoint("BOTTOMLEFT", 20, 18)
 	frame.appNote = appNote
 	private.frame = frame

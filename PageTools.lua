@@ -33,7 +33,7 @@ function private.BuildNetwork(container, width)
 	reconnect:SetPoint("LEFT", test, "RIGHT", 6, 0)
 	local bug = W:Button(card, "Report a bug", "primary", 120, 26, function() Wanted.Report:Show() end)
 	bug:SetPoint("BOTTOMRIGHT", -16, 12)
-	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy and shows where to send it. Also /wanted bug.")
+	W:AttachTooltip(bug, "Report a bug", "Sends a report to the developers through the Wanted app. Also /wanted bug.")
 
 end
 

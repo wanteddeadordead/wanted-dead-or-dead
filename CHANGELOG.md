@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+- Tell us when a duel tip looks wrong: "Something not right?" under each tip on a fight card asks what's off (a few
+  words, or none) and sends the tip to the developers, with the duel's classes, specs and your level.
+- Report a bug can now send the report itself: Send to the developers asks what happened and sends it with Wanted's
+  recent log (other players' names left out). It's the only way to report now: copying the report for GitHub is gone,
+  and the window says when a report waits for the Wanted app and where to get it. The log it sends starts with a few
+  lines about your game, settings and the app, then this session's problems (blocked actions and the like) if they've
+  scrolled out of the recent lines.
+- Neither goes straight away: the Wanted app (0.2.46 or newer) passes reports on the next time it syncs, after a
+  /reload or logout. Up to 20 wait for it, each for 30 days.
+- A report's log leaves out the names of players Wanted never stored as well, by where the log puts a name ("from",
+  "killed by" and the like).
+
 ## [1.20.0] - 2026-10-11
 
 - Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs

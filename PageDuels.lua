@@ -608,12 +608,8 @@ function private.FillLane(lane, side, length, gearText)
 				points[#points + 1] = tostring(floor(n))
 			end
 		end
-		local talents = {}
-		for _, t in ipairs(type(build.talents) == "table" and build.talents or {}) do
-			talents[#talents + 1] = private.CleanText(t)
-		end
-		buildText = "Build: "..private.CleanText(build.spec)..(#points > 0 and (" ("..table.concat(points, "/")..")") or "")
-			..(#talents > 0 and (": "..table.concat(talents, ", ")) or "").."\n"
+		-- The talents themselves are a click away (See talent tree)
+		buildText = "Build: "..private.CleanText(build.spec)..(#points > 0 and (" ("..table.concat(points, "/")..")") or "").."\n"
 	end
 	lane.used:SetText(buildText..(gearText and (gearText.."\n") or "")..(#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
 		..(#used > 0 and ("Used: "..table.concat(used, ", ")) or "Used nothing that counts"))

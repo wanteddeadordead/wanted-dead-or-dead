@@ -10736,8 +10736,8 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find("free to act, between 0:08", 1, true) then openerShown = openerShown + 1 end end
 	check(openerShown == 1, "an opener that's also a finding is said once: "..openerShown)
 	db.duelReports[duel.id].opener = "They opened from stealth."
-	check(OnScreen("Build: Feral Combat (0/12/0): Feral Charge, Sharpened Claws") and OnScreen("vs Feral Combat Druid"),
-		"the card shows their build, and names them by it")
+	check(OnScreen("Build: Feral Combat (0/12/0)") and not OnScreen("Sharpened Claws") and OnScreen("vs Feral Combat Druid"),
+		"the card shows their build by its spec and points (the talents are in See talent tree), and names them by it")
 	check(Duels:Side(duel, "them").spec == "Feral Combat" and duel.them.spec == nil, "the shown spec comes from the report; the record is left as it was")
 	check(Duels:GetSheet().matchups[1].label == "Feral Combat Druid", "the matchup is named by the build too")
 	local keptSpec = duel.them.spec
@@ -10907,7 +10907,7 @@ end)()
 				check(OnScreen(i..". "..f.text), "the card shows the app's finding: "..f.text)
 			end
 			check(#golden[d.id].me.hp > 1 and type(golden[d.id].me.hp[1][2]) == "number", "health comes as { t, pct } pairs")
-			check(OnScreen("Build: Combat (0/12/0): Improved Eviscerate"), "the card shows the build the app decoded from the loadout")
+			check(OnScreen("Build: Combat (0/12/0)") and not OnScreen("Improved Eviscerate"), "the card shows the build the app decoded from the loadout")
 		end
 		db.duels, db.duelReports = keptDuels, keptReportsHere
 		ns.UI:Show("duels")

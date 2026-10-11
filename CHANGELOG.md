@@ -10,6 +10,11 @@
   on the PC that kept the old numbers reach only the players online at the time, and the website through that PC's
   Wanted app. A player who reinstalled within the last day may show as a new witness ("new to the network") on a
   claim, for players who only heard of them through others: a warning, not a reason to trust anyone more.
+- Wanted no longer mistakes another player's message for its own just after you log in or /reload. Every copy of
+  Wanted numbered its messages from 1 each session, so another player's first messages could look like yours
+  coming back. Before your first record of the session, that could switch your identity to theirs and lose your
+  record chain. Messages are now numbered from a different point each session, and a message is only treated as
+  your own when it comes under your name.
 
 ## [1.20.0] - 2026-10-11
 

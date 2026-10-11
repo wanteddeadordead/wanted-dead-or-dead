@@ -316,7 +316,10 @@ record) or relayed by another player, for one of this account's characters (the 
 seq more than a minute past the clock's number, or for a record that would be pruned at once; such a record is held
 ahead of the gap until the origin's own hello or fill. A record of the origin's from before `start` (its old chain)
 that arrives later is kept, not flagged as a rewritten history. `first` also takes the time of the record at `start`
-when no earlier first record is known. A chain with no `start` began at the base, as before; the hello leaves out a
+when no earlier first record is known. A restart record dated before its own number (`t` earlier than
+`1767225600 + (seq - 1) / 10` less a minute) neither moves a chain nor sets `first`. A claim's witness with no first
+record known counts as new when their chain is numbered past the clock's number a day before the kill: it started
+within the day. A chain with no `start` began at the base, as before; the hello leaves out a
 chain with no record past its start. A `start` or `first` that isn't a number is dropped at login. An optional new
 field: no migration. Saved chains are kept as they are, so an existing player's chain carries on from where it was;
 only a fresh own chain starts by the clock. Other players' chains still start at the base.

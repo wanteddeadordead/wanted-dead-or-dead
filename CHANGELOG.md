@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- Reinstalling the addon, moving to a new PC or losing your saved data no longer loses your new bounties, kills and
+  claims. Wanted used to number your records from 1 again, the same ids as your old records already on the network,
+  so the network kept the old ones and dropped the new. A fresh start now numbers them from the time, and other
+  players' addons move on to the new numbers instead of waiting for the ones in between. Players who keep their
+  saved data are not affected.
+
 ## [1.20.0] - 2026-10-11
 
 - Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs

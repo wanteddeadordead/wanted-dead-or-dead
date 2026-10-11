@@ -117,6 +117,34 @@ points, honor, hk, season, t }` (Blizzard rank, the season's rank points, Honor 
 season). Written at login and when the rank, honor or bags change. The Wanted app sends them for the Blizzard PvP
 boards; the site takes them only for the account's own characters.
 
+`WantedDB.duels` (from 1.20.0) is the duels the account's characters fought (`Duels.lua`), oldest first, at most 500
+(the oldest dropped). A new top-level table: no migration. Each is plain values:
+`{ id, startAt, endAt, length, result, fled, toTheDeath, zone, mapId, x, y, me = side, them = side }`, where
+`side = { guid, name, class, race, raceName, level, spec, specId, loadout, talents, health, mana, gear }`. `id` is `"<origin>:duel:<startAt>"`, stable
+for the app's uploads to de-duplicate. Times are server times (`GetServerTime()`), `length` seconds. `result` is
+`"won"`, `"lost"` or `"none"` (no winner line: cancelled); `fled` is true when the loser left the duel area;
+`toTheDeath` true for a duel to the death. `zone` is `GetRealZoneText()`, `x`/`y` 0-100 on `mapId`. On a side, `class`
+and `race` are the game's file names (`MAGE`, `Scourge`), `gear` what the side wore (added in the 1.20.0 tests; the opponent's read with their inspect, ours at the duel's end): `{ items = { [inventory slot] = item string }, partial }`, the `item:<id>:...` part of each link only (`item:<id>` alone, and `partial = true`, for an opponent's slot whose link the game hadn't sent yet) (no names; letters, digits, `:` and `-`), slots 1-3 and 5-18, at most 255 bytes each; `raceName` the game's own name for the race as shown (`UnitRace`; added in the 1.20.0 tests, absent on the first records), `spec` the name of the chosen specialization (Forever's
+talents are retail's: our own from `C_SpecializationInfo.GetSpecialization`, the opponent's from
+`GetInspectSpecialization` after an inspect; nil before one is chosen, or when the opponent's inspect never answered),
+`specId` the game's id for that specialization (the same in every language), `loadout` the talent loadout as the
+game exports it (the import string the talents frame copies: ours from the active config, the opponent's read right
+after their inspect; kept only as a plain printable string without spaces or `|`, at most 512 bytes), `talents` always
+nil (there are no per-tree points to count), and
+`health`/`mana` percentages at the end (mana only for mana users; the opponent's as last seen if out of view, nil
+where the game hides it). `them.name` is kept only when the opponent runs Wanted (a signing key is bound to their
+GUID by the app's list or by a hello whose sender is the game's own name for that character, `KeyBook:OriginOf`, and
+the game's name for the opponent is that Wanted user's): anyone else is kept by class, spec, race and level, and their GUID only to tell duels
+apart, never shown. Never shared with other players; the Wanted app uploads them with the player's other data.
+
+`WantedDB.duelReports` (from 1.20.0) is the fight reports the desktop app made of those duels from the combat log,
+keyed by duel `id`, taken from the app's catch-up (`duelReports`) at each login and kept only for duels still in
+`WantedDB.duels`. A new top-level table: no migration. A report is the app's (shape in the network repo's duel
+coaching PR); `{ noLog = true, why }` marks a duel the app had no combat log for. The app's newest 20 reports also carry the
+fight's timeline, `events = { "t,w,k,id,amt,a,b", ... }` (one event a string, at most about 32 KB a report, layout in
+the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` when it was too long to send whole;
+an older report comes back from the app without them, so the saved file holds at most 20 timelines.
+
 `WantedDB.recentWhispers` (from 1.19.4) is who the addon whispered in its last 10 minutes, `name -> server time`,
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.

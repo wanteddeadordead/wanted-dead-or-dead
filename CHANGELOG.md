@@ -1,6 +1,28 @@
 # Changelog
 
-## [Unreleased]
+## [1.20.0] - 2026-10-11
+
+- Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs
+  Frost Mage 3-9", most faced first), how you do as each of your own talent builds (a build keeps its row as you add points
+  when you level, and a respec starts a new one; each is named by its points, "Combat Rogue (0/13/0)"). Click a matchup
+  to see its duels: when, the result, how long and the opponent's level; click a build for its duels and See talent tree (hover one for where, and both sides' level, race and build). Fight
+  reports from the Wanted app reach the game at a /reload: the Duels tab says when your last duel's report is due and
+  gives a Reload button. Click a duel for its fight card: both sides' health through the fight, the control you
+  suffered, every spell each of you used, and up to five tips, each with what to try next time (experimental: tell us about a wrong tip with /wanted bug).
+  Tips know the matchup, Rogues first: what their Power Word: Shield absorbed, how much their Shadow Word: Pain did,
+  and what to do about it. Fight cards need the Wanted app 0.2.42 or newer, the timeline and matchup tips 0.2.45:
+  the Duels tab says when it's missing, too old or not running. Timeline lists the whole fight in order:
+  every cast, hit, tick, miss, absorb, control, interrupt and heal of both sides, with the health each blow left
+  (your newest 20 duels); hover a line for its spell's tooltip. See talent tree opens the game's
+  talent frame on either side's build, and See gear lists what each of you wore, slot by slot, with your average item
+  levels; a clear gear gap is called out at the top. Your opponent's talents are read by inspect when
+  nobody else's inspect is waiting, so the inspect window and other addons aren't disturbed. An opponent who runs
+  Wanted shows by name; anyone else as their spec and class. The Wanted app (0.2.42 or later) uploads them with your
+  other data; they are never shared with other players.
+- The Gear tab lists only the rank vendors' PvP gear again: profession trainers' and cooks' patterns and recipes
+  ("Requires Leatherworking (75)") were read as ranked items; the ones already listed are cleared.
+- A duel never counts as a kill, a death or a sighting. Even a duel to the death leaves no kill or death record, no
+  "Killed by" warning and no lost kill streak.
 
 ## [1.19.4] - 2026-10-10
 

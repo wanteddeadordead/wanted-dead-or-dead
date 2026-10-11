@@ -5,8 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks! In game, **Report a bug** in the Wanted window's title bar (or `/wanted bug`)
-        builds a report with your versions, settings, errors and recent log. Please paste it below.
+        Thanks! The best way to report a bug is in game: **Report a bug** in the Wanted window's title bar
+        (or `/wanted bug`) sends it to the developers through the Wanted app, with your versions, settings,
+        errors and recent log. If you can't do that, describe the problem below.
   - type: textarea
     id: what
     attributes:
@@ -19,14 +20,6 @@ body:
     attributes:
       label: How can it be reproduced?
       description: The steps that lead to it, if you know them. "It happened once while sniping in Ratchet" is useful too.
-  - type: textarea
-    id: report
-    attributes:
-      label: Report from the game
-      description: Paste the text from Report a bug (/wanted bug) here.
-      render: text
-    validations:
-      required: true
   - type: textarea
     id: error
     attributes:

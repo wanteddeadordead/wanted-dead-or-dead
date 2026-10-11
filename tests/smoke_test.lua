@@ -5650,7 +5650,8 @@ end)()
 -- saved data (at most 20), shown as their own kind with their local times, location and link, and dropped 2 days after
 -- they end
 ;(function()
-	-- Its catch-ups are from a later clock: the last one taken in goes back after, or later tests' would be skipped
+	-- Its catch-ups are from a later clock: once their queued work is done, the last one taken in goes back, or later
+	-- tests' catch-ups would be skipped as already taken in
 	local realClock, realCatchupT = clock, ns.db.catchupT
 	clock = os.time({ year = 2026, month = 10, day = 10, hour = 12 })
 	local checkInAt, finalsDay = 1792245600, 1792281600 -- 2026-10-17 14:00 UTC; 2026-10-18 00:00 UTC
@@ -5777,6 +5778,7 @@ end)()
 	check(type(ns.db.calendarEvents.list) == "table", "unreadable saved events start empty")
 	ns.db.calendarEvents = nil
 	ns.PvPCalendar:OnLoad()
+	RunFrames()
 	clock, ns.db.catchupT = realClock, realCatchupT
 end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text

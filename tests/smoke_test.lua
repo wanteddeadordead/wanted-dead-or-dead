@@ -10848,6 +10848,18 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "You" and fs._parent and rawget(fs._parent, "key") == "mine" then youFilter = fs._parent end end
 	youFilter:Click()
 	check(OnScreen("Sinister Strike") and not OnScreen("Regrowth  begins casting"), "You shows only your own")
+	local tipSpell, tipShown, tipHidden
+	local origSpell, origShow, origHide = GameTooltip.SetSpellByID, GameTooltip.Show, GameTooltip.Hide
+	GameTooltip.SetSpellByID = function(_, id) tipSpell = id end
+	GameTooltip.Show = function() tipShown = true end
+	GameTooltip.Hide = function() tipHidden = true end
+	local strikeRow
+	for _, fs in ipairs(Mock.fontStrings) do if type(fs._text) == "string" and fs._text:find("Sinister Strike", 1, true) and fs._text:find("hit them", 1, true) and fs._parent:IsShown() then strikeRow = fs._parent end end
+	strikeRow._scripts.OnEnter(strikeRow)
+	check(tipSpell == 1752 and tipShown, "hovering a timeline line shows its spell's tooltip: "..tostring(tipSpell))
+	strikeRow._scripts.OnLeave(strikeRow)
+	check(tipHidden, "leaving the line hides the tooltip")
+	GameTooltip.SetSpellByID, GameTooltip.Show, GameTooltip.Hide = origSpell, origShow, origHide
 	Button("Back to the fight")._scripts.OnClick(Button("Back to the fight"))
 	check(OnScreen("Build: Feral Combat") or OnScreen("Gear:") or OnScreen("Used"), "back to the fight card")
 	C_Spell = savedSpell

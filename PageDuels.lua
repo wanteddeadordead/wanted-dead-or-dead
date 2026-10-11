@@ -438,7 +438,8 @@ function private.BuildTimelinePanel(card, width)
 	card.timelinePanel = panel
 end
 
----The nth line of the timeline, made once: the time, whose, the spell's icon and name, and what it did.
+---The nth line of the timeline, made once: the time, whose, the spell's icon and name, and what it did; hovering it
+---shows the spell's tooltip.
 function private.TimelineRow(panel, i)
 	local row = panel.rows[i]
 	if row then
@@ -460,6 +461,15 @@ function private.TimelineRow(panel, i)
 	row.text:SetPoint("RIGHT", -8, 0)
 	row.text:SetJustifyH("LEFT")
 	row.text:SetWordWrap(false)
+	row:EnableMouse(true)
+	row:SetScript("OnEnter", function(self)
+		if self.spellId then
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetSpellByID(self.spellId)
+			GameTooltip:Show()
+		end
+	end)
+	row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	panel.rows[i] = row
 	return row
 end
@@ -479,6 +489,7 @@ function private.FillTimeline()
 		if filter == "all" or (filter == "mine") == line.mine then
 			n = n + 1
 			local row = private.TimelineRow(panel, n)
+			row.spellId = line.id
 			row.clock:SetText(line.clock)
 			row.who:SetText(line.mine and Theme:Colorize("You", C.green) or Theme:Colorize("Them", C.red))
 			row.icon:SetTexture(line.icon)

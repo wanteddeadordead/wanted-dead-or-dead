@@ -296,8 +296,9 @@ UI:RegisterPage("calendar", {
 		}
 		for i, item in ipairs(legend) do
 			local key = Theme:Text(side, "tiny", item[1], KIND_COLORS[item[2]])
-			-- Above the arena note, which wraps to two lines
-			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 14 + 34)
+			-- Above the arena note, which wraps to two lines, 12 apart: seven lines stay clear of Coming up full (10 rows) and
+			-- its launch note on two
+			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 12 + 30)
 		end
 		local arenas = Theme:Text(side, "tiny", "Arena seasons: not on WoW Forever yet.", C.faint)
 		arenas:SetPoint("BOTTOMLEFT", 14, 12)

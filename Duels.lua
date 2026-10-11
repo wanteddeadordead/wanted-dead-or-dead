@@ -985,6 +985,41 @@ function Duels:Timeline(report)
 	return lines, report.eventsCut == true
 end
 
+-- A use of a spell: it went off, landed, missed, controlled, interrupted or dispelled. Ticks and heals over time follow
+-- a use, so they count only for a spell seen no other way (a proc's).
+local USE_KINDS = { c = true, h = true, m = true, x = true, i = true, d = true }
+
+---What one side used in a fight, from its report's timeline: each spell once, in the order first used, with how often
+---("Sinister Strike x8"). Melee, cast starts and a pet's doing are left out. Nil when the report has no timeline.
+---@return string[]?
+function Duels:SpellsUsed(report, mine)
+	if type(report) ~= "table" or type(report.events) ~= "table" then
+		return nil
+	end
+	local order, uses, groups = {}, {}, {}
+	for _, event in ipairs(report.events) do
+		local f = type(event) == "string" and { strsplit(",", event) } or {}
+		local kind, id = f[3], tonumber(f[4])
+		if (f[2] == "m") == mine and (f[2] == "m" or f[2] == "t") and id and id ~= MELEE_SPELL and f[8] ~= "p"
+			and (USE_KINDS[kind] or kind == "k" or kind == "e") then
+			if not uses[id] then
+				order[#order + 1], uses[id], groups[id] = id, 0, 0
+			end
+			if USE_KINDS[kind] then
+				uses[id] = uses[id] + 1
+			else
+				groups[id] = groups[id] + 1
+			end
+		end
+	end
+	local out = {}
+	for _, id in ipairs(order) do
+		local n = uses[id] > 0 and uses[id] or groups[id]
+		out[#out + 1] = private.SpellName(id)..(n > 1 and (" x"..n) or "")
+	end
+	return out
+end
+
 -- Race names for duels recorded before the game's own name was kept (its file names: Scourge is Undead)
 local RACE_NAMES = { Scourge = "Undead", NightElf = "Night Elf" }
 

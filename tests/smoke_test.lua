@@ -10724,7 +10724,7 @@ end)()
 	local duelRow = Row(function(item) return item.duel == duel end)
 	duelRow._scripts.OnClick(duelRow, "LeftButton")
 	check(OnScreen("1. You lost with Gouge, Evasion and Sprint never used.") and OnScreen("Gouge then bandage or reset.")
-		and OnScreen("between 0:08 and 0:18.") and OnScreen("They opened from stealth.") and OnScreen("Controlled: Bash 2.0 s") and OnScreen("Used: Evasion 0:16"),
+		and OnScreen("between 0:08 and 0:18.") and OnScreen("They opened from stealth.") and OnScreen("Crowd-controlled by: Bash (2.0 s)") and OnScreen("Defensives, escapes and controls used: Evasion at 0:16"),
 		"the fight card shows the findings with their tips, the control suffered and what was used")
 	-- The app's reading of each talent loadout: the build on the card, and the spec from the tree with the most
 	-- points where the game gave only the class
@@ -10830,6 +10830,15 @@ end)()
 	db.duelReports[duel.id].events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1.8,t,h,6603,50,28,c", "5.5,m,c,5171,,,",
 		"11.7,t,x,5211,,13.7,expired", "13.5,t,s,8938,,,", "13.9,m,i,1766,,8938,", "17.8,t,k,8925,34,4,26.7", "26.3,t,e,8938,182,,",
 		"30,m,D,0,,,", "bad", "1,x,h,1,1,,", "5.7,t,h,6603,20,6,,p", "6,m,m,1752,94,ABSORB," }
+	-- What each used, from the timeline: every spell once with how often, melee and cast starts left out, a cast's
+	-- ticks or heal the same use, a spell seen only by its ticks or heals used once a group
+	local usedReport = { events = { "0,m,h,1752,30,96,", "0.4,t,m,6603,,PARRY,", "1,t,c,8925,,,", "1.2,t,k,8925,34,4,13",
+		"2,m,m,1752,94,ABSORB,", "3,t,x,5211,,5,expired", "4,m,c,5171,,,", "5,t,s,8938,,,", "5.1,m,i,1766,,8938,", "8,t,s,8938,,,",
+		"9.5,t,c,8938,,,", "10,t,e,8938,40,3,16", "11,m,h,6603,20,50,", "12,m,e,8938,30,2,14", "30,m,D,0,,," } }
+	local mineUsed, theirsUsed = Duels:SpellsUsed(usedReport, true), Duels:SpellsUsed(usedReport, false)
+	check(table.concat(mineUsed, ", ") == "Sinister Strike x2, Slice and Dice, Kick, Regrowth", "what you used, in order, with counts: "..table.concat(mineUsed, ", "))
+	check(table.concat(theirsUsed, ", ") == "Moonfire, Bash, Regrowth", "what they used: "..table.concat(theirsUsed, ", "))
+	check(Duels:SpellsUsed({}, true) == nil, "no timeline, no list")
 	local lines = Duels:Timeline(db.duelReports[duel.id])
 	check(#lines == 12 and lines[12].text == "absorbed 94", "a blow a shield took says how much: "..tostring(lines[12].text))
 	table.remove(lines)
@@ -10866,7 +10875,8 @@ end)()
 	check(tipHidden, "leaving the line hides the tooltip")
 	GameTooltip.SetSpellByID, GameTooltip.Show, GameTooltip.Hide = origSpell, origShow, origHide
 	Button("Back to the fight")._scripts.OnClick(Button("Back to the fight"))
-	check(OnScreen("Build: Feral Combat") or OnScreen("Gear:") or OnScreen("Used"), "back to the fight card")
+	check(OnScreen("Build: Feral Combat") or OnScreen("Gear:") or OnScreen("Used: "), "back to the fight card")
+	check(OnScreen("Used: Sinister Strike x2, Slice and Dice, Kick"), "with a timeline, the card lists every spell each side used")
 	C_Spell = savedSpell
 	db.duelReports[duel.id].events = nil
 	local back

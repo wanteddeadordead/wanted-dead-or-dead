@@ -564,8 +564,9 @@ function private.ShowTree(loadout, specId, level)
 end
 
 ---Fills a lane from one side of a report (v1): health as the last reading at each bar's moment ({ t, pct } pairs),
----control as gold marks across the fight, and the answers they used and when.
-function private.FillLane(lane, side, length, gearText)
+---control as gold marks across the fight, and what they used (spells: every spell, from the timeline; without one, the
+---defensives, escapes and controls and when).
+function private.FillLane(lane, side, length, gearText, spells)
 	side = type(side) == "table" and side or {}
 	local hp = type(side.hp) == "table" and side.hp or {}
 	length = (type(length) == "number" and length > 0) and length or 1
@@ -588,7 +589,7 @@ function private.FillLane(lane, side, length, gearText)
 			mark:SetPoint("TOPLEFT", from * lane.width, 0)
 			mark:SetWidth(max((to - from) * lane.width, 2))
 			mark:Show()
-			controls[#controls + 1] = format("%s %.1f s", private.CleanText(c.spell), c.to - c.from)
+			controls[#controls + 1] = format("%s (%.1f s)", private.CleanText(c.spell), c.to - c.from)
 		else
 			mark:Hide()
 		end
@@ -596,7 +597,7 @@ function private.FillLane(lane, side, length, gearText)
 	local used = {}
 	for _, u in ipairs(type(side.cds) == "table" and side.cds or {}) do
 		if type(u) == "table" then
-			used[#used + 1] = private.CleanText(u.spell).." "..private.Clock(u.t)
+			used[#used + 1] = private.CleanText(u.spell).." at "..private.Clock(u.t)
 		end
 	end
 	local build = type(side.build) == "table" and side.build or nil
@@ -611,8 +612,12 @@ function private.FillLane(lane, side, length, gearText)
 		-- The talents themselves are a click away (See talent tree)
 		buildText = "Build: "..private.CleanText(build.spec)..(#points > 0 and (" ("..table.concat(points, "/")..")") or "").."\n"
 	end
-	lane.used:SetText(buildText..(gearText and (gearText.."\n") or "")..(#controls > 0 and ("Controlled: "..table.concat(controls, ", ").."   ") or "")
-		..(#used > 0 and ("Used: "..table.concat(used, ", ")) or "Used nothing that counts"))
+	-- Every spell this side used, from the timeline; a report without one (older than the newest 20) has the
+	-- defensives, escapes and controls the app keeps for its tips
+	local usedText = spells and ("Used: "..(#spells > 0 and table.concat(spells, ", ") or "nothing but melee"))
+		or ("Defensives, escapes and controls used: "..(#used > 0 and table.concat(used, ", ") or "none"))
+	lane.used:SetText(buildText..(gearText and (gearText.."\n") or "")..(#controls > 0 and ("Crowd-controlled by: "..table.concat(controls, ", ").."\n") or "")
+		..usedText)
 end
 
 function private.BuildCard(container, width)
@@ -715,7 +720,8 @@ function private.ShowCard(duel)
 			part:SetShown(hasReport)
 		end
 		if hasReport then
-			private.FillLane(lane, report[key], report.len, private.GearText(type(duel[key]) == "table" and duel[key].gear))
+			private.FillLane(lane, report[key], report.len, private.GearText(type(duel[key]) == "table" and duel[key].gear),
+				Duels:SpellsUsed(report, key == "me"))
 		end
 		-- The loadout is the duel record's own (the addon read it by inspect), shown whether or not a report came
 		local side = type(duel[key]) == "table" and duel[key] or {}

@@ -11087,8 +11087,10 @@ end)()
 	dialog.confirm:Click()
 	check(Report:CountQueued() == 4 and OnScreen("waits until the Wanted app runs on this PC"), "with no app, the report waits for it to be set up")
 	dialog.confirm:Click()
-	-- The report window's own button opens the same question
+	-- The report window's own button opens the same question; with no app, the window says a report waits for it
 	ns.Report:Show()
+	check(OnScreen("A report waits until the Wanted app is running on this PC. Get it at wanteddeadordead.com/app."), "with no app, the report window says a report waits for it")
+	check(not OnScreen("Or copy it for GitHub") and not OnScreen("Choose \"Bug report\""), "the report window has no GitHub steps")
 	local send
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
 	send:Click()

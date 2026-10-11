@@ -21,7 +21,6 @@ Wanted.DEV = Wanted:IsDevVersion(Wanted.VERSION)
 Wanted.newerVersion = nil
 -- Beta: a label in the window, a one-time welcome, and bug reports
 Wanted.BETA = false
-Wanted.ISSUES_URL = "https://github.com/wanteddeadordead/wanted-dead-or-dead/issues"
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
 Wanted.DB_VERSION = 3
 -- Which game world the saved data belongs to. The first time a release for the live game loads beta data,

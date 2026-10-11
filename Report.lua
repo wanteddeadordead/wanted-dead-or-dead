@@ -1,7 +1,6 @@
 -- Wanted: bug reports and the beta welcome. An addon can't open a web page or send anything outside the
 -- game, so a report the player sends (a bug, or a duel tip that looks wrong) waits in the saved data for the
--- desktop app to pass on to the developers. "Report a bug" also builds a ready-made report to copy, with the
--- address to paste it at.
+-- desktop app to pass on to the developers.
 
 local _, Wanted = ...
 local Report = Wanted:NewModule("Report")
@@ -342,6 +341,22 @@ function private.SentText()
 	return "Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."
 end
 
+---Where a bug report goes from here, for the report window: whether the app sends it, or what it waits for.
+---@return string text
+---@return table color
+function private.AppText()
+	local version = Wanted:AppVersion()
+	if not version then
+		return "A report waits until the Wanted app is running on this PC. Get it at wanteddeadordead.com/app.", C.amber
+	elseif Wanted:IsNewerVersion(Report.MIN_APP, version) then
+		return format("A report waits until the Wanted app is updated to %s or newer (you have %s): update it from its tray menu or wanteddeadordead.com/app.",
+			Report.MIN_APP, Theme:Plain(version)), C.amber
+	elseif Wanted:AppNotRunningFor() then
+		return "The Wanted app isn't running: a report waits until you start it. Get it at wanteddeadordead.com/app.", C.amber
+	end
+	return "The Wanted app is set up: a report goes the next time it syncs (after a /reload or logout).", C.muted
+end
+
 ---Tells the player the queue is full, and what gets the app sending.
 function private.ShowFull()
 	local version = Wanted:AppVersion()
@@ -434,7 +449,7 @@ end
 
 function private.Create()
 	local frame = CreateFrame("Frame", "WantedBugReport", UIParent)
-	frame:SetSize(620, 526)
+	frame:SetSize(620, 446)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:SetToplevel(true)
@@ -463,23 +478,15 @@ function private.Create()
 	sendNote:SetPoint("TOPLEFT", 20, -51)
 	sendNote:SetPoint("RIGHT", send, "LEFT", -12, 0)
 	sendNote:SetWordWrap(true)
-	local copyLabel = W:SectionLabel(frame, "Or copy it for GitHub")
-	copyLabel:SetPoint("TOPLEFT", 20, -88)
-	local steps = Theme:Text(frame, "body", "", C.text)
-	steps:SetPoint("TOPLEFT", 20, -106)
-	steps:SetPoint("RIGHT", -20, 0)
-	steps:SetWordWrap(true)
-	steps:SetText("1. Copy the address below (click it, Ctrl+C) and open it in a browser.\n2. Choose \"Bug report\", say what happened and what you expected.\n3. Click the report box, Ctrl+A, Ctrl+C, and paste it into the form.")
-	local urlBox = ReadOnlyBox(frame, function() return Wanted.ISSUES_URL end)
-	urlBox:SetSize(580, 26)
-	urlBox:SetPoint("TOPLEFT", 20, -170)
-	urlBox:SetTextInsets(9, 9, 0, 0)
-	Theme:Skin(urlBox, C.input, C.accent)
-	urlBox:SetText(Wanted.ISSUES_URL)
+	-- Whether the app will send it, or what the report waits for (set at each Show)
+	local appNote = Theme:Text(frame, "small", "")
+	appNote:SetPoint("TOPLEFT", 20, -84)
+	appNote:SetPoint("RIGHT", -20, 0)
+	appNote:SetWordWrap(true)
 	local label = W:SectionLabel(frame, "Report (nothing personal: versions, settings, errors and the recent log)")
-	label:SetPoint("TOPLEFT", 20, -210)
+	label:SetPoint("TOPLEFT", 20, -130)
 	local holder = CreateFrame("Frame", nil, frame)
-	holder:SetPoint("TOPLEFT", 20, -228)
+	holder:SetPoint("TOPLEFT", 20, -148)
 	holder:SetPoint("BOTTOMRIGHT", -20, 52)
 	Theme:Skin(holder, C.input, C.border)
 	local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
@@ -494,6 +501,7 @@ function private.Create()
 	local note = Theme:Text(frame, "tiny", "Also useful: a screenshot, and the exact red error text if the game showed one.")
 	note:SetPoint("LEFT", refresh, "RIGHT", 12, 0)
 	frame.reportBox = reportBox
+	frame.appNote = appNote
 	private.frame = frame
 end
 
@@ -505,10 +513,13 @@ function Report:Show()
 	private.text = Report:Build()
 	private.frame.reportBox:SetText(private.text)
 	private.frame.reportBox:SetCursorPosition(0)
+	local text, color = private.AppText()
+	private.frame.appNote:SetText(text)
+	private.frame.appNote:SetTextColor(color[1], color[2], color[3])
 	private.frame:Show()
 end
 
-Wanted:RegisterCommand("bug", "Opens a bug report to send to the developers or copy.", function()
+Wanted:RegisterCommand("bug", "Opens a bug report to send to the developers.", function()
 	Report:Show()
 end)
 
@@ -532,7 +543,7 @@ function Report:MaybeWelcome()
 		end
 		W:Dialog({
 			title = "Welcome, bounty hunter",
-			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) puts together the details and shows where to send them.",
+			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) sends the details to the developers through the Wanted app.",
 			confirmLabel = "Let's hunt",
 		})
 	end)

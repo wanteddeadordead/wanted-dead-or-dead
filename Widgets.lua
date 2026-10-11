@@ -743,7 +743,8 @@ ShowNext = function()
 end
 
 ---Shows a modal dialog over the Wanted window.
----@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text) }, width
+---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), maxLetters
+---(of a multiline box, default 255) }, width
 ---(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
@@ -812,6 +813,7 @@ function W:Dialog(options)
 		frame.area:SetPoint("BOTTOMLEFT", 20, 56)
 		frame.area:SetPoint("BOTTOMRIGHT", -20, 56)
 		frame.area:SetHeight(AREA_HEIGHT)
+		frame.area:SetMaxLetters(options.input.maxLetters or 255)
 		frame.area:SetText(options.input.value or "")
 		frame.area:Show()
 	elseif options.input then

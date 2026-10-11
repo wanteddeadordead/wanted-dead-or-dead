@@ -159,6 +159,9 @@ MailFrame._shown = false
 local printed = {}
 function Methods:AddMessage(msg) printed[#printed + 1] = msg end
 UISpecialFrames = {}
+-- The game's scrolling edit box functions (Blizzard_SharedXML InputBoxTemplates.lua): keep the cursor in view
+ScrollingEdit_OnCursorChanged = function(self, _, y, _, h) self.cursorOffset, self.cursorHeight = y, h end
+ScrollingEdit_OnUpdate = function() end
 local function Fire(event, ...)
 	for _, frame in ipairs(registry[event] or {}) do
 		frame._scripts.OnEvent(frame, event, ...)
@@ -2174,7 +2177,7 @@ for _ in pairs(ns.db.kos) do kosBefore = kosBefore + 1 end
 ns.Store:FreshStart()
 check(next(ns.db.records) == nil, "fresh start clears the records")
 local first = ns.Store:NewRecord("pass", { bounty = "x" })
-check(first.seq == 1 and first.prev == "0", "the chain starts again")
+check(first.seq == ns.db.chains[first.origin].start and first.seq > 1 and first.prev == "0", "the chain starts again, by the clock")
 local kosAfter = 0
 for _ in pairs(ns.db.kos) do kosAfter = kosAfter + 1 end
 check(kosAfter == kosBefore and next(ns.db.players) ~= nil, "Kill on Sight and players stay")
@@ -7575,8 +7578,9 @@ end)()
 	ns.UI:GetFrame():Hide()
 end)()
 -- The live world numbers every chain from 1,000,000, so no live record shares an id with a beta one (the server keeps
--- the beta's records, and a character can keep its beta name): our own first live record is :1000001, another
--- player's first one follows on with no gap to ask for, and "new player" checks count from there
+-- the beta's records, and a character can keep its beta name): our own first live record is past it (a fresh chain
+-- of our own starts by the clock), another player's first one is :1000001 and follows on with no gap to ask for, and
+-- "new player" checks count from there
 ;(function()
 	local S = ns.Store
 	check(S:SeqBase() == 0, "the beta numbers from 0")
@@ -7584,7 +7588,7 @@ end)()
 	check(S:SeqBase() == 1000000, "the live world from 1,000,000")
 	S:FreshStart()
 	local mine = S:NewRecord("mark", { target = "Player-9-LIVE1", name = "Live Target" })
-	check(mine.seq == 1000001 and mine.id == S:GetOrigin()..":1000001" and mine.prev == "0", "our first live record: "..mine.id)
+	check(mine.seq > 1000001 and mine.id == S:GetOrigin()..":"..format("%d", mine.seq) and mine.prev == "0", "our first live record: "..mine.id)
 	check(S:GetChainSeq("Never Heard") == 1000000, "a chain we've no record of stands at the base")
 	local theirs = { kind = "mark", id = "Livey Person:1000001", origin = "Livey Person", seq = 1000001, prev = "0", t = clock, data = { target = "Player-9-LIVE2" } }
 	theirs.hash = S:Hash(table.concat({ theirs.kind, theirs.id, theirs.prev, tostring(theirs.t), "target=Player-9-LIVE2" }, "\n"))
@@ -7606,6 +7610,319 @@ end)()
 	ns.LAUNCH_AT = realLaunch
 	WantedAppCatchup = nil
 	ns.WORLD = "beta"
+	S:FreshStart()
+end)()
+-- Our own chain, started fresh (lost saved data, a new PC), counts from a number the server's clock gives, not from
+-- the base: our old records are still on the network, and the server keeps the first record under an id, so a chain
+-- starting at the base again lost everything it made under the old ids. A chain we have goes on as it was; other
+-- players' chains still start at the base, and a peer moves its copy of ours on to the restart without asking for
+-- the numbers between
+;(function()
+	local S, db = ns.Store, ns.db
+	local origin = S:GetOrigin()
+	local EPOCH = 1767225600
+	local function TimeStart() return (clock - EPOCH) * 10 end
+	local function Digits(id) return id:match(":(%d+)$") ~= nil end
+	-- A fresh own chain starts at the time-based number
+	S:FreshStart()
+	local start = TimeStart()
+	check(S:GetChainSeq(origin) == start and db.chains[origin].start == start + 1, "a fresh own chain stands at the time-based number: "..S:GetChainSeq(origin))
+	local first = S:NewRecord("mark", { target = "Player-9-RESTART1", name = "Restart One" })
+	check(first.seq == start + 1 and first.prev == "0" and first.id == origin..":"..format("%d", start + 1) and Digits(first.id), "its first record follows it: "..first.id)
+	check(S:IsWellFormed(S:ForWire(first)), "and is well formed")
+	-- Before any record of our own, the origin may still be corrected, and the corrected one's chain starts by the clock too
+	S:FreshStart()
+	S:LearnOrigin("Test-Realm")
+	check(S:GetOrigin() == "Test-Realm" and S:GetChainSeq("Test-Realm") == start and db.chains["Test-Realm"].start == start + 1,
+		"a corrected origin's fresh chain starts by the clock too")
+	S:LearnOrigin(origin)
+	check(S:GetOrigin() == origin and db.chains["Test-Realm"] == nil, "and back")
+	-- Once a record exists, the origin stays
+	S:NewRecord("mark", { target = "Player-9-RESTART2", name = "Restart Two" })
+	S:LearnOrigin("Test-Realm")
+	check(S:GetOrigin() == origin, "a time-started chain with a record keeps its origin")
+	-- Before the epoch (a wrong clock) a fresh chain starts at the base, and the live world's base still holds
+	local keptClock = clock
+	clock = EPOCH - 100
+	S:FreshStart()
+	check(S:GetChainSeq(origin) == S:SeqBase(), "a clock before the epoch: the base")
+	-- Past October 2032 the clock's number is past the highest seq: a fresh chain starts under it with room to grow
+	clock = EPOCH + 215000000
+	S:FreshStart()
+	check(S:GetChainSeq(origin) == 2 ^ 31 - 1 - 1000000, "a clock past the highest seq: under it, with room")
+	clock = EPOCH - 100
+	ns.WORLD = "live"
+	S:FreshStart()
+	check(S:GetChainSeq(origin) == 1000000, "the live base, before the epoch")
+	clock = keptClock
+	S:FreshStart()
+	check(S:GetChainSeq(origin) == start and start > 1000000, "the live world's time start is past its base")
+	local live = S:NewRecord("mark", { target = "Player-9-RESTART3", name = "Restart Three" })
+	check(live.seq == start + 1 and live.seq > S:SeqBase(), "our first live record is past the base: "..live.id)
+	ns.WORLD = "beta"
+	-- An existing own chain carries on: saved data from before this change keeps its numbering
+	S:FreshStart()
+	db.chains[origin] = { seq = 86, lastHash = "0000abcd" }
+	S:OnEnable()
+	check(S:GetChainSeq(origin) == 86 and db.chains[origin].start == nil, "a saved own chain is kept as it was")
+	local carried = S:NewRecord("mark", { target = "Player-9-RESTART4", name = "Restart Four" })
+	check(carried.seq == 87 and carried.prev == "0000abcd", "and goes on from where it was: "..carried.id)
+	-- No saved own chain at login: one by the clock
+	db.chains[origin] = nil
+	S:OnEnable()
+	check(S:GetChainSeq(origin) == start and db.chains[origin].start == start + 1, "no saved chain at login: one by the clock")
+	-- Another player's chain still starts at the base, and their first record follows on
+	check(S:GetChainSeq("Never Seen") == S:SeqBase(), "a peer's chain we've no record of stands at the base")
+	local chan = ns.Sync:GetInfo().channelName
+	local function Hear(tag, tbl, sender) Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, chan) RunTimers() end
+	local function Rec(who, seq, prev, t, kind)
+		return Sealed({ kind = kind or "mark", id = who..":"..format("%d", seq), origin = who, seq = seq, prev = prev, t = t or clock,
+			data = kind == "kill" and { victim = "Player-9-VICTIM"..seq } or { target = "Player-9-"..seq } })
+	end
+	local function Forget(who)
+		db.chains[who] = nil
+		for id, r in pairs(db.records) do if r.origin == who then db.records[id] = nil end end
+	end
+	Hear("R", { r = { Rec("Base Peer", 1, "0") } }, "Base Peer")
+	check(S:GetChainSeq("Base Peer") == 1 and db.chains["Base Peer"].start == nil, "a peer's first record at the base follows on")
+	-- A peer holding a player's old chain (Peta at 3) hears the restarted one from Peta: prev "0", far past it
+	local old1 = Rec("Peta Dicted", 1, "0", clock - 600)
+	local old2 = Rec("Peta Dicted", 2, old1.hash, clock - 500)
+	local old3 = Rec("Peta Dicted", 3, old2.hash, clock - 400)
+	Hear("R", { r = { old1, old2, old3 } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == 3 and S:GetFirstSeen("Peta Dicted") == clock - 600, "Peta's old chain is held")
+	local restart = Rec("Peta Dicted", start + 1, "0")
+	ClearSent()
+	Hear("R", { r = { restart } }, "Peta Dicted")
+	check(S:Get(restart.id) and S:GetChainSeq("Peta Dicted") == start + 1 and db.chains["Peta Dicted"].start == start + 1 and not S:Get(restart.id).brokenChain,
+		"the chain moves on to the restart, not held ahead of a gap: "..S:GetChainSeq("Peta Dicted"))
+	check(S:GetFirstSeen("Peta Dicted") == clock - 600, "Peta is still first seen at the old chain's start")
+	local restart2 = Rec("Peta Dicted", start + 2, restart.hash)
+	Hear("R", { r = { restart2 } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == start + 2 and not S:Get(restart2.id).brokenChain, "and follows on from it")
+	-- Peta's hello asks only for what follows the restart, nothing of the numbers between
+	Hear("H", { c = { ["Peta Dicted"] = start + 5 }, v = ns.VERSION }, "Peta Dicted")
+	RunTimers()
+	local asked
+	for _, m in ipairs(Sent("CHANNEL")) do
+		if m.tag == "N" and m.tbl.n and m.tbl.n["Peta Dicted"] then asked = m.tbl.n["Peta Dicted"] end
+	end
+	check(asked == start + 3, "Peta's hello asks for what follows the restart only: "..tostring(asked))
+	-- An old record of Peta's that reaches us later (a fill for someone else) is from before the restart: kept, not a
+	-- rewritten history
+	local old4 = Rec("Peta Dicted", 4, old3.hash, clock - 300)
+	Hear("F", { r = { old4 } }, "Some Peer")
+	check(S:Get(old4.id) and not S:Get(old4.id).brokenChain and S:GetChainSeq("Peta Dicted") == start + 2,
+		"an old record from before the restart is kept unflagged, the chain stays")
+	-- A peer that never heard of Peta, hearing the restart first, holds it as Peta's first
+	Forget("Peta Dicted")
+	Hear("R", { r = { Rec("Peta Dicted", start + 1, "0") } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == start + 1 and S:GetFirstSeen("Peta Dicted") == clock,
+		"a restart heard first: the chain jumps to it and Peta is first seen then")
+	-- Peta's own fill answering a request says where its chain starts, and the chain moves on there
+	Forget("Peta Dicted")
+	Hear("R", { r = { old1 } }, "Peta Dicted")
+	Hear("F", { r = { Rec("Peta Dicted", start + 1, "0") }, p = { ["Peta Dicted"] = start + 1 } }, "Peta Dicted")
+	check(S:GetChainSeq("Peta Dicted") == start + 1 and db.chains["Peta Dicted"].start == start + 1, "Peta's own fill moves the chain on to the restart")
+	Forget("Peta Dicted")
+	-- A restart relayed by another player, of an origin that hasn't said how far its chain reaches, is further than the
+	-- chain is known to reach: not taken, and the chain stays
+	Hear("R", { r = { Rec("Quiet One", 1, "0", clock - 600) } }, "Quiet One")
+	Hear("F", { r = { Rec("Quiet One", start + 1, "0") } }, "Some Peer")
+	check(S:GetChainSeq("Quiet One") == 1 and not S:Get("Quiet One:"..format("%d", start + 1)) and db.chains["Quiet One"].start == nil,
+		"a restart relayed by someone else is refused, the chain stays")
+	-- The app's catch-up is no one's word for a restart: the server takes any key's upload of any origin's record. It's
+	-- held ahead of the gap until the origin's own hello or fill
+	Forget("Quiet One")
+	Hear("R", { r = { Rec("Quiet One", 1, "0", clock - 600) } }, "Quiet One")
+	local forged = Rec("Quiet One", start + 1, "0")
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 1, records = { forged } } }
+	ns.Catchup:Import()
+	RunFrames()
+	WantedAppCatchup = nil
+	check(S:Get(forged.id) and S:GetChainSeq("Quiet One") == 1 and db.chains["Quiet One"].start == nil, "a restart from the app's catch-up is held, the chain stays")
+	Forget("Quiet One")
+	-- Peta can't move her chain past where the clock has got to (a minute's leeway)
+	Hear("R", { r = { Rec("Far Ahead", 1, "0", clock - 600) } }, "Far Ahead")
+	Hear("R", { r = { Rec("Far Ahead", start + 1 + 601, "0") } }, "Far Ahead")
+	check(S:GetChainSeq("Far Ahead") == 1 and db.chains["Far Ahead"].start == nil, "a live restart past the clock doesn't move the chain")
+	Hear("R", { r = { Rec("Far Ahead", start + 1 + 600, "0") } }, "Far Ahead")
+	check(db.chains["Far Ahead"].start == start + 1 + 600, "one within a minute of it does")
+	Forget("Far Ahead")
+	-- A restart that would be pruned at once (a kill too old to keep) moves neither the chain nor when they were first seen
+	Hear("R", { r = { Rec("Old Kill", 1, "0", clock - 600) } }, "Old Kill")
+	db.chains["Old Kill"].first = nil
+	Hear("R", { r = { Rec("Old Kill", start + 1, "0", clock - S.KEEP_SECONDS - 3600, "kill") } }, "Old Kill")
+	check(S:GetChainSeq("Old Kill") == 1 and db.chains["Old Kill"].start == nil and S:GetFirstSeen("Old Kill") == nil,
+		"a restart too old to keep moves neither the chain nor first seen")
+	Forget("Old Kill")
+	-- A relayer's fill saying the chain starts at a made-up first record with prev "0" may skip the chain as any skip
+	-- does, but doesn't mark a restart: only the origin says that
+	Hear("R", { r = { Rec("Said Far", 1, "0", clock - 600) } }, "Said Far")
+	Hear("H", { c = { ["Said Far"] = start + 1 }, v = ns.VERSION }, "Said Far")
+	Hear("F", { r = { Rec("Said Far", start + 1, "0") }, p = { ["Said Far"] = start + 1 } }, "Some Peer")
+	check(db.chains["Said Far"].start == nil, "a relayer's fill doesn't mark a restart")
+	Forget("Said Far")
+	-- An alt of this account (the saved data is the account's) never has its chain moved this way
+	S:NoteCharacter("Player-1-ALTRESTART", "Alt Restart", clock)
+	Hear("R", { r = { Rec("Alt Restart", 1, "0", clock - 600) } }, "Alt Restart")
+	Hear("R", { r = { Rec("Alt Restart", start + 1, "0") } }, "Alt Restart")
+	check(S:GetChainSeq("Alt Restart") == 1 and db.chains["Alt Restart"].start == nil, "an alt's chain isn't moved by a restart")
+	Forget("Alt Restart")
+	db.characters["Player-1-ALTRESTART"] = nil
+	S:NoteCharacter(UnitGUID("player"), origin)
+	-- A restart record can't be older than its own number: one heard live with a made-up old time moves neither the
+	-- chain nor when they were first seen (an alt made to look long established)
+	Hear("R", { r = { Rec("Backdated", 1, "0", clock - 600) } }, "Backdated")
+	Hear("R", { r = { Rec("Backdated", start + 1, "0", clock - 5 * 86400) } }, "Backdated")
+	check(S:GetChainSeq("Backdated") == 1 and db.chains["Backdated"].start == nil and S:GetFirstSeen("Backdated") == clock - 600,
+		"a restart dated before its own number moves neither the chain nor first seen")
+	Forget("Backdated")
+	-- Nor, skipped to by its origin's own fill, does it say when they were first seen
+	Hear("R", { r = { Rec("Backdated", 1, "0", clock - 600) } }, "Backdated")
+	Hear("F", { r = { Rec("Backdated", start + 1, "0", clock - 5 * 86400) }, p = { Backdated = start + 1 } }, "Backdated")
+	check(S:GetFirstSeen("Backdated") == clock - 600, "a backdated restart skipped to by its origin's fill leaves first seen")
+	Forget("Backdated")
+	-- A witness whose chain we only know from a third player's fill, past the start, with no first record: a chain
+	-- numbered by the clock past where it stood a day before the kill started within the day, so they're new. One
+	-- numbered from the base with plenty of records isn't
+	local function Witnessed(witness, killT)
+		local victim = "Player-9-WITNESSED-"..witness -- each its own kill: another witness would vouch for it
+		local claim = S:InsertTest("claim", "Some Hunter", { bounty = "b-witnessed", victim = victim, victimName = "Witnessed", zone = "Ashenvale", killT = killT }, killT)
+		S:InsertTest("death", witness, { victim = victim, victimName = "Witnessed", zone = "Ashenvale" }, killT + 1)
+		for _, w in ipairs(ns.Bounties:GetClaimWarnings(claim)) do
+			if w:find(witness.." is new to the network", 1, true) then return "new" end
+		end
+		return "not new"
+	end
+	Hear("H", { c = { ["Fresh Alt"] = start + 5 }, v = ns.VERSION }, "Peer One")
+	Hear("H", { c = { ["Fresh Alt"] = start + 5 }, v = ns.VERSION }, "Peer Two")
+	local relayed = { r = { Rec("Fresh Alt", start + 3, "abcd1234"), Rec("Fresh Alt", start + 4, "x"), Rec("Fresh Alt", start + 5, "y") }, p = { ["Fresh Alt"] = start + 3 } }
+	relayed.r[2].prev = relayed.r[1].hash Sealed(relayed.r[2])
+	relayed.r[3].prev = relayed.r[2].hash Sealed(relayed.r[3])
+	Hear("F", relayed, "Peer One")
+	Hear("F", relayed, "Peer One")
+	check(S:GetChainSeq("Fresh Alt") == start + 5 and db.chains["Fresh Alt"].start == nil and S:GetFirstSeen("Fresh Alt") == nil,
+		"a chain known only from a relayer's fill: past the start, no start, no first: "..S:GetChainSeq("Fresh Alt"))
+	check(Witnessed("Fresh Alt", clock) == "new", "its origin witnessing a kill is new to the network")
+	db.chains["Base Veteran"] = { seq = 400, lastHash = "x" }
+	check(Witnessed("Base Veteran", clock) == "not new", "a base-numbered chain with plenty of records isn't")
+	db.chains["Base Veteran"] = nil
+	Forget("Fresh Alt")
+	-- A made-up alt answering a request itself, its chain starting at a first record dated 400 days back: no start, and
+	-- still new as a witness
+	Hear("F", { r = { Rec("Sybil Alt", start + 1, "0", clock - 400 * 86400) }, p = { ["Sybil Alt"] = start + 1 } }, "Sybil Alt")
+	check(db.chains["Sybil Alt"].start == nil and S:GetFirstSeen("Sybil Alt") == nil, "a skip to a backdated first record marks no start")
+	check(Witnessed("Sybil Alt", clock) == "new", "and its origin witnessing a kill is new to the network")
+	db.chains["Sybil Alt"] = { seq = start + 1, lastHash = "x", start = start + 1 }
+	check(Witnessed("Sybil Alt", clock) == "new", "a backdated record at a known start doesn't count as a first record either")
+	Forget("Sybil Alt")
+	-- A start or first that isn't a number (hand-edited saved data) is dropped at login, and the hello still goes out
+	db.chains["Garbled"] = { seq = 5, lastHash = "x", start = "junk", first = {} }
+	S:OnEnable()
+	check(db.chains["Garbled"].start == nil and db.chains["Garbled"].first == nil, "a start or first that isn't a number is dropped")
+	ClearSent()
+	-- (the send queue's allowance comes back with time)
+	clock = clock + 60
+	SlashCmdList.WANTED("synctest")
+	RunTimers()
+	local garbledHello
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then garbledHello = m.tbl end end
+	check(garbledHello, "and the hello still goes out")
+	db.chains["Garbled"] = nil
+	-- Big numbers go out whole: the hello carries our seq as the same number, never 2.3e+08, and the largest seq a
+	-- chain may have survives a message. A fresh own chain with no record yet isn't in it: nothing to ask us for
+	ClearSent()
+	SlashCmdList.WANTED("synctest")
+	local hello
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
+	check(hello and hello.c[origin] == nil, "a fresh own chain with no record isn't in the hello")
+	S:NewRecord("mark", { target = "Player-9-RESTART5", name = "Restart Five" })
+	ClearSent()
+	SlashCmdList.WANTED("synctest")
+	hello = nil
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
+	check(hello and hello.c[origin] == S:GetChainSeq(origin) and S:GetChainSeq(origin) > start, "the hello carries our time-started seq whole")
+	local biggest = 2 ^ 31 - 1
+	local decoded = ns.Sync:Decode(Message("H", { c = { Big = biggest, Ours = start + 1 } }):match("^%u:%w+:%d+/%d+:(.*)$"))
+	check(decoded and decoded.c.Big == biggest and decoded.c.Ours == start + 1, "the largest seq survives a message")
+	check(format("%d", biggest) == "2147483647" and ("X:"..(start + 1)):match("^X:%d+$"), "and is written as digits")
+	local far = Sealed({ kind = "mark", id = "Far Restart:"..format("%d", biggest), origin = "Far Restart", seq = biggest, prev = "0", t = clock, data = { target = "Player-9-FAR" } })
+	check(S:IsWellFormed(far) and not S:IsWellFormed(Sealed({ kind = "mark", id = "Far Restart:2147483648", origin = "Far Restart", seq = biggest + 1, prev = "0", t = clock, data = { target = "Player-9-FAR" } })),
+		"a seq up to 2^31 - 1 is well formed, and none past it")
+	S:FreshStart()
+end)()
+-- Our own messages are known by their id coming back, but another player's message can carry the same id (every
+-- client numbers its messages, and a fresh session used to start at 1): it is only our echo when it's under our name
+-- (our name and surname, or our name on another realm), so another player never becomes our origin, nor takes our
+-- chain, and their message is read as theirs
+;(function()
+	local S, db = ns.Store, ns.db
+	S:FreshStart()
+	local origin = S:GetOrigin()
+	local chan = ns.Sync:GetInfo().channelName
+	local function LastSent()
+		ClearSent()
+		clock = clock + 120
+		SlashCmdList.WANTED("synctest")
+		RunTimers()
+		for i = #addonSent, 1, -1 do
+			local prefix = addonSent[i].text:match("^(H:%w+):")
+			if prefix then return prefix end
+		end
+	end
+	local function SameId(prefix, sender, tbl)
+		Fire("CHAT_MSG_ADDON", "WNTD", prefix..":1/1:"..LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(LibSerialize:Serialize(tbl))),
+			"CHANNEL", sender, nil, nil, nil, chan)
+	end
+	db.chains["Other Player"] = { seq = 77, lastHash = "abc" }
+	local ourChain = db.chains[origin]
+	check(ourChain and S:GetChainSeq(origin) == S:GetChainBase(origin), "a fresh own chain, no record yet")
+	-- Another player's hello under the id we just used: read as theirs, our origin and chain stay
+	SameId(LastSent(), "Other Player", { c = { ["Hello Chain"] = 5 }, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] == ourChain and db.chains["Other Player"].seq == 77,
+		"another player's message under our id leaves our origin and chain: "..S:GetOrigin())
+	RunTimers() RunTimers()
+	local asked
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" and m.tbl.n and m.tbl.n["Hello Chain"] then asked = true end end
+	check(asked, "and their hello is read as theirs")
+	-- Our first name with another surname is another player too
+	SameId(LastSent(), "Test Other", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] == ourChain, "our first name with another surname isn't us")
+	S:LearnOrigin("Other Player")
+	check(S:GetOrigin() == origin, "nor is another name told to the store")
+	-- Our own echo under our name on another realm still corrects the origin, and back again
+	SameId(LastSent(), "Test-Realm", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == "Test-Realm" and db.chains["Test-Realm"] and db.chains[origin] == nil, "our echo under our name on a realm corrects the origin")
+	SameId(LastSent(), origin, { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin] and db.chains["Test-Realm"] == nil, "and our echo under our full name corrects it back")
+	-- Our own echo can't carry another realm than ours; without our realm's normalized name, any realm passes as before
+	check(not S:IsOwnName("Test-OtherRealm") and S:IsOwnName("Test-Realm") and S:IsOwnName("Test") and S:IsOwnName("Test Player-Realm"),
+		"our name on another realm isn't us; on ours, or with no realm, it is")
+	SameId(LastSent(), "Test-OtherRealm", { c = {}, v = ns.VERSION })
+	check(S:GetOrigin() == origin and db.chains[origin], "an echo under our name on another realm doesn't correct the origin")
+	local realRealm = GetNormalizedRealmName
+	GetNormalizedRealmName = function() return nil end
+	check(S:IsOwnName("Test-OtherRealm") and S:IsOwnName("Test"), "with no normalized realm, any realm passes")
+	GetNormalizedRealmName = realRealm
+	db.chains["Other Player"], db.chains["Hello Chain"] = nil, nil
+	-- Each session numbers its messages from its own start, even where math.random isn't seeded: not every client from 1
+	local realRandom, realFast = math.random, fastrandom
+	math.random, fastrandom = function() return 0 end, nil
+	local function FirstId(t)
+		local realGetTime, realServerTime = GetTime, GetServerTime
+		GetTime, GetServerTime = function() return t end, function() return 1790000000 + floor(t) end
+		ns.Sync:OnLoad()
+		GetTime, GetServerTime = realGetTime, realServerTime
+		return LastSent():match(":(%w+)$")
+	end
+	-- (math.random stubbed to one value: the start then follows the session's clocks alone)
+	local first = FirstId(5000.25)
+	local again = FirstId(5000.25)
+	local second = FirstId(5007.5)
+	math.random, fastrandom = realRandom, realFast
+	check(first == again, "a session's first message id comes from when it started: "..tostring(first).." "..tostring(again))
+	check(first ~= "1" and second ~= "1" and first ~= second, "each session's message ids start somewhere of their own: "..tostring(first).." "..tostring(second))
 	S:FreshStart()
 end)()
 -- Another player's shared sighting is checked before anything uses it: a position is two numbers 0 to 100 or nothing,
@@ -7968,6 +8285,110 @@ end)()
 	end
 	check(report:find("Game client 1.60.1", 1, true), "the report still says what it did")
 	ns.db.players["Player-9-0C1"], ns.db.players["Player-9-0C2"] = nil, nil
+end)()
+-- A name Wanted never stored ("First Surname", this client's names) is left out too, by where the log puts it: the
+-- sender in Sync's formats and a name after the words that come before one; zones, classes and channels stay
+;(function()
+	ns.db.players["Player-9-0C3"] = { name = "Kept Known", faction = "Alliance" }
+	local lines = {
+		"Sync: received 249 bytes from Reaux Darkcloud on WantedNetHorde",
+		"Sync: received 12 bytes from Solo by whisper",
+		"Sync: handling R from Odd Name (realm link)",
+		"Payments: sending 5g to Tomas Vane for claim c1",
+		"Recorder: our death, killed by Mira Holt",
+		"Recorder: UNIT_DIED for Pell Grant (Human), one of ours",
+		"KeyBook: learned a key for Ada Finch (live)",
+		"Sync: realm link with Juno Reyes on Distant",
+		"Recorder: death of Ivo Marsh in Hillsbrad Foothills",
+		"Login as Rhea Stone (Horde)",
+		"Bounties: posted 5g on Cass Doyle",
+		"Posse: Vic Lane calls one against Nell Ward in Stranglethorn Vale",
+		"Sync: channel notice YOU_JOINED Ola Berg by Uma Kline",
+		"Enemies: death, killer Tess Moor (melee)",
+		"Store: origin corrected from Lio Park to Rudi Senn",
+		"Sync: greeting Bo Lindqvist (Other) as a realm link",
+		"Sync: told Gus Ernst to update",
+		"Store: Fen Akers's records before 4 are gone from the network",
+		"Recorder: party kill by Kept Known of Zed Quill in Duskwood",
+		"Duels: won a duel against Shadow Priest",
+		"Hotspots: Hillsbrad Foothills rising, 4 from 1",
+		"Enemies: win against Player-9-0ABCDEF",
+	}
+	for _, line in ipairs(lines) do ns:Log(line) end
+	local report = ns.Report:Build()
+	check(report:find("Sync: received 249 bytes from <name> on WantedNetHorde", 1, true), "the leaked line reads from <name>")
+	for _, leak in ipairs({ "Reaux", "Darkcloud", "Solo", "Odd Name", "Tomas", "Mira", "Pell", "Ada Finch", "Juno", "Ivo",
+		"Rhea", "Cass", "Vic Lane", "Nell", "Ola", "Uma", "Tess", "Lio", "Rudi", "Bo Lindqvist", "Gus", "Fen", "Akers",
+		"Kept Known", "Zed" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	for _, kept in ipairs({ "on WantedNetHorde", "by whisper", "(realm link)", "for claim c1", "(Human), one of ours",
+		"on Distant", "in Hillsbrad Foothills", "calls one against <name> in Stranglethorn Vale", "YOU_JOINED <name> by <name>",
+		"<name>'s records before 4", "won a duel against Shadow Priest", "Hotspots: Hillsbrad Foothills rising",
+		"party kill by <name> of <name> in Duskwood", "Sync: told <name> to update", "win against Player-?" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
+	ns.db.players["Player-9-0C3"] = nil
+end)()
+-- More names a report leaves out: the name book, key origins and realm links (and each one's first name alone, as
+-- the combat log gives it), names after words that only come before one in a format, record ids, guilds; counts,
+-- reasons, spells and vendors stay
+;(function()
+	local db, now = ns.db, GetServerTime()
+	db.names["Player-9-NB1"] = { n = "Reaux Darkcloud", t = now }
+	local hadKeys = db.keys["Kell Varn"]
+	db.keys["Kell Varn"] = hadKeys or { list = {} }
+	db.farPeers["Ferro Lusk"] = { realm = "Distant", seen = now }
+	ns.Sync:GetLinks()["Lyle Moss"] = { realm = "Distant", since = 0, sent = 0, received = 0 }
+	ns.Sync:TakeDirectory({ { n = "Dirk Hale", r = "Distant" } })
+	local lines = {
+		"Recorder: our death, killed by Reaux",
+		"Recorder: UNIT_DIED for Reaux (Human), one of ours",
+		"Recorder: honor kill of Reaux (nil) in Durotar",
+		"Recorder: assist on Reaux in Durotar",
+		"Posse: Reaux calls one against Kell in Ashenvale",
+		"Bridge: hello to Reaux (Horde, community)",
+		"Sync: Ferro isn't online (the game says)",
+		"Sync: realm link Dirk is offline; link ended",
+		"Sync: realm link with Lyle Moss went quiet; dropped",
+		"Sync: realm link Juno Reyes is offline; link ended",
+		"!! GuildKoS: Abe Cole may not remove Cole Dunn; ignored",
+		"Recorder: honor message not understood: Mira Holt dies, honorable kill Rank: Private",
+		"Store: sender name Sid Vance differs from origin Tad Wolfe but records exist; keeping origin",
+		"!! Store: kill record Una Pike:12 doesn't match its hash (altered)",
+		"!! Store: record Vera Lund-Distant:13 doesn't follow Vera Lund-Distant's previous record (broken chain)",
+		"Bounties: started hunting Wes Hart:7",
+		"Payments: prefilled 5g to Yuri Bell for claim Xan Moor:9",
+		"Verify: kill record Zara Quinn:3 checked out with Zara Quinn's key k1: taken in",
+		"Bounties: posted 5g on guild Blood Pact",
+		"Bounties: posted 5g on guild the riders",
+		"!! Bridge: parts of a message from Abel Stone stopped coming (2 of 5)",
+		"!! Bridge: ignored a message from Abel Stone (Alliance, Horde): not the other faction on this ruleset",
+		"!! Sync: badly framed message from Odd",
+		"GearCatalog: 4 PvP items from Captain Foo",
+		"Problem: ADDON_ACTION_BLOCKED: CastSpellByName() (in combat) from Nearby.lua:20; last: Cast with Lesser Heal",
+	}
+	for _, line in ipairs(lines) do ns:Log(line) end
+	local report = ns.Report:Build()
+	for _, leak in ipairs({ "Reaux", "Kell", "Ferro", "Dirk", "Lyle", "Juno", "Reyes", "Abe", "Cole", "Mira", "Holt", "Sid",
+		"Tad", "Una", "Vera", "Wes", "Xan", "Yuri", "Zara", "Blood Pact", "riders", "Abel", "Odd" }) do
+		check(not report:find(leak, 1, true), "the report leaves out "..leak)
+	end
+	for _, kept in ipairs({ "killed by <name>", "UNIT_DIED for <name> (Human)", "honor kill of <name> (nil) in Durotar",
+		"assist on <name> in Durotar", "Posse: <name> calls one against <name> in Ashenvale", "hello to <name> (Horde, community)",
+		"Sync: <name> isn't online (the game says)", "realm link <name> is offline; link ended", "realm link with <name> went quiet",
+		"<name> may not remove <name>; ignored", "honor message not understood: <text>",
+		"sender name <name> differs from origin <name> but", "kill record <name>:12 doesn't match",
+		"record <name>:13 doesn't follow <name>'s previous record", "hunting <name>:7", "to <name> for claim <name>:9",
+		"record <name>:3 checked out with <name>'s key k1", "posted 5g on guild <name>",
+		"parts of a message from <name> stopped coming (2 of 5)",
+		"ignored a message from <name> (Alliance, Horde): not the other faction", "badly framed message from <name>",
+		"4 PvP items from Captain Foo", "last: Cast with Lesser Heal" }) do
+		check(report:find(kept, 1, true), "the report keeps "..kept)
+	end
+	db.names["Player-9-NB1"], db.keys["Kell Varn"], db.farPeers["Ferro Lusk"] = nil, hadKeys, nil
+	ns.Sync:GetLinks()["Lyle Moss"] = nil
+	ns.Sync:TakeDirectory({})
 end)()
 -- Officer ranks when the game won't show a rank's permissions: only the guild master's rank counts (never every
 -- rank), it's said once in the log, and the Guild Kill on Sight page says so
@@ -11075,6 +11496,173 @@ end)()
 	C_UI.Reload = savedReload
 	WantedAppInfo = keptAppInfo
 	db.duels, db.duelReports = kept, keptReports
+end)()
+-- Reports for the developers: a duel tip that looks wrong or a bug waits in WantedDB.reports for the app to send on,
+-- and leaves the queue when the app's catch-up says it was received
+;(function()
+	local db, Report, Duels = ns.db, ns.Report, ns.Duels
+	local keptDuels, keptReports, keptAppInfo = db.duels, db.duelReports, WantedAppInfo
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	db.reports = {}
+	-- A duel another of the account's characters fought: the tip goes in its name
+	local duel = { id = "Alt Char:duel:"..(clock - 60), startAt = clock - 60, endAt = clock - 30, length = 30, result = "lost", zone = "Durotar",
+		me = { class = "ROGUE", spec = "Combat", level = 24 }, them = { class = "PRIEST", spec = "Shadow", level = 25 } }
+	local finding = { rule = "pws", text = "Their Power Word: Shield absorbed 400.", tip = "Save Kick for the shield.", weight = 0.6 }
+	-- A tip: its fields, the player's words without escape codes, an id of the duel's character and the time
+	local id = Report:QueueTip(duel, finding, "The |cffff0000tip|r is|TInterface\\Icons\\Spell_Nature_Bloodlust:0|t\nwrong|Ashop-icon:12:12|a about |Kq12|k|Hitem:19019::::|h[Thunderfury]|h ")
+	local r = db.reports[id]
+	check(id == "Alt Char:report:"..clock and r and r.kind == "tip" and r.at == clock and r.character == "Alt Char"
+		and r.addonVersion == tostring(ns.VERSION) and r.id == nil, "a tip report is queued under the duel's <character>:report:<at>: "..tostring(id))
+	check(r.text == "The tip is wrong about [Thunderfury]", "the player's words lose the game's escape codes: "..tostring(r.text))
+	check(r.duelId == duel.id and r.rule == "pws" and r.tip == "Save Kick for the shield." and r.finding == "Their Power Word: Shield absorbed 400."
+		and r.myClass == "ROGUE" and r.mySpec == "Combat" and r.theirClass == "PRIEST" and r.theirSpec == "Shadow" and r.myLevel == 24 and r.log == nil,
+		"the tip report carries the duel, the rule, the tip and finding, and both sides' classes and specs")
+	-- A second in the same second takes the next free one
+	local id2 = Report:QueueTip(duel, { text = "No tip here." }, nil)
+	check(id2 == "Alt Char:report:"..(clock + 1) and db.reports[id2].tip == "No tip here." and db.reports[id2].text == "" and db.reports[id] == r,
+		"a second report in the same second gets the next id, and a finding without a tip sends its text: "..tostring(id2))
+	-- Limits in letters, as the app and server count them: the text 500, the tip and finding 1000
+	local id3 = Report:QueueTip(duel, { text = string.rep("f", 1500), tip = string.rep("\195\169", 1500) }, "a"..string.rep("\195\169", 600))
+	local long = db.reports[id3]
+	check(id3 == "Alt Char:report:"..(clock + 2) and #long.text == 999 and long.text:sub(-2) == "\195\169" and #long.tip == 2000 and #long.finding == 1000,
+		"the text is held to 500 letters, whole letters only, the tip and finding to 1000: "..#long.text)
+	-- A duel id that doesn't name its character: the tip goes in this one's
+	check(Report:QueueTip({ id = "odd", me = {}, them = {} }, { text = "x" }, "") == "Test Player:report:"..clock, "a duel id without a character falls back to this one")
+	-- A bug: the player's words and the last 40 log lines, oldest first, held to 8 KB
+	local problems = ns:GetProblems()
+	local earlierProblems = { unpack(problems) }
+	for i = #problems, 1, -1 do problems[i] = nil end
+	-- A short header first (the game, settings, the app and network, signing), then the recent lines
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	local bug = db.reports[Report:QueueBug("It broke")]
+	check(bug.kind == "bug" and bug.text == "It broke" and #bug.log == 40 and bug.duelId == nil
+		and bug.log[1]:find("^Game client 1%.60%.1 %(build %S+%), locale %S+; %S+, level %S+$")
+		and bug.log[2]:find("^Detection ") and bug.log[3]:find("^Wanted app none; network ") and bug.log[4]:find("^Signing: ")
+		and bug.log[5]:find("report test line 15", 1, true) and bug.log[40]:find("report test line 50", 1, true),
+		"a bug report's log is a 4-line header and the last 36 log lines, oldest first: "..bug.log[1].." / "..bug.log[3])
+	-- This session's problems the recent lines have scrolled past come after the header (names left out); one still
+	-- in them isn't sent twice
+	ns:NoteProblem("a lost problem from Nell Ward")
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	ns:NoteProblem("a fresh problem")
+	bug = db.reports[Report:QueueBug("It broke again")]
+	local function Count(log, text)
+		local n = 0
+		for _, line in ipairs(log) do n = n + (line:find(text, 1, true) and 1 or 0) end
+		return n
+	end
+	check(#bug.log == 39 and bug.log[5]:find("^%S+ Problem: a lost problem from <name>$") and bug.log[6]:find("report test line 18", 1, true)
+		and bug.log[39]:find("Problem: a fresh problem", 1, true) and Count(bug.log, "a fresh problem") == 1,
+		"a bug report's log has the problems it scrolled past after the header: "..bug.log[5])
+	-- The newest problem is never lost to trimming: six problems, five scrolled out and the sixth the second recent
+	-- line, which trimming drops; the newest five go after the header
+	for i = #problems, 1, -1 do problems[i] = nil end
+	for i = 1, 5 do ns:NoteProblem("problem P"..i) end
+	for i = 1, 50 do ns:Log("report test line %d", i) end
+	ns:NoteProblem("problem P6")
+	for i = 1, 38 do ns:Log("report test line %d", 100 + i) end
+	bug = db.reports[Report:QueueBug("Six problems")]
+	check(#bug.log == 40 and bug.log[5]:find("problem P2$") and bug.log[9]:find("problem P6$") and Count(bug.log, "problem P6") == 1
+		and Count(bug.log, "problem P1") == 0 and bug.log[10]:find("report test line 108", 1, true) and bug.log[40]:find("report test line 138", 1, true),
+		"the newest five problems go after the header, the sixth kept though its log line was trimmed: "..bug.log[9])
+	for i = 1, 40 do ns:Log("%s %d", string.rep("x", 300), i) end
+	local big = db.reports[Report:QueueBug("Long log")]
+	local bytes = 0
+	for _, line in ipairs(big.log) do bytes = bytes + #line + 1 end
+	check(bytes <= 8192 and #big.log < 40 and big.log[1]:find("^Game client") and big.log[9]:find("problem P6$") and big.log[#big.log]:find(" 40$"),
+		"the log is held to 8 KB with its breaks, the oldest recent lines dropped and the header and problems kept: "..bytes)
+	for i = #problems, 1, -1 do problems[i] = nil end
+	for i, problem in ipairs(earlierProblems) do problems[i] = problem end
+	-- The catch-up's reportsReceived lets them go, at every login, even a catch-up already taken in
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, "Someone:report:1", 7 } } }
+	ns.Catchup:Import()
+	check(db.reports[id] == nil and db.reports[id2] == nil and db.reports[id3] ~= nil, "reports the app received leave the queue")
+	local id4 = Report:QueueTip(duel, finding, "later")
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or 0, reportsReceived = { id, id2, id4 } } }
+	ns.Catchup:Import()
+	check(db.reports[id4] == nil and db.reports[id3] ~= nil, "the next login's list: one received since leaves, ids already gone change nothing, one not listed stays")
+	-- Pruning at load: older than 30 days goes, and anything malformed
+	db.reports = { ["A:report:1"] = { kind = "bug", at = clock - 31 * 86400 }, ["A:report:2"] = { kind = "bug", at = clock - 29 * 86400 }, ["A:report:3"] = "junk" }
+	Report:OnLoad()
+	check(db.reports["A:report:1"] == nil and db.reports["A:report:2"] ~= nil and db.reports["A:report:3"] == nil, "reports older than 30 days are dropped at load")
+	-- At most 20 wait: the next is refused, and the player told why
+	db.reports = {}
+	for i = 1, 20 do db.reports["A:report:"..i] = { kind = "bug", at = clock } end
+	check(Report:IsQueueFull() and Report:QueueBug("one more") == nil and Report:CountQueued() == 20, "a 21st report is refused")
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	Report:AskAboutBug()
+	check(OnScreen("20 reports are already waiting for the Wanted app to send them. Start the app and /reload"), "the player is told the queue is full")
+	_G.WantedDialog.frame.confirm:Click()
+	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	Report:AskAboutBug()
+	check(OnScreen("Update the app to 0.2.46 or newer from its tray menu (you have 0.2.45) and /reload"), "with an app too old to send them, update it")
+	_G.WantedDialog.frame.confirm:Click()
+	db.reports = {}
+	-- From the fight card: "Something not right?" under a tip asks, then queues it and says where it goes
+	db.duels = { duel }
+	db.duelReports = { [duel.id] = { v = 1, len = 30, me = { hp = {} }, them = { hp = {} }, findings = { finding, { rule = "race", text = "You did no damage for 10 s." } } } }
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	ns.UI:Show("duels")
+	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
+	local matchup = Row(function(item) return item.label == "Shadow Priest" end)
+	matchup._scripts.OnClick(matchup, "LeftButton")
+	local duelRow = Row(function(item) return item.duel == duel end)
+	duelRow._scripts.OnClick(duelRow, "LeftButton")
+	local links = {}
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Something not right?" and f:IsShown() then links[#links + 1] = f end end
+	check(#links == 2 and OnScreen("1. Their Power Word: Shield absorbed 400.") and OnScreen("2. You did no damage"), "each finding on the card has a Something not right? link: "..#links)
+	links[2]:Click()
+	local dialog = _G.WantedDialog.frame
+	check(OnScreen("Tell the developers what looks wrong with this tip"), "the link asks what looks wrong")
+	dialog.area:SetText("It said Kick, but I had none")
+	dialog.confirm:Click()
+	local _, sent = next(db.reports)
+	check(sent and sent.kind == "tip" and sent.rule == "race" and sent.finding == "You did no damage for 10 s." and sent.text == "It said Kick, but I had none",
+		"Send queues that finding's tip with the player's words")
+	check(OnScreen("Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."), "and says it goes at the app's next sync")
+	dialog.confirm:Click()
+	WantedAppInfo = { running = "0.2.46", seen = 1 }
+	links[1]:Click()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 2 and OnScreen("The Wanted app isn't running, so it waits until you start it"), "with the app not running, the report waits for it")
+	dialog.confirm:Click()
+	WantedAppInfo = { running = "0.2.45", seen = GetServerTime() }
+	links[1]:Click()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 3 and OnScreen("It waits until the Wanted app is updated to 0.2.46 or newer (you have 0.2.45)"), "with an app too old to send reports, the report waits for an update")
+	dialog.confirm:Click()
+	WantedAppInfo = nil
+	Report:AskAboutBug()
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 3 and OnScreen("Say what happened first."), "a bug report needs the player's words")
+	dialog.area:SetText("The board is empty")
+	dialog.confirm:Click()
+	check(Report:CountQueued() == 4 and OnScreen("waits until the Wanted app runs on this PC"), "with no app, the report waits for it to be set up")
+	dialog.confirm:Click()
+	-- The report window's own button opens the same question; with no app, the window says a report waits for it
+	ns.Report:Show()
+	check(OnScreen("A report waits until the Wanted app is running on this PC. Get it at wanteddeadordead.com/app."), "with no app, the report window says a report waits for it")
+	check(not OnScreen("Or copy it for GitHub") and not OnScreen("Choose \"Bug report\""), "the report window has no GitHub steps")
+	local send
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
+	send:Click()
+	check(OnScreen("What happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
+	local realDialog, asked = ns.Widgets.Dialog, 0
+	ns.Widgets.Dialog = function(...) asked = asked + 1 return realDialog(...) end
+	send:Click()
+	ns.Widgets.Dialog = realDialog
+	_G.WantedDialog.frame.cancel:Click()
+	check(asked == 0, "a second click while it asks doesn't queue another")
+	_G.WantedBugReport:Hide()
+	-- Saved data from before reports gets an empty queue (a new key: no layout change)
+	local realDB = WantedDB
+	WantedDB = { version = 3, settings = {} }
+	ns:LoadSavedData()
+	check(type(WantedDB.reports) == "table" and next(WantedDB.reports) == nil and WantedDB.version == ns.DB_VERSION, "saved data without reports starts an empty queue")
+	WantedDB = realDB
+	ns:LoadSavedData()
+	db.reports = {}
+	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

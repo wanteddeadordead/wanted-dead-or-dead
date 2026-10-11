@@ -75,6 +75,8 @@ function Catchup:Import()
 	end
 	-- Fight reports the app made of this account's duels, read at every login like the challenges
 	Wanted.Duels:TakeReports(entry.duelReports, entry.t)
+	-- Reports the app has sent on to the developers, read at every login: they leave the queue
+	Wanted.Report:TakeReceived(entry.reportsReceived)
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
 	private.LookUpUnnamed(entry.unnamed)
 	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over

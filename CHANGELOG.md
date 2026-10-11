@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+- Tell us when a duel tip looks wrong: "Something not right?" under each tip on a fight card asks what's off (a few
+  words, or none) and sends the tip to the developers, with the duel's classes, specs and your level.
+- Report a bug can now send the report itself: Send to the developers asks what happened and sends it with Wanted's
+  recent log (other players' names left out). It's the only way to report now: copying the report for GitHub is gone,
+  and the window says when a report waits for the Wanted app and where to get it. The log it sends starts with a few
+  lines about your game, settings and the app, then this session's problems (blocked actions and the like) if they've
+  scrolled out of the recent lines.
+- Neither goes straight away: the Wanted app (0.2.46 or newer) passes reports on the next time it syncs, after a
+  /reload or logout. Up to 20 wait for it, each for 30 days.
+- A report's log leaves out the names of players Wanted never stored as well, by where the log puts a name ("from",
+  "killed by" and the like).
+- Reinstalling the addon, moving to a new PC or losing your saved data no longer loses your new bounties, kills and
+  claims. Wanted used to number your records from 1 again, the same ids as your old records already on the network,
+  so the network kept the old ones and dropped the new. A fresh start now numbers them from the time, and other
+  players' addons move on to the new numbers instead of waiting for the ones in between. Players who keep their
+  saved data are not affected. If you play one character on two PCs, each with its own saved data, the records made
+  on the PC that kept the old numbers reach only the players online at the time, and the website through that PC's
+  Wanted app. A player who reinstalled within the last day may show as a new witness ("new to the network") on a
+  claim, for players who only heard of them through others: a warning, not a reason to trust anyone more.
+- Wanted no longer mistakes another player's message for its own just after you log in or /reload. Every copy of
+  Wanted numbered its messages from 1 each session, so another player's first messages could look like yours
+  coming back. Before your first record of the session, that could switch your identity to theirs and lose your
+  record chain. Messages are now numbered from a different point each session, and a message is only treated as
+  your own when it comes under your name.
 - The calendar shows events from wanteddeadordead.com, such as the Forever Open tournament, in pink: its name on its
   day, and in the tooltip its time in your time zone, where it is and its web address. They're on Coming up too.
   Events come with the Wanted app (0.2.47 or newer) and are kept until 2 days after they end, so they stay when the

@@ -306,6 +306,7 @@ local HOSTILE_NOTICES_SELF = {
 ---in the last NOT_FOUND_SECONDS is saved at logout and taken back here, and the filter that hides those answers is set
 ---up now, before login, so it's in place when they arrive.
 function Sync:OnLoad()
+	private.msgCounter = private.FirstMessageCounter()
 	local saved, now, serverNow = Wanted.db.recentWhispers, GetTime(), GetServerTime()
 	if type(saved) == "table" then
 		for name, at in pairs(saved) do
@@ -319,6 +320,18 @@ function Sync:OnLoad()
 	if addFilter then
 		addFilter("CHAT_MSG_SYSTEM", private.HideNotFound)
 	end
+end
+
+---Where this session's message ids start (msgCounter counts round 46655 ids, base 36 up to "zzz"). Every client
+---starting at 1 gave another player's first messages the ids of ours, read as our echo: the session's clocks (the
+---server's, and the client's to the millisecond) are mixed with whatever randomness the client gives, since
+---math.random may not be seeded.
+function private.FirstMessageCounter()
+	local mix = GetServerTime() + floor(GetTime() * 1000) + math.random(0, 46654)
+	if type(fastrandom) == "function" then
+		mix = mix + fastrandom(0, 46654)
+	end
+	return mix % 46655
 end
 
 ---Who was whispered in the last NOT_FOUND_SECONDS, by server time, for the next load (Sync:OnLoad).
@@ -1549,7 +1562,7 @@ function private.GetHaveTable()
 	local cutoff = GetServerTime() - HAVE_ACTIVE_SECONDS
 	local active = {}
 	for origin, chain in pairs(Wanted.db.chains) do
-		if chain.seq > Store:SeqBase() and (origin == own or Store:GetLastActive(origin) >= cutoff) then
+		if chain.seq > Store:GetChainBase(origin) and (origin == own or Store:GetLastActive(origin) >= cutoff) then
 			tinsert(active, origin)
 		end
 	end
@@ -1704,7 +1717,9 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 	local isSelf = false
 	if not viaLink then
 		local echoTag, echoId = strmatch(text, "^(%u):(%w+):")
+		-- Under our name only: another player's message can carry an id we just used
 		isSelf = echoTag and private.ownMessages[echoTag..":"..echoId] and now - private.ownMessages[echoTag..":"..echoId] < 30
+			and Store:IsOwnName(sender)
 		if isSelf then
 			private.ownMessages[echoTag..":"..echoId] = nil
 			Store:LearnOrigin(sender)
@@ -1918,13 +1933,13 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			for origin, first in pairs(tbl.p) do
 				local seq = type(origin) == "string" and private.SkipTarget(origin, first, tbl, sender)
 				if seq then
-					local prev
+					local prev, t
 					for _, record in ipairs(tbl.r) do
-						if type(record) == "table" and record.origin == origin and record.seq == seq then
-							prev = record.prev
+						if Store:IsWellFormed(record) and record.origin == origin and record.seq == seq then
+							prev, t = record.prev, record.t
 						end
 					end
-					Store:SkipTo(origin, seq, prev)
+					Store:SkipTo(origin, seq, prev, sender, t)
 				end
 			end
 		end
@@ -2237,13 +2252,13 @@ function private.SkipPruned(tbl, sender)
 				from = Store:IsSeq(from) and floor(from) or nil
 				to = private.SkipTarget(origin, to, tbl, sender)
 				if from and to and Store:GetChainSeq(origin) >= from then
-					local prev
+					local prev, t
 					for _, record in ipairs(tbl.r) do
-						if type(record) == "table" and record.origin == origin and record.seq == to then
-							prev = record.prev
+						if Store:IsWellFormed(record) and record.origin == origin and record.seq == to then
+							prev, t = record.prev, record.t
 						end
 					end
-					Store:SkipTo(origin, to, prev)
+					Store:SkipTo(origin, to, prev, sender, t)
 				end
 			end
 		end
@@ -2609,6 +2624,16 @@ function Sync:GreetDirectory()
 			Sync:Greet(entry.name, entry.realm)
 		end
 	end
+end
+
+---The names in the directory, for a bug report to leave out.
+---@return string[]
+function Sync:DirectoryNames()
+	local names = {}
+	for _, entry in ipairs(private.directory) do
+		tinsert(names, entry.name)
+	end
+	return names
 end
 
 ---How the directory is doing: names held, and how many of their realm names have a live link.

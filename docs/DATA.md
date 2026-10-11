@@ -321,6 +321,33 @@ a character's first live record is `Name:1000001`, never the id of one of its be
 would refuse as a conflict when a player keeps their beta name. Other players' chains start at the same base, so
 their first live record follows on with nothing to ask for.
 
+Chain restarts (from the release after 1.20.0): a client that has no saved chain of its own (a first install, or saved
+data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since
+2026-01-01 00:00 UTC, or at the world's base if that is higher, instead of at the base. The player's old records are
+still on the network and the server keeps the first record under an id, so a chain starting at the base again lost
+every record it made under its old ids. The number is held 1,000,000 under 2^31 - 1, which the clock passes in October
+2032; from then restarts can collide again until the epoch or the rate changes. A restarted chain's first record has
+`prev = "0"` like any chain's first. The chain keeps `start`, the seq of that first record. A peer that holds the
+origin's chain behind a record with `prev = "0"` past it, heard from the origin itself, moves the chain on to it and
+keeps `start` too, rather than asking for the numbers between; so does a skip (`p` or `g`) onto such a record sent by
+the origin. Neither happens for a record from the app's catch-up (the server takes anyone's upload of any origin's
+record) or relayed by another player, for one of this account's characters (the saved data is the account's), for a
+seq more than a minute past the clock's number, or for a record that would be pruned at once; such a record is held
+ahead of the gap until the origin's own hello or fill. A record of the origin's from before `start` (its old chain)
+that arrives later is kept, not flagged as a rewritten history. `first` also takes the time of the record at `start`
+when no earlier first record is known. A restart record dated before its own number (`t` earlier than
+`1767225600 + (seq - 1) / 10` less a minute) neither moves a chain nor sets `first`. A claim's witness with no first
+record known counts as new when their chain is numbered past the clock's number a day before the kill: it started
+within the day. A chain with no `start` began at the base, as before; the hello leaves out a
+chain with no record past its start. A `start` or `first` that isn't a number is dropped at login. An optional new
+field: no migration. Saved chains are kept as they are, so an existing player's chain carries on from where it was;
+only a fresh own chain starts by the clock. Other players' chains still start at the base.
+
+A character played on two PCs, each with its own saved data, has two chains: the one still on the old numbers goes on
+from them after the other has restarted by the clock. Peers that moved on to the restart hold that PC's new records
+as from before the restart, but never ask for them, so they reach only the players online when they're made, and the
+website through that PC's app.
+
 `bounty` records (from 0.1.0-beta.8) can also carry the poster's notes on the target: `class`, `race`,
 `faction`, `seenAt` (when the poster last saw them), `x`, `y`, `mapId`. A client that doesn't know the target
 fills its player notes from them (never overwriting its own), marked as seen by the poster.
@@ -516,8 +543,8 @@ out as they do altered ones. No layout change: nothing new is saved.
 
 ## Fresh start (development builds)
 
-`/wanted freshstart` deletes every shared record on the client and starts its record chain again. Only
-safe before anyone has synced with that client: their copies of its records would no longer match. It
+`/wanted freshstart` deletes every shared record on the client and starts its record chain again, by the clock as for
+any fresh chain of its own (from the release after 1.20.0). Peers keep their copies of its old records. It
 exists only in development builds.
 
 `WantedDB.kosPending` (from 1.8.0) holds Kill on Sight brought over from Spy or True Spy for players Wanted hasn't

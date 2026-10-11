@@ -13,6 +13,19 @@
   /reload or logout. Up to 20 wait for it, each for 30 days.
 - A report's log leaves out the names of players Wanted never stored as well, by where the log puts a name ("from",
   "killed by" and the like).
+- Reinstalling the addon, moving to a new PC or losing your saved data no longer loses your new bounties, kills and
+  claims. Wanted used to number your records from 1 again, the same ids as your old records already on the network,
+  so the network kept the old ones and dropped the new. A fresh start now numbers them from the time, and other
+  players' addons move on to the new numbers instead of waiting for the ones in between. Players who keep their
+  saved data are not affected. If you play one character on two PCs, each with its own saved data, the records made
+  on the PC that kept the old numbers reach only the players online at the time, and the website through that PC's
+  Wanted app. A player who reinstalled within the last day may show as a new witness ("new to the network") on a
+  claim, for players who only heard of them through others: a warning, not a reason to trust anyone more.
+- Wanted no longer mistakes another player's message for its own just after you log in or /reload. Every copy of
+  Wanted numbered its messages from 1 each session, so another player's first messages could look like yours
+  coming back. Before your first record of the session, that could switch your identity to theirs and lose your
+  record chain. Messages are now numbered from a different point each session, and a message is only treated as
+  your own when it comes under your name.
 
 ## [1.20.0] - 2026-10-11
 

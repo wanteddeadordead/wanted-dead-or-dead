@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- The calendar shows events from wanteddeadordead.com, such as the Forever Open tournament, in pink: the title on its
+  day, and in the tooltip its time in your time zone, where it is and its web address. They're on Coming up too.
+  Events come with the Wanted app (0.2.47 or newer) and are kept until 2 days after they end, so they stay when the
+  app isn't running.
+
 ## [1.20.0] - 2026-10-11
 
 - Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs

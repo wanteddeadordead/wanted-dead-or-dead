@@ -5646,6 +5646,112 @@ end)()
 	C_Calendar, Enum.CalendarEventType, ns.db.pvpSeason = nil, realEnum, nil
 	ns.Challenges:Take(nil)
 end)()
+-- Events the operator puts on the calendar (wanteddeadordead.com /admin), from the app's catch-up: checked, kept in
+-- saved data (at most 20), shown as their own kind with their local times, location and link, and dropped 2 days after
+-- they end
+;(function()
+	local realClock = clock
+	clock = os.time({ year = 2026, month = 10, day = 10, hour = 12 })
+	local checkInAt, finalsDay = 1792245600, 1792281600 -- 2026-10-17 14:00 UTC; 2026-10-18 00:00 UTC
+	local raw = {
+		{ id = 1, title = "Forever Open: check-in", startsAt = checkInAt, endsAt = checkInAt + 3600, location = "Raider.IO, then Orgrimmar",
+			link = "https://raider.io", kind = "tournament" },
+		{ id = 2, title = "Forever Open: finals", startsAt = finalsDay, endsAt = finalsDay + 22 * 3600, allDay = true, kind = "tournament" },
+		{ id = 3, title = "Bad |cffff0000link", startsAt = checkInAt + 86400 * 3, link = "javascript:alert(1)", location = "", kind = "event" },
+		{ id = 4, title = "Long over", startsAt = clock - 5 * 86400, kind = "event" },
+		{ id = 5, startsAt = checkInAt },
+		{ id = 6, title = "Ends before it starts", startsAt = checkInAt, endsAt = checkInAt - 1, kind = "event" },
+		"junk",
+	}
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = raw } }
+	ns.Catchup:Import()
+	local saved = ns.db.calendarEvents
+	check(type(saved) == "table" and saved.t == clock and #saved.list == 3, "three good, coming events kept: "..(saved and #saved.list or 0))
+	check(saved.list[1].title == "Forever Open: check-in" and saved.list[1].link == "https://raider.io" and saved.list[1].kind == "tournament",
+		"the check-in, with its link")
+	check(saved.list[3].title == "Bad cffff0000link" and saved.list[3].link == nil and saved.list[3].location == nil,
+		"no escape codes, no link that isn't http(s), no empty location")
+	local function Events(t, utc)
+		local d = date(utc and "!*t" or "*t", t)
+		local out = {}
+		for _, e in ipairs(ns.PvPCalendar:GetMonth(d.year, d.month)[d.day] or {}) do
+			if e.kind == "event" then out[e.text] = e end
+		end
+		return out
+	end
+	local checkIn = Events(checkInAt)["Forever Open: check-in"]
+	check(checkIn and table.concat(checkIn.labels, "|") == "Forever Open: check-in|Check-in", "on its local day, shortened to after the colon")
+	local local1, local2 = date("*t", checkInAt), date("*t", checkInAt + 3600)
+	local function Clock(d) local h = d.hour % 12 return format("%d:%02d %s", h == 0 and 12 or h, d.min, d.hour < 12 and "AM" or "PM") end
+	check(checkIn.detail.lines[1] == "Tournament, "..Clock(local1).." - "..Clock(local2), "its local times: "..tostring(checkIn.detail.lines[1]))
+	check(checkIn.detail.lines[2] == "Raider.IO, then Orgrimmar" and checkIn.detail.lines[3] == "https://raider.io", "its location and link, as text")
+	local finals = Events(finalsDay, true)["Forever Open: finals"]
+	local finalsEnd = date("*t", finalsDay + 22 * 3600)
+	check(finals and finals.detail.lines[1] == "Tournament, start time not announced, ends "..(finalsEnd.day ~= date("!*t", finalsDay).day
+		and format("%d/%02d ", finalsEnd.month, finalsEnd.day) or "")..Clock(finalsEnd), "all day on its own date: "..tostring(finals and finals.detail.lines[1]))
+	local upcoming = {}
+	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = e.kind end
+	check(upcoming["Forever Open: check-in"] == "event" and upcoming["Forever Open: finals"] == "event", "coming up")
+	-- The page: the title in the day's box, the rest in its tooltip
+	ns.UI:Show("calendar")
+	local cell
+	for _, f in ipairs(Mock.created) do
+		for _, e in ipairs(rawget(f, "events") or {}) do
+			if e.text == "Forever Open: check-in" then cell = f end
+		end
+	end
+	if not cell then
+		for _ = 1, 12 do
+			local nextMonth
+			for _, f in ipairs(Mock.created) do
+				if f._kind == "Button" and rawget(f, "label") and f.label._text == ">" then nextMonth = f end
+			end
+			if not nextMonth then break end
+			nextMonth._scripts.OnClick(nextMonth)
+			for _, f in ipairs(Mock.created) do
+				for _, e in ipairs(rawget(f, "events") or {}) do
+					if e.text == "Forever Open: check-in" then cell = f end
+				end
+			end
+			if cell then break end
+		end
+	end
+	check(cell, "the check-in's day on the grid")
+	local lines = {}
+	local origAdd = GameTooltip.AddLine
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	cell._scripts.OnEnter(cell)
+	GameTooltip.AddLine = origAdd
+	local said = table.concat(lines, "\n")
+	check(said:find("Forever Open: check-in", 1, true) and said:find("Raider.IO, then Orgrimmar", 1, true) and said:find("https://raider.io", 1, true),
+		"the tooltip names it, where and the link: "..said)
+	-- An older app (no events) keeps them; an older catch-up changes nothing; a newer empty list clears them
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 5, records = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 3, "no events from an older app keeps them")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock - 5, records = {}, events = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 3, "an older catch-up changes nothing")
+	-- At most 20
+	local many = {}
+	for i = 1, 30 do many[i] = { id = i, title = "Event "..i, startsAt = clock + i * 3600, kind = "event" } end
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock + 10, records = {}, events = many } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 20 and ns.db.calendarEvents.list[20].title == "Event 20", "at most 20, soonest first")
+	-- Two days after they end, they're dropped, app or no app
+	clock = clock + 30 * 3600 + 2 * 86400 + 60
+	ns.PvPCalendar:OnLoad()
+	check(#ns.db.calendarEvents.list == 0, "past ones dropped 2 days after: "..#ns.db.calendarEvents.list)
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, events = {} } }
+	ns.Catchup:Import()
+	check(#ns.db.calendarEvents.list == 0, "an empty list leaves none")
+	ns.db.calendarEvents = { t = 1, list = "junk" }
+	ns.PvPCalendar:OnLoad()
+	check(type(ns.db.calendarEvents.list) == "table", "unreadable saved events start empty")
+	ns.db.calendarEvents = nil
+	ns.PvPCalendar:OnLoad()
+	clock = realClock
+end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
 -- 0, or never set) aren't measured here.

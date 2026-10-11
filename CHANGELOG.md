@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.20.0] - 2026-10-11
 
 - Your duels are kept: a Duels tab under Progress shows your record, how you do against each class and spec ("vs
   Frost Mage 3-9", most faced first), how you do as each of your own talent builds (a build keeps its row as you add points
@@ -8,9 +8,11 @@
   to see its duels: when, the result, how long and the opponent's level; click a build for its duels and See talent tree (hover one for where, and both sides' level, race and build). Fight
   reports from the Wanted app reach the game at a /reload: the Duels tab says when your last duel's report is due and
   gives a Reload button. Click a duel for its fight card: both sides' health through the fight, the control you
-  suffered, what each of you used, and up to five tips, each with what to try next time (experimental: tell us about a wrong tip with /wanted bug). Fight cards need the Wanted app 0.2.42 or newer:
+  suffered, every spell each of you used, and up to five tips, each with what to try next time (experimental: tell us about a wrong tip with /wanted bug).
+  Tips know the matchup, Rogues first: what their Power Word: Shield absorbed, how much their Shadow Word: Pain did,
+  and what to do about it. Fight cards need the Wanted app 0.2.42 or newer, the timeline and matchup tips 0.2.45:
   the Duels tab says when it's missing, too old or not running. Timeline lists the whole fight in order:
-  every cast, hit, miss, control, interrupt and heal of both sides, with each hit's damage and the health it left
+  every cast, hit, tick, miss, absorb, control, interrupt and heal of both sides, with the health each blow left
   (your newest 20 duels); hover a line for its spell's tooltip. See talent tree opens the game's
   talent frame on either side's build, and See gear lists what each of you wore, slot by slot, with your average item
   levels; a clear gear gap is called out at the top. Your opponent's talents are read by inspect when

@@ -83,6 +83,10 @@ learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
 origins not heard for 60 days with no authority record held go, then the least recently heard until 2,000 remain (about
 0.5 MB at most). New table with a default: no migration.
 
+`WantedDB.settings.duelsAllCharacters` (after 1.21.0, default off): the Duels tab shows every character's duels, not
+only the logged-in character's (`Duels:IsOwn`: the record's `me.guid`, else its `id`'s origin). New setting with a
+default: no migration; `WantedDB.duels` still keeps every character's duels.
+
 `WantedDB.settings.sigBackground` (from 1.19.0, default on): check held records' signatures in the background, one a
 second, out of combat (Settings, Display). Off, only records a page shows or an authority decision reads are checked.
 

@@ -36,6 +36,7 @@ local DEFAULTS = {
 		zoneFilter = nil, -- a zone name, or nil for all
 		announce = false, -- nothing is announced in public chat (decided 2026-09-24)
 		showPassed = false,
+		duelsAllCharacters = false, -- the Duels page shows every character's duels, not only this one's (PageDuels)
 		emotes = { -- the emote buttons in the Nearby window (Emotes)
 			enabled = true,
 			tipShown = false,

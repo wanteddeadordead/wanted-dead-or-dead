@@ -1,6 +1,6 @@
--- Wanted: your duels, a tab of Progress. Your record, how you do against each class and spec (a click opens a matchup
--- to its duels, newest first), and how you do as each of your own builds. An opponent who runs Wanted shows by name; anyone else as
--- their spec and class ("Frost Mage").
+-- Wanted: your duels, a tab of Progress: this character's, or every character's with All characters ticked. Your record,
+-- how you do against each class and spec (a click opens a matchup to its duels, newest first), and how you do as each of
+-- your own builds. An opponent who runs Wanted shows by name; anyone else as their spec and class ("Frost Mage").
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -822,7 +822,9 @@ function private.Refresh()
 	if not private.list then
 		return
 	end
-	local sheet = Duels:GetSheet()
+	local all = Wanted.db.settings.duelsAllCharacters
+	private.allToggle:SetChecked(all)
+	local sheet = Duels:GetSheet(all)
 	private.ShowReportNote(sheet.recent[1])
 	private.recordTile.value:SetText(private.Record(sheet.won, sheet.lost))
 	private.recordTile.note:SetText(sheet.total > 0 and private.Share(sheet.won, sheet.total).." won" or "")
@@ -837,6 +839,9 @@ function private.Refresh()
 		label:SetText(strupper(HEADERS[private.view][i]))
 	end
 	local empty, hint = "No duels yet.", "Duel someone and it shows up here."
+	if sheet.total == 0 and not all and Duels:GetSheet(true).total > 0 then
+		empty, hint = "No duels on this character yet.", "Tick All characters to see your other characters' duels."
+	end
 	local items = {}
 	for _, row in ipairs(sheet[private.view]) do
 		tinsert(items, row)
@@ -889,7 +894,15 @@ UI:RegisterPage("duels", {
 		private.reloadButton = W:Button(container, "Reload", "secondary", 80, 26, function() C_UI.Reload() end)
 		private.reloadButton:SetPoint("TOPRIGHT", 0, -84)
 		private.reportText = Theme:Text(container, "small", "")
-		private.reportText:SetPoint("LEFT", segment, "RIGHT", 16, 0)
+		-- Saved duels are the account's: this character's unless ticked
+		private.allToggle = W:Toggle(container, "All characters", function(checked)
+			Wanted.db.settings.duelsAllCharacters = checked
+			private.HideCard()
+			private.Refresh()
+		end)
+		private.allToggle:SetPoint("LEFT", segment, "RIGHT", 16, 0)
+		W:AttachTooltip(private.allToggle, "All characters", "Duels from every character on this account, not only this one.")
+		private.reportText:SetPoint("LEFT", private.allToggle, "RIGHT", 16, 0)
 		private.reportText:SetPoint("RIGHT", private.reloadButton, "LEFT", -12, 0)
 		private.reportText:SetJustifyH("RIGHT")
 		private.reportText:SetWordWrap(true)

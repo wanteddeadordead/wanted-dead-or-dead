@@ -286,6 +286,7 @@ local function Character()
 	local _, class = UnitClass("player")
 	local _, race = UnitRace("player")
 	local character = {
+		name = (UnitName("player")),
 		level = UnitLevel("player"),
 		class = class,
 		race = race,
@@ -315,6 +316,7 @@ local function Character()
 		skills = Skills(),
 		weapons = Weapons("player"),
 		gear = {},
+		ammoItemID = GetInventoryItemID("player", 0),
 		pet = Pet(),
 	}
 	local expertiseMain, expertiseOff, expertiseRanged = GetExpertise()
@@ -342,9 +344,21 @@ Wanted:RegisterCommand("simdump", "Development: records the client's spell and i
 		return
 	end
 	queue, waiting = {}, {}
+	local queuedItems = {}
 	for _, kind in ipairs({ "spells", "items" }) do
 		for _, id in ipairs(ids[kind] or {}) do
 			tinsert(queue, { kind = kind, id = id })
+			if kind == "items" then
+				queuedItems[id] = true
+			end
+		end
+	end
+	-- The equipped gear and ammo too: the simulator needs each weapon's own damage and speed (UnitDamage includes attack power)
+	for slot = 0, 19 do
+		local id = GetInventoryItemID("player", slot)
+		if id and not queuedItems[id] then
+			queuedItems[id] = true
+			tinsert(queue, { kind = "items", id = id })
 		end
 	end
 	local _, class = UnitClass("player")

@@ -11694,7 +11694,7 @@ end)()
 		GetMeleeHaste = function() return 0 end, GetRangedHaste = function() return 0, 0 end, GetDodgeChance = function() return 4 end, GetParryChance = function() return 0 end,
 		GetBlockChance = function() return 0 end, GetShieldBlock = function() return 0 end, GetSpellBonusHealing = function() return 12 end, GetSpellPenetration = function() return 0 end,
 		GetArmorPenetration = function() return 0 end, GetExpertise = function() return 0, 0, 0 end, GetManaRegen = function() return 8, 2 end,
-		GetSpellBonusDamage = function(school) return school == 5 and 44 or 30 end, GetInventoryItemID = function(_, slot) return slot == 16 and 1234 or nil end,
+		GetSpellBonusDamage = function(school) return school == 5 and 44 or 30 end, GetInventoryItemID = function(_, slot) return slot == 16 and 1234 or slot == 0 and 2512 or slot == 18 and 4 or nil end,
 		C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i) return i == 1 and { isHeader = true, name = "Weapon Skills" } or { name = "Staves", skillID = 136, rank = 150, modifier = 0, maxRank = 150 } end },
 		C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return 77 end },
 		C_Traits = { GetConfigInfo = function() return { treeIDs = { 9 } } end, GetGroupDisplayInfoByTreeID = function() return { { groupID = 1, displayName = "Frost" }, { groupID = 2, displayName = "Fire" } } end,
@@ -11733,9 +11733,10 @@ end)()
 	check(char and char.race == "Gnome" and char.stats.intellect.base == 24 and char.stats.intellect.total == 34 and char.attackPower.total == 45
 		and char.power.mana == 1200 and char.crit.spell == 7.5 and char.hit.spell == 3 and char.spellPower.frost == 44 and char.healing == 12
 		and char.manaRegen.base == 8 and char.manaRegen.casting == 2 and char.weapons.mainHand.max == 35 and char.weapons.ranged.speed == 2.8
-		and char.gear[16] == 1234 and char.skills[1].name == "Staves" and #char.skills == 1 and db.serverTime, "the character's stats, weapons, skills and gear: "..tostring(db.characterError))
+		and char.gear[16] == 1234 and char.ammoItemID == 2512 and char.name and char.skills[1].name == "Staves" and #char.skills == 1 and db.serverTime, "the character's stats, weapons, skills and gear: "..tostring(db.characterError))
 	check(char.talents.trees[1].points == 3 and char.talents.trees[2].points == 0 and char.talents.trees[1].currency[1].spent == 3
 		and #char.talents.taken == 1 and char.talents.taken[1].spellID == 11070 and char.talents.taken[1].rank == 3, "the talents taken and the points per tree")
+	check(db.items[1234] and db.items[2512] and db.items[4].name == "Staff", "the equipped gear and ammo are read with the listed items")
 	check(char.pet and char.pet.family == "Imp" and char.pet.stats.stamina.total == 33 and char.pet.weapons.ranged == nil, "the pet's stats")
 	for name in pairs(stubs) do _G[name] = originals[name] end
 	Enum.PowerType, CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL = savedEnum, nil, nil, nil

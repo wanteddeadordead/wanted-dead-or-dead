@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Wanted SimDump (development)
+## Notes: Development only, never released: /wanted simdump records what the client says about spells and items for the damage simulator.
+## Author: Wanted: Dead or... Dead
+## Version: dev
+## Dependencies: WantedDeadOrDead
+## SavedVariables: WantedSimDumpDB
+
+simdump-ids.lua
+SimDump.lua

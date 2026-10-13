@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.21.1] - 2026-10-13
+
+- The addon names no individual: the author fields, the licence and the What's new signature now carry the project's
+  name.
+
 ## [1.21.0] - 2026-10-11
 
 - Tell us when a duel tip looks wrong: "Something not right?" under each tip on a fight card asks what's off (a few

@@ -1213,11 +1213,25 @@ function Duels:AddsTo(old, new)
 	return true
 end
 
----The player's duels added up: the record overall, the record against each class and spec (most faced first), the
+---Whether this character fought a duel: by the GUID on its record, else (a record without one) by its id's origin,
+---this character's sender name as it was then ("First Last" on this client, else "Name-Realm"; Store:IsOwnName).
+---@param record table
+---@return boolean
+function Duels:IsOwn(record)
+	local guid, mine = type(record.me) == "table" and record.me.guid, private.Readable(UnitGUID("player"))
+	if type(guid) == "string" and mine then
+		return guid == mine
+	end
+	local origin = type(record.id) == "string" and strmatch(record.id, "^(.-):duel:%d+$")
+	return origin ~= nil and origin ~= "" and (origin == Store:GetOrigin() or Store:IsOwnName(origin))
+end
+
+---The player's duels added up, this character's only unless all is set: the record overall, the record against each class and spec (most faced first), the
 ---record as each of their own builds (one a talent loadout where the record has one, else one a specialization), and
 ---every duel newest first. Records not in the expected shape are passed over.
+---@param all boolean? every character's duels (WantedDB.duels is the account's)
 ---@return table { won, lost, total, matchups = { { label, class, won, lost, games, duels (newest first) } }, builds = (the same), recent }
-function Duels:GetSheet()
+function Duels:GetSheet(all)
 	local sheet = { won = 0, lost = 0, total = 0, matchups = {}, builds = {}, recent = {} }
 	local byMatchup, byBuild, withLoadout = {}, {}, {}
 	local function Add(rows, index, side, record, key)
@@ -1235,7 +1249,8 @@ function Duels:GetSheet()
 		row.lost = row.lost + (record.result == "lost" and 1 or 0)
 	end
 	for _, record in ipairs(Wanted.db.duels) do
-		if type(record) == "table" and type(record.me) == "table" and type(record.them) == "table" and type(record.startAt) == "number" then
+		if type(record) == "table" and type(record.me) == "table" and type(record.them) == "table" and type(record.startAt) == "number"
+			and (all or Duels:IsOwn(record)) then
 			sheet.total = sheet.total + 1
 			sheet.won = sheet.won + (record.result == "won" and 1 or 0)
 			sheet.lost = sheet.lost + (record.result == "lost" and 1 or 0)

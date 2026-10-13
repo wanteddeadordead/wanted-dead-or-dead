@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- The Duels tab shows the duels of the character you're playing. Tick All characters for every character's duels on
+  this account, as before; Wanted remembers your choice.
+
 ## [1.21.0] - 2026-10-11
 
 - Tell us when a duel tip looks wrong: "Something not right?" under each tip on a fight card asks what's off (a few

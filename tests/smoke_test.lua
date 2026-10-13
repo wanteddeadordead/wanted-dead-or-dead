@@ -11234,6 +11234,46 @@ end)()
 	db.duelReports = keptReports
 	db.duels = kept
 end)()
+-- The Duels page shows this character's duels unless All characters is ticked; every character's stay saved for the app
+;(function()
+	local db, Duels = ns.db, ns.Duels
+	local kept, keptReports, keptAll = db.duels, db.duelReports, db.settings.duelsAllCharacters
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	local function Duel(origin, t, result, guid) return { id = origin..":duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
+		me = { guid = guid, class = "WARRIOR" }, them = { class = "MAGE", spec = "Frost" } } end
+	check(db.settings.duelsAllCharacters == false, "the Duels page starts on this character")
+	db.duels = {
+		Duel("Test Player", clock - 600, "won", "Player-1-ME"),
+		Duel("Alt Char", clock - 500, "lost", "Player-1-ALT"),
+		Duel("Alt Char", clock - 400, "lost", nil), -- an old record without a GUID: by its id's origin
+		Duel("Test Player", clock - 300, "won", nil),
+		Duel("Test-Realm", clock - 200, "lost", nil), -- this character as "Name-Realm"
+		Duel("Test-Elsewhere", clock - 100, "won", nil), -- the same name on another realm isn't us
+	}
+	check(Duels:IsOwn(db.duels[1]) and not Duels:IsOwn(db.duels[2]) and not Duels:IsOwn(db.duels[3]) and Duels:IsOwn(db.duels[4])
+		and Duels:IsOwn(db.duels[5]) and not Duels:IsOwn(db.duels[6]), "a duel is ours by the GUID on it, else by its id's origin")
+	local mine, all = Duels:GetSheet(), Duels:GetSheet(true)
+	check(mine.total == 3 and mine.won == 2 and mine.lost == 1 and #mine.recent == 3 and mine.matchups[1].games == 3,
+		"this character's record: "..mine.won.."-"..mine.lost.." of "..mine.total)
+	check(all.total == 6 and all.won == 3 and all.lost == 3 and #all.recent == 6 and all.matchups[1].games == 6,
+		"every character's record: "..all.won.."-"..all.lost.." of "..all.total)
+	db.duelReports = {}
+	Duels:TakeReports({ [db.duels[2].id] = { v = 1 } }, clock)
+	check(db.duelReports[db.duels[2].id] ~= nil and #db.duels == 6, "another character's duels and fight reports are still kept")
+	ns.UI:Show("duels")
+	check(OnScreen("2-1") and not OnScreen("3-3"), "the page shows this character's record")
+	local toggle
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "All characters" and f._scripts.OnClick then toggle = f end end
+	toggle._scripts.OnClick(toggle, "LeftButton")
+	check(db.settings.duelsAllCharacters == true and OnScreen("3-3"), "All characters shows every character's duels, and is remembered")
+	toggle._scripts.OnClick(toggle, "LeftButton")
+	check(db.settings.duelsAllCharacters == false and OnScreen("2-1"), "unticked, back to this character")
+	db.duels = { Duel("Alt Char", clock - 500, "lost", "Player-1-ALT") }
+	ns.UI:Show("duels")
+	check(OnScreen("No duels on this character yet.") and OnScreen("All characters"), "another character's duels only: the page says where they are")
+	db.duels, db.duelReports, db.settings.duelsAllCharacters = kept, keptReports, keptAll
+	ns.UI:Show("duels")
+end)()
 -- Fight reports come from the app's catch-up, read only at a /reload: the Duels tab says where the last one stands,
 -- with a Reload button while one would help
 ;(function()
@@ -11602,6 +11642,9 @@ end)()
 	db.duels = { duel }
 	db.duelReports = { [duel.id] = { v = 1, len = 30, me = { hp = {} }, them = { hp = {} }, findings = { finding, { rule = "race", text = "You did no damage for 10 s." } } } }
 	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	-- Another character's duel, so shown with All characters ticked
+	local keptAll = db.settings.duelsAllCharacters
+	db.settings.duelsAllCharacters = true
 	ns.UI:Show("duels")
 	local function Row(match) for _, f in ipairs(Mock.created) do local item = rawget(f, "item") if type(item) == "table" and match(item) and f._scripts.OnClick then return f end end end
 	local matchup = Row(function(item) return item.label == "Shadow Priest" end)
@@ -11662,7 +11705,7 @@ end)()
 	WantedDB = realDB
 	ns:LoadSavedData()
 	db.reports = {}
-	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
+	db.duels, db.duelReports, WantedAppInfo, db.settings.duelsAllCharacters = keptDuels, keptReports, keptAppInfo, keptAll
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

@@ -966,6 +966,25 @@ check(pin.Count._text ~= "" and tonumber(pin.Count._text) == #pin.group.members,
 check(pin._levelType == "PIN_FRAME_LEVEL_WANTED_ENEMY" and pin._x > 0 and pin._x < 1, "marker in our layer at a map position")
 pin:OnMouseEnter()
 pin:OnMouseLeave()
+-- An enemy named in a PvP death is marked where it happened, even one never seen here (a zone known from other
+-- players' fights alone opened on an empty map)
+do
+ns.Store:NewRecord("death", { killer = "Player-9-FIGHT1", killerName = "Fight Ganker", killerClass = "HUNTER", killerLevel = 28, killerFaction = "Alliance",
+	victim = "Player-1-OURS5", victimName = "Our Five", victimFaction = "Horde", deathId = "fight-1", zone = "Durotar", mapId = 1, x = 90, y = 90 })
+local fightPin
+for _, p in ipairs(WorldMapFrame.pins) do
+	for _, m in ipairs(p.group.members) do
+		if m.info.guid == "Player-9-FIGHT1" then fightPin = p end
+	end
+end
+check(fightPin and #fightPin.group.members == 1 and fightPin.group.x == 90 and fightPin.group.members[1].info.name == "Fight Ganker"
+	and fightPin.group.members[1].sighting.fight == "Killed Our Five", "an enemy from a death record is marked where it happened, named from the record")
+local lines, origAdd = {}, GameTooltip.AddLine
+GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+if fightPin then fightPin:OnMouseEnter() fightPin:OnMouseLeave() end
+GameTooltip.AddLine = origAdd
+check(table.concat(lines, "\n"):find("Killed Our Five here", 1, true), "its tooltip says who they killed here")
+end
 -- Show / hide from the map's filter menu
 local checkbox
 local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = { text = text, isSelected = isSelected, setSelected = setSelected } end }

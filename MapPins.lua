@@ -1,8 +1,8 @@
 -- Wanted: enemies on the world map. Recent sightings (yours and those shared by other Wanted users) are
--- drawn where they were seen, for the last 30 minutes: red for Kill on Sight, gold for bounty targets,
--- class colour for everyone else. Enemies seen in the same spot (a sighting records where the watcher
--- stood, so a group seen together lands on one point) share one bigger marker with a count. Hover a marker
--- for who, when, and who saw them.
+-- drawn where they were seen, and enemies named in PvP deaths where the fight was, for the last 30 minutes:
+-- red for Kill on Sight, gold for bounty targets, class colour for everyone else. Enemies seen in the same
+-- spot (a sighting records where the watcher stood, so a group seen together lands on one point) share one
+-- bigger marker with a count. Hover a marker for who, when, and who saw them.
 --
 -- The markers go through the map's own data provider and pin system, the way Blizzard's icons and other
 -- map addons add theirs. The map places, scales and layers them, so they keep working with addons that
@@ -91,7 +91,11 @@ function PinMixin:OnMouseEnter()
 		GameTooltip:SetText(Theme:ClassName(d.name, d.class))
 		Wanted.EnemyMenu:AddTooltip(d)
 		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("Seen here "..Theme:Ago(now - sighting.t).." by "..(sighting.by or "you"), C.muted[1], C.muted[2], C.muted[3])
+		if sighting.fight then
+			GameTooltip:AddLine(sighting.fight.." here "..Theme:Ago(now - sighting.t), C.muted[1], C.muted[2], C.muted[3])
+		else
+			GameTooltip:AddLine("Seen here "..Theme:Ago(now - sighting.t).." by "..(sighting.by or "you"), C.muted[1], C.muted[2], C.muted[3])
+		end
 	else
 		GameTooltip:SetText(format("%d enemies seen here", #group.members), 1, 1, 1)
 		for i, member in ipairs(group.members) do
@@ -148,14 +152,27 @@ function Provider:RefreshAllData()
 	local map = self:GetMap()
 	local mapId = map:GetMapID()
 	local now = GetServerTime()
-	-- The newest sighting of each enemy on this map
-	local latest = {}
+	-- The newest sighting of each enemy on this map, or the fight they were last named in, whichever is later
+	local latest, named = {}, {}
+	local function Consider(sighting)
+		local current = latest[sighting.guid]
+		if not current or current.t < sighting.t then
+			latest[sighting.guid] = sighting
+		end
+	end
 	for sighting in Store:SightingIterator() do
 		if sighting.mapId == mapId and sighting.x and sighting.y and now - sighting.t <= WINDOW then
-			local current = latest[sighting.guid]
-			if not current or current.t < sighting.t then
-				latest[sighting.guid] = sighting
-			end
+			Consider(sighting)
+		end
+	end
+	-- A record's position can be any number (a peer wrote it): only one on the map
+	local function OnMap(v)
+		return type(v) == "number" and v >= 0 and v <= 100
+	end
+	for _, fight in ipairs(Wanted.Hotspots:EnemiesInFights(now, WINDOW)) do
+		if fight.mapId == mapId and OnMap(fight.x) and OnMap(fight.y) then
+			named[fight.guid] = fight.player
+			Consider({ guid = fight.guid, x = fight.x, y = fight.y, t = fight.t, fight = fight.fight })
 		end
 	end
 	-- Newest first, each joining the first marker close enough to it
@@ -163,6 +180,11 @@ function Provider:RefreshAllData()
 	for guid, sighting in pairs(latest) do
 		local info = Wanted.Enemies:Describe(guid)
 		if not info.ignored then
+			-- An enemy known from a record alone is named as the record names them
+			local player = named[guid]
+			if player and info.name == "?" then
+				info.name, info.class, info.level, info.guild = player.name or "?", player.class, player.level, player.guild
+			end
 			tinsert(members, { info = info, sighting = sighting })
 		end
 	end
@@ -196,9 +218,11 @@ end
 
 function MapPins:OnEnable()
 	C_Timer.After(2, private.Attach)
-	Store:OnRecord("sighting", function()
-		MapPins:Refresh()
-	end)
+	for _, kind in ipairs({ "sighting", "kill", "death" }) do
+		Store:OnRecord(kind, function()
+			MapPins:Refresh()
+		end)
+	end
 end
 
 function private.Attach()

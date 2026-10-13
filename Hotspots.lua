@@ -67,35 +67,58 @@ function private.Readable(value)
 	return value
 end
 
+---A real player's guid, not test data, not ignored.
+local function Wanted_(guid)
+	return type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and not Wanted.db.ignore[guid]
+end
+
+---The enemies named in PvP deaths (kills and deaths, ours and other Wanted users') in the last `window` seconds,
+---and where each fight was. The map marks them there and Hotspots counts them in the zone. `player` is the saved
+---player, or what the record says of them; `fight` says what happened, "Killed Our Five" or "Killed by Thrall".
+---@param now number
+---@param window number seconds
+---@return table[] { guid, t, mapId, zone, x, y, player, fight }
+function Hotspots:EnemiesInFights(now, window)
+	local myFaction = UnitFactionGroup("player")
+	local fights = {}
+	for _, kind in ipairs({ "kill", "death" }) do
+		for record in Store:Iterator(kind) do
+			local data = record.data
+			if record.t and now - record.t <= window and data.zone and not Store:IsTest(record) then
+				for _, side in ipairs({ "killer", "victim" }) do
+					local guid = data[side]
+					local known = Wanted_(guid) and Wanted.db.players[guid]
+					local faction = data[side.."Faction"] or (known and known.faction)
+					if Wanted_(guid) and faction and faction ~= myFaction then
+						local other = private.Readable(data[side == "killer" and "victimName" or "killerName"])
+						tinsert(fights, {
+							guid = guid, t = record.t, mapId = data.mapId, zone = data.zone, x = data.x, y = data.y,
+							player = known or { name = data[side.."Name"], class = data[side.."Class"], level = data[side.."Level"], guild = data[side.."Guild"] },
+							fight = (side == "killer" and "Killed " or "Killed by ")..(type(other) == "string" and other or "?"),
+						})
+					end
+				end
+			end
+		end
+	end
+	return fights
+end
+
 ---Where each enemy was last known to be in the last hour: guid -> { t, mapId, zone, player }. Seen by a Wanted user,
----or named in a PvP death (kills and deaths, ours and other Wanted users'), whichever is later.
+---or named in a PvP death, whichever is later.
 function private.Positions(now)
 	local myFaction = UnitFactionGroup("player")
 	local positions = {}
-	local function Wanted_(guid)
-		return type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and not Wanted.db.ignore[guid]
-	end
 	for guid, player in pairs(Wanted.db.players) do
 		local lastSeen = player.lastSeen
 		if lastSeen and now - lastSeen <= HOUR and player.faction and player.faction ~= myFaction and Wanted_(guid) and (player.mapId or player.zone) then
 			positions[guid] = { t = lastSeen, mapId = player.mapId, zone = player.zone, player = player }
 		end
 	end
-	for _, kind in ipairs({ "kill", "death" }) do
-		for record in Store:Iterator(kind) do
-			local data = record.data
-			if record.t and now - record.t <= HOUR and data.zone and not Store:IsTest(record) then
-				for _, side in ipairs({ "killer", "victim" }) do
-					local guid = data[side]
-					local known = Wanted_(guid) and Wanted.db.players[guid]
-					local faction = data[side.."Faction"] or (known and known.faction)
-					local at = Wanted_(guid) and positions[guid]
-					if Wanted_(guid) and faction and faction ~= myFaction and (not at or record.t > at.t) then
-						positions[guid] = { t = record.t, mapId = data.mapId, zone = data.zone, player = known or {
-							name = data[side.."Name"], class = data[side.."Class"], level = data[side.."Level"], guild = data[side.."Guild"] } }
-					end
-				end
-			end
+	for _, fight in ipairs(Hotspots:EnemiesInFights(now, HOUR)) do
+		local at = positions[fight.guid]
+		if not at or fight.t > at.t then
+			positions[fight.guid] = { t = fight.t, mapId = fight.mapId, zone = fight.zone, player = fight.player }
 		end
 	end
 	return positions

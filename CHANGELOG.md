@@ -5,6 +5,9 @@
 - Hotspots: a zone known only from kills and deaths (one you haven't been to yourself) now opens on the map when you
   click it, instead of saying "No map for this zone yet". The records carried the map id all along; Hotspots didn't
   read it.
+- The world map marks enemies named in PvP deaths in the last 30 minutes where the fight was, not only enemies a
+  Wanted user saw: a zone known from other players' fights alone opened on an empty map. The marker's tooltip says
+  who they killed there, or who killed them.
 
 ## [1.21.1] - 2026-10-13
 

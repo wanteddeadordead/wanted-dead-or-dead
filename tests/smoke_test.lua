@@ -11664,6 +11664,85 @@ end)()
 	db.reports = {}
 	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
 end)()
+-- The development addon WantedSimDump (dev/, never packaged): /wanted simdump records each listed spell and item,
+-- waiting for data still loading, and gives up on one that never loads
+;(function()
+	local saved = { C_Spell = C_Spell, C_SpellBook = C_SpellBook, C_Item = C_Item, C_TooltipInfo = C_TooltipInfo, GetBuildInfo = GetBuildInfo, GetTime = GetTime, UnitClass = UnitClass }
+	local t, cachedAt = 0, {}
+	local function loaded(id) return cachedAt[id] and t >= cachedAt[id] end
+	GetTime = function() return t end
+	UnitClass = function() return "Mage", "MAGE", 8 end
+	GetBuildInfo = function() return "1.60.1", "70205", "Oct 1 2026", 16001 end
+	C_Spell = { DoesSpellExist = function(id) return id ~= 999 end, IsSpellDataCached = function(id) return loaded(id) end,
+		RequestLoadSpellData = function(id) cachedAt[id] = cachedAt[id] or t + 1 end,
+		GetSpellInfo = function(id) return { name = "Frostbolt", castTime = 2500, minRange = 0, maxRange = 30, spellID = id } end,
+		GetSpellSubtext = function() return "Rank 4" end, GetSpellDescription = function(id) return loaded(id) and "Deals 100 Frost damage." or "" end,
+		GetSpellCooldown = function() return { duration = 0 } end, GetSpellPowerCost = function() return { { name = "MANA", cost = 65, minCost = 65, costPercent = 0, costPerSec = 0 } } end }
+	C_SpellBook = { IsSpellKnown = function(id) return id == 116 end }
+	C_TooltipInfo = { GetSpellByID = function() return { lines = { { leftText = "Frostbolt", rightText = "Rank 4" }, { leftText = "2.5 sec cast" } } } end,
+		GetItemByID = function() return { lines = { { leftText = "Staff" } } } end }
+	C_Item = { RequestLoadItemDataByID = function(id) if id ~= 5 then cachedAt[id] = cachedAt[id] or t + 2 end end, IsItemDataCachedByID = function(id) return loaded(id) end,
+		GetItemInfo = function(id) if loaded(id) then return "Staff", "|Hitem:"..id.."|h[Staff]|h", 2, 20, 15 end end, GetItemStats = function() return { ITEM_MOD_INTELLECT_SHORT = 5 } end }
+	-- The character's stats, talents, skills and gear
+	local stubs = {
+		UnitStat = function(_, i) return 20 + i, 30 + i, 10, 0 end, UnitAttackPower = function() return 40, 5, 0 end, UnitRangedAttackPower = function() return 30, 0, 0 end,
+		UnitArmor = function() return 100, 150, 150, 50 end, UnitHealthMax = function() return 900 end, UnitPowerMax = function(_, kind) return kind == 0 and 1200 or 100 end,
+		UnitRace = function() return "Gnome", "Gnome", 7 end, UnitExists = function(unit) return unit == "pet" end, UnitCreatureFamily = function() return "Imp", 23 end,
+		UnitDamage = function() return 20, 35, 0, 0, 0, 0, 1 end, UnitRangedDamage = function() return 2.8, 15, 28, 0, 0, 1 end, UnitAttackSpeed = function() return 2.6 end,
+		UnitSpellHaste = function() return 0 end, GetCritChance = function() return 5 end, GetRangedCritChance = function() return 5 end, GetSpellCritChance = function() return 7.5 end,
+		GetHitModifier = function() return 0 end, GetRangedHitModifier = function() return 0 end, GetSpellHitModifier = function() return 3 end, GetCombatRatingBonus = function() return 0 end,
+		GetMeleeHaste = function() return 0 end, GetRangedHaste = function() return 0, 0 end, GetDodgeChance = function() return 4 end, GetParryChance = function() return 0 end,
+		GetBlockChance = function() return 0 end, GetShieldBlock = function() return 0 end, GetSpellBonusHealing = function() return 12 end, GetSpellPenetration = function() return 0 end,
+		GetArmorPenetration = function() return 0 end, GetExpertise = function() return 0, 0, 0 end, GetManaRegen = function() return 8, 2 end,
+		GetSpellBonusDamage = function(school) return school == 5 and 44 or 30 end, GetInventoryItemID = function(_, slot) return slot == 16 and 1234 or slot == 0 and 2512 or slot == 18 and 4 or nil end,
+		C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i) return i == 1 and { isHeader = true, name = "Weapon Skills" } or { name = "Staves", skillID = 136, rank = 150, modifier = 0, maxRank = 150 } end },
+		C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return 77 end },
+		C_Traits = { GetConfigInfo = function() return { treeIDs = { 9 } } end, GetGroupDisplayInfoByTreeID = function() return { { groupID = 1, displayName = "Frost" }, { groupID = 2, displayName = "Fire" } } end,
+			GetTreeNodes = function() return { 101, 102 } end, GetNodeInfo = function(_, id) return { ranksPurchased = id == 101 and 3 or 0, activeRank = id == 101 and 3 or 0, maxRanks = 5, groupIDs = { 1 }, activeEntry = { entryID = 501 } } end,
+			GetEntryInfo = function() return { definitionID = 601 } end, GetDefinitionInfo = function() return { spellID = 11070 } end,
+			GetGroupCurrencyInfo = function() return { { traitNodeGroupID = 1, currencyInfos = { { spent = 3 } } } } end, GetTreeCurrencyInfo = function() return { { quantity = 2, spent = 3 } } end },
+	}
+	local originals = {}
+	for name, stub in pairs(stubs) do originals[name] = _G[name] _G[name] = stub end
+	local savedEnum = Enum.PowerType
+	Enum.PowerType = { Mana = 0, Rage = 1, Energy = 3 }
+	CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL = 6, 7, 8
+	C_Spell.GetSpellName = function() return "Improved Frostbolt" end
+	WantedSimDumpIDs = { spells = { 116, 205, 999 }, items = { 4, 5 } }
+	local before = #Mock.created
+	assert(loadfile(ADDON.."dev/WantedSimDump/SimDump.lua"))("WantedSimDump", {})
+	local f = Mock.created[before + 1]
+	ns:RunCommand("simdump", "")
+	for _ = 1, 300 do
+		if not f._scripts.OnUpdate then break end
+		t = t + 0.1
+		f._scripts.OnUpdate(f, 0.1)
+	end
+	local db = WantedSimDumpDB
+	check(not f._scripts.OnUpdate, "simdump finishes")
+	check(db.class == "MAGE" and db.build == "1.60.1.70205" and db.interface == 16001 and db.started, "the dump notes the character and build")
+	local frostbolt = db.spells[116]
+	check(frostbolt.name == "Frostbolt" and frostbolt.rank == "Rank 4" and frostbolt.description == "Deals 100 Frost damage." and frostbolt.castTime == 2500
+		and frostbolt.maxRange == 30 and frostbolt.known and frostbolt.costs[1].cost == 65 and frostbolt.tooltip[2].left == "2.5 sec cast"
+		and frostbolt.tooltip[1].right == "Rank 4" and not frostbolt.incomplete, "a spell's name, rank, description, cast, range, cost, tooltip and known")
+	check(db.spells[205].known == false and db.spells[999].missing, "an unknown spell is noted, one that doesn't exist is marked missing")
+	check(db.items[4].name == "Staff" and db.items[4].stats.ITEM_MOD_INTELLECT_SHORT == 5 and db.items[4].tooltip[1].left == "Staff" and not db.items[4].incomplete,
+		"an item is recorded once its data loads")
+	check(db.items[5].incomplete and db.finished, "an item that never loads is recorded as incomplete after the wait")
+	local char = db.character
+	check(char and char.race == "Gnome" and char.stats.intellect.base == 24 and char.stats.intellect.total == 34 and char.attackPower.total == 45
+		and char.power.mana == 1200 and char.crit.spell == 7.5 and char.hit.spell == 3 and char.spellPower.frost == 44 and char.healing == 12
+		and char.manaRegen.base == 8 and char.manaRegen.casting == 2 and char.weapons.mainHand.max == 35 and char.weapons.ranged.speed == 2.8
+		and char.gear[16] == 1234 and char.ammoItemID == 2512 and char.name and char.skills[1].name == "Staves" and #char.skills == 1 and db.serverTime, "the character's stats, weapons, skills and gear: "..tostring(db.characterError))
+	check(char.talents.trees[1].points == 3 and char.talents.trees[2].points == 0 and char.talents.trees[1].currency[1].spent == 3
+		and #char.talents.taken == 1 and char.talents.taken[1].spellID == 11070 and char.talents.taken[1].rank == 3, "the talents taken and the points per tree")
+	check(db.items[1234] and db.items[2512] and db.items[4].name == "Staff", "the equipped gear and ammo are read with the listed items")
+	check(char.pet and char.pet.family == "Imp" and char.pet.stats.stamina.total == 33 and char.pet.weapons.ranged == nil, "the pet's stats")
+	for name in pairs(stubs) do _G[name] = originals[name] end
+	Enum.PowerType, CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL = savedEnum, nil, nil, nil
+	C_Spell, C_SpellBook, C_Item, C_TooltipInfo, GetBuildInfo, GetTime, UnitClass = saved.C_Spell, saved.C_SpellBook, saved.C_Item, saved.C_TooltipInfo, saved.GetBuildInfo, saved.GetTime, saved.UnitClass
+	WantedSimDumpIDs, WantedSimDumpDB = nil, nil
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -27,6 +27,7 @@ KeyBook.lua
 Verify.lua
 Store.lua
 Recorder.lua
+Shard.lua
 Sync.lua
 Bounties.lua
 Payments.lua

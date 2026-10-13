@@ -34,7 +34,7 @@ function private.MapName(mapId)
 end
 
 ---Finds or makes the group for a zone. Map ids group the same zone across game languages; a zone
----known only by name (kill and death records carry no map id) joins the group showing that name.
+---known only by name (records from before 1.2.12 carry no map id) joins the group showing that name.
 function private.GetGroup(groups, byName, mapId, zone)
 	local name = private.MapName(mapId) or zone
 	local named = name and byName[name]
@@ -91,7 +91,7 @@ function private.Positions(now)
 					local faction = data[side.."Faction"] or (known and known.faction)
 					local at = Wanted_(guid) and positions[guid]
 					if Wanted_(guid) and faction and faction ~= myFaction and (not at or record.t > at.t) then
-						positions[guid] = { t = record.t, zone = data.zone, player = known or {
+						positions[guid] = { t = record.t, mapId = data.mapId, zone = data.zone, player = known or {
 							name = data[side.."Name"], class = data[side.."Class"], level = data[side.."Level"], guild = data[side.."Guild"] } }
 					end
 				end
@@ -161,7 +161,7 @@ function private.AddDeaths(groups, byName, now)
 			local key = data.deathId or record.id
 			if record.t and now - record.t <= HOUR and data.zone and not counted[key] and not Store:IsTest(record) then
 				counted[key] = true
-				local group = private.GetGroup(groups, byName, nil, data.zone)
+				local group = private.GetGroup(groups, byName, data.mapId, data.zone)
 				group.deaths = group.deaths + 1
 				group.lastFight = max(group.lastFight or 0, record.t)
 			end

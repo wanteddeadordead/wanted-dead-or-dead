@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Hotspots: a zone known only from kills and deaths (one you haven't been to yourself) now opens on the map when you
+  click it, instead of saying "No map for this zone yet". The records carried the map id all along; Hotspots didn't
+  read it.
+
 ## [1.21.1] - 2026-10-13
 
 - The addon names no individual: the author fields, the licence and the What's new signature now carry the project's

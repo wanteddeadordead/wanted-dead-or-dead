@@ -298,7 +298,7 @@ function GetClassAtlas(c) return "classicon-"..c:lower() end
 function PlaySoundFile() return true end
 SOUNDKIT = { RAID_WARNING = 1, UI_RAID_BOSS_WHISPER_WARNING = 2, IG_PLAYER_INVITE = 3 }
 C_Spell = { GetSpellName = function() return nil end }
-local MAP_NAMES = { [1] = "Durotar", [10] = "The Barrens" }
+local MAP_NAMES = { [1] = "Durotar", [10] = "The Barrens", [21] = "Silverpine Forest" }
 C_Map = { GetBestMapForUnit = function() return 1 end, GetPlayerMapPosition = function() return { x = 0.446, y = 0.25 } end, GetMapInfo = function(id) return MAP_NAMES[id] and { name = MAP_NAMES[id] } end }
 -- Named areas on the map as the world map's hover labels find them: { name, left, top, right, bottom }
 local exploredAreas = {}
@@ -931,6 +931,12 @@ table.sort(hillNames)
 check(hills and hills.deaths == 3 and hills.hour == 2 and hills.recent == 2 and table.concat(hillNames, ",") == "Hill Ganker,Unseen Ganker" and hills.minLevel == 30,
 	"the fights' enemies count in Hillsbrad: "..tostring(hills and hills.hour).." "..table.concat(hillNames, ","))
 check(FindZone(spots, "The Barrens").hour == 3, "one seen in the Barrens since stays there")
+-- A zone known only from kill and death records takes the map id they carry (since 1.2.12), so its map opens
+ns.Store:NewRecord("death", { killer = "Player-9-PINE1", killerName = "Pine Ganker", killerClass = "WARLOCK", killerLevel = 25, killerFaction = "Alliance",
+	victim = "Player-1-OURS4", victimName = "Our Four", victimFaction = "Horde", deathId = "pine-1", zone = "Silverpine Forest", mapId = 21 })
+spots = ns.Hotspots:Get()
+local pine = FindZone(spots, "Silverpine Forest")
+check(pine and pine.mapId == 21 and pine.key == 21 and pine.deaths == 1 and pine.hour == 1, "a zone of records alone has their map id, got "..tostring(pine and pine.mapId))
 end
 -- New since you looked: Hotspots counts zones that have become busy since it was last open (the first look takes in
 -- what's busy); opening it clears them. The Enemies menu entry adds it to its own count, in the to-do colour if any.

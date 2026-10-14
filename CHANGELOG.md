@@ -10,6 +10,8 @@
   who they killed there, or who killed them.
 - Addons built on Wanted (the poker addon) can message the players at their table in dungeons and raids, where the
   game's chat lockdown is on; Wanted's own whispers still wait it out.
+- The minimap button's seal sits where the button library puts it again. The hand-tuned offset from 1.18.3 was centred
+  on one screen and off on others.
 
 ## [1.21.1] - 2026-10-13
 

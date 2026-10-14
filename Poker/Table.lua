@@ -134,8 +134,8 @@ end
 
 -- The player's choices for the table: sounds (each one picked from the game's own sounds, a SharedMedia sound, or
 -- none), a four-colour deck, the window opening on their turn
-local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
-local SOUND_KINDS = { { "deal", "Deal", "Cards dealt, and each new street." }, { "chips", "Chips", "A bet, a raise, a call." }, { "turn", "Your turn", "The moment it's yours to act." },
+local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", fold = "kit:IG_SPELLBOOK_OPEN", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
+local SOUND_KINDS = { { "deal", "Deal", "Cards dealt, and each new street." }, { "chips", "Chips", "A bet, a raise, a call." }, { "fold", "Fold", "Cards thrown in." }, { "turn", "Your turn", "The moment it's yours to act." },
 	{ "win", "Pot won", "A pot that comes to you." }, { "tick", "Five seconds", "Once, when five seconds are left on your clock." } }
 -- The game's sounds offered, { SOUNDKIT name, label }; ones this client lacks aren't offered
 local GAME_SOUNDS = {
@@ -233,7 +233,7 @@ end
 -- The settings panel over the felt
 function private.BuildSettings()
 	local panel = CreateFrame("Frame", nil, private.frame)
-	panel:SetSize(400, 300)
+	panel:SetSize(400, 330)
 	panel:SetPoint("CENTER", private.felt, "CENTER", 0, 0)
 	panel:SetFrameLevel(private.frame:GetFrameLevel() + 30)
 	panel:EnableMouse(true)
@@ -770,7 +770,7 @@ function private.LogChanges(st)
 		for i = private.loggedActions + 1, #hand.log do
 			TableUI:Log(Describe(hand.log[i], st))
 			local a = hand.log[i].action
-			if a == "bet" or a == "raise" or a == "call" or a == "allin" then Play("chips") end
+			if a == "bet" or a == "raise" or a == "call" or a == "allin" then Play("chips") elseif a == "fold" then Play("fold") end
 		end
 		private.loggedActions = #hand.log
 	end

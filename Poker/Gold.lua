@@ -13,11 +13,13 @@ local private = {
 	pendingSend = nil, -- { lineId, recipient, amount, at, closedAt }
 	seenInbox = {}, -- line id -> true once recorded from the inbox
 }
+local Protocol = Poker.PokerProtocol
 local SUBJECT_PREFIX = "Wanted poker "
 Gold.UNPAID_AFTER_SECONDS = 48 * 60 * 60
 local SEND_ANSWER_SECONDS = 30
 local CLOSE_GRACE_SECONDS = 10
-local COPPER = 10000
+local COPPER = 100 -- a gold table's chip is a silver piece
+local function Money(chips) return Protocol:Money(chips, "gold") end
 
 local function SameName(a, b)
 	if type(a) ~= "string" or type(b) ~= "string" then
@@ -61,9 +63,9 @@ function Gold:Add(line)
 	private.Notify()
 	local me = Net:Me()
 	if SameName(line.from, me) then
-		Wanted:Print("Poker: you owe %s %dg from %s. Pay from the Poker page at a mailbox.", line.to, line.amount, line.title or "the table")
+		Wanted:Print("Poker: you owe %s %s from %s. Pay from the Poker page at a mailbox.", line.to, Money(line.amount), line.title or "the table")
 	elseif SameName(line.to, me) then
-		Wanted:Print("Poker: %s owes you %dg from %s.", line.from, line.amount, line.title or "the table")
+		Wanted:Print("Poker: %s owes you %s from %s.", line.from, Money(line.amount), line.title or "the table")
 	end
 end
 
@@ -99,7 +101,7 @@ function Gold:IsOverdue(line)
 	return not line.paid and time() - (line.at or 0) > Gold.UNPAID_AFTER_SECONDS
 end
 
----What this character still owes, in gold, across every line.
+---What this character still owes, in silver, across every line.
 ---@return number
 function Gold:Owing()
 	local me, total = Net:Me(), 0
@@ -111,15 +113,15 @@ function Gold:Owing()
 	return total
 end
 
----Whether this character can buy in for an amount of gold: the gold in their bags, less what they still owe.
----@param amount number gold
+---Whether this character can buy in for an amount (silver): the money in their bags, less what they still owe.
+---@param amount number silver
 ---@return boolean ok
 ---@return string? reason
 function Gold:CanBuyIn(amount)
 	local bags = floor((GetMoney and GetMoney() or 0) / COPPER)
 	local owing = Gold:Owing()
 	if bags - owing < amount then
-		return false, owing > 0 and ("you have %dg and still owe %dg from earlier games"):format(bags, owing) or ("you have %dg"):format(bags)
+		return false, owing > 0 and ("you have %s and still owe %s from earlier games"):format(Money(bags), Money(owing)) or ("you have %s"):format(Money(bags))
 	end
 	return true
 end
@@ -212,7 +214,7 @@ function private.OnEvent(_, event, ...)
 			return
 		end
 		if Gold:MarkPaid(pending.lineId, "mail") then
-			Wanted:Print("Poker: paid %dg to %s.", floor(pending.amount / COPPER), pending.recipient)
+			Wanted:Print("Poker: paid %s to %s.", Money(floor(pending.amount / COPPER)), pending.recipient)
 		end
 	elseif event == "MAIL_FAILED" then
 		local itemID = ...
@@ -252,7 +254,7 @@ function private.ScanInbox()
 			if line and not private.seenInbox[line.id] then
 				private.seenInbox[line.id] = true
 				if Gold:MarkPaid(line.id, "mail") then
-					Wanted:Print("Poker: %s paid you %dg.", sender, gold)
+					Wanted:Print("Poker: %s paid you %s.", sender, Money(gold))
 				end
 			end
 		end

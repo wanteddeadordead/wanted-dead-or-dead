@@ -14,8 +14,12 @@ local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 244 -- the form with how it works under it
-local BLINDS = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } }
-local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100
+-- Blinds to pick from: chips, and at a gold table silver pieces (5s/10s up to 5g/10g)
+local BLINDS = {
+	chips = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } },
+	gold = { { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 }, { key = "500/1000", sb = 500, bb = 1000 } },
+}
+local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100 -- the buy-in range offered when the blinds are picked; the host sets their own
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
 	"1.  Host a table, or sit at one below. Everyone with Wanted on your faction sees open tables.",
@@ -31,11 +35,20 @@ local function Settings()
 	return Poker.db.host
 end
 
+local function Stakes()
+	return Settings().stakes == "gold" and "gold" or "chips"
+end
+
 local function Blinds(key)
-	for _, b in ipairs(BLINDS) do
+	local list = BLINDS[Stakes()]
+	for _, b in ipairs(list) do
 		if b.key == key then return b end
 	end
-	return BLINDS[3]
+	return list[3]
+end
+
+local function Money(n)
+	return Protocol:Money(n, Stakes())
 end
 
 local function Name(full)
@@ -58,11 +71,8 @@ function private.BuildForm(parent, width)
 	private.titleBox:SetValue(s.title or "")
 	local blindsLabel = Theme:Text(form, "small", "Blinds", C.muted)
 	blindsLabel:SetPoint("LEFT", private.titleBox, "RIGHT", 14, 0)
-	local blindChoices = {}
-	for _, b in ipairs(BLINDS) do blindChoices[#blindChoices + 1] = { key = b.key, label = b.key } end
-	private.blinds = W:Choice(form, 90, blindChoices, function(key) Settings().blinds = key private.RefreshBuyin() end)
+	private.blinds = W:Choice(form, 104, {}, function(key) Settings().blinds = key private.RefreshBuyin(true) end)
 	private.blinds:SetPoint("LEFT", blindsLabel, "RIGHT", 6, 0)
-	private.blinds:SetChoice(s.blinds)
 	local seatsLabel = Theme:Text(form, "small", "Seats", C.muted)
 	seatsLabel:SetPoint("LEFT", private.blinds, "RIGHT", 14, 0)
 	local seatChoices = {}
@@ -77,16 +87,26 @@ function private.BuildForm(parent, width)
 	private.turn:SetChoice(s.turn)
 	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" } }, function(key)
 		Settings().stakes = key
-		private.RefreshBuyin()
+		private.RefreshBuyin(true)
 	end, 70)
 	private.stakes:SetPoint("TOPLEFT", 14, -66)
 	private.stakes:Select(s.stakes or "chips", true)
-	private.buyinNote = Theme:Text(form, "small", "", C.muted)
+	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
 	private.buyinNote:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
-	private.buyinBox = W:Input(form, 90, "Your buy-in")
-	private.buyinBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 10, 0)
-	local go = W:Button(form, "Host table", "primary", 110, 26, private.Host)
-	go:SetPoint("LEFT", private.buyinBox, "RIGHT", 10, 0)
+	private.minBox = W:Input(form, 76, "least")
+	private.minBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 6, 0)
+	local toLabel = Theme:Text(form, "small", "to", C.muted)
+	toLabel:SetPoint("LEFT", private.minBox, "RIGHT", 6, 0)
+	private.maxBox = W:Input(form, 76, "most")
+	private.maxBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
+	local yoursLabel = Theme:Text(form, "small", "yours", C.muted)
+	yoursLabel:SetPoint("LEFT", private.maxBox, "RIGHT", 10, 0)
+	private.buyinBox = W:Input(form, 76, "yours")
+	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
+	private.unitNote = Theme:Text(form, "tiny", "", C.faint)
+	private.unitNote:SetPoint("LEFT", private.buyinBox, "RIGHT", 8, 0)
+	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
+	go:SetPoint("TOPRIGHT", -14, -66)
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
 	how:SetPoint("TOPLEFT", 14, -102)
 	how:SetPoint("RIGHT", -14, 0)
@@ -97,26 +117,43 @@ function private.BuildForm(parent, width)
 	return form
 end
 
-function private.RefreshBuyin()
-	local b = Blinds(Settings().blinds)
-	local low, high = b.bb * BUYIN_MIN_BB, b.bb * BUYIN_MAX_BB
-	local gold = Settings().stakes == "gold"
-	private.buyinNote:SetText(gold and ("Buy-in %dg to %dg, settled by mail"):format(low, high) or ("Buy-in %d to %d chips"):format(low, high))
-	local current = tonumber(private.buyinBox:GetText())
-	if not current or current < low or current > high then
-		private.buyinBox:SetValue(tostring(high))
+---Fills the blinds list for the stakes and, when the blinds or stakes changed, a buy-in range of 20 to 100 big
+---blinds for the host to change.
+---@param reset boolean? the blinds or stakes changed: offer the range again
+function private.RefreshBuyin(reset)
+	local stakes = Stakes()
+	local choices = {}
+	for _, b in ipairs(BLINDS[stakes]) do
+		choices[#choices + 1] = { key = b.key, label = Protocol:Money(b.sb, stakes).."/"..Protocol:Money(b.bb, stakes) }
 	end
+	private.blinds:SetChoices(choices)
+	local b = Blinds(Settings().blinds)
+	Settings().blinds = b.key
+	private.blinds:SetChoice(b.key)
+	local low, high = b.bb * BUYIN_MIN_BB, b.bb * BUYIN_MAX_BB
+	if reset or private.minBox:GetText() == "" then
+		private.minBox:SetValue(Money(low))
+		private.maxBox:SetValue(Money(high))
+		private.buyinBox:SetValue(Money(high))
+	end
+	private.unitNote:SetText(stakes == "gold" and "in gold and silver (2g 50s), settled by mail" or "chips")
 end
 
 function private.Host()
 	local s = Settings()
 	local b = Blinds(s.blinds)
+	local stakes = Stakes()
 	s.title = strtrim(private.titleBox:GetText() or "")
-	local buyin = tonumber(private.buyinBox:GetText())
-	local cfg = { sb = b.sb, bb = b.bb, buyMin = b.bb * BUYIN_MIN_BB, buyMax = b.bb * BUYIN_MAX_BB, maxSeats = s.seats, turnSeconds = s.turn, stakes = s.stakes or "chips",
+	local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
+	local buyin = Protocol:ParseAmount(private.buyinBox:GetText(), stakes)
+	if not buyMin or not buyMax or buyMin < b.bb or buyMax < buyMin then
+		UI:Toast(("The buy-in range is two amounts, the least at least a big blind (%s)."):format(Money(b.bb)), C.red)
+		return
+	end
+	local cfg = { sb = b.sb, bb = b.bb, buyMin = buyMin, buyMax = buyMax, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
 		title = s.title ~= "" and s.title or nil }
-	if not buyin or buyin ~= floor(buyin) or buyin < cfg.buyMin or buyin > cfg.buyMax then
-		UI:Toast(("Your buy-in is %d to %d%s."):format(cfg.buyMin, cfg.buyMax, cfg.stakes == "gold" and " gold" or " chips"), C.red)
+	if not buyin or buyin < cfg.buyMin or buyin > cfg.buyMax then
+		UI:Toast(("Your buy-in is %s to %s."):format(Money(cfg.buyMin), Money(cfg.buyMax)), C.red)
 		return
 	end
 	if cfg.stakes == "gold" then
@@ -196,7 +233,9 @@ function private.UpdateRow(row, item)
 	local ad = item
 	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
 	row.title:SetText(title..Theme:Colorize("  "..Name(ad.h), C.muted))
-	row.sub:SetText(("blinds %d/%d  -  %d of %d seats  -  buy-in %d to %d%s"):format(ad.sb or 0, ad.bb or 0, ad.s or 0, ad.m or 0, ad.lo or 0, ad.hi or 0, ad.g and "  -  gold" or ""))
+	local stakes = ad.g and "gold" or "chips"
+	row.sub:SetText(("blinds %s/%s  -  %d of %d seats  -  buy-in %s to %s%s"):format(Protocol:Money(ad.sb, stakes), Protocol:Money(ad.bb, stakes), ad.s or 0, ad.m or 0,
+		Protocol:Money(ad.lo, stakes), Protocol:Money(ad.hi, stakes), ad.g and "  -  gold, settled by mail" or ""))
 	local st = Net:State()
 	if st and st.t == ad.id then
 		row.action:SetText(Theme:Colorize("Seated", C.green))
@@ -212,7 +251,8 @@ function private.UpdateLine(row, line)
 	local me = Net:Me()
 	local owe = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
 	local other = Name(owe and line.to or line.from)
-	row.title:SetText(owe and ("You owe %s %dg"):format(other, line.amount) or ("%s owes you %dg"):format(other, line.amount))
+	local amount = Protocol:Money(line.amount, "gold")
+	row.title:SetText(owe and ("You owe %s %s"):format(other, amount) or ("%s owes you %s"):format(other, amount))
 	row.sub:SetText((line.title and line.title ~= "" and line.title or "Poker")..Theme:Colorize("  -  "..Theme:Ago(time() - (line.at or time())).." ago", C.faint))
 	row.pay:SetShown(owe and not line.paid)
 	row.mark:SetShown(not owe and not line.paid)
@@ -238,7 +278,7 @@ function private.MarkPaid(line)
 	if not line or private.view ~= "settlement" then return end
 	W:Dialog({
 		title = "Mark as paid?",
-		text = ("Only if %s has paid you the %dg some other way (a trade, a mail your client missed). It counts for their reputation as paid."):format(Name(line.from), line.amount),
+		text = ("Only if %s has paid you the %s some other way (a trade, a mail your client missed). It counts for their reputation as paid."):format(Name(line.from), Protocol:Money(line.amount, "gold")),
 		confirmLabel = "Mark paid",
 		onConfirm = function()
 			Gold:MarkPaid(line.id, "hand")
@@ -258,22 +298,24 @@ function private.Sit(ad)
 		UI:Toast("That table is full.", C.red)
 		return
 	end
+	local stakes = ad.g and "gold" or "chips"
+	local function M(n) return Protocol:Money(n or 0, stakes) end
 	W:Dialog({
 		title = "Sit at "..(ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")),
-		text = ad.g and ("Blinds %dg/%dg, for gold. Buy in for %dg to %dg. %s is the bank: when you leave, what you won or lost is settled with them by mail."):format(ad.sb or 0, ad.bb or 0, ad.lo or 0, ad.hi or 0, Name(ad.h))
-			or ("Blinds %d/%d. Buy in for %d to %d chips. Your client checks every deal; chips are play money."):format(ad.sb or 0, ad.bb or 0, ad.lo or 0, ad.hi or 0),
-		input = { placeholder = "Buy-in", value = tostring(ad.hi or 0) },
+		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. %s is the bank: when you leave, what you won or lost is settled with them by mail."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h))
+			or ("Blinds %s/%s. Buy in for %s to %s chips. Your client checks every deal; chips are play money."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi)),
+		input = { placeholder = ad.g and "e.g. 2g 50s" or "Buy-in", value = M(ad.hi) },
 		confirmLabel = "Sit down",
 		validate = function(value)
-			local n = tonumber(value)
-			if not n or n ~= floor(n) or n < (ad.lo or 0) or n > (ad.hi or 0) then return ("A whole number from %d to %d."):format(ad.lo or 0, ad.hi or 0) end
+			local n = Protocol:ParseAmount(value, stakes)
+			if not n or n < (ad.lo or 0) or n > (ad.hi or 0) then return ("From %s to %s."):format(M(ad.lo), M(ad.hi)) end
 			if ad.g then
 				local ok, why = Gold:CanBuyIn(n)
 				if not ok then return "You can't buy in for that: "..why.."." end
 			end
 		end,
 		onConfirm = function(value)
-			local ok, why = Net:JoinTable(ad.id, tonumber(value))
+			local ok, why = Net:JoinTable(ad.id, Protocol:ParseAmount(value, stakes))
 			if not ok then
 				UI:Toast(why or "Couldn't sit down.", C.red)
 				return
@@ -304,7 +346,7 @@ function private.Refresh()
 		local n = 0
 		for _ in pairs(st.seats) do n = n + 1 end
 		private.seatTitle:SetText(st.cfg.title and st.cfg.title ~= "" and st.cfg.title or (Name(st.host).."'s table"))
-		private.seatSub:SetText(("blinds %d/%d  -  %d of %d seated  -  host %s%s"):format(st.cfg.sb, st.cfg.bb, n, st.cfg.maxSeats, Name(st.host), Net:HostedTable() and " (you)" or ""))
+		private.seatSub:SetText(("blinds %s/%s  -  %d of %d seated  -  host %s%s"):format(Protocol:Money(st.cfg.sb, st.cfg.stakes), Protocol:Money(st.cfg.bb, st.cfg.stakes), n, st.cfg.maxSeats, Name(st.host), Net:HostedTable() and " (you)" or ""))
 		private.leaveButton:SetText(Net:HostedTable() and "Close table" or "Leave")
 	end
 	local lines = Gold:Lines()

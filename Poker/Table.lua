@@ -38,11 +38,7 @@ local function Name(full)
 end
 
 local function Chips(n, cfg)
-	n = n or 0
-	if cfg and cfg.stakes == "gold" then
-		return n.."g"
-	end
-	return tostring(n)
+	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
 -- ============================================================================
@@ -220,7 +216,7 @@ function private.Build()
 	private.raise = W:Button(bar, "Raise", "primary", 110, 28, function() private.Act(private.raiseAction, private.amount) end)
 	private.raise:SetPoint("RIGHT", private.allin, "LEFT", -6, 0)
 	private.amountBox = W:Input(bar, 70, "", function(text)
-		local n = tonumber(text)
+		local n = Protocol:ParseAmount(text, private.state and private.state.cfg and private.state.cfg.stakes)
 		if n and private.range then
 			n = max(private.range[1], min(private.range[2], floor(n)))
 			private.amount = n
@@ -231,7 +227,7 @@ function private.Build()
 	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
 	private.slider = W:Slider(bar, "", 150, 0, 1, 1, function(v) return "" end, function(v)
 		private.amount = v
-		private.amountBox:SetValue(tostring(v))
+		private.amountBox:SetValue(Chips(v, private.state and private.state.cfg))
 		private.raise:SetText(private.raiseLabel.." "..Chips(v, private.state and private.state.cfg))
 	end)
 	private.slider:SetPoint("RIGHT", private.amountBox, "LEFT", -8, 4)
@@ -302,14 +298,15 @@ function private.AskRebuy()
 	W:Dialog({
 		title = "Rebuy",
 		text = ("Add chips to your stack, up to %s (the table's most)."):format(Chips(room, st.cfg)),
-		input = { placeholder = "Chips", value = tostring(min(room, st.cfg.buyMin)) },
+		input = { placeholder = st.cfg.stakes == "gold" and "e.g. 2g 50s" or "Chips", value = Chips(min(room, st.cfg.buyMin), st.cfg) },
 		confirmLabel = "Buy",
 		over = private.frame,
 		validate = function(value)
 			local n = tonumber(value)
-			if not n or n ~= floor(n) or n < 1 or n > room then return ("A whole number from 1 to %d."):format(room) end
+			n = Protocol:ParseAmount(value, st.cfg.stakes)
+			if not n or n < 1 or n > room then return ("From %s to %s."):format(Chips(1, st.cfg), Chips(room, st.cfg)) end
 		end,
-		onConfirm = function(value) player:Rebuy(tonumber(value)) end,
+		onConfirm = function(value) player:Rebuy(Protocol:ParseAmount(value, st.cfg.stakes)) end,
 	})
 end
 
@@ -461,7 +458,7 @@ function TableUI:Refresh(st)
 				seatFrame.empty:SetText("")
 				seatFrame.name:SetText(seat == me and (Name(p.n).." (you)") or Name(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
-				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize(("  %+d"):format(net), net > 0 and C.green or C.red) or ""))
+				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize("  "..(net > 0 and "+" or "-")..Chips(math.abs(net), cfg), net > 0 and C.green or C.red) or ""))
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown
 				local inHand = hand and (p.b ~= nil or p.tot ~= nil) and not p.f
 				for i = 1, 2 do
@@ -574,7 +571,7 @@ function TableUI:Refresh(st)
 			private.slider.slider:SetMinMaxValues(low, high)
 			private.slider:SetValue(low)
 			private.amount = low
-			private.amountBox:SetValue(tostring(low))
+			private.amountBox:SetValue(Chips(low, cfg))
 			private.raise:SetText(private.raiseLabel.." "..Chips(low, cfg))
 			private.slider.label:SetText(("%s to %s"):format(Chips(low, cfg), Chips(high, cfg)))
 		end
@@ -639,8 +636,8 @@ end
 function TableUI:OnSettle(line)
 	local me = Net:Me()
 	local owe = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
-	TableUI:Log(owe and ("Settlement: you owe %s %dg. Pay from the Poker page at a mailbox."):format(Name(line.to), line.amount)
-		or ("Settlement: %s owes you %dg."):format(Name(line.from), line.amount), C.gold)
+	TableUI:Log(owe and ("Settlement: you owe %s %s. Pay from the Poker page at a mailbox."):format(Name(line.to), Protocol:Money(line.amount, "gold"))
+		or ("Settlement: %s owes you %s."):format(Name(line.from), Protocol:Money(line.amount, "gold")), C.gold)
 end
 
 ---The host went quiet, or a new one took over.

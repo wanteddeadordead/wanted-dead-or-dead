@@ -12445,28 +12445,28 @@ end)()
 	local function Line(id) for _, l in ipairs(Gold:Lines()) do if l.id == id then return l end end end
 	check(Gold:IsOverdue(Line("T1:2")) and not Gold:IsOverdue(Line("T1:1")), "a line unpaid two days is overdue")
 	local realMoney, realSendMoney, realCount, realHeader = GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo
-	GetMoney = function() return 500 * 10000 end
-	check(Gold:CanBuyIn(310) == true and not Gold:CanBuyIn(311), "a buy-in is covered by the gold in the bags less what you owe: 500 - 190")
+	GetMoney = function() return 500 * 10000 end -- 500g: 50,000 silver, the chips of a gold table
+	check(Gold:CanBuyIn(49810) == true and not Gold:CanBuyIn(49811), "a buy-in is covered by the money in the bags less what you owe: 50,000s - 190s")
 	MailFrame._shown = true
 	check(Gold:Prefill(Line("T1:1")) and SendMailSubjectEditBox:GetText() == "Wanted poker T1:1" and SendMailNameEditBox:GetText() == "Ann-Realm", "Pay fills the mail in")
 	check(not Gold:Prefill(Line("T1:2")), "not a debt of yours: nothing filled in")
-	local function SendHook(recipient, subject, gold)
-		GetSendMailMoney = function() return gold * 10000 end
+	local function SendHook(recipient, subject, copper)
+		GetSendMailMoney = function() return copper end
 		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
 	end
-	SendHook("Ann-Realm", "Wanted poker T1:1", 150)
+	SendHook("Ann-Realm", "Wanted poker T1:1", 150 * 100)
 	Fire("MAIL_SEND_SUCCESS")
 	check(Line("T1:1").paid and Line("T1:1").paidHow == "mail", "sent with the amount: paid")
-	SendHook("Bob-Realm", "gg", 39)
+	SendHook("Bob-Realm", "gg", 39 * 100)
 	Fire("MAIL_SEND_SUCCESS")
 	check(not Line("T1:3").paid, "a mail with less than the line isn't the payment")
-	SendHook("Bob-Realm", "gg", 40)
+	SendHook("Bob-Realm", "gg", 40 * 100)
 	Fire("MAIL_SEND_SUCCESS")
 	check(Line("T1:3").paid, "a hand-written mail with the amount pays the oldest line to that player")
 	check(Gold:Owing() == 0, "nothing owed")
 	-- Receiving: a mail from the debtor with the amount
 	GetInboxNumItems = function() return 1 end
-	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 * 10000 end
+	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 * 100 end
 	Fire("MAIL_INBOX_UPDATE")
 	check(Line("T1:2").paid, "the creditor's client marks the line paid when the mail arrives")
 	-- Reputation: a debt left unpaid counts against its debtor; one paid counts for them
@@ -12483,7 +12483,12 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Settlement (1)" then switch = f end end
 	check(switch, "the Settlement view counts what's open")
 	switch._scripts.OnClick(switch)
-	check(OnScreen("Stiff owes you 500g") and OnScreen("OVERDUE") and OnScreen("Paid"), "the lines show, the overdue one marked")
+	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid"), "the lines show in gold and silver, the overdue one marked")
+	-- Amounts typed and shown
+	local Protocol = P.PokerProtocol
+	check(Protocol:Money(250, "gold") == "2g 50s" and Protocol:Money(1000, "gold") == "10g" and Protocol:Money(5, "gold") == "5s" and Protocol:Money(250, "chips") == "250", "silver shows as gold and silver")
+	check(Protocol:ParseAmount("2g 50s", "gold") == 250 and Protocol:ParseAmount("10g", "gold") == 1000 and Protocol:ParseAmount("75s", "gold") == 75 and Protocol:ParseAmount("2.5", "gold") == 250
+		and Protocol:ParseAmount("2g50s", "gold") == 250 and Protocol:ParseAmount("abc", "gold") == nil and Protocol:ParseAmount("400", "chips") == 400 and Protocol:ParseAmount("4.5", "chips") == nil, "typed money is read")
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

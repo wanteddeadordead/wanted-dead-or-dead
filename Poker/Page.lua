@@ -192,6 +192,10 @@ function private.BuildForm(parent, width)
 	private.antes:SetPoint("LEFT", private.late, "RIGHT", 16, 0)
 	private.antes:SetChecked(s.antes == true)
 
+	-- How to type money, on every money box
+	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
+		W:AttachTooltip(box, "Amounts", "Gold, silver and copper as 1g 50s 25c, any of the three alone (75s, 5c), or a plain number for gold (2.5 is 2g 50s). Chips tables take a number of chips.")
+	end
 	-- Step 3: the table
 	local t = private.steps[3]
 	Label(t, -4, "Table name")
@@ -306,7 +310,7 @@ function private.RefreshBuyin(reset)
 	private.passwordBox:SetShown(not practice)
 	private.passwordNote:SetShown(not practice)
 	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
-		box.placeholder:SetText(money and "e.g. 2g 50s" or "chips")
+		box.placeholder:SetText(money and "e.g. 1g 50s 25c" or "chips")
 	end
 	private.Guide()
 end

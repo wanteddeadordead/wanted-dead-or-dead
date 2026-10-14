@@ -412,6 +412,18 @@ function private.Build()
 	return frame
 end
 
+-- A card dealt: it slides in from the middle of the felt (where the deck would be), a beat after the one before
+local function Dealt(card, order)
+	local felt = private.felt
+	local cx, cy = card:GetCenter()
+	local fx, fy = felt:GetCenter()
+	if type(cx) ~= "number" or type(fx) ~= "number" then
+		card:Arrive(0, 40, (order or 0) * 0.12)
+		return
+	end
+	card:Arrive(fx - cx, fy - cy + 30, (order or 0) * 0.12)
+end
+
 -- The grip is held: the table's scale follows the cursor's distance from the window's middle
 function private.Size()
 	local s, frame = private.sizing, private.frame
@@ -697,8 +709,10 @@ function TableUI:Refresh(st)
 				seatFrame.name:SetText(Name(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
 				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize("  "..(net > 0 and "+" or "-")..Chips(math.abs(net), cfg), net > 0 and C.green or C.red) or ""))
-				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown
+				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown. Dealt (slid in from
+				-- the middle) when the hand is new, a beat apart around the table
 				local inHand = hand and (p.b ~= nil or p.tot ~= nil) and not p.f
+				local newDeal = playing and hand.key ~= private.dealtKey
 				for i = 1, 2 do
 					local card = seatFrame.cards[i]
 					if p.hole and p.hole[i] then
@@ -712,6 +726,7 @@ function TableUI:Refresh(st)
 					else
 						card:Hide()
 					end
+					if newDeal and card:IsShown() then Dealt(card, k * 2 + (i - 1)) end
 				end
 				-- Status
 				local status, color
@@ -747,10 +762,17 @@ function TableUI:Refresh(st)
 			end
 		end
 	end
-	-- The middle
+	if playing then private.dealtKey = hand.key end
+	-- The middle: a card new to its slot is dealt, the flop's three one after another
+	local fresh = 0
 	for i = 1, 5 do
 		local card = hand and hand.board and hand.board[i]
+		local was = private.board[i].card
 		private.board[i]:SetCard(card or nil)
+		if type(card) == "number" and was ~= card then
+			Dealt(private.board[i], fresh)
+			fresh = fresh + 1
+		end
 		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
@@ -998,6 +1020,7 @@ end
 ---table closes, until the next one).
 function TableUI:Reset()
 	private.state, private.deadlineAt, private.nextAt, private.hostGone = nil, nil, nil, false
+	private.dealtKey, private.turnKey, private.preKey = nil, nil, nil
 	if private.log then private.log:Clear() end
 	private.lines = {}
 	private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt, private.loggedFinish = nil, 0, nil, false, false, false

@@ -13132,12 +13132,13 @@ end)()
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
 	ns.UI:Show("poker")
-	check(OnScreen("HOST A TABLE") and OnScreen("Practice: pick Practice"), "the form, with practice explained")
+	check(OnScreen("HOST A TABLE") and (OnScreen("A CASH GAME") or OnScreen("A TOURNAMENT")) and OnScreen("THE DEAL:"), "the form, with the guide to the table being set up")
 	local practice = Button("Practice")
 	check(practice, "Practice among the stakes")
-	practice._scripts.OnClick(practice)
 	WantedPokerDB.host.kind = "cash"
 	WantedPokerDB.host.seats = 3
+	practice._scripts.OnClick(practice)
+	check(OnScreen("PLAY MONEY: the other seats are computer players") and OnScreen("You and 2 computer players"), "picking Practice rewrites the guide")
 	addonSent = {}
 	TableUI:Log("a line from the last table")
 	local go = Button("Host table")

@@ -508,7 +508,7 @@ vault then ended with the crash, and every seat is owed what it had.
   keeps the app's last epoch. A client with nothing saved (ceiling 1) can follow the server's channel only while the
   server's epoch is at most 4 (it was 1 for the Horde and 0 for the Alliance on 2026-10-08). The app's pointer is never older than the app's last, and replaces one a whisper brought only when
   it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.
-- Rally positions (`L`, `Rally.lua`, from the release after 1.19.3) carry `{ c = claimed (server time), z = zone name
+- Rally positions (`L`, `Rally.lua`, from the release after 1.22.0) carry `{ c = claimed (server time), z = zone name
   (shown only), m = the zone's map id, x, y (map percent on it), k = class file, f = faction, e = 1 when it ended }`.
   Passing news like sightings: never stored or saved, never passed on, sent on the channel every 30 s (also while sync
   is paused) and to realm links every two minutes, and taken only as the sender's own rally (the game names the

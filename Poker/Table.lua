@@ -369,6 +369,36 @@ function private.RefreshSettings()
 	end
 end
 
+---Asks what went wrong and sends a bug report to the developers through the base (Report), with the table's state
+---and the last of the hand log written into Wanted's log first so they travel with it.
+function TableUI:ReportBug()
+	local st = private.state
+	if st then
+		local seats = 0
+		for _ in pairs(st.seats) do seats = seats + 1 end
+		Wanted:Log("Poker: report from table %s (%s, %s, %s); phase %s, hand %s, %d seated, my seat %s, host %s, hosting %s, blocked %s",
+			tostring(st.t), tostring(st.cfg.kind), tostring(st.cfg.stakes), tostring(st.cfg.title), tostring(st.phase), tostring(st.h), seats, tostring(st.me), tostring(st.host),
+			tostring(Net:HostedTable() ~= nil), tostring(Net:Blocked()))
+		local lines = private.lines or {}
+		for i = max(1, #lines - 11), #lines do
+			Wanted:Log("Poker log: %s", lines[i])
+		end
+	else
+		Wanted:Log("Poker: report with no table open")
+	end
+	W:Dialog({
+		title = "Report a poker bug",
+		text = "What happened, and what did you expect? Poker is experimental: the table's state and its last lines go with the report, other players' names left out.",
+		input = { placeholder = "What went wrong" },
+		confirmLabel = "Send to the developers",
+		validate = function(value) if strtrim(value or "") == "" then return "Say what happened first." end end,
+		onConfirm = function(value)
+			local id = Wanted.Report and Wanted.Report:QueueBug("[Poker] "..strtrim(value))
+			Wanted.UI:Toast(id and "Thank you. The report goes to the developers with the Wanted app." or "The report queue is full; try again later.", id and C.green or C.red)
+		end,
+	})
+end
+
 ---Shows or hides the table's settings.
 function TableUI:ToggleSettings()
 	if not private.frame then private.Build() end
@@ -434,8 +464,11 @@ function private.Build()
 	W:AttachTooltip(main, "Open Wanted", "The Poker page: open tables and your seat.")
 	private.leave = W:Button(header, "Leave", "ghost", 60, 22, private.ConfirmLeave)
 	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
+	local report = W:Button(header, "Report a bug", "ghost", 96, 22, function() TableUI:ReportBug() end)
+	report:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
+	W:AttachTooltip(report, "Report a bug", "Poker is experimental. Say what went wrong and the report goes to the developers with the table's log.")
 	local options = W:Button(header, "...", "ghost", 22, 22, function() TableUI:ToggleSettings() end)
-	options:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
+	options:SetPoint("RIGHT", report, "LEFT", -2, 0)
 	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, and whether the table opens on your turn.")
 
 	-- The felt, with its rail
@@ -982,7 +1015,7 @@ function TableUI:Refresh(st)
 	local me = st.me
 	local hand = st.hand
 	local playing = hand and hand.stage == "play" and hand.street ~= "done"
-	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host))
+	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host)..Theme:Colorize("  -  experimental", C.amber))
 	private.leave:SetText(Net:HostedTable() and "Close table" or "Leave")
 	-- The clock for the player to act
 	if hand and hand.left and (playing or hand.stage == "commits" or hand.stage == "reveals") then

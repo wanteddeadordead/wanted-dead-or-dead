@@ -250,13 +250,20 @@ local function Place(seat, k, n, felt)
 		end
 		return true
 	end
-	local side = y > 1 and -1 or 1 -- above the box for the lower half and the sides, below it for the upper half
+	-- Toward the middle first; when the board is in the way, on the ring just above or below the card row, nearest
+	-- the seat's side; the box's own edge only as a last resort
+	local ringY = CARD_H / 2 + 8 + GROUP_H / 2 + 4
+	local tx = x + dx * (edge + 40)
+	tx = max(-w / 2 + GROUP_W / 2 + 6, min(w / 2 - GROUP_W / 2 - 6, tx))
+	local nearSide = y >= 0 and ringY or -ringY
 	local candidates = {
 		{ x + dx * (edge + 60), y + dy * (edge + 60) },
 		{ x + dx * (edge + 40), y + dy * (edge + 40) },
-		{ x + (x > 1 and -20 or x < -1 and 20 or 0), y + side * (SEAT_H / 2 + 18) },
-		{ x + (x > 1 and -1 or 1) * (SEAT_W / 2 + GROUP_W / 2 + 4), y },
-		{ x, y + side * (SEAT_H / 2 + 18) },
+		{ tx, nearSide },
+		{ tx, -nearSide },
+		{ tx + (x > 1 and 40 or -40), nearSide },
+		{ tx + (x > 1 and 40 or -40), -nearSide },
+		{ x, y + (y > 1 and -1 or 1) * (SEAT_H / 2 + 18) },
 	}
 	local lx, ly = candidates[3][1], candidates[3][2]
 	for _, c in ipairs(candidates) do

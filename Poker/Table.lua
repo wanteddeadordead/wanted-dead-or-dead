@@ -826,8 +826,8 @@ function private.NoteActions(st)
 	local log = hand.log or {}
 	-- The hand's key is known from the shuffle on; the blinds once it's dealt, before anyone has acted
 	if hand.sb and hand.bb and #log == 0 and not private.acts[hand.bb] then
-		private.acts[hand.sb] = { action = "blind", text = "Small blind" }
-		private.acts[hand.bb] = { action = "blind", text = "Big blind" }
+		private.acts[hand.sb] = { action = "blind", text = "SB" }
+		private.acts[hand.bb] = { action = "blind", text = "BB" }
 	end
 	for i = (private.notedActions or 0) + 1, #log do
 		local e = log[i]

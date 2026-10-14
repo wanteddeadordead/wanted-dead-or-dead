@@ -118,7 +118,8 @@ local function BuildSeat(felt, k)
 	seat.won:SetPoint("BOTTOMLEFT", seat, "TOPLEFT", 4, 4)
 	seat.won:SetWidth(SEAT_W - 36)
 	seat.won:SetJustifyH("LEFT")
-	seat.won:SetWordWrap(false)
+	seat.won:SetWordWrap(true) -- onto a second line rather than cut short
+	seat.won:SetMaxLines(2)
 	seat.won:Hide()
 	seat.empty = Theme:Text(seat, "small", "", C.faint)
 	seat.empty:SetPoint("CENTER")
@@ -406,7 +407,8 @@ function private.Build()
 	-- What your cards make, above your seat
 	private.strength = Theme:Text(felt, "small", "", C.gold)
 	private.strength:SetJustifyH("LEFT")
-	private.strength:SetWordWrap(false)
+	private.strength:SetWordWrap(true) -- onto a second line rather than cut short
+	private.strength:SetMaxLines(2)
 	private.strength:SetWidth(SEAT_W - 36) -- clear of the dealer button at the corner
 	private.pot = Theme:Text(felt, "money", "")
 	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)

@@ -36,6 +36,7 @@ local SEAT_BG = { 0, 0, 0, 0.5 }
 local SEAT_BORDER = { 1, 1, 1, 0.1 }
 local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
 local CARD_W, CARD_H = 46, 64
+local CHIP = 14 -- a chip by a bet
 local SMALL_W, SMALL_H = 34, 48
 
 local function Name(full)
@@ -98,6 +99,16 @@ local function BuildSeat(felt, k)
 	seat.dealer:SetPoint("BOTTOM", seat, "TOPRIGHT", -14, 3)
 	seat.bet = Theme:Text(felt, "body", "", C.text) -- what they did and what it cost, on the felt beside them
 	seat.bet:SetJustifyH("CENTER")
+	-- A stack of chips by the bet: Wanted's seal, one to four high by how big the bet is against the blind
+	seat.chips = {}
+	for i = 1, 4 do
+		local chip = felt:CreateTexture(nil, "ARTWORK", nil, i)
+		chip:SetSize(CHIP, CHIP)
+		chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
+		chip:SetPoint("RIGHT", seat.bet, "LEFT", -5, (i - 1) * 3)
+		chip:Hide()
+		seat.chips[i] = chip
+	end
 	seat.timer = TimerBar(seat)
 	seat.timer:SetPoint("BOTTOMLEFT", 1, 1)
 	seat.timer:SetPoint("BOTTOMRIGHT", -1, 1)
@@ -906,6 +917,7 @@ function TableUI:Refresh(st)
 				seatFrame.stack:SetText("")
 				seatFrame.status:Set(nil)
 				seatFrame.won:Hide()
+				for i = 1, 4 do seatFrame.chips[i]:Hide() end
 				seatFrame.dealer:Set(nil)
 				seatFrame.cards[1]:Hide()
 				seatFrame.cards[2]:Hide()
@@ -973,6 +985,12 @@ function TableUI:Refresh(st)
 					seatFrame.won:Hide()
 				end
 				-- The bet in front of them, or what they won
+				local stack = 0
+				if not showdown and playing and p.b and p.b > 0 then
+					local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
+					stack = p.b <= 2 * bb and 1 or p.b <= 5 * bb and 2 or p.b <= 20 * bb and 3 or 4
+				end
+				for i = 1, 4 do seatFrame.chips[i]:SetShown(i <= stack) end
 				if showdown and hand.results.payouts and hand.results.payouts[seat] then
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
 					seatFrame.bet:Show()

@@ -20,6 +20,8 @@ local BACK = { 0.42, 0.08, 0.11, 1 }
 local HIGHLIGHT = { 1, 0.8, 0.32, 1 }
 local SLOT = { 1, 1, 1, 0.06 }
 local SLOT_BORDER = { 1, 1, 1, 0.12 }
+local RISE = 10 -- a card in the winning five lifts this far at the showdown
+local SHADE = 0.3 -- and every other face-up card dims to this
 -- The rank in the game's plain sans (ARIALN): the theme's Friz Quadrata draws a J with hardly any hook, so at card size a
 -- jack read as a one. Ranks are Latin letters and digits, so one file covers every client
 local RANK_FONT = "Fonts\\ARIALN.TTF"
@@ -39,8 +41,9 @@ function Cards:Say(card)
 	return RANK_WORD[Engine:RankOf(card)].." of "..SUIT_WORD[Engine:SuitOf(card)]
 end
 
----A card frame. SetCard(card) shows a face, SetCard(true) a back, SetCard(nil) an empty slot; SetHighlight marks a
----card in the winning hand.
+---A card frame. SetCard(card) shows a face, SetCard(true) a back, SetCard(nil) an empty slot; SetHighlight(true) marks a
+---card in the winning hand (a gold edge, and it rises), SetHighlight(false) shades one that lost, SetHighlight(nil) is
+---the hand under way.
 ---@param parent Frame
 ---@param width number
 ---@param height number
@@ -100,10 +103,40 @@ function Cards:New(parent, width, height, font)
 	function f:SetHighlight(on)
 		if on then
 			Theme:SetBorderColor(self, HIGHLIGHT)
-		elseif type(self.card) == "number" then
-			Theme:SetBorderColor(self, FACE_BORDER)
+			self:Rise()
+		else
+			if type(self.card) == "number" then Theme:SetBorderColor(self, FACE_BORDER) end
+			self:Settle()
 		end
-		self:SetAlpha(on == false and type(self.card) == "number" and 0.45 or 1)
+		self:SetAlpha(on == false and type(self.card) == "number" and SHADE or 1)
+	end
+	-- Lifts the card: it slides up from where it sits and stays up until Settle
+	function f:Rise()
+		if self.raised then return end
+		local point, rel, relPoint, x, y = self:GetPoint(1)
+		if type(y) ~= "number" then return end
+		self.raised = { point, rel, relPoint, x, y }
+		if not self.rise then
+			self.rise = self:CreateAnimationGroup()
+			local slide = self.rise:CreateAnimation("Translation")
+			slide:SetOffset(0, RISE)
+			slide:SetDuration(0.3)
+			slide:SetSmoothing("OUT")
+			self.rise:SetScript("OnFinished", function()
+				local b = self.raised
+				if b then self:SetPoint(b[1], b[2], b[3], b[4], b[5] + RISE) end
+			end)
+		end
+		self.rise:Stop()
+		self.rise:Play()
+	end
+	-- Back where it sits
+	function f:Settle()
+		local b = self.raised
+		if not b then return end
+		self.raised = nil
+		if self.rise then self.rise:Stop() end
+		self:SetPoint(b[1], b[2], b[3], b[4], b[5])
 	end
 	f:SetCard(nil)
 	return f

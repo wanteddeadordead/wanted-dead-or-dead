@@ -13472,6 +13472,17 @@ end)()
 	TableUI:ToggleSettings()
 	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Five seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
 	TableUI:ToggleSettings()
+	-- Experimental, and a bug report with the table's log
+	ns.UI:Show("poker")
+	check(OnScreenNow("EXPERIMENTAL"), "the Poker page says poker is experimental")
+	local queued = ns.Report:CountQueued()
+	TableUI:ReportBug()
+	check(ns.Widgets:IsDialogShown(), "Report a bug asks what happened")
+	ConfirmDialog("the pot paid the wrong seat")
+	check(ns.Report:CountQueued() == queued + 1, "and queues a report for the developers")
+	local tagged = false
+	for _, line in ipairs(ns:GetLogLines(40)) do tagged = tagged or line:find("Poker: report", 1, true) ~= nil end
+	check(tagged, "the poker context went into the log that travels with it")
 	wipe(played)
 	check(Cards:SuitColor(1) == Cards:SuitColor(4) and Cards:SuitColor(2) == Cards:SuitColor(3), "two colours: clubs like spades, diamonds like hearts")
 	o.fourColor = true

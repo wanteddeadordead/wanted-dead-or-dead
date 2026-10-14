@@ -26,6 +26,7 @@ for _, u in ipairs(UNITS) do
 end
 local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100 -- the buy-in range offered when the blinds are picked; the host sets their own
 local HOW_IT_WORKS = table.concat({
+	"EXPERIMENTAL: poker hasn't been played with a full table of people yet. If anything looks wrong, press Report a bug at the table or here: the table's log goes with it.",
 	"HOW IT WORKS",
 	"1.  Host a table, or sit at one below. Everyone with Wanted on your faction sees open tables.",
 	"2.  Before each hand every player's client makes a secret; the deck is shuffled from all of them together, so nobody, the host included, can choose it.",
@@ -170,6 +171,9 @@ function private.BuildForm(parent, width)
 	private.unit:SetChoice(s.unit or "silver")
 	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
 	go:SetPoint("TOPRIGHT", -14, -62)
+	local report = W:Button(form, "Report a bug", "ghost", 100, 26, function() Poker.PokerTable:ReportBug() end)
+	report:SetPoint("RIGHT", go, "LEFT", -6, 0)
+	W:AttachTooltip(report, "Report a bug", "Poker is experimental. Say what went wrong and the report goes to the developers with the table's log.")
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
 	how:SetPoint("TOPLEFT", 14, -126)
 	how:SetPoint("RIGHT", -14, 0)
@@ -658,7 +662,7 @@ end
 UI:RegisterPage("poker", {
 	group = "World PvP",
 	title = "Poker",
-	subtitle = "Texas hold'em at the Wanted table: a deal no player can rig, checked by every seat after each hand.",
+	subtitle = "Experimental. Texas hold'em at the Wanted table: a deal no player can rig, checked by every seat after each hand.",
 	order = 3.2,
 	badge = function()
 		local n = #Net:Tables()

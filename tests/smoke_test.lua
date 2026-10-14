@@ -12355,7 +12355,7 @@ end)()
 	check(type(mine.cards[1].card) == "number" and type(mine.cards[2].card) == "number" and bobs.cards[1].card == true, "your cards face up, Bob's face down")
 	st = ToBob("state").st
 	check(st.seats[2].hole and st.seats[1].hole == nil, "Bob's state has his cards and not yours")
-	check(OnScreen("Hand 1") and parts.lock.text._text:find("^Deck "), "the hand and its deck hash show")
+	check(OnScreen("Hand 1") and not parts.lock:IsShown(), "the hand shows; no check mark until the hand is over")
 	-- Heads-up: the button (you) posts the small blind and acts first
 	check(parts.call:IsShown() and parts.call.label._text == "Call 10" and parts.raise.label._text == "Raise to 40", "the bar offers Call 10 and Raise to 40: "..tostring(parts.call.label._text)..", "..tostring(parts.raise.label._text))
 	parts.call._scripts.OnClick(parts.call)
@@ -12372,7 +12372,7 @@ end)()
 	parts.call._scripts.OnClick(parts.call)
 	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen(" win ")), "the showdown, with the winner on screen")
 	check(type(bobs.cards[1].card) == "number", "Bob's cards are shown at the showdown")
-	check(parts.lock.text._text == "Verified" and Logged("Hand 1 verified"), "our client verified the host's hand: "..tostring(parts.lock.text._text))
+	check(parts.lock.state == "ok" and parts.lock:IsShown() and not Logged("verified"), "our client verified the host's hand: a check mark, nothing in the log: "..tostring(parts.lock.state))
 	check(Logged(" wins ") and Logged("River:"), "the result and the river are logged")
 	-- Sit out and come back
 	parts.sitOut._scripts.OnClick(parts.sitOut)

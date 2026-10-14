@@ -206,14 +206,28 @@ function private.Build()
 	private.info = Theme:Text(felt, "tiny", "", C.muted)
 	private.info:SetPoint("TOP", felt, "CENTER", 0, -CARD_H / 2 - 8)
 	private.info:SetJustifyH("CENTER")
-	private.lock = W:Pill(felt)
-	private.lock:SetPoint("TOP", private.info, "BOTTOM", 0, -4)
+	-- The deal's check, once the hand is over: a green check mark, or a red cross; what it means on hover
+	private.lock = CreateFrame("Frame", nil, felt)
+	private.lock:SetSize(18, 18)
+	private.lock:SetPoint("TOP", private.info, "BOTTOM", 0, -3)
+	private.lock.icon = private.lock:CreateTexture(nil, "ARTWORK")
+	private.lock.icon:SetAllPoints()
+	function private.lock:Set(state)
+		self.state = state
+		if state == "ok" then
+			self.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+		elseif state == "failed" then
+			self.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+		end
+		self:SetShown(state ~= nil)
+	end
+	private.lock:Set(nil)
 	private.lock:EnableMouse(true)
 	private.lock:SetScript("OnEnter", function(self)
 		local st = private.state
 		if not st or not st.hand then return end
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText("The deal", 1, 1, 1)
+		GameTooltip:SetText(self.state == "failed" and "The deal FAILED its check" or "The deal checked out", 1, 1, 1)
 		GameTooltip:AddLine("Every player's secret went into this shuffle, so nobody could choose the deck. Your client checks the host's account of the hand once it's over.", C.muted[1], C.muted[2], C.muted[3], true)
 		if st.hand.dh then GameTooltip:AddLine("Deck "..strsub(st.hand.dh, 1, 16).."...", C.text[1], C.text[2], C.text[3]) end
 		local audit = private.audits and private.audits[st.hand.key]
@@ -610,7 +624,7 @@ function TableUI:Refresh(st)
 	end
 	if hand and hand.dh then
 		local audit = private.audits and private.audits[hand.key]
-		private.lock:Set(audit and (audit.ok and "Verified" or "Deal FAILED") or ("Deck "..strsub(hand.dh, 1, 8)), audit and (audit.ok and C.green or C.red) or C.muted)
+		private.lock:Set(audit and (audit.ok and "ok" or "failed") or nil)
 	else
 		private.lock:Set(nil)
 	end
@@ -737,9 +751,8 @@ function TableUI:OnAudit(key, ok, reason)
 	private.audits = private.audits or {}
 	private.audits[key] = { ok = ok, reason = reason }
 	local handNo = key:match("^(%d+)") or key
-	if ok then
-		TableUI:Log(("Hand %s verified: the deck was the one every player's secret made, and the payouts follow from the actions."):format(handNo), C.green)
-	else
+	-- A deal that checks out shows as the check mark under the board, not in the log
+	if not ok then
 		TableUI:Log(("Hand %s FAILED verification: %s. Don't settle this hand."):format(handNo, tostring(reason)), C.red)
 		Wanted:Print("Poker: hand %s failed verification (%s).", handNo, tostring(reason))
 	end

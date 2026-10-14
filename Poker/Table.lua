@@ -91,8 +91,8 @@ local function BuildSeat(felt, k)
 	seat.cards = { Cards:New(seat, SMALL_W, SMALL_H, "small"), Cards:New(seat, SMALL_W, SMALL_H, "small") }
 	seat.cards[1]:SetPoint("BOTTOMRIGHT", -6 - SMALL_W - 3, 6)
 	seat.cards[2]:SetPoint("BOTTOMRIGHT", -6, 6)
-	seat.dealer = W:Pill(seat)
-	seat.dealer:SetPoint("TOPRIGHT", -4, 4)
+	seat.dealer = W:Pill(seat) -- placed outside the box, at the corner nearest the middle of the felt (Place)
+	seat.dealer:SetPoint("BOTTOM", seat, "TOPRIGHT", -14, 3)
 	seat.bet = Theme:Text(felt, "small", "", C.text)
 	seat.bet:SetJustifyH("CENTER")
 	seat.timer = TimerBar(seat)
@@ -114,9 +114,15 @@ local function Place(seat, k, n, felt)
 	local x, y = rx * math.cos(angle), ry * math.sin(angle)
 	seat:ClearAllPoints()
 	seat:SetPoint("CENTER", felt, "CENTER", x, y)
-	-- The bet sits between the seat and the middle
+	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.62, y * 0.56)
+	seat.dealer:ClearAllPoints()
+	if y > 0 then
+		seat.dealer:SetPoint("TOP", seat, "BOTTOMRIGHT", -14, -3)
+	else
+		seat.dealer:SetPoint("BOTTOM", seat, "TOPRIGHT", -14, 3)
+	end
 end
 
 function private.Build()

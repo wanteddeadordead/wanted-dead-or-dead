@@ -13542,10 +13542,17 @@ end)()
 	check(not parts.seats[0].bet:IsShown(), "the turn dealt: last street's labels are cleared")
 	FromBob({ k = "act", h = key, q = host.seq, a = "bet", m = 20 })
 	check(parts.seats[1].status.text._text == "Bet 20" and Felt(1) == "20", "Bob's pill says Bet 20; the felt shows the 20")
-	check(parts.seats[1].chips[1]:IsShown() and not parts.seats[1].chips[2]:IsShown() and not parts.seats[0].chips[1]:IsShown(), "one chip by Bob's bet of a big blind; none by us")
-	local potChips = 0
-	for _, c in ipairs(parts.potChips) do if c:IsShown() then potChips = potChips + 1 end end
-	check(potChips == 3, "the pot of 60 (blinds, our call, Bob's bet) at blinds of 20 shows three chips: "..potChips)
+	local function Shown(list) local n = 0 for _, c in ipairs(list) do if c:IsShown() then n = n + 1 end end return n end
+	check(Shown(parts.seats[1].chips) == 1 and Shown(parts.seats[0].chips) == 0, "one white chip by Bob's bet of a big blind; none by us")
+	check(Shown(parts.potChips) == 3, "the pot of 60 (blinds, our call, Bob's bet) at blinds of 20: three white chips: "..Shown(parts.potChips))
+	-- Stacks count the amount out in denominations: 140 big blinds is a black, a green, three reds
+	local pool = {}
+	for i = 1, 40 do pool[i] = NewMock() end
+	local anchor = NewMock()
+	local Lay = TableUI.LayStacks
+	check(Lay(pool, 140 * 20, 20, anchor, false, 5) == 5, "140 big blinds: 100 + 25 + 5 + 5 + 5, five chips in three stacks")
+	check(Lay(pool, 10, 20, anchor, false, 5) == 1, "half a big blind still shows one chip")
+	check(Lay(pool, 0, 20, anchor, false, 5) == 0 and not pool[1]:IsShown(), "nothing: no chips")
 	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "F")
 	check((host.phase == "showdown" or host.hand.street == "done") and Played(1156) >= 1, "F folds, with the cards' sound")

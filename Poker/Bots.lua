@@ -120,14 +120,18 @@ function Bots:Strength(hole, board)
 	return min(1, made)
 end
 
----What a bot does on its turn: the action and, for a bet or raise, the total to have in front.
+---What a bot does on its turn: the action and, for a bet or raise, the total to have in front; and whether it was a
+---bluff, for the bot to remember. Bets vary in size; a bluff on one street is sometimes fired again on the next; a
+---lone bet is sometimes raised with nothing, once a hand.
 ---@param st table the state the host sent it, with its own cards and hand.legal
 ---@param seat number its seat
 ---@param style table one of Bots.STYLES
 ---@param rng fun(): number 0 to 1
+---@param memory table? what the bot remembers of this hand: { key, bluffStreet?, bluffRaised? }
 ---@return string action
 ---@return number? amount
-function Bots:Decide(st, seat, style, rng)
+---@return boolean? bluff
+function Bots:Decide(st, seat, style, rng, memory)
 	local hand = st.hand
 	local legal = hand.legal
 	local me = st.seats[seat]
@@ -144,14 +148,17 @@ function Bots:Decide(st, seat, style, rng)
 	end
 	strength = strength + (rng() * 0.08 - 0.04)
 	local canRaise = legal.minBet or legal.minRaise
+	-- Sizes vary a little, so the amount says nothing about the hand
 	local function Bet()
 		if legal.minBet then
-			local to = hand.street == "preflop" and 3 * bb or floor(pot * 0.66)
+			local to = hand.street == "preflop" and 3 * bb or floor(pot * (0.5 + rng() * 0.35))
 			return "bet", max(legal.minBet, min(legal.maxBet, to))
 		end
-		local to = floor((hand.cur or 0) * 2.5)
+		local to = floor((hand.cur or 0) * (2.2 + rng() * 0.8))
 		return "raise", max(legal.minRaise, min(legal.maxRaise, to))
 	end
+	local weak = strength < 0.3
+	local remembered = memory and memory.key == hand.key and memory or nil
 	-- Short: a hand worth playing goes in whole
 	if stack <= 8 * bb and strength >= 0.5 and (canRaise or toCall > 0) then
 		return "allin"
@@ -159,8 +166,13 @@ function Bots:Decide(st, seat, style, rng)
 	if toCall <= 0 then
 		if canRaise and strength >= 0.55 / a then
 			return Bet()
-		elseif canRaise and hand.street ~= "preflop" and strength < 0.3 and rng() < style.bluff then
-			return Bet()
+		elseif canRaise and hand.street ~= "preflop" and weak then
+			-- A bluff fired on the last street is followed up more often than a fresh one is started
+			local again = remembered and remembered.bluffStreet and remembered.bluffStreet ~= hand.street
+			if rng() < (again and style.bluff * 2.5 or style.bluff) then
+				local action, amount = Bet()
+				return action, amount, true
+			end
 		end
 		return "check"
 	end
@@ -179,6 +191,11 @@ function Bots:Decide(st, seat, style, rng)
 	end
 	if toCall >= stack and strength >= 0.5 then
 		return "call"
+	end
+	-- A lone bet of no more than the pot, raised with nothing: once a hand, after the flop
+	if weak and canRaise and hand.street ~= "preflop" and toCall <= pot * 0.75 and not (remembered and remembered.bluffRaised) and rng() < style.bluff * 0.6 then
+		local action, amount = Bet()
+		return action, amount, true
 	end
 	return "fold"
 end
@@ -232,7 +249,12 @@ function Bot:Tick()
 			self.actAt = now + Protocol.BOT_THINK_MIN + self.rng() * (Protocol.BOT_THINK_MAX - Protocol.BOT_THINK_MIN)
 		end
 		if now >= self.actAt then
-			local action, amount = Bots:Decide(st, seat, self.style, self.rng)
+			if not self.memory or self.memory.key ~= hand.key then self.memory = { key = hand.key } end
+			local action, amount, bluff = Bots:Decide(st, seat, self.style, self.rng, self.memory)
+			if bluff then
+				self.memory.bluffStreet = hand.street
+				if action == "raise" then self.memory.bluffRaised = true end
+			end
 			self.player:Act(action, amount)
 		end
 	else

@@ -12908,7 +12908,7 @@ end)()
 	local aces = { Card(14, 4), Card(14, 3) }
 	local trash = { Card(7, 1), Card(2, 2) }
 	local action, amount = Bots:Decide(State({ hole = aces, street = "preflop", legal = { fold = true, call = 10, minRaise = 40, maxRaise = 1010 } }), 1, steady, Rng(0.5))
-	check(action == "raise" and amount == 50, "aces raise before the flop: "..action.." "..tostring(amount))
+	check(action == "raise" and amount == 52, "aces raise before the flop, the size a little varied: "..action.." "..tostring(amount))
 	action = Bots:Decide(State({ hole = trash, street = "preflop", pot = 300, cur = 200, legal = { fold = true, call = 200 } }), 1, steady, Rng(0.5))
 	check(action == "fold", "seven-deuce folds to a raise: "..action)
 	action = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, legal = { fold = true, check = true, minBet = 20, maxBet = 1000 } }), 1, steady, Rng(0.5))
@@ -12919,6 +12919,19 @@ end)()
 	check(action == "call", "top pair calls a bet: "..action)
 	action = Bots:Decide(State({ hole = aces, stack = 100, street = "preflop", legal = { fold = true, call = 10, minRaise = 40, maxRaise = 110 } }), 1, steady, Rng(0.5))
 	check(action == "allin", "short with a hand goes all in: "..action)
+	-- Bluffs: a second barrel follows a bluff from the street before more often than a fresh bluff starts; a lone bet
+	-- is raised with nothing now and then, once a hand
+	local board = { Card(14, 3), Card(13, 2), Card(12, 1), Card(4, 4) }
+	local free = { fold = true, check = true, minBet = 20, maxBet = 1000 }
+	local act2, _, bluff = Bots:Decide(State({ hole = trash, street = "turn", board = board, legal = free }), 1, steady, Rng(0.2), { key = "1.1", bluffStreet = "flop" })
+	check(act2 == "bet" and bluff == true, "having bluffed the flop, the turn is fired again at a 20% roll: "..act2)
+	act2 = Bots:Decide(State({ hole = trash, street = "turn", board = board, legal = free }), 1, steady, Rng(0.2), { key = "1.1" })
+	check(act2 == "check", "without a bluff behind it the same roll checks: "..act2)
+	local facing = { fold = true, call = 50, minRaise = 150, maxRaise = 1000 }
+	act2, _, bluff = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, pot = 150, cur = 50, legal = facing }), 1, steady, Rng(0.05), { key = "1.1" })
+	check(act2 == "raise" and bluff == true, "a lone bet is raised with nothing at a 5% roll: "..act2)
+	act2 = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, pot = 150, cur = 50, legal = facing }), 1, steady, Rng(0.05), { key = "1.1", bluffRaised = true })
+	check(act2 == "fold", "but only once a hand: "..act2)
 
 	-- Settings: a practice table is chips only, keeps a seat for the host
 	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 3 }).bots == 3, "bots in the settings")

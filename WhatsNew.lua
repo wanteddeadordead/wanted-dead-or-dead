@@ -14,6 +14,19 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.22.0",
+		note = "Nothing better after a day of hunting than playing some poker with that hard-earned gold. Wanted now deals "
+			.."Texas hold'em: open the Poker page, host a table or sit at one, and play for chips, for gold, or against the "
+			.."house's computer players while you wait on a pull. Every deal is shuffled by everyone at the table and checked "
+			.."by every client, so nobody can rig it, the host included.",
+		lines = {
+			"Poker: cash games and tournaments on the Poker page, or /wanted poker. It comes with Wanted and is on by default.",
+			"Gold tables are cash on the table: buy-ins go to the host first, stacks come back when you leave, and Settlement keeps the books.",
+			"Practice tables fill the seats with computer players on play money that looks like gold.",
+			"Tables run in dungeons and raids too, and pause themselves during a boss fight.",
+		},
+	},
+	{
 		version = "1.21.0",
 		note = "Something not right? Tell us from inside the game. Every duel tip now has a \"Something not right?\" link, and "
 			.."Report a bug sends your report straight to us through the Wanted app, with other players' names left out.\n\n"

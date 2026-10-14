@@ -4,7 +4,8 @@ Releases are built by the [BigWigs packager](https://github.com/BigWigsMods/pack
 pushed. It reads `## Interface: 16001` from the toc (interfaces starting `16` map to CurseForge's
 **Forever** game type), replaces `@project-version@` with the tag, leaves out what `.pkgmeta` ignores,
 posts that version's section of `CHANGELOG.md` as the release notes (`.github/release-notes.sh`), and uploads `WantedDeadOrDead-<tag>.zip` to CurseForge and a
-GitHub release. Until a CurseForge project ID and token exist, it only makes the GitHub release.
+GitHub release. The zip carries two folders: the base and, moved out of `Poker/` by `.pkgmeta`, `WantedDeadOrDead_Poker`
+(the poker addon, which depends on the base and ships with it rather than as a listing of its own); CI checks both are there. Until a CurseForge project ID and token exist, it only makes the GitHub release.
 
 ## One-time CurseForge setup
 

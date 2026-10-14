@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-10-14
+
+- **Poker.** Texas hold'em at the Wanted table, as a second addon folder in the same download (Wanted: Dead Man's
+  Hand Poker, enabled by default, needing Wanted). Open it from the Poker page in the Wanted window or `/wanted poker`.
+  - Cash games and tournaments, for chips, for gold, or for practice against computer players on play money. A
+    four-step form walks the host through the table and explains it before it opens.
+  - Every deal is shuffled from a secret each player's client makes, so nobody, the host included, can choose the
+    deck, and every client checks the host's account of the hand afterwards.
+  - Gold tables are cash on the table: a buy-in goes to the host first, by trade or by mail, and the host owes each
+    player their stack when they leave. The Settlement list keeps every line, Pay fills the mail in at a mailbox, a
+    trade of the right amount marks a line paid, and a debt left two days counts against the host's reputation. The
+    open debts and the live table are mirrored to character macros so a crash loses nothing.
+  - Tournaments with a blind clock, late entry, optional antes, places by the order out and prizes by place; a
+    practice tournament against the bots plays to the end on its own.
+  - At the table: card and chip stacks by denomination, sounds you can pick, bet presets, hotkeys, pre-actions, a
+    strength line under your cards, the winning hand named, table talk, and a seat kept across a reload.
+  - Tables keep running in dungeons and raids; a boss fight pauses the clocks until the game lets messages through
+    again. `/wanted poker probe` says whether tables work where you stand.
 - Hotspots: a zone known only from kills and deaths (one you haven't been to yourself) now opens on the map when you
   click it, instead of saying "No map for this zone yet". The records carried the map id all along; Hotspots didn't
   read it.

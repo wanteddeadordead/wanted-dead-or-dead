@@ -12434,6 +12434,13 @@ end)()
 	host:Tick()
 	check(host:SeatOf("Cat-Realm") == nil and host:SeatOf("Dan-Realm") == nil, "seats unpaid after three minutes are given up")
 	check(#lines == 2 and lines[2].to == "Dan-Realm" and lines[2].amount == 200 and lines[2].kind == "refund", "Dan's 200 goes back; Cat, who paid nothing, is owed nothing")
+	-- The host lets a seat in by hand: with what they say they received, within the range; a tournament entry exactly
+	host:Receive("Fay-Realm", { k = "join", t = host.id, b = 1000 })
+	local okAdmit, whyAdmit = host:Admit("Fay-Realm", 300)
+	check(okAdmit == false and whyAdmit == "the buy-in is 4s to 20s", "less than the least buy-in: not let in: "..tostring(whyAdmit))
+	check(host:Admit("Fay-Realm", 600) and host.seats[host:SeatOf("Fay-Realm")].stack == 600 and host.seats[host:SeatOf("Fay-Realm")].bought == 600 and host.seats[host:SeatOf("Fay-Realm")].unpaid == nil, "she sent 6s of the 10s she asked for: let in with 6s")
+	check(host:Admit("Fay-Realm", 5) == false, "nothing due now")
+	host:Receive("Fay-Realm", { k = "leave", t = host.id })
 	-- A rebuy is chips once the money has come
 	host.phase, host.hand, host.hs = "waiting", nil, nil
 	host.seats[2].stack = 300
@@ -12581,6 +12588,9 @@ end)()
 	local function From(name, tbl) tbl.t, tbl.v = netHost.id, "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zt"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", name) end
 	From("Bob-Realm", { k = "join", b = 500 })
 	check(netHost.seats[2] and netHost.seats[2].unpaid == 500, "Bob's seat waits for 5g")
+	P.PokerTable:Show()
+	check(P.PokerTable:GetParts().seats[1].admit:IsShown() and P.PokerTable:GetParts().seats[1].admit.label._text == "Let in", "the host sees Let in on Bob's waiting seat")
+	check(P.PokerTable:GetParts().seats[1].trust._text ~= nil and P.PokerTable:GetParts().seats[0].trust._text ~= nil, "each seat shows the player's trust to pay beside the name")
 	Trade("Bob-Realm", 0, 500)
 	check(netHost.seats[2].unpaid == nil and netHost.seats[2].stack == 500, "Bob trades the host 5g: seated with his chips")
 	local receipt

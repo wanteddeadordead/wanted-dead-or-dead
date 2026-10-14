@@ -416,6 +416,18 @@ function Net:Handoff()
 	return private.host:ProposeHandoff()
 end
 
+---The host lets a seat in by hand, with the money they say they received.
+---@param name string
+---@param amount number
+---@return boolean ok
+---@return string? reason
+function Net:Admit(name, amount)
+	if not private.host then
+		return false, "you aren't hosting"
+	end
+	return private.host:Admit(name, amount)
+end
+
 ---Thinks better of a handoff waiting on its trade.
 function Net:CancelHandoff()
 	if private.host then private.host:CancelHandoff() end

@@ -392,7 +392,7 @@ function private.UpdateRow(row, item)
 	row.mark:Hide()
 	local ad = item
 	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
-	row.title:SetText(title..Theme:Colorize("  "..Name(ad.h), C.muted))
+	row.title:SetText(title..Theme:Colorize("  "..Name(ad.h), C.muted).."  "..Wanted.Reputation:GetPosterBadge(ad.h))
 	local stakes = ad.g and "gold" or "chips"
 	local lock = ad.p and Theme:Colorize("  -  password", C.amber) or ""
 	if ad.k == "t" then
@@ -479,6 +479,9 @@ function private.Sit(ad)
 	local stakes = ad.g and "gold" or "chips"
 	local function M(n) return Protocol:Money(n or 0, stakes) end
 	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
+	-- The host's record of paying what they owe, for the player to weigh before buying in
+	local trustLabel = Wanted.Reputation:GetPosterTrust(Wanted.Reputation:GetTally(ad.h))
+	local hostTrust = ad.g and (" %s's record of paying what they owe: %s."):format(Name(ad.h), trustLabel or "none yet") or ""
 	local function Go(amount, password)
 		local ok, why = Net:JoinTable(ad.id, amount, password)
 		if not ok then
@@ -509,7 +512,7 @@ function private.Sit(ad)
 			W:Dialog({
 				title = "Enter "..title,
 				text = (ad.g and ("Tournament, entry %s. "):format(M(entry)) or "Tournament, free to enter. ")..(ad.on and ("Under way at level %d: you enter late with the starting stack. "):format(ad.lv or 1) or "")..("Everyone starts with %d chips; the blinds rise every %d minutes until one player has them all. No rebuys.%s"):format(
-					ad.ss or 0, ad.lm or 0, ad.g and (" Your entry goes to %s first, by trade or by mail; the prizes are the entries, split by place, and come back from them the same way."):format(Name(ad.h)) or ""),
+					ad.ss or 0, ad.lm or 0, ad.g and (" Your entry goes to %s first, by trade or by mail; the prizes are the entries, split by place, and come back from them the same way.%s"):format(Name(ad.h), hostTrust) or ""),
 				confirmLabel = "Enter",
 				onConfirm = function() Go(entry, password) end,
 			})
@@ -520,7 +523,7 @@ function private.Sit(ad)
 	local function BuyIn(password)
 	W:Dialog({
 		title = "Sit at "..(ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")),
-		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. Cash on the table: your buy-in goes to %s first, by trade or by mail, and your stack comes back from them when you leave."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h))
+		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. Cash on the table: your buy-in goes to %s first, by trade or by mail, and your stack comes back from them when you leave.%s"):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h), hostTrust)
 			or ("Blinds %s/%s. Buy in for %s to %s chips. Your client checks every deal; chips are play money."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi)),
 		input = { placeholder = ad.g and "e.g. 2g 50s" or "Buy-in", value = M(ad.hi) },
 		confirmLabel = "Sit down",

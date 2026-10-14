@@ -272,7 +272,7 @@ function private.Build()
 	log:SetJustifyH("LEFT")
 	log:SetFading(false)
 	log:SetMaxLines(300)
-	log:SetInsertMode("TOP")
+	log:SetInsertMode(SCROLLING_MESSAGE_FRAME_INSERT_MODE_TOP or 1) -- the game's constant is a number; a string means bottom
 	log:EnableMouseWheel(true)
 	log:SetScript("OnMouseWheel", function(self, delta)
 		if delta > 0 then self:ScrollUp() else self:ScrollDown() end

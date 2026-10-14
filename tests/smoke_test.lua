@@ -13435,7 +13435,7 @@ end)()
 	local played = {}
 	local realPlaySound, realKit = PlaySound, SOUNDKIT
 	PlaySound = function(kit) played[#played + 1] = kit end
-	SOUNDKIT = { IG_ABILITY_PAGE_TURN = 836, LOOT_WINDOW_COIN_SOUND = 120, READY_CHECK = 8960, IG_QUEST_LIST_COMPLETE = 878, IG_CREATURE_NEUTRAL_SELECT = 871, MAP_PING = 3175 }
+	SOUNDKIT = { IG_ABILITY_PAGE_TURN = 836, LOOT_WINDOW_COIN_SOUND = 120, READY_CHECK = 8960, IG_QUEST_LIST_COMPLETE = 878, IG_CREATURE_NEUTRAL_SELECT = 871, MAP_PING = 3175, IG_SPELLBOOK_OPEN = 1156 }
 	local function Played(kit) local n = 0 for _, k in ipairs(played) do if k == kit then n = n + 1 end end return n end
 	local o = TableUI.Options()
 	check(o.sounds == true and o.fourColor == false and o.popOnTurn == true, "the defaults: sounds on, two colours, the table opens on your turn")
@@ -13544,7 +13544,7 @@ end)()
 	check(tostring(parts.seats[1].bet._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") == "Bet 20", "and so does the label on the felt beside him: "..tostring(parts.seats[1].bet._text))
 	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "F")
-	check(host.phase == "showdown" or host.hand.street == "done", "F folds")
+	check((host.phase == "showdown" or host.hand.street == "done") and Played(1156) >= 1, "F folds, with the cards' sound")
 	-- All-in at a gold table asks first
 	Net:Leave()
 	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, stakes = "gold" }, 2000), "a gold table")

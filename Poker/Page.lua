@@ -268,16 +268,17 @@ function private.RefreshBuyin(reset)
 	for _, b in ipairs(BlindsList()) do
 		choices[#choices + 1] = { key = b.key, label = Protocol:Money(b.sb, stakes).."/"..Protocol:Money(b.bb, stakes) }
 	end
-	private.kindNote:SetText(tournament and "Everyone starts with the same chips and plays until one player has them all. The blinds rise on a clock. No rebuys."
-		or "Players buy in for what they like, within your range, and leave whenever they like with what's in front of them.")
+	local cashLine = "CASH GAME: players buy in for what they like, within your range, and leave whenever they like with what's in front of them."
+	local tourneyLine = "TOURNAMENT: everyone starts with the same chips and plays until one player has them all. The blinds rise on a clock. No rebuys."
+	private.kindNote:SetText(Theme:Colorize(cashLine, tournament and C.faint or C.text).."\n\n"..Theme:Colorize(tourneyLine, tournament and C.text or C.faint))
 	private.stakes:Select(practice and "practice" or "people", true)
-	private.opponentsNote:SetText(practice and "Computer players take the other seats. Nothing is advertised, nothing is owed." or "Everyone with Wanted on your faction sees the table.")
+	private.opponentsNote:SetText(practice and "Computer players fill the other seats; nothing is advertised or owed." or "Anyone with Wanted on your faction can sit down.")
 	private.playForLabel:SetShown(not practice)
 	private.playFor:SetShown(not practice)
 	if not practice then private.playFor:Select(s.stakes == "gold" and "gold" or "chips", true) end
 	private.playForNote:SetShown(not practice)
-	private.playForNote:SetText(s.stakes == "gold" and "Real gold: each buy-in goes to the host first, and your stack comes back from them when you leave the table."
-		or "A friendly game for no stakes: nothing is sent and nothing is owed.")
+	private.playForNote:SetText(s.stakes == "gold" and "Real gold. Each buy-in goes to the host up front; your stack comes back from them when you leave."
+		or "A friendly game for no stakes. Nothing is sent, nothing is owed.")
 	private.unitLabel:SetShown(money)
 	private.unit:SetShown(money)
 	private.unitLabel:ClearAllPoints()

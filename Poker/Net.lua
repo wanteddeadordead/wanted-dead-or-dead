@@ -99,12 +99,45 @@ function private.OnMessage(tbl, sender)
 		end
 		return
 	end
+	if tbl.k == Protocol.LINES then
+		return private.OnLines(tbl, sender)
+	end
 	if private.host and Protocol.TO_HOST[tbl.k] then
 		private.host:Receive(sender, tbl)
 	end
 	if private.player and Protocol.TO_PLAYER[tbl.k] then
 		private.player:Receive(sender, tbl)
 	end
+end
+
+-- Settlement lines between two players, about no table in particular: a question (no lines) is answered with the
+-- open lines this character owes the asker; an answer is taken only for lines the sender owes this character
+function private.OnLines(tbl, sender)
+	local Gold = Poker.PokerGold
+	if type(tbl.l) ~= "table" then
+		local owed = Gold and Gold:DebtsTo(sender) or {}
+		if #owed > 0 then
+			local lines = {}
+			for i, l in ipairs(owed) do
+				lines[i] = { id = l.id, table = l.table, title = l.title, at = l.at, from = l.from, to = l.to, amount = l.amount, kind = l.kind }
+			end
+			Wanted.Sync:SendPlugin(Protocol.TAG, { k = Protocol.LINES, l = lines }, sender)
+		end
+		return
+	end
+	local me = Net:Me()
+	for _, l in ipairs(tbl.l) do
+		if type(l) == "table" and type(l.id) == "string" and #l.id <= 120 and l.from == sender and l.to == me and Protocol:IsCount(l.amount, 1) and type(l.table) == "string" then
+			private.Notify("settle", { id = l.id, table = l.table, title = type(l.title) == "string" and l.title or nil, host = sender, at = tonumber(l.at) or time(),
+				from = l.from, to = l.to, amount = l.amount, kind = type(l.kind) == "string" and l.kind or nil })
+		end
+	end
+end
+
+---Asks a player for the open lines they owe this character.
+---@param name string
+function Net:AskLines(name)
+	Wanted.Sync:SendPlugin(Protocol.TAG, { k = Protocol.LINES }, name)
 end
 
 function private.OnAd(ad, sender)
@@ -254,8 +287,12 @@ function Net:Leave()
 	end
 end
 
--- The host vanished and this seat is next: the table carries on from the backup, under this character
+-- The host vanished and this seat is next: the table carries on from the backup, under this character. Not a gold
+-- table: the host holds the money, so nobody else can carry it on (the client claims its stack instead)
 function private.TakeOver(backup)
+	if type(backup) == "table" and type(backup.cfg) == "table" and backup.cfg.stakes == "gold" then
+		return
+	end
 	local host = Host:Restore(backup, { name = Net:Me(), send = Send, ad = Advertise, now = Now, on = private.OnHostEvent, blocked = Blocked })
 	if not host then
 		return

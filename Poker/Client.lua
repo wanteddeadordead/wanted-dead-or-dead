@@ -11,6 +11,10 @@ local Protocol = Poker.PokerProtocol
 local Player = {}
 Player.__index = Player
 
+local function Short(name)
+	return strmatch(name, "^(.-)%-") or name
+end
+
 ---A player's client. Nothing happens until Join.
 ---@param o table { name, send = fun(target, tbl): boolean?, now = fun(): number, on = fun(event, ...)?, blocked = fun(): boolean? }
 ---A send that returns false didn't go (the game refused it); blocked says the game is refusing messages for now.
@@ -127,7 +131,7 @@ function Player:Receive(sender, tbl)
 		if type(l) == "table" and type(l.id) == "string" and Protocol:IsName(l.from) and Protocol:IsName(l.to) and Protocol:IsCount(l.amount, 1)
 			and (l.from == self.name or l.to == self.name) and (l.from == sender or l.to == sender) then
 			self.on("settle", { id = l.id, table = self.id, title = type(l.title) == "string" and l.title or nil, host = sender, at = time(),
-				from = l.from, to = l.to, amount = l.amount })
+				from = l.from, to = l.to, amount = l.amount, kind = type(l.kind) == "string" and l.kind or nil })
 		end
 	end
 end
@@ -275,6 +279,30 @@ function Player:Rank()
 	return nil
 end
 
+---The host of a gold table is gone for good: the table is over, and the host owes this seat what it had at the start
+---of the hand (a hand cut short returns its bets), or what was paid toward a seat never dealt in. A claim, until the
+---host's own line for it arrives.
+function Player:Lost()
+	local st = self.state
+	local me = self.seat and st.seats[self.seat]
+	self.left = true
+	if me then
+		local amount, kind
+		if me.unpaid then
+			amount, kind = me.received or 0, "refund"
+		elseif st.cfg.kind == "tournament" then
+			if st.phase ~= "finished" then amount, kind = me.bought or 0, "refund" end
+		else
+			amount, kind = (me.s or 0) + (me.tot or 0) + (me.pending or 0), "cashout"
+		end
+		if amount and amount >= 1 then
+			self.on("hostLost", { id = self.id..":out:"..Short(self.name), table = self.id, title = st.cfg.title, host = self.host, at = time(),
+				from = self.host, to = self.name, amount = amount, kind = kind, claim = true })
+		end
+	end
+	self.on("left")
+end
+
 ---Runs the clock: an unanswered join, a stale state, a host gone quiet. Call about once a second.
 function Player:Tick()
 	if not self.id or self.left then
@@ -295,7 +323,16 @@ function Player:Tick()
 	local silent = now - self.lastHeard
 	if silent >= Protocol.HOST_TIMEOUT then
 		local rank = self:Rank()
-		if rank and self.backup and silent >= Protocol.HOST_TIMEOUT + (rank - 1) * Protocol.TAKEOVER_STEP and not self.takingOver then
+		local gold = self.state.cfg and self.state.cfg.stakes == "gold"
+		if gold then
+			-- Nobody else can be the bank: the table is over once the host is truly gone
+			if silent >= Protocol.HOST_LOST_SECONDS then
+				return self:Lost()
+			elseif not self.saidGone then
+				self.saidGone = true
+				self.on("hostGone")
+			end
+		elseif rank and self.backup and silent >= Protocol.HOST_TIMEOUT + (rank - 1) * Protocol.TAKEOVER_STEP and not self.takingOver then
 			self.takingOver = true
 			self.on("takeover", self.backup)
 		elseif not self.saidGone then

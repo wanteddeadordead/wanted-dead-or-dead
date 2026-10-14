@@ -403,6 +403,11 @@ C_ChatInfo = { RegisterAddonMessagePrefix = function() return 0 end, SendAddonMe
 	addonSent[#addonSent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target } return 0
 end, SendChatMessage = function(msg, channel, _, target) chatSent[#chatSent + 1] = channel..": "..msg..(channel == "WHISPER" and target and " >"..target or "") end }
 C_AddOns = { GetAddOnMetadata = function() return "0.1.0-dev" end }
+mockMacros = {} -- global: the poker vault's character macros
+function GetMacroIndexByName(name) for i, m in ipairs(mockMacros) do if m.name == name then return i end end return 0 end
+function GetMacroBody(index) return mockMacros[index] and mockMacros[index].body end
+function EditMacro(index, name, icon, body) if mockMacros[index] then mockMacros[index].body = body end return index end
+function CreateMacro(name, icon, body) mockMacros[#mockMacros + 1] = { name = name, body = body } return #mockMacros end
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c).."c" end }
 C_Log = nil
 Enum = { TooltipDataType = { Unit = 2 } }
@@ -12370,14 +12375,14 @@ end)()
 	parts.call._scripts.OnClick(parts.call)
 	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
 	parts.call._scripts.OnClick(parts.call)
-	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen(" win ")), "the showdown, with the winner on screen")
+	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen("Split pot")), "the showdown, with the winner on screen: "..host.phase..", "..tostring(parts.status._text))
 	check(type(bobs.cards[1].card) == "number", "Bob's cards are shown at the showdown")
 	local raised = 0
 	for _, c in ipairs(parts.board) do if c.raised then raised = raised + 1 end end
 	for _, s in ipairs({ mine, bobs }) do for _, c in ipairs(s.cards) do if c.raised then raised = raised + 1 end end end
 	check(raised == 5, "the winning five rise from the board and the winner's hand: "..raised)
 	check(parts.lock.state == "ok" and parts.lock:IsShown() and not Logged("verified"), "our client verified the host's hand: a check mark, nothing in the log: "..tostring(parts.lock.state))
-	check(Logged(" wins ") and Logged("River:"), "the result and the river are logged")
+	check((Logged(" wins ") or Logged("Split pot")) and Logged("River:"), "the result and the river are logged")
 	-- Sit out and come back
 	parts.sitOut._scripts.OnClick(parts.sitOut)
 	check(host.seats[1].out == "sitting" and parts.sitOut.label._text == "I'm back", "sitting out from the next hand")
@@ -12392,64 +12397,116 @@ end)()
 	check(OnScreen("HOST A TABLE"), "the page is back to the host form")
 end)()
 
--- Poker gold: a gold table settles with the host as the bank when a player leaves or the table closes; the lines
--- are paid by mail the way bounties are; a debt left unpaid two days counts against the debtor's reputation
+-- Poker gold: cash on the table. A seat at a gold table waits, with no chips, until its buy-in has reached the host
+-- (by trade or by mail); when a player leaves, the host owes them their stack, as a line both clients keep; the lines
+-- are paid by trade or by mail; a debt the host leaves two days counts against their reputation; the open debts and
+-- the table under way live in the vault (character macros), so a crash loses nothing
 ;(function()
 	local P = WantedPokerTestNS
-	local Host, Client, Gold, Net = P.PokerHost, P.PokerClient, P.PokerGold, P.PokerNet
+	local Host, Client, Gold, Net, Vault, Protocol = P.PokerHost, P.PokerClient, P.PokerGold, P.PokerNet, P.PokerVault, P.PokerProtocol
 	local now = 9000
 	local sent = {}
 	local function Sent(to, kind) for i = #sent, 1, -1 do local m = sent[i] if m.to == to and (m.tbl and m.tbl.k == kind or m.line and kind == "own") then return m end end end
-	local host = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, stakes = "gold", title = "Gold Den" },
+	local lines = {}
+	local host = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 5, stakes = "gold", title = "Gold Den" },
 		send = function(target, tbl) sent[#sent + 1] = { to = target, tbl = tbl } end, now = function() return now end,
-		on = function(event, line) if event == "settle" then sent[#sent + 1] = { to = "own", line = line } end end })
+		on = function(event, line) if event == "settle" then sent[#sent + 1] = { to = "own", line = line } lines[#lines + 1] = line end end })
 	host:Receive("Ann-Realm", { k = "join", t = host.id, b = 2000 })
 	host:Receive("Bob-Realm", { k = "join", t = host.id, b = 1000 })
+	check(host.seats[1].stack == 2000 and host.seats[1].unpaid == nil, "the host's own seat is paid: they hold the money")
+	check(host.seats[2].stack == 0 and host.seats[2].unpaid == 1000 and host.seats[2].bought == 0, "Bob's seat waits for his buy-in")
+	local welcome = Sent("Bob-Realm", "welcome")
+	check(welcome.tbl.st.seats[2].unpaid == 1000 and welcome.tbl.st.holding == 0, "and his state says what's due; the host holds nothing yet")
+	check(select(2, host:Players()) == 1, "an unpaid seat is not dealt in")
+	check(host:Paid("Bob-Realm", 400, "trade") and host.seats[2].unpaid == 1000 and host.seats[2].received == 400 and host.seats[2].stack == 0, "part of it: still waiting")
+	check(host:Paid("Bob-Realm", 700, "mail") and host.seats[2].unpaid == nil and host.seats[2].stack == 1000 and host.seats[2].bought == 1000, "the rest, and a bit over: dealt in with the buy-in")
+	check(#lines == 1 and lines[1].kind == "refund" and lines[1].amount == 100 and lines[1].from == "Ann-Realm" and lines[1].to == "Bob-Realm", "the 100 over is owed straight back")
+	check(select(2, host:Players()) == 2 and host:Holding() == 1000, "dealt in; the host holds his 1000")
+	-- A seat whose buy-in never comes is given up; part of one comes back
 	host:Receive("Cat-Realm", { k = "join", t = host.id, b = 500 })
-	-- Stacks as hands would leave them: Bob down, Cat up, then Bob rebuys and loses that too
-	host.seats[2].stack, host.seats[3].stack = 700, 900
-	host:Receive("Bob-Realm", { k = "rebuy", t = host.id, b = 300 })
-	check(host.seats[2].stack == 1000 and host.seats[2].bought == 1300, "a rebuy adds to the stack and to what was bought")
+	host:Receive("Dan-Realm", { k = "join", t = host.id, b = 500 })
+	host:Paid("Dan-Realm", 200, "trade")
+	now = now + Protocol.PAY_SECONDS + 1
+	host:Tick()
+	check(host:SeatOf("Cat-Realm") == nil and host:SeatOf("Dan-Realm") == nil, "seats unpaid after three minutes are given up")
+	check(#lines == 2 and lines[2].to == "Dan-Realm" and lines[2].amount == 200 and lines[2].kind == "refund", "Dan's 200 goes back; Cat, who paid nothing, is owed nothing")
+	-- A rebuy is chips once the money has come
+	host.phase, host.hand, host.hs = "waiting", nil, nil
+	host.seats[2].stack = 300
+	host:Receive("Bob-Realm", { k = "rebuy", t = host.id, b = 700 })
+	check(host.seats[2].stack == 300 and host.seats[2].rebuyDue == 700 and Sent("Bob-Realm", "state").tbl.st.seats[2].rebuyDue == 700, "a rebuy asked is chips only once paid; Bob is told what's due")
+	check(host:Paid("Bob-Realm", 700, "trade") and host.seats[2].stack == 1000 and host.seats[2].bought == 1700 and host.seats[2].rebuyDue == nil, "paid: the chips are his")
+	check(host:Paid("Eve-Realm", 50, "trade") == false and lines[#lines].to == "Eve-Realm" and lines[#lines].kind == "refund", "money from someone with nothing due is owed back")
+	-- Leaving: the host owes the stack, never the other way round
 	host.seats[2].stack = 600
 	host:Receive("Bob-Realm", { k = "leave", t = host.id })
 	local bobLine = Sent("Bob-Realm", "settle")
-	check(bobLine and bobLine.tbl.l.from == "Bob-Realm" and bobLine.tbl.l.to == "Ann-Realm" and bobLine.tbl.l.amount == 700 and bobLine.tbl.l.id == host.id..":1", "leaving down 700 on 1300 bought: Bob owes the host 700")
-	local own = Sent("own", "own")
-	check(own and own.line.id == host.id..":1" and own.line.from == "Bob-Realm", "the host's own ledger gets the same line")
+	check(bobLine and bobLine.tbl.l.from == "Ann-Realm" and bobLine.tbl.l.to == "Bob-Realm" and bobLine.tbl.l.amount == 600 and bobLine.tbl.l.kind == "cashout", "leaving with 600: the host owes Bob 600")
+	check(Sent("own", "own").line.id == bobLine.tbl.l.id, "the host's own ledger gets the same line")
+	host:Receive("Eve-Realm", { k = "join", t = host.id, b = 800 })
+	host:Paid("Eve-Realm", 800, "trade")
+	host.seats[host:SeatOf("Eve-Realm")].stack = 950
 	host:Close()
-	local catLine = Sent("Cat-Realm", "settle")
-	check(catLine and catLine.tbl.l.from == "Ann-Realm" and catLine.tbl.l.to == "Cat-Realm" and catLine.tbl.l.amount == 400, "closing settles the rest: the host owes Cat 400")
-	check(Sent("Ann-Realm", "settle") == nil, "the host, the bank, gets no line of their own")
+	local eveLine = Sent("Eve-Realm", "settle")
+	check(eveLine and eveLine.tbl.l.amount == 950 and eveLine.tbl.l.kind == "cashout" and Sent("Ann-Realm", "settle") == nil, "closing owes Eve her stack; the host has no line of their own")
 	-- A chips table settles nothing
 	sent = {}
 	local chips = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4 }, send = function(target, tbl) sent[#sent + 1] = { to = target, tbl = tbl } end, now = function() return now end })
 	chips:Receive("Ann-Realm", { k = "join", t = chips.id, b = 2000 })
 	chips:Receive("Bob-Realm", { k = "join", t = chips.id, b = 1000 })
+	check(chips.seats[2].stack == 1000 and chips.seats[2].unpaid == nil, "play chips are dealt at once")
 	chips.seats[2].stack = 100
 	chips:Receive("Bob-Realm", { k = "leave", t = chips.id })
 	check(Sent("Bob-Realm", "settle") == nil, "play chips settle nothing")
 
 	-- A player's client takes a line only from its host and only about itself
-	local lines = {}
-	local player = Client:New({ name = "Cat-Realm", send = function() end, now = function() return now end, on = function(event, line) if event == "settle" then lines[#lines + 1] = line end end })
+	local taken = {}
+	local player = Client:New({ name = "Cat-Realm", send = function() end, now = function() return now end, on = function(event, line) if event == "settle" then taken[#taken + 1] = line end end })
 	player:Join("Ann-Realm", host.id, 500)
-	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = host.id..":2", from = "Ann-Realm", to = "Cat-Realm", amount = 400, title = "Gold Den" } })
-	check(#lines == 1 and lines[1].amount == 400 and lines[1].host == "Ann-Realm" and lines[1].title == "Gold Den", "the line is taken")
+	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = host.id..":9", from = "Ann-Realm", to = "Cat-Realm", amount = 400, title = "Gold Den", kind = "cashout" } })
+	check(#taken == 1 and taken[1].amount == 400 and taken[1].host == "Ann-Realm" and taken[1].title == "Gold Den" and taken[1].kind == "cashout", "the line is taken")
 	player:Receive("Bob-Realm", { k = "settle", t = host.id, l = { id = "x", from = "Bob-Realm", to = "Cat-Realm", amount = 999 } })
 	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = "y", from = "Dan-Realm", to = "Eve-Realm", amount = 5 } })
 	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = "z", from = "Ann-Realm", to = "Cat-Realm", amount = 0.5 } })
-	check(#lines == 1, "not from someone else, not about others, not a fraction of gold")
+	check(#taken == 1, "not from someone else, not about others, not a fraction of silver")
+
+	-- The host of a gold table gone for good: the table is over and the seat claims its stack as it stood at the
+	-- start of the hand; nobody takes the table over, since nobody else holds the money
+	local events = {}
+	local me = Net:Me()
+	local gone = Client:New({ name = "Bob-Realm", send = function() end, now = function() return now end, on = function(event, ...) events[#events + 1] = { event, ... } end })
+	gone:Join("Ann-Realm", "Ann-Realm#lost", 1000)
+	gone.backup = { id = "Ann-Realm#lost", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, stakes = "gold" }, seats = {} }
+	gone:Receive("Ann-Realm", { k = "welcome", t = "Ann-Realm#lost", st = { t = "Ann-Realm#lost", host = "Ann-Realm", e = 1, q = 1, me = 2, phase = "playing", open = true,
+		cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, stakes = "gold", title = "Lost Den" }, seats = { [1] = { n = "Ann-Realm", s = 2000 }, [2] = { n = "Bob-Realm", s = 940, tot = 60, bought = 1000 } } } })
+	now = now + Protocol.HOST_TIMEOUT + 1
+	gone:Tick()
+	local function Count(event) local n = 0 for _, e in ipairs(events) do if e[1] == event then n = n + 1 end end return n end
+	check(Count("hostGone") == 1 and Count("takeover") == 0 and Count("hostLost") == 0 and not gone.left, "half a minute quiet: the host has gone quiet, nobody takes over a gold table")
+	now = now + Protocol.HOST_LOST_SECONDS
+	gone:Tick()
+	local lost
+	for _, e in ipairs(events) do if e[1] == "hostLost" then lost = e[2] end end
+	check(lost and lost.claim and lost.from == "Ann-Realm" and lost.to == "Bob-Realm" and lost.amount == 1000 and lost.kind == "cashout" and lost.id == "Ann-Realm#lost:out:Bob" and gone.left and Count("left") == 1,
+		"two minutes: the host is lost, the seat claims 1000 (its stack plus the hand's bets) and the table is over")
+	-- A claim gives way to the host's own line for the same table and player, and never replaces one
+	wipe(P.db.ledger)
+	Gold:Add({ id = "X:out:Me", table = "X", title = "Lost Den", host = "Ann-Realm", at = time(), from = "Ann-Realm", to = me, amount = 1000, kind = "cashout", claim = true })
+	Gold:Add({ id = "X:3", table = "X", title = "Lost Den", host = "Ann-Realm", at = time(), from = "Ann-Realm", to = me, amount = 980, kind = "cashout" })
+	check(#Gold:Lines() == 1 and Gold:Lines()[1].id == "X:3", "the host's line replaces the claim")
+	Gold:Add({ id = "X:out:Me", table = "X", title = "Lost Den", host = "Ann-Realm", at = time(), from = "Ann-Realm", to = me, amount = 1000, kind = "cashout", claim = true })
+	check(#Gold:Lines() == 1, "a claim after the host's line is dropped")
 
 	-- The ledger, and paying by mail
-	local me = Net:Me()
 	wipe(P.db.ledger)
-	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 10, from = me, to = "Ann-Realm", amount = 150 })
-	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 10, from = me, to = "Ann-Realm", amount = 150 })
-	Gold:Add({ id = "T1:2", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 3 * 86400, from = "Bob-Realm", to = me, amount = 60 })
-	Gold:Add({ id = "T1:3", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 20, from = me, to = "Bob-Realm", amount = 40 })
-	check(#Gold:Lines() == 3 and Gold:Owing() == 190, "lines are kept once; you owe 190 in all")
+	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = me, at = time() - 10, from = me, to = "Ann-Realm", amount = 150, kind = "cashout" })
+	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = me, at = time() - 10, from = me, to = "Ann-Realm", amount = 150, kind = "cashout" })
+	Gold:Add({ id = "T1:2", table = "T1", title = "Gold Den", host = "Bob-Realm", at = time() - 3 * 86400, from = "Bob-Realm", to = me, amount = 60, kind = "cashout" })
+	Gold:Add({ id = "T1:3", table = "T1", title = "Gold Den", host = me, at = time() - 20, from = me, to = "Bob-Realm", amount = 40, kind = "prize" })
+	Gold:Add({ id = "T1:in:Bob:1", table = "T1", title = "Gold Den", host = me, at = time() - 30, from = "Bob-Realm", to = me, amount = 500, kind = "buyin", paid = time() - 30, paidHow = "trade" })
+	check(#Gold:Lines() == 4 and Gold:Owing() == 190, "lines are kept once; a receipt is no debt; you owe 190 in all")
 	local function Line(id) for _, l in ipairs(Gold:Lines()) do if l.id == id then return l end end end
-	check(Gold:IsOverdue(Line("T1:2")) and not Gold:IsOverdue(Line("T1:1")), "a line unpaid two days is overdue")
+	check(Gold:IsOverdue(Line("T1:2")) and not Gold:IsOverdue(Line("T1:1")) and not Gold:IsOverdue(Line("T1:in:Bob:1")), "a debt unpaid two days is overdue; a receipt never is")
 	local realMoney, realSendMoney, realCount, realHeader = GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo
 	GetMoney = function() return 500 * 10000 end -- 500g: 50,000 silver, the chips of a gold table
 	check(Gold:CanBuyIn(49810) == true and not Gold:CanBuyIn(49811), "a buy-in is covered by the money in the bags less what you owe: 50,000s - 190s")
@@ -12475,26 +12532,141 @@ end)()
 	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 * 100 end
 	Fire("MAIL_INBOX_UPDATE")
 	check(Line("T1:2").paid, "the creditor's client marks the line paid when the mail arrives")
-	-- Reputation: a debt left unpaid counts against its debtor; one paid counts for them
-	Gold:Add({ id = "T2:1", table = "T2", title = "Gold Den", host = "Ann-Realm", at = time() - 3 * 86400, from = "Stiff-Realm", to = me, amount = 500 })
+	-- Reputation: a debt left unpaid counts against its debtor; one paid counts for them; a claim counts for nothing
+	Gold:Add({ id = "T2:1", table = "T2", title = "Gold Den", host = "Stiff-Realm", at = time() - 3 * 86400, from = "Stiff-Realm", to = me, amount = 500, kind = "cashout" })
+	Gold:Add({ id = "T3:out:Me", table = "T3", title = "Gold Den", host = "Vague-Realm", at = time() - 3 * 86400, from = "Vague-Realm", to = me, amount = 500, kind = "cashout", claim = true })
 	local tally = ns.Reputation:GetTally("Stiff-Realm")
 	check(tally.unpaid == 1 and tally.points < 0, "a poker debt two days unpaid counts like a bounty left unpaid")
 	check(ns.Reputation:GetTally("Bob-Realm").paid >= 1, "a poker debt paid counts like a bounty paid")
+	check(ns.Reputation:GetTally("Vague-Realm").unpaid == 0, "a claim this client made counts for nothing until the host's own line comes")
 	GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo = realMoney, realSendMoney, realCount, realHeader
 
-	-- The page's Settlement view
+	-- The page's Settlement view (the paid debts dropped first: the list shows four rows)
+	for i = #P.db.ledger, 1, -1 do if P.db.ledger[i].paid and P.db.ledger[i].kind ~= "buyin" then tremove(P.db.ledger, i) end end
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	ns.UI:Show("poker")
 	local switch
-	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Settlement (1)" then switch = f end end
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Settlement (2)" then switch = f end end
 	check(switch, "the Settlement view counts what's open")
 	switch._scripts.OnClick(switch)
-	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid"), "the lines show in gold and silver, the overdue one marked")
+	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid") and OnScreen("Received 5g from Bob") and OnScreen("the host dropped"), "the lines show in gold and silver: the overdue one marked, the receipt, the claim")
 	-- Amounts typed and shown
-	local Protocol = P.PokerProtocol
 	check(Protocol:Money(250, "gold") == "2g 50s" and Protocol:Money(1000, "gold") == "10g" and Protocol:Money(5, "gold") == "5s" and Protocol:Money(250, "chips") == "250", "silver shows as gold and silver")
 	check(Protocol:ParseAmount("2g 50s", "gold") == 250 and Protocol:ParseAmount("10g", "gold") == 1000 and Protocol:ParseAmount("75s", "gold") == 75 and Protocol:ParseAmount("2.5", "gold") == 250
 		and Protocol:ParseAmount("2g50s", "gold") == 250 and Protocol:ParseAmount("abc", "gold") == nil and Protocol:ParseAmount("400", "chips") == 400 and Protocol:ParseAmount("4.5", "chips") == nil, "typed money is read")
+
+	-- Trades: a buy-in traded to the host seats the player; the host's trade pays a line; the inbox takes a mailed buy-in
+	wipe(P.db.ledger)
+	local money = 1000 * 10000
+	local realGetMoney, realUnitName, realGetUnitName = GetMoney, UnitName, GetUnitName
+	GetMoney = function() return money end
+	local tradeWith = "Bob-Realm"
+	GetUnitName = function(unit, full) if unit == "NPC" then return tradeWith end return realGetUnitName(unit, full) end
+	local give, get = 0, 0
+	GetPlayerTradeMoney = function() return give end
+	GetTargetTradeMoney = function() return get end
+	local function Trade(name, giveCopper, getCopper)
+		tradeWith, give, get = name, giveCopper, getCopper
+		Fire("TRADE_SHOW")
+		Fire("TRADE_ACCEPT_UPDATE", 1, 1)
+		money = money - giveCopper + getCopper
+		Fire("TRADE_CLOSED")
+	end
+	check(Net:HostTable({ sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 4, stakes = "gold", title = "Trade Den" }, 1000), "a gold table through Net")
+	local netHost = Net:HostedTable()
+	local function From(name, tbl) tbl.t, tbl.v = netHost.id, "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zt"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", name) end
+	From("Bob-Realm", { k = "join", b = 500 })
+	check(netHost.seats[2] and netHost.seats[2].unpaid == 500, "Bob's seat waits for 5g")
+	Trade("Bob-Realm", 0, 500 * 100)
+	check(netHost.seats[2].unpaid == nil and netHost.seats[2].stack == 500, "Bob trades the host 5g: seated with his chips")
+	local receipt
+	for _, l in ipairs(Gold:Lines()) do if l.kind == "buyin" and l.from == "Bob-Realm" then receipt = l end end
+	check(receipt and receipt.paid and receipt.paidHow == "trade" and receipt.amount == 500 and receipt.to == me, "the host's ledger has the receipt")
+	From("Bob-Realm", { k = "leave" })
+	local owed
+	for _, l in ipairs(Gold:Lines()) do if l.kind == "cashout" and l.to == "Bob-Realm" and not l.paid then owed = l end end
+	check(owed and owed.amount == 500 and owed.from == me, "Bob leaves: the host owes him his 5g")
+	Trade("Bob-Realm", 500 * 100, 0)
+	check(owed.paid and owed.paidHow == "trade", "the host trades it to him: paid")
+	From("Cal-Realm", { k = "join", b = 300 })
+	GetInboxNumItems = function() return 1 end
+	GetInboxHeaderInfo = function() return nil, nil, "Cal-Realm", "Wanted poker buy-in "..netHost.id, 300 * 100 end
+	Fire("MAIL_INBOX_UPDATE")
+	Fire("MAIL_INBOX_UPDATE")
+	local _, cal = netHost:SeatOf("Cal-Realm")
+	check(cal and cal.stack == 300 and cal.unpaid == nil and netHost:Holding() == 300, "Cal's mailed buy-in seats her, counted once")
+	GetInboxNumItems, GetInboxHeaderInfo = realCount, realHeader
+	-- The vault follows the table; closing sums up what the host owes
+	clock = clock + 2
+	RunTimers()
+	local kept = Vault:Load()
+	check(kept and kept.table and kept.table.id == netHost.id and #kept.table.seats == 1 and kept.table.seats[1].n == "Cal-Realm" and kept.table.seats[1].s == 300, "the vault holds the table: Cal's seat and stack")
+	local from = #printed
+	Net:Leave()
+	local summary = false
+	for i = from + 1, #printed do summary = summary or (printed[i]:find("table closed", 1, true) and printed[i]:find("Cal 3g", 1, true)) ~= nil end
+	check(summary, "closing says who's owed what")
+	clock = clock + 2
+	RunTimers()
+	kept = Vault:Load()
+	check(kept and kept.table == nil and #kept.lines == 1 and kept.lines[1].to == "Cal-Realm", "the vault keeps the open debt and no table")
+	GetMoney, UnitName, GetUnitName, GetPlayerTradeMoney, GetTargetTradeMoney = realGetMoney, realUnitName, realGetUnitName, nil, nil
+
+	-- Lines asked for and answered between players: a host sends the debts it owes the asker; an answer is taken only
+	-- for lines the sender owes this character
+	addonSent = {}
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:zl1:1/1:"..ns.Sync:Encode({ k = "lines", v = "0.1.0-dev" }), "WHISPER", "Cal-Realm")
+	local answer
+	for _, m in ipairs(addonSent) do if m.target == "Cal-Realm" and m.text:find("^P:") then answer = ns.Sync:Decode(m.text:match("^P:%w+:%d+/%d+:(.*)$")) end end
+	check(answer and answer.k == "lines" and #answer.l == 1 and answer.l[1].amount == 300 and answer.l[1].to == "Cal-Realm", "Cal asks: the host answers with the 3g it owes her")
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:zl2:1/1:"..ns.Sync:Encode({ k = "lines", v = "0.1.0-dev", l = { { id = "A:9", table = "A", from = "Ann-Realm", to = me, amount = 55, kind = "cashout", at = time() }, { id = "A:10", table = "A", from = "Zed-Realm", to = me, amount = 66, kind = "cashout", at = time() } } }), "WHISPER", "Ann-Realm")
+	check(Line("A:9") and Line("A:9").amount == 55 and Line("A:10") == nil, "Ann's answer: her own debt is taken, one she claims for Zed is not")
+
+	-- The vault: data kept across a crash in macros, in chunks, written out of combat
+	local saved = {}
+	local function Roundtrip(data)
+		Vault:Save(data)
+		clock = clock + 2
+		RunTimers()
+		return Vault:Load()
+	end
+	local long = "" -- hashes: text that doesn't compress away
+	for i = 1, 10 do long = long..ns.Crypto:Hex(ns.Crypto:SHA512("chunk"..i)) end
+	local back = Roundtrip({ v = 1, lines = { { id = "L:1", amount = 7 } }, text = long })
+	check(back and back.lines[1].id == "L:1" and back.text == long and #mockMacros >= 2, "a kilobyte of data comes back whole from several macros: "..#mockMacros)
+	back = Roundtrip({ small = true })
+	check(back and back.small == true and mockMacros[2].body == "", "smaller data empties the chunks it no longer needs")
+	local realLockdown = InCombatLockdown
+	InCombatLockdown = function() return true end
+	Vault:Save({ later = true })
+	clock = clock + 2
+	RunTimers()
+	check(Vault:Load().small == true, "nothing is written in combat")
+	InCombatLockdown = realLockdown
+	Fire("PLAYER_REGEN_ENABLED")
+	check(Vault:Load().later == true, "it's written once the fight is over")
+	-- A crash with a table under way: at the next login every seat is owed what it had
+	Roundtrip({ v = 1, lines = { { id = "V:1", table = "V", title = "Old Den", host = me, from = me, to = "Zed-Realm", amount = 70, kind = "cashout", at = time() } },
+		table = { id = "Me#crash", title = "Crashed Den", kind = "cash", seats = { { n = "Bob-Realm", s = 650, b = 500 }, { n = "Cat-Realm", s = 0, b = 0, u = 300, r = 100 }, { n = "Dan-Realm", s = 0, b = 200 } } } })
+	wipe(P.db.ledger)
+	from = #printed
+	Gold:Recover()
+	check(Line("V:1") and Line("V:1").amount == 70, "a debt the saved variables lost is back from the vault")
+	check(Line("Me#crash:out:Bob") and Line("Me#crash:out:Bob").amount == 650 and Line("Me#crash:out:Bob").kind == "cashout" and Line("Me#crash:out:Bob").from == me, "Bob is owed the 650 he had")
+	check(Line("Me#crash:out:Cat") and Line("Me#crash:out:Cat").amount == 100 and Line("Me#crash:out:Cat").kind == "refund", "Cat, never dealt in, is owed the 100 she'd paid")
+	check(Line("Me#crash:out:Dan") == nil, "Dan, busted, is owed nothing")
+	local told = false
+	for i = from + 1, #printed do told = told or printed[i]:find("ended with the last session", 1, true) ~= nil end
+	check(told, "and the host is told")
+	clock = clock + 2
+	RunTimers()
+	kept = Vault:Load()
+	check(kept.table == nil and #kept.lines == 3, "the vault now holds the three debts and no table")
+	wipe(P.db.ledger)
+	Gold:Persist()
+	clock = clock + 2
+	RunTimers()
+	check(Vault:Load() == nil, "nothing owed, nothing kept")
 end)()
 
 -- Poker tournaments and passwords: a locked table asks for its password; a tournament registers, starts on the host's
@@ -12573,7 +12745,10 @@ end)()
 	dan.player:Join("Ann-Realm", t.id, 100)
 	Flush()
 	check(ann.player.seat == 1 and bob.player.seat == 2 and cat.player.seat == 3 and dan.player.seat == nil and Last("Dan-Realm", "refused")[2] == "the entry is 2g", "three enter at the entry; a wrong amount is refused")
-	check(t.seats[1].stack == 1000 and t.seats[2].bought == 200, "everyone starts with the same chips, having paid the entry")
+	check(t.seats[1].stack == 1000 and t.seats[2].stack == 0 and t.seats[2].unpaid == 200 and bob.player.state.seats[2].unpaid == 200, "the host's own seat is paid; the others wait for their entry to arrive, and are told")
+	check(t:Paid("Bob-Realm", 200, "trade") and t:Paid("Cat-Realm", 200, "mail"), "the entries arrive by trade and by mail")
+	Flush()
+	check(t.seats[2].stack == 1000 and t.seats[2].bought == 200 and t.seats[2].unpaid == nil and t.seats[3].stack == 1000, "everyone starts with the same chips, having paid the entry")
 	Tick(3)
 	check(t.phase == "waiting" and t.hand == nil and not ann.player.state.started, "no hand before the host starts it")
 	t:Receive("Bob-Realm", { k = "rebuy", t = t.id, b = 500 })
@@ -12622,20 +12797,21 @@ end)()
 	check(t.seats[2].stack == bobStack - 30 and not (t.hand and t.hand.seats[2]), "Bob's client answers nothing: a big blind gone, dealt out this hand")
 	nodes["Bob-Realm"] = bob
 	PlayOut()
-	-- Leaving forfeits: Bob goes out third, owing his entry; Cat second; Ann wins and the prizes are settled
+	-- Leaving forfeits: Bob goes out third, his entry stays with the host; then Cat takes every chip and is owed the prize
 	bob.player:Leave()
 	Flush()
 	check(t.entrants["Bob-Realm"].place == 3 and t.entrants["Bob-Realm"].left, "leaving a tournament takes the current place")
-	local bobLine = Last("Bob-Realm", "settle")
-	check(bobLine and bobLine[2].from == "Bob-Realm" and bobLine[2].to == "Ann-Realm" and bobLine[2].amount == 200, "and forfeits the entry to the bank")
-	cat.player:Leave()
+	check(Last("Bob-Realm", "settle") == nil, "and forfeits the entry: nothing comes back")
+	t.phase, t.hand, t.hs = "waiting", nil, nil
+	t.seats[1].stack, t.seats[3].stack = 0, 3000
+	t:Eliminate(1)
+	t:Finish()
 	Flush()
-	Tick(Protocol.SHOWDOWN_SECONDS + 2)
-	check(t.phase == "finished", "the last player with chips wins: "..t.phase)
+	check(t.phase == "finished", "one player with every chip: finished")
 	local st = ann.player.state
-	check(st.standings and st.standings[1].name == "Ann-Realm" and st.standings[1].place == 1 and st.standings[1].prize == 600 and st.standings[2].name == "Cat-Realm" and st.standings[3].name == "Bob-Realm", "standings with the winner's prize, the whole pool with three entered")
-	check(#settled == 2 and ads[#ads].c == 1, "two lines (the two who forfeited); the host's own prize is implied; the ad says the table is done")
-	check(Last("Cat-Realm", "settle")[2].amount == 200, "Cat owes her entry too")
+	check(st.standings and st.standings[1].name == "Cat-Realm" and st.standings[1].place == 1 and st.standings[1].prize == 600 and st.standings[2].name == "Ann-Realm" and st.standings[3].name == "Bob-Realm", "standings with the winner's prize, the whole pool with three entered")
+	check(#settled == 1 and settled[1].to == "Cat-Realm" and settled[1].amount == 600 and settled[1].kind == "prize" and ads[#ads].c == 1, "one line: the host owes Cat the prize; the ad says the table is done")
+	check(Last("Cat-Realm", "settle")[2].amount == 600, "Cat is told")
 	check(Protocol:Prizes(1000, 5)[1] == 650 and Protocol:Prizes(1000, 5)[2] == 350 and Protocol:Prizes(1001, 7)[1] == 501 and Protocol:Prizes(1001, 7)[3] == 200, "prizes split 65/35 from five, 50/30/20 from seven, the rounding to first")
 	-- Cancelled: nothing settled
 	settled = {}
@@ -12645,11 +12821,12 @@ end)()
 		send = SendFrom("Ann-Realm"), now = Now, on = function(event, line) if event == "settle" then settled[#settled + 1] = line end end })
 	ann.player:Join("Ann-Realm", ann.host.id, 200) bob.player:Join("Ann-Realm", ann.host.id, 200)
 	Flush()
+	ann.host:Paid("Bob-Realm", 200, "trade")
 	ann.host:Start()
 	Tick(2)
 	ann.host:Close()
 	Flush()
-	check(#settled == 0 and bob.player.state.phase == "closed" and Last("Bob-Realm", "settle") == nil, "a tournament cancelled settles nothing")
+	check(#settled == 1 and settled[1].kind == "refund" and settled[1].amount == 200 and settled[1].to == "Bob-Realm" and bob.player.state.phase == "closed", "a tournament cancelled gives every entry back")
 	-- A busted player's place, two in one hand by their stacks at the start of it
 	local h = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 5, maxSeats = 4 }, send = function() end, now = Now })
 	h:Receive("Ann-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Bob-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Cat-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Dan-Realm", { k = "join", t = h.id, b = 0 })

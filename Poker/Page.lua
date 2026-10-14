@@ -26,7 +26,7 @@ local HOW_IT_WORKS = table.concat({
 	"2.  Before each hand every player's client makes a secret; the deck is shuffled from all of them together, so nobody, the host included, can choose it.",
 	"3.  After each hand your client checks the host's account of it. A hand that doesn't check out is marked in red at the table.",
 	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
-	"5.  Gold tables: the host is the bank. When you leave, what you won or lost against your buy-in is a line under Settlement, paid by mail at a mailbox (Pay fills it in, you press Send). A debt left two days counts against your reputation with everyone who was at the table.",
+	"5.  Gold tables: cash on the table. Your buy-in goes to the host before you're dealt in, by a trade or by mail, and when you leave the host owes you your stack: a line under Settlement, paid by trade or by mail (Pay fills it in at a mailbox). Nobody owes anyone but the host, and a host two days late loses reputation with everyone who sat there.",
 	"6.  Closing the table window keeps your seat; leave from the table or from here.",
 	"7.  Practice: pick Practice instead of Chips or Gold and the other seats are taken by computer players. Nothing is advertised and nothing is owed.",
 }, "\n")
@@ -254,6 +254,12 @@ function private.BuildSeatCard(parent, width)
 	private.seatSub:SetWidth(width - 420)
 	local open = W:Button(card, "Open table", "primary", 110, 26, function() TableUI:Show() end)
 	open:SetPoint("BOTTOMRIGHT", -14, 12)
+	private.payButton = W:Button(card, "Pay by mail", "secondary", 110, 26, function()
+		local ok, why = Gold:PrefillBuyIn()
+		UI:Toast(ok and "Mail to the host filled in: check it and press Send. Trading it to them in person is quicker." or ("Can't fill the mail in: "..tostring(why).."."), ok and C.green or C.red)
+	end)
+	private.payButton:SetPoint("BOTTOMLEFT", 14, 12)
+	private.payButton:Hide()
 	private.startButton = W:Button(card, "Start", "primary", 150, 26, function()
 		local ok, why = Net:StartTournament()
 		if not ok then UI:Toast(why or "Couldn't start.", C.red) end
@@ -265,7 +271,8 @@ function private.BuildSeatCard(parent, width)
 		local hosting = Net:HostedTable() ~= nil
 		W:Dialog({
 			title = hosting and "Close the table?" or "Leave the table?",
-			text = hosting and "Everyone at your table is sent their final stacks and the table closes." or "Your chips leave with you. A hand under way is folded.",
+			text = hosting and ((Net:State() and Net:State().cfg.stakes == "gold") and "The table closes and you owe every player their stack: the lines go under Settlement, to pay by trade or by mail." or "Everyone at your table is sent their final stacks and the table closes.")
+				or "Your chips leave with you. A hand under way is folded.",
 			confirmLabel = hosting and "Close table" or "Leave",
 			confirmStyle = "danger",
 			onConfirm = function()
@@ -329,24 +336,29 @@ function private.UpdateRow(row, item)
 	end
 end
 
--- A settlement line: what you owe or are owed, paid or not
+-- A settlement line: a debt you owe or are owed, paid or not, or a receipt (a buy-in paid, money received)
+local KIND_WORDS = { cashout = "cash-out", prize = "prize", refund = "refund", buyin = "buy-in", received = "not asked for" }
 function private.UpdateLine(row, line)
 	local me = Net:Me()
-	local owe = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
-	local other = Name(owe and line.to or line.from)
+	local mine = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
+	local other = Name(mine and line.to or line.from)
 	local amount = Protocol:Money(line.amount, "gold")
-	row.title:SetText(owe and ("You owe %s %s"):format(other, amount) or ("%s owes you %s"):format(other, amount))
-	row.sub:SetText((line.title and line.title ~= "" and line.title or "Poker")..Theme:Colorize("  -  "..Theme:Ago(time() - (line.at or time())).." ago", C.faint))
-	row.pay:SetShown(owe and not line.paid)
-	row.mark:SetShown(not owe and not line.paid)
-	if line.paid then
-		row.action:SetText(Theme:Colorize("Paid", C.green))
-	elseif owe then
-		row.action:SetText("")
+	local kind = KIND_WORDS[line.kind or "cashout"] or line.kind
+	local debt = Gold:IsDebt(line)
+	if not debt then
+		row.title:SetText(mine and ("Paid %s %s"):format(other, amount) or ("Received %s from %s"):format(amount, other))
+	elseif line.paid then
+		row.title:SetText(mine and ("Paid %s %s"):format(other, amount) or ("%s paid you %s"):format(other, amount))
 	else
-		row.action:SetText("")
+		row.title:SetText(mine and ("You owe %s %s"):format(other, amount) or ("%s owes you %s"):format(other, amount))
 	end
-	if not line.paid and Gold:IsOverdue(line) then
+	local how = line.paidHow and (", by "..(line.paidHow == "hand" and "your word" or line.paidHow)) or ""
+	local note = line.claim and "  -  the host dropped; your client reminds them" or ""
+	row.sub:SetText((line.title and line.title ~= "" and line.title or "Poker")..Theme:Colorize("  -  "..kind..how.."  -  "..Theme:Ago(time() - (line.at or time())).." ago"..note, C.faint))
+	row.pay:SetShown(debt and mine and not line.paid)
+	row.mark:SetShown(debt and not mine and not line.paid and not line.claim)
+	row.action:SetText(line.paid and Theme:Colorize("Paid", C.green) or "")
+	if Gold:IsOverdue(line) then
 		row.sub:SetText(row.sub:GetText()..Theme:Colorize("  -  OVERDUE", C.red))
 	end
 end
@@ -418,7 +430,7 @@ function private.Sit(ad)
 			W:Dialog({
 				title = "Enter "..title,
 				text = (ad.g and ("Tournament, entry %s. "):format(M(entry)) or "Tournament, free to enter. ")..("Everyone starts with %d chips; the blinds rise every %d minutes until one player has them all. No rebuys.%s"):format(
-					ad.ss or 0, ad.lm or 0, ad.g and (" %s is the bank: the prizes are the entries, split by place and settled by mail."):format(Name(ad.h)) or ""),
+					ad.ss or 0, ad.lm or 0, ad.g and (" Your entry goes to %s first, by trade or by mail; the prizes are the entries, split by place, and come back from them the same way."):format(Name(ad.h)) or ""),
 				confirmLabel = "Enter",
 				onConfirm = function() Go(entry, password) end,
 			})
@@ -429,7 +441,7 @@ function private.Sit(ad)
 	local function BuyIn(password)
 	W:Dialog({
 		title = "Sit at "..(ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")),
-		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. %s is the bank: when you leave, what you won or lost is settled with them by mail."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h))
+		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. Cash on the table: your buy-in goes to %s first, by trade or by mail, and your stack comes back from them when you leave."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h))
 			or ("Blinds %s/%s. Buy in for %s to %s chips. Your client checks every deal; chips are play money."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi)),
 		input = { placeholder = ad.g and "e.g. 2g 50s" or "Buy-in", value = M(ad.hi) },
 		confirmLabel = "Sit down",
@@ -480,6 +492,18 @@ function private.Refresh()
 			private.startButton:Hide()
 		end
 		private.leaveButton:SetText(hosting and "Close table" or "Leave")
+		local mine = st.me and st.seats[st.me]
+		local due
+		if mine and st.cfg.stakes == "gold" then due = (mine.unpaid and mine.unpaid - (mine.received or 0)) or mine.rebuyDue end
+		private.payButton:SetShown(due ~= nil and due > 0 and st.phase ~= "closed")
+		if due and due > 0 then
+			private.seatSub:SetText(private.seatSub:GetText()..Theme:Colorize(("  -  pay %s your %s of %s: trade it, or Pay by mail"):format(Name(st.host), mine.unpaid and "buy-in" or "rebuy", Protocol:Money(due, "gold")), C.amber))
+		elseif hosting and st.cfg.stakes == "gold" then
+			local waiting = {}
+			for _, p in pairs(st.seats) do if p.unpaid then waiting[#waiting + 1] = Name(p.n) end end
+			private.seatSub:SetText(private.seatSub:GetText()..Theme:Colorize(("  -  holding %s"):format(Protocol:Money(st.holding or 0, "gold")), C.gold)
+				..(#waiting > 0 and Theme:Colorize("  -  waiting on "..table.concat(waiting, ", ").." to pay", C.amber) or ""))
+		end
 	end
 	local lines = Gold:Lines()
 	local open = 0
@@ -554,6 +578,7 @@ UI:RegisterPage("poker", {
 		private.seat = private.BuildSeatCard(container, width)
 		private.views = W:Segmented(container, { { key = "tables", label = "Open tables" }, { key = "settlement", label = "Settlement" } }, function(key)
 			private.view = key
+			if key == "settlement" then Gold:AskForLines() end
 			private.Refresh()
 		end, 130)
 		private.views:Select("tables", true)

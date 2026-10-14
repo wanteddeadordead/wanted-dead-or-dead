@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Wanted: Dead Man's Hand Poker
 ## IconTexture: Interface\AddOns\WantedDeadOrDead\Media\icon
-## Notes: Experimental. Texas hold'em at the Wanted: Dead or... Dead table: a deal no player can rig, play chips or gold, cash on the table.
+## Notes: Texas hold'em at the Wanted: Dead or... Dead table: a deal no player can rig, play chips or gold, cash on the table.
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@
 ## Dependencies: WantedDeadOrDead

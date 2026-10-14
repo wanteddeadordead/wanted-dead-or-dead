@@ -37,7 +37,7 @@ local HOW_IT_WORKS = table.concat({
 }, "\n")
 
 local function Settings()
-	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10, unit = "silver" }
+	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10, unit = "silver", lateLevels = Protocol.DEFAULT_LATE_LEVELS, antes = false }
 	return Poker.db.host
 end
 
@@ -139,6 +139,15 @@ function private.BuildForm(parent, width)
 	private.levels = W:Choice(form, 76, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key end)
 	private.levels:SetPoint("LEFT", private.levelLabel, "RIGHT", 6, 0)
 	private.levels:SetChoice(s.levelMinutes or 10)
+	private.lateLabel = Theme:Text(form, "small", "Late entry", C.muted)
+	private.lateLabel:SetPoint("LEFT", private.levels, "RIGHT", 12, 0)
+	private.late = W:Choice(form, 96, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key end)
+	private.late:SetPoint("LEFT", private.lateLabel, "RIGHT", 6, 0)
+	private.late:SetChoice(s.lateLevels == nil and Protocol.DEFAULT_LATE_LEVELS or s.lateLevels)
+	private.antes = W:Toggle(form, "Antes", function(on) Settings().antes = on end)
+	private.antes:SetPoint("LEFT", private.late, "RIGHT", 14, 0)
+	private.antes:SetChecked(s.antes == true)
+	W:AttachTooltip(private.antes, "Antes", ("From level %d everyone antes a tenth of the big blind each hand, the way the big events do."):format(Protocol.ANTE_FROM_LEVEL))
 	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
 	private.buyinNote:SetPoint("TOPLEFT", 14, -100)
 	private.minBox = W:Input(form, 76, "least")
@@ -195,7 +204,7 @@ function private.RefreshBuyin(reset)
 	end
 	local tournament = Settings().kind == "tournament"
 	for _, f in ipairs({ private.buyinNote, private.minBox, private.maxBox, private.buyinBox }) do f:SetShown(not tournament) end
-	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels }) do f:SetShown(tournament) end
+	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels, private.lateLabel, private.late, private.antes }) do f:SetShown(tournament) end
 	-- A chips tournament has no entry; the blinds come from the schedule
 	local entry = tournament and stakes == "gold"
 	private.entryLabel:SetShown(entry)
@@ -234,7 +243,7 @@ function private.Host()
 			return
 		end
 		cfg = { kind = "tournament", entry = entry, startStack = s.startStack, levelMinutes = s.levelMinutes, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
-			title = s.title ~= "" and s.title or nil, bots = s.stakes == "practice" and (s.seats - 1) or 0 }
+			title = s.title ~= "" and s.title or nil, bots = s.stakes == "practice" and (s.seats - 1) or 0, lateLevels = s.lateLevels, antes = s.antes == true }
 		buyin = entry
 	else
 		local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
@@ -344,8 +353,9 @@ function private.UpdateRow(row, item)
 	local stakes = ad.g and "gold" or "chips"
 	local lock = ad.p and Theme:Colorize("  -  password", C.amber) or ""
 	if ad.k == "t" then
-		row.sub:SetText(("Tournament  -  %s  -  %d of %d registered  -  stacks of %d, levels every %d min%s%s"):format(
-			ad.g and ("entry "..Protocol:Money(ad.e, stakes)) or "free entry", ad.s or 0, ad.m or 0, ad.ss or 0, ad.lm or 0, ad.on and "  -  under way" or "", lock))
+		local standing = ad.on and (ad.la and ("  -  under way, level %d, late entry open"):format(ad.lv or 1) or "  -  under way") or ((ad.ll or 0) > 0 and ("  -  late entry to level %d"):format(ad.ll) or "")
+		row.sub:SetText(("Tournament  -  %s  -  %d of %d registered  -  stacks of %d, levels every %d min%s%s%s"):format(
+			ad.g and ("entry "..Protocol:Money(ad.e, stakes)) or "free entry", ad.s or 0, ad.m or 0, ad.ss or 0, ad.lm or 0, ad.an and ", antes" or "", standing, lock))
 	else
 		row.sub:SetText(("blinds %s/%s  -  %d of %d seats  -  buy-in %s to %s%s%s"):format(Protocol:Money(ad.sb, stakes), Protocol:Money(ad.bb, stakes), ad.s or 0, ad.m or 0,
 			Protocol:Money(ad.lo, stakes), Protocol:Money(ad.hi, stakes), ad.g and "  -  gold, settled by mail" or "", lock))
@@ -353,7 +363,7 @@ function private.UpdateRow(row, item)
 	local st = Net:State()
 	if st and st.t == ad.id then
 		row.action:SetText(Theme:Colorize("Seated", C.green))
-	elseif ad.k == "t" and ad.on then
+	elseif ad.k == "t" and ad.on and not ad.la then
 		row.action:SetText(Theme:Colorize("Under way", C.muted))
 	elseif (ad.s or 0) >= (ad.m or 0) then
 		row.action:SetText(Theme:Colorize("Full", C.muted))
@@ -419,8 +429,8 @@ function private.Sit(ad)
 		UI:Toast("That table is full.", C.red)
 		return
 	end
-	if ad.k == "t" and ad.on then
-		UI:Toast("That tournament is under way.", C.red)
+	if ad.k == "t" and ad.on and not ad.la then
+		UI:Toast("That tournament is under way and late entry has closed.", C.red)
 		return
 	end
 	local stakes = ad.g and "gold" or "chips"
@@ -455,7 +465,7 @@ function private.Sit(ad)
 			end
 			W:Dialog({
 				title = "Enter "..title,
-				text = (ad.g and ("Tournament, entry %s. "):format(M(entry)) or "Tournament, free to enter. ")..("Everyone starts with %d chips; the blinds rise every %d minutes until one player has them all. No rebuys.%s"):format(
+				text = (ad.g and ("Tournament, entry %s. "):format(M(entry)) or "Tournament, free to enter. ")..(ad.on and ("Under way at level %d: you enter late with the starting stack. "):format(ad.lv or 1) or "")..("Everyone starts with %d chips; the blinds rise every %d minutes until one player has them all. No rebuys.%s"):format(
 					ad.ss or 0, ad.lm or 0, ad.g and (" Your entry goes to %s first, by trade or by mail; the prizes are the entries, split by place, and come back from them the same way."):format(Name(ad.h)) or ""),
 				confirmLabel = "Enter",
 				onConfirm = function() Go(entry, password) end,

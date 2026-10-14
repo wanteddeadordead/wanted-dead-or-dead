@@ -39,6 +39,8 @@ Protocol.SCHEDULE = { { 10, 20 }, { 15, 30 }, { 25, 50 }, { 50, 100 }, { 75, 150
 Protocol.START_STACKS = { 1000, 1500, 3000 }
 Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES = 1, 60
 Protocol.ABSENT_BLIND_SECONDS = 0 -- an absent entrant loses a big blind every hand they miss
+Protocol.ANTE_FROM_LEVEL = 4 -- with antes on, every player antes a tenth of the big blind from this level
+Protocol.DEFAULT_LATE_LEVELS = 2 -- late entry stays open through this level
 -- A practice table: the host plays computer players run by their own client (Bots), for chips, never advertised
 Protocol.MAX_BOTS = Protocol.MAX_SEATS - 1
 Protocol.BOT_THINK_MIN, Protocol.BOT_THINK_MAX = 1, 4 -- a bot takes this long over its turn
@@ -184,6 +186,7 @@ function Protocol:Settings(cfg)
 		kind = cfg.kind or "cash", sb = cfg.sb, bb = cfg.bb, ante = cfg.ante or 0, maxSeats = cfg.maxSeats or 6, buyMin = cfg.buyMin, buyMax = cfg.buyMax,
 		turnSeconds = cfg.turnSeconds or Protocol.DEFAULT_TURN_SECONDS, stakes = cfg.stakes or "chips", title = cfg.title,
 		entry = cfg.entry, startStack = cfg.startStack, levelMinutes = cfg.levelMinutes, bots = cfg.bots or 0,
+		antes = cfg.antes == true, lateLevels = cfg.lateLevels,
 	}
 	if not Protocol:IsCount(c.bots, 0, Protocol.MAX_BOTS) then
 		return nil, ("a table takes up to %d computer players"):format(Protocol.MAX_BOTS)
@@ -210,6 +213,12 @@ function Protocol:Settings(cfg)
 		if not Protocol:IsCount(c.levelMinutes, Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES) then
 			return nil, ("a level lasts %d to %d minutes"):format(Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES)
 		end
+		if c.lateLevels == nil then c.lateLevels = Protocol.DEFAULT_LATE_LEVELS end
+		if not Protocol:IsCount(c.lateLevels, 0, #Protocol.SCHEDULE) then
+			return nil, "late entry is open through a level of the schedule, or not at all"
+		end
+	else
+		c.antes, c.lateLevels = false, nil
 	end
 	if not (Protocol:IsCount(c.sb, 1) and Protocol:IsCount(c.bb, c.sb) and Protocol:IsCount(c.ante)) then
 		return nil, "the blinds are whole numbers, the big blind at least the small"

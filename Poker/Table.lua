@@ -629,8 +629,8 @@ function TableUI:Refresh(st)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
 	if cfg.kind == "tournament" and st.started then
-		private.info:SetText(("Level %d  -  blinds %d/%d%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
-			hand and hand.key and ("  -  hand "..st.h) or ""))
+		private.info:SetText(("Level %d  -  blinds %d/%d%s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
+			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.lateOpen and "  -  late entry open" or "", hand and hand.key and ("  -  hand "..st.h) or ""))
 	else
 		private.info:SetText(hand and hand.key and ("Hand "..st.h) or "")
 	end
@@ -655,7 +655,7 @@ function TableUI:Refresh(st)
 		end
 		text, color = "Finished: "..table.concat(parts, ", "), C.green
 	elseif cfg.kind == "tournament" and not st.started then
-		text, color = ("Registering: %d of %d entered. The host starts the tournament."):format(seated, n), C.muted
+		text, color = ("Registering: %d of %d entered. The host starts the tournament.%s"):format(seated, n, (st.lateLevels or 0) > 0 and (" Late entry stays open to level "..st.lateLevels..".") or ""), C.muted
 	elseif st.phase == "waiting" then
 		text, color = seated < Protocol.MIN_SEATS and ("Waiting for players: %d of %d seated"):format(seated, n) or "Next hand soon", C.muted
 	elseif st.phase == "seeding" then
@@ -757,8 +757,8 @@ function private.TickClock()
 		private.countdown:SetText("")
 	end
 	if private.levelAt and st.cfg.kind == "tournament" and st.started and st.phase ~= "finished" and st.nextBlinds then
-		private.info:SetText(("Level %d  -  blinds %d/%d  -  %d/%d in %s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
-			st.nextBlinds[1], st.nextBlinds[2], Clock(private.levelAt - now), st.hand and st.hand.key and ("  -  hand "..st.h) or ""))
+		private.info:SetText(("Level %d  -  blinds %d/%d%s  -  %d/%d in %s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
+			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.nextBlinds[1], st.nextBlinds[2], Clock(private.levelAt - now), st.lateOpen and "  -  late entry open" or "", st.hand and st.hand.key and ("  -  hand "..st.h) or ""))
 	end
 end
 

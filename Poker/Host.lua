@@ -44,7 +44,8 @@ function Host:New(o)
 		button = o.button, open = true, nextHandAt = now, lastSent = now, lastAd = 0,
 		password = type(o.password) == "string" and o.password ~= "" and strlower(strtrim(o.password)) or nil, -- asked of anyone sitting down; never sent in the state
 		startedAt = o.elapsed and (now - o.elapsed) or nil, -- a tournament under way, and since when
-		entrants = o.entrants or {}, -- a tournament's players, by name: { seat, place?, left? }, kept after they bust or leave
+		entrants = o.entrants or {}, -- a tournament's players, by name: { seat, outNo?, place?, left? }, kept after they bust or leave
+		outCount = o.outCount or 0, -- how many entrants have gone out (busted or left), for their places
 		settled = o.settled,
 	}, Table)
 	for seat, p in pairs(o.seats or {}) do
@@ -70,7 +71,7 @@ function Host:Restore(backup, o)
 	end
 	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on, blocked = o.blocked,
 		term = (tonumber(backup.term) or 1) + 1, handNo = tonumber(backup.handNo) or 0, button = backup.button, seats = seats,
-		elapsed = tonumber(backup.elapsed), entrants = type(backup.entrants) == "table" and backup.entrants or nil, settled = tonumber(backup.settled), password = backup.password })
+		elapsed = tonumber(backup.elapsed), entrants = type(backup.entrants) == "table" and backup.entrants or nil, settled = tonumber(backup.settled), password = backup.password, outCount = tonumber(backup.outCount) })
 end
 
 -- ============================================================================
@@ -107,8 +108,8 @@ function Table:Sit(name, buyin)
 		return nil, "you're already seated"
 	end
 	local tournament = self.cfg.kind == "tournament"
-	if tournament and self.startedAt then
-		return nil, "the tournament has started"
+	if tournament and self.startedAt and (self.phase == "finished" or self:Level() > (self.cfg.lateLevels or 0)) then
+		return nil, (self.cfg.lateLevels or 0) > 0 and "late entry has closed" or "the tournament has started"
 	end
 	if not Protocol:IsCount(buyin, self.cfg.buyMin, self.cfg.buyMax) then
 		return nil, tournament and ("the entry is %s"):format(Protocol:Money(self.cfg.entry, self.cfg.stakes)) or ("the buy-in is %d to %d"):format(self.cfg.buyMin, self.cfg.buyMax)
@@ -121,6 +122,7 @@ function Table:Sit(name, buyin)
 				unpaid = owes and buyin or nil, received = owes and 0 or nil }
 			if tournament then
 				self.entrants[name] = { seat = seat }
+				self:Replace()
 			end
 			self.on("sat", name, seat, buyin)
 			return seat
@@ -156,9 +158,10 @@ function Table:Stand(name)
 	end
 	if self.cfg.kind == "tournament" then
 		if self.startedAt and self.phase ~= "finished" and self.entrants[name] and not self.entrants[name].place then
-			-- Out of the running: the current place, the entry forfeited, their chips out of play
-			self.entrants[name].place, self.entrants[name].left = self:PlaceNow(), true
-			self:SettleAmount(name, -(p.bought or 0))
+			-- Out of the running: the entry forfeited, their chips out of play, placed by the order they went out
+			self.outCount = (self.outCount or 0) + 1
+			self.entrants[name].outNo, self.entrants[name].left = self.outCount, true
+			self:Replace()
 			self.on("eliminated", name, self.entrants[name].place)
 			-- The last one standing wins: now, or once the hand under way has been shown
 			if self:PlaceNow() <= 2 then
@@ -451,6 +454,38 @@ function Table:Level()
 	return level, max(0, length - (elapsed % length))
 end
 
+---The ante for the next hand: a tournament with antes on takes a tenth of the big blind from everyone from
+---ANTE_FROM_LEVEL; otherwise the table's own ante (none, for now).
+---@return number
+function Table:Ante()
+	if self.cfg.kind == "tournament" then
+		if not self.cfg.antes then return 0 end
+		local level = self:Level()
+		if level < Protocol.ANTE_FROM_LEVEL then return 0 end
+		return max(1, floor(Protocol.SCHEDULE[level][2] / 10))
+	end
+	return self.cfg.ante or 0
+end
+
+---Whether a tournament still takes entrants: not started, or under way with late entry open.
+---@return boolean
+function Table:LateEntryOpen()
+	return self.cfg.kind == "tournament" and self.startedAt ~= nil and self.phase ~= "finished" and self:Level() <= (self.cfg.lateLevels or 0)
+end
+
+---Places every entrant by the order they went out: the first out finishes last, however many entered after them.
+function Table:Replace()
+	local n = 0
+	for _ in pairs(self.entrants) do n = n + 1 end
+	for name, e in pairs(self.entrants) do
+		if e.outNo then
+			e.place = n - e.outNo + 1
+			local _, p = self:SeatOf(name)
+			if p then p.place = e.place end
+		end
+	end
+end
+
 ---The blinds for the next hand: the table's, or a tournament's level.
 ---@return number sb
 ---@return number bb
@@ -613,9 +648,10 @@ function Table:DealHand()
 		seats[seat] = { stack = self.seats[seat].stack, name = self.seats[seat].name }
 	end
 	local sb, bb = self:Blinds()
-	hs.setup = { seats = Copy(seats), button = button, sb = sb, bb = bb, ante = self.cfg.ante }
+	local ante = self:Ante()
+	hs.setup = { seats = Copy(seats), button = button, sb = sb, bb = bb, ante = ante }
 	hs.level = self:Level()
-	self.hand = Engine:NewHand({ seats = seats, button = button, sb = sb, bb = bb, ante = self.cfg.ante, deck = deck })
+	self.hand = Engine:NewHand({ seats = seats, button = button, sb = sb, bb = bb, ante = ante, deck = deck })
 	Engine:Start(self.hand)
 	hs.stage = "play"
 	self.phase = "playing"
@@ -657,11 +693,10 @@ function Table:Showdown()
 		end
 	end
 	if self.cfg.kind == "tournament" and #busted > 0 then
-		-- Two out in one hand: the one who started it with more chips places higher
+		-- Two out in one hand: the one who started it with fewer chips goes out first, so places lower
 		sort(busted, function(a, b) return (hs.setup.seats[a] and hs.setup.seats[a].stack or 0) < (hs.setup.seats[b] and hs.setup.seats[b].stack or 0) end)
-		local alive = self:PlaceNow() - 1
-		for i, seat in ipairs(busted) do
-			self:Eliminate(seat, alive + #busted - i + 1)
+		for _, seat in ipairs(busted) do
+			self:Eliminate(seat)
 		end
 	end
 	self.phase = "showdown"
@@ -682,17 +717,17 @@ function Table:Showdown()
 	self:Backup()
 end
 
----A tournament entrant is out: their place is one more than the players still holding chips, unless given (two
----out in one hand).
+---A tournament entrant is out: placed by the order they went out (the first out finishes last).
 ---@param seat number
----@param place number?
-function Table:Eliminate(seat, place)
+function Table:Eliminate(seat)
 	local p = self.seats[seat]
 	if not p then return end
 	local entrant = self.entrants[p.name]
-	if entrant and not entrant.place then
-		entrant.place = place or self:PlaceNow()
-		p.out, p.place = "busted", entrant.place
+	if entrant and not entrant.outNo and not entrant.place then
+		self.outCount = (self.outCount or 0) + 1
+		entrant.outNo = self.outCount
+		p.out = "busted"
+		self:Replace()
 		self.on("eliminated", p.name, entrant.place)
 	end
 end
@@ -908,6 +943,7 @@ function Table:Advertise()
 	self.ad({ id = self.id, h = self.name, n = self.cfg.title, s = taken, m = self.cfg.maxSeats, sb = sb, bb = bb,
 		g = self.cfg.stakes == "gold" and 1 or nil, lo = self.cfg.buyMin, hi = self.cfg.buyMax, c = (not self.open or self.phase == "finished") and 1 or nil,
 		k = self.cfg.kind == "tournament" and "t" or nil, e = self.cfg.entry, ss = self.cfg.startStack, lm = self.cfg.levelMinutes, on = self.startedAt and 1 or nil,
+		la = self:LateEntryOpen() and 1 or nil, ll = self.cfg.lateLevels, lv = self.startedAt and self:Level() or nil, an = self.cfg.antes and 1 or nil,
 		p = self.password and 1 or nil })
 end
 
@@ -934,6 +970,10 @@ function Table:StateFor(name)
 		st.started = self.startedAt ~= nil
 		st.level, st.levelLeft = level, floor(left + 0.5)
 		st.levelBlinds = Protocol.SCHEDULE[level]
+		st.ante = self:Ante()
+		st.antes = self.cfg.antes or nil
+		st.lateLevels = self.cfg.lateLevels
+		st.lateOpen = self:LateEntryOpen() or nil
 		local nextLevel = Protocol.SCHEDULE[level + 1]
 		st.nextBlinds = nextLevel
 		if self.phase == "finished" or self.phase == "closed" then
@@ -1003,7 +1043,7 @@ function Table:BackupData()
 	end
 	return { id = self.id, cfg = self.cfg, seats = seats, handNo = self.handNo, term = self.term, button = self.button, host = self.name,
 		elapsed = self.startedAt and (self.now() - self.startedAt) or nil, entrants = self.cfg.kind == "tournament" and self.entrants or nil, settled = self.settled,
-		password = self.password }
+		password = self.password, outCount = self.outCount }
 end
 
 function Table:Backup()

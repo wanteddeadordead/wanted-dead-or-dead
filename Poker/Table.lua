@@ -159,7 +159,7 @@ local function BuildSeat(felt, k)
 	-- A stack of chips by the bet: Wanted's seal, one to four high by how big the bet is against the blind
 	seat.chips = {}
 	for i = 1, 3 * STACK_HEIGHT do
-		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT + 1)
+		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT)
 		chip:SetSize(CHIP, CHIP)
 		chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
 		chip:Hide()
@@ -484,7 +484,7 @@ function private.Build()
 	-- The pot's chips: up to five stacks of five, a chip a big blind, left of the amount
 	private.potChips = {}
 	for i = 1, 5 * STACK_HEIGHT do
-		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT + 1)
+		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT)
 		chip:SetSize(CHIP, CHIP)
 		chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
 		chip:Hide()

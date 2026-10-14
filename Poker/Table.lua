@@ -593,7 +593,9 @@ function TableUI:Refresh(st)
 		end
 		text, color = table.concat(lines, "; "), C.green
 	end
-	if private.hostGone then
+	if private.blocked then
+		text, color = "The game is refusing table messages here (a boss fight or a PvP match). The table waits for it to lift.", C.amber
+	elseif private.hostGone then
 		text, color = "The host has gone quiet. The next seat takes over if they don't come back.", C.amber
 	end
 	private.status:SetText(text)
@@ -662,7 +664,7 @@ function private.TickClock()
 		if st.phase == "playing" and st.hand.toAct then
 			local actor = st.seats[st.hand.toAct]
 			local who = st.hand.toAct == st.me and "Your turn" or ((actor and Name(actor.n) or "?").." to act")
-			if not private.hostGone then private.status:SetText(("%s  -  %ds"):format(who, ceil(left))) end
+			if not private.hostGone and not private.blocked then private.status:SetText(("%s  -  %ds"):format(who, ceil(left))) end
 		end
 	end
 	if private.nextAt and (st.phase == "showdown" or st.phase == "waiting") then
@@ -708,6 +710,14 @@ function TableUI:OnHost(event, name)
 		private.hostGone = false
 		TableUI:Log(Name(name).." is the host now.", C.amber)
 	end
+	if private.state then TableUI:Refresh(private.state) end
+end
+
+---The game started or stopped refusing table messages (its lockdown in a boss fight or a PvP match).
+---@param blocked boolean
+function TableUI:OnBlocked(blocked)
+	private.blocked = blocked
+	TableUI:Log(blocked and "The game is refusing table messages: the table waits." or "Table messages go through again.", C.amber)
 	if private.state then TableUI:Refresh(private.state) end
 end
 

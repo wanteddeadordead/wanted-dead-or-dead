@@ -8,6 +8,8 @@
 - The world map marks enemies named in PvP deaths in the last 30 minutes where the fight was, not only enemies a
   Wanted user saw: a zone known from other players' fights alone opened on an empty map. The marker's tooltip says
   who they killed there, or who killed them.
+- Addons built on Wanted (the poker addon) can message the players at their table in dungeons and raids, where the
+  game's chat lockdown is on; Wanted's own whispers still wait it out.
 
 ## [1.21.1] - 2026-10-13
 

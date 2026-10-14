@@ -207,11 +207,12 @@ local DIRECTORY_GREETS = 3 -- names greeted per realm name each round
 local DIRECTORY_SECONDS = GREET_SECONDS -- how often a round runs
 
 ---Whispers addon data to target, noting it so the game's "No player named ... is currently playing" for them is
----hidden (HideNotFound). Someone the game just said wasn't online isn't whispered again for a while.
+---hidden (HideNotFound). Someone the game just said wasn't online isn't whispered again for a while, and nothing
+---goes in the chat messaging lockdown unless asked (a plugin's message to a player at its table: see Send).
 ---@return any result SendAddonMessage's result, or nil when skipped
-local function Whisper(text, target)
+local function Whisper(text, target, inLockdown)
 	local off = private.offline[target]
-	if off and GetTime() - off < OFFLINE_SECONDS or private.ChatLocked() then
+	if off and GetTime() - off < OFFLINE_SECONDS or (private.ChatLocked() and not inLockdown) then
 		return nil
 	end
 	private.whispered[target] = GetTime()
@@ -1229,7 +1230,10 @@ function private.Send(tag, tbl, attempt, target)
 		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
 		return true
 	end
-	if private.ChatLocked() then
+	-- A plugin's whisper goes to a player at its table, who is online and sent to us moments ago, so the lockdown's
+	-- secret "not online" line is no worry: it's tried, and the game's answer says whether it went
+	local plugin = private.plugins[tag] ~= nil
+	if private.ChatLocked() and not plugin then
 		-- Not sent, and not counted as sent: the caller keeps what it can (FlushForward) and resyncs after. What the
 		-- player asked for themself isn't kept: they're told, so they can ask again once it lifts
 		if PLAYER_WHISPERS[tag] then
@@ -1238,13 +1242,13 @@ function private.Send(tag, tbl, attempt, target)
 		return false
 	end
 	for part = 1, total do
-		local result = Whisper(parts[part], target)
+		local result = Whisper(parts[part], target, plugin)
 		Wanted:Log("Sync: SendAddonMessage part %d/%d to %s -> %s", part, total, target, tostring(result))
 		if RESULT_THROTTLED[result] or result == RESULT_LOCKDOWN then
 			private.stats.throttled = private.stats.throttled + 1
 			Wanted:Log("!! Sync: refused by the game (%s) at part %d/%d of %s to %s", tostring(result), part, total, tag, target)
 			private.QueueRetry(tag, tbl, attempt, target)
-			return false
+			return false, result == RESULT_LOCKDOWN and "lockdown" or "throttled"
 		end
 		tinsert(private.plugins[tag] and private.pluginTimes or private.linkTimes, now)
 		private.stats.sent = private.stats.sent + 1
@@ -2481,12 +2485,15 @@ function Sync:RegisterPlugin(tag, handler)
 	private.plugins[tag] = handler
 end
 
----Whispers a plugin's message to one player. Returns whether it went out (the game may block addon whispers in a
----boss fight, a PvP match or an instance; the caller tries again later).
+---Whispers a plugin's message to one player. Returns whether it went out, and when not and the game refused it,
+---why: "lockdown" (its addon message lockdown: a boss fight, a PvP match) or "throttled". Unlike Wanted's own
+---whispers it is tried during the chat messaging lockdown (every dungeon and raid map on this client): the target is
+---at the plugin's table, so online. A refused one is tried again a few times by itself.
 ---@param tag string
 ---@param tbl table
 ---@param target string the player, as the game names them
----@return boolean
+---@return boolean sent
+---@return string? reason
 function Sync:SendPlugin(tag, tbl, target)
 	assert(private.plugins[tag], "not a registered plugin tag")
 	return private.Send(tag, tbl, nil, target)

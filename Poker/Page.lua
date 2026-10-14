@@ -28,6 +28,7 @@ local HOW_IT_WORKS = table.concat({
 	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
 	"5.  Gold tables: the host is the bank. When you leave, what you won or lost against your buy-in is a line under Settlement, paid by mail at a mailbox (Pay fills it in, you press Send). A debt left two days counts against your reputation with everyone who was at the table.",
 	"6.  Closing the table window keeps your seat; leave from the table or from here.",
+	"7.  Practice: pick Practice instead of Chips or Gold and the other seats are taken by computer players. Nothing is advertised and nothing is owed.",
 }, "\n")
 
 local function Settings()
@@ -100,7 +101,7 @@ function private.BuildForm(parent, width)
 	end, 92)
 	private.kind:SetPoint("TOPLEFT", 14, -66)
 	private.kind:Select(s.kind or "cash", true)
-	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" } }, function(key)
+	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" }, { key = "practice", label = "Practice" } }, function(key)
 		Settings().stakes = key
 		private.RefreshBuyin(true)
 	end, 70)
@@ -200,7 +201,7 @@ function private.Host()
 			return
 		end
 		cfg = { kind = "tournament", entry = entry, startStack = s.startStack, levelMinutes = s.levelMinutes, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
-			title = s.title ~= "" and s.title or nil }
+			title = s.title ~= "" and s.title or nil, bots = s.stakes == "practice" and (s.seats - 1) or 0 }
 		buyin = entry
 	else
 		local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
@@ -210,7 +211,7 @@ function private.Host()
 			return
 		end
 		cfg = { sb = b.sb, bb = b.bb, buyMin = buyMin, buyMax = buyMax, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
-			title = s.title ~= "" and s.title or nil }
+			title = s.title ~= "" and s.title or nil, bots = s.stakes == "practice" and (s.seats - 1) or 0 }
 		if not buyin or buyin < cfg.buyMin or buyin > cfg.buyMax then
 			UI:Toast(("Your buy-in is %s to %s."):format(Money(cfg.buyMin), Money(cfg.buyMax)), C.red)
 			return
@@ -516,13 +517,19 @@ function Page:OnEnable()
 			private.Refresh()
 		elseif event == "hostGone" or event == "newHost" then
 			TableUI:OnHost(event, ...)
+		elseif event == "blocked" then
+			TableUI:OnBlocked(...)
 		elseif event == "left" then
 			private.shownOnce = nil
 			private.Refresh()
 		end
 	end)
-	Wanted:RegisterCommand("poker", "Opens the Poker page: host a table or sit at one.", function()
-		UI:Show("poker")
+	Wanted:RegisterCommand("poker", "Opens the Poker page: host a table or sit at one. 'poker probe' checks tables work where you stand.", function(args)
+		if strtrim(args or "") == "probe" then
+			Net:Probe()
+		else
+			UI:Show("poker")
+		end
 	end)
 end
 

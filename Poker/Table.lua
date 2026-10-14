@@ -80,6 +80,16 @@ local function TimerBar(parent)
 	return bar
 end
 
+-- A seat box's border, so many pixels wide: the winner's thick, the player to act's a little thicker than the rest
+local function BorderWidth(frame, px)
+	local edges = frame._edges
+	if not edges then return end
+	edges[1]:SetHeight(px)
+	edges[2]:SetHeight(px)
+	edges[3]:SetWidth(px)
+	edges[4]:SetWidth(px)
+end
+
 local function BuildSeat(felt, k)
 	local seat = CreateFrame("Frame", nil, felt)
 	seat:SetSize(SEAT_W, SEAT_H)
@@ -928,6 +938,7 @@ function TableUI:Refresh(st)
 				seatFrame.timer:Hide()
 				seatFrame.empty:SetText("Seat "..seat)
 				Theme:SetBorderColor(seatFrame, SEAT_BORDER)
+				BorderWidth(seatFrame, 1)
 			else
 				seatFrame.empty:SetText("")
 				seatFrame.name:SetText(Name(p.n))
@@ -1019,6 +1030,7 @@ function TableUI:Refresh(st)
 				local acting = playing and hand.toAct == seat
 				seatFrame.timer:SetShown(acting)
 				Theme:SetBorderColor(seatFrame, acting and C.gold or (showdown and winners[seat] and C.green) or SEAT_BORDER)
+				BorderWidth(seatFrame, (showdown and winners[seat]) and 3 or acting and 2 or 1)
 			end
 		end
 	end

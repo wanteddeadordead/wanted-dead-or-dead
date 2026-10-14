@@ -180,7 +180,7 @@ top-level table: no migration.
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.
 
-`WantedDB.presence` (capture fronts, after 1.19.3) is the account's characters' time at capture points (`Captures.lua`):
+`WantedDB.presence` (capture fronts, from the release after 1.22.0) is the account's characters' time at capture points (`Captures.lua`):
 `presence["point:slot:guid"] = { g, n, f, p, s, c }` (GUID, name as the site names it, side "Horde" or "Alliance", point
 id, slot = game-server time / 300, samples 1-10; the app sends only entries on the side it catches up for). A sample is added every 30 s while the character stands in a point able to fight. Entries older
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to

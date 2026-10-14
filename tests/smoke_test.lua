@@ -13431,10 +13431,31 @@ end)()
 	local played = {}
 	local realPlaySound, realKit = PlaySound, SOUNDKIT
 	PlaySound = function(kit) played[#played + 1] = kit end
-	SOUNDKIT = { IG_ABILITY_PAGE_TURN = 836, LOOT_WINDOW_COIN_SOUND = 120, READY_CHECK = 8960, IG_QUEST_LIST_COMPLETE = 878, IG_CREATURE_NEUTRAL_SELECT = 871 }
+	SOUNDKIT = { IG_ABILITY_PAGE_TURN = 836, LOOT_WINDOW_COIN_SOUND = 120, READY_CHECK = 8960, IG_QUEST_LIST_COMPLETE = 878, IG_CREATURE_NEUTRAL_SELECT = 871, MAP_PING = 3175 }
 	local function Played(kit) local n = 0 for _, k in ipairs(played) do if k == kit then n = n + 1 end end return n end
 	local o = TableUI.Options()
 	check(o.sounds == true and o.fourColor == false and o.popOnTurn == true, "the defaults: sounds on, two colours, the table opens on your turn")
+	-- Each sound is a choice: a game sound by default, any other, or none; the settings panel lists them
+	check(TableUI:SoundChoice("turn") == "kit:READY_CHECK" and TableUI:SoundLabel("kit:READY_CHECK") == "Ready check" and TableUI:SoundLabel("none") == "None" and TableUI:SoundLabel("lsm:Gong") == "Gong", "the your-turn sound is the ready check by default; choices have names")
+	TableUI.Play("turn", true)
+	check(played[#played] == 8960, "a preview plays it")
+	TableUI:SetSound("turn", "kit:MAP_PING")
+	TableUI.Play("turn", true)
+	check(played[#played] == 3175, "picked the map ping: that plays instead")
+	TableUI:SetSound("turn", "none")
+	local n = #played
+	TableUI.Play("turn", true)
+	check(#played == n, "none: silence")
+	TableUI:SetSound("turn", nil)
+	o.sounds = false
+	TableUI.Play("deal")
+	check(#played == n, "sounds off: nothing plays")
+	o.sounds = true
+	local function OnScreenNow(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find(text, 1, true) then return true end end return false end
+	TableUI:ToggleSettings()
+	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Five seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
+	TableUI:ToggleSettings()
+	wipe(played)
 	check(Cards:SuitColor(1) == Cards:SuitColor(4) and Cards:SuitColor(2) == Cards:SuitColor(3), "two colours: clubs like spades, diamonds like hearts")
 	o.fourColor = true
 	check(Cards:SuitColor(1) ~= Cards:SuitColor(4) and Cards:SuitColor(2) ~= Cards:SuitColor(3) and Cards:SuitColor(1) ~= Cards:SuitColor(2), "four colours: every suit its own")

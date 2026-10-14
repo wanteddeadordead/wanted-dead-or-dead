@@ -146,11 +146,16 @@ end
 ---plain words elsewhere (Money).
 ---@param chips number
 ---@param stakes string?
+---@param compact boolean? the copper left off from a gold, and the silver too from a hundred gold
 ---@return string
-function Protocol:Coins(chips, stakes)
+function Protocol:Coins(chips, stakes, compact)
 	chips = floor((chips or 0) + 0.5)
 	if not Protocol:IsMoney(stakes) then
 		return tostring(chips)
+	end
+	if compact then
+		if chips >= 1000000 then chips = chips - chips % 10000
+		elseif chips >= 10000 then chips = chips - chips % 100 end
 	end
 	if C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString then
 		return C_CurrencyInfo.GetCoinTextureString(chips)

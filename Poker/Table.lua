@@ -744,9 +744,12 @@ function TableUI:IsShown()
 	return private.frame ~= nil and private.frame:IsShown()
 end
 
----Forgets the table (left or closed), keeping the log on screen.
+---Forgets the last table: a new one starts with a clean window and an empty log (the log stays readable after a
+---table closes, until the next one).
 function TableUI:Reset()
 	private.state, private.deadlineAt, private.nextAt, private.hostGone = nil, nil, nil, false
+	if private.log then private.log:Clear() end
+	private.lines = {}
 	private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt, private.loggedFinish = nil, 0, nil, false, false, false
 	private.audits = {}
 end

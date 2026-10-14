@@ -697,13 +697,30 @@ end
 ---Adds a line to the hand log.
 ---@param text string
 ---@param color table?
+-- The kicker that won a seat its pot, when a shown hand of the same kind lost to it on one: "king", or nil
+function private.Kicker(st, seat)
+	local hand = st.hand
+	local me = st.seats[seat]
+	if not hand or not hand.board or #hand.board < 3 or not me or not me.hole or not me.hole[1] then return nil end
+	local function Cards(p) local c = { p.hole[1], p.hole[2] } for _, b in ipairs(hand.board) do c[#c + 1] = b end return c end
+	local mine = Cards(me)
+	for other, p in pairs(st.seats) do
+		if other ~= seat and p.hole and p.hole[1] and p.hole[2] then
+			local kicker = Engine:DecidingKicker(mine, Cards(p))
+			if kicker then return kicker end
+		end
+	end
+	return nil
+end
+
 -- A pot's result as one line: who wins it, or a split pot and who shares it; with more than one pot, the main pot and
 -- the side pots are named (the engine builds them from the smallest stake up, so the first is the main pot)
 local function PotLine(st, pot, index, count)
 	local names = {}
 	for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
 	local which = count > 1 and (index == 1 and "the main pot of " or "a side pot of ") or ""
-	local with = pot.description and (" with "..pot.description) or ""
+	local kicker = #(pot.winners or {}) == 1 and private.Kicker(st, pot.winners[1])
+	local with = pot.description and (" with "..pot.description..(kicker and (", "..kicker.." kicker") or "")) or ""
 	if #names > 1 then
 		return ("Split pot: %s split %s%s%s"):format(table.concat(names, " and "), which, Chips(pot.amount, st.cfg), with)
 	end
@@ -944,6 +961,10 @@ function TableUI:Refresh(st)
 					local cards = { p.hole[1], p.hole[2] }
 					for _, c in ipairs(hand.board) do cards[#cards + 1] = c end
 					shownHand = Engine:Describe(cards)
+				end
+				if shownHand and winners[seat] then
+					local kicker = private.Kicker(st, seat)
+					if kicker then shownHand = shownHand..", "..kicker.." kicker" end
 				end
 				if shownHand then
 					seatFrame.won:SetText(Theme:Colorize(shownHand, winners[seat] and C.green or C.muted))

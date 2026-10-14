@@ -75,6 +75,7 @@ function Methods:GetText() return self._text end
 -- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
 -- character (12pt: about 6.7 pixels), colour codes and textures taking none
 function Methods:SetFont(_, size, flags) self._size, self._flags = size, flags end
+function Methods:Clear() self._cleared = (self._cleared or 0) + 1 end
 function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } end
 do
 	local function TextWidth(fs)
@@ -12936,9 +12937,13 @@ end)()
 	WantedPokerDB.host.kind = "cash"
 	WantedPokerDB.host.seats = 3
 	addonSent = {}
+	TableUI:Log("a line from the last table")
 	local go = Button("Host table")
 	go._scripts.OnClick(go)
 	local host = Net:HostedTable()
+	local stale = false
+	for _, line in ipairs(TableUI:GetParts().lines or {}) do stale = stale or line == "a line from the last table" end
+	check(not stale, "a new table starts with an empty log")
 	check(host and host.cfg.bots == 2 and host.cfg.stakes == "chips" and #host:Seated() == 3, "hosting a practice table seats two bots: "..tostring(host and #host:Seated()))
 	local botsSeen = 0
 	for _ in pairs(Net:Bots()) do botsSeen = botsSeen + 1 end

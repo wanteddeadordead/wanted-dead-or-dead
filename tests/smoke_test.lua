@@ -12503,13 +12503,13 @@ end)()
 	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = me, at = time() - 10, from = me, to = "Ann-Realm", amount = 150, kind = "cashout" })
 	Gold:Add({ id = "T1:2", table = "T1", title = "Gold Den", host = "Bob-Realm", at = time() - 3 * 86400, from = "Bob-Realm", to = me, amount = 60, kind = "cashout" })
 	Gold:Add({ id = "T1:3", table = "T1", title = "Gold Den", host = me, at = time() - 20, from = me, to = "Bob-Realm", amount = 40, kind = "prize" })
-	Gold:Add({ id = "T1:in:Bob:1", table = "T1", title = "Gold Den", host = me, at = time() - 30, from = "Bob-Realm", to = me, amount = 500, kind = "buyin", paid = time() - 30, paidHow = "trade" })
+	Gold:Add({ id = "T1:in:Bob:1", table = "T1", title = "Gold Den", host = me, at = time() - 30, from = "Bob-Realm", to = me, amount = 50000, kind = "buyin", paid = time() - 30, paidHow = "trade" })
 	check(#Gold:Lines() == 4 and Gold:Owing() == 190, "lines are kept once; a receipt is no debt; you owe 190 in all")
 	local function Line(id) for _, l in ipairs(Gold:Lines()) do if l.id == id then return l end end end
 	check(Gold:IsOverdue(Line("T1:2")) and not Gold:IsOverdue(Line("T1:1")) and not Gold:IsOverdue(Line("T1:in:Bob:1")), "a debt unpaid two days is overdue; a receipt never is")
 	local realMoney, realSendMoney, realCount, realHeader = GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo
-	GetMoney = function() return 500 * 10000 end -- 500g: 50,000 silver, the chips of a gold table
-	check(Gold:CanBuyIn(49810) == true and not Gold:CanBuyIn(49811), "a buy-in is covered by the money in the bags less what you owe: 50,000s - 190s")
+	GetMoney = function() return 500 * 10000 end -- 500g: 5,000,000 copper, the chips of a gold table
+	check(Gold:CanBuyIn(4999810) == true and not Gold:CanBuyIn(4999811), "a buy-in is covered by the money in the bags less what you owe: 500g - 190c")
 	MailFrame._shown = true
 	check(Gold:Prefill(Line("T1:1")) and SendMailSubjectEditBox:GetText() == "Wanted poker T1:1" and SendMailNameEditBox:GetText() == "Ann-Realm", "Pay fills the mail in")
 	check(not Gold:Prefill(Line("T1:2")), "not a debt of yours: nothing filled in")
@@ -12517,23 +12517,23 @@ end)()
 		GetSendMailMoney = function() return copper end
 		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
 	end
-	SendHook("Ann-Realm", "Wanted poker T1:1", 150 * 100)
+	SendHook("Ann-Realm", "Wanted poker T1:1", 150)
 	Fire("MAIL_SEND_SUCCESS")
 	check(Line("T1:1").paid and Line("T1:1").paidHow == "mail", "sent with the amount: paid")
-	SendHook("Bob-Realm", "gg", 39 * 100)
+	SendHook("Bob-Realm", "gg", 39)
 	Fire("MAIL_SEND_SUCCESS")
 	check(not Line("T1:3").paid, "a mail with less than the line isn't the payment")
-	SendHook("Bob-Realm", "gg", 40 * 100)
+	SendHook("Bob-Realm", "gg", 40)
 	Fire("MAIL_SEND_SUCCESS")
 	check(Line("T1:3").paid, "a hand-written mail with the amount pays the oldest line to that player")
 	check(Gold:Owing() == 0, "nothing owed")
 	-- Receiving: a mail from the debtor with the amount
 	GetInboxNumItems = function() return 1 end
-	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 * 100 end
+	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 end
 	Fire("MAIL_INBOX_UPDATE")
 	check(Line("T1:2").paid, "the creditor's client marks the line paid when the mail arrives")
 	-- Reputation: a debt left unpaid counts against its debtor; one paid counts for them; a claim counts for nothing
-	Gold:Add({ id = "T2:1", table = "T2", title = "Gold Den", host = "Stiff-Realm", at = time() - 3 * 86400, from = "Stiff-Realm", to = me, amount = 500, kind = "cashout" })
+	Gold:Add({ id = "T2:1", table = "T2", title = "Gold Den", host = "Stiff-Realm", at = time() - 3 * 86400, from = "Stiff-Realm", to = me, amount = 50000, kind = "cashout" })
 	Gold:Add({ id = "T3:out:Me", table = "T3", title = "Gold Den", host = "Vague-Realm", at = time() - 3 * 86400, from = "Vague-Realm", to = me, amount = 500, kind = "cashout", claim = true })
 	local tally = ns.Reputation:GetTally("Stiff-Realm")
 	check(tally.unpaid == 1 and tally.points < 0, "a poker debt two days unpaid counts like a bounty left unpaid")
@@ -12551,9 +12551,9 @@ end)()
 	switch._scripts.OnClick(switch)
 	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid") and OnScreen("Received 5g from Bob") and OnScreen("the host dropped"), "the lines show in gold and silver: the overdue one marked, the receipt, the claim")
 	-- Amounts typed and shown
-	check(Protocol:Money(250, "gold") == "2g 50s" and Protocol:Money(1000, "gold") == "10g" and Protocol:Money(5, "gold") == "5s" and Protocol:Money(250, "chips") == "250", "silver shows as gold and silver")
-	check(Protocol:ParseAmount("2g 50s", "gold") == 250 and Protocol:ParseAmount("10g", "gold") == 1000 and Protocol:ParseAmount("75s", "gold") == 75 and Protocol:ParseAmount("2.5", "gold") == 250
-		and Protocol:ParseAmount("2g50s", "gold") == 250 and Protocol:ParseAmount("abc", "gold") == nil and Protocol:ParseAmount("400", "chips") == 400 and Protocol:ParseAmount("4.5", "chips") == nil, "typed money is read")
+	check(Protocol:Money(25000, "gold") == "2g 50s" and Protocol:Money(100000, "gold") == "10g" and Protocol:Money(5, "gold") == "5c" and Protocol:Money(10005, "gold") == "1g 5c" and Protocol:Money(0, "gold") == "0c" and Protocol:Money(250, "chips") == "250", "copper shows as gold, silver and copper")
+	check(Protocol:ParseAmount("2g 50s", "gold") == 25000 and Protocol:ParseAmount("10g", "gold") == 100000 and Protocol:ParseAmount("75s", "gold") == 7500 and Protocol:ParseAmount("2.5", "gold") == 25000 and Protocol:ParseAmount("5c", "gold") == 5
+		and Protocol:ParseAmount("1g 5c", "gold") == 10005 and Protocol:ParseAmount("2g50s", "gold") == 25000 and Protocol:ParseAmount("abc", "gold") == nil and Protocol:ParseAmount("400", "chips") == 400 and Protocol:ParseAmount("4.5", "chips") == nil, "typed money is read")
 
 	-- Trades: a buy-in traded to the host seats the player; the host's trade pays a line; the inbox takes a mailed buy-in
 	wipe(P.db.ledger)
@@ -12577,7 +12577,7 @@ end)()
 	local function From(name, tbl) tbl.t, tbl.v = netHost.id, "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zt"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", name) end
 	From("Bob-Realm", { k = "join", b = 500 })
 	check(netHost.seats[2] and netHost.seats[2].unpaid == 500, "Bob's seat waits for 5g")
-	Trade("Bob-Realm", 0, 500 * 100)
+	Trade("Bob-Realm", 0, 500)
 	check(netHost.seats[2].unpaid == nil and netHost.seats[2].stack == 500, "Bob trades the host 5g: seated with his chips")
 	local receipt
 	for _, l in ipairs(Gold:Lines()) do if l.kind == "buyin" and l.from == "Bob-Realm" then receipt = l end end
@@ -12586,11 +12586,11 @@ end)()
 	local owed
 	for _, l in ipairs(Gold:Lines()) do if l.kind == "cashout" and l.to == "Bob-Realm" and not l.paid then owed = l end end
 	check(owed and owed.amount == 500 and owed.from == me, "Bob leaves: the host owes him his 5g")
-	Trade("Bob-Realm", 500 * 100, 0)
+	Trade("Bob-Realm", 500, 0)
 	check(owed.paid and owed.paidHow == "trade", "the host trades it to him: paid")
 	From("Cal-Realm", { k = "join", b = 300 })
 	GetInboxNumItems = function() return 1 end
-	GetInboxHeaderInfo = function() return nil, nil, "Cal-Realm", "Wanted poker buy-in "..netHost.id, 300 * 100 end
+	GetInboxHeaderInfo = function() return nil, nil, "Cal-Realm", "Wanted poker buy-in "..netHost.id, 300 end
 	Fire("MAIL_INBOX_UPDATE")
 	Fire("MAIL_INBOX_UPDATE")
 	local _, cal = netHost:SeatOf("Cal-Realm")
@@ -12604,7 +12604,7 @@ end)()
 	local from = #printed
 	Net:Leave()
 	local summary = false
-	for i = from + 1, #printed do summary = summary or (printed[i]:find("table closed", 1, true) and printed[i]:find("Cal 3g", 1, true)) ~= nil end
+	for i = from + 1, #printed do summary = summary or (printed[i]:find("table closed", 1, true) and printed[i]:find("Cal 3s", 1, true)) ~= nil end
 	check(summary, "closing says who's owed what")
 	clock = clock + 2
 	RunTimers()
@@ -12744,7 +12744,7 @@ end)()
 	cat.player:Join("Ann-Realm", t.id, 200)
 	dan.player:Join("Ann-Realm", t.id, 100)
 	Flush()
-	check(ann.player.seat == 1 and bob.player.seat == 2 and cat.player.seat == 3 and dan.player.seat == nil and Last("Dan-Realm", "refused")[2] == "the entry is 2g", "three enter at the entry; a wrong amount is refused")
+	check(ann.player.seat == 1 and bob.player.seat == 2 and cat.player.seat == 3 and dan.player.seat == nil and Last("Dan-Realm", "refused")[2] == "the entry is 2s", "three enter at the entry; a wrong amount is refused")
 	check(t.seats[1].stack == 1000 and t.seats[2].stack == 0 and t.seats[2].unpaid == 200 and bob.player.state.seats[2].unpaid == 200, "the host's own seat is paid; the others wait for their entry to arrive, and are told")
 	check(t:Paid("Bob-Realm", 200, "trade") and t:Paid("Cat-Realm", 200, "mail"), "the entries arrive by trade and by mail")
 	Flush()

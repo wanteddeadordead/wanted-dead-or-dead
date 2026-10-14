@@ -34,7 +34,7 @@ local HOW_IT_WORKS = table.concat({
 	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
 	"5.  Gold tables: cash on the table. Your buy-in goes to the host before you're dealt in, by a trade or by mail, and when you leave the host owes you your stack: a line under Settlement, paid by trade or by mail (Pay fills it in at a mailbox). Nobody owes anyone but the host, and a host two days late loses reputation with everyone who sat there.",
 	"6.  Closing the table window keeps your seat; leave from the table or from here.",
-	"7.  Practice: pick Practice instead of Chips or Gold and the other seats are taken by computer players. Nothing is advertised and nothing is owed.",
+	"7.  Practice: pick Practice instead of Chips or Gold and the other seats are taken by computer players. It plays on play money that looks like gold, in the blinds you choose; nothing is advertised and nothing is owed.",
 }, "\n")
 
 local function Settings()
@@ -48,8 +48,10 @@ local function Ordinal(n)
 	return n..suffix
 end
 
+-- What the table plays for: gold, play money that looks like gold (a practice table), or chips
 local function Stakes()
-	return Settings().stakes == "gold" and "gold" or "chips"
+	local s = Settings().stakes
+	return s == "gold" and "gold" or s == "practice" and "play" or "chips"
 end
 
 -- The money a gold table's blinds are in: copper, silver or gold
@@ -59,7 +61,7 @@ local function Unit()
 end
 
 local function BlindsList()
-	return Stakes() == "gold" and BLINDS[Unit()] or BLINDS.chips
+	return Protocol:IsMoney(Stakes()) and BLINDS[Unit()] or BLINDS.chips
 end
 
 local function Blinds(key)
@@ -67,7 +69,7 @@ local function Blinds(key)
 	for _, b in ipairs(list) do
 		if b.key == key then return b end
 	end
-	return Stakes() == "gold" and list[1] or list[4]
+	return Protocol:IsMoney(Stakes()) and list[1] or list[4]
 end
 
 local function Money(n)
@@ -193,8 +195,8 @@ function private.RefreshBuyin(reset)
 	for _, b in ipairs(BlindsList()) do
 		choices[#choices + 1] = { key = b.key, label = Protocol:Money(b.sb, stakes).."/"..Protocol:Money(b.bb, stakes) }
 	end
-	private.unitLabel:SetShown(stakes == "gold" and Settings().kind ~= "tournament")
-	private.unit:SetShown(stakes == "gold" and Settings().kind ~= "tournament")
+	private.unitLabel:SetShown(Protocol:IsMoney(stakes) and Settings().kind ~= "tournament")
+	private.unit:SetShown(Protocol:IsMoney(stakes) and Settings().kind ~= "tournament")
 	private.unit:SetChoice(Unit())
 	private.blinds:SetChoices(choices)
 	local b = Blinds(Settings().blinds)
@@ -210,7 +212,7 @@ function private.RefreshBuyin(reset)
 	for _, f in ipairs({ private.buyinNote, private.minBox, private.maxBox, private.buyinBox }) do f:SetShown(not tournament) end
 	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels, private.lateLabel, private.late, private.antes }) do f:SetShown(tournament) end
 	-- A chips tournament has no entry; the blinds come from the schedule
-	local entry = tournament and stakes == "gold"
+	local entry = tournament and Protocol:IsMoney(stakes)
 	private.entryLabel:SetShown(entry)
 	private.entryBox:SetShown(entry)
 	-- Without an entry the stack starts the row
@@ -225,7 +227,7 @@ function private.RefreshBuyin(reset)
 		private.blinds:SetText(Protocol:Money(Protocol.SCHEDULE[1][1], stakes).."/"..Protocol:Money(Protocol.SCHEDULE[1][2], stakes).." up")
 	end
 	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
-		box.placeholder:SetText(stakes == "gold" and "e.g. 2g 50s" or "chips")
+		box.placeholder:SetText(Protocol:IsMoney(stakes) and "e.g. 2g 50s" or "chips")
 	end
 end
 
@@ -241,7 +243,7 @@ function private.Host()
 	end
 	local cfg, buyin
 	if s.kind == "tournament" then
-		local entry = stakes == "gold" and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
+		local entry = Protocol:IsMoney(stakes) and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
 		if not entry then
 			UI:Toast("The entry is an amount, like 2g or 50s.", C.red)
 			return

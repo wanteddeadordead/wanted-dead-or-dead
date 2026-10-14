@@ -12937,6 +12937,9 @@ end)()
 	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 3 }).bots == 3, "bots in the settings")
 	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 4 }) == nil, "the host keeps a seat")
 	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 2, stakes = "gold" }) == nil, "no gold against bots")
+	check(Protocol:Settings({ sb = 100, bb = 200, buyMin = 4000, buyMax = 20000, maxSeats = 4, bots = 2, stakes = "play" }).stakes == "play", "play money against bots")
+	check(Protocol:Settings({ sb = 100, bb = 200, buyMin = 4000, buyMax = 20000, maxSeats = 4, stakes = "play" }) == nil, "play money is for practice tables only")
+	check(Protocol:Money(25000, "play") == "2g 50s" and Protocol:ParseAmount("2g 50s", "play") == 25000, "play money reads and shows like gold")
 	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000 }).bots == 0, "none by default")
 
 	-- A cash table of four bots (the host's seat a bot too, so the table runs itself) delivered without a network,
@@ -13143,7 +13146,7 @@ end)()
 	local stale = false
 	for _, line in ipairs(TableUI:GetParts().lines or {}) do stale = stale or line == "a line from the last table" end
 	check(not stale, "a new table starts with an empty log")
-	check(host and host.cfg.bots == 2 and host.cfg.stakes == "chips" and #host:Seated() == 3, "hosting a practice table seats two bots: "..tostring(host and #host:Seated()))
+	check(host and host.cfg.bots == 2 and host.cfg.stakes == "play" and host.cfg.sb == 100 and host.cfg.bb == 200 and host.seats[2].stack == 20000 and #host:Seated() == 3, "hosting a practice table on play money at 1s/2s seats two bots with 2g each: "..tostring(host and host.cfg.stakes)..", "..tostring(host and host.seats[2] and host.seats[2].stack))
 	local botsSeen = 0
 	for _ in pairs(Net:Bots()) do botsSeen = botsSeen + 1 end
 	local named = false

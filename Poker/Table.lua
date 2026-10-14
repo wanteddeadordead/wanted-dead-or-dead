@@ -164,6 +164,11 @@ local function Place(seat, k, n, felt)
 	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.62, y * 0.56)
+	-- The chips on the label's outer side, away from the board
+	for i, chip in ipairs(seat.chips) do
+		chip:ClearAllPoints()
+		if x > 1 then chip:SetPoint("LEFT", seat.bet, "RIGHT", 5, (i - 1) * 3) else chip:SetPoint("RIGHT", seat.bet, "LEFT", -5, (i - 1) * 3) end
+	end
 	-- The dealer button on the corner facing the middle vertically, and on the side AWAY from the bet label (which sits
 	-- toward the middle): the left corner for seats on the left half, the right corner otherwise
 	seat.dealer:ClearAllPoints()
@@ -996,6 +1001,10 @@ function TableUI:Refresh(st)
 				elseif playing and hand.toAct == seat then status, color = seat == me and "Your turn" or "To act", C.gold
 				elseif hand and (hand.stage == "commits" or hand.stage == "reveals") and p.inHand then status, color = "Shuffling", C.blue
 				elseif showdown and winners[seat] then status, color = winners[seat] == "split" and "Split" or "Winner", C.green
+				elseif private.acts[seat] and (playing or showdown) then
+					local a = private.acts[seat]
+					status = a.text
+					color = (a.action == "bet" or a.action == "raise") and C.amber or (a.action == "allin" and C.red) or (a.action == "blind" and C.muted) or C.text
 				elseif p.away and p.away > 0 and not p.out then status, color = "Slow", C.amber
 				end
 				seatFrame.status:Set(status, color)
@@ -1034,13 +1043,8 @@ function TableUI:Refresh(st)
 				if showdown and hand.results.payouts and hand.results.payouts[seat] then
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
 					seatFrame.bet:Show()
-				elseif (playing or showdown) and private.acts[seat] and private.acts[seat].action ~= "fold" then
-					-- What they did, by their chips: "Check", "Call 46", "Raise to 60", "BB"
-					local a = private.acts[seat]
-					local tint = (a.action == "bet" or a.action == "raise") and C.amber or (a.action == "allin" and C.red) or (a.action == "blind" and C.muted) or C.text
-					seatFrame.bet:SetText(Theme:Colorize(a.text, tint))
-					seatFrame.bet:Show()
 				elseif p.b and p.b > 0 then
+					-- The amount by the chips; what it was for is in the pill
 					seatFrame.bet:SetText(Chips(p.b, cfg))
 					seatFrame.bet:Show()
 				else

@@ -32,6 +32,53 @@ Protocol.JOIN_RETRY_SECONDS = 5 -- a join unanswered this long is sent again
 Protocol.SYNC_SECONDS = 20 -- a player whose last message brought no new state asks for it after this long
 Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS, Protocol.DEFAULT_TURN_SECONDS = 15, 90, 30
 
+---An amount shown: chips as a number; at a gold table a chip is a silver piece, shown as gold and silver ("2g 50s").
+---@param chips number
+---@param stakes string? "chips" | "gold"
+---@return string
+function Protocol:Money(chips, stakes)
+	chips = floor((chips or 0) + 0.5)
+	if stakes ~= "gold" then
+		return tostring(chips)
+	end
+	local g, s = floor(chips / 100), chips % 100
+	if g > 0 and s > 0 then return g.."g "..s.."s" end
+	if g > 0 then return g.."g" end
+	return s.."s"
+end
+
+---An amount typed: a number of chips, or at a gold table gold and silver ("10g", "2g 50s", "75s"; a bare number is
+---gold). Nil when it isn't one.
+---@param text string
+---@param stakes string? "chips" | "gold"
+---@return number? chips
+function Protocol:ParseAmount(text, stakes)
+	text = strlower(strtrim(tostring(text or "")))
+	if text == "" then return nil end
+	if stakes ~= "gold" then
+		local n = tonumber(text)
+		return n and n == floor(n) and n >= 0 and n or nil
+	end
+	local plain = tonumber(text)
+	if plain then
+		local silver = floor(plain * 100 + 0.5)
+		return silver >= 0 and silver or nil
+	end
+	local total, rest = 0, text
+	local g = strmatch(rest, "^(%d+)%s*g")
+	if g then
+		total = total + tonumber(g) * 100
+		rest = gsub(rest, "^%d+%s*g%s*", "")
+	end
+	local s = strmatch(rest, "^(%d+)%s*s")
+	if s then
+		total = total + tonumber(s)
+		rest = gsub(rest, "^%d+%s*s%s*", "")
+	end
+	if rest ~= "" or (not g and not s) then return nil end
+	return total
+end
+
 ---Whether a value is a whole number of chips (or seats, or seconds).
 ---@param n any
 ---@param min number?

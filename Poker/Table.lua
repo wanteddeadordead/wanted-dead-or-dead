@@ -220,17 +220,40 @@ local function Place(seat, k, n, felt)
 	seat:ClearAllPoints()
 	seat:SetPoint("CENTER", felt, "CENTER", x, y)
 	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
-	-- The bet label on the line from the box to the middle of the felt, a little way out from the box's edge, so it
-	-- stays by its own seat whatever the seat count; the chips go on its outer side
+	-- The bet label (and its chips) goes to the first spot by the box, trying toward the middle first, then above or
+	-- below the box, then beside it, that doesn't land on the board, the pot row or the hand line
 	local len = math.sqrt(x * x + y * y)
 	local dx, dy = len > 0 and -x / len or 0, len > 0 and -y / len or 1
 	local ex = math.abs(dx) > 0.001 and (SEAT_W / 2) / math.abs(dx) or math.huge
 	local ey = math.abs(dy) > 0.001 and (SEAT_H / 2) / math.abs(dy) or math.huge
-	-- Out from the box far enough for the chips (up to three stacks) on the label's outer side, and the label itself
-	local dist = math.min(ex, ey) + 14 + 3 * (CHIP - 1) + 18
-	-- And never on the pot row above the board or the hand line below it, however short the felt
-	local lx, ly = x + dx * dist, y + dy * dist
-	if y > 1 then ly = max(ly, CARD_H / 2 + 22 + 30) elseif y < -1 then ly = min(ly, -(CARD_H / 2 + 56)) end
+	local edge = math.min(ex, ey)
+	local GROUP_W, GROUP_H = 96, 26 -- the label with three stacks of chips beside it
+	local halfBoard = 2.5 * (CARD_W + 6) + 8
+	local keepOut = {
+		{ -halfBoard, halfBoard, -CARD_H / 2 - 8, CARD_H / 2 + 8 }, -- the board
+		{ -halfBoard, 70, CARD_H / 2 + 8, CARD_H / 2 + 22 + 3 * STACK_HEIGHT + 14 }, -- the pot and its stacks
+		{ -70, 70, -CARD_H / 2 - 60, -CARD_H / 2 - 8 }, -- Hand N and the check mark
+	}
+	local function Clear(cx, cy)
+		local l, r, b, t = cx - GROUP_W / 2, cx + GROUP_W / 2, cy - GROUP_H / 2, cy + GROUP_H / 2
+		if l < -w / 2 + 4 or r > w / 2 - 4 or b < -h / 2 + 4 or t > h / 2 - 4 then return false end
+		for _, k in ipairs(keepOut) do
+			if l < k[2] and r > k[1] and b < k[4] and t > k[3] then return false end
+		end
+		return true
+	end
+	local side = y > 1 and -1 or 1 -- above the box for the lower half and the sides, below it for the upper half
+	local candidates = {
+		{ x + dx * (edge + 60), y + dy * (edge + 60) },
+		{ x + dx * (edge + 40), y + dy * (edge + 40) },
+		{ x + (x > 1 and -20 or x < -1 and 20 or 0), y + side * (SEAT_H / 2 + 18) },
+		{ x + (x > 1 and -1 or 1) * (SEAT_W / 2 + GROUP_W / 2 + 4), y },
+		{ x, y + side * (SEAT_H / 2 + 18) },
+	}
+	local lx, ly = candidates[3][1], candidates[3][2]
+	for _, c in ipairs(candidates) do
+		if Clear(c[1], c[2]) then lx, ly = c[1], c[2] break end
+	end
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", lx, ly)
 	seat.chipsRightward = x > 1 -- the chips on the label's outer side, away from the board

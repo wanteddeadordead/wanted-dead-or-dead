@@ -1,5 +1,9 @@
 package-as: WantedDeadOrDead
 
+# The poker addon ships beside the base as its own folder (its .toc depends on WantedDeadOrDead)
+move-folders:
+  WantedDeadOrDead/Poker: WantedDeadOrDead_Poker
+
 # Written by .github/release-notes.sh from CHANGELOG.md: only the version being released
 manual-changelog:
   filename: RELEASE_NOTES.md

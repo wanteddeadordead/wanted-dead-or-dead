@@ -429,6 +429,16 @@ do
 	broken.Deserialize = function() error("Division by zero") end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
+-- The poker addon depends on the base: its files load after the base's ADDON_LOADED, into its own namespace
+WantedPokerTestNS = {} -- global: the main chunk is at its limit of locals
+for line in io.lines(ADDON.."Poker/WantedDeadOrDead_Poker.toc") do
+	line = line:gsub("\r", "")
+	if line ~= "" and not line:match("^#") then
+		local chunk = assert(loadfile(ADDON.."Poker/"..line))
+		chunk("WantedDeadOrDead_Poker", WantedPokerTestNS)
+	end
+end
+Fire("ADDON_LOADED", "WantedDeadOrDead_Poker")
 Fire("PLAYER_LOGIN")
 RunTimers()
 
@@ -11688,6 +11698,316 @@ end)()
 	ns:LoadSavedData()
 	db.reports = {}
 	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
+end)()
+-- Poker: the hold'em engine and the provably random deal (Poker/Engine.lua, Poker/Deal.lua), pure Lua with no game
+-- calls, so every rule is checked here. Cards are 1..52: rank 2..14 (ace high) and suit 1..4.
+;(function()
+	local Engine, Deal = WantedPokerTestNS.PokerEngine, WantedPokerTestNS.PokerDeal
+	check(Engine and Deal and WantedPokerTestNS.Wanted == ns, "the poker addon loads on the base's namespace")
+	-- Cards by name: "Ah" is the ace of hearts
+	local SUITS = { c = 1, d = 2, h = 3, s = 4 }
+	local RANKS = { ["2"] = 2, ["3"] = 3, ["4"] = 4, ["5"] = 5, ["6"] = 6, ["7"] = 7, ["8"] = 8, ["9"] = 9, T = 10, J = 11, Q = 12, K = 13, A = 14 }
+	local function C(name) return Engine:Card(RANKS[name:sub(1, 1)], SUITS[name:sub(2, 2)]) end
+	local function cards(s) local out = {} for name in s:gmatch("%S+") do out[#out + 1] = C(name) end return out end
+	local function names(list) local out = {} for _, c in ipairs(list) do out[#out + 1] = Engine:Name(c) end return table.concat(out, " ") end
+	local function score(s) return (Engine:Evaluate(cards(s))) end
+	local function category(s) local _, cat = Engine:Evaluate(cards(s)) return cat end
+	check(Engine:RankOf(C("Ah")) == 14 and Engine:SuitOf(C("Ah")) == 3 and Engine:Name(C("Ah")) == "Ah", "a card knows its rank, suit and name")
+	check(Engine:Name(C("Tc")) == "Tc" and Engine:Name(C("2s")) == "2s" and C("2c") == 1 and C("As") == 52, "the deck runs 2c (1) to As (52)")
+
+	-- The hand ranking, every category in order
+	local ladder = {
+		{ "Ah Kh Qh Jh Th", "straight flush" },
+		{ "9c 9d 9h 9s 2c", "four of a kind" },
+		{ "3c 3d 3h Kc Kd", "full house" },
+		{ "Ac Jc 9c 5c 2c", "flush" },
+		{ "9c 8d 7h 6s 5c", "straight" },
+		{ "7c 7d 7h Ac 2d", "three of a kind" },
+		{ "Ac Ad Kc Kd 2h", "two pair" },
+		{ "Ac Ad 9c 5d 2h", "pair" },
+		{ "Ac Kd 9c 5d 2h", "high card" },
+	}
+	for i = 1, #ladder do
+		check(category(ladder[i][1]) == ladder[i][2], ladder[i][1].." is "..ladder[i][2]..", got "..tostring(category(ladder[i][1])))
+		if i > 1 then check(score(ladder[i - 1][1]) > score(ladder[i][1]), ladder[i - 1][2].." beats "..ladder[i][2]) end
+	end
+	-- The ties and kickers the old addons got wrong
+	check(category("Ac 2d 3h 4s 5c") == "straight" and score("2c 3d 4h 5s 6c") > score("Ac 2d 3h 4s 5c"), "the wheel is a straight, and a six-high straight beats it")
+	check(score("Ah 2h 3h 4h 5h") < score("2c 3c 4c 5c 6c"), "a six-high straight flush beats the steel wheel")
+	check(score("4c 5d 6h 7s 8c 9d 2c") == score("5c 6d 7h 8s 9c 2d 3c"), "a six-card run scores as its top five: nine high both ways")
+	check(score("4c 5d 6h 7s 8c 9d 2c") > score("4h 5s 6c 7d 8h Kc 2s"), "the nine-high straight beats the eight-high one")
+	check(score("4c 4d 4h 2c 2d") > score("3c 3d 3h Kc Kd"), "a full house compares its three of a kind first: fours full beat threes full")
+	check(score("Ac Jc 9c 5c 3c") > score("Ac Jc 9c 5c 2c"), "flushes compare every card: the three kicker wins")
+	check(score("Ac Ad Kc Kd 3h") > score("Ac Ad Kc Kd 2h"), "two pair compares the kicker")
+	check(score("Ac Ad Kc Kd 2h") > score("Ac Ad Qc Qd Kh"), "two pair compares the second pair before the kicker")
+	check(score("Ac Ad 9c 5d 3h") > score("Ac Ad 9c 5d 2h"), "a pair compares every kicker")
+	check(score("Ac Kd Qc 5d 3h") == score("As Kh Qd 5c 3s"), "equal hands in different suits tie")
+	check(score("Ah Kh Qh Jh Th 9h 8h") == score("Ah Kh Qh Jh Th"), "seven cards score as their best five")
+	check(score("Kh Qh Jh Th 9h 8h Ac") == score("Kh Qh Jh Th 9h"), "a king-high straight flush in seven cards, not a royal")
+	check(category("Ac Ad Ah Kc Kd Kh 2s") == "full house" and score("Ac Ad Ah Kc Kd Kh 2s") > score("Kc Kd Kh Ac Ad 2s 3s"), "two trips make the higher full house")
+	check(category("Ac Ad Ah As Kc Kd 2s") == "four of a kind", "quads with a pair are quads")
+	check(score("3c 3d 3h 3s 2c 2d 2h") > score("2c 2d 2h 2s 3c 3d 3h"), "quads of threes beat quads of twos")
+	check(score("Ac Jc 9c 5c 2c Kd Qd") > score("Kc Jc 9c 5c 2c Ad Qd"), "a flush is judged by the suited cards, not the hand's highest card")
+	check(score("Ac Ad Kc Kd Qh Qs 2c") > score("Ac Ad Qc Qd Kh 2s 3c"), "three pairs play the best two with the best kicker")
+	do -- The best five are named, for the table to highlight them
+		local _, cat, best = Engine:Evaluate(cards("Ac Jc 9c 5c 2c Kd Qd"))
+		local list = {}
+		for _, c in ipairs(best) do list[#list + 1] = Engine:Name(c) end
+		table.sort(list)
+		check(cat == "flush" and table.concat(list, " ") == "2c 5c 9c Ac Jc", "the flush's five cards are the suited ones, got "..table.concat(list, " "))
+		local _, _, five = Engine:Evaluate(cards("Ac 2d 3h 4s 5c 9d 9s"))
+		check(#five == 5, "a straight names five cards")
+	end
+	check(Engine:Describe(cards("Ac Ad Kc Kd 2h")) == "two pair, aces and kings", "a hand is described: "..tostring(Engine:Describe(cards("Ac Ad Kc Kd 2h"))))
+	check(Engine:Describe(cards("9c 8d 7h 6s 5c")) == "a nine-high straight", Engine:Describe(cards("9c 8d 7h 6s 5c")))
+	check(Engine:Describe(cards("7c 7d 7h Ac 2d")) == "three sevens", Engine:Describe(cards("7c 7d 7h Ac 2d")))
+
+	-- A deck for the hand tests: the named cards first, the rest after, so every deal is known. Hole cards go one at
+	-- a time starting left of the button, with a burn before each street.
+	local function deck(spec)
+		local d = cards(spec)
+		local used = {}
+		for _, c in ipairs(d) do used[c] = true end
+		for c = 1, 52 do if not used[c] then d[#d + 1] = c end end
+		return d
+	end
+	local function chips(hand)
+		local sum = 0
+		for _, s in pairs(hand.seats) do sum = sum + s.stack + (hand.street ~= "done" and s.total or 0) end
+		return sum
+	end
+	local function act(hand, seat, action, amount)
+		local ok, err = Engine:Act(hand, seat, action, amount)
+		check(ok, ("seat %d %s %s: %s"):format(seat, action, tostring(amount), tostring(err)))
+	end
+	local function refuse(hand, seat, action, amount, why)
+		local ok = Engine:Act(hand, seat, action, amount)
+		check(not ok, ("seat %d %s %s should be refused: %s"):format(seat, action, tostring(amount), why))
+	end
+	local function newHand(seats, button, spec, sb, bb)
+		local hand = Engine:NewHand({ seats = seats, button = button, sb = sb or 10, bb = bb or 20, deck = deck(spec) })
+		Engine:Start(hand)
+		return hand
+	end
+
+	-- Three-handed: blinds, order of play, min-raise, side pots, an uncalled bet returned, a fold at the end
+	do
+		-- Seat 2 (small blind) gets Ah Ad, seat 3 (big blind, 60 chips) Kh Kd, seat 1 (button) 7c 2d; board Qs Js 9s / 4h / 5c
+		local hand = newHand({ [1] = { stack = 1000, name = "Button" }, [2] = { stack = 1000, name = "Small" }, [3] = { stack = 60, name = "Big" } },
+			1, "Ah Kh 7c Ad Kd 2d 3c Qs Js 9s 4c 4h 5d 5c")
+		check(hand.street == "preflop" and hand.toAct == 1, "preflop the button acts first three-handed, got "..tostring(hand.toAct))
+		check(hand.seats[2].bet == 10 and hand.seats[3].bet == 20 and hand.seats[1].bet == 0, "the blinds are posted")
+		check(names(hand.seats[2].hole) == "Ah Ad" and names(hand.seats[3].hole) == "Kh Kd" and names(hand.seats[1].hole) == "7c 2d", "dealt one at a time from the left of the button, the button last")
+		local legal = Engine:Legal(hand, 1)
+		check(legal.call == 20 and legal.minRaise == 40 and legal.maxRaise == 1000 and not legal.check, "the button may call 20 or raise to at least 40, all-in 1000")
+		refuse(hand, 2, "call", nil, "not their turn")
+		refuse(hand, 1, "check", nil, "there is a bet to call")
+		refuse(hand, 1, "raise", 30, "below the minimum raise")
+		refuse(hand, 1, "raise", 1001, "more than the stack")
+		refuse(hand, 1, "raise", 40.5, "a fractional amount")
+		refuse(hand, 1, "bet", 40, "a bet when there is one to call is a raise")
+		act(hand, 1, "raise", 60)
+		check(hand.toAct == 2 and hand.currentBet == 60 and hand.lastRaiseSize == 40, "the raise is to 60, a raise of 40")
+		check(Engine:Legal(hand, 2).minRaise == 100 and Engine:Legal(hand, 2).call == 50, "the small blind's minimum re-raise is to 100, a call 50 more")
+		act(hand, 2, "call")
+		-- The big blind has 60 and is in for 20: calling 40 more is all-in, and no raise is possible
+		local big = Engine:Legal(hand, 3)
+		check(big.call == 40 and big.minRaise == nil and big.maxRaise == nil, "the big blind can only call all-in, got call "..tostring(big.call).." min "..tostring(big.minRaise))
+		act(hand, 3, "call")
+		check(hand.seats[3].allin and hand.street == "flop" and #hand.board == 3, "the big blind is all-in and the flop is out")
+		check(names(hand.board) == "Qs Js 9s", "a card is burnt before the flop, got "..names(hand.board))
+		check(hand.toAct == 2, "post-flop the first player left of the button acts first")
+		check(Engine:Legal(hand, 2).check and Engine:Legal(hand, 2).minBet == 20, "with no bet, a check or a bet of at least the big blind")
+		refuse(hand, 2, "bet", 10, "below the minimum bet")
+		act(hand, 2, "check")
+		act(hand, 1, "bet", 100)
+		check(hand.toAct == 2 and hand.lastRaiseSize == 100 and hand.currentBet == 100, "a bet of 100 sets the raise size")
+		act(hand, 2, "call")
+		check(hand.street == "turn" and #hand.board == 4 and hand.toAct == 2 and hand.currentBet == 0 and hand.seats[2].bet == 0, "the turn: bets are gathered")
+		act(hand, 2, "check")
+		act(hand, 1, "check")
+		check(hand.street == "river" and #hand.board == 5, "the river")
+		act(hand, 2, "bet", 200)
+		act(hand, 1, "fold")
+		check(hand.street == "done" and hand.results, "the hand ends when the last bet is folded to")
+		local r = hand.results
+		-- Main pot 180 (60 from each): aces beat kings. Side pot 200 (the flop bets): the button folded, so the small
+		-- blind's. The river bet of 200 nobody called goes back.
+		check(hand.seats[2].stack == 1220 and hand.seats[1].stack == 840 and hand.seats[3].stack == 0, ("stacks %d %d %d"):format(hand.seats[1].stack, hand.seats[2].stack, hand.seats[3].stack))
+		check(chips(hand) == 2060, "no chip is made or lost: "..chips(hand))
+		check(#r.pots == 2 and r.pots[1].amount == 180 and r.pots[1].winners[1] == 2 and r.pots[2].amount == 200 and r.pots[2].winners[1] == 2, "two pots, both to seat 2")
+		check(r.returned and r.returned[2] == 200, "the uncalled river bet is returned")
+		check(r.payouts[2] == 380 and r.payouts[1] == nil, "payouts: seat 2 wins 380")
+		check(r.shown[2] and r.shown[3] and not r.shown[1], "the two players in the showdown show; the one who folded doesn't")
+		check(r.pots[1].description == "a pair of aces", "the winning hand is described: "..tostring(r.pots[1].description))
+		check(#hand.log == 10, "every action is logged: "..#hand.log)
+		check(Engine:Legal(hand, 1) == nil, "no action after the hand")
+	end
+
+	-- A short all-in doesn't reopen the betting for those who already acted; a full raise does
+	do
+		local seats = function(utg) return { [1] = { stack = 1000 }, [2] = { stack = 1000 }, [3] = { stack = 1000 }, [4] = { stack = utg } } end
+		local hand = newHand(seats(70), 1, "")
+		check(hand.toAct == 4, "four-handed, the player left of the big blind opens")
+		act(hand, 4, "call")
+		act(hand, 1, "raise", 60)
+		act(hand, 2, "call")
+		act(hand, 3, "call")
+		act(hand, 4, "raise", 70) -- all-in for 10 more: short of the 40 minimum
+		check(hand.seats[4].allin and hand.currentBet == 70 and hand.toAct == 1, "the short all-in stands and the action comes back round")
+		local legal = Engine:Legal(hand, 1)
+		check(legal.call == 10 and legal.minRaise == nil, "the button may call the 10 or fold, not raise again")
+		refuse(hand, 1, "raise", 200, "the short all-in didn't reopen the betting")
+		act(hand, 1, "call")
+		act(hand, 2, "call")
+		act(hand, 3, "call")
+		check(hand.street == "flop" and hand.currentBet == 0, "on to the flop")
+		-- The same spot with a full raise behind
+		hand = newHand(seats(200), 1, "")
+		act(hand, 4, "call")
+		act(hand, 1, "raise", 60)
+		act(hand, 2, "call")
+		act(hand, 3, "call")
+		act(hand, 4, "raise", 200)
+		check(Engine:Legal(hand, 1).minRaise == 340, "a full raise reopens the betting: the minimum is 200 plus the raise of 140")
+		act(hand, 1, "fold") act(hand, 2, "fold") act(hand, 3, "fold")
+		check(hand.street == "done" and hand.seats[4].stack == 380 and not next(hand.results.shown), "folded to the all-in player, who shows nothing")
+	end
+
+	-- Side pots with three different stacks, all-in before the flop: the board runs out by itself
+	do
+		-- Seat 2 (small blind) Kh Kd, seat 3 (big blind) Qh Qd, seat 1 (button) Ah Ad; board 2c 5d 8s / 9h / 3c
+		local hand = newHand({ [1] = { stack = 100 }, [2] = { stack = 300 }, [3] = { stack = 500 } }, 1, "Kh Qh Ah Kd Qd Ad 4c 2c 5d 8s 4d 9h 4h 3c")
+		act(hand, 1, "raise", 100)
+		act(hand, 2, "raise", 300)
+		act(hand, 3, "call")
+		check(hand.street == "done" and #hand.board == 5, "everyone all-in or called: the board runs out and the hand is over")
+		local r = hand.results
+		check(#r.pots == 2 and r.pots[1].amount == 300 and r.pots[1].winners[1] == 1 and r.pots[2].amount == 400 and r.pots[2].winners[1] == 2, "main pot 300 to the aces, side pot 400 to the kings")
+		check(hand.seats[1].stack == 300 and hand.seats[2].stack == 400 and hand.seats[3].stack == 200 and chips(hand) == 900, "stacks 300, 400, 200")
+		check(#r.pots[1].eligible == 3 and #r.pots[2].eligible == 2, "who could win each pot")
+	end
+
+	-- A split pot's odd chip goes to the first winner left of the button
+	do
+		local hand = newHand({ [1] = { stack = 101 }, [2] = { stack = 101 }, [3] = { stack = 101 } }, 3, "Ac As 2c Kd Kh 3d 4c 7h 8h 9c 4d Jd 4h Qs")
+		act(hand, 3, "raise", 101) act(hand, 1, "call") act(hand, 2, "call")
+		check(hand.street == "done", "all-in three ways")
+		check(hand.seats[1].stack == 152 and hand.seats[2].stack == 151 and hand.seats[3].stack == 0, ("split 303: %d %d %d"):format(hand.seats[1].stack, hand.seats[2].stack, hand.seats[3].stack))
+		check(#hand.results.pots[1].winners == 2, "two winners")
+	end
+
+	-- Heads-up: the button is the small blind and acts first before the flop, last after it
+	do
+		local hand = newHand({ [1] = { stack = 500 }, [2] = { stack = 500 } }, 1, "")
+		check(hand.seats[1].bet == 10 and hand.seats[2].bet == 20 and hand.toAct == 1, "the button posts the small blind and opens")
+		act(hand, 1, "call")
+		check(hand.toAct == 2 and Engine:Legal(hand, 2).check, "the big blind has the option")
+		act(hand, 2, "check")
+		check(hand.street == "flop" and hand.toAct == 2, "after the flop the big blind acts first")
+		act(hand, 2, "check") act(hand, 1, "check") act(hand, 2, "check") act(hand, 1, "check") act(hand, 2, "check") act(hand, 1, "check")
+		check(hand.street == "done" and chips(hand) == 1000 and (hand.results.payouts[1] or 0) + (hand.results.payouts[2] or 0) == 40, "checked down to a showdown")
+	end
+
+	-- Blinds a stack can't cover are posted all-in, and the others still owe the full blind
+	do
+		local hand = newHand({ [1] = { stack = 500 }, [2] = { stack = 500 }, [3] = { stack = 15 } }, 1, "")
+		check(hand.seats[3].bet == 15 and hand.seats[3].allin and hand.currentBet == 20, "a short big blind posts what it has")
+		check(Engine:Legal(hand, 1).call == 20, "the others still owe the full big blind")
+		act(hand, 1, "call") act(hand, 2, "call")
+		check(hand.street == "flop" and hand.toAct == 2, "the two with chips play on")
+		for _ = 1, 3 do act(hand, 2, "check") act(hand, 1, "check") end
+		check(hand.street == "done" and chips(hand) == 1015, "checked down")
+		check(hand.seats[1].stack == 535, "the button's club flush takes the main pot of 45 and the side pot of 10: "..hand.seats[1].stack)
+	end
+
+	-- A player who leaves is folded, on their turn or not, and their chips stay in the pot
+	do
+		local hand = newHand({ [1] = { stack = 500 }, [2] = { stack = 500 }, [3] = { stack = 500 } }, 1, "")
+		act(hand, 1, "call")
+		Engine:Leave(hand, 2)
+		check(hand.seats[2].folded and hand.toAct == 3, "leaving on your turn folds and passes the action")
+		act(hand, 3, "check")
+		check(hand.street == "flop" and hand.toAct == 3, "the flop, and the folded seat is skipped")
+		Engine:Leave(hand, 1)
+		check(hand.street == "done" and hand.seats[3].stack == 530 and hand.seats[1].stack == 480 and hand.seats[2].stack == 490, ("the last player left wins what was in the middle: %d %d %d"):format(hand.seats[1].stack, hand.seats[2].stack, hand.seats[3].stack))
+		check(chips(hand) == 1500 and not next(hand.results.shown), "chips are conserved and nothing is shown")
+	end
+
+	-- Replay: the same seats, deck and actions give the same result, so a client can check the host's settlement
+	do
+		local setup = { seats = { [1] = { stack = 100 }, [2] = { stack = 300 }, [3] = { stack = 500 } }, button = 1, sb = 10, bb = 20 }
+		local d = deck("Kh Qh Ah Kd Qd Ad 4c 2c 5d 8s 4d 9h 4h 3c")
+		local hand = Engine:NewHand({ seats = setup.seats, button = 1, sb = 10, bb = 20, deck = d })
+		Engine:Start(hand)
+		act(hand, 1, "raise", 100) act(hand, 2, "raise", 300) act(hand, 3, "call")
+		local again = Engine:Replay(setup, d, hand.log)
+		check(again and again.results.payouts[1] == 300 and again.results.payouts[2] == 400 and Engine:SamePayouts(again.results.payouts, hand.results.payouts), "the replay pays the same")
+		local bad = {}
+		for k, v in pairs(hand.results.payouts) do bad[k] = v end
+		bad[2] = 401
+		check(not Engine:SamePayouts(again.results.payouts, bad), "a changed payout is caught")
+		local broken = Engine:Replay(setup, d, { { seat = 2, action = "raise", amount = 100 } })
+		check(broken == nil, "a log with an illegal action doesn't replay")
+	end
+
+	-- The deal: every player's secret goes into the shuffle, and anyone can check it afterwards
+	do
+		local s1, s2 = Deal:Secret(), Deal:Secret()
+		check(#s1 == 64 and s1:match("^%x+$") and s1 ~= s2, "a secret is 32 random bytes in hex")
+		check(#Deal:Commit(s1) == 64 and Deal:Commit(s1) == Deal:Commit(s1) and Deal:Commit(s1) ~= Deal:Commit(s2), "a commitment is a hash of the secret")
+		local secrets = { [1] = "aa", [2] = "bb", [4] = "cc" }
+		local d1 = Deal:Deck("table1", 7, secrets)
+		local seen = {}
+		for _, c in ipairs(d1) do seen[c] = true end
+		local count = 0
+		for _ in pairs(seen) do count = count + 1 end
+		check(#d1 == 52 and count == 52, "the deck is a permutation of 52 cards")
+		check(table.concat(Deal:Deck("table1", 7, secrets), ",") == table.concat(d1, ","), "the same secrets give the same deck")
+		check(table.concat(Deal:Deck("table1", 8, secrets), ",") ~= table.concat(d1, ","), "the next hand's deck differs")
+		check(table.concat(Deal:Deck("table1", 7, { [1] = "aa", [2] = "bb", [4] = "cd" }), ",") ~= table.concat(d1, ","), "one changed secret changes the deck")
+		check(#Deal:DeckHash(d1) == 64 and Deal:DeckHash(d1) ~= Deal:DeckHash(Deal:Deck("table1", 8, secrets)), "the deck's hash")
+		-- No card favours a position: over 520 decks the first card is each of the 52 about 10 times
+		local firsts = {}
+		for i = 1, 520 do
+			local dk = Deal:Deck("t", i, { [1] = "x"..i })
+			firsts[dk[1]] = (firsts[dk[1]] or 0) + 1
+		end
+		local most = 0
+		for c = 1, 52 do most = math.max(most, firsts[c] or 0) check(firsts[c], "card "..c.." never came first") end
+		check(most <= 30, "no card comes first far more than its share: "..most)
+
+		-- An honest hand verifies; each thing a host could fiddle is caught, with a reason the table can show
+		local function audit(tamper)
+			local sec = { [1] = Deal:Secret(), [2] = Deal:Secret(), [3] = Deal:Secret() }
+			local com = {}
+			for seat, s in pairs(sec) do com[seat] = Deal:Commit(s) end
+			local setup = { seats = { [1] = { stack = 100 }, [2] = { stack = 300 }, [3] = { stack = 500 } }, button = 1, sb = 10, bb = 20 }
+			local dk = Deal:Deck("t9", 3, sec)
+			local hand = Engine:NewHand({ seats = setup.seats, button = 1, sb = 10, bb = 20, deck = dk })
+			Engine:Start(hand)
+			act(hand, 1, "raise", 100) act(hand, 2, "raise", 300) act(hand, 3, "call")
+			local a = { tableId = "t9", handNo = 3, commits = com, secrets = sec, deckHash = Deal:DeckHash(dk), setup = setup, log = hand.log,
+				payouts = hand.results.payouts, board = hand.board }
+			local me = { seat = 2, secret = sec[2], commit = com[2], hole = { hand.seats[2].hole[1], hand.seats[2].hole[2] } }
+			if tamper then tamper(a, me, sec, com) end
+			return Deal:Verify(a, me)
+		end
+		check(audit() == true, "an honest hand verifies")
+		local function fails(tamper, word, what)
+			local ok, reason = audit(tamper)
+			check(ok == false and reason and reason:lower():find(word, 1, true), what..": "..tostring(reason))
+		end
+		fails(function(a) a.commits[2] = Deal:Commit("other") end, "commit", "my commitment replaced")
+		fails(function(a) a.commits[2] = nil end, "commit", "my commitment left out")
+		fails(function(a) a.secrets[2] = "0000" end, "secret", "my secret replaced")
+		fails(function(a, me, sec, com) a.secrets[3] = Deal:Secret() end, "seat 3", "another player's secret doesn't match their commitment")
+		fails(function(a) a.deckHash = Deal:DeckHash(Deal:Deck("t9", 4, a.secrets)) end, "deck", "the deck isn't the one the secrets make")
+		fails(function(a, me) me.hole[1] = me.hole[1] == 1 and 2 or 1 end, "cards", "the cards I was dealt aren't the deck's")
+		fails(function(a) a.board[5] = a.board[5] == 1 and 2 or 1 end, "board", "the board isn't the deck's")
+		fails(function(a) local seat = next(a.payouts) a.payouts[seat] = a.payouts[seat] + 1 end, "payout", "the settlement doesn't follow from the actions")
+		fails(function(a) a.log[#a.log] = nil end, "payout", "an action left out of the log changes the settlement")
+	end
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

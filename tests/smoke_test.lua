@@ -13500,8 +13500,10 @@ end)()
 	-- A pre-action while Bob thinks: check/fold acts the moment the turn comes
 	check(parts.checkFold:IsShown() and parts.callAny:IsShown(), "waiting: the pre-actions are offered")
 	parts.checkFold:SetChecked(true)
+	local before = { parts.board[1].arrivals, parts.board[3].arrivals, parts.board[4].arrivals }
 	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
 	check(host.hand.street == "flop" and host.hand.toAct == 2 and parts.checkFold.checked, "the flop: Bob (the big blind) acts first; our pre-action waits")
+	check(parts.board[1].arrivals == before[1] + 1 and parts.board[3].arrivals == before[2] + 1 and parts.board[4].arrivals == before[3] and parts.seats[0].cards[1].arrivals >= 1 and parts.seats[1].cards[2].arrivals >= 1, "the flop's three cards and everyone's hole cards were dealt in, once each: board "..parts.board[1].arrivals..","..parts.board[3].arrivals..","..parts.board[4].arrivals.." mine "..parts.seats[0].cards[1].arrivals.." bob "..parts.seats[1].cards[2].arrivals)
 	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
 	check(host.hand.street == "turn" and host.hand.toAct == 2 and not parts.checkFold.checked, "Bob checks: our check went by itself, the turn is dealt and the pre-action is spent")
 	FromBob({ k = "act", h = key, q = host.seq, a = "bet", m = 20 })

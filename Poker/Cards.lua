@@ -90,7 +90,7 @@ function Cards:New(parent, width, height, font)
 	f.back:SetPoint("BOTTOMRIGHT", -2, 2)
 	f.back:SetTexture(MEDIA.."card-back")
 	f.back:Hide()
-	f.raised, f.rise = false, false -- set, not left nil: a frame field the tests' mock would otherwise answer with a method
+	f.raised, f.rise, f.arrive, f.arrivals = false, false, false, 0 -- set, not left nil: a frame field the tests' mock would otherwise answer with a method
 	function f:SetCard(card)
 		self.card = card
 		if type(card) == "number" then
@@ -153,6 +153,26 @@ function Cards:New(parent, width, height, font)
 		end
 		self.rise:Stop()
 		self.rise:Play()
+	end
+	-- Arrives: slides in from dx, dy away (the middle of the felt, the deck) and fades up, after a moment's delay so a
+	-- flop lands one card after another. The animation runs backwards, so it ends where the card sits
+	function f:Arrive(dx, dy, delay)
+		self.arrivals = (self.arrivals or 0) + 1
+		if not self.arrive then
+			self.arrive = self:CreateAnimationGroup()
+			self.arriveSlide = self.arrive:CreateAnimation("Translation")
+			self.arriveSlide:SetDuration(0.28)
+			self.arriveSlide:SetSmoothing("IN")
+			self.arriveFade = self.arrive:CreateAnimation("Alpha")
+			self.arriveFade:SetFromAlpha(1)
+			self.arriveFade:SetToAlpha(0)
+			self.arriveFade:SetDuration(0.28)
+		end
+		self.arrive:Stop()
+		self.arriveSlide:SetOffset(dx, dy)
+		self.arriveSlide:SetStartDelay(delay or 0)
+		self.arriveFade:SetStartDelay(delay or 0)
+		self.arrive:Play(true)
 	end
 	-- Back where it sits
 	function f:Settle()

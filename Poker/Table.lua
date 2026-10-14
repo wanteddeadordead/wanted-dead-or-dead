@@ -20,6 +20,7 @@ local private = {
 	deadlineAt = nil, -- when the player to act runs out of time, by our clock
 	turnSeconds = Protocol.DEFAULT_TURN_SECONDS,
 	loggedKey = nil, loggedActions = 0, loggedStreet = nil, loggedResults = false,
+	acts = {}, -- seat -> what they did last this hand (NoteActions)
 }
 local WIDTH, HEIGHT = 900, 560
 local HEADER = 26
@@ -650,6 +651,48 @@ function private.Strength(hole, board)
 	return text
 end
 
+-- What each seat did last in this hand, for its pill: the blinds at the deal, then every action as it comes. Folds and
+-- all-ins hold for the hand; the rest clear when the next street is dealt. A raise after a raise on the same street is
+-- a re-raise
+function private.NoteActions(st)
+	local hand = st.hand
+	if not hand or not hand.key then
+		private.acts, private.actsKey = {}, nil
+		return
+	end
+	if hand.key ~= private.actsKey then
+		private.acts, private.actsKey, private.notedActions, private.actsStreet, private.raises = {}, hand.key, 0, nil, 0
+	end
+	local log = hand.log or {}
+	-- The hand's key is known from the shuffle on; the blinds once it's dealt, before anyone has acted
+	if hand.sb and hand.bb and #log == 0 and not private.acts[hand.bb] then
+		private.acts[hand.sb] = { action = "blind", text = "Small blind" }
+		private.acts[hand.bb] = { action = "blind", text = "Big blind" }
+	end
+	for i = (private.notedActions or 0) + 1, #log do
+		local e = log[i]
+		local text
+		if e.action == "fold" then text = "Fold"
+		elseif e.action == "check" then text = "Check"
+		elseif e.action == "call" then text = "Call "..Chips(e.amount or 0, st.cfg)
+		elseif e.action == "bet" then text = "Bet "..Chips(e.amount or 0, st.cfg) private.raises = 1
+		elseif e.action == "raise" then
+			private.raises = (private.raises or 0) + 1
+			text = (private.raises >= 2 and "Re-raise to " or "Raise to ")..Chips(e.amount or 0, st.cfg)
+		elseif e.action == "allin" then text = "All-in "..Chips(e.amount or 0, st.cfg)
+		end
+		if text then private.acts[e.seat] = { action = e.action, text = text } end
+	end
+	private.notedActions = #log
+	if private.actsStreet and hand.street ~= private.actsStreet then
+		for seat, a in pairs(private.acts) do
+			if a.action ~= "fold" and a.action ~= "allin" then private.acts[seat] = nil end
+		end
+		private.raises = 0
+	end
+	private.actsStreet = hand.street
+end
+
 function TableUI:Refresh(st)
 	if not private.frame then private.Build() end
 	private.state = st
@@ -682,6 +725,7 @@ function TableUI:Refresh(st)
 		end
 	end
 	local showdown = hand and hand.results ~= nil
+	private.NoteActions(st)
 	-- Seats
 	for k = 0, Protocol.MAX_SEATS - 1 do
 		local seatFrame = private.seats[k]
@@ -742,6 +786,10 @@ function TableUI:Refresh(st)
 				elseif playing and hand.toAct == seat then status, color = seat == me and "Your turn" or "To act", C.gold
 				elseif hand and (hand.stage == "commits" or hand.stage == "reveals") and p.inHand then status, color = "Shuffling", C.blue
 				elseif showdown and winners[seat] then status, color = winners[seat] == "split" and "Split" or "Winner", C.green
+				elseif private.acts[seat] and (playing or showdown) then
+					local a = private.acts[seat]
+					status = a.text
+					color = (a.action == "bet" or a.action == "raise") and C.amber or (a.action == "allin" and C.red) or (a.action == "blind" and C.muted) or C.text
 				elseif p.away and p.away > 0 and not p.out then status, color = "Slow", C.amber
 				end
 				seatFrame.status:Set(status, color)

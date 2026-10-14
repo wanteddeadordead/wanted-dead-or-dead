@@ -1069,14 +1069,15 @@ function private.NoteActions(st)
 	for i = (private.notedActions or 0) + 1, #log do
 		local e = log[i]
 		local text
+		-- The word alone: the amount is on the felt by their chips
 		if e.action == "fold" then text = "Fold"
 		elseif e.action == "check" then text = "Check"
-		elseif e.action == "call" then text = "Call "..Chips(e.amount or 0, st.cfg)
-		elseif e.action == "bet" then text = "Bet "..Chips(e.amount or 0, st.cfg) private.raises = 1
+		elseif e.action == "call" then text = "Call"
+		elseif e.action == "bet" then text = "Bet" private.raises = 1
 		elseif e.action == "raise" then
 			private.raises = (private.raises or 0) + 1
-			text = (private.raises >= 2 and "Re-raise to " or "Raise to ")..Chips(e.amount or 0, st.cfg)
-		elseif e.action == "allin" then text = "All-in "..Chips(e.amount or 0, st.cfg)
+			text = private.raises >= 2 and "Re-raise" or "Raise"
+		elseif e.action == "allin" then text = "All-in"
 		end
 		if text then private.acts[e.seat] = { action = e.action, text = text } end
 	end

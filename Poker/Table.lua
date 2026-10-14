@@ -37,6 +37,7 @@ local SEAT_BORDER = { 1, 1, 1, 0.1 }
 local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
 local CARD_W, CARD_H = 46, 64
 local CHIP = 14 -- a chip by a bet
+local CHIP_COLORS = { { 1, 1, 1 }, { 1, 0.82, 0.35 }, { 0.35, 1, 0.45 }, { 0.45, 0.65, 1 }, { 0.3, 0.3, 0.32 } } -- white, gold, green, blue, black
 local SMALL_W, SMALL_H = 34, 48
 
 local function Name(full)
@@ -985,12 +986,19 @@ function TableUI:Refresh(st)
 					seatFrame.won:Hide()
 				end
 				-- The bet in front of them, or what they won
-				local stack = 0
+				-- The chips by a bet: one to four high by its size against the big blind, and coloured like a rack: the small
+				-- blind's white, the big blind's gold, then green, blue and black as the bets grow
+				local stack, tint = 0, CHIP_COLORS[1]
 				if not showdown and playing and p.b and p.b > 0 then
 					local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
-					stack = p.b <= 2 * bb and 1 or p.b <= 5 * bb and 2 or p.b <= 20 * bb and 3 or 4
+					local x = p.b / bb
+					stack = x <= 2 and 1 or x <= 5 and 2 or x <= 20 and 3 or 4
+					tint = CHIP_COLORS[x < 1 and 1 or x <= 1 and 2 or x <= 5 and 3 or x <= 25 and 4 or 5]
 				end
-				for i = 1, 4 do seatFrame.chips[i]:SetShown(i <= stack) end
+				for i = 1, 4 do
+					seatFrame.chips[i]:SetShown(i <= stack)
+					seatFrame.chips[i]:SetVertexColor(tint[1], tint[2], tint[3], 1)
+				end
 				if showdown and hand.results.payouts and hand.results.payouts[seat] then
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
 					seatFrame.bet:Show()

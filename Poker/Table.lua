@@ -10,6 +10,7 @@ local C = Theme.C
 local Engine = Poker.PokerEngine
 local Cards = Poker.PokerCards
 local Bots = Poker.PokerBots
+local Engine = Poker.PokerEngine
 local Protocol = Poker.PokerProtocol
 local Net = Poker.PokerNet
 local private = {
@@ -101,6 +102,10 @@ local function BuildSeat(felt, k)
 	seat.timer:SetPoint("BOTTOMLEFT", 1, 1)
 	seat.timer:SetPoint("BOTTOMRIGHT", -1, 1)
 	seat.timer:Hide()
+	seat.won = Theme:Text(felt, "small", "", C.green) -- at the showdown, the hand they showed, above the box
+	seat.won:SetPoint("BOTTOM", seat, "TOP", 0, 4)
+	seat.won:SetJustifyH("CENTER")
+	seat.won:Hide()
 	seat.empty = Theme:Text(seat, "small", "", C.faint)
 	seat.empty:SetPoint("CENTER")
 	seat.empty:SetJustifyH("CENTER")
@@ -879,6 +884,7 @@ function TableUI:Refresh(st)
 				seatFrame.name:SetText("")
 				seatFrame.stack:SetText("")
 				seatFrame.status:Set(nil)
+				seatFrame.won:Hide()
 				seatFrame.dealer:Set(nil)
 				seatFrame.cards[1]:Hide()
 				seatFrame.cards[2]:Hide()
@@ -932,6 +938,19 @@ function TableUI:Refresh(st)
 				end
 				seatFrame.status:Set(status, color)
 				seatFrame.dealer:Set(hand and hand.button == seat and "D" or nil, C.gold)
+				-- At the showdown, the hand they showed, above the box: the winner's in green, the rest muted
+				local shownHand
+				if showdown and p.hole and p.hole[1] and p.hole[2] and hand.board and #hand.board >= 3 then
+					local cards = { p.hole[1], p.hole[2] }
+					for _, c in ipairs(hand.board) do cards[#cards + 1] = c end
+					shownHand = Engine:Describe(cards)
+				end
+				if shownHand then
+					seatFrame.won:SetText(Theme:Colorize(shownHand, winners[seat] and C.green or C.muted))
+					seatFrame.won:Show()
+				else
+					seatFrame.won:Hide()
+				end
 				-- The bet in front of them, or what they won
 				if showdown and hand.results.payouts and hand.results.payouts[seat] then
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
@@ -1081,7 +1100,7 @@ function TableUI:Refresh(st)
 	private.turnKey = turnKey
 	-- What your cards make
 	local mine0 = me and st.seats[me]
-	if mine0 and mine0.hole and hand and hand.stage == "play" and not mine0.f then
+	if mine0 and mine0.hole and hand and hand.stage == "play" and not mine0.f and not showdown then
 		private.strength:SetText(private.Strength(mine0.hole, hand.board or {}))
 		private.strength:ClearAllPoints()
 		private.strength:SetPoint("BOTTOM", private.seats[0], "TOP", 0, 4)

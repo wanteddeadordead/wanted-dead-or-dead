@@ -12377,6 +12377,7 @@ end)()
 	parts.call._scripts.OnClick(parts.call)
 	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen("Split pot")), "the showdown, with the winner on screen: "..host.phase..", "..tostring(parts.status._text))
 	check(type(bobs.cards[1].card) == "number", "Bob's cards are shown at the showdown")
+	check((mine.won and mine.won._text ~= "" or false) or (bobs.won and bobs.won._text ~= "" or false), "the hands shown are named above the seats")
 	local raised = 0
 	for _, c in ipairs(parts.board) do if c.raised then raised = raised + 1 end end
 	for _, s in ipairs({ mine, bobs }) do for _, c in ipairs(s.cards) do if c.raised then raised = raised + 1 end end end

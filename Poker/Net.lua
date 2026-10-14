@@ -106,6 +106,14 @@ function Net:On(func)
 	tinsert(private.listeners, func)
 end
 
+-- What the table this character hosts reports: its settlement lines go to the ledger like a player's
+function private.OnHostEvent(event, ...)
+	if event == "settle" then
+		private.Notify("settle", ...)
+	end
+	private.Notify("host", event, ...)
+end
+
 local function NewPlayer()
 	return Client:New({ name = Net:Me(), send = Send, now = Now, on = function(event, ...)
 		if event == "takeover" then
@@ -124,7 +132,7 @@ function Net:HostTable(cfg, buyin)
 	if private.player and not private.player.left then
 		return false, "you're at a table already"
 	end
-	local host, reason = Host:New({ name = Net:Me(), cfg = cfg, send = Send, ad = Advertise, now = Now, on = function(...) private.Notify("host", ...) end })
+	local host, reason = Host:New({ name = Net:Me(), cfg = cfg, send = Send, ad = Advertise, now = Now, on = private.OnHostEvent })
 	if not host then
 		return false, reason
 	end
@@ -167,7 +175,7 @@ end
 
 -- The host vanished and this seat is next: the table carries on from the backup, under this character
 function private.TakeOver(backup)
-	local host = Host:Restore(backup, { name = Net:Me(), send = Send, ad = Advertise, now = Now, on = function(...) private.Notify("host", ...) end })
+	local host = Host:Restore(backup, { name = Net:Me(), send = Send, ad = Advertise, now = Now, on = private.OnHostEvent })
 	if not host then
 		return
 	end

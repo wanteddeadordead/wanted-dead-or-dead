@@ -51,6 +51,8 @@ local private = {
 	links = {}, -- name -> { realm, heard, since, sent, received } realm links (players on another realm name)
 	directory = {}, -- { name, realm } players on other realm names from the app, newest first (TakeDirectory)
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
+	pluginTimes = {}, -- outbound plugin whisper times in the last minute (their own budget)
+	plugins = {}, -- tag -> handler(tbl, sender, channel): other addons' messages carried by this transport (Sync:RegisterPlugin)
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
 	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
@@ -120,6 +122,8 @@ local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
+local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true }
+function private.OwnTag(tag) return OWN_TAGS[tag] == true end
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts
@@ -183,6 +187,7 @@ local MAX_FILL_PER_REQUEST = 200
 -- Realm links (whispers to players on another realm name): their own budget, a resync every minute so a
 -- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list
 local MAX_LINK_PARTS_PER_MINUTE = 40
+local MAX_PLUGIN_PARTS_PER_MINUTE = 150 -- plugin whispers (a poker table's traffic) have their own budget
 local LINK_HAVE_SECONDS = 60
 local LINK_TIMEOUT = 3 * 60 -- a link that misses a few resyncs is dropped (and greeted again later)
 local LINK_FORWARD_SECONDS = 2
@@ -1165,6 +1170,13 @@ function private.Send(tag, tbl, attempt, target)
 			private.Drop("guild budget", 1)
 			return false
 		end
+	elseif target and private.plugins[tag] then
+		PruneTimes(private.pluginTimes, now)
+		if #private.pluginTimes + total > MAX_PLUGIN_PARTS_PER_MINUTE then
+			Wanted:Log("!! Sync: plugin whisper budget reached, dropping %s to %s", tag, target)
+			private.Drop("plugin budget", 1)
+			return false
+		end
 	elseif target then
 		PruneTimes(private.linkTimes, now)
 		if #private.linkTimes + total > MAX_LINK_PARTS_PER_MINUTE then
@@ -1234,7 +1246,7 @@ function private.Send(tag, tbl, attempt, target)
 			private.QueueRetry(tag, tbl, attempt, target)
 			return false
 		end
-		tinsert(private.linkTimes, now)
+		tinsert(private.plugins[tag] and private.pluginTimes or private.linkTimes, now)
 		private.stats.sent = private.stats.sent + 1
 	end
 	if private.links[target] then
@@ -1799,7 +1811,7 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		payload = table.concat(partial.parts, "", 1, total)
 	end
 	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
-	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and not private.plugins[tag] and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
 		local waiting = private.deferred[sender] or 0
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
@@ -1874,6 +1886,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	end
 	-- Waiting for an update: take nothing in until this client can read what newer versions write
 	if Wanted:GetRequiredUpdate() then
+		return
+	end
+	if private.plugins[tag] then
+		private.plugins[tag](tbl, sender, channel)
 		return
 	end
 	if tag == TAG_RAID then
@@ -2448,6 +2464,51 @@ end
 ---@param guid string the target
 function Sync:SendPosseJoin(caller, guid)
 	return private.Send(TAG_POSSE_JOIN, { g = guid }, nil, caller)
+end
+
+-- ============================================================================
+-- Plugins: other addons' messages over this transport
+-- ============================================================================
+
+---Lets another addon (the poker table) send and receive its own messages through this transport: by whisper
+---(their own budget, not the realm links') or on the channel. One tag letter each, not one the sync uses.
+---@param tag string one capital letter
+---@param handler fun(tbl: table, sender: string, channel: string)
+function Sync:RegisterPlugin(tag, handler)
+	assert(type(tag) == "string" and #tag == 1 and strmatch(tag, "^%u$"), "a plugin tag is one capital letter")
+	assert(not private.plugins[tag] and not private.OwnTag(tag), "the tag "..tag.." is taken")
+	assert(type(handler) == "function", "a plugin handler is a function")
+	private.plugins[tag] = handler
+end
+
+---Whispers a plugin's message to one player. Returns whether it went out (the game may block addon whispers in a
+---boss fight, a PvP match or an instance; the caller tries again later).
+---@param tag string
+---@param tbl table
+---@param target string the player, as the game names them
+---@return boolean
+function Sync:SendPlugin(tag, tbl, target)
+	assert(private.plugins[tag], "not a registered plugin tag")
+	return private.Send(tag, tbl, nil, target)
+end
+
+---Puts a plugin's message on the channel, and to each realm link, so every Wanted player of the faction hears it.
+---@param tag string
+---@param tbl table
+---@return boolean sent on the channel
+function Sync:BroadcastPlugin(tag, tbl)
+	assert(private.plugins[tag], "not a registered plugin tag")
+	local sent = private.Send(tag, tbl)
+	for name in pairs(private.links) do
+		private.Send(tag, tbl, nil, name)
+	end
+	return sent
+end
+
+---Whether addon whispers are blocked right now (a boss fight, a PvP match, an instance).
+---@return boolean
+function Sync:WhispersLocked()
+	return private.ChatLocked()
 end
 
 ---Shares a raid's ad: on the channel, and to each realm link (whose clients share it on theirs).

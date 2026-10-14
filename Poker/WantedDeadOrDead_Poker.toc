@@ -11,3 +11,7 @@
 Core.lua
 Engine.lua
 Deal.lua
+Protocol.lua
+Host.lua
+Client.lua
+Net.lua

@@ -80,6 +80,14 @@ local function Chips(n, cfg)
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
+-- A bar button's text, with the button widened to fit a long amount ("All-in 1g 90s 38c"); icons and colours don't count
+local function Fit(button, text, least)
+	button:SetText(text)
+	local plain = tostring(text):gsub("|T[^|]*|t", "@"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	button:SetWidth(max(least, 18 + #plain * 6.5))
+end
+
+
 local function Ordinal(n)
 	local last, tens = n % 10, n % 100
 	local suffix = (tens >= 11 and tens <= 13) and "th" or (last == 1 and "st") or (last == 2 and "nd") or (last == 3 and "rd") or "th"
@@ -660,14 +668,14 @@ function private.Build()
 			n = max(private.range[1], min(private.range[2], floor(n)))
 			private.amount = n
 			private.slider:SetValue(n)
-			private.raise:SetText(private.raiseLabel.." "..Chips(n, private.state and private.state.cfg))
+			Fit(private.raise, private.raiseLabel.." "..Chips(n, private.state and private.state.cfg), 100)
 		end
 	end)
 	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
 	private.slider = W:Slider(bar, "", 120, 0, 1, 1, function(v) return "" end, function(v)
 		private.amount = v
 		private.amountBox:SetValue(Chips(v, private.state and private.state.cfg))
-		private.raise:SetText(private.raiseLabel.." "..Chips(v, private.state and private.state.cfg))
+		Fit(private.raise, private.raiseLabel.." "..Chips(v, private.state and private.state.cfg), 100)
 	end)
 	private.slider:SetPoint("RIGHT", private.amountBox, "LEFT", -8, 4)
 	private.call = W:Button(bar, "Call", "secondary", 90, 28, function() private.Act(private.callAction) end)
@@ -815,7 +823,7 @@ function private.SetAmount(n)
 	private.amount = n
 	private.slider:SetValue(n)
 	private.amountBox:SetValue(Chips(n, private.state and private.state.cfg))
-	private.raise:SetText(private.raiseLabel.." "..Chips(n, private.state and private.state.cfg))
+	Fit(private.raise, private.raiseLabel.." "..Chips(n, private.state and private.state.cfg), 100)
 end
 
 ---A preset: the least, a share of the pot (what's in it plus the call, on top of the bet to match), or the most.
@@ -1313,7 +1321,7 @@ function TableUI:Refresh(st)
 			private.call:SetText("Check")
 		else
 			private.callAction = "call"
-			private.call:SetText("Call "..Chips(legal.call, cfg))
+			Fit(private.call, "Call "..Chips(legal.call, cfg), 90)
 		end
 		local low, high = legal.minBet or legal.minRaise, legal.maxBet or legal.maxRaise
 		if low then
@@ -1328,7 +1336,7 @@ function TableUI:Refresh(st)
 			private.slider.label:SetText(("%s to %s"):format(Chips(low, cfg), Chips(high, cfg)))
 		end
 		local myStack = st.seats[me] and st.seats[me].s or 0
-		private.allin:SetText("All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg))
+		Fit(private.allin, "All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg), 90)
 	end
 	for _, b in ipairs(private.presets) do b:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil) end
 	for _, b in ipairs(private.emotes) do b:SetShown(st.phase == "showdown" and me ~= nil) end

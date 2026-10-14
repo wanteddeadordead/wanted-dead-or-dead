@@ -49,8 +49,11 @@ function Bots:Preflop(c1, c2)
 	return max(0, min(1, ceil(points) / 20))
 end
 
--- Whether the cards hold four to a flush (one more card makes it) and four to a straight
-local function Draws(cards)
+---Whether the cards hold four to a flush (one more card makes it) and four to a straight.
+---@param cards number[]
+---@return boolean flushDraw
+---@return boolean straightDraw
+function Bots:Draws(cards)
 	local suits, ranks = {}, {}
 	for _, c in ipairs(cards) do
 		local s, r = Engine:SuitOf(c), Engine:RankOf(c)
@@ -110,7 +113,7 @@ function Bots:Strength(hole, board)
 	end
 	local toCome = 5 - #board
 	if toCome > 0 and made < 0.6 then
-		local flush, straight = Draws(cards)
+		local flush, straight = Bots:Draws(cards)
 		local draw = (flush and 0.18 or 0) + (straight and 0.14 or 0)
 		made = made + draw * (toCome == 2 and 1.6 or 1)
 	end

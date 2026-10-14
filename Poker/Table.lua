@@ -9,6 +9,7 @@ local W = Wanted.Widgets
 local C = Theme.C
 local Engine = Poker.PokerEngine
 local Cards = Poker.PokerCards
+local Bots = Poker.PokerBots
 local Protocol = Poker.PokerProtocol
 local Net = Poker.PokerNet
 local private = {
@@ -125,6 +126,34 @@ local function Place(seat, k, n, felt)
 	end
 end
 
+-- The player's choices for the table: sounds, a four-colour deck, the window opening on their turn
+local function Options()
+	Poker.db.options = Poker.db.options or { sounds = true, fourColor = false, popOnTurn = true }
+	return Poker.db.options
+end
+TableUI.Options = Options
+
+-- One of the game's own sounds, when sounds are on
+local SOUNDS = { deal = "IG_ABILITY_PAGE_TURN", chips = "LOOT_WINDOW_COIN_SOUND", turn = "READY_CHECK", win = "IG_QUEST_LIST_COMPLETE", tick = "IG_CREATURE_NEUTRAL_SELECT" }
+local function Play(what)
+	if Options().sounds and SOUNDKIT and SOUNDKIT[SOUNDS[what]] and PlaySound then
+		PlaySound(SOUNDKIT[SOUNDS[what]], "Master")
+	end
+end
+TableUI.Play = Play
+
+-- The options menu, from the header's button
+function private.OpenOptions(anchor)
+	local o = Options()
+	local function Item(label, key)
+		return { text = (o[key] and "|cff5ccc76on|r  " or "|cff666a78off|r  ")..label, onClick = function()
+			o[key] = not o[key]
+			if private.state then TableUI:Refresh(private.state) end
+		end }
+	end
+	W:Menu({ Item("Sounds", "sounds"), Item("Four-colour deck", "fourColor"), Item("Open the table on my turn", "popOnTurn") }, anchor)
+end
+
 function private.Build()
 	local frame = CreateFrame("Frame", "WantedPokerTableFrame", UIParent)
 	frame:SetSize(WIDTH, HEIGHT)
@@ -178,6 +207,9 @@ function private.Build()
 	W:AttachTooltip(main, "Open Wanted", "The Poker page: open tables and your seat.")
 	private.leave = W:Button(header, "Leave", "ghost", 60, 22, private.ConfirmLeave)
 	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
+	local options = W:Button(header, "...", "ghost", 22, 22, function(self) private.OpenOptions(self) end)
+	options:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
+	W:AttachTooltip(options, "Options", "Sounds, a four-colour deck, and whether the table opens on your turn.")
 
 	-- The felt, with its rail
 	local rail = CreateFrame("Frame", nil, frame)
@@ -195,6 +227,28 @@ function private.Build()
 	private.status:SetHeight(STATUS_H - 6)
 	private.status:SetJustifyH("CENTER")
 	private.status:SetWordWrap(false)
+	-- Bet presets on the strip's right, on your turn: a share of the pot, or the most you can
+	private.presets = {}
+	local PRESETS = { { "Min", 0 }, { "1/2", 0.5 }, { "3/4", 0.75 }, { "Pot", 1 }, { "Max", nil } }
+	local last
+	for i = #PRESETS, 1, -1 do
+		local def = PRESETS[i]
+		local b = W:Button(rail, def[1], "ghost", 40, 20, function() private.Preset(def[2]) end)
+		if last then b:SetPoint("RIGHT", last, "LEFT", -2, 0) else b:SetPoint("BOTTOMRIGHT", -8, 2) end
+		b:Hide()
+		private.presets[#private.presets + 1] = b
+		last = b
+	end
+	-- Pre-actions on the strip's left, while waiting for your turn
+	private.checkFold = W:Toggle(rail, "Check/fold", function(on) if on then private.callAny:SetChecked(false) end end)
+	private.checkFold:SetPoint("BOTTOMLEFT", 10, 4)
+	private.checkFold:Hide()
+	private.callAny = W:Toggle(rail, "Call any", function(on) if on then private.checkFold:SetChecked(false) end end)
+	private.callAny:SetPoint("LEFT", private.checkFold, "RIGHT", 12, 0)
+	private.callAny:Hide()
+	-- What your cards make, above your seat
+	private.strength = Theme:Text(felt, "small", "", C.gold)
+	private.strength:SetJustifyH("CENTER")
 	private.pot = Theme:Text(felt, "money", "")
 	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)
 	private.pot:SetJustifyH("CENTER")
@@ -261,7 +315,16 @@ function private.Build()
 	private.start:Hide()
 	private.countdown = Theme:Text(bar, "small", "", C.muted)
 	private.countdown:SetPoint("LEFT", private.start, "RIGHT", 10, 0)
-	private.allin = W:Button(bar, "All-in", "danger", 90, 28, function() private.Act("allin") end)
+	private.allin = W:Button(bar, "All-in", "danger", 90, 28, function()
+		local st = private.state
+		if st and st.cfg.stakes == "gold" then
+			local mine = st.me and st.seats[st.me]
+			W:Dialog({ title = "All in?", text = ("Everything in front of you, %s, goes in."):format(Chips((mine and mine.s or 0) + (mine and mine.b or 0), st.cfg)), confirmLabel = "All in", confirmStyle = "danger",
+				onConfirm = function() private.Act("allin") end })
+		else
+			private.Act("allin")
+		end
+	end)
 	private.allin:SetPoint("RIGHT", -10, 0)
 	private.raise = W:Button(bar, "Raise", "primary", 100, 28, function() private.Act(private.raiseAction, private.amount) end)
 	private.raise:SetPoint("RIGHT", private.allin, "LEFT", -6, 0)
@@ -326,6 +389,17 @@ function private.Build()
 	end)
 	W:AttachTooltip(grip, "Size", "Drag to make the table bigger or smaller.")
 
+	-- Hotkeys on your turn: F folds, C checks or calls, R raises the amount set. Other keys go on to the game
+	frame:EnableKeyboard(true)
+	if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+	frame:SetScript("OnKeyDown", function(self, key)
+		local st = private.state
+		if not st or not st.hand or st.hand.toAct ~= st.me or not st.hand.legal or (private.amountBox.HasFocus and private.amountBox:HasFocus()) then return end
+		if key == "F" then private.Act("fold")
+		elseif key == "C" then private.Act(private.callAction)
+		elseif key == "R" and private.raise:IsShown() then private.Act(private.raiseAction, private.amount)
+		end
+	end)
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		if private.sizing then private.Size() end
 		private.sinceTick = (private.sinceTick or 0) + elapsed
@@ -362,6 +436,29 @@ function private.Act(action, amount)
 		player:Act(action, amount)
 	end
 end
+
+-- The raise amount set on the bar: slider, box and button together
+function private.SetAmount(n)
+	if not private.range then return end
+	n = max(private.range[1], min(private.range[2], floor(n)))
+	private.amount = n
+	private.slider:SetValue(n)
+	private.amountBox:SetValue(Chips(n, private.state and private.state.cfg))
+	private.raise:SetText(private.raiseLabel.." "..Chips(n, private.state and private.state.cfg))
+end
+
+---A preset: the least, a share of the pot (what's in it plus the call, on top of the bet to match), or the most.
+---@param share number? nil for the most, 0 for the least
+function private.Preset(share)
+	local st = private.state
+	if not st or not st.hand or not private.range then return end
+	if share == nil then return private.SetAmount(private.range[2]) end
+	if share == 0 then return private.SetAmount(private.range[1]) end
+	local hand, legal = st.hand, st.hand.legal
+	local call = legal and legal.call or 0
+	private.SetAmount((hand.cur or 0) + floor(share * ((hand.pot or 0) + call)))
+end
+TableUI.Preset = private.Preset
 
 function private.ToggleSitOut()
 	local player, st = Net:Player(), private.state
@@ -467,7 +564,7 @@ function TableUI:Log(text, color)
 	if #private.lines > 300 then tremove(private.lines, 1) end
 end
 
--- What's new in this state, said in the log
+-- What's new in this state, said in the log (and heard: the deal, chips going in, a pot won)
 function private.LogChanges(st)
 	local hand = st.hand
 	if st.standings and st.phase == "finished" and not private.loggedFinish then
@@ -487,6 +584,7 @@ function private.LogChanges(st)
 		private.loggedDealt = true
 		local button = st.seats[hand.button]
 		TableUI:Log(("Hand %d: dealt. Button: %s."):format(st.h, button and Name(button.n) or "?"), C.gold)
+		Play("deal")
 	end
 	if hand.street and hand.street ~= private.loggedStreet then
 		local board = hand.board or {}
@@ -498,20 +596,48 @@ function private.LogChanges(st)
 	if hand.log then
 		for i = private.loggedActions + 1, #hand.log do
 			TableUI:Log(Describe(hand.log[i], st))
+			local a = hand.log[i].action
+			if a == "bet" or a == "raise" or a == "call" or a == "allin" then Play("chips") end
 		end
 		private.loggedActions = #hand.log
 	end
 	if hand.results and not private.loggedResults then
 		private.loggedResults = true
 		local pots = hand.results.pots or {}
+		local won = false
 		for i, pot in ipairs(pots) do
 			TableUI:Log(PotLine(st, pot, i, #pots), C.green)
+			for _, seat in ipairs(pot.winners or {}) do if seat == st.me then won = true end end
 		end
+		if won then Play("win") end
 	end
 end
 
 ---Shows the host's latest state.
 ---@param st table
+-- What two hole cards make with the board, in words: before the flop the cards themselves, after it the hand and
+-- any draw ("a pair of kings, flush draw")
+local RANK_WORDS = { [2] = "deuce", [3] = "three", [4] = "four", [5] = "five", [6] = "six", [7] = "seven", [8] = "eight", [9] = "nine", [10] = "ten", [11] = "jack", [12] = "queen", [13] = "king", [14] = "ace" }
+function private.Strength(hole, board)
+	local Engine = Poker.PokerEngine
+	if #board < 3 then
+		local r1, r2 = Engine:RankOf(hole[1]), Engine:RankOf(hole[2])
+		if r1 < r2 then r1, r2 = r2, r1 end
+		if r1 == r2 then return "a pair of "..RANK_WORDS[r1].."s" end
+		return RANK_WORDS[r1].."-"..RANK_WORDS[r2]..(Engine:SuitOf(hole[1]) == Engine:SuitOf(hole[2]) and " suited" or " offsuit")
+	end
+	local cards = { hole[1], hole[2] }
+	for _, c in ipairs(board) do cards[#cards + 1] = c end
+	local text = Engine:Describe(cards)
+	if #board < 5 then
+		local flush, straight = Bots:Draws(cards)
+		if flush and straight then text = text..", flush and straight draws"
+		elseif flush then text = text..", flush draw"
+		elseif straight then text = text..", straight draw" end
+	end
+	return text
+end
+
 function TableUI:Refresh(st)
 	if not private.frame then private.Build() end
 	private.state = st
@@ -714,6 +840,43 @@ function TableUI:Refresh(st)
 		local myStack = st.seats[me] and st.seats[me].s or 0
 		private.allin:SetText("All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg))
 	end
+	for _, b in ipairs(private.presets) do b:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil) end
+	-- Pre-actions: offered while waiting in a hand, acted on the moment the turn comes, forgotten with the hand
+	local inHand = playing and me and hand.seats and false or (playing and me and st.seats[me] and not st.seats[me].f and not st.seats[me].a)
+	if hand and hand.key ~= private.preKey then
+		private.preKey = hand.key
+		private.checkFold:SetChecked(false)
+		private.callAny:SetChecked(false)
+	end
+	private.checkFold:SetShown(inHand and not legal)
+	private.callAny:SetShown(inHand and not legal)
+	if legal and (private.checkFold.checked or private.callAny.checked) then
+		local action = private.checkFold.checked and (legal.check and "check" or "fold") or (legal.call and "call" or "check")
+		private.checkFold:SetChecked(false)
+		private.callAny:SetChecked(false)
+		private.Act(action)
+		legal = nil
+	end
+	-- Your turn: a sound, the window if it's hidden and wanted, a word in the log otherwise
+	local turnKey = legal and (hand.key..":"..#(hand.log or {})) or nil
+	if turnKey and turnKey ~= private.turnKey then
+		Play("turn")
+		private.tickedAt = nil
+		if not private.frame:IsShown() then
+			if Options().popOnTurn then TableUI:Show() else Wanted.UI:Toast("Poker: your turn.", C.gold) end
+		end
+	end
+	private.turnKey = turnKey
+	-- What your cards make
+	local mine0 = me and st.seats[me]
+	if mine0 and mine0.hole and hand and hand.stage == "play" and not mine0.f then
+		private.strength:SetText(private.Strength(mine0.hole, hand.board or {}))
+		private.strength:ClearAllPoints()
+		private.strength:SetPoint("BOTTOM", private.seats[0], "TOP", 0, 4)
+		private.strength:Show()
+	else
+		private.strength:Hide()
+	end
 	local mine = me and st.seats[me]
 	local tournament = cfg.kind == "tournament"
 	private.sitOut:SetShown(mine ~= nil and st.phase ~= "closed" and st.phase ~= "finished")
@@ -746,8 +909,18 @@ function private.TickClock()
 		end
 		if st.phase == "playing" and st.hand.toAct then
 			local actor = st.seats[st.hand.toAct]
-			local who = st.hand.toAct == st.me and "Your turn" or ((actor and Name(actor.n) or "?").." to act")
-			if not private.hostGone and not private.blocked then private.status:SetText(("%s  -  %ds"):format(who, ceil(left))) end
+			local mine = st.hand.toAct == st.me
+			local who = mine and "Your turn" or ((actor and Name(actor.n) or "?").." to act")
+			if not private.hostGone and not private.blocked then
+				private.status:SetText(("%s  -  %ds"):format(who, ceil(left)))
+				-- The last five seconds of your own clock: red, with one tick
+				if mine and left <= 5 then
+					private.status:SetTextColor(C.red[1], C.red[2], C.red[3])
+					if not private.tickedAt then private.tickedAt = now Play("tick") end
+				elseif mine then
+					private.status:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
+				end
+			end
 		end
 	end
 	if private.nextAt and (st.phase == "showdown" or st.phase == "waiting") then

@@ -13524,7 +13524,7 @@ end)()
 	TableUI.Preset(0)
 	check(parts.amount == 40, "min")
 	-- The C key calls
-	check(parts.seats[1].status.text._text == "Big blind", "before anyone acts, Bob's pill says he posted the big blind: "..tostring(parts.seats[1].status.text._text))
+	check(parts.seats[1].status.text._text == "BB", "before anyone acts, Bob's pill says he posted the big blind: "..tostring(parts.seats[1].status.text._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "C")
 	check(host.hand.toAct == 2 and Played(120) >= 1, "C calls, with the chips' sound")
 	check(parts.seats[0].status.text._text == "Call 10" and parts.seats[1].status.text._text == "To act", "our pill says Call 10; Bob is to act")

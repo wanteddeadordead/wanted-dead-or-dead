@@ -95,7 +95,7 @@ local function BuildSeat(felt, k)
 	seat.cards[2]:SetPoint("BOTTOMRIGHT", -6, 6)
 	seat.dealer = W:Pill(seat) -- placed outside the box, at the corner nearest the middle of the felt (Place)
 	seat.dealer:SetPoint("BOTTOM", seat, "TOPRIGHT", -14, 3)
-	seat.bet = Theme:Text(felt, "small", "", C.text)
+	seat.bet = Theme:Text(felt, "body", "", C.text) -- what they did and what it cost, on the felt beside them
 	seat.bet:SetJustifyH("CENTER")
 	seat.timer = TimerBar(seat)
 	seat.timer:SetPoint("BOTTOMLEFT", 1, 1)
@@ -936,7 +936,11 @@ function TableUI:Refresh(st)
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
 					seatFrame.bet:Show()
 				elseif p.b and p.b > 0 then
-					seatFrame.bet:SetText(Chips(p.b, cfg))
+					-- Named for what they did ("Call 46", "Raise to 60"), when known; the chips alone otherwise
+					local a = private.acts[seat]
+					local named = a and a.action ~= "fold" and a.action ~= "check" and a.text
+					local tint = a and ((a.action == "bet" or a.action == "raise") and C.amber or (a.action == "allin" and C.red) or (a.action == "blind" and C.muted)) or C.text
+					seatFrame.bet:SetText(Theme:Colorize(named or Chips(p.b, cfg), tint))
 					seatFrame.bet:Show()
 				else
 					seatFrame.bet:Hide()

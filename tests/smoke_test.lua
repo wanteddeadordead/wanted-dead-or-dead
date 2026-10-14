@@ -14212,13 +14212,13 @@ end)()
 	clock = clock + 30
 	C:Sample()
 	check(Warned("Your tower is under attack"), "enemies at our tower warn: "..table.concat(warned, "; "))
-	-- A P message on the channel from the player it's about counts them there; the same from a guild member too
+	-- A C message on the channel from the player it's about counts them there; the same from a guild member too
 	local heardBefore = C:Allies("ah-top-3")
 	slot = math.floor(clock / C.SLOT_SECONDS)
-	Fire("CHAT_MSG_ADDON", "WNTD", "P:pt1:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "CHANNEL", "Ally Five", nil, nil, nil, ns.Sync:GetInfo().channelName)
-	Fire("CHAT_MSG_ADDON", "WNTD", "P:pt2:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "GUILD", "Ally Six")
+	Fire("CHAT_MSG_ADDON", "WNTD", "C:pt1:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "CHANNEL", "Ally Five", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	Fire("CHAT_MSG_ADDON", "WNTD", "C:pt2:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "GUILD", "Ally Six")
 	RunFrames()
-	check(C:Allies("ah-top-3") == heardBefore + 2, "P messages count their senders there: "..C:Allies("ah-top-3"))
+	check(C:Allies("ah-top-3") == heardBefore + 2, "C messages count their senders there: "..C:Allies("ah-top-3"))
 	-- The catch-up passes the holders at every login
 	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, points = { ["av-mid-3"] = { h = "H", s = clock - 60, r = clock + 60, t = clock } } } }
 	ns.Catchup:Import()

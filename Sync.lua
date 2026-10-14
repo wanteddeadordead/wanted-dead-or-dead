@@ -126,12 +126,12 @@ local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
-local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true }
+local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true, C = true }
 function private.OwnTag(tag) return OWN_TAGS[tag] == true end
 -- A player standing at a capture point (Captures): { p = point id, s = slot, c = samples }. Passing news like
 -- sightings: on the channel (or the guild's) only, from the player it's about, never stored, relayed or counted; the
 -- addon only shows it as what its side is doing there now. Older versions ignore it.
-local TAG_POINT = "P"
+local TAG_POINT = "C"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
 -- 10 parts at once, then one more every 2 seconds; past that it refuses them (ChannelThrottle). Channel parts

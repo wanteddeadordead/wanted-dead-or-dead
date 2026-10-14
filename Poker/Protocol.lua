@@ -142,6 +142,22 @@ function Protocol:Money(chips, stakes)
 	return table.concat(parts, " ")
 end
 
+---An amount shown with the game's coin icons (the gold, silver and copper pieces), for the felt and the bar; the
+---plain words elsewhere (Money).
+---@param chips number
+---@param stakes string?
+---@return string
+function Protocol:Coins(chips, stakes)
+	chips = floor((chips or 0) + 0.5)
+	if not Protocol:IsMoney(stakes) then
+		return tostring(chips)
+	end
+	if C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString then
+		return C_CurrencyInfo.GetCoinTextureString(chips)
+	end
+	return Protocol:Money(chips, stakes)
+end
+
 ---An amount typed: a number of chips, or at a gold table gold, silver and copper ("10g", "2g 50s", "75s", "5c"; a
 ---bare number is gold). Nil when it isn't one.
 ---@param text string

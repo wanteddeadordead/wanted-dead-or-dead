@@ -415,7 +415,7 @@ function TableUI:ReportBug()
 	end
 	W:Dialog({
 		title = "Report a poker bug",
-		text = "What happened, and what did you expect? Poker is experimental: the table's state and its last lines go with the report, other players' names left out.",
+		text = "What happened, and what did you expect? The table's state and its last lines go with the report, other players' names left out.",
 		input = { placeholder = "What went wrong" },
 		confirmLabel = "Send to the developers",
 		validate = function(value) if strtrim(value or "") == "" then return "Say what happened first." end end,
@@ -493,7 +493,7 @@ function private.Build()
 	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
 	local report = W:Button(header, "Report a bug", "ghost", 96, 22, function() TableUI:ReportBug() end)
 	report:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
-	W:AttachTooltip(report, "Report a bug", "Poker is experimental. Say what went wrong and the report goes to the developers with the table's log.")
+	W:AttachTooltip(report, "Report a bug", "Say what went wrong and the report goes to the developers with the table's log.")
 	local options = W:Button(header, "...", "ghost", 22, 22, function() TableUI:ToggleSettings() end)
 	options:SetPoint("RIGHT", report, "LEFT", -2, 0)
 	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, and whether the table opens on your turn.")
@@ -1060,7 +1060,7 @@ function TableUI:Refresh(st)
 	local me = st.me
 	local hand = st.hand
 	local playing = hand and hand.stage == "play" and hand.street ~= "done"
-	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host)..Theme:Colorize("  -  experimental", C.amber))
+	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host))
 	private.leave:SetText(Net:HostedTable() and "Close table" or "Leave")
 	-- The clock for the player to act
 	if hand and hand.left and (playing or hand.stage == "commits" or hand.stage == "reveals") then

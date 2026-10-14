@@ -73,106 +73,179 @@ end
 -- The form and the seat card
 -- ============================================================================
 
+-- The host form is a wizard: four steps, one choice to a row, and a plain-language review before the table opens
+local STEPS = { "Game", "Players and money", "Table", "Review" }
+local ROW = 34
+local LABEL_X, CONTROL_X = 18, 180
+
 function private.BuildForm(parent, width)
 	local form = W:Card(parent)
 	form:SetPoint("TOPLEFT")
 	form:SetSize(width, CARD_HEIGHT)
-	local label = Theme:Text(form, "tiny", "HOST A TABLE", C.faint)
-	label:SetPoint("TOPLEFT", 14, -12)
 	local s = Settings()
-	private.titleBox = W:Input(form, 220, "Table name, e.g. The Saloon")
-	private.titleBox:SetPoint("TOPLEFT", 14, -30)
-	private.titleBox:SetValue(s.title or "")
-	local blindsLabel = Theme:Text(form, "small", "Blinds", C.muted)
-	blindsLabel:SetPoint("LEFT", private.titleBox, "RIGHT", 14, 0)
-	private.blinds = W:Choice(form, 104, {}, function(key) Settings().blinds = key private.RefreshBuyin(true) end)
-	private.blinds:SetPoint("LEFT", blindsLabel, "RIGHT", 6, 0)
-	local seatsLabel = Theme:Text(form, "small", "Seats", C.muted)
-	seatsLabel:SetPoint("LEFT", private.blinds, "RIGHT", 14, 0)
-	local seatChoices = {}
-	for n = Protocol.MIN_SEATS, Protocol.MAX_SEATS do seatChoices[#seatChoices + 1] = { key = n, label = tostring(n) } end
-	private.seats = W:Choice(form, 56, seatChoices, function(key) Settings().seats = key private.Guide() end)
-	private.seats:SetPoint("LEFT", seatsLabel, "RIGHT", 6, 0)
-	private.seats:SetChoice(s.seats)
-	local turnLabel = Theme:Text(form, "small", "Turn", C.muted)
-	turnLabel:SetPoint("LEFT", private.seats, "RIGHT", 14, 0)
-	private.turn = W:Choice(form, 64, { { key = 20, label = "20s" }, { key = 30, label = "30s" }, { key = 45, label = "45s" }, { key = 60, label = "60s" } }, function(key) Settings().turn = key private.Guide() end)
-	private.turn:SetPoint("LEFT", turnLabel, "RIGHT", 6, 0)
-	private.turn:SetChoice(s.turn)
-	private.passwordBox = W:Input(form, 96, "Password", function() private.Guide() end)
-	private.passwordBox:SetPoint("LEFT", private.turn, "RIGHT", 14, 0)
-	W:AttachTooltip(private.passwordBox, "Password", "Leave it empty for an open table. With one, the table shows as locked and anyone sitting down is asked for it.")
-	private.kind = W:Segmented(form, { { key = "cash", label = "Cash game" }, { key = "tournament", label = "Tournament" } }, function(key)
+	private.stepTitle = Theme:Text(form, "tiny", "", C.faint)
+	private.stepTitle:SetPoint("TOPLEFT", 14, -12)
+	-- One frame per step, filling the card under the title and above the footer
+	private.steps = {}
+	for i = 1, #STEPS do
+		local step = CreateFrame("Frame", nil, form)
+		step:SetPoint("TOPLEFT", 0, -30)
+		step:SetPoint("BOTTOMRIGHT", 0, 44)
+		step:Hide()
+		private.steps[i] = step
+	end
+	local function Label(step, y, text)
+		local label = Theme:Text(step, "small", text, C.muted)
+		label:SetPoint("TOPLEFT", LABEL_X, y - 6)
+		return label
+	end
+	local function At(control, step, y, x)
+		control:SetPoint("TOPLEFT", step, "TOPLEFT", x or CONTROL_X, y)
+		return control
+	end
+
+	-- Step 1: the game
+	local g = private.steps[1]
+	private.kind = W:Segmented(g, { { key = "cash", label = "Cash game" }, { key = "tournament", label = "Tournament" } }, function(key)
 		Settings().kind = key
 		private.RefreshBuyin(true)
-	end, 92)
-	private.kind:SetPoint("TOPLEFT", 14, -62)
+	end, 150)
+	At(private.kind, g, -8, LABEL_X)
+	private.kindNote = Theme:Text(g, "body", "", C.text)
+	private.kindNote:SetPoint("TOPLEFT", LABEL_X, -48)
+	private.kindNote:SetPoint("RIGHT", -18, 0)
+	private.kindNote:SetWordWrap(true)
+	private.kindNote:SetJustifyH("LEFT")
 	private.kind:Select(s.kind or "cash", true)
-	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" }, { key = "practice", label = "Practice" } }, function(key)
-		Settings().stakes = key
+
+	-- Step 2: who plays, and for what
+	local m = private.steps[2]
+	Label(m, -4, "Opponents")
+	private.stakes = W:Segmented(m, { { key = "people", label = "People" }, { key = "practice", label = "Practice" } }, function(key)
+		if key == "practice" then
+			if Settings().stakes ~= "practice" then Settings().peopleStakes = Settings().stakes end
+			Settings().stakes = "practice"
+		else
+			Settings().stakes = Settings().peopleStakes or "chips"
+		end
 		private.RefreshBuyin(true)
-	end, 70)
-	private.stakes:SetPoint("LEFT", private.kind, "RIGHT", 12, 0)
-	private.stakes:Select(s.stakes or "chips", true)
-	-- The third row: a cash game's buy-in range, or a tournament's entry, starting stack and how long a level lasts
-	private.entryLabel = Theme:Text(form, "small", "Entry", C.muted)
-	private.entryLabel:SetPoint("TOPLEFT", 14, -100)
-	private.entryBox = W:Input(form, 76, "e.g. 2g", function() private.Guide() end)
-	private.entryBox:SetPoint("LEFT", private.entryLabel, "RIGHT", 6, 0)
-	private.stackLabel = Theme:Text(form, "small", "Stack", C.muted)
-	private.stackLabel:SetPoint("LEFT", private.entryBox, "RIGHT", 12, 0)
-	local stacks = {}
-	for _, n in ipairs(Protocol.START_STACKS) do stacks[#stacks + 1] = { key = n, label = tostring(n) } end
-	private.stack = W:Choice(form, 70, stacks, function(key) Settings().startStack = key private.Guide() end)
-	private.stack:SetPoint("LEFT", private.stackLabel, "RIGHT", 6, 0)
-	private.stack:SetChoice(s.startStack or 1500)
-	private.levelLabel = Theme:Text(form, "small", "Levels", C.muted)
-	private.levelLabel:SetPoint("LEFT", private.stack, "RIGHT", 12, 0)
-	private.levels = W:Choice(form, 76, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key private.Guide() end)
-	private.levels:SetPoint("LEFT", private.levelLabel, "RIGHT", 6, 0)
-	private.levels:SetChoice(s.levelMinutes or 10)
-	private.lateLabel = Theme:Text(form, "small", "Late entry", C.muted)
-	private.lateLabel:SetPoint("LEFT", private.levels, "RIGHT", 12, 0)
-	private.late = W:Choice(form, 96, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key private.Guide() end)
-	private.late:SetPoint("LEFT", private.lateLabel, "RIGHT", 6, 0)
-	private.late:SetChoice(s.lateLevels == nil and Protocol.DEFAULT_LATE_LEVELS or s.lateLevels)
-	private.antes = W:Toggle(form, "Antes", function(on) Settings().antes = on private.Guide() end)
-	private.antes:SetPoint("LEFT", private.late, "RIGHT", 14, 0)
-	private.antes:SetChecked(s.antes == true)
-	W:AttachTooltip(private.antes, "Antes", ("From level %d everyone antes a tenth of the big blind each hand, the way the big events do."):format(Protocol.ANTE_FROM_LEVEL))
-	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
-	private.buyinNote:SetPoint("TOPLEFT", 14, -100)
-	private.minBox = W:Input(form, 76, "least", function() private.Guide() end)
-	private.minBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 6, 0)
-	local toLabel = Theme:Text(form, "small", "to", C.muted)
-	toLabel:SetPoint("LEFT", private.minBox, "RIGHT", 6, 0)
-	private.maxBox = W:Input(form, 76, "most", function() private.Guide() end)
-	private.maxBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
-	local yoursLabel = Theme:Text(form, "small", "yours", C.muted)
-	yoursLabel:SetPoint("LEFT", private.maxBox, "RIGHT", 10, 0)
-	private.buyinBox = W:Input(form, 76, "yours", function() private.Guide() end)
-	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
-	-- A gold table's money: the blinds and buy-ins in copper, silver or gold
-	private.unitLabel = Theme:Text(form, "small", "in", C.muted)
-	private.unitLabel:SetPoint("LEFT", private.buyinBox, "RIGHT", 12, 0)
+	end, 100)
+	At(private.stakes, m, -4)
+	private.opponentsNote = Theme:Text(m, "tiny", "", C.faint)
+	private.opponentsNote:SetPoint("LEFT", private.stakes, "RIGHT", 12, 0)
+	private.opponentsNote:SetPoint("RIGHT", -18, 0)
+	private.opponentsNote:SetWordWrap(false)
+	private.playForLabel = Label(m, -4 - ROW, "Play for")
+	private.playFor = W:Segmented(m, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" } }, function(key)
+		Settings().stakes = key
+		Settings().peopleStakes = key
+		private.RefreshBuyin(true)
+	end, 100)
+	At(private.playFor, m, -4 - ROW)
+	private.unitLabel = Theme:Text(m, "small", "in", C.muted)
+	private.unitLabel:SetPoint("LEFT", private.playFor, "RIGHT", 14, 0)
 	local unitChoices = {}
 	for _, u in ipairs(UNITS) do unitChoices[#unitChoices + 1] = { key = u.key, label = u.label } end
-	private.unit = W:Choice(form, 76, unitChoices, function(key) Settings().unit = key private.RefreshBuyin(true) end)
+	private.unit = W:Choice(m, 90, unitChoices, function(key) Settings().unit = key private.RefreshBuyin(true) end)
 	private.unit:SetPoint("LEFT", private.unitLabel, "RIGHT", 6, 0)
 	private.unit:SetChoice(s.unit or "silver")
-	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
-	go:SetPoint("TOPRIGHT", -14, -62)
-	local report = W:Button(form, "Report a bug", "ghost", 100, 26, function() Poker.PokerTable:ReportBug() end)
-	report:SetPoint("RIGHT", go, "LEFT", -6, 0)
-	W:AttachTooltip(report, "Report a bug", "Poker is experimental. Say what went wrong and the report goes to the developers with the table's log.")
-	private.how = Theme:Text(form, "tiny", "", C.faint)
-	private.how:SetPoint("TOPLEFT", 14, -126)
-	private.how:SetPoint("RIGHT", -14, 0)
+	-- A cash game's rows
+	private.blindsLabel = Label(m, -4 - ROW * 2, "Blinds")
+	private.blinds = W:Choice(m, 120, {}, function(key) Settings().blinds = key private.RefreshBuyin(true) end)
+	At(private.blinds, m, -4 - ROW * 2)
+	private.buyinNote = Label(m, -4 - ROW * 3, "Buy-in from")
+	private.minBox = W:Input(m, 90, "least", function() private.Guide() end)
+	At(private.minBox, m, -4 - ROW * 3)
+	private.toLabel = Theme:Text(m, "small", "to", C.muted)
+	private.toLabel:SetPoint("LEFT", private.minBox, "RIGHT", 8, 0)
+	private.maxBox = W:Input(m, 90, "most", function() private.Guide() end)
+	private.maxBox:SetPoint("LEFT", private.toLabel, "RIGHT", 8, 0)
+	private.yoursLabel = Label(m, -4 - ROW * 4, "Your buy-in")
+	private.buyinBox = W:Input(m, 90, "yours", function() private.Guide() end)
+	At(private.buyinBox, m, -4 - ROW * 4)
+	-- A tournament's rows
+	private.entryLabel = Label(m, -4 - ROW * 2, "Entry")
+	private.entryBox = W:Input(m, 90, "e.g. 2g", function() private.Guide() end)
+	At(private.entryBox, m, -4 - ROW * 2)
+	private.stackLabel = Label(m, -4 - ROW * 3, "Starting stack")
+	local stacks = {}
+	for _, n in ipairs(Protocol.START_STACKS) do stacks[#stacks + 1] = { key = n, label = tostring(n).." chips" } end
+	private.stack = W:Choice(m, 120, stacks, function(key) Settings().startStack = key private.Guide() end)
+	At(private.stack, m, -4 - ROW * 3)
+	private.stack:SetChoice(s.startStack or 1500)
+	private.levelLabel = Label(m, -4 - ROW * 4, "Levels every")
+	private.levels = W:Choice(m, 120, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key private.Guide() end)
+	At(private.levels, m, -4 - ROW * 4)
+	private.levels:SetChoice(s.levelMinutes or 10)
+	private.lateLabel = Label(m, -4 - ROW * 5, "Late entry")
+	private.late = W:Choice(m, 120, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key private.Guide() end)
+	At(private.late, m, -4 - ROW * 5)
+	private.late:SetChoice(s.lateLevels == nil and Protocol.DEFAULT_LATE_LEVELS or s.lateLevels)
+	private.antes = W:Toggle(m, "Antes from level "..Protocol.ANTE_FROM_LEVEL..", a tenth of the big blind", function(on) Settings().antes = on private.Guide() end)
+	private.antes:SetPoint("LEFT", private.late, "RIGHT", 16, 0)
+	private.antes:SetChecked(s.antes == true)
+
+	-- Step 3: the table
+	local t = private.steps[3]
+	Label(t, -4, "Table name")
+	private.titleBox = W:Input(t, 240, "e.g. The Saloon", function() private.Guide() end)
+	At(private.titleBox, t, -4)
+	private.titleBox:SetValue(s.title or "")
+	Label(t, -4 - ROW, "Seats")
+	local seatChoices = {}
+	for n = Protocol.MIN_SEATS, Protocol.MAX_SEATS do seatChoices[#seatChoices + 1] = { key = n, label = tostring(n) } end
+	private.seats = W:Choice(t, 90, seatChoices, function(key) Settings().seats = key private.Guide() end)
+	At(private.seats, t, -4 - ROW)
+	private.seats:SetChoice(s.seats)
+	Label(t, -4 - ROW * 2, "Time to act")
+	private.turn = W:Choice(t, 90, { { key = 20, label = "20 s" }, { key = 30, label = "30 s" }, { key = 45, label = "45 s" }, { key = 60, label = "60 s" } }, function(key) Settings().turn = key private.Guide() end)
+	At(private.turn, t, -4 - ROW * 2)
+	private.turn:SetChoice(s.turn)
+	private.passwordLabel = Label(t, -4 - ROW * 3, "Password")
+	private.passwordBox = W:Input(t, 160, "none: open to everyone", function() private.Guide() end)
+	At(private.passwordBox, t, -4 - ROW * 3)
+	private.passwordNote = Theme:Text(t, "tiny", "With one, the table shows as locked and anyone sitting down is asked for it.", C.faint)
+	private.passwordNote:SetPoint("LEFT", private.passwordBox, "RIGHT", 12, 0)
+
+	-- Step 4: the review
+	local r = private.steps[4]
+	private.how = Theme:Text(r, "small", "", C.text)
+	private.how:SetPoint("TOPLEFT", LABEL_X, -4)
+	private.how:SetPoint("RIGHT", -18, 0)
 	private.how:SetWordWrap(true)
 	private.how:SetJustifyH("LEFT")
-	private.how:SetSpacing(2)
+	private.how:SetSpacing(3)
+
+	-- The footer: where you are, Back and Next, and the table at the end
+	private.back = W:Button(form, "Back", "secondary", 80, 26, function() private.ShowStep(private.step - 1) end)
+	private.back:SetPoint("BOTTOMLEFT", 14, 10)
+	private.next = W:Button(form, "Next", "primary", 100, 26, function() private.ShowStep(private.step + 1) end)
+	private.next:SetPoint("BOTTOMRIGHT", -14, 10)
+	private.go = W:Button(form, "Host table", "primary", 110, 26, private.Host)
+	private.go:SetPoint("BOTTOMRIGHT", -14, 10)
+	local report = W:Button(form, "Report a bug", "ghost", 100, 26, function() Poker.PokerTable:ReportBug() end)
+	report:SetPoint("RIGHT", private.next, "LEFT", -8, 0)
+	W:AttachTooltip(report, "Report a bug", "Say what went wrong and the report goes to the developers with the table's log.")
+	private.dots = Theme:Text(form, "small", "", C.muted)
+	private.dots:SetPoint("LEFT", private.back, "RIGHT", 12, 0)
 	private.RefreshBuyin()
+	private.ShowStep(1)
 	return form
+end
+
+-- Shows one step of the wizard
+function private.ShowStep(n)
+	n = max(1, min(#STEPS, n))
+	private.step = n
+	for i, step in ipairs(private.steps) do step:SetShown(i == n) end
+	private.stepTitle:SetText(("HOST A TABLE  -  STEP %d OF %d: %s"):format(n, #STEPS, strupper(STEPS[n])))
+	private.back:SetShown(n > 1)
+	private.next:SetShown(n < #STEPS)
+	private.go:SetShown(n == #STEPS)
+	local dots = {}
+	for i = 1, #STEPS do dots[i] = i == n and "|cffffffff"..STEPS[i].."|r" or STEPS[i] end
+	private.dots:SetText(table.concat(dots, "  >  "))
+	if n == #STEPS then private.Guide() end
 end
 
 ---Fills the blinds list for the stakes and, when the blinds or stakes changed, a buy-in range of 20 to 100 big
@@ -180,16 +253,31 @@ end
 ---@param reset boolean? the blinds or stakes changed: offer the range again
 function private.RefreshBuyin(reset)
 	local stakes = Stakes()
+	local s = Settings()
+	local practice = s.stakes == "practice"
+	local tournament = s.kind == "tournament"
+	local money = Protocol:IsMoney(stakes)
 	local choices = {}
 	for _, b in ipairs(BlindsList()) do
 		choices[#choices + 1] = { key = b.key, label = Protocol:Money(b.sb, stakes).."/"..Protocol:Money(b.bb, stakes) }
 	end
-	private.unitLabel:SetShown(Protocol:IsMoney(stakes) and Settings().kind ~= "tournament")
-	private.unit:SetShown(Protocol:IsMoney(stakes) and Settings().kind ~= "tournament")
+	private.kindNote:SetText(tournament and "Everyone starts with the same chips and plays until one player has them all. The blinds rise on a clock. No rebuys."
+		or "Players buy in for what they like, within your range, and leave whenever they like with what's in front of them.")
+	private.stakes:Select(practice and "practice" or "people", true)
+	private.opponentsNote:SetText(practice and "Computer players take the other seats. Nothing is advertised, nothing is owed." or "Everyone with Wanted on your faction sees the table.")
+	private.playForLabel:SetShown(not practice)
+	private.playFor:SetShown(not practice)
+	if not practice then private.playFor:Select(s.stakes == "gold" and "gold" or "chips", true) end
+	private.unitLabel:SetShown(money)
+	private.unit:SetShown(money)
+	private.unitLabel:ClearAllPoints()
+	if practice then private.unitLabel:SetPoint("TOPLEFT", private.steps[2], "TOPLEFT", LABEL_X, -4 - ROW - 6) private.unitLabel:SetText("Money") else private.unitLabel:SetPoint("LEFT", private.playFor, "RIGHT", 14, 0) private.unitLabel:SetText("in") end
+	private.unit:ClearAllPoints()
+	if practice then private.unit:SetPoint("TOPLEFT", private.steps[2], "TOPLEFT", CONTROL_X, -4 - ROW) else private.unit:SetPoint("LEFT", private.unitLabel, "RIGHT", 6, 0) end
 	private.unit:SetChoice(Unit())
 	private.blinds:SetChoices(choices)
-	local b = Blinds(Settings().blinds)
-	Settings().blinds = b.key
+	local b = Blinds(s.blinds)
+	s.blinds = b.key
 	private.blinds:SetChoice(b.key)
 	local low, high = b.bb * BUYIN_MIN_BB, b.bb * BUYIN_MAX_BB
 	if reset or private.minBox:GetText() == "" then
@@ -197,26 +285,17 @@ function private.RefreshBuyin(reset)
 		private.maxBox:SetValue(Money(high))
 		private.buyinBox:SetValue(Money(high))
 	end
-	local tournament = Settings().kind == "tournament"
-	for _, f in ipairs({ private.buyinNote, private.minBox, private.maxBox, private.buyinBox }) do f:SetShown(not tournament) end
+	for _, f in ipairs({ private.blindsLabel, private.blinds, private.buyinNote, private.minBox, private.toLabel, private.maxBox, private.yoursLabel, private.buyinBox }) do f:SetShown(not tournament) end
 	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels, private.lateLabel, private.late, private.antes }) do f:SetShown(tournament) end
 	-- A chips tournament has no entry; the blinds come from the schedule
-	local entry = tournament and Protocol:IsMoney(stakes)
+	local entry = tournament and money
 	private.entryLabel:SetShown(entry)
 	private.entryBox:SetShown(entry)
-	-- Without an entry the stack starts the row
-	private.stackLabel:ClearAllPoints()
-	if entry then
-		private.stackLabel:SetPoint("LEFT", private.entryBox, "RIGHT", 12, 0)
-	else
-		private.stackLabel:SetPoint("TOPLEFT", 14, -100)
-	end
-	private.blinds:SetEnabled(not tournament)
-	if tournament then
-		private.blinds:SetText(Protocol:Money(Protocol.SCHEDULE[1][1], stakes).."/"..Protocol:Money(Protocol.SCHEDULE[1][2], stakes).." up")
-	end
+	private.passwordLabel:SetShown(not practice)
+	private.passwordBox:SetShown(not practice)
+	private.passwordNote:SetShown(not practice)
 	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
-		box.placeholder:SetText(Protocol:IsMoney(stakes) and "e.g. 2g 50s" or "chips")
+		box.placeholder:SetText(money and "e.g. 2g 50s" or "chips")
 	end
 	private.Guide()
 end
@@ -231,7 +310,7 @@ function private.Guide()
 	local tournament = s.kind == "tournament"
 	local practice = s.stakes == "practice"
 	local function M(n) return Protocol:Money(n or 0, stakes) end
-	local lines = { "EXPERIMENTAL: poker hasn't been played with a full table of people yet. Anything wrong, press Report a bug: the table's log goes with it." }
+	local lines = {}
 	local what = stakes == "gold" and "gold" or practice and "play money that looks like gold" or "chips"
 	if tournament then
 		local entry = money and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
@@ -633,6 +712,12 @@ function private.Refresh()
 	end
 end
 
+---Shows a step of the host wizard (1 to 4).
+---@param n number
+function Page:GoToStep(n)
+	if private.steps then private.ShowStep(n) end
+end
+
 ---Redraws the page (the ledger changed).
 function Page:Refresh()
 	private.Refresh()
@@ -700,7 +785,7 @@ end
 UI:RegisterPage("poker", {
 	group = "World PvP",
 	title = "Poker",
-	subtitle = "Experimental. Texas hold'em at the Wanted table: a deal no player can rig, checked by every seat after each hand.",
+	subtitle = "Texas hold'em at the Wanted table: a deal no player can rig, checked by every seat after each hand.",
 	order = 3.2,
 	badge = function()
 		local n = #Net:Tables()

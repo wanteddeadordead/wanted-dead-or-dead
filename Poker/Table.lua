@@ -30,7 +30,7 @@ local FELT = { 0.08, 0.21, 0.13, 1 }
 local FELT_LINE = { 0.16, 0.34, 0.2, 1 }
 local SEAT_BG = { 0, 0, 0, 0.5 }
 local SEAT_BORDER = { 1, 1, 1, 0.1 }
-local SEAT_W, SEAT_H = 136, 72
+local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
 local CARD_W, CARD_H = 46, 64
 local SMALL_W, SMALL_H = 30, 42
 
@@ -80,14 +80,16 @@ local function BuildSeat(felt, k)
 	Theme:Skin(seat, SEAT_BG, SEAT_BORDER)
 	seat.name = Theme:Text(seat, "body", "")
 	seat.name:SetPoint("TOPLEFT", 8, -6)
-	seat.name:SetWidth(SEAT_W - 16)
+	seat.name:SetWidth(SEAT_W - 44) -- room for the dealer pill
+	seat.name:SetJustifyH("LEFT")
+	seat.name:SetWordWrap(false)
 	seat.stack = Theme:Text(seat, "small", "", C.gold)
-	seat.stack:SetPoint("TOPLEFT", 8, -24)
+	seat.stack:SetPoint("TOPLEFT", 8, -28)
 	seat.status = W:Pill(seat)
 	seat.status:SetPoint("BOTTOMLEFT", 6, 5)
 	seat.cards = { Cards:New(seat, SMALL_W, SMALL_H, "small"), Cards:New(seat, SMALL_W, SMALL_H, "small") }
-	seat.cards[1]:SetPoint("RIGHT", -6 - SMALL_W - 3, 0)
-	seat.cards[2]:SetPoint("RIGHT", -6, 0)
+	seat.cards[1]:SetPoint("BOTTOMRIGHT", -6 - SMALL_W - 3, 6)
+	seat.cards[2]:SetPoint("BOTTOMRIGHT", -6, 6)
 	seat.dealer = W:Pill(seat)
 	seat.dealer:SetPoint("TOPRIGHT", -4, 4)
 	seat.bet = Theme:Text(felt, "small", "", C.text)
@@ -495,7 +497,7 @@ function TableUI:Refresh(st)
 				Theme:SetBorderColor(seatFrame, SEAT_BORDER)
 			else
 				seatFrame.empty:SetText("")
-				seatFrame.name:SetText(seat == me and (Name(p.n).." (you)") or Name(p.n))
+				seatFrame.name:SetText(Name(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
 				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize("  "..(net > 0 and "+" or "-")..Chips(math.abs(net), cfg), net > 0 and C.green or C.red) or ""))
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown

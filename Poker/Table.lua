@@ -149,11 +149,15 @@ local function Place(seat, k, n, felt)
 	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.62, y * 0.56)
+	-- The dealer button on the corner facing the middle vertically, and on the side AWAY from the bet label (which sits
+	-- toward the middle): the left corner for seats on the left half, the right corner otherwise
 	seat.dealer:ClearAllPoints()
+	local corner = x < -1 and "LEFT" or "RIGHT"
+	local dx = x < -1 and 14 or -14
 	if y > 0 then
-		seat.dealer:SetPoint("TOP", seat, "BOTTOMRIGHT", -14, -3)
+		seat.dealer:SetPoint("TOP", seat, "BOTTOM"..corner, dx, -3)
 	else
-		seat.dealer:SetPoint("BOTTOM", seat, "TOPRIGHT", -14, 3)
+		seat.dealer:SetPoint("BOTTOM", seat, "TOP"..corner, dx, 3)
 	end
 end
 

@@ -76,6 +76,7 @@ local function Name(full)
 end
 
 local function Chips(n, cfg)
+	if cfg and Protocol:IsMoney(cfg.stakes) then return Protocol:Coins(n, cfg.stakes) end
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
@@ -227,8 +228,11 @@ local function Place(seat, k, n, felt)
 	local ey = math.abs(dy) > 0.001 and (SEAT_H / 2) / math.abs(dy) or math.huge
 	-- Out from the box far enough for the chips (up to three stacks) on the label's outer side, and the label itself
 	local dist = math.min(ex, ey) + 14 + 3 * (CHIP - 1) + 18
+	-- And never on the pot row above the board or the hand line below it, however short the felt
+	local lx, ly = x + dx * dist, y + dy * dist
+	if y > 1 then ly = max(ly, CARD_H / 2 + 22 + 30) elseif y < -1 then ly = min(ly, -(CARD_H / 2 + 56)) end
 	seat.bet:ClearAllPoints()
-	seat.bet:SetPoint("CENTER", felt, "CENTER", x + dx * dist, y + dy * dist)
+	seat.bet:SetPoint("CENTER", felt, "CENTER", lx, ly)
 	seat.chipsRightward = x > 1 -- the chips on the label's outer side, away from the board
 	-- The dealer button on the corner facing the middle vertically, and on the side AWAY from the bet label (which sits
 	-- toward the middle): the left corner for seats on the left half, the right corner otherwise

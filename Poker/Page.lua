@@ -310,7 +310,7 @@ function private.RefreshBuyin(reset)
 	private.passwordBox:SetShown(not practice)
 	private.passwordNote:SetShown(not practice)
 	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
-		box.placeholder:SetText(money and "1g 50s 25c" or "chips")
+		box.placeholder:SetText(money and "1|TInterface\\MoneyFrame\\UI-GoldIcon:12|t 50|TInterface\\MoneyFrame\\UI-SilverIcon:12|t 25|TInterface\\MoneyFrame\\UI-CopperIcon:12|t" or "chips")
 	end
 	private.Guide()
 end

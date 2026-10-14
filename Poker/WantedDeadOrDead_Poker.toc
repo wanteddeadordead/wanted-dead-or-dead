@@ -5,6 +5,7 @@
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@
 ## Dependencies: WantedDeadOrDead
+## SavedVariables: WantedPokerDB
 ## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
 ## X-License: MIT
 
@@ -15,3 +16,6 @@ Protocol.lua
 Host.lua
 Client.lua
 Net.lua
+Cards.lua
+Table.lua
+Page.lua

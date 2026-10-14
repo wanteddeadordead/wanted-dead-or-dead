@@ -209,6 +209,16 @@ function Table:Receive(sender, tbl)
 		local p = self.seats[seat]
 		if p.stack > 0 then
 			p.out, p.away = false, 0
+			self:Bump()
+			self:Broadcast()
+		end
+	elseif k == "sitout" then
+		-- From the next hand; a hand under way is played out
+		local p = self.seats[seat]
+		if not p.out then
+			p.out = "sitting"
+			self:Bump()
+			self:Broadcast()
 		end
 	elseif k == "rebuy" then
 		local p = self.seats[seat]
@@ -559,7 +569,7 @@ function Table:StateFor(name)
 		end
 		if hand then
 			local h = st.hand
-			h.button, h.street, h.board, h.toAct, h.cur, h.dh = hand.button, hand.street, hand.board, hand.toAct, hand.currentBet, hs.deckHash
+			h.button, h.street, h.board, h.toAct, h.cur, h.dh, h.log = hand.button, hand.street, hand.board, hand.toAct, hand.currentBet, hs.deckHash, hand.log
 			h.sb, h.bb = hand.sbSeat, hand.bbSeat
 			local pot = 0
 			for _, p in pairs(hand.seats) do pot = pot + p.total end

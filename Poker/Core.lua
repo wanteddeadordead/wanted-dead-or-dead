@@ -32,6 +32,9 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(_, event, name)
 	if event == "ADDON_LOADED" and name == ADDON_NAME then
+		-- This addon's saved data: the table window's place and the last settings hosted with (WantedPokerDB)
+		WantedPokerDB = type(WantedPokerDB) == "table" and WantedPokerDB or {}
+		Poker.db = WantedPokerDB
 		CallModules("OnLoad")
 	elseif event == "PLAYER_LOGIN" then
 		CallModules("OnEnable")

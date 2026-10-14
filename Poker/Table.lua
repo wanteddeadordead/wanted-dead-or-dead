@@ -1,0 +1,673 @@
+-- Wanted: Dead Man's Hand Poker. The table window: the felt with up to eight seats around it (yours at the
+-- bottom), the board and pot in the middle, the action bar on your turn, and the hand log beside it. It draws
+-- whatever state the host last sent (Net) and sends your actions back; nothing here decides a rule.
+local _, Poker = ...
+local TableUI = Poker:NewModule("PokerTable")
+local Wanted = Poker.Wanted
+local Theme = Wanted.Theme
+local W = Wanted.Widgets
+local C = Theme.C
+local Engine = Poker.PokerEngine
+local Cards = Poker.PokerCards
+local Protocol = Poker.PokerProtocol
+local Net = Poker.PokerNet
+local private = {
+	frame = nil,
+	seats = {}, -- display index -> seat frame
+	board = {},
+	state = nil,
+	deadlineAt = nil, -- when the player to act runs out of time, by our clock
+	turnSeconds = Protocol.DEFAULT_TURN_SECONDS,
+	loggedKey = nil, loggedActions = 0, loggedStreet = nil, loggedResults = false,
+}
+local WIDTH, HEIGHT = 860, 560
+local HEADER = 26
+local LOG_WIDTH = 230
+local ACTION_H = 58
+local RAIL = { 0.26, 0.14, 0.07, 1 }
+local FELT = { 0.08, 0.21, 0.13, 1 }
+local FELT_LINE = { 0.16, 0.34, 0.2, 1 }
+local SEAT_BG = { 0, 0, 0, 0.5 }
+local SEAT_BORDER = { 1, 1, 1, 0.1 }
+local SEAT_W, SEAT_H = 136, 72
+local CARD_W, CARD_H = 46, 64
+local SMALL_W, SMALL_H = 30, 42
+
+local function Name(full)
+	return Ambiguate and Ambiguate(full, "none") or (full:match("^([^%-]+)") or full)
+end
+
+local function Chips(n, cfg)
+	n = n or 0
+	if cfg and cfg.stakes == "gold" then
+		return n.."g"
+	end
+	return tostring(n)
+end
+
+-- ============================================================================
+-- Building
+-- ============================================================================
+
+local function TimerBar(parent)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetHeight(3)
+	bar.track = Theme:Fill(bar, { 1, 1, 1, 0.08 })
+	bar.fill = bar:CreateTexture(nil, "ARTWORK")
+	bar.fill:SetPoint("TOPLEFT")
+	bar.fill:SetPoint("BOTTOMLEFT")
+	bar.fill:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
+	function bar:SetFraction(f)
+		local width = max(1, (self:GetWidth() or 100) * max(0, min(1, f)))
+		self.fill:SetWidth(width)
+		local color = f < 0.25 and C.red or C.gold
+		self.fill:SetColorTexture(color[1], color[2], color[3], 1)
+	end
+	return bar
+end
+
+local function BuildSeat(felt, k)
+	local seat = CreateFrame("Frame", nil, felt)
+	seat:SetSize(SEAT_W, SEAT_H)
+	Theme:Skin(seat, SEAT_BG, SEAT_BORDER)
+	seat.name = Theme:Text(seat, "body", "")
+	seat.name:SetPoint("TOPLEFT", 8, -6)
+	seat.name:SetWidth(SEAT_W - 16)
+	seat.stack = Theme:Text(seat, "small", "", C.gold)
+	seat.stack:SetPoint("TOPLEFT", 8, -24)
+	seat.status = W:Pill(seat)
+	seat.status:SetPoint("BOTTOMLEFT", 6, 5)
+	seat.cards = { Cards:New(seat, SMALL_W, SMALL_H, "small"), Cards:New(seat, SMALL_W, SMALL_H, "small") }
+	seat.cards[1]:SetPoint("RIGHT", -6 - SMALL_W - 3, 0)
+	seat.cards[2]:SetPoint("RIGHT", -6, 0)
+	seat.dealer = W:Pill(seat)
+	seat.dealer:SetPoint("TOPRIGHT", -4, 4)
+	seat.bet = Theme:Text(felt, "small", "", C.text)
+	seat.bet:SetJustifyH("CENTER")
+	seat.timer = TimerBar(seat)
+	seat.timer:SetPoint("BOTTOMLEFT", 1, 1)
+	seat.timer:SetPoint("BOTTOMRIGHT", -1, 1)
+	seat.timer:Hide()
+	seat.empty = Theme:Text(seat, "small", "", C.faint)
+	seat.empty:SetPoint("CENTER")
+	seat.empty:SetJustifyH("CENTER")
+	seat.k = k
+	return seat
+end
+
+-- Where display position k of n seats sits around the felt: you at the bottom, the next seat to your left
+local function Place(seat, k, n, felt)
+	local angle = -math.pi / 2 - k * (2 * math.pi / n)
+	local w, h = felt:GetWidth() or 600, felt:GetHeight() or 400
+	local rx, ry = w / 2 - SEAT_W / 2 - 10, h / 2 - SEAT_H / 2 - 8
+	local x, y = rx * math.cos(angle), ry * math.sin(angle)
+	seat:ClearAllPoints()
+	seat:SetPoint("CENTER", felt, "CENTER", x, y)
+	-- The bet sits between the seat and the middle
+	seat.bet:ClearAllPoints()
+	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.55, y * 0.52)
+end
+
+function private.Build()
+	local frame = CreateFrame("Frame", "WantedPokerTableFrame", UIParent)
+	frame:SetSize(WIDTH, HEIGHT)
+	frame:SetFrameStrata("MEDIUM")
+	frame:SetClampedToScreen(true)
+	frame:SetMovable(true)
+	frame:EnableMouse(true)
+	Theme:Skin(frame, C.bg, C.borderLight)
+	local saved = Poker.db and Poker.db.window
+	if saved and saved.point then
+		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)
+	else
+		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+	end
+	frame:Hide()
+	tinsert(UISpecialFrames, "WantedPokerTableFrame")
+
+	local header = CreateFrame("Frame", nil, frame)
+	header:SetPoint("TOPLEFT", 1, -1)
+	header:SetPoint("TOPRIGHT", -1, -1)
+	header:SetHeight(HEADER)
+	Theme:Fill(header, C.titleBar)
+	header:EnableMouse(true)
+	header:RegisterForDrag("LeftButton")
+	header:SetScript("OnDragStart", function() frame:StartMoving() end)
+	header:SetScript("OnDragStop", function()
+		frame:StopMovingOrSizing()
+		local point, _, _, x, y = frame:GetPoint(1)
+		if Poker.db then Poker.db.window = { point = point, x = x, y = y } end
+	end)
+	local mark = header:CreateTexture(nil, "ARTWORK")
+	mark:SetSize(3, 14)
+	mark:SetPoint("LEFT", 8, 0)
+	mark:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	private.title = Theme:Text(header, "heading", "Dead Man's Hand")
+	private.title:SetPoint("LEFT", mark, "RIGHT", 7, 0)
+	private.subtitle = Theme:Text(header, "small", "", C.muted)
+	private.subtitle:SetPoint("LEFT", private.title, "RIGHT", 10, 0)
+	local close = W:Button(header, "X", "ghost", 22, 22, function() frame:Hide() end)
+	close:SetPoint("RIGHT", -2, 0)
+	W:AttachTooltip(close, "Hide", "You stay seated. Open the table again from the Poker page, or /wanted poker.")
+	local main = W:Button(header, "W", "ghost", 22, 22, function() Wanted.UI:Show("poker") end)
+	main:SetPoint("RIGHT", close, "LEFT", -2, 0)
+	W:AttachTooltip(main, "Open Wanted", "The Poker page: open tables and your seat.")
+	private.leave = W:Button(header, "Leave", "ghost", 60, 22, private.ConfirmLeave)
+	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
+
+	-- The felt, with its rail
+	local rail = CreateFrame("Frame", nil, frame)
+	rail:SetPoint("TOPLEFT", 1, -HEADER - 1)
+	rail:SetPoint("BOTTOMRIGHT", -LOG_WIDTH - 1, ACTION_H + 1)
+	Theme:Fill(rail, RAIL)
+	local felt = CreateFrame("Frame", nil, rail)
+	felt:SetPoint("TOPLEFT", 10, -10)
+	felt:SetPoint("BOTTOMRIGHT", -10, 10)
+	Theme:Skin(felt, FELT, FELT_LINE)
+	private.felt = felt
+	private.status = Theme:Text(felt, "body", "", C.text)
+	private.status:SetPoint("TOP", 0, -12)
+	private.status:SetJustifyH("CENTER")
+	private.status:SetWidth(420)
+	private.pot = Theme:Text(felt, "money", "")
+	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)
+	private.pot:SetJustifyH("CENTER")
+	for i = 1, 5 do
+		local card = Cards:New(felt, CARD_W, CARD_H)
+		card:SetPoint("CENTER", felt, "CENTER", (i - 3) * (CARD_W + 6), 0)
+		private.board[i] = card
+	end
+	private.info = Theme:Text(felt, "tiny", "", C.muted)
+	private.info:SetPoint("TOP", felt, "CENTER", 0, -CARD_H / 2 - 8)
+	private.info:SetJustifyH("CENTER")
+	private.lock = W:Pill(felt)
+	private.lock:SetPoint("TOP", private.info, "BOTTOM", 0, -4)
+	private.lock:EnableMouse(true)
+	private.lock:SetScript("OnEnter", function(self)
+		local st = private.state
+		if not st or not st.hand then return end
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText("The deal", 1, 1, 1)
+		GameTooltip:AddLine("Every player's secret went into this shuffle, so nobody could choose the deck. Your client checks the host's account of the hand once it's over.", C.muted[1], C.muted[2], C.muted[3], true)
+		if st.hand.dh then GameTooltip:AddLine("Deck "..strsub(st.hand.dh, 1, 16).."...", C.text[1], C.text[2], C.text[3]) end
+		local audit = private.audits and private.audits[st.hand.key]
+		if audit then
+			GameTooltip:AddLine(audit.ok and "Verified by this client." or ("FAILED: "..tostring(audit.reason)), unpack(audit.ok and C.green or C.red))
+		end
+		GameTooltip:Show()
+	end)
+	private.lock:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	for k = 0, Protocol.MAX_SEATS - 1 do
+		private.seats[k] = BuildSeat(felt, k)
+	end
+
+	-- The action bar
+	local bar = CreateFrame("Frame", nil, frame)
+	bar:SetPoint("BOTTOMLEFT", 1, 1)
+	bar:SetPoint("BOTTOMRIGHT", -LOG_WIDTH - 1, 1)
+	bar:SetHeight(ACTION_H)
+	Theme:Fill(bar, C.titleBar)
+	private.bar = bar
+	private.sitOut = W:Button(bar, "Sit out", "ghost", 90, 24, private.ToggleSitOut)
+	private.sitOut:SetPoint("LEFT", 10, 0)
+	private.rebuy = W:Button(bar, "Rebuy", "secondary", 70, 24, private.AskRebuy)
+	private.rebuy:SetPoint("LEFT", private.sitOut, "RIGHT", 6, 0)
+	private.rebuy:Hide()
+	private.countdown = Theme:Text(bar, "small", "", C.muted)
+	private.countdown:SetPoint("LEFT", private.rebuy, "RIGHT", 10, 0)
+	private.allin = W:Button(bar, "All-in", "danger", 96, 28, function() private.Act("allin") end)
+	private.allin:SetPoint("RIGHT", -10, 0)
+	private.raise = W:Button(bar, "Raise", "primary", 110, 28, function() private.Act(private.raiseAction, private.amount) end)
+	private.raise:SetPoint("RIGHT", private.allin, "LEFT", -6, 0)
+	private.amountBox = W:Input(bar, 70, "", function(text)
+		local n = tonumber(text)
+		if n and private.range then
+			n = max(private.range[1], min(private.range[2], floor(n)))
+			private.amount = n
+			private.slider:SetValue(n)
+			private.raise:SetText(private.raiseLabel.." "..Chips(n, private.state and private.state.cfg))
+		end
+	end)
+	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
+	private.slider = W:Slider(bar, "", 150, 0, 1, 1, function(v) return "" end, function(v)
+		private.amount = v
+		private.amountBox:SetValue(tostring(v))
+		private.raise:SetText(private.raiseLabel.." "..Chips(v, private.state and private.state.cfg))
+	end)
+	private.slider:SetPoint("RIGHT", private.amountBox, "LEFT", -8, 4)
+	private.call = W:Button(bar, "Call", "secondary", 110, 28, function() private.Act(private.callAction) end)
+	private.call:SetPoint("RIGHT", private.slider, "LEFT", -12, -4)
+	private.fold = W:Button(bar, "Fold", "ghost", 70, 28, function() private.Act("fold") end)
+	private.fold:SetPoint("RIGHT", private.call, "LEFT", -6, 0)
+
+	-- The hand log
+	local side = CreateFrame("Frame", nil, frame)
+	side:SetPoint("TOPLEFT", frame, "TOPRIGHT", -LOG_WIDTH - 1, -HEADER - 1)
+	side:SetPoint("BOTTOMRIGHT", -1, 1)
+	Theme:Fill(side, C.sidebar)
+	local label = Theme:Text(side, "tiny", "HAND LOG", C.faint)
+	label:SetPoint("TOPLEFT", 10, -8)
+	local log = CreateFrame("ScrollingMessageFrame", nil, side)
+	log:SetPoint("TOPLEFT", 10, -24)
+	log:SetPoint("BOTTOMRIGHT", -8, 8)
+	log:SetFontObject(Theme.Fonts.small)
+	log:SetJustifyH("LEFT")
+	log:SetFading(false)
+	log:SetMaxLines(300)
+	log:SetInsertMode("BOTTOM")
+	log:EnableMouseWheel(true)
+	log:SetScript("OnMouseWheel", function(self, delta)
+		if delta > 0 then self:ScrollUp() else self:ScrollDown() end
+	end)
+	private.log = log
+
+	frame:SetScript("OnUpdate", function(_, elapsed)
+		private.sinceTick = (private.sinceTick or 0) + elapsed
+		if private.sinceTick >= 0.2 then
+			private.sinceTick = 0
+			private.TickClock()
+		end
+	end)
+	private.frame = frame
+	return frame
+end
+
+-- ============================================================================
+-- Actions
+-- ============================================================================
+
+function private.Act(action, amount)
+	local player = Net:Player()
+	if player and action then
+		player:Act(action, amount)
+	end
+end
+
+function private.ToggleSitOut()
+	local player, st = Net:Player(), private.state
+	if not player or not st or not st.me then return end
+	local me = st.seats[st.me]
+	if me and me.out then
+		player:Back()
+	else
+		player:SitOut()
+	end
+end
+
+function private.AskRebuy()
+	local st = private.state
+	local player = Net:Player()
+	if not st or not st.me or not player then return end
+	local room = st.cfg.buyMax - (st.seats[st.me].s or 0)
+	W:Dialog({
+		title = "Rebuy",
+		text = ("Add chips to your stack, up to %s (the table's most)."):format(Chips(room, st.cfg)),
+		input = { placeholder = "Chips", value = tostring(min(room, st.cfg.buyMin)) },
+		confirmLabel = "Buy",
+		over = private.frame,
+		validate = function(value)
+			local n = tonumber(value)
+			if not n or n ~= floor(n) or n < 1 or n > room then return ("A whole number from 1 to %d."):format(room) end
+		end,
+		onConfirm = function(value) player:Rebuy(tonumber(value)) end,
+	})
+end
+
+function private.ConfirmLeave()
+	local hosting = Net:HostedTable() ~= nil
+	W:Dialog({
+		title = hosting and "Close the table?" or "Leave the table?",
+		text = hosting and "Everyone at your table is sent their final stacks and the table closes." or "Your chips leave with you. A hand under way is folded.",
+		confirmLabel = hosting and "Close table" or "Leave",
+		confirmStyle = "danger",
+		over = private.frame,
+		onConfirm = function()
+			Net:Leave()
+			if private.frame then private.frame:Hide() end
+		end,
+	})
+end
+
+-- ============================================================================
+-- Drawing
+-- ============================================================================
+
+local function Describe(entry, st)
+	local who = Name(st.seats[entry.seat] and st.seats[entry.seat].n or ("Seat "..entry.seat))
+	local cfg = st.cfg
+	if entry.action == "fold" then return who.." folds" end
+	if entry.action == "check" then return who.." checks" end
+	if entry.action == "call" then return who.." calls "..Chips(entry.amount, cfg) end
+	if entry.action == "bet" then return who.." bets "..Chips(entry.amount, cfg) end
+	if entry.action == "raise" then return who.." raises to "..Chips(entry.amount, cfg) end
+	if entry.action == "allin" then return who.." is all in for "..Chips(entry.amount, cfg) end
+	if entry.action == "leave" then return who.." leaves the table" end
+	return who.." "..tostring(entry.action)
+end
+
+local function Board(board, from, to)
+	local names = {}
+	for i = from, to do
+		if board[i] then names[#names + 1] = Engine:Name(board[i]) end
+	end
+	return table.concat(names, " ")
+end
+
+---Adds a line to the hand log.
+---@param text string
+---@param color table?
+function TableUI:Log(text, color)
+	if not private.log then return end
+	color = color or C.text
+	private.log:AddMessage(text, color[1], color[2], color[3])
+	private.lines = private.lines or {}
+	tinsert(private.lines, text)
+	if #private.lines > 300 then tremove(private.lines, 1) end
+end
+
+-- What's new in this state, said in the log
+function private.LogChanges(st)
+	local hand = st.hand
+	if not hand or not hand.key then return end
+	if hand.key ~= private.loggedKey then
+		private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt = hand.key, 0, nil, false, false
+	end
+	if hand.street and not private.loggedDealt then
+		-- The hand's key is known from the shuffle on; the deal is the first street
+		private.loggedDealt = true
+		local button = st.seats[hand.button]
+		TableUI:Log(("Hand %d: dealt. Button: %s."):format(st.h, button and Name(button.n) or "?"), C.gold)
+	end
+	if hand.street and hand.street ~= private.loggedStreet then
+		local board = hand.board or {}
+		if hand.street == "flop" and #board >= 3 then TableUI:Log("Flop: "..Board(board, 1, 3), C.muted) end
+		if hand.street == "turn" and #board >= 4 then TableUI:Log("Turn: "..Board(board, 4, 4), C.muted) end
+		if hand.street == "river" and #board >= 5 then TableUI:Log("River: "..Board(board, 5, 5), C.muted) end
+		private.loggedStreet = hand.street
+	end
+	if hand.log then
+		for i = private.loggedActions + 1, #hand.log do
+			TableUI:Log(Describe(hand.log[i], st))
+		end
+		private.loggedActions = #hand.log
+	end
+	if hand.results and not private.loggedResults then
+		private.loggedResults = true
+		for _, pot in ipairs(hand.results.pots or {}) do
+			local names = {}
+			for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
+			local share = #pot.winners > 1 and (" split %d ways"):format(#pot.winners) or ""
+			TableUI:Log(("%s win%s %s%s%s"):format(table.concat(names, " and "), #names == 1 and "s" or "", Chips(pot.amount, st.cfg), pot.description and (" with "..pot.description) or "", share), C.green)
+		end
+	end
+end
+
+---Shows the host's latest state.
+---@param st table
+function TableUI:Refresh(st)
+	if not private.frame then private.Build() end
+	private.state = st
+	if not st then
+		private.frame:Hide()
+		return
+	end
+	local cfg = st.cfg
+	local n = cfg.maxSeats
+	local me = st.me
+	local hand = st.hand
+	local playing = hand and hand.stage == "play" and hand.street ~= "done"
+	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host))
+	private.leave:SetText(Net:HostedTable() and "Close table" or "Leave")
+	-- The clock for the player to act
+	if hand and hand.left and (playing or hand.stage == "commits" or hand.stage == "reveals") then
+		private.deadlineAt = GetTime() + hand.left
+		private.turnSeconds = playing and cfg.turnSeconds or (hand.stage == "commits" and Protocol.COMMIT_SECONDS or Protocol.REVEAL_SECONDS)
+	else
+		private.deadlineAt = nil
+	end
+	private.nextAt = st.nextIn and (GetTime() + st.nextIn) or nil
+	-- Winners and their best five, at a showdown
+	local winners, best = {}, {}
+	if hand and hand.results then
+		for _, pot in ipairs(hand.results.pots or {}) do
+			for _, seat in ipairs(pot.winners or {}) do winners[seat] = true end
+			for _, card in ipairs(pot.best or {}) do best[card] = true end
+		end
+	end
+	local showdown = hand and hand.results ~= nil
+	-- Seats
+	for k = 0, Protocol.MAX_SEATS - 1 do
+		local seatFrame = private.seats[k]
+		local seat = me and ((me - 1 + k) % n) + 1 or (k + 1)
+		local p = st.seats[seat]
+		if k >= n then
+			seatFrame:Hide()
+			seatFrame.bet:Hide()
+		else
+			seatFrame:Show()
+			Place(seatFrame, k, n, private.felt)
+			if not p then
+				seatFrame.name:SetText("")
+				seatFrame.stack:SetText("")
+				seatFrame.status:Set(nil)
+				seatFrame.dealer:Set(nil)
+				seatFrame.cards[1]:Hide()
+				seatFrame.cards[2]:Hide()
+				seatFrame.bet:Hide()
+				seatFrame.timer:Hide()
+				seatFrame.empty:SetText("Seat "..seat)
+				Theme:SetBorderColor(seatFrame, SEAT_BORDER)
+			else
+				seatFrame.empty:SetText("")
+				seatFrame.name:SetText(seat == me and (Name(p.n).." (you)") or Name(p.n))
+				seatFrame.stack:SetText(Chips(p.s, cfg))
+				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown
+				local inHand = hand and (p.b ~= nil or p.tot ~= nil) and not p.f
+				for i = 1, 2 do
+					local card = seatFrame.cards[i]
+					if p.hole and p.hole[i] then
+						card:SetCard(p.hole[i])
+						card:SetHighlight(showdown and next(best) and (best[p.hole[i]] or false) or nil)
+						card:Show()
+					elseif inHand and playing then
+						card:SetCard(true)
+						card:SetHighlight(nil)
+						card:Show()
+					else
+						card:Hide()
+					end
+				end
+				-- Status
+				local status, color
+				if p.out == "busted" then status, color = "Busted", C.red
+				elseif p.out == "sitting" then status, color = "Sitting out", C.muted
+				elseif p.out == "away" then status, color = "Away", C.amber
+				elseif p.out == "missed" then status, color = "Reconnecting", C.amber
+				elseif p.f then status, color = "Folded", C.muted
+				elseif p.a then status, color = "All-in", C.red
+				elseif playing and hand.toAct == seat then status, color = seat == me and "Your turn" or "To act", C.gold
+				elseif hand and (hand.stage == "commits" or hand.stage == "reveals") and p.inHand then status, color = "Shuffling", C.blue
+				elseif showdown and winners[seat] then status, color = "Winner", C.green
+				elseif p.away and p.away > 0 and not p.out then status, color = "Slow", C.amber
+				end
+				seatFrame.status:Set(status, color)
+				seatFrame.dealer:Set(hand and hand.button == seat and "D" or nil, C.gold)
+				-- The bet in front of them, or what they won
+				if showdown and hand.results.payouts and hand.results.payouts[seat] then
+					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
+					seatFrame.bet:Show()
+				elseif p.b and p.b > 0 then
+					seatFrame.bet:SetText(Chips(p.b, cfg))
+					seatFrame.bet:Show()
+				else
+					seatFrame.bet:Hide()
+				end
+				local acting = playing and hand.toAct == seat
+				seatFrame.timer:SetShown(acting)
+				Theme:SetBorderColor(seatFrame, acting and C.gold or (showdown and winners[seat] and C.green) or SEAT_BORDER)
+			end
+		end
+	end
+	-- The middle
+	for i = 1, 5 do
+		local card = hand and hand.board and hand.board[i]
+		private.board[i]:SetCard(card or nil)
+		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
+	end
+	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
+	private.info:SetText(hand and hand.key and ("Hand "..st.h) or "")
+	if hand and hand.dh then
+		local audit = private.audits and private.audits[hand.key]
+		private.lock:Set(audit and (audit.ok and "Verified" or "Deal FAILED") or ("Deck "..strsub(hand.dh, 1, 8)), audit and (audit.ok and C.green or C.red) or C.muted)
+	else
+		private.lock:Set(nil)
+	end
+	-- The status line
+	local seated = 0
+	for _ in pairs(st.seats) do seated = seated + 1 end
+	local text, color = "", C.text
+	if st.phase == "closed" then
+		text, color = "The table is closed.", C.muted
+	elseif st.phase == "waiting" then
+		text, color = seated < Protocol.MIN_SEATS and ("Waiting for players: %d of %d seated"):format(seated, n) or "Next hand soon", C.muted
+	elseif st.phase == "seeding" then
+		text, color = "Shuffling: every player's secret goes into the deck", C.blue
+	elseif st.phase == "playing" and hand then
+		local actor = st.seats[hand.toAct]
+		text, color = hand.toAct == me and "Your turn" or ((actor and Name(actor.n) or "?").." to act"), hand.toAct == me and C.gold or C.text
+	elseif st.phase == "showdown" and hand and hand.results then
+		local lines = {}
+		for _, pot in ipairs(hand.results.pots or {}) do
+			local names = {}
+			for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
+			lines[#lines + 1] = table.concat(names, " and ").." win"..(#names == 1 and "s" or "").." "..Chips(pot.amount, cfg)..(pot.description and (" with "..pot.description) or "")
+		end
+		text, color = table.concat(lines, "; "), C.green
+	end
+	if private.hostGone then
+		text, color = "The host has gone quiet. The next seat takes over if they don't come back.", C.amber
+	end
+	private.status:SetText(text)
+	private.status:SetTextColor(color[1], color[2], color[3])
+	-- The action bar
+	local legal = playing and hand.legal and hand.toAct == me and hand.legal or nil
+	private.fold:SetShown(legal ~= nil)
+	private.call:SetShown(legal ~= nil)
+	private.raise:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil)
+	private.slider:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil)
+	private.amountBox:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil)
+	private.allin:SetShown(legal ~= nil)
+	if legal then
+		if legal.check then
+			private.callAction = "check"
+			private.call:SetText("Check")
+		else
+			private.callAction = "call"
+			private.call:SetText("Call "..Chips(legal.call, cfg))
+		end
+		local low, high = legal.minBet or legal.minRaise, legal.maxBet or legal.maxRaise
+		if low then
+			private.raiseAction = legal.minBet and "bet" or "raise"
+			private.raiseLabel = legal.minBet and "Bet" or "Raise to"
+			private.range = { low, high }
+			private.slider.slider:SetMinMaxValues(low, high)
+			private.slider:SetValue(low)
+			private.amount = low
+			private.amountBox:SetValue(tostring(low))
+			private.raise:SetText(private.raiseLabel.." "..Chips(low, cfg))
+			private.slider.label:SetText(("%s to %s"):format(Chips(low, cfg), Chips(high, cfg)))
+		end
+		local myStack = st.seats[me] and st.seats[me].s or 0
+		private.allin:SetText("All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg))
+	end
+	local mine = me and st.seats[me]
+	private.sitOut:SetShown(mine ~= nil and st.phase ~= "closed")
+	if mine then
+		private.sitOut:SetText(mine.out and mine.out ~= "busted" and "I'm back" or "Sit out")
+		private.sitOut:SetEnabled(mine.out ~= "busted")
+		private.rebuy:SetShown(st.phase ~= "closed" and st.phase ~= "playing" and (mine.s or 0) < cfg.buyMax and (mine.out == "busted" or (mine.s or 0) < cfg.buyMin))
+	else
+		private.rebuy:Hide()
+	end
+	private.LogChanges(st)
+	private.TickClock()
+end
+
+-- Seconds left for the player to act, and for the next hand, by our own clock between states
+function private.TickClock()
+	local st = private.state
+	if not st or not private.frame or not private.frame:IsShown() then return end
+	local now = GetTime()
+	if private.deadlineAt and st.hand then
+		local left = max(0, private.deadlineAt - now)
+		for k = 0, Protocol.MAX_SEATS - 1 do
+			local seatFrame = private.seats[k]
+			if seatFrame.timer:IsShown() then
+				seatFrame.timer:SetFraction(left / max(1, private.turnSeconds))
+			end
+		end
+		if st.phase == "playing" and st.hand.toAct then
+			local actor = st.seats[st.hand.toAct]
+			local who = st.hand.toAct == st.me and "Your turn" or ((actor and Name(actor.n) or "?").." to act")
+			if not private.hostGone then private.status:SetText(("%s  -  %ds"):format(who, ceil(left))) end
+		end
+	end
+	if private.nextAt and (st.phase == "showdown" or st.phase == "waiting") then
+		local left = max(0, private.nextAt - now)
+		private.countdown:SetText(left > 0 and ("Next hand in %ds"):format(ceil(left)) or "")
+	else
+		private.countdown:SetText("")
+	end
+end
+
+---Notes an audit's result for the lock pill and the log.
+function TableUI:OnAudit(key, ok, reason)
+	private.audits = private.audits or {}
+	private.audits[key] = { ok = ok, reason = reason }
+	local handNo = key:match("^(%d+)") or key
+	if ok then
+		TableUI:Log(("Hand %s verified: the deck was the one every player's secret made, and the payouts follow from the actions."):format(handNo), C.green)
+	else
+		TableUI:Log(("Hand %s FAILED verification: %s. Don't settle this hand."):format(handNo, tostring(reason)), C.red)
+		Wanted:Print("Poker: hand %s failed verification (%s).", handNo, tostring(reason))
+	end
+	if private.state then TableUI:Refresh(private.state) end
+end
+
+---The host went quiet, or a new one took over.
+function TableUI:OnHost(event, name)
+	if event == "hostGone" then
+		private.hostGone = true
+		TableUI:Log("The host has gone quiet.", C.amber)
+	elseif event == "newHost" then
+		private.hostGone = false
+		TableUI:Log(Name(name).." is the host now.", C.amber)
+	end
+	if private.state then TableUI:Refresh(private.state) end
+end
+
+---Shows the window, building it first.
+function TableUI:Show()
+	if not private.frame then private.Build() end
+	private.frame:Show()
+	if private.state then TableUI:Refresh(private.state) end
+end
+
+function TableUI:Hide()
+	if private.frame then private.frame:Hide() end
+end
+
+function TableUI:IsShown()
+	return private.frame ~= nil and private.frame:IsShown()
+end
+
+---Forgets the table (left or closed), keeping the log on screen.
+function TableUI:Reset()
+	private.state, private.deadlineAt, private.nextAt, private.hostGone = nil, nil, nil, false
+	private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt = nil, 0, nil, false, false
+	private.audits = {}
+end
+
+-- For the tests
+function TableUI:GetFrame() return private.frame end
+function TableUI:GetParts() return private end

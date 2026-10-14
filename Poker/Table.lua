@@ -189,9 +189,9 @@ end
 
 -- The player's choices for the table: sounds (each one picked from the game's own sounds, a SharedMedia sound, or
 -- none), a four-colour deck, the window opening on their turn
-local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", fold = "kit:IG_SPELLBOOK_OPEN", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
+local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", fold = "kit:IG_SPELLBOOK_OPEN", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", lose = "kit:LFG_DENIED", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
 local SOUND_KINDS = { { "deal", "Deal", "Cards dealt, and each new street." }, { "chips", "Chips", "A bet, a raise, a call." }, { "fold", "Fold", "Cards thrown in." }, { "turn", "Your turn", "The moment it's yours to act." },
-	{ "win", "Pot won", "A pot that comes to you." }, { "tick", "Five seconds", "Once, when five seconds are left on your clock." } }
+	{ "win", "Pot won", "A pot that comes to you." }, { "lose", "Hand lost", "You showed down and lost." }, { "tick", "Five seconds", "Once, when five seconds are left on your clock." } }
 -- The game's sounds offered, { SOUNDKIT name, label }; ones this client lacks aren't offered
 local GAME_SOUNDS = {
 	{ "IG_ABILITY_PAGE_TURN", "Page turn" }, { "LOOT_WINDOW_COIN_SOUND", "Coins" }, { "READY_CHECK", "Ready check" }, { "IG_QUEST_LIST_COMPLETE", "Quest complete" },
@@ -200,6 +200,7 @@ local GAME_SOUNDS = {
 	{ "GS_TITLE_OPTION_OK", "Click" }, { "UI_EPICLOOT_TOAST", "Epic loot" }, { "UI_LEGENDARY_LOOT_TOAST", "Legendary loot" }, { "UI_BONUS_LOOT_ROLL_END", "Bonus roll" },
 	{ "PVP_THROUGH_QUEUE", "Queue ready" }, { "RAID_WARNING", "Raid warning" }, { "RAID_BOSS_EMOTE_WARNING", "Boss emote" }, { "UI_RAID_BOSS_WHISPER_WARNING", "Boss whisper" },
 	{ "ALARM_CLOCK_WARNING_1", "Alarm clock 1" }, { "ALARM_CLOCK_WARNING_2", "Alarm clock 2" }, { "ALARM_CLOCK_WARNING_3", "Alarm clock 3" },
+	{ "LFG_DENIED", "Buzzer" }, { "IG_QUEST_LOG_ABANDON_QUEST", "Abandon" }, { "IG_MAINMENU_OPTION_CHECKBOX_OFF", "Click off" }, { "IG_MINIMAP_CLOSE", "Minimap close" },
 }
 local SOUND_MENU_PAGE = 12
 local function Options()
@@ -288,7 +289,7 @@ end
 -- The settings panel over the felt
 function private.BuildSettings()
 	local panel = CreateFrame("Frame", nil, private.frame)
-	panel:SetSize(400, 330)
+	panel:SetSize(400, 360)
 	panel:SetPoint("CENTER", private.felt, "CENTER", 0, 0)
 	panel:SetFrameLevel(private.frame:GetFrameLevel() + 30)
 	panel:EnableMouse(true)
@@ -854,7 +855,13 @@ function private.LogChanges(st)
 			TableUI:Log(PotLine(st, pot, i, #pots), C.green)
 			for _, seat in ipairs(pot.winners or {}) do if seat == st.me then won = true end end
 		end
-		if won then Play("win") end
+		if won then
+			Play("win")
+		else
+			-- Shown down and lost: in the hand to the end, not among the winners
+			local mine = st.me and st.seats[st.me]
+			if mine and mine.tot ~= nil and not mine.f then Play("lose") end
+		end
 	end
 end
 

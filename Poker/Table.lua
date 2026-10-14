@@ -118,7 +118,9 @@ end
 function private.Build()
 	local frame = CreateFrame("Frame", "WantedPokerTableFrame", UIParent)
 	frame:SetSize(WIDTH, HEIGHT)
-	frame:SetFrameStrata("MEDIUM")
+	-- On the Wanted window's layer and above it when shown: below, it opened behind the window and seemed not to open
+	frame:SetFrameStrata("HIGH")
+	frame:SetToplevel(true)
 	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
@@ -725,6 +727,7 @@ end
 function TableUI:Show()
 	if not private.frame then private.Build() end
 	private.frame:Show()
+	private.frame:Raise()
 	if private.state then TableUI:Refresh(private.state) end
 end
 

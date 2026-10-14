@@ -13,7 +13,7 @@ local TableUI = Poker.PokerTable
 local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
-local CARD_HEIGHT = 268 -- the form (three rows) with how it works under it
+local CARD_HEIGHT = 292 -- the form (three rows) with the guide to the table under it
 -- Blinds to pick from: the card room's standard structures, in chips, or at a gold table in copper, silver or gold
 -- (a gold table's chip is a copper piece)
 local UNITS = { { key = "copper", label = "Copper", mult = 1 }, { key = "silver", label = "Silver", mult = 100 }, { key = "gold", label = "Gold", mult = 10000 } }
@@ -25,17 +25,6 @@ for _, u in ipairs(UNITS) do
 	for _, st in ipairs(STRUCTURES) do BLINDS[u.key][#BLINDS[u.key] + 1] = { key = u.key..":"..st[1].."/"..st[2], sb = st[1] * u.mult, bb = st[2] * u.mult } end
 end
 local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100 -- the buy-in range offered when the blinds are picked; the host sets their own
-local HOW_IT_WORKS = table.concat({
-	"EXPERIMENTAL: poker hasn't been played with a full table of people yet. If anything looks wrong, press Report a bug at the table or here: the table's log goes with it.",
-	"HOW IT WORKS",
-	"1.  Host a table, or sit at one below. Everyone with Wanted on your faction sees open tables.",
-	"2.  Before each hand every player's client makes a secret; the deck is shuffled from all of them together, so nobody, the host included, can choose it.",
-	"3.  After each hand your client checks the host's account of it. A hand that doesn't check out is marked in red at the table.",
-	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
-	"5.  Gold tables: cash on the table. Your buy-in goes to the host before you're dealt in, by a trade or by mail, and when you leave the host owes you your stack: a line under Settlement, paid by trade or by mail (Pay fills it in at a mailbox). Nobody owes anyone but the host, and a host two days late loses reputation with everyone who sat there.",
-	"6.  Closing the table window keeps your seat; leave from the table or from here.",
-	"7.  Practice: pick Practice instead of Chips or Gold and the other seats are taken by computer players. It plays on play money that looks like gold, in the blinds you choose; nothing is advertised and nothing is owed.",
-}, "\n")
 
 local function Settings()
 	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10, unit = "silver", lateLevels = Protocol.DEFAULT_LATE_LEVELS, antes = false }
@@ -102,15 +91,15 @@ function private.BuildForm(parent, width)
 	seatsLabel:SetPoint("LEFT", private.blinds, "RIGHT", 14, 0)
 	local seatChoices = {}
 	for n = Protocol.MIN_SEATS, Protocol.MAX_SEATS do seatChoices[#seatChoices + 1] = { key = n, label = tostring(n) } end
-	private.seats = W:Choice(form, 56, seatChoices, function(key) Settings().seats = key end)
+	private.seats = W:Choice(form, 56, seatChoices, function(key) Settings().seats = key private.Guide() end)
 	private.seats:SetPoint("LEFT", seatsLabel, "RIGHT", 6, 0)
 	private.seats:SetChoice(s.seats)
 	local turnLabel = Theme:Text(form, "small", "Turn", C.muted)
 	turnLabel:SetPoint("LEFT", private.seats, "RIGHT", 14, 0)
-	private.turn = W:Choice(form, 64, { { key = 20, label = "20s" }, { key = 30, label = "30s" }, { key = 45, label = "45s" }, { key = 60, label = "60s" } }, function(key) Settings().turn = key end)
+	private.turn = W:Choice(form, 64, { { key = 20, label = "20s" }, { key = 30, label = "30s" }, { key = 45, label = "45s" }, { key = 60, label = "60s" } }, function(key) Settings().turn = key private.Guide() end)
 	private.turn:SetPoint("LEFT", turnLabel, "RIGHT", 6, 0)
 	private.turn:SetChoice(s.turn)
-	private.passwordBox = W:Input(form, 96, "Password")
+	private.passwordBox = W:Input(form, 96, "Password", function() private.Guide() end)
 	private.passwordBox:SetPoint("LEFT", private.turn, "RIGHT", 14, 0)
 	W:AttachTooltip(private.passwordBox, "Password", "Leave it empty for an open table. With one, the table shows as locked and anyone sitting down is asked for it.")
 	private.kind = W:Segmented(form, { { key = "cash", label = "Cash game" }, { key = "tournament", label = "Tournament" } }, function(key)
@@ -128,40 +117,40 @@ function private.BuildForm(parent, width)
 	-- The third row: a cash game's buy-in range, or a tournament's entry, starting stack and how long a level lasts
 	private.entryLabel = Theme:Text(form, "small", "Entry", C.muted)
 	private.entryLabel:SetPoint("TOPLEFT", 14, -100)
-	private.entryBox = W:Input(form, 76, "e.g. 2g")
+	private.entryBox = W:Input(form, 76, "e.g. 2g", function() private.Guide() end)
 	private.entryBox:SetPoint("LEFT", private.entryLabel, "RIGHT", 6, 0)
 	private.stackLabel = Theme:Text(form, "small", "Stack", C.muted)
 	private.stackLabel:SetPoint("LEFT", private.entryBox, "RIGHT", 12, 0)
 	local stacks = {}
 	for _, n in ipairs(Protocol.START_STACKS) do stacks[#stacks + 1] = { key = n, label = tostring(n) } end
-	private.stack = W:Choice(form, 70, stacks, function(key) Settings().startStack = key end)
+	private.stack = W:Choice(form, 70, stacks, function(key) Settings().startStack = key private.Guide() end)
 	private.stack:SetPoint("LEFT", private.stackLabel, "RIGHT", 6, 0)
 	private.stack:SetChoice(s.startStack or 1500)
 	private.levelLabel = Theme:Text(form, "small", "Levels", C.muted)
 	private.levelLabel:SetPoint("LEFT", private.stack, "RIGHT", 12, 0)
-	private.levels = W:Choice(form, 76, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key end)
+	private.levels = W:Choice(form, 76, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key private.Guide() end)
 	private.levels:SetPoint("LEFT", private.levelLabel, "RIGHT", 6, 0)
 	private.levels:SetChoice(s.levelMinutes or 10)
 	private.lateLabel = Theme:Text(form, "small", "Late entry", C.muted)
 	private.lateLabel:SetPoint("LEFT", private.levels, "RIGHT", 12, 0)
-	private.late = W:Choice(form, 96, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key end)
+	private.late = W:Choice(form, 96, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key private.Guide() end)
 	private.late:SetPoint("LEFT", private.lateLabel, "RIGHT", 6, 0)
 	private.late:SetChoice(s.lateLevels == nil and Protocol.DEFAULT_LATE_LEVELS or s.lateLevels)
-	private.antes = W:Toggle(form, "Antes", function(on) Settings().antes = on end)
+	private.antes = W:Toggle(form, "Antes", function(on) Settings().antes = on private.Guide() end)
 	private.antes:SetPoint("LEFT", private.late, "RIGHT", 14, 0)
 	private.antes:SetChecked(s.antes == true)
 	W:AttachTooltip(private.antes, "Antes", ("From level %d everyone antes a tenth of the big blind each hand, the way the big events do."):format(Protocol.ANTE_FROM_LEVEL))
 	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
 	private.buyinNote:SetPoint("TOPLEFT", 14, -100)
-	private.minBox = W:Input(form, 76, "least")
+	private.minBox = W:Input(form, 76, "least", function() private.Guide() end)
 	private.minBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 6, 0)
 	local toLabel = Theme:Text(form, "small", "to", C.muted)
 	toLabel:SetPoint("LEFT", private.minBox, "RIGHT", 6, 0)
-	private.maxBox = W:Input(form, 76, "most")
+	private.maxBox = W:Input(form, 76, "most", function() private.Guide() end)
 	private.maxBox:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
 	local yoursLabel = Theme:Text(form, "small", "yours", C.muted)
 	yoursLabel:SetPoint("LEFT", private.maxBox, "RIGHT", 10, 0)
-	private.buyinBox = W:Input(form, 76, "yours")
+	private.buyinBox = W:Input(form, 76, "yours", function() private.Guide() end)
 	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
 	-- A gold table's money: the blinds and buy-ins in copper, silver or gold
 	private.unitLabel = Theme:Text(form, "small", "in", C.muted)
@@ -176,12 +165,12 @@ function private.BuildForm(parent, width)
 	local report = W:Button(form, "Report a bug", "ghost", 100, 26, function() Poker.PokerTable:ReportBug() end)
 	report:SetPoint("RIGHT", go, "LEFT", -6, 0)
 	W:AttachTooltip(report, "Report a bug", "Poker is experimental. Say what went wrong and the report goes to the developers with the table's log.")
-	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
-	how:SetPoint("TOPLEFT", 14, -126)
-	how:SetPoint("RIGHT", -14, 0)
-	how:SetWordWrap(true)
-	how:SetJustifyH("LEFT")
-	how:SetSpacing(2)
+	private.how = Theme:Text(form, "tiny", "", C.faint)
+	private.how:SetPoint("TOPLEFT", 14, -126)
+	private.how:SetPoint("RIGHT", -14, 0)
+	private.how:SetWordWrap(true)
+	private.how:SetJustifyH("LEFT")
+	private.how:SetSpacing(2)
 	private.RefreshBuyin()
 	return form
 end
@@ -229,6 +218,50 @@ function private.RefreshBuyin(reset)
 	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
 		box.placeholder:SetText(Protocol:IsMoney(stakes) and "e.g. 2g 50s" or "chips")
 	end
+	private.Guide()
+end
+
+-- The guide under the form: the table being set up, step by step, in the choices made so far, and how its money works
+function private.Guide()
+	if not private.how then return end
+	local s = Settings()
+	local stakes = Stakes()
+	local money = Protocol:IsMoney(stakes)
+	local b = Blinds(s.blinds)
+	local tournament = s.kind == "tournament"
+	local practice = s.stakes == "practice"
+	local function M(n) return Protocol:Money(n or 0, stakes) end
+	local lines = { "EXPERIMENTAL: poker hasn't been played with a full table of people yet. Anything wrong, press Report a bug: the table's log goes with it." }
+	local what = stakes == "gold" and "gold" or practice and "play money that looks like gold" or "chips"
+	if tournament then
+		local entry = money and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
+		lines[#lines + 1] = ("1.  A TOURNAMENT for %s. Everyone starts with %d chips; the blinds start at 10/20 and rise every %d minutes until one player has them all. No rebuys.%s%s"):format(
+			what, s.startStack or 1500, s.levelMinutes or 10, (s.lateLevels or 0) > 0 and (" Late entry stays open to level %d."):format(s.lateLevels) or " Nobody enters after the start.",
+			s.antes and (" Antes from level %d."):format(Protocol.ANTE_FROM_LEVEL) or "")
+		if stakes == "gold" then
+			lines[#lines + 1] = ("2.  ENTRY %s each, paid to you before they're dealt in, by a trade or by mail. You hold the pool. The prizes are the entries: winner takes all up to four entered, 65/35 from five, 50/30/20 from seven."):format(entry and entry > 0 and M(entry) or "(type one)")
+			lines[#lines + 1] = "3.  PAYING OUT: when it ends, each prize is a line under Settlement from you to the player, paid by trade or with Pay at a mailbox. Bust early and you can hand the table to the next seat by trading them the pool."
+		else
+			lines[#lines + 1] = practice and "2.  FREE ENTRY against computer players; the prizes are play money." or "2.  FREE ENTRY; the chips are play money and nothing is owed."
+		end
+	else
+		local lo, hi, yours = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes), Protocol:ParseAmount(private.buyinBox:GetText(), stakes)
+		lines[#lines + 1] = ("1.  A CASH GAME for %s, blinds %s/%s. Players buy in for %s to %s and leave whenever they like with what's in front of them. You sit with %s."):format(
+			what, M(b.sb), M(b.bb), lo and M(lo) or "?", hi and M(hi) or "?", yours and M(yours) or "?")
+		if stakes == "gold" then
+			lines[#lines + 1] = "2.  CASH ON THE TABLE: each buy-in (and rebuy) goes to you first, by a trade in person or by mail, and the seat is dealt in once it has. You hold the money; nobody can run up a debt."
+			lines[#lines + 1] = "3.  PAYING OUT: when a player leaves you owe them their stack, a line under Settlement, paid by trade or with Pay at a mailbox. Close table settles everyone; Hand off passes the table and the pool to the next seat."
+		elseif practice then
+			lines[#lines + 1] = "2.  PLAY MONEY: the other seats are computer players who buy in for the most. It looks and counts like gold, nothing is owed, and nothing is advertised."
+		else
+			lines[#lines + 1] = "2.  PLAY CHIPS: nothing is owed and nothing is settled."
+		end
+	end
+	local password = strtrim(private.passwordBox:GetText() or "")
+	lines[#lines + 1] = ("%d.  SEATS %d, %ds a turn. %s"):format(#lines, s.seats or 6, s.turn or 30,
+		practice and ("You and %d computer players."):format((s.seats or 6) - 1) or (password ~= "" and "Password set: the table shows as locked and anyone sitting down is asked for it." or "Everyone with Wanted on your faction sees it in Open tables; a password keeps it to friends."))
+	lines[#lines + 1] = ("%d.  THE DEAL: before each hand every client makes a secret and the deck is shuffled from all of them, so nobody, you included, can choose it; every client checks the hand afterwards. Your client deals, so play for gold only with people you'd deal cards to."):format(#lines)
+	private.how:SetText(table.concat(lines, "\n"))
 end
 
 function private.Host()

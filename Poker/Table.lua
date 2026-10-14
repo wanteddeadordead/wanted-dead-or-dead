@@ -20,10 +20,11 @@ local private = {
 	turnSeconds = Protocol.DEFAULT_TURN_SECONDS,
 	loggedKey = nil, loggedActions = 0, loggedStreet = nil, loggedResults = false,
 }
-local WIDTH, HEIGHT = 860, 560
+local WIDTH, HEIGHT = 900, 560
 local HEADER = 26
-local LOG_WIDTH = 230
+local LOG_WIDTH = 220
 local ACTION_H = 58
+local STATUS_H = 24 -- the strip of rail under the felt where the status line goes (no seat can cover it there)
 local RAIL = { 0.26, 0.14, 0.07, 1 }
 local FELT = { 0.08, 0.21, 0.13, 1 }
 local FELT_LINE = { 0.16, 0.34, 0.2, 1 }
@@ -112,7 +113,7 @@ local function Place(seat, k, n, felt)
 	seat:SetPoint("CENTER", felt, "CENTER", x, y)
 	-- The bet sits between the seat and the middle
 	seat.bet:ClearAllPoints()
-	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.55, y * 0.52)
+	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.62, y * 0.56)
 end
 
 function private.Build()
@@ -171,13 +172,15 @@ function private.Build()
 	Theme:Fill(rail, RAIL)
 	local felt = CreateFrame("Frame", nil, rail)
 	felt:SetPoint("TOPLEFT", 10, -10)
-	felt:SetPoint("BOTTOMRIGHT", -10, 10)
+	felt:SetPoint("BOTTOMRIGHT", -10, 10 + STATUS_H)
 	Theme:Skin(felt, FELT, FELT_LINE)
 	private.felt = felt
-	private.status = Theme:Text(felt, "body", "", C.text)
-	private.status:SetPoint("TOP", 0, -12)
+	private.status = Theme:Text(rail, "body", "", C.text)
+	private.status:SetPoint("BOTTOMLEFT", 10, 6)
+	private.status:SetPoint("BOTTOMRIGHT", -10, 6)
+	private.status:SetHeight(STATUS_H - 6)
 	private.status:SetJustifyH("CENTER")
-	private.status:SetWidth(420)
+	private.status:SetWordWrap(false)
 	private.pot = Theme:Text(felt, "money", "")
 	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)
 	private.pot:SetJustifyH("CENTER")
@@ -217,7 +220,7 @@ function private.Build()
 	bar:SetHeight(ACTION_H)
 	Theme:Fill(bar, C.titleBar)
 	private.bar = bar
-	private.sitOut = W:Button(bar, "Sit out", "ghost", 90, 24, private.ToggleSitOut)
+	private.sitOut = W:Button(bar, "Sit out", "ghost", 70, 24, private.ToggleSitOut)
 	private.sitOut:SetPoint("LEFT", 10, 0)
 	private.rebuy = W:Button(bar, "Rebuy", "secondary", 70, 24, private.AskRebuy)
 	private.rebuy:SetPoint("LEFT", private.sitOut, "RIGHT", 6, 0)
@@ -230,11 +233,11 @@ function private.Build()
 	private.start:Hide()
 	private.countdown = Theme:Text(bar, "small", "", C.muted)
 	private.countdown:SetPoint("LEFT", private.start, "RIGHT", 10, 0)
-	private.allin = W:Button(bar, "All-in", "danger", 96, 28, function() private.Act("allin") end)
+	private.allin = W:Button(bar, "All-in", "danger", 90, 28, function() private.Act("allin") end)
 	private.allin:SetPoint("RIGHT", -10, 0)
-	private.raise = W:Button(bar, "Raise", "primary", 110, 28, function() private.Act(private.raiseAction, private.amount) end)
+	private.raise = W:Button(bar, "Raise", "primary", 100, 28, function() private.Act(private.raiseAction, private.amount) end)
 	private.raise:SetPoint("RIGHT", private.allin, "LEFT", -6, 0)
-	private.amountBox = W:Input(bar, 70, "", function(text)
+	private.amountBox = W:Input(bar, 60, "", function(text)
 		local n = Protocol:ParseAmount(text, private.state and private.state.cfg and private.state.cfg.stakes)
 		if n and private.range then
 			n = max(private.range[1], min(private.range[2], floor(n)))
@@ -244,15 +247,15 @@ function private.Build()
 		end
 	end)
 	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
-	private.slider = W:Slider(bar, "", 150, 0, 1, 1, function(v) return "" end, function(v)
+	private.slider = W:Slider(bar, "", 120, 0, 1, 1, function(v) return "" end, function(v)
 		private.amount = v
 		private.amountBox:SetValue(Chips(v, private.state and private.state.cfg))
 		private.raise:SetText(private.raiseLabel.." "..Chips(v, private.state and private.state.cfg))
 	end)
 	private.slider:SetPoint("RIGHT", private.amountBox, "LEFT", -8, 4)
-	private.call = W:Button(bar, "Call", "secondary", 110, 28, function() private.Act(private.callAction) end)
+	private.call = W:Button(bar, "Call", "secondary", 90, 28, function() private.Act(private.callAction) end)
 	private.call:SetPoint("RIGHT", private.slider, "LEFT", -12, -4)
-	private.fold = W:Button(bar, "Fold", "ghost", 70, 28, function() private.Act("fold") end)
+	private.fold = W:Button(bar, "Fold", "ghost", 60, 28, function() private.Act("fold") end)
 	private.fold:SetPoint("RIGHT", private.call, "LEFT", -6, 0)
 
 	-- The hand log
@@ -269,7 +272,7 @@ function private.Build()
 	log:SetJustifyH("LEFT")
 	log:SetFading(false)
 	log:SetMaxLines(300)
-	log:SetInsertMode("BOTTOM")
+	log:SetInsertMode("TOP")
 	log:EnableMouseWheel(true)
 	log:SetScript("OnMouseWheel", function(self, delta)
 		if delta > 0 then self:ScrollUp() else self:ScrollDown() end

@@ -13519,6 +13519,7 @@ end)()
 	FromBob({ k = "reveal", h = key, s = secret })
 	check(host.phase == "playing" and host.hand.toAct == 1, "dealt; heads-up the button (us) acts first")
 	local parts = TableUI:GetParts()
+	local function Logged(text) for _, line in ipairs(parts.lines or {}) do if line:find(text, 1, true) then return true end end return false end
 	check(TableUI:IsShown(), "our turn with the window hidden: it opens")
 	check(Played(8960) == 1 and Played(836) == 1, "a sound for the deal and one for our turn: turn "..Played(8960)..", deal "..Played(836)..", all "..#played)
 	check(parts.strength:IsShown() and parts.strength._text ~= "" and (parts.strength._text:find("suited") or parts.strength._text:find("offsuit") or parts.strength._text:find("a pair of")), "the strength line before the flop: "..tostring(parts.strength._text))
@@ -13569,6 +13570,18 @@ end)()
 	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "F")
 	check((host.phase == "showdown" or host.hand.street == "done") and Played(1156) >= 1, "F folds, with the cards' sound")
+	-- Table talk at the showdown: the buttons show, a line goes to the host, who tells everyone; it shows over the seat
+	check(host.phase == "showdown" and parts.emotes[1]:IsShown(), "the table-talk buttons show at the showdown")
+	addonSent = {}
+	FromBob({ k = "say", e = 1 })
+	local said = ToBob("said")
+	check(said and said.s == 2 and said.e == 1, "Bob's line is relayed to him and to us")
+	check(parts.seats[1].won._text:find("Nice hand", 1, true) ~= nil and Logged("Bob: Nice hand"), "and shows over his seat and in the log")
+	addonSent = {}
+	FromBob({ k = "say", e = 2 })
+	check(ToBob("said") == nil, "a second line within three seconds is dropped")
+	FromBob({ k = "say", e = 99 })
+	check(ToBob("said") == nil, "a line that isn't one of the set is dropped")
 	check(Played(12889) == 0, "folding is no showdown loss: no buzzer")
 	-- All-in at a gold table asks first
 	Net:Leave()

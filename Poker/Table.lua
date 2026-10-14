@@ -465,6 +465,20 @@ function private.Build()
 		private.presets[#private.presets + 1] = b
 		last = b
 	end
+	-- Table talk on the strip's right at the showdown: a set line to everyone
+	private.emotes = {}
+	local lastEmote
+	for i = #Protocol.EMOTES, 1, -1 do
+		local index = i
+		local b = W:Button(rail, Protocol.EMOTES[i], "ghost", 64, 20, function()
+			local player = Net:Player()
+			if player then player:Say(index) end
+		end)
+		if lastEmote then b:SetPoint("RIGHT", lastEmote, "LEFT", -2, 0) else b:SetPoint("BOTTOMRIGHT", -8, 2) end
+		b:Hide()
+		private.emotes[#private.emotes + 1] = b
+		lastEmote = b
+	end
 	-- Pre-actions on the strip's left, while waiting for your turn
 	private.checkFold = W:Toggle(rail, "Check/fold", function(on) if on then private.callAny:SetChecked(false) end end)
 	private.checkFold:SetPoint("BOTTOMLEFT", 10, 4)
@@ -1069,7 +1083,11 @@ function TableUI:Refresh(st)
 					local kicker = private.Kicker(st, seat)
 					if kicker then shownHand = shownHand..", "..kicker.." kicker" end
 				end
-				if shownHand then
+				local said = private.said and private.said[seat]
+				if said and GetTime() < said.until_ then
+					seatFrame.won:SetText(Theme:Colorize("\""..said.text.."\"", C.gold))
+					seatFrame.won:Show()
+				elseif shownHand then
 					seatFrame.won:SetText(Theme:Colorize(shownHand, winners[seat] and C.green or C.muted))
 					seatFrame.won:Show()
 				else
@@ -1199,6 +1217,7 @@ function TableUI:Refresh(st)
 		private.allin:SetText("All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg))
 	end
 	for _, b in ipairs(private.presets) do b:SetShown(legal ~= nil and (legal.minBet or legal.minRaise) ~= nil) end
+	for _, b in ipairs(private.emotes) do b:SetShown(st.phase == "showdown" and me ~= nil) end
 	-- Pre-actions: offered while waiting in a hand, acted on the moment the turn comes, forgotten with the hand
 	local inHand = playing and me and hand.seats and false or (playing and me and st.seats[me] and not st.seats[me].f and not st.seats[me].a)
 	if hand and hand.key ~= private.preKey then
@@ -1283,6 +1302,14 @@ function private.TickClock()
 			end
 		end
 	end
+	-- A word over a seat fades after its few seconds
+	if private.said then
+		local expired = false
+		for seat, said in pairs(private.said) do
+			if now >= said.until_ then private.said[seat] = nil expired = true end
+		end
+		if expired then TableUI:Refresh(st) end
+	end
 	if private.nextAt and (st.phase == "showdown" or st.phase == "waiting") then
 		local left = max(0, private.nextAt - now)
 		private.countdown:SetText(left > 0 and ("Next hand in %ds"):format(ceil(left)) or "")
@@ -1293,6 +1320,19 @@ function private.TickClock()
 		private.info:SetText(("Level %d  -  blinds %d/%d%s  -  %d/%d in %s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
 			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.nextBlinds[1], st.nextBlinds[2], Clock(private.levelAt - now), st.lateOpen and "  -  late entry open" or "", st.hand and st.hand.key and ("  -  hand "..st.h) or ""))
 	end
+end
+
+---A seat said one of the table's lines: shown over their box for a few seconds, and in the log.
+---@param seat number
+---@param index number
+function TableUI:OnSaid(seat, index)
+	local text = Protocol.EMOTES[index]
+	local st = private.state
+	if not text or not st or not st.seats[seat] then return end
+	private.said = private.said or {}
+	private.said[seat] = { text = text, until_ = GetTime() + 4 }
+	TableUI:Log(Name(st.seats[seat].n)..": "..text, C.gold)
+	TableUI:Refresh(st)
 end
 
 ---Notes an audit's result for the lock pill and the log.

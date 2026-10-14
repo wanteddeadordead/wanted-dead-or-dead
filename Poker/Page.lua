@@ -608,6 +608,8 @@ function Page:OnEnable()
 				TableUI:Show()
 			end
 			private.Refresh()
+		elseif event == "said" then
+			TableUI:OnSaid(...)
 		elseif event == "audit" then
 			local key, ok, reason = ...
 			TableUI:OnAudit(key, ok, reason)

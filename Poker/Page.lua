@@ -31,8 +31,14 @@ local HOW_IT_WORKS = table.concat({
 }, "\n")
 
 local function Settings()
-	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips" }
+	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10 }
 	return Poker.db.host
+end
+
+local function Ordinal(n)
+	local last, tens = n % 10, n % 100
+	local suffix = (tens >= 11 and tens <= 13) and "th" or (last == 1 and "st") or (last == 2 and "nd") or (last == 3 and "rd") or "th"
+	return n..suffix
 end
 
 local function Stakes()
@@ -85,12 +91,38 @@ function private.BuildForm(parent, width)
 	private.turn = W:Choice(form, 64, { { key = 20, label = "20s" }, { key = 30, label = "30s" }, { key = 45, label = "45s" }, { key = 60, label = "60s" } }, function(key) Settings().turn = key end)
 	private.turn:SetPoint("LEFT", turnLabel, "RIGHT", 6, 0)
 	private.turn:SetChoice(s.turn)
+	private.passwordBox = W:Input(form, 96, "Password")
+	private.passwordBox:SetPoint("LEFT", private.turn, "RIGHT", 14, 0)
+	W:AttachTooltip(private.passwordBox, "Password", "Leave it empty for an open table. With one, the table shows as locked and anyone sitting down is asked for it.")
+	private.kind = W:Segmented(form, { { key = "cash", label = "Cash game" }, { key = "tournament", label = "Tournament" } }, function(key)
+		Settings().kind = key
+		private.RefreshBuyin(true)
+	end, 92)
+	private.kind:SetPoint("TOPLEFT", 14, -66)
+	private.kind:Select(s.kind or "cash", true)
 	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" } }, function(key)
 		Settings().stakes = key
 		private.RefreshBuyin(true)
 	end, 70)
-	private.stakes:SetPoint("TOPLEFT", 14, -66)
+	private.stakes:SetPoint("LEFT", private.kind, "RIGHT", 12, 0)
 	private.stakes:Select(s.stakes or "chips", true)
+	-- A tournament: the entry, the starting stack and how long a level lasts
+	private.entryLabel = Theme:Text(form, "small", "Entry", C.muted)
+	private.entryLabel:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
+	private.entryBox = W:Input(form, 76, "e.g. 2g")
+	private.entryBox:SetPoint("LEFT", private.entryLabel, "RIGHT", 6, 0)
+	private.stackLabel = Theme:Text(form, "small", "Stack", C.muted)
+	private.stackLabel:SetPoint("LEFT", private.entryBox, "RIGHT", 12, 0)
+	local stacks = {}
+	for _, n in ipairs(Protocol.START_STACKS) do stacks[#stacks + 1] = { key = n, label = tostring(n) } end
+	private.stack = W:Choice(form, 70, stacks, function(key) Settings().startStack = key end)
+	private.stack:SetPoint("LEFT", private.stackLabel, "RIGHT", 6, 0)
+	private.stack:SetChoice(s.startStack or 1500)
+	private.levelLabel = Theme:Text(form, "small", "Levels", C.muted)
+	private.levelLabel:SetPoint("LEFT", private.stack, "RIGHT", 12, 0)
+	private.levels = W:Choice(form, 76, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key end)
+	private.levels:SetPoint("LEFT", private.levelLabel, "RIGHT", 6, 0)
+	private.levels:SetChoice(s.levelMinutes or 10)
 	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
 	private.buyinNote:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
 	private.minBox = W:Input(form, 76, "least")
@@ -103,8 +135,6 @@ function private.BuildForm(parent, width)
 	yoursLabel:SetPoint("LEFT", private.maxBox, "RIGHT", 10, 0)
 	private.buyinBox = W:Input(form, 76, "yours")
 	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
-	private.unitNote = Theme:Text(form, "tiny", "", C.faint)
-	private.unitNote:SetPoint("LEFT", private.buyinBox, "RIGHT", 8, 0)
 	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
 	go:SetPoint("TOPRIGHT", -14, -66)
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
@@ -136,7 +166,20 @@ function private.RefreshBuyin(reset)
 		private.maxBox:SetValue(Money(high))
 		private.buyinBox:SetValue(Money(high))
 	end
-	private.unitNote:SetText(stakes == "gold" and "in gold and silver (2g 50s), settled by mail" or "chips")
+	local tournament = Settings().kind == "tournament"
+	for _, f in ipairs({ private.buyinNote, private.minBox, private.maxBox, private.buyinBox }) do f:SetShown(not tournament) end
+	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels }) do f:SetShown(tournament) end
+	-- A chips tournament has no entry; the blinds come from the schedule
+	local entry = tournament and stakes == "gold"
+	private.entryLabel:SetShown(entry)
+	private.entryBox:SetShown(entry)
+	private.blinds:SetEnabled(not tournament)
+	if tournament then
+		private.blinds:SetText(Protocol:Money(Protocol.SCHEDULE[1][1], stakes).."/"..Protocol:Money(Protocol.SCHEDULE[1][2], stakes).." up")
+	end
+	for _, box in ipairs({ private.minBox, private.maxBox, private.buyinBox, private.entryBox }) do
+		box.placeholder:SetText(stakes == "gold" and "e.g. 2g 50s" or "chips")
+	end
 end
 
 function private.Host()
@@ -144,26 +187,43 @@ function private.Host()
 	local b = Blinds(s.blinds)
 	local stakes = Stakes()
 	s.title = strtrim(private.titleBox:GetText() or "")
-	local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
-	local buyin = Protocol:ParseAmount(private.buyinBox:GetText(), stakes)
-	if not buyMin or not buyMax or buyMin < b.bb or buyMax < buyMin then
-		UI:Toast(("The buy-in range is two amounts, the least at least a big blind (%s)."):format(Money(b.bb)), C.red)
+	local password = strtrim(private.passwordBox:GetText() or "")
+	if #password > 20 or strfind(password, "[|%c]") then
+		UI:Toast("A password is up to 20 characters.", C.red)
 		return
 	end
-	local cfg = { sb = b.sb, bb = b.bb, buyMin = buyMin, buyMax = buyMax, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
-		title = s.title ~= "" and s.title or nil }
-	if not buyin or buyin < cfg.buyMin or buyin > cfg.buyMax then
-		UI:Toast(("Your buy-in is %s to %s."):format(Money(cfg.buyMin), Money(cfg.buyMax)), C.red)
-		return
+	local cfg, buyin
+	if s.kind == "tournament" then
+		local entry = stakes == "gold" and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
+		if not entry then
+			UI:Toast("The entry is an amount, like 2g or 50s.", C.red)
+			return
+		end
+		cfg = { kind = "tournament", entry = entry, startStack = s.startStack, levelMinutes = s.levelMinutes, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
+			title = s.title ~= "" and s.title or nil }
+		buyin = entry
+	else
+		local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
+		buyin = Protocol:ParseAmount(private.buyinBox:GetText(), stakes)
+		if not buyMin or not buyMax or buyMin < b.bb or buyMax < buyMin then
+			UI:Toast(("The buy-in range is two amounts, the least at least a big blind (%s)."):format(Money(b.bb)), C.red)
+			return
+		end
+		cfg = { sb = b.sb, bb = b.bb, buyMin = buyMin, buyMax = buyMax, maxSeats = s.seats, turnSeconds = s.turn, stakes = stakes,
+			title = s.title ~= "" and s.title or nil }
+		if not buyin or buyin < cfg.buyMin or buyin > cfg.buyMax then
+			UI:Toast(("Your buy-in is %s to %s."):format(Money(cfg.buyMin), Money(cfg.buyMax)), C.red)
+			return
+		end
 	end
-	if cfg.stakes == "gold" then
+	if cfg.stakes == "gold" and buyin > 0 then
 		local ok, why = Gold:CanBuyIn(buyin)
 		if not ok then
 			UI:Toast("You can't host for that: "..why..".", C.red)
 			return
 		end
 	end
-	local ok, why = Net:HostTable(cfg, buyin)
+	local ok, why = Net:HostTable(cfg, buyin, password ~= "" and password or nil)
 	if not ok then
 		UI:Toast(why or "Couldn't open a table.", C.red)
 		return
@@ -183,9 +243,16 @@ function private.BuildSeatCard(parent, width)
 	private.seatTitle:SetPoint("TOPLEFT", 14, -30)
 	private.seatSub = Theme:Text(card, "small", "", C.muted)
 	private.seatSub:SetPoint("TOPLEFT", 14, -52)
-	private.seatSub:SetWidth(width - 300)
+	private.seatSub:SetWidth(width - 420)
 	local open = W:Button(card, "Open table", "primary", 110, 26, function() TableUI:Show() end)
 	open:SetPoint("BOTTOMRIGHT", -14, 12)
+	private.startButton = W:Button(card, "Start", "primary", 150, 26, function()
+		local ok, why = Net:StartTournament()
+		if not ok then UI:Toast(why or "Couldn't start.", C.red) end
+		private.Refresh()
+	end)
+	private.startButton:SetPoint("RIGHT", open, "LEFT", -6, 0)
+	private.startButton:Hide()
 	private.leaveButton = W:Button(card, "Leave", "danger", 90, 26, function()
 		local hosting = Net:HostedTable() ~= nil
 		W:Dialog({
@@ -200,7 +267,7 @@ function private.BuildSeatCard(parent, width)
 			end,
 		})
 	end)
-	private.leaveButton:SetPoint("RIGHT", open, "LEFT", -6, 0)
+	private.leaveButton:SetPoint("RIGHT", private.startButton, "LEFT", -6, 0)
 	return card
 end
 
@@ -234,15 +301,23 @@ function private.UpdateRow(row, item)
 	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
 	row.title:SetText(title..Theme:Colorize("  "..Name(ad.h), C.muted))
 	local stakes = ad.g and "gold" or "chips"
-	row.sub:SetText(("blinds %s/%s  -  %d of %d seats  -  buy-in %s to %s%s"):format(Protocol:Money(ad.sb, stakes), Protocol:Money(ad.bb, stakes), ad.s or 0, ad.m or 0,
-		Protocol:Money(ad.lo, stakes), Protocol:Money(ad.hi, stakes), ad.g and "  -  gold, settled by mail" or ""))
+	local lock = ad.p and Theme:Colorize("  -  password", C.amber) or ""
+	if ad.k == "t" then
+		row.sub:SetText(("Tournament  -  %s  -  %d of %d registered  -  stacks of %d, levels every %d min%s%s"):format(
+			ad.g and ("entry "..Protocol:Money(ad.e, stakes)) or "free entry", ad.s or 0, ad.m or 0, ad.ss or 0, ad.lm or 0, ad.on and "  -  under way" or "", lock))
+	else
+		row.sub:SetText(("blinds %s/%s  -  %d of %d seats  -  buy-in %s to %s%s%s"):format(Protocol:Money(ad.sb, stakes), Protocol:Money(ad.bb, stakes), ad.s or 0, ad.m or 0,
+			Protocol:Money(ad.lo, stakes), Protocol:Money(ad.hi, stakes), ad.g and "  -  gold, settled by mail" or "", lock))
+	end
 	local st = Net:State()
 	if st and st.t == ad.id then
 		row.action:SetText(Theme:Colorize("Seated", C.green))
+	elseif ad.k == "t" and ad.on then
+		row.action:SetText(Theme:Colorize("Under way", C.muted))
 	elseif (ad.s or 0) >= (ad.m or 0) then
 		row.action:SetText(Theme:Colorize("Full", C.muted))
 	else
-		row.action:SetText(Theme:Colorize("Click to sit", C.gold))
+		row.action:SetText(Theme:Colorize(ad.k == "t" and "Click to enter" or "Click to sit", C.gold))
 	end
 end
 
@@ -298,8 +373,52 @@ function private.Sit(ad)
 		UI:Toast("That table is full.", C.red)
 		return
 	end
+	if ad.k == "t" and ad.on then
+		UI:Toast("That tournament is under way.", C.red)
+		return
+	end
 	local stakes = ad.g and "gold" or "chips"
 	local function M(n) return Protocol:Money(n or 0, stakes) end
+	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
+	local function Go(amount, password)
+		local ok, why = Net:JoinTable(ad.id, amount, password)
+		if not ok then
+			UI:Toast(why or "Couldn't sit down.", C.red)
+			return
+		end
+		TableUI:Reset()
+		TableUI:Show()
+		private.Refresh()
+	end
+	local function AskPassword(then_)
+		W:Dialog({
+			title = "Password for "..title,
+			text = "The host set a password for this table.",
+			input = { placeholder = "Password" },
+			confirmLabel = "Continue",
+			validate = function(value) if strtrim(value or "") == "" then return "Type the password." end end,
+			onConfirm = function(value) then_(strtrim(value)) end,
+		})
+	end
+	if ad.k == "t" then
+		local entry = ad.e or 0
+		local function Enter(password)
+			if ad.g and entry > 0 then
+				local ok, why = Gold:CanBuyIn(entry)
+				if not ok then UI:Toast("You can't enter: "..why..".", C.red) return end
+			end
+			W:Dialog({
+				title = "Enter "..title,
+				text = (ad.g and ("Tournament, entry %s. "):format(M(entry)) or "Tournament, free to enter. ")..("Everyone starts with %d chips; the blinds rise every %d minutes until one player has them all. No rebuys.%s"):format(
+					ad.ss or 0, ad.lm or 0, ad.g and (" %s is the bank: the prizes are the entries, split by place and settled by mail."):format(Name(ad.h)) or ""),
+				confirmLabel = "Enter",
+				onConfirm = function() Go(entry, password) end,
+			})
+		end
+		if ad.p then AskPassword(Enter) else Enter(nil) end
+		return
+	end
+	local function BuyIn(password)
 	W:Dialog({
 		title = "Sit at "..(ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")),
 		text = ad.g and ("Blinds %s/%s, for gold. Buy in for %s to %s. %s is the bank: when you leave, what you won or lost is settled with them by mail."):format(M(ad.sb), M(ad.bb), M(ad.lo), M(ad.hi), Name(ad.h))
@@ -315,16 +434,11 @@ function private.Sit(ad)
 			end
 		end,
 		onConfirm = function(value)
-			local ok, why = Net:JoinTable(ad.id, Protocol:ParseAmount(value, stakes))
-			if not ok then
-				UI:Toast(why or "Couldn't sit down.", C.red)
-				return
-			end
-			TableUI:Reset()
-			TableUI:Show()
-			private.Refresh()
+			Go(Protocol:ParseAmount(value, stakes), password)
 		end,
 	})
+	end
+	if ad.p then AskPassword(BuyIn) else BuyIn(nil) end
 end
 
 -- ============================================================================
@@ -346,8 +460,18 @@ function private.Refresh()
 		local n = 0
 		for _ in pairs(st.seats) do n = n + 1 end
 		private.seatTitle:SetText(st.cfg.title and st.cfg.title ~= "" and st.cfg.title or (Name(st.host).."'s table"))
-		private.seatSub:SetText(("blinds %s/%s  -  %d of %d seated  -  host %s%s"):format(Protocol:Money(st.cfg.sb, st.cfg.stakes), Protocol:Money(st.cfg.bb, st.cfg.stakes), n, st.cfg.maxSeats, Name(st.host), Net:HostedTable() and " (you)" or ""))
-		private.leaveButton:SetText(Net:HostedTable() and "Close table" or "Leave")
+		local hosting = Net:HostedTable() ~= nil
+		if st.cfg.kind == "tournament" then
+			local standing = st.phase == "finished" and "finished" or (st.started and ("level %d, %s/%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or "?", st.levelBlinds and st.levelBlinds[2] or "?") or "registering")
+			private.seatSub:SetText(("Tournament, %s  -  %d of %d  -  host %s%s"):format(standing, n, st.cfg.maxSeats, Name(st.host), hosting and " (you)" or ""))
+			private.startButton:SetShown(hosting and not st.started and st.phase ~= "closed")
+			private.startButton:SetText(("Start (%d entered)"):format(n))
+			private.startButton:SetEnabled(n >= Protocol.MIN_SEATS)
+		else
+			private.seatSub:SetText(("blinds %s/%s  -  %d of %d seated  -  host %s%s"):format(Protocol:Money(st.cfg.sb, st.cfg.stakes), Protocol:Money(st.cfg.bb, st.cfg.stakes), n, st.cfg.maxSeats, Name(st.host), hosting and " (you)" or ""))
+			private.startButton:Hide()
+		end
+		private.leaveButton:SetText(hosting and "Close table" or "Leave")
 	end
 	local lines = Gold:Lines()
 	local open = 0

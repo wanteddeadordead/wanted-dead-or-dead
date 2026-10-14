@@ -128,17 +128,18 @@ end
 ---@param buyin number
 ---@return boolean ok
 ---@return string? reason
-function Net:HostTable(cfg, buyin)
+---@param password string? asked of anyone sitting down
+function Net:HostTable(cfg, buyin, password)
 	if private.player and not private.player.left then
 		return false, "you're at a table already"
 	end
-	local host, reason = Host:New({ name = Net:Me(), cfg = cfg, send = Send, ad = Advertise, now = Now, on = private.OnHostEvent })
+	local host, reason = Host:New({ name = Net:Me(), cfg = cfg, send = Send, ad = Advertise, now = Now, on = private.OnHostEvent, password = password })
 	if not host then
 		return false, reason
 	end
 	private.host = host
 	private.player = NewPlayer()
-	private.player:Join(host.name, host.id, buyin)
+	private.player:Join(host.name, host.id, buyin, password)
 	host:Advertise()
 	return true
 end
@@ -148,7 +149,8 @@ end
 ---@param buyin number
 ---@return boolean ok
 ---@return string? reason
-function Net:JoinTable(id, buyin)
+---@param password string? for a locked table
+function Net:JoinTable(id, buyin, password)
 	if private.player and not private.player.left then
 		return false, "you're at a table already"
 	end
@@ -157,8 +159,18 @@ function Net:JoinTable(id, buyin)
 		return false, "no such table"
 	end
 	private.player = NewPlayer()
-	private.player:Join(host, id, buyin)
+	private.player:Join(host, id, buyin, password)
 	return true
+end
+
+---Starts the tournament this character hosts.
+---@return boolean ok
+---@return string? reason
+function Net:StartTournament()
+	if not private.host then
+		return false, "you aren't hosting"
+	end
+	return private.host:Start()
 end
 
 ---Leaves the table; a host closes it.

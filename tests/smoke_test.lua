@@ -12490,6 +12490,208 @@ end)()
 	check(Protocol:ParseAmount("2g 50s", "gold") == 250 and Protocol:ParseAmount("10g", "gold") == 1000 and Protocol:ParseAmount("75s", "gold") == 75 and Protocol:ParseAmount("2.5", "gold") == 250
 		and Protocol:ParseAmount("2g50s", "gold") == 250 and Protocol:ParseAmount("abc", "gold") == nil and Protocol:ParseAmount("400", "chips") == 400 and Protocol:ParseAmount("4.5", "chips") == nil, "typed money is read")
 end)()
+
+-- Poker tournaments and passwords: a locked table asks for its password; a tournament registers, starts on the host's
+-- word, raises the blinds by the clock, folds a player sitting out at once, bleeds an absent one, places the
+-- eliminated, and ends with standings and the prizes settled; cancelled, it settles nothing
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Client, Protocol = P.PokerHost, P.PokerClient, P.PokerProtocol
+	local nodes, queue, events = {}, {}, {}
+	local now = 20000
+	local function Now() return now end
+	local function SendFrom(from) return function(target, tbl) queue[#queue + 1] = { from = from, to = target, text = ns.Sync:Encode(tbl), k = tbl.k } end end
+	local function Flush()
+		local guard = 0
+		while #queue > 0 do
+			guard = guard + 1 assert(guard < 20000, "the table never settles")
+			local m = tremove(queue, 1)
+			local node = nodes[m.to]
+			if node then
+				local tbl = ns.Sync:Decode(m.text)
+				if node.host and Protocol.TO_HOST[tbl.k] then node.host:Receive(m.from, tbl) end
+				if node.player and Protocol.TO_PLAYER[tbl.k] then node.player:Receive(m.from, tbl) end
+			end
+		end
+	end
+	local function Tick(seconds)
+		for _ = 1, seconds do
+			now = now + 1
+			for _, node in pairs(nodes) do if node.host then node.host:Tick() end if node.player then node.player:Tick() end end
+			Flush()
+		end
+	end
+	local function Node(name)
+		events[name] = {}
+		local node = { name = name }
+		node.player = Client:New({ name = name, send = SendFrom(name), now = Now, on = function(event, ...) tinsert(events[name], { event, ... }) end })
+		nodes[name] = node
+		return node
+	end
+	local function Last(name, event) for i = #events[name], 1, -1 do if events[name][i][1] == event then return events[name][i] end end end
+	local ads, settled = {}, {}
+
+	-- A password
+	local ann = Node("Ann-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4 }, send = SendFrom("Ann-Realm"), ad = function(ad) ads[#ads + 1] = ad end, now = Now, password = "Saloon" })
+	local locked = ann.host
+	ann.player:Join("Ann-Realm", locked.id, 1000, "saloon")
+	local bob = Node("Bob-Realm")
+	bob.player:Join("Ann-Realm", locked.id, 1000)
+	Flush()
+	check(ann.player.seat == 1 and bob.player.seat == nil and Last("Bob-Realm", "refused")[2] == "wrong password", "no password, no seat")
+	bob.player:Join("Ann-Realm", locked.id, 1000, "opensesame")
+	Flush()
+	check(bob.player.seat == nil, "a wrong password, no seat")
+	bob.player:Join("Ann-Realm", locked.id, 1000, " SALOON ")
+	Flush()
+	check(bob.player.seat == 2, "the password, whatever its case and spaces, seats you")
+	locked:Advertise()
+	check(ads[#ads].p == 1, "the ad says the table is locked")
+	for _, st in ipairs({ ann.player.state, bob.player.state }) do check(st.cfg.password == nil, "the password never travels in the state") end
+	locked:Close()
+	Flush()
+	ann.player:Leave() bob.player:Leave()
+
+	-- A tournament: gold entry 2g, stacks of 1000, a level a minute
+	nodes = {}
+	ann, bob = Node("Ann-Realm"), Node("Bob-Realm")
+	local cat, dan, eve = Node("Cat-Realm"), Node("Dan-Realm"), Node("Eve-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 200, startStack = 1000, levelMinutes = 1, maxSeats = 4, stakes = "gold", title = "Dead Man's Open" },
+		send = SendFrom("Ann-Realm"), ad = function(ad) ads[#ads + 1] = ad end, now = Now, on = function(event, line) if event == "settle" then settled[#settled + 1] = line end end })
+	local t = ann.host
+	check(t.cfg.sb == 10 and t.cfg.bb == 20 and t.cfg.buyMin == 200 and t.cfg.buyMax == 200, "a tournament's blinds start at the schedule's first level; the entry is the one buy-in")
+	ann.player:Join("Ann-Realm", t.id, 200)
+	bob.player:Join("Ann-Realm", t.id, 200)
+	cat.player:Join("Ann-Realm", t.id, 200)
+	dan.player:Join("Ann-Realm", t.id, 100)
+	Flush()
+	check(ann.player.seat == 1 and bob.player.seat == 2 and cat.player.seat == 3 and dan.player.seat == nil and Last("Dan-Realm", "refused")[2] == "the entry is 2g", "three enter at the entry; a wrong amount is refused")
+	check(t.seats[1].stack == 1000 and t.seats[2].bought == 200, "everyone starts with the same chips, having paid the entry")
+	Tick(3)
+	check(t.phase == "waiting" and t.hand == nil and not ann.player.state.started, "no hand before the host starts it")
+	t:Receive("Bob-Realm", { k = "rebuy", t = t.id, b = 500 })
+	check(t.seats[2].stack == 1000, "no rebuys in a tournament")
+	local ok = t:Start()
+	Flush()
+	check(ok and ann.player.state.started and ads[#ads].k == "t" and ads[#ads].on == 1, "started: everyone's state and the ad say so")
+	eve.player:Join("Ann-Realm", t.id, 200)
+	Flush()
+	check(eve.player.seat == nil and Last("Eve-Realm", "refused")[2] == "the tournament has started", "nobody enters after the start")
+	Tick(1)
+	check(t.phase == "playing" and t.hand.bb == 20 and ann.player.state.level == 1, "the first hand at level 1")
+	local function Turn() for _, n in pairs(nodes) do if n.player.seat == t.hand.toAct then return n end end end
+	local function Play(action, amount) local n = Turn() check(n and n.player:Act(action, amount), "the player to act can "..action) Flush() end
+	local function PlayOut(watch)
+		local guard = 0
+		while t.phase == "playing" do
+			guard = guard + 1 assert(guard < 100, "the hand never ends")
+			local n = Turn()
+			if watch then check(n ~= watch, watch.name.." is never left to act: the host folds them at once") end
+			if n and nodes[n.name] then Play(n.player.state.hand.legal.check and "check" or "fold") else Tick(31) end
+		end
+	end
+	PlayOut()
+	-- The clock: a minute on, the next hand is at level 2
+	Tick(61)
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	while t.phase ~= "playing" do Tick(1) end
+	check(t.hand.bb == 30 and ann.player.state.level == 2 and ann.player.state.levelBlinds[2] == 30, "a minute later the blinds are 15/30: "..tostring(t.hand.bb))
+	-- Sitting out: dealt in, folded at once on their turn, blinds and all
+	cat.player:SitOut()
+	Flush()
+	PlayOut()
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	while t.phase ~= "playing" do Tick(1) end
+	check(t.hand.seats[3] ~= nil, "a player sitting out is still dealt in")
+	PlayOut(cat)
+	check(t.seats[3].away == 0, "and never times out")
+	cat.player:Back()
+	Flush()
+	-- An absent client: a big blind a hand leaves their stack
+	nodes["Bob-Realm"] = nil
+	local bobStack = t.seats[2].stack
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	Tick(Protocol.COMMIT_SECONDS + Protocol.REVEAL_SECONDS + 2)
+	check(t.seats[2].stack == bobStack - 30 and not (t.hand and t.hand.seats[2]), "Bob's client answers nothing: a big blind gone, dealt out this hand")
+	nodes["Bob-Realm"] = bob
+	PlayOut()
+	-- Leaving forfeits: Bob goes out third, owing his entry; Cat second; Ann wins and the prizes are settled
+	bob.player:Leave()
+	Flush()
+	check(t.entrants["Bob-Realm"].place == 3 and t.entrants["Bob-Realm"].left, "leaving a tournament takes the current place")
+	local bobLine = Last("Bob-Realm", "settle")
+	check(bobLine and bobLine[2].from == "Bob-Realm" and bobLine[2].to == "Ann-Realm" and bobLine[2].amount == 200, "and forfeits the entry to the bank")
+	cat.player:Leave()
+	Flush()
+	Tick(Protocol.SHOWDOWN_SECONDS + 2)
+	check(t.phase == "finished", "the last player with chips wins: "..t.phase)
+	local st = ann.player.state
+	check(st.standings and st.standings[1].name == "Ann-Realm" and st.standings[1].place == 1 and st.standings[1].prize == 600 and st.standings[2].name == "Cat-Realm" and st.standings[3].name == "Bob-Realm", "standings with the winner's prize, the whole pool with three entered")
+	check(#settled == 2 and ads[#ads].c == 1, "two lines (the two who forfeited); the host's own prize is implied; the ad says the table is done")
+	check(Last("Cat-Realm", "settle")[2].amount == 200, "Cat owes her entry too")
+	check(Protocol:Prizes(1000, 5)[1] == 650 and Protocol:Prizes(1000, 5)[2] == 350 and Protocol:Prizes(1001, 7)[1] == 501 and Protocol:Prizes(1001, 7)[3] == 200, "prizes split 65/35 from five, 50/30/20 from seven, the rounding to first")
+	-- Cancelled: nothing settled
+	settled = {}
+	nodes = {}
+	ann, bob = Node("Ann-Realm"), Node("Bob-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 200, startStack = 1000, levelMinutes = 5, maxSeats = 4, stakes = "gold" },
+		send = SendFrom("Ann-Realm"), now = Now, on = function(event, line) if event == "settle" then settled[#settled + 1] = line end end })
+	ann.player:Join("Ann-Realm", ann.host.id, 200) bob.player:Join("Ann-Realm", ann.host.id, 200)
+	Flush()
+	ann.host:Start()
+	Tick(2)
+	ann.host:Close()
+	Flush()
+	check(#settled == 0 and bob.player.state.phase == "closed" and Last("Bob-Realm", "settle") == nil, "a tournament cancelled settles nothing")
+	-- A busted player's place, two in one hand by their stacks at the start of it
+	local h = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 5, maxSeats = 4 }, send = function() end, now = Now })
+	h:Receive("Ann-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Bob-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Cat-Realm", { k = "join", t = h.id, b = 0 }) h:Receive("Dan-Realm", { k = "join", t = h.id, b = 0 })
+	h:Start()
+	h.seats[2].stack, h.seats[3].stack = 40, 60
+	h.hs = { key = "1.1", setup = { seats = { [2] = { stack = 40 }, [3] = { stack = 60 } } }, commits = {}, secrets = {}, deckHash = "x" }
+	local function S(stack) return { stack = stack, hole = { 1, 2 }, bet = 0, total = 0 } end
+	h.hand = { seats = { [1] = S(1900), [2] = S(0), [3] = S(0), [4] = S(1000) }, results = { payouts = {}, shown = {}, pots = {} }, log = {}, board = {}, street = "done" }
+	h:Showdown()
+	check(h.entrants["Bob-Realm"].place == 4 and h.entrants["Cat-Realm"].place == 3, "two out in one hand: the shorter stack at the start places lower")
+end)()
+
+-- Poker UI, tournaments: the form switches to a tournament's fields, hosting registers, the window says so, the
+-- host starts it once a second player has entered by whisper, and the level shows
+;(function()
+	local P = WantedPokerTestNS
+	local Net, TableUI = P.PokerNet, P.PokerTable
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
+	ns.UI:Show("poker")
+	local switch = Button("Tournament")
+	check(switch, "the form offers a tournament")
+	switch._scripts.OnClick(switch)
+	check(OnScreen("Levels") and Button("Host table"), "a tournament's fields: the stack and the levels")
+	Button("Host table")._scripts.OnClick(Button("Host table"))
+	local host = Net:HostedTable()
+	check(host and host.cfg.kind == "tournament" and host.cfg.entry == 0 and host.seats[1].stack == 1500, "a free chips tournament, stacks of 1500")
+	check(TableUI:IsShown() and OnScreen("Registering: 1 of 6 entered"), "the window says it's registering")
+	local parts = TableUI:GetParts()
+	check(parts.start:IsShown(), "the host has a Start button")
+	local id = host.id
+	local n = 0
+	local function FromBob(tbl)
+		tbl.t, tbl.v = id, "0.1.0-dev"
+		n = n + 1
+		Fire("CHAT_MSG_ADDON", "WNTD", "P:tb"..n..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", "Bob-Realm")
+	end
+	FromBob({ k = "join", b = 0 })
+	check(host.seats[2] and host.seats[2].name == "Bob-Realm" and OnScreen("Registering: 2 of 6 entered"), "Bob enters")
+	parts.start._scripts.OnClick(parts.start)
+	check(host.startedAt and Net:State().started, "started from the window")
+	clock = clock + 1
+	host:Tick()
+	check(host.phase == "seeding" and OnScreen("Level 1") and OnScreen("10/20"), "the level and blinds show once under way")
+	parts.leave._scripts.OnClick(parts.leave)
+	ConfirmDialog()
+	check(Net:HostedTable() == nil, "cancelled")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

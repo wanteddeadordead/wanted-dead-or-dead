@@ -31,6 +31,35 @@ Protocol.AD_STALE_SECONDS = 120 -- and forgotten when not heard for this long
 Protocol.JOIN_RETRY_SECONDS = 5 -- a join unanswered this long is sent again
 Protocol.SYNC_SECONDS = 20 -- a player whose last message brought no new state asks for it after this long
 Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS, Protocol.DEFAULT_TURN_SECONDS = 15, 90, 30
+-- Tournaments: the blind levels, in chips, and how prizes split by how many entered (the host is the bank)
+Protocol.SCHEDULE = { { 10, 20 }, { 15, 30 }, { 25, 50 }, { 50, 100 }, { 75, 150 }, { 100, 200 }, { 150, 300 }, { 200, 400 }, { 300, 600 }, { 400, 800 }, { 500, 1000 }, { 700, 1400 }, { 1000, 2000 }, { 1500, 3000 }, { 2000, 4000 } }
+Protocol.START_STACKS = { 1000, 1500, 3000 }
+Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES = 1, 60
+Protocol.ABSENT_BLIND_SECONDS = 0 -- an absent entrant loses a big blind every hand they miss
+
+---How a tournament's prize pool splits: shares by place, for a number of entrants.
+---@param entrants number
+---@return number[] shares summing to 1
+function Protocol:PrizeShares(entrants)
+	if entrants >= 7 then return { 0.5, 0.3, 0.2 } end
+	if entrants >= 5 then return { 0.65, 0.35 } end
+	return { 1 }
+end
+
+---The prizes, in chips of money (silver), for a pool: whole amounts, the rounding left to first place.
+---@param pool number
+---@param entrants number
+---@return number[] prize by place
+function Protocol:Prizes(pool, entrants)
+	local shares = Protocol:PrizeShares(entrants)
+	local prizes, given = {}, 0
+	for i = #shares, 2, -1 do
+		prizes[i] = floor(pool * shares[i])
+		given = given + prizes[i]
+	end
+	prizes[1] = pool - given
+	return prizes
+end
 
 ---An amount shown: chips as a number; at a gold table a chip is a silver piece, shown as gold and silver ("2g 50s").
 ---@param chips number
@@ -138,16 +167,37 @@ function Protocol:Settings(cfg)
 		return nil, "no settings"
 	end
 	local c = {
-		sb = cfg.sb, bb = cfg.bb, ante = cfg.ante or 0, maxSeats = cfg.maxSeats or 6, buyMin = cfg.buyMin, buyMax = cfg.buyMax,
+		kind = cfg.kind or "cash", sb = cfg.sb, bb = cfg.bb, ante = cfg.ante or 0, maxSeats = cfg.maxSeats or 6, buyMin = cfg.buyMin, buyMax = cfg.buyMax,
 		turnSeconds = cfg.turnSeconds or Protocol.DEFAULT_TURN_SECONDS, stakes = cfg.stakes or "chips", title = cfg.title,
+		entry = cfg.entry, startStack = cfg.startStack, levelMinutes = cfg.levelMinutes,
 	}
+	if c.kind ~= "cash" and c.kind ~= "tournament" then
+		return nil, "a table is a cash game or a tournament"
+	end
+	if c.kind == "tournament" then
+		-- Blinds come from the schedule; the entry is the one buy-in; the stacks are chips, not money
+		c.sb, c.bb = Protocol.SCHEDULE[1][1], Protocol.SCHEDULE[1][2]
+		c.entry = c.entry or 0
+		c.startStack = c.startStack or Protocol.START_STACKS[2]
+		c.levelMinutes = c.levelMinutes or 10
+		c.buyMin, c.buyMax = c.entry, c.entry
+		if not Protocol:IsCount(c.entry) then
+			return nil, "the entry is a whole amount"
+		end
+		if not Protocol:IsCount(c.startStack, c.bb * 10) then
+			return nil, "the starting stack is at least ten big blinds"
+		end
+		if not Protocol:IsCount(c.levelMinutes, Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES) then
+			return nil, ("a level lasts %d to %d minutes"):format(Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES)
+		end
+	end
 	if not (Protocol:IsCount(c.sb, 1) and Protocol:IsCount(c.bb, c.sb) and Protocol:IsCount(c.ante)) then
 		return nil, "the blinds are whole numbers, the big blind at least the small"
 	end
 	if not Protocol:IsCount(c.maxSeats, Protocol.MIN_SEATS, Protocol.MAX_SEATS) then
 		return nil, ("a table seats %d to %d"):format(Protocol.MIN_SEATS, Protocol.MAX_SEATS)
 	end
-	if not (Protocol:IsCount(c.buyMin, c.bb) and Protocol:IsCount(c.buyMax, c.buyMin)) then
+	if c.kind == "cash" and not (Protocol:IsCount(c.buyMin, c.bb) and Protocol:IsCount(c.buyMax, c.buyMin)) then
 		return nil, "the buy-in is at least a big blind, the most at least the least"
 	end
 	if not Protocol:IsCount(c.turnSeconds, Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS) then

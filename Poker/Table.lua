@@ -41,6 +41,17 @@ local function Chips(n, cfg)
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
+local function Ordinal(n)
+	local last, tens = n % 10, n % 100
+	local suffix = (tens >= 11 and tens <= 13) and "th" or (last == 1 and "st") or (last == 2 and "nd") or (last == 3 and "rd") or "th"
+	return n..suffix
+end
+
+local function Clock(seconds)
+	seconds = max(0, floor(seconds + 0.5))
+	return ("%d:%02d"):format(floor(seconds / 60), seconds % 60)
+end
+
 -- ============================================================================
 -- Building
 -- ============================================================================
@@ -209,8 +220,14 @@ function private.Build()
 	private.rebuy = W:Button(bar, "Rebuy", "secondary", 70, 24, private.AskRebuy)
 	private.rebuy:SetPoint("LEFT", private.sitOut, "RIGHT", 6, 0)
 	private.rebuy:Hide()
+	private.start = W:Button(bar, "Start tournament", "primary", 140, 24, function()
+		local ok, why = Net:StartTournament()
+		if not ok then Wanted.UI:Toast(why or "Couldn't start.", C.red) end
+	end)
+	private.start:SetPoint("LEFT", private.rebuy, "RIGHT", 6, 0)
+	private.start:Hide()
 	private.countdown = Theme:Text(bar, "small", "", C.muted)
-	private.countdown:SetPoint("LEFT", private.rebuy, "RIGHT", 10, 0)
+	private.countdown:SetPoint("LEFT", private.start, "RIGHT", 10, 0)
 	private.allin = W:Button(bar, "All-in", "danger", 96, 28, function() private.Act("allin") end)
 	private.allin:SetPoint("RIGHT", -10, 0)
 	private.raise = W:Button(bar, "Raise", "primary", 110, 28, function() private.Act(private.raiseAction, private.amount) end)
@@ -312,9 +329,17 @@ end
 
 function private.ConfirmLeave()
 	local hosting = Net:HostedTable() ~= nil
+	local st = private.state
+	local tournament = st and st.cfg and st.cfg.kind == "tournament"
+	local text
+	if tournament and st.started and st.phase ~= "finished" then
+		text = hosting and "The tournament is cancelled: nothing is settled, nobody owes anything." or "You forfeit your entry and take your current place."
+	else
+		text = hosting and "Everyone at your table is sent their final stacks and the table closes." or "Your chips leave with you. A hand under way is folded."
+	end
 	W:Dialog({
 		title = hosting and "Close the table?" or "Leave the table?",
-		text = hosting and "Everyone at your table is sent their final stacks and the table closes." or "Your chips leave with you. A hand under way is folded.",
+		text = text,
 		confirmLabel = hosting and "Close table" or "Leave",
 		confirmStyle = "danger",
 		over = private.frame,
@@ -365,6 +390,14 @@ end
 -- What's new in this state, said in the log
 function private.LogChanges(st)
 	local hand = st.hand
+	if st.standings and st.phase == "finished" and not private.loggedFinish then
+		private.loggedFinish = true
+		for _, row in ipairs(st.standings) do
+			if row.place then
+				TableUI:Log(("%s: %s%s"):format(Ordinal(row.place), Name(row.name), row.prize and row.prize > 0 and (", "..Protocol:Money(row.prize, "gold")) or ""), row.place == 1 and C.gold or C.text)
+			end
+		end
+	end
 	if not hand or not hand.key then return end
 	if hand.key ~= private.loggedKey then
 		private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt = hand.key, 0, nil, false, false
@@ -423,6 +456,7 @@ function TableUI:Refresh(st)
 		private.deadlineAt = nil
 	end
 	private.nextAt = st.nextIn and (GetTime() + st.nextIn) or nil
+	private.levelAt = st.levelLeft and (GetTime() + st.levelLeft) or nil
 	-- Winners and their best five, at a showdown
 	local winners, best = {}, {}
 	if hand and hand.results then
@@ -477,7 +511,9 @@ function TableUI:Refresh(st)
 				end
 				-- Status
 				local status, color
-				if p.out == "busted" then status, color = "Busted", C.red
+				if p.place and p.out == "busted" then status, color = "Out "..Ordinal(p.place), C.red
+				elseif p.place == 1 then status, color = "Winner", C.green
+				elseif p.out == "busted" then status, color = "Busted", C.red
 				elseif p.out == "sitting" then status, color = "Sitting out", C.muted
 				elseif p.out == "away" then status, color = "Away", C.amber
 				elseif p.out == "missed" then status, color = "Reconnecting", C.amber
@@ -513,7 +549,12 @@ function TableUI:Refresh(st)
 		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
-	private.info:SetText(hand and hand.key and ("Hand "..st.h) or "")
+	if cfg.kind == "tournament" and st.started then
+		private.info:SetText(("Level %d  -  blinds %d/%d%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
+			hand and hand.key and ("  -  hand "..st.h) or ""))
+	else
+		private.info:SetText(hand and hand.key and ("Hand "..st.h) or "")
+	end
 	if hand and hand.dh then
 		local audit = private.audits and private.audits[hand.key]
 		private.lock:Set(audit and (audit.ok and "Verified" or "Deal FAILED") or ("Deck "..strsub(hand.dh, 1, 8)), audit and (audit.ok and C.green or C.red) or C.muted)
@@ -526,6 +567,16 @@ function TableUI:Refresh(st)
 	local text, color = "", C.text
 	if st.phase == "closed" then
 		text, color = "The table is closed.", C.muted
+	elseif st.phase == "finished" and st.standings then
+		local parts = {}
+		for _, row in ipairs(st.standings) do
+			if row.place and row.place <= 3 then
+				parts[#parts + 1] = ("%s %s%s"):format(Ordinal(row.place), Name(row.name), row.prize and row.prize > 0 and (" ("..Protocol:Money(row.prize, "gold")..")") or "")
+			end
+		end
+		text, color = "Finished: "..table.concat(parts, ", "), C.green
+	elseif cfg.kind == "tournament" and not st.started then
+		text, color = ("Registering: %d of %d entered. The host starts the tournament."):format(seated, n), C.muted
 	elseif st.phase == "waiting" then
 		text, color = seated < Protocol.MIN_SEATS and ("Waiting for players: %d of %d seated"):format(seated, n) or "Next hand soon", C.muted
 	elseif st.phase == "seeding" then
@@ -579,14 +630,18 @@ function TableUI:Refresh(st)
 		private.allin:SetText("All-in "..Chips(myStack + (st.seats[me] and st.seats[me].b or 0), cfg))
 	end
 	local mine = me and st.seats[me]
-	private.sitOut:SetShown(mine ~= nil and st.phase ~= "closed")
+	local tournament = cfg.kind == "tournament"
+	private.sitOut:SetShown(mine ~= nil and st.phase ~= "closed" and st.phase ~= "finished")
 	if mine then
 		private.sitOut:SetText(mine.out and mine.out ~= "busted" and "I'm back" or "Sit out")
 		private.sitOut:SetEnabled(mine.out ~= "busted")
-		private.rebuy:SetShown(st.phase ~= "closed" and st.phase ~= "playing" and (mine.s or 0) < cfg.buyMax and (mine.out == "busted" or (mine.s or 0) < cfg.buyMin))
+		private.rebuy:SetShown(not tournament and st.phase ~= "closed" and st.phase ~= "playing" and (mine.s or 0) < cfg.buyMax and (mine.out == "busted" or (mine.s or 0) < cfg.buyMin))
 	else
 		private.rebuy:Hide()
 	end
+	private.start:SetShown(tournament and not st.started and st.phase ~= "closed" and Net:HostedTable() ~= nil)
+	private.start:SetEnabled(seated >= Protocol.MIN_SEATS)
+	private.leave:SetText(Net:HostedTable() and "Close table" or (tournament and st.started and st.phase ~= "finished" and mine and not mine.place and "Forfeit" or "Leave"))
 	private.LogChanges(st)
 	private.TickClock()
 end
@@ -615,6 +670,10 @@ function private.TickClock()
 		private.countdown:SetText(left > 0 and ("Next hand in %ds"):format(ceil(left)) or "")
 	else
 		private.countdown:SetText("")
+	end
+	if private.levelAt and st.cfg.kind == "tournament" and st.started and st.phase ~= "finished" and st.nextBlinds then
+		private.info:SetText(("Level %d  -  blinds %d/%d  -  %d/%d in %s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
+			st.nextBlinds[1], st.nextBlinds[2], Clock(private.levelAt - now), st.hand and st.hand.key and ("  -  hand "..st.h) or ""))
 	end
 end
 
@@ -670,7 +729,7 @@ end
 ---Forgets the table (left or closed), keeping the log on screen.
 function TableUI:Reset()
 	private.state, private.deadlineAt, private.nextAt, private.hostGone = nil, nil, nil, false
-	private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt = nil, 0, nil, false, false
+	private.loggedKey, private.loggedActions, private.loggedStreet, private.loggedResults, private.loggedDealt, private.loggedFinish = nil, 0, nil, false, false, false
 	private.audits = {}
 end
 

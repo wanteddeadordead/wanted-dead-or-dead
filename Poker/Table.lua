@@ -445,6 +445,19 @@ end
 ---Adds a line to the hand log.
 ---@param text string
 ---@param color table?
+-- A pot's result as one line: who wins it, or a split pot and who shares it; with more than one pot, the main pot and
+-- the side pots are named (the engine builds them from the smallest stake up, so the first is the main pot)
+local function PotLine(st, pot, index, count)
+	local names = {}
+	for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
+	local which = count > 1 and (index == 1 and "the main pot of " or "a side pot of ") or ""
+	local with = pot.description and (" with "..pot.description) or ""
+	if #names > 1 then
+		return ("Split pot: %s split %s%s%s"):format(table.concat(names, " and "), which, Chips(pot.amount, st.cfg), with)
+	end
+	return ("%s wins %s%s%s"):format(names[1] or "?", which, Chips(pot.amount, st.cfg), with)
+end
+
 function TableUI:Log(text, color)
 	if not private.log then return end
 	color = color or C.text
@@ -490,11 +503,9 @@ function private.LogChanges(st)
 	end
 	if hand.results and not private.loggedResults then
 		private.loggedResults = true
-		for _, pot in ipairs(hand.results.pots or {}) do
-			local names = {}
-			for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
-			local share = #pot.winners > 1 and (" split %d ways"):format(#pot.winners) or ""
-			TableUI:Log(("%s win%s %s%s%s"):format(table.concat(names, " and "), #names == 1 and "s" or "", Chips(pot.amount, st.cfg), pot.description and (" with "..pot.description) or "", share), C.green)
+		local pots = hand.results.pots or {}
+		for i, pot in ipairs(pots) do
+			TableUI:Log(PotLine(st, pot, i, #pots), C.green)
 		end
 	end
 end
@@ -528,7 +539,7 @@ function TableUI:Refresh(st)
 	local winners, best = {}, {}
 	if hand and hand.results then
 		for _, pot in ipairs(hand.results.pots or {}) do
-			for _, seat in ipairs(pot.winners or {}) do winners[seat] = true end
+			for _, seat in ipairs(pot.winners or {}) do winners[seat] = (#pot.winners == 1 or winners[seat] == "sole") and "sole" or "split" end
 			for _, card in ipairs(pot.best or {}) do best[card] = true end
 		end
 	end
@@ -588,7 +599,7 @@ function TableUI:Refresh(st)
 				elseif p.a then status, color = "All-in", C.red
 				elseif playing and hand.toAct == seat then status, color = seat == me and "Your turn" or "To act", C.gold
 				elseif hand and (hand.stage == "commits" or hand.stage == "reveals") and p.inHand then status, color = "Shuffling", C.blue
-				elseif showdown and winners[seat] then status, color = "Winner", C.green
+				elseif showdown and winners[seat] then status, color = winners[seat] == "split" and "Split" or "Winner", C.green
 				elseif p.away and p.away > 0 and not p.out then status, color = "Slow", C.amber
 				end
 				seatFrame.status:Set(status, color)
@@ -653,10 +664,9 @@ function TableUI:Refresh(st)
 		text, color = hand.toAct == me and "Your turn" or ((actor and Name(actor.n) or "?").." to act"), hand.toAct == me and C.gold or C.text
 	elseif st.phase == "showdown" and hand and hand.results then
 		local lines = {}
-		for _, pot in ipairs(hand.results.pots or {}) do
-			local names = {}
-			for _, seat in ipairs(pot.winners or {}) do names[#names + 1] = Name(st.seats[seat] and st.seats[seat].n or "?") end
-			lines[#lines + 1] = table.concat(names, " and ").." win"..(#names == 1 and "s" or "").." "..Chips(pot.amount, cfg)..(pot.description and (" with "..pot.description) or "")
+		local pots = hand.results.pots or {}
+		for i, pot in ipairs(pots) do
+			lines[#lines + 1] = PotLine(st, pot, i, #pots)
 		end
 		text, color = table.concat(lines, "; "), C.green
 	end

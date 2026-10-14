@@ -75,8 +75,8 @@ local function Name(full)
 	return Ambiguate and Ambiguate(full, "none") or (full:match("^([^%-]+)") or full)
 end
 
-local function Chips(n, cfg)
-	if cfg and Protocol:IsMoney(cfg.stakes) then return Protocol:Coins(n, cfg.stakes) end
+local function Chips(n, cfg, compact)
+	if cfg and Protocol:IsMoney(cfg.stakes) then return Protocol:Coins(n, cfg.stakes, compact) end
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
@@ -154,6 +154,9 @@ local function BuildSeat(felt, k)
 		local label, color, detail, stars = Wanted.Reputation:GetPosterTrust(tally)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
 		GameTooltip:SetText(Name(p.n), 1, 1, 1)
+		if seat.net and seat.net ~= 0 and private.state then
+			GameTooltip:AddLine((seat.net > 0 and "Up " or "Down ")..Chips(math.abs(seat.net), private.state.cfg).." since sitting down.", unpack(seat.net > 0 and C.green or C.red))
+		end
 		if label then
 			Wanted.Reputation:AddTrustLines("Pays what's owed", label, color, detail, stars)
 		else
@@ -164,6 +167,9 @@ local function BuildSeat(felt, k)
 	seat.trustHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	seat.stack = Theme:Text(seat, "small", "", C.gold)
 	seat.stack:SetPoint("TOPLEFT", 8, -28)
+	seat.stack:SetWidth(SEAT_W - 86) -- clear of the cards
+	seat.stack:SetJustifyH("LEFT")
+	seat.stack:SetWordWrap(false)
 	seat.status = W:Pill(seat)
 	seat.status:SetPoint("BOTTOMLEFT", 6, 5)
 	seat.cards = { Cards:New(seat, SMALL_W, SMALL_H, "small"), Cards:New(seat, SMALL_W, SMALL_H, "small") }
@@ -1156,7 +1162,9 @@ function TableUI:Refresh(st)
 				seatFrame.player = p
 				seatFrame.trust:SetText(Wanted.Reputation:GetPosterBadge(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
-				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize("  "..(net > 0 and "+" or "-")..Chips(math.abs(net), cfg), net > 0 and C.green or C.red) or ""))
+				-- The stack rounded to silver past a gold (the copper is on the bar when it matters); the net since sitting down on hover
+				seatFrame.stack:SetText(Chips(p.s, cfg, true))
+				seatFrame.net = net
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown. Dealt (slid in from
 				-- the middle) when the hand is new, a beat apart around the table
 				local inHand = hand and (p.b ~= nil or p.tot ~= nil) and not p.f
@@ -1233,7 +1241,7 @@ function TableUI:Refresh(st)
 					seatFrame.bet:Show()
 				elseif p.b and p.b > 0 then
 					-- The amount by the chips; what it was for is in the pill
-					seatFrame.bet:SetText(Chips(p.b, cfg))
+					seatFrame.bet:SetText(Chips(p.b, cfg, true))
 					seatFrame.bet:Show()
 				else
 					seatFrame.bet:Hide()

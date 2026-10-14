@@ -15,6 +15,9 @@ Protocol.AD_TAG = "T" -- open tables, on the channel
 Protocol.TO_HOST = { join = true, leave = true, sync = true, commit = true, reveal = true, act = true, back = true, sitout = true, rebuy = true }
 -- From the host to a player:
 Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true }
+-- Between any two players, about no table: { k = "lines" } asks for the open lines the sender is owed by the receiver;
+-- { k = "lines", l = { line, ... } } answers with them (Gold). Only lines the SENDER owes are taken from an answer.
+Protocol.LINES = "lines"
 
 Protocol.MAX_SEATS = 8
 Protocol.MIN_SEATS = 2
@@ -42,6 +45,10 @@ Protocol.BOT_THINK_MIN, Protocol.BOT_THINK_MAX = 1, 4 -- a bot takes this long o
 -- The game refused a table message (its addon message lockdown: a boss fight, a PvP match). The table's clocks stop
 -- until a message goes through again; the host's beat tries every BEAT_SECONDS, so this is two beats and a little
 Protocol.BLOCKED_SECONDS = 25
+-- Gold tables: cash on the table. A seat waits this long for its buy-in to reach the host before it's given up
+Protocol.PAY_SECONDS = 180
+-- A gold table's host gone this long is lost: the table is over and the host owes every seat its stack (Client)
+Protocol.HOST_LOST_SECONDS = 120
 
 ---How a tournament's prize pool splits: shares by place, for a number of entrants.
 ---@param entrants number

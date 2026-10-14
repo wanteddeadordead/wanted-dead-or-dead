@@ -589,7 +589,8 @@ function TableUI:Refresh(st)
 				end
 				-- Status
 				local status, color
-				if p.place and p.out == "busted" then status, color = "Out "..Ordinal(p.place), C.red
+				if p.unpaid then status, color = "Paying", C.amber
+				elseif p.place and p.out == "busted" then status, color = "Out "..Ordinal(p.place), C.red
 				elseif p.place == 1 then status, color = "Winner", C.green
 				elseif p.out == "busted" then status, color = "Busted", C.red
 				elseif p.out == "sitting" then status, color = "Sitting out", C.muted
@@ -670,8 +671,13 @@ function TableUI:Refresh(st)
 		end
 		text, color = table.concat(lines, "; "), C.green
 	end
+	local mine = me and st.seats[me]
 	if private.blocked then
 		text, color = "The game is refusing table messages here (a boss fight or a PvP match). The table waits for it to lift.", C.amber
+	elseif mine and mine.unpaid and st.phase ~= "closed" then
+		text, color = ("Pay %s your buy-in of %s: trade it to them, or Pay by mail from the Poker page."):format(Name(st.host), Chips(mine.unpaid - (mine.received or 0), cfg)), C.amber
+	elseif mine and mine.rebuyDue and st.phase ~= "closed" then
+		text, color = ("Your rebuy of %s: trade it to %s, or Pay by mail from the Poker page."):format(Chips(mine.rebuyDue, cfg), Name(st.host)), C.amber
 	elseif private.hostGone then
 		text, color = "The host has gone quiet. The next seat takes over if they don't come back.", C.amber
 	end

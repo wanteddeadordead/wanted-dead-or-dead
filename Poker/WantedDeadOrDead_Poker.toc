@@ -17,6 +17,7 @@ Host.lua
 Client.lua
 Bots.lua
 Net.lua
+Vault.lua
 Gold.lua
 Cards.lua
 Table.lua

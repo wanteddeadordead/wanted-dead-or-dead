@@ -3,6 +3,9 @@
 -- backup the next seat keeps so it can take the table over if the host vanishes. Pure: it sends through the
 -- function it's given and asks the clock it's given, so the tests run a host and several players in one place.
 -- The host plays too: their own client talks to this through the same messages, delivered locally (Net).
+-- Gold tables are cash on the table: a seat's buy-in goes to the host first (by trade or mail; Gold sees it arrive
+-- and calls Paid) and the seat is dealt in once it has; when a player leaves, the host owes them their stack, as a
+-- settlement line. Nobody but the host ever owes anyone, so no seat can run up a debt.
 local _, Poker = ...
 local Host = Poker:NewModule("PokerHost")
 local Engine = Poker.PokerEngine
@@ -112,7 +115,10 @@ function Table:Sit(name, buyin)
 	end
 	for seat = 1, self.cfg.maxSeats do
 		if not self.seats[seat] then
-			self.seats[seat] = { name = name, stack = tournament and self.cfg.startStack or buyin, bought = buyin, out = false, away = 0, since = self.now() }
+			-- At a gold table the seat waits, with no chips, until the buy-in has reached the host (Paid)
+			local owes = self.cfg.stakes == "gold" and name ~= self.name and buyin > 0
+			self.seats[seat] = { name = name, stack = owes and 0 or (tournament and self.cfg.startStack or buyin), bought = owes and 0 or buyin, out = false, away = 0, since = self.now(),
+				unpaid = owes and buyin or nil, received = owes and 0 or nil }
 			if tournament then
 				self.entrants[name] = { seat = seat }
 			end
@@ -141,6 +147,13 @@ function Table:Stand(name)
 		self.hs.players[seat] = nil
 	end
 	self.seats[seat] = nil
+	if p.unpaid then
+		-- Never dealt in: whatever part of the buy-in arrived goes back
+		if (p.received or 0) > 0 then self:SettleAmount(name, p.received, "refund") end
+		if self.cfg.kind == "tournament" then self.entrants[name] = nil end
+		self.on("stood", name, seat, 0)
+		return
+	end
 	if self.cfg.kind == "tournament" then
 		if self.startedAt and self.phase ~= "finished" and self.entrants[name] and not self.entrants[name].place then
 			-- Out of the running: the current place, the entry forfeited, their chips out of play
@@ -261,14 +274,19 @@ function Table:Receive(sender, tbl)
 	elseif k == "rebuy" then
 		local p = self.seats[seat]
 		local inHand = self.hand and self.hand.street ~= "done" and self.hand.seats[seat] and not self.hand.seats[seat].folded
-		if self.cfg.kind ~= "tournament" and not inHand and Protocol:IsCount(tbl.b, 1) and p.stack + tbl.b <= self.cfg.buyMax then
-			p.stack = p.stack + tbl.b
-			p.bought = (p.bought or 0) + tbl.b
-			p.out, p.away = false, 0
-			self.on("rebuy", sender, seat, tbl.b)
-			self:Bump()
-			self:Broadcast()
-			self:Backup()
+		if self.cfg.kind ~= "tournament" and not p.unpaid and Protocol:IsCount(tbl.b, 1) and p.stack + (p.pendingChips or 0) + tbl.b <= self.cfg.buyMax then
+			if self.cfg.stakes == "gold" and sender ~= self.name then
+				-- The chips come once the money has (Paid)
+				p.rebuyDue = tbl.b
+				self:Bump()
+				self:Broadcast()
+			elseif not inHand then
+				self:AddChips(seat, tbl.b)
+				self.on("rebuy", sender, seat, tbl.b)
+				self:Bump()
+				self:Broadcast()
+				self:Backup()
+			end
 		end
 	elseif k == "commit" then
 		self:OnCommit(seat, tbl)
@@ -316,15 +334,103 @@ function Table:OnAct(seat, tbl)
 end
 
 -- ============================================================================
+-- Money in (gold tables)
+-- ============================================================================
+
+---Adds chips to a seat: now between hands, or once the hand under way is over.
+---@param seat number
+---@param chips number
+function Table:AddChips(seat, chips)
+	local p = self.seats[seat]
+	local inHand = self.hand and self.hand.street ~= "done" and self.hand.seats[seat]
+	p.bought = (p.bought or 0) + chips
+	if inHand then
+		p.pendingChips = (p.pendingChips or 0) + chips
+	else
+		p.stack = p.stack + chips
+		p.out, p.away = false, 0
+	end
+end
+
+-- Chips bought during a hand join the stacks once it's over
+function Table:ApplyPendingChips()
+	for _, p in pairs(self.seats) do
+		if p.pendingChips then
+			p.stack = p.stack + p.pendingChips
+			p.pendingChips = nil
+			if p.out == "busted" then p.out, p.away = false, 0 end
+		end
+	end
+end
+
+---Money from a player reached the host (a trade, a mail: Gold). It pays the seat's buy-in, or the rebuy they asked
+---for; anything over, or money nobody asked for, is owed straight back. Returns whether it was something due.
+---@param name string
+---@param silver number
+---@param how string "trade" | "mail"
+---@return boolean due
+function Table:Paid(name, silver, how)
+	if self.cfg.stakes ~= "gold" or not Protocol:IsCount(silver, 1) or name == self.name then
+		return false
+	end
+	local seat, p = self:SeatOf(name)
+	if p and p.unpaid then
+		p.received = (p.received or 0) + silver
+		if p.received >= p.unpaid then
+			local extra = p.received - p.unpaid
+			p.bought = p.unpaid
+			p.stack = self.cfg.kind == "tournament" and self.cfg.startStack or p.unpaid
+			p.unpaid, p.received, p.paidHow = nil, nil, how
+			self.on("paid", name, seat, p.bought)
+			if extra > 0 then self:SettleAmount(name, extra, "refund") end
+			self:Backup()
+		end
+		self:Bump()
+		self:Broadcast()
+		return true
+	end
+	if p and p.rebuyDue then
+		if silver >= p.rebuyDue then
+			local extra = silver - p.rebuyDue
+			self:AddChips(seat, p.rebuyDue)
+			self.on("rebuy", name, seat, p.rebuyDue)
+			p.rebuyDue = nil
+			if extra > 0 then self:SettleAmount(name, extra, "refund") end
+		else
+			-- Short of the rebuy asked: it goes back, the rebuy stays asked
+			self:SettleAmount(name, silver, "refund")
+		end
+		self:Bump()
+		self:Broadcast()
+		self:Backup()
+		return true
+	end
+	self:SettleAmount(name, silver, "refund")
+	return false
+end
+
+---What the host holds for the players at the table, in silver: every paid seat's buy-ins and rebuys.
+---@return number
+function Table:Holding()
+	local total = 0
+	if self.cfg.stakes == "gold" then
+		for _, p in pairs(self.seats) do
+			if p.name ~= self.name and not p.unpaid then total = total + (p.bought or 0) end
+		end
+	end
+	return total
+end
+
+-- ============================================================================
 -- The hand
 -- ============================================================================
 
--- Who is dealt in: seated, not sitting out, with chips
+-- Who is dealt in: seated, paid up, not sitting out, with chips
 function Table:Players()
 	local players, n = {}, 0
 	local tournament = self.cfg.kind == "tournament"
 	for seat, p in pairs(self.seats) do
-		if p.stack > 0 and (tournament or not p.out) then
+		if p.stack > 0 and not p.unpaid and (tournament or not p.out) then
 			players[seat] = true
 			n = n + 1
 		end
@@ -366,8 +472,12 @@ function Table:Start()
 	if self.startedAt then
 		return false, "it has started"
 	end
+	-- Whoever hasn't paid their entry by now isn't in
+	for _, seat in ipairs(self:Seated()) do
+		if self.seats[seat].unpaid then self:Stand(self.seats[seat].name) end
+	end
 	if #self:Seated() < Protocol.MIN_SEATS then
-		return false, "it takes at least two players"
+		return false, "it takes at least two paid-up players"
 	end
 	self.startedAt = self.now()
 	self.nextHandAt = self.now()
@@ -392,6 +502,7 @@ function Table:StartSeedRound()
 	if self.cfg.kind == "tournament" and (not self.startedAt or self.phase == "finished") then
 		return false
 	end
+	self:ApplyPendingChips()
 	local players, n = self:Players()
 	if n < Protocol.MIN_SEATS then
 		return false
@@ -612,8 +723,8 @@ function Table:Finish()
 	local prizes = Protocol:Prizes(self.cfg.entry * entrants, entrants)
 	for name, e in pairs(self.entrants) do
 		e.prize = (not e.left and e.place and prizes[e.place]) or 0
-		if not e.left then
-			self:SettleAmount(name, e.prize - self.cfg.entry)
+		if e.prize > 0 then
+			self:SettleAmount(name, e.prize, "prize")
 		end
 	end
 	self.phase = "finished"
@@ -629,17 +740,18 @@ function Table:Finish()
 	self:Backup()
 end
 
----Settles an amount of money with a player, the host being the bank: positive, the host owes them; negative, they
----owe the host. Gold tables only; the host's own line is implied.
+---Owes a player an amount of money: their stack when they leave ("cashout"), a tournament prize ("prize"), money
+---back ("refund"). The host holds the money, so every line runs from the host to a player. Gold tables only.
 ---@param name string
----@param net number
-function Table:SettleAmount(name, net)
-	if self.cfg.stakes ~= "gold" or name == self.name or net == 0 then
+---@param amount number silver
+---@param kind string
+function Table:SettleAmount(name, amount, kind)
+	if self.cfg.stakes ~= "gold" or name == self.name or not Protocol:IsCount(amount, 1) then
 		return
 	end
 	self.settled = (self.settled or 0) + 1
 	local line = { id = self.id..":"..self.settled, table = self.id, title = self.cfg.title, host = self.name, at = time(),
-		from = net < 0 and name or self.name, to = net < 0 and self.name or name, amount = math.abs(net) }
+		from = self.name, to = name, amount = amount, kind = kind or "cashout" }
 	self.send(name, { k = "settle", t = self.id, l = line })
 	self.on("settle", line)
 end
@@ -659,26 +771,31 @@ function Table:Close()
 	local finished = self.phase == "finished"
 	self.phase = "closed"
 	self.hand, self.hs = nil, nil
+	self:ApplyPendingChips()
 	self:Bump()
 	self:Broadcast()
-	if self.cfg.kind ~= "tournament" then
-		for seat, p in pairs(self.seats) do
+	for seat, p in pairs(self.seats) do
+		if p.unpaid then
+			if (p.received or 0) > 0 then self:SettleAmount(p.name, p.received, "refund") end
+		elseif self.cfg.kind ~= "tournament" then
 			self:Settle(seat, p)
+		elseif not finished then
+			-- A tournament cut short: every entry goes back
+			self:SettleAmount(p.name, p.bought or 0, "refund")
 		end
 	end
 	self.on("closed", finished)
 end
 
----At a gold table the host is the bank: a player who leaves (or is at the table when it closes) owes the host
----what they lost, or is owed what they won, against what they bought in for. The player is sent the line, and
----the host's own ledger gets it (on "settle"). Chips tables settle nothing.
+---At a gold table the host holds the money: a player who leaves (or is at the table when it closes) is owed their
+---stack. The player is sent the line, and the host's own ledger gets it (on "settle"). Chips tables settle nothing.
 ---@param seat number
 ---@param p table the seat's record
 function Table:Settle(seat, p)
 	if self.cfg.stakes ~= "gold" or p.name == self.name then
 		return
 	end
-	self:SettleAmount(p.name, p.stack - (p.bought or 0))
+	self:SettleAmount(p.name, p.stack + (p.pendingChips or 0), "cashout")
 end
 
 -- ============================================================================
@@ -710,6 +827,16 @@ function Table:Tick()
 		self.wasBlocked = nil
 		self:Bump()
 		self:Broadcast()
+	end
+	-- A seat whose buy-in never came is given up
+	for _, seat in ipairs(self:Seated()) do
+		local p = self.seats[seat]
+		if p and p.unpaid and now - p.since >= Protocol.PAY_SECONDS then
+			self:Stand(p.name)
+			self.on("unpaid", p.name)
+			self:Bump()
+			self:Broadcast()
+		end
 	end
 	if self.phase == "waiting" and now >= self.nextHandAt then
 		self:StartSeedRound()
@@ -815,7 +942,8 @@ function Table:StateFor(name)
 		end
 	end
 	for seat, p in pairs(self.seats) do
-		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil, place = p.place }
+		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil, place = p.place,
+			unpaid = p.unpaid, received = p.unpaid and p.received or nil, rebuyDue = p.rebuyDue, pending = p.pendingChips }
 		if hand and hand.seats[seat] then
 			local hp = hand.seats[seat]
 			s.s, s.b, s.tot = hp.stack, hp.bet, hp.total
@@ -855,6 +983,9 @@ function Table:StateFor(name)
 	end
 	if self.phase == "showdown" or self.phase == "waiting" then
 		st.nextIn = max(0, floor(self.nextHandAt - self.now() + 0.5))
+	end
+	if self.cfg.stakes == "gold" then
+		st.holding = self:Holding()
 	end
 	return st
 end

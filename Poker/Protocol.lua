@@ -87,14 +87,21 @@ function Protocol:Prizes(pool, entrants)
 	return prizes
 end
 
----An amount shown: chips as a number; at a gold table a chip is a copper piece, shown as gold, silver and copper
----("2g 50s", "75c", "1g 5c").
+---Whether stakes are shown as money: real gold, or a practice table's play money.
+---@param stakes string?
+---@return boolean
+function Protocol:IsMoney(stakes)
+	return stakes == "gold" or stakes == "play"
+end
+
+---An amount shown: chips as a number; at a gold table (or a practice table on play money) a chip is a copper piece,
+---shown as gold, silver and copper ("2g 50s", "75c", "1g 5c").
 ---@param chips number
----@param stakes string? "chips" | "gold"
+---@param stakes string? "chips" | "gold" | "play"
 ---@return string
 function Protocol:Money(chips, stakes)
 	chips = floor((chips or 0) + 0.5)
-	if stakes ~= "gold" then
+	if not Protocol:IsMoney(stakes) then
 		return tostring(chips)
 	end
 	local g, s, c = floor(chips / 10000), floor(chips / 100) % 100, chips % 100
@@ -108,12 +115,12 @@ end
 ---An amount typed: a number of chips, or at a gold table gold, silver and copper ("10g", "2g 50s", "75s", "5c"; a
 ---bare number is gold). Nil when it isn't one.
 ---@param text string
----@param stakes string? "chips" | "gold"
+---@param stakes string? "chips" | "gold" | "play"
 ---@return number? chips
 function Protocol:ParseAmount(text, stakes)
 	text = strlower(strtrim(tostring(text or "")))
 	if text == "" then return nil end
-	if stakes ~= "gold" then
+	if not Protocol:IsMoney(stakes) then
 		local n = tonumber(text)
 		return n and n == floor(n) and n >= 0 and n or nil
 	end
@@ -202,8 +209,8 @@ function Protocol:Settings(cfg)
 	if not Protocol:IsCount(c.bots, 0, Protocol.MAX_BOTS) then
 		return nil, ("a table takes up to %d computer players"):format(Protocol.MAX_BOTS)
 	end
-	if c.bots > 0 and c.stakes ~= "chips" then
-		return nil, "a practice table plays for chips"
+	if c.bots > 0 and c.stakes == "gold" then
+		return nil, "a practice table plays for chips or play money, never gold"
 	end
 	if c.kind ~= "cash" and c.kind ~= "tournament" then
 		return nil, "a table is a cash game or a tournament"
@@ -246,8 +253,11 @@ function Protocol:Settings(cfg)
 	if not Protocol:IsCount(c.turnSeconds, Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS) then
 		return nil, ("a turn is %d to %d seconds"):format(Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS)
 	end
-	if c.stakes ~= "chips" and c.stakes ~= "gold" then
-		return nil, "stakes are chips or gold"
+	if c.stakes ~= "chips" and c.stakes ~= "gold" and c.stakes ~= "play" then
+		return nil, "stakes are chips, gold or play money"
+	end
+	if c.stakes == "play" and c.bots == 0 then
+		return nil, "play money is for practice tables"
 	end
 	if c.title ~= nil and (type(c.title) ~= "string" or #c.title > Protocol.MAX_TITLE or strfind(c.title, "[|%c]")) then
 		return nil, "a title is a short line"

@@ -162,8 +162,14 @@ local function Place(seat, k, n, felt)
 	seat:ClearAllPoints()
 	seat:SetPoint("CENTER", felt, "CENTER", x, y)
 	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
+	-- The bet label a set distance in from the box toward the middle, with room for the chips on its outer side; for
+	-- the lower seats above the hand named over the box, for the upper ones below the box
+	local function toward(v, inset) if v > 1 then return v - math.min(v, inset) elseif v < -1 then return v + math.min(-v, inset) end return 0 end
+	local lx = toward(x, SEAT_W / 2 + 40)
+	local ly = y > 1 and (y - SEAT_H / 2 - 16) or y < -1 and (y + SEAT_H / 2 + 38) or 0
+	if math.abs(x) > 1 and math.abs(y) <= 1 then ly = 0 end
 	seat.bet:ClearAllPoints()
-	seat.bet:SetPoint("CENTER", felt, "CENTER", x * 0.62, y * 0.56)
+	seat.bet:SetPoint("CENTER", felt, "CENTER", lx, ly)
 	-- The chips on the label's outer side, away from the board
 	for i, chip in ipairs(seat.chips) do
 		chip:ClearAllPoints()

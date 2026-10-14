@@ -12735,7 +12735,7 @@ end)()
 	nodes = {}
 	ann, bob = Node("Ann-Realm"), Node("Bob-Realm")
 	local cat, dan, eve = Node("Cat-Realm"), Node("Dan-Realm"), Node("Eve-Realm")
-	ann.host = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 200, startStack = 1000, levelMinutes = 1, maxSeats = 4, stakes = "gold", title = "Dead Man's Open" },
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 200, startStack = 1000, levelMinutes = 1, maxSeats = 4, stakes = "gold", title = "Dead Man's Open", lateLevels = 0 },
 		send = SendFrom("Ann-Realm"), ad = function(ad) ads[#ads + 1] = ad end, now = Now, on = function(event, line) if event == "settle" then settled[#settled + 1] = line end end })
 	local t = ann.host
 	check(t.cfg.sb == 10 and t.cfg.bb == 20 and t.cfg.buyMin == 200 and t.cfg.buyMax == 200, "a tournament's blinds start at the schedule's first level; the entry is the one buy-in")
@@ -13144,6 +13144,61 @@ end)()
 	Net:Leave()
 	check(Net:HostedTable() == nil and next(Net:Bots()) == nil, "closing clears the bots")
 	WantedPokerDB.host.stakes = "chips"
+end)()
+
+-- Poker tournaments, late entry and antes: entrants sit down with the starting stack while late entry is open, places
+-- follow the order players went out however many entered after them, and antes come in from level four when on
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Protocol = P.PokerHost, P.PokerProtocol
+	local now = 50000
+	local function Now() return now end
+	local sent, ads = {}, {}
+	local function Refused(name) for i = #sent, 1, -1 do if sent[i].to == name and sent[i].tbl.k == "refuse" then return sent[i].tbl.why end end end
+	check(Protocol:Settings({ kind = "tournament", entry = 0 }).lateLevels == Protocol.DEFAULT_LATE_LEVELS and Protocol:Settings({ kind = "tournament", entry = 0 }).antes == false, "by default late entry stays open to level 2 and there are no antes")
+	check(Protocol:Settings({ sb = 1, bb = 2, buyMin = 40, buyMax = 200, antes = true, lateLevels = 3 }).antes == false, "a cash game has neither")
+	check(Protocol:Settings({ kind = "tournament", entry = 0, lateLevels = 99 }) == nil, "late entry closes within the schedule")
+	local t = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 1, maxSeats = 6, lateLevels = 2, antes = true },
+		send = function(to, tbl) sent[#sent + 1] = { to = to, tbl = tbl } end, ad = function(ad) ads[#ads + 1] = ad end, now = Now })
+	for _, n in ipairs({ "Ann-Realm", "Bob-Realm", "Cat-Realm" }) do t:Receive(n, { k = "join", t = t.id, b = 0 }) end
+	check(t:StateFor("Ann-Realm").lateLevels == 2 and not t:StateFor("Ann-Realm").lateOpen, "registering: the state says late entry stays open to level 2")
+	t:Start()
+	t:Receive("Dan-Realm", { k = "join", t = t.id, b = 0 })
+	local danSeat = t:SeatOf("Dan-Realm")
+	check(danSeat and t.seats[danSeat].stack == 1000 and t.entrants["Dan-Realm"] and t:StateFor("Dan-Realm").lateOpen, "a late entrant at level 1 sits with the starting stack")
+	t:Advertise()
+	check(ads[#ads].on == 1 and ads[#ads].la == 1 and ads[#ads].lv == 1 and ads[#ads].an == 1, "the ad: under way, late entry open at level 1, antes")
+	now = now + 61
+	t:Receive("Eve-Realm", { k = "join", t = t.id, b = 0 })
+	check(t:SeatOf("Eve-Realm") ~= nil, "still open at level 2")
+	now = now + 60
+	t:Receive("Fay-Realm", { k = "join", t = t.id, b = 0 })
+	check(t:SeatOf("Fay-Realm") == nil and Refused("Fay-Realm") == "late entry has closed", "closed at level 3: "..tostring(Refused("Fay-Realm")))
+	t:Advertise()
+	check(ads[#ads].on == 1 and ads[#ads].la == nil and ads[#ads].lv == 3, "the ad: under way, late entry closed")
+	-- Antes: none before level 4, a tenth of the big blind from it; none when off
+	check(t:Ante() == 0 and t:StateFor("Ann-Realm").ante == 0, "no ante at level 3")
+	now = now + 60
+	check(t:Level() == 4 and t:Ante() == 10 and t:StateFor("Ann-Realm").ante == 10, "level 4, blinds 50/100: an ante of 10")
+	local quiet = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 1, maxSeats = 6 }, send = function() end, now = Now })
+	quiet:Receive("Ann-Realm", { k = "join", t = quiet.id, b = 0 }) quiet:Receive("Bob-Realm", { k = "join", t = quiet.id, b = 0 })
+	quiet:Start()
+	now = now + 600
+	check(quiet:Level() >= 4 and quiet:Ante() == 0, "antes off: none at any level")
+	-- Places by the order out: the first out finishes last, however many enter after
+	local p = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 60, maxSeats = 6, lateLevels = 6 }, send = function() end, now = Now })
+	for _, n in ipairs({ "Ann-Realm", "Bob-Realm", "Cat-Realm" }) do p:Receive(n, { k = "join", t = p.id, b = 0 }) end
+	p:Start()
+	p:Eliminate(2)
+	check(p.entrants["Bob-Realm"].place == 3, "Bob out first of three: third")
+	p:Receive("Dan-Realm", { k = "join", t = p.id, b = 0 })
+	check(p.entrants["Bob-Realm"].place == 4 and p.seats[2].place == 4, "Dan enters late: Bob is fourth of four now")
+	p:Eliminate(3)
+	p:Receive("Dan-Realm", { k = "leave", t = p.id })
+	check(p.entrants["Cat-Realm"].place == 3 and p.entrants["Dan-Realm"].place == 2 and p.entrants["Dan-Realm"].left, "Cat third, Dan (who left) second")
+	p:Finish()
+	local standings = p:Standings()
+	check(standings[1].name == "Ann-Realm" and standings[1].place == 1 and standings[2].name == "Dan-Realm" and standings[3].name == "Cat-Realm" and standings[4].name == "Bob-Realm", "standings: Ann, Dan, Cat, Bob")
 end)()
 
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)

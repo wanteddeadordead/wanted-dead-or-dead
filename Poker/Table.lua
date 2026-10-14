@@ -198,7 +198,8 @@ local function Place(seat, k, n, felt)
 	local dx, dy = len > 0 and -x / len or 0, len > 0 and -y / len or 1
 	local ex = math.abs(dx) > 0.001 and (SEAT_W / 2) / math.abs(dx) or math.huge
 	local ey = math.abs(dy) > 0.001 and (SEAT_H / 2) / math.abs(dy) or math.huge
-	local dist = math.min(ex, ey) + 34
+	-- Out from the box far enough for the chips (up to three stacks) on the label's outer side, and the label itself
+	local dist = math.min(ex, ey) + 14 + 3 * (CHIP - 1) + 18
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", x + dx * dist, y + dy * dist)
 	seat.chipsRightward = x > 1 -- the chips on the label's outer side, away from the board

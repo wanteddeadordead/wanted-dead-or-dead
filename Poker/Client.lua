@@ -59,6 +59,12 @@ function Player:Back()
 	self:Send({ k = "back" })
 end
 
+---Sits out from the next hand.
+function Player:SitOut()
+	self.sittingOut = true
+	self:Send({ k = "sitout" })
+end
+
 ---Buys more chips between hands.
 ---@param amount number
 function Player:Rebuy(amount)

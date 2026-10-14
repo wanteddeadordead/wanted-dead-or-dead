@@ -7534,17 +7534,17 @@ end)()
 	UI:Show("home")
 	local labels = {}
 	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
-	check(table.concat(labels, ", ") == "Home, Bounties, Enemies, Raids, Progress, You", "six menu entries: "..table.concat(labels, ", "))
+	check(table.concat(labels, ", ") == "Home, Bounties, Enemies, Raids, Poker, Progress, You", "the six menu entries, and Poker from the poker addon: "..table.concat(labels, ", "))
 	local function selected()
 		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home" }) do
+		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home", poker = "Poker" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
-		if entry ~= "Home" and entry ~= "Raids" then
+		if entry ~= "Home" and entry ~= "Raids" and entry ~= "Poker" then
 			check(tabs and tabs.selected == key, key.."'s tab is selected")
 		end
 	end
@@ -12270,6 +12270,120 @@ end)()
 	Flush()
 	for name, node in pairs(nodes) do check(node.player.state.phase == "closed", name.." sees the table close") end
 	check(#ads >= 1 and ads[1].h == "Ann-Realm" and ads[1].m == 4, "the table was advertised")
+end)()
+
+-- Poker UI: the Poker page lists tables heard on the channel and hosts one; a second player joins by addon whisper
+-- through the sync transport; the table window shows the hand, takes actions from its bar and logs the result
+;(function()
+	local P = WantedPokerTestNS
+	local Net, TableUI, Deal = P.PokerNet, P.PokerTable, P.PokerDeal
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
+	ns.UI:Show("poker")
+	check(ns.UI:IsShown("poker") and OnScreen("HOST A TABLE"), "the Poker page opens with the host form")
+	local function Ad(sender, ad)
+		ad.v = "0.1.0-dev"
+		Fire("CHAT_MSG_ADDON", "WNTD", "T:za"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(ad), "CHANNEL", sender, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	end
+	Ad("Zed-Realm", { id = "Zed-Realm#abc1", h = "Zed-Realm", n = "Zed's Den", s = 1, m = 6, sb = 5, bb = 10, lo = 200, hi = 1000 })
+	check(#Net:Tables() == 1 and OnScreen("Zed's Den") and OnScreen("1 of 6 seats"), "a table advertised on the channel is listed")
+	Ad("Imp-Realm", { id = "Zed-Realm#abc2", h = "Zed-Realm", n = "Not Zed's", s = 1, m = 6, sb = 5, bb = 10, lo = 200, hi = 1000 })
+	check(#Net:Tables() == 1, "an ad for someone else's table is ignored")
+	Ad("Zed-Realm", { id = "Zed-Realm#abc1", h = "Zed-Realm", c = 1 })
+	check(#Net:Tables() == 0, "a closed table leaves the list")
+	-- Host from the form (default blinds 10/20: buy-in 400 to 2000, the box filled with 2000)
+	local go = Button("Host table")
+	check(go, "the Host table button")
+	go._scripts.OnClick(go)
+	local host = Net:HostedTable()
+	check(host and Net:State() and Net:State().me == 1 and Net:State().seats[1].s == 2000, "hosting seats you with your buy-in")
+	check(TableUI:IsShown() and OnScreen("Waiting for players: 1 of 6 seated"), "the table window opens, waiting for players")
+	check(OnScreen("YOUR TABLE") and Button("Close table"), "the page shows your table, with Close table")
+	-- Bob joins by whisper. Whispers to Bob come back out through the transport, possibly in parts
+	local id = host.id
+	local msgNo = 0
+	local function FromBob(tbl)
+		tbl.t, tbl.v = id, "0.1.0-dev"
+		msgNo = msgNo + 1
+		local payload = ns.Sync:Encode(tbl)
+		local total = math.ceil(#payload / 240)
+		for part = 1, total do
+			Fire("CHAT_MSG_ADDON", "WNTD", "P:zb"..msgNo..":"..part.."/"..total..":"..payload:sub((part - 1) * 240 + 1, part * 240), "WHISPER", "Bob-Realm")
+		end
+	end
+	local function ToBob(kind)
+		local messages, order = {}, {}
+		for _, m in ipairs(addonSent) do
+			if m.target == "Bob-Realm" and m.text:find("^P:") then
+				local msgId, part, total, chunk = m.text:match("^P:(%w+):(%d+)/(%d+):(.*)$")
+				local entry = messages[msgId]
+				if not entry then entry = { parts = {}, total = tonumber(total) } messages[msgId] = entry order[#order + 1] = msgId end
+				entry.parts[tonumber(part)] = chunk
+			end
+		end
+		for i = #order, 1, -1 do
+			local entry = messages[order[i]]
+			if #entry.parts == entry.total then
+				local tbl = ns.Sync:Decode(table.concat(entry.parts))
+				if tbl and (not kind or tbl.k == kind) then return tbl end
+			end
+		end
+	end
+	addonSent = {}
+	FromBob({ k = "join", b = 1000 })
+	local welcome = ToBob("welcome")
+	check(welcome and welcome.st.seats[2] and welcome.st.seats[2].n == "Bob-Realm" and welcome.st.me == 2, "Bob is seated and welcomed by whisper")
+	check(OnScreen("Bob") and OnScreen("1000"), "Bob shows at the table")
+	-- The hand: the host's clock runs, we commit by ourselves, Bob commits and reveals by whisper
+	clock = clock + 1
+	host:Tick()
+	check(host.phase == "seeding", "a hand is called with two seated: "..host.phase)
+	local st = ToBob("state").st
+	local key = st.hand.key
+	check(key == "1.1" and st.seats[2].inHand, "Bob is told the hand is called")
+	local secret = Deal:Secret()
+	FromBob({ k = "commit", h = key, c = Deal:Commit(secret) })
+	check(host.hs.stage == "reveals", "both commitments in (ours by itself), published")
+	st = ToBob("state").st
+	check(st.hand.commits and st.hand.commits[2] == Deal:Commit(secret) and st.hand.commits[1], "Bob sees both commitments, his own among them")
+	FromBob({ k = "reveal", h = key, s = secret })
+	check(host.phase == "playing", "dealt once both secrets are in")
+	local parts = TableUI:GetParts()
+	local mine, bobs = parts.seats[0], parts.seats[1]
+	check(type(mine.cards[1].card) == "number" and type(mine.cards[2].card) == "number" and bobs.cards[1].card == true, "your cards face up, Bob's face down")
+	st = ToBob("state").st
+	check(st.seats[2].hole and st.seats[1].hole == nil, "Bob's state has his cards and not yours")
+	check(OnScreen("Hand 1") and parts.lock.text._text:find("^Deck "), "the hand and its deck hash show")
+	-- Heads-up: the button (you) posts the small blind and acts first
+	check(parts.call:IsShown() and parts.call.label._text == "Call 10" and parts.raise.label._text == "Raise to 40", "the bar offers Call 10 and Raise to 40: "..tostring(parts.call.label._text)..", "..tostring(parts.raise.label._text))
+	parts.call._scripts.OnClick(parts.call)
+	check(host.hand.toAct == 2 and not parts.call:IsShown(), "the call went through; Bob to act and the bar is gone")
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	local function Logged(text) for _, line in ipairs(parts.lines or {}) do if line:find(text, 1, true) then return true end end return false end
+	check(host.hand.street == "flop" and Logged("Flop:") and Logged("calls 10") and Logged("Hand 1: dealt"), "the flop and the actions, in the log")
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	check(parts.call.label._text == "Check" and parts.raise:IsShown() and parts.raise.label._text == "Bet 20", "check, or bet from 20: "..tostring(parts.raise.label._text))
+	parts.call._scripts.OnClick(parts.call)
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	parts.call._scripts.OnClick(parts.call)
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	parts.call._scripts.OnClick(parts.call)
+	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen(" win ")), "the showdown, with the winner on screen")
+	check(type(bobs.cards[1].card) == "number", "Bob's cards are shown at the showdown")
+	check(parts.lock.text._text == "Verified" and Logged("Hand 1 verified"), "our client verified the host's hand: "..tostring(parts.lock.text._text))
+	check(Logged(" wins ") and Logged("River:"), "the result and the river are logged")
+	-- Sit out and come back
+	parts.sitOut._scripts.OnClick(parts.sitOut)
+	check(host.seats[1].out == "sitting" and parts.sitOut.label._text == "I'm back", "sitting out from the next hand")
+	parts.sitOut._scripts.OnClick(parts.sitOut)
+	check(host.seats[1].out == false and parts.sitOut.label._text == "Sit out", "and back")
+	-- Close the table from the window's header
+	parts.leave._scripts.OnClick(parts.leave)
+	ConfirmDialog()
+	check(Net:HostedTable() == nil and not TableUI:IsShown(), "closed")
+	check(ToBob("state").st.phase == "closed", "Bob is told the table closed")
+	ns.UI:Show("poker")
+	check(OnScreen("HOST A TABLE"), "the page is back to the host form")
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))

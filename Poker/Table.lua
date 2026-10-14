@@ -466,20 +466,6 @@ function private.Build()
 		private.presets[#private.presets + 1] = b
 		last = b
 	end
-	-- Table talk on the strip's right at the showdown: a set line to everyone
-	private.emotes = {}
-	local lastEmote
-	for i = #Protocol.EMOTES, 1, -1 do
-		local index = i
-		local b = W:Button(rail, Protocol.EMOTES[i], "ghost", 64, 20, function()
-			local player = Net:Player()
-			if player then player:Say(index) end
-		end)
-		if lastEmote then b:SetPoint("RIGHT", lastEmote, "LEFT", -2, 0) else b:SetPoint("BOTTOMRIGHT", -8, 2) end
-		b:Hide()
-		private.emotes[#private.emotes + 1] = b
-		lastEmote = b
-	end
 	-- Pre-actions on the strip's left, while waiting for your turn
 	private.checkFold = W:Toggle(rail, "Check/fold", function(on) if on then private.callAny:SetChecked(false) end end)
 	private.checkFold:SetPoint("BOTTOMLEFT", 10, 4)
@@ -567,7 +553,7 @@ function private.Build()
 	private.start:SetPoint("LEFT", private.rebuy, "RIGHT", 6, 0)
 	private.start:Hide()
 	private.countdown = Theme:Text(bar, "small", "", C.muted)
-	private.countdown:SetPoint("LEFT", private.start, "RIGHT", 10, 0)
+	private.countdown:SetPoint("LEFT", private.sitOut, "RIGHT", 12, 0)
 	private.allin = W:Button(bar, "All-in", "danger", 90, 28, function()
 		local st = private.state
 		if st and st.cfg.stakes == "gold" then
@@ -601,6 +587,21 @@ function private.Build()
 	private.call:SetPoint("RIGHT", private.slider, "LEFT", -12, -4)
 	private.fold = W:Button(bar, "Fold", "ghost", 60, 28, function() private.Act("fold") end)
 	private.fold:SetPoint("RIGHT", private.call, "LEFT", -6, 0)
+	-- Table talk, in the bar at the showdown (the action buttons are away then): a set line to everyone
+	private.emotes = {}
+	local lastEmote
+	for i = #Protocol.EMOTES, 1, -1 do
+		local index = i
+		local label = Protocol.EMOTES[i]
+		local b = W:Button(bar, label, "ghost", 16 + #label * 6, 24, function()
+			local player = Net:Player()
+			if player then player:Say(index) end
+		end)
+		if lastEmote then b:SetPoint("RIGHT", lastEmote, "LEFT", -2, 0) else b:SetPoint("RIGHT", -10, 0) end
+		b:Hide()
+		private.emotes[#private.emotes + 1] = b
+		lastEmote = b
+	end
 
 	-- The hand log
 	local side = CreateFrame("Frame", nil, frame)

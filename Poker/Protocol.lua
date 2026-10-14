@@ -63,6 +63,38 @@ Protocol.REJOIN_DELAY_SECONDS = 4
 Protocol.REJOIN_GIVE_UP_SECONDS = 60
 Protocol.REJOIN_WINDOW_SECONDS = 6 * 60 * 60
 
+---About how long a tournament runs, in minutes: the level at which the whole field's chips are twenty-five big
+---blinds is near the end (the last few hands go fast), so that level's number times the level length, a little less
+---with antes. A rule of thumb that matches the usual online structures.
+---@param stack number the starting stack
+---@param players number
+---@param levelMinutes number
+---@param antes boolean?
+---@return number minutes
+function Protocol:TournamentMinutes(stack, players, levelMinutes, antes)
+	local chips = (stack or 1500) * max(2, players or 2)
+	local level = #Protocol.SCHEDULE
+	for i, blinds in ipairs(Protocol.SCHEDULE) do
+		if blinds[2] * 25 >= chips then
+			level = i
+			break
+		end
+	end
+	local minutes = level * (levelMinutes or 10)
+	if antes then minutes = minutes * 0.9 end
+	return max(levelMinutes or 10, floor(minutes + 0.5))
+end
+
+---A length of time in words: "about 50 min", "about 1 h 30 min".
+---@param minutes number
+---@return string
+function Protocol:AboutMinutes(minutes)
+	minutes = floor(minutes / 5 + 0.5) * 5
+	if minutes < 60 then return ("about %d min"):format(minutes) end
+	local h, m = floor(minutes / 60), minutes % 60
+	return m > 0 and ("about %d h %d min"):format(h, m) or ("about %d h"):format(h)
+end
+
 ---How a tournament's prize pool splits: shares by place, for a number of entrants.
 ---@param entrants number
 ---@return number[] shares summing to 1

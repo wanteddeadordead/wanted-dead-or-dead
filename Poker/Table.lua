@@ -34,7 +34,7 @@ local FELT = { 0.08, 0.21, 0.13, 1 }
 local FELT_LINE = { 0.16, 0.34, 0.2, 1 }
 local SEAT_BG = { 0, 0, 0, 0.5 }
 local SEAT_BORDER = { 1, 1, 1, 0.1 }
-local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
+local SEAT_W, SEAT_H = 150, 96 -- the name across the top, the whole stack on its own line under it, the status at the left and the cards at the right below
 local CARD_W, CARD_H = 46, 64
 local CHIP = 14 -- a chip by a bet
 -- Chip denominations in big blinds, largest first, coloured like a rack: purple 500, black 100, green 25, red 5, white 1.
@@ -166,8 +166,8 @@ local function BuildSeat(felt, k)
 	end)
 	seat.trustHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	seat.stack = Theme:Text(seat, "small", "", C.gold)
-	seat.stack:SetPoint("TOPLEFT", 8, -28)
-	seat.stack:SetWidth(SEAT_W - 86) -- clear of the cards
+	seat.stack:SetPoint("TOPLEFT", 8, -24)
+	seat.stack:SetWidth(SEAT_W - 16) -- the full amount, always, on a line of its own above the cards
 	seat.stack:SetJustifyH("LEFT")
 	seat.stack:SetWordWrap(false)
 	seat.status = W:Pill(seat)
@@ -1162,8 +1162,8 @@ function TableUI:Refresh(st)
 				seatFrame.player = p
 				seatFrame.trust:SetText(Wanted.Reputation:GetPosterBadge(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
-				-- The stack rounded to silver past a gold (the copper is on the bar when it matters); the net since sitting down on hover
-				seatFrame.stack:SetText(Chips(p.s, cfg, true))
+				-- The whole stack, to the copper; the net since sitting down is on hover
+				seatFrame.stack:SetText(Chips(p.s, cfg))
 				seatFrame.net = net
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown. Dealt (slid in from
 				-- the middle) when the hand is new, a beat apart around the table
@@ -1241,7 +1241,7 @@ function TableUI:Refresh(st)
 					seatFrame.bet:Show()
 				elseif p.b and p.b > 0 then
 					-- The amount by the chips; what it was for is in the pill
-					seatFrame.bet:SetText(Chips(p.b, cfg, true))
+					seatFrame.bet:SetText(Chips(p.b, cfg))
 					seatFrame.bet:Show()
 				else
 					seatFrame.bet:Hide()

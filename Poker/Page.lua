@@ -13,7 +13,7 @@ local TableUI = Poker.PokerTable
 local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
-local CARD_HEIGHT = 244 -- the form with how it works under it
+local CARD_HEIGHT = 268 -- the form (three rows) with how it works under it
 -- Blinds to pick from: chips, and at a gold table silver pieces (5s/10s up to 5g/10g)
 local BLINDS = {
 	chips = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } },
@@ -99,7 +99,7 @@ function private.BuildForm(parent, width)
 		Settings().kind = key
 		private.RefreshBuyin(true)
 	end, 92)
-	private.kind:SetPoint("TOPLEFT", 14, -66)
+	private.kind:SetPoint("TOPLEFT", 14, -62)
 	private.kind:Select(s.kind or "cash", true)
 	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" }, { key = "practice", label = "Practice" } }, function(key)
 		Settings().stakes = key
@@ -107,9 +107,9 @@ function private.BuildForm(parent, width)
 	end, 70)
 	private.stakes:SetPoint("LEFT", private.kind, "RIGHT", 12, 0)
 	private.stakes:Select(s.stakes or "chips", true)
-	-- A tournament: the entry, the starting stack and how long a level lasts
+	-- The third row: a cash game's buy-in range, or a tournament's entry, starting stack and how long a level lasts
 	private.entryLabel = Theme:Text(form, "small", "Entry", C.muted)
-	private.entryLabel:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
+	private.entryLabel:SetPoint("TOPLEFT", 14, -100)
 	private.entryBox = W:Input(form, 76, "e.g. 2g")
 	private.entryBox:SetPoint("LEFT", private.entryLabel, "RIGHT", 6, 0)
 	private.stackLabel = Theme:Text(form, "small", "Stack", C.muted)
@@ -125,7 +125,7 @@ function private.BuildForm(parent, width)
 	private.levels:SetPoint("LEFT", private.levelLabel, "RIGHT", 6, 0)
 	private.levels:SetChoice(s.levelMinutes or 10)
 	private.buyinNote = Theme:Text(form, "small", "Buy-in from", C.muted)
-	private.buyinNote:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
+	private.buyinNote:SetPoint("TOPLEFT", 14, -100)
 	private.minBox = W:Input(form, 76, "least")
 	private.minBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 6, 0)
 	local toLabel = Theme:Text(form, "small", "to", C.muted)
@@ -137,9 +137,9 @@ function private.BuildForm(parent, width)
 	private.buyinBox = W:Input(form, 76, "yours")
 	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
 	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
-	go:SetPoint("TOPRIGHT", -14, -66)
+	go:SetPoint("TOPRIGHT", -14, -62)
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
-	how:SetPoint("TOPLEFT", 14, -102)
+	how:SetPoint("TOPLEFT", 14, -126)
 	how:SetPoint("RIGHT", -14, 0)
 	how:SetWordWrap(true)
 	how:SetJustifyH("LEFT")
@@ -174,6 +174,13 @@ function private.RefreshBuyin(reset)
 	local entry = tournament and stakes == "gold"
 	private.entryLabel:SetShown(entry)
 	private.entryBox:SetShown(entry)
+	-- Without an entry the stack starts the row
+	private.stackLabel:ClearAllPoints()
+	if entry then
+		private.stackLabel:SetPoint("LEFT", private.entryBox, "RIGHT", 12, 0)
+	else
+		private.stackLabel:SetPoint("TOPLEFT", 14, -100)
+	end
 	private.blinds:SetEnabled(not tournament)
 	if tournament then
 		private.blinds:SetText(Protocol:Money(Protocol.SCHEDULE[1][1], stakes).."/"..Protocol:Money(Protocol.SCHEDULE[1][2], stakes).." up")

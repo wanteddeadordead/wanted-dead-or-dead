@@ -395,6 +395,15 @@ function Table:Receive(sender, tbl)
 		self:OnReveal(seat, tbl)
 	elseif k == "act" then
 		self:OnAct(seat, tbl)
+	elseif k == "say" then
+		-- Table talk, relayed to everyone: one of the set lines, not too often
+		local p = self.seats[seat]
+		if Protocol:IsCount(tbl.e, 1, #Protocol.EMOTES) and self.now() - (p.saidAt or -math.huge) >= Protocol.SAY_SECONDS then
+			p.saidAt = self.now()
+			for _, q in pairs(self.seats) do
+				self.send(q.name, { k = "said", t = self.id, s = seat, e = tbl.e })
+			end
+		end
 	end
 end
 

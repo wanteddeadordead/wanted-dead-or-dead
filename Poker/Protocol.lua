@@ -12,9 +12,12 @@ Protocol.TAG = "P" -- table traffic, by whisper
 Protocol.AD_TAG = "T" -- open tables, on the channel
 
 -- Message kinds, in the message's k field. From a player to the host:
-Protocol.TO_HOST = { join = true, leave = true, sync = true, commit = true, reveal = true, act = true, back = true, sitout = true, rebuy = true }
+Protocol.TO_HOST = { join = true, leave = true, sync = true, commit = true, reveal = true, act = true, back = true, sitout = true, rebuy = true, say = true }
 -- From the host to a player:
-Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true, handoff = true }
+Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true, handoff = true, said = true }
+-- Table talk: a seat says one of these, by number, and the host tells every seat (at most one every SAY_SECONDS)
+Protocol.EMOTES = { "Nice hand", "Great call", "I bluffed", "Ouch", "Well played", "Lucky", "gg", "Ha!" }
+Protocol.SAY_SECONDS = 3
 -- Between any two players, about no table: { k = "lines" } asks for the open lines the sender is owed by the receiver;
 -- { k = "lines", l = { line, ... } } answers with them (Gold). Only lines the SENDER owes are taken from an answer.
 Protocol.LINES = "lines"
@@ -24,7 +27,7 @@ Protocol.MIN_SEATS = 2
 Protocol.MAX_TITLE = 40
 Protocol.COMMIT_SECONDS = 6 -- a player has this long to commit to a secret once a hand is called
 Protocol.REVEAL_SECONDS = 6 -- and this long to send it once every commitment is published
-Protocol.SHOWDOWN_SECONDS = 8 -- the result stays up this long before the next hand
+Protocol.SHOWDOWN_SECONDS = 10 -- the result stays up this long before the next hand
 Protocol.BEAT_SECONDS = 10 -- the host says it's there this often when nothing else is sent
 Protocol.HOST_TIMEOUT = 30 -- a host silent this long is gone
 Protocol.TAKEOVER_STEP = 10 -- each next seat in line waits this much longer before taking over

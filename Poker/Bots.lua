@@ -260,6 +260,19 @@ function Bot:Tick()
 	else
 		self.turnKey = nil
 	end
+	-- A word at the showdown, now and then: a loser who showed down says nice hand; a bluffer who got paid gloats
+	if hand and hand.results and st.phase == "showdown" and self.saidKey ~= hand.key then
+		self.saidKey = hand.key
+		local won = false
+		for _, pot in ipairs(hand.results.pots or {}) do for _, w in ipairs(pot.winners or {}) do if w == seat then won = true end end end
+		local me0 = st.seats[seat]
+		local showed = me0 and me0.tot ~= nil and not me0.f
+		if not won and showed and self.rng() < 0.25 then
+			self.player:Say(1)
+		elseif won and self.memory and self.memory.key == hand.key and self.memory.bluffStreet and self.rng() < 0.4 then
+			self.player:Say(3)
+		end
+	end
 	local me = st.seats[seat]
 	if me and (me.s or 0) == 0 and st.cfg.kind ~= "tournament" and st.phase ~= "playing" and st.phase ~= "closed" and now - self.rebuyAt >= 3 then
 		self.rebuyAt = now

@@ -73,6 +73,12 @@ function Player:SitOut()
 	self:Send({ k = "sitout" })
 end
 
+---Says one of the table's set lines (Protocol.EMOTES), by number.
+---@param index number
+function Player:Say(index)
+	self:Send({ k = "say", e = index })
+end
+
 ---Buys more chips between hands.
 ---@param amount number
 function Player:Rebuy(amount)
@@ -133,6 +139,10 @@ function Player:Receive(sender, tbl)
 			if tbl.to == self.name and type(tbl.b) == "table" then
 				self.on("handoff", tbl.b, tonumber(tbl.pool) or 0, sender)
 			end
+		end
+	elseif k == "said" then
+		if Protocol:IsCount(tbl.s, 1, Protocol.MAX_SEATS) and Protocol:IsCount(tbl.e, 1, #Protocol.EMOTES) then
+			self.on("said", tbl.s, tbl.e)
 		end
 	elseif k == "settle" then
 		local l = tbl.l

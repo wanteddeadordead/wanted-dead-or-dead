@@ -883,7 +883,9 @@ function TableUI:Refresh(st)
 	if mine then
 		private.sitOut:SetText(mine.out and mine.out ~= "busted" and "I'm back" or "Sit out")
 		private.sitOut:SetEnabled(mine.out ~= "busted")
-		private.rebuy:SetShown(not tournament and st.phase ~= "closed" and st.phase ~= "playing" and (mine.s or 0) < cfg.buyMax and (mine.out == "busted" or (mine.s or 0) < cfg.buyMin))
+		-- A rebuy any time you're not in a hand: between hands, or while one plays without you (busted, sitting out, folded)
+		local dealtIn = playing and mine.tot ~= nil and not mine.f
+		private.rebuy:SetShown(not tournament and st.phase ~= "closed" and not dealtIn and (mine.s or 0) < cfg.buyMax and (mine.out == "busted" or (mine.s or 0) < cfg.buyMin))
 	else
 		private.rebuy:Hide()
 	end

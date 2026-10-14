@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: Wanted: Dead Man's Hand Poker
+## IconTexture: Interface\AddOns\WantedDeadOrDead\Media\icon
+## Notes: Texas hold'em at the Wanted: Dead or... Dead table: a deal no player can rig, play chips or gold, settled by mail.
+## Author: Wanted: Dead or... Dead
+## Version: @project-version@
+## Dependencies: WantedDeadOrDead
+## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
+## X-License: MIT
+
+Core.lua
+Engine.lua
+Deal.lua

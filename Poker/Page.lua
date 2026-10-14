@@ -14,11 +14,16 @@ local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 268 -- the form (three rows) with how it works under it
--- Blinds to pick from: chips, and at a gold table silver pieces (5s/10s up to 5g/10g)
-local BLINDS = {
-	chips = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } },
-	gold = { { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 }, { key = "500/1000", sb = 500, bb = 1000 } },
-}
+-- Blinds to pick from: the card room's standard structures, in chips, or at a gold table in copper, silver or gold
+-- (a gold table's chip is a copper piece)
+local UNITS = { { key = "copper", label = "Copper", mult = 1 }, { key = "silver", label = "Silver", mult = 100 }, { key = "gold", label = "Gold", mult = 10000 } }
+local STRUCTURES = { { 1, 2 }, { 2, 5 }, { 5, 10 }, { 10, 20 }, { 25, 50 }, { 50, 100 }, { 100, 200 } }
+local BLINDS = { chips = {} }
+for _, st in ipairs(STRUCTURES) do BLINDS.chips[#BLINDS.chips + 1] = { key = st[1].."/"..st[2], sb = st[1], bb = st[2] } end
+for _, u in ipairs(UNITS) do
+	BLINDS[u.key] = {}
+	for _, st in ipairs(STRUCTURES) do BLINDS[u.key][#BLINDS[u.key] + 1] = { key = u.key..":"..st[1].."/"..st[2], sb = st[1] * u.mult, bb = st[2] * u.mult } end
+end
 local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100 -- the buy-in range offered when the blinds are picked; the host sets their own
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
@@ -32,7 +37,7 @@ local HOW_IT_WORKS = table.concat({
 }, "\n")
 
 local function Settings()
-	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10 }
+	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips", kind = "cash", startStack = 1500, levelMinutes = 10, unit = "silver" }
 	return Poker.db.host
 end
 
@@ -46,12 +51,22 @@ local function Stakes()
 	return Settings().stakes == "gold" and "gold" or "chips"
 end
 
+-- The money a gold table's blinds are in: copper, silver or gold
+local function Unit()
+	local unit = Settings().unit
+	return BLINDS[unit] and unit ~= "chips" and unit or "silver"
+end
+
+local function BlindsList()
+	return Stakes() == "gold" and BLINDS[Unit()] or BLINDS.chips
+end
+
 local function Blinds(key)
-	local list = BLINDS[Stakes()]
+	local list = BlindsList()
 	for _, b in ipairs(list) do
 		if b.key == key then return b end
 	end
-	return list[3]
+	return Stakes() == "gold" and list[1] or list[4]
 end
 
 local function Money(n)
@@ -136,6 +151,14 @@ function private.BuildForm(parent, width)
 	yoursLabel:SetPoint("LEFT", private.maxBox, "RIGHT", 10, 0)
 	private.buyinBox = W:Input(form, 76, "yours")
 	private.buyinBox:SetPoint("LEFT", yoursLabel, "RIGHT", 6, 0)
+	-- A gold table's money: the blinds and buy-ins in copper, silver or gold
+	private.unitLabel = Theme:Text(form, "small", "in", C.muted)
+	private.unitLabel:SetPoint("LEFT", private.buyinBox, "RIGHT", 12, 0)
+	local unitChoices = {}
+	for _, u in ipairs(UNITS) do unitChoices[#unitChoices + 1] = { key = u.key, label = u.label } end
+	private.unit = W:Choice(form, 76, unitChoices, function(key) Settings().unit = key private.RefreshBuyin(true) end)
+	private.unit:SetPoint("LEFT", private.unitLabel, "RIGHT", 6, 0)
+	private.unit:SetChoice(s.unit or "silver")
 	local go = W:Button(form, "Host table", "primary", 100, 26, private.Host)
 	go:SetPoint("TOPRIGHT", -14, -62)
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
@@ -154,9 +177,12 @@ end
 function private.RefreshBuyin(reset)
 	local stakes = Stakes()
 	local choices = {}
-	for _, b in ipairs(BLINDS[stakes]) do
+	for _, b in ipairs(BlindsList()) do
 		choices[#choices + 1] = { key = b.key, label = Protocol:Money(b.sb, stakes).."/"..Protocol:Money(b.bb, stakes) }
 	end
+	private.unitLabel:SetShown(stakes == "gold" and Settings().kind ~= "tournament")
+	private.unit:SetShown(stakes == "gold" and Settings().kind ~= "tournament")
+	private.unit:SetChoice(Unit())
 	private.blinds:SetChoices(choices)
 	local b = Blinds(Settings().blinds)
 	Settings().blinds = b.key

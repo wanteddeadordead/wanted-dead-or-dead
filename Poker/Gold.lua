@@ -27,7 +27,7 @@ Gold.UNPAID_AFTER_SECONDS = 48 * 60 * 60
 local SEND_ANSWER_SECONDS = 30
 local CLOSE_GRACE_SECONDS = 10
 local ASK_SECONDS = 60
-local COPPER = 100 -- a gold table's chip is a silver piece
+local COPPER = 1 -- a gold table's chip is a copper piece: the game's own money unit, so mail and trades need no conversion
 -- Lines that are debts (the host owes), as against receipts, which are paid as they're made
 local DEBT = { cashout = true, prize = true, refund = true }
 local function Money(chips) return Protocol:Money(chips, "gold") end
@@ -81,7 +81,7 @@ end
 
 ---Records a line, once. A real line from the host replaces a claim this client made for the same table and player
 ---when the host dropped; a claim never replaces a real line.
----@param line table { id, table, title?, host, at, from, to, amount (silver), kind?, paid?, paidHow?, claim? }
+---@param line table { id, table, title?, host, at, from, to, amount (copper), kind?, paid?, paidHow?, claim? }
 function Gold:Add(line)
 	if type(line) ~= "table" or type(line.id) ~= "string" then
 		return
@@ -152,7 +152,7 @@ function Gold:IsOverdue(line)
 	return Gold:IsDebt(line) and not line.paid and time() - (line.at or 0) > Gold.UNPAID_AFTER_SECONDS
 end
 
----What this character still owes, in silver, across every line.
+---What this character still owes, in copper, across every line.
 ---@return number
 function Gold:Owing()
 	local me, total = Net:Me(), 0
@@ -177,8 +177,8 @@ function Gold:DebtsTo(name)
 	return list
 end
 
----Whether this character can buy in for an amount (silver): the money in their bags, less what they still owe.
----@param amount number silver
+---Whether this character can buy in for an amount (copper): the money in their bags, less what they still owe.
+---@param amount number copper
 ---@return boolean ok
 ---@return string? reason
 function Gold:CanBuyIn(amount)
@@ -197,10 +197,10 @@ function private.Notify()
 end
 
 -- The oldest unpaid debt from one player to another that an amount covers
-local function LineCovered(from, to, silver)
+local function LineCovered(from, to, copper)
 	local best
 	for _, l in ipairs(Poker.db.ledger) do
-		if Gold:IsDebt(l) and not l.paid and not l.claim and SameName(l.from, from) and SameName(l.to, to) and silver >= l.amount and (not best or (l.at or 0) < (best.at or 0)) then
+		if Gold:IsDebt(l) and not l.paid and not l.claim and SameName(l.from, from) and SameName(l.to, to) and copper >= l.amount and (not best or (l.at or 0) < (best.at or 0)) then
 			best = l
 		end
 	end
@@ -227,10 +227,10 @@ local function SubjectBuyIn(subject)
 end
 
 -- A receipt: money that changed hands for a table, recorded on the spot
-local function Receipt(tableId, title, from, to, silver, kind, how)
+local function Receipt(tableId, title, from, to, copper, kind, how)
 	private.receipts = (private.receipts or 0) + 1
 	Gold:Add({ id = tableId..":in:"..Short(from)..":"..time()..":"..private.receipts, table = tableId, title = title, host = Protocol:HostOf(tableId) or to, at = time(),
-		from = from, to = to, amount = silver, kind = kind, paid = time(), paidHow = how })
+		from = from, to = to, amount = copper, kind = kind, paid = time(), paidHow = how })
 end
 
 -- ============================================================================
@@ -240,21 +240,21 @@ end
 ---Money came in from a player (a trade, a mail): a buy-in for the table this character hosts, or the payment of a
 ---line they owed. Returns what it was.
 ---@param name string
----@param silver number
+---@param copper number
 ---@param how string "trade" | "mail"
 ---@return string? "buyin" | "paid" | "received"
-function Gold:Received(name, silver, how)
+function Gold:Received(name, copper, how)
 	local me = Net:Me()
 	local host = Net:HostedTable()
 	if host and host.cfg.stakes == "gold" and host.open then
-		local due = host:Paid(name, silver, how)
-		Receipt(host.id, host.cfg.title, name, me, silver, due and "buyin" or "received", how)
-		Wanted:Print(due and "Poker: %s paid %s for their seat (%s)." or "Poker: %s sent %s nobody asked for (%s): it's owed back, see Settlement.", Short(name), Money(silver), how)
+		local due = host:Paid(name, copper, how)
+		Receipt(host.id, host.cfg.title, name, me, copper, due and "buyin" or "received", how)
+		Wanted:Print(due and "Poker: %s paid %s for their seat (%s)." or "Poker: %s sent %s nobody asked for (%s): it's owed back, see Settlement.", Short(name), Money(copper), how)
 		return due and "buyin" or "received"
 	end
-	local line = LineCovered(name, me, silver)
+	local line = LineCovered(name, me, copper)
 	if line and Gold:MarkPaid(line.id, how) then
-		Wanted:Print("Poker: %s paid you %s (%s).", Short(name), Money(silver), how)
+		Wanted:Print("Poker: %s paid you %s (%s).", Short(name), Money(copper), how)
 		return "paid"
 	end
 	return nil
@@ -262,21 +262,21 @@ end
 
 ---Money went out to a player (a trade, a mail): this character's buy-in to their host, or a line paid.
 ---@param name string
----@param silver number
+---@param copper number
 ---@param how string
 ---@return string? "buyin" | "paid"
-function Gold:Gave(name, silver, how)
+function Gold:Gave(name, copper, how)
 	local me = Net:Me()
 	local st = Net:State()
 	local mine = st and st.me and st.seats[st.me]
 	if st and st.cfg and st.cfg.stakes == "gold" and SameName(st.host, name) and mine and (mine.unpaid or mine.rebuyDue) then
-		Receipt(st.t, st.cfg.title, me, st.host, silver, "buyin", how)
-		Wanted:Print("Poker: %s paid to %s for your seat (%s).", Money(silver), Short(name), how)
+		Receipt(st.t, st.cfg.title, me, st.host, copper, "buyin", how)
+		Wanted:Print("Poker: %s paid to %s for your seat (%s).", Money(copper), Short(name), how)
 		return "buyin"
 	end
-	local line = LineCovered(me, name, silver)
+	local line = LineCovered(me, name, copper)
 	if line and Gold:MarkPaid(line.id, how) then
-		Wanted:Print("Poker: paid %s to %s (%s).", Money(silver), Short(name), how)
+		Wanted:Print("Poker: paid %s to %s (%s).", Money(copper), Short(name), how)
 		return "paid"
 	end
 	return nil
@@ -374,26 +374,26 @@ function private.OnSendMail(recipient, subject)
 	if (GetSendMailCOD and (GetSendMailCOD() or 0) > 0) or type(amount) ~= "number" or amount < COPPER then
 		return
 	end
-	local silver = floor(amount / COPPER)
+	local copper = floor(amount / COPPER)
 	local tableId = SubjectBuyIn(subject)
 	if tableId then
-		private.pendingSend = { buyin = true, recipient = recipient, amount = silver, at = GetTime() }
+		private.pendingSend = { buyin = true, recipient = recipient, amount = copper, at = GetTime() }
 		return
 	end
 	local line
 	local id = SubjectLine(subject)
 	if id then
 		line = LineById(id)
-		if not line or line.paid or not SameName(line.from, Net:Me()) or not SameName(line.to, recipient) or silver < line.amount then
+		if not line or line.paid or not SameName(line.from, Net:Me()) or not SameName(line.to, recipient) or copper < line.amount then
 			return
 		end
 	else
-		line = LineCovered(Net:Me(), recipient, silver)
+		line = LineCovered(Net:Me(), recipient, copper)
 	end
 	if not line then
 		return
 	end
-	private.pendingSend = { lineId = line.id, recipient = recipient, amount = silver, at = GetTime() }
+	private.pendingSend = { lineId = line.id, recipient = recipient, amount = copper, at = GetTime() }
 end
 
 function private.OnEvent(_, event, ...)
@@ -433,29 +433,29 @@ function private.ScanInbox()
 	for i = 1, GetInboxNumItems() do
 		local _, _, sender, subject, money, cod = GetInboxHeaderInfo(i)
 		if type(money) == "number" and money >= COPPER and not (type(cod) == "number" and cod > 0) and type(sender) == "string" then
-			local silver = floor(money / COPPER)
+			local copper = floor(money / COPPER)
 			local buyinFor = SubjectBuyIn(subject)
 			local mark = sender.."|"..tostring(subject).."|"..money
 			if host and host.cfg.stakes == "gold" and host.open and (buyinFor == host.id or (not buyinFor and private.SeatDue(host, sender))) then
 				if not private.seenInbox[mark] then
 					private.seenInbox[mark] = true
-					Gold:Received(sender, silver, "mail")
+					Gold:Received(sender, copper, "mail")
 				end
 			else
 				local line
 				local id = SubjectLine(subject)
 				if id then
 					line = LineById(id)
-					if line and (line.paid or not SameName(line.to, me) or not SameName(line.from, sender) or silver < line.amount) then
+					if line and (line.paid or not SameName(line.to, me) or not SameName(line.from, sender) or copper < line.amount) then
 						line = nil
 					end
 				else
-					line = LineCovered(sender, me, silver)
+					line = LineCovered(sender, me, copper)
 				end
 				if line and not private.seenInbox[line.id] then
 					private.seenInbox[line.id] = true
 					if Gold:MarkPaid(line.id, "mail") then
-						Wanted:Print("Poker: %s paid you %s (mail).", Short(sender), Money(silver))
+						Wanted:Print("Poker: %s paid you %s (mail).", Short(sender), Money(copper))
 					end
 				end
 			end

@@ -34,7 +34,7 @@ Protocol.AD_STALE_SECONDS = 120 -- and forgotten when not heard for this long
 Protocol.JOIN_RETRY_SECONDS = 5 -- a join unanswered this long is sent again
 Protocol.SYNC_SECONDS = 20 -- a player whose last message brought no new state asks for it after this long
 Protocol.MIN_TURN_SECONDS, Protocol.MAX_TURN_SECONDS, Protocol.DEFAULT_TURN_SECONDS = 15, 90, 30
--- Tournaments: the blind levels, in chips, and how prizes split by how many entered (the host is the bank)
+-- Tournaments: the blind levels, in chips, and how prizes split by how many entered (the host holds the entries)
 Protocol.SCHEDULE = { { 10, 20 }, { 15, 30 }, { 25, 50 }, { 50, 100 }, { 75, 150 }, { 100, 200 }, { 150, 300 }, { 200, 400 }, { 300, 600 }, { 400, 800 }, { 500, 1000 }, { 700, 1400 }, { 1000, 2000 }, { 1500, 3000 }, { 2000, 4000 } }
 Protocol.START_STACKS = { 1000, 1500, 3000 }
 Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES = 1, 60
@@ -59,7 +59,7 @@ function Protocol:PrizeShares(entrants)
 	return { 1 }
 end
 
----The prizes, in chips of money (silver), for a pool: whole amounts, the rounding left to first place.
+---The prizes, in chips of money (copper), for a pool: whole amounts, the rounding left to first place.
 ---@param pool number
 ---@param entrants number
 ---@return number[] prize by place
@@ -74,7 +74,8 @@ function Protocol:Prizes(pool, entrants)
 	return prizes
 end
 
----An amount shown: chips as a number; at a gold table a chip is a silver piece, shown as gold and silver ("2g 50s").
+---An amount shown: chips as a number; at a gold table a chip is a copper piece, shown as gold, silver and copper
+---("2g 50s", "75c", "1g 5c").
 ---@param chips number
 ---@param stakes string? "chips" | "gold"
 ---@return string
@@ -83,14 +84,16 @@ function Protocol:Money(chips, stakes)
 	if stakes ~= "gold" then
 		return tostring(chips)
 	end
-	local g, s = floor(chips / 100), chips % 100
-	if g > 0 and s > 0 then return g.."g "..s.."s" end
-	if g > 0 then return g.."g" end
-	return s.."s"
+	local g, s, c = floor(chips / 10000), floor(chips / 100) % 100, chips % 100
+	local parts = {}
+	if g > 0 then parts[#parts + 1] = g.."g" end
+	if s > 0 then parts[#parts + 1] = s.."s" end
+	if c > 0 or #parts == 0 then parts[#parts + 1] = c.."c" end
+	return table.concat(parts, " ")
 end
 
----An amount typed: a number of chips, or at a gold table gold and silver ("10g", "2g 50s", "75s"; a bare number is
----gold). Nil when it isn't one.
+---An amount typed: a number of chips, or at a gold table gold, silver and copper ("10g", "2g 50s", "75s", "5c"; a
+---bare number is gold). Nil when it isn't one.
 ---@param text string
 ---@param stakes string? "chips" | "gold"
 ---@return number? chips
@@ -103,21 +106,19 @@ function Protocol:ParseAmount(text, stakes)
 	end
 	local plain = tonumber(text)
 	if plain then
-		local silver = floor(plain * 100 + 0.5)
-		return silver >= 0 and silver or nil
+		local copper = floor(plain * 10000 + 0.5)
+		return copper >= 0 and copper or nil
 	end
-	local total, rest = 0, text
-	local g = strmatch(rest, "^(%d+)%s*g")
-	if g then
-		total = total + tonumber(g) * 100
-		rest = gsub(rest, "^%d+%s*g%s*", "")
+	local total, rest, any = 0, text, false
+	for _, unit in ipairs({ { "g", 10000 }, { "s", 100 }, { "c", 1 } }) do
+		local n = strmatch(rest, "^(%d+)%s*"..unit[1])
+		if n then
+			total = total + tonumber(n) * unit[2]
+			rest = gsub(rest, "^%d+%s*"..unit[1].."%s*", "")
+			any = true
+		end
 	end
-	local s = strmatch(rest, "^(%d+)%s*s")
-	if s then
-		total = total + tonumber(s)
-		rest = gsub(rest, "^%d+%s*s%s*", "")
-	end
-	if rest ~= "" or (not g and not s) then return nil end
+	if rest ~= "" or not any then return nil end
 	return total
 end
 

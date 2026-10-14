@@ -240,6 +240,35 @@ function Engine:Describe(cards)
 	return RANK_WORDS[top].." high"
 end
 
+---When two hands are the same kind and the better one won on a kicker, that kicker: "king". Nil when the hands
+---differ in kind or in the ranks that make them.
+---@param winner number[] five to seven cards
+---@param loser number[]
+---@return string? rank word
+function Engine:DecidingKicker(winner, loser)
+	local a, catA = Engine:Evaluate(winner)
+	local b, catB = Engine:Evaluate(loser)
+	if catA ~= catB or a <= b then
+		return nil
+	end
+	local va, vb = {}, {}
+	for i = 5, 1, -1 do
+		va[i], vb[i] = a % 15, b % 15
+		a, b = floor(a / 15), floor(b / 15)
+	end
+	-- The ranks that make the hand come first; a difference there isn't a kicker
+	local made = ({ ["high card"] = 1, pair = 1, ["two pair"] = 2, ["three of a kind"] = 1, ["full house"] = 2, ["four of a kind"] = 1 })[catA]
+	if not made then
+		return nil
+	end
+	for i = 1, 5 do
+		if va[i] ~= vb[i] then
+			return i > made and RANK_WORDS[va[i]] or nil
+		end
+	end
+	return nil
+end
+
 -- ============================================================================
 -- A hand
 -- ============================================================================

@@ -37,7 +37,38 @@ local SEAT_BORDER = { 1, 1, 1, 0.1 }
 local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
 local CARD_W, CARD_H = 46, 64
 local CHIP = 14 -- a chip by a bet
-local CHIP_COLORS = { { 1, 1, 1 }, { 1, 0.82, 0.35 }, { 0.35, 1, 0.45 }, { 0.45, 0.65, 1 }, { 0.3, 0.3, 0.32 } } -- white, gold, green, blue, black
+-- Chip denominations in big blinds, largest first, coloured like a rack: purple 500, black 100, green 25, red 5, white 1.
+-- A stack is the amount counted out in these, so the chips on the felt add up to the number beside them
+local DENOMINATIONS = { { 500, { 0.7, 0.4, 1 } }, { 100, { 0.3, 0.3, 0.32 } }, { 25, { 0.35, 1, 0.45 } }, { 5, { 1, 0.4, 0.4 } }, { 1, { 1, 1, 1 } } }
+local STACK_HEIGHT = 8 -- chips shown per stack at most
+
+-- Lays an amount out as stacks of chips, one stack per denomination used, from the anchor outward (right to left,
+-- or left to right when `rightward`). Returns how many textures it used
+local function LayStacks(chips, amount, bb, anchor, rightward, maxColumns)
+	local used, col = 0, 0
+	local units = max(amount > 0 and 1 or 0, floor(amount / max(1, bb)))
+	for _, denom in ipairs(DENOMINATIONS) do
+		local n = floor(units / denom[1])
+		if n > 0 and col < maxColumns then
+			units = units - n * denom[1]
+			n = min(n, STACK_HEIGHT)
+			col = col + 1
+			for row = 1, n do
+				used = used + 1
+				local chip = chips[used]
+				if not chip then break end
+				chip:ClearAllPoints()
+				local dx = (col - 1) * (CHIP - 1) + 5
+				if rightward then chip:SetPoint("LEFT", anchor, "RIGHT", dx, (row - 1) * 3) else chip:SetPoint("RIGHT", anchor, "LEFT", -dx, (row - 1) * 3) end
+				chip:SetVertexColor(denom[2][1], denom[2][2], denom[2][3], 1)
+				chip:Show()
+			end
+		end
+	end
+	for i = used + 1, #chips do chips[i]:Hide() end
+	return used
+end
+TableUI.LayStacks = LayStacks
 local SMALL_W, SMALL_H = 34, 48
 
 local function Name(full)
@@ -127,11 +158,10 @@ local function BuildSeat(felt, k)
 	seat.bet:SetJustifyH("CENTER")
 	-- A stack of chips by the bet: Wanted's seal, one to four high by how big the bet is against the blind
 	seat.chips = {}
-	for i = 1, 4 do
-		local chip = felt:CreateTexture(nil, "ARTWORK", nil, i)
+	for i = 1, 3 * STACK_HEIGHT do
+		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT + 1)
 		chip:SetSize(CHIP, CHIP)
 		chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
-		chip:SetPoint("RIGHT", seat.bet, "LEFT", -5, (i - 1) * 3)
 		chip:Hide()
 		seat.chips[i] = chip
 	end
@@ -171,11 +201,7 @@ local function Place(seat, k, n, felt)
 	local dist = math.min(ex, ey) + 34
 	seat.bet:ClearAllPoints()
 	seat.bet:SetPoint("CENTER", felt, "CENTER", x + dx * dist, y + dy * dist)
-	-- The chips on the label's outer side, away from the board
-	for i, chip in ipairs(seat.chips) do
-		chip:ClearAllPoints()
-		if x > 1 then chip:SetPoint("LEFT", seat.bet, "RIGHT", 5, (i - 1) * 3) else chip:SetPoint("RIGHT", seat.bet, "LEFT", -5, (i - 1) * 3) end
-	end
+	seat.chipsRightward = x > 1 -- the chips on the label's outer side, away from the board
 	-- The dealer button on the corner facing the middle vertically, and on the side AWAY from the bet label (which sits
 	-- toward the middle): the left corner for seats on the left half, the right corner otherwise
 	seat.dealer:ClearAllPoints()
@@ -457,17 +483,12 @@ function private.Build()
 	private.pot:SetJustifyH("CENTER")
 	-- The pot's chips: up to five stacks of five, a chip a big blind, left of the amount
 	private.potChips = {}
-	for col = 1, 5 do
-		for row = 1, 5 do
-			local chip = felt:CreateTexture(nil, "ARTWORK", nil, row)
-			chip:SetSize(CHIP, CHIP)
-			chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
-			chip:SetPoint("RIGHT", private.pot, "LEFT", -6 - (col - 1) * (CHIP - 2), (row - 1) * 3)
-			local tint = CHIP_COLORS[col]
-			chip:SetVertexColor(tint[1], tint[2], tint[3], 1)
-			chip:Hide()
-			private.potChips[(col - 1) * 5 + row] = chip
-		end
+	for i = 1, 5 * STACK_HEIGHT do
+		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT + 1)
+		chip:SetSize(CHIP, CHIP)
+		chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
+		chip:Hide()
+		private.potChips[i] = chip
 	end
 	for i = 1, 5 do
 		local card = Cards:New(felt, CARD_W, CARD_H)
@@ -982,7 +1003,7 @@ function TableUI:Refresh(st)
 				seatFrame.stack:SetText("")
 				seatFrame.status:Set(nil)
 				seatFrame.won:Hide()
-				for i = 1, 4 do seatFrame.chips[i]:Hide() end
+				for _, chip in ipairs(seatFrame.chips) do chip:Hide() end
 				seatFrame.dealer:Set(nil)
 				seatFrame.cards[1]:Hide()
 				seatFrame.cards[2]:Hide()
@@ -1057,17 +1078,8 @@ function TableUI:Refresh(st)
 				-- The bet in front of them, or what they won
 				-- The chips by a bet: one to four high by its size against the big blind, and coloured like a rack: the small
 				-- blind's white, the big blind's gold, then green, blue and black as the bets grow
-				local stack, tint = 0, CHIP_COLORS[1]
-				if not showdown and playing and p.b and p.b > 0 then
-					local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
-					local x = p.b / bb
-					stack = x <= 2 and 1 or x <= 5 and 2 or x <= 20 and 3 or 4
-					tint = CHIP_COLORS[x < 1 and 1 or x <= 1 and 2 or x <= 5 and 3 or x <= 25 and 4 or 5]
-				end
-				for i = 1, 4 do
-					seatFrame.chips[i]:SetShown(i <= stack)
-					seatFrame.chips[i]:SetVertexColor(tint[1], tint[2], tint[3], 1)
-				end
+				local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
+				LayStacks(seatFrame.chips, (not showdown and playing and p.b) or 0, bb, seatFrame.bet, seatFrame.chipsRightward, 3)
 				if showdown and hand.results.payouts and hand.results.payouts[seat] then
 					seatFrame.bet:SetText(Theme:Colorize("+"..Chips(hand.results.payouts[seat], cfg), C.green))
 					seatFrame.bet:Show()
@@ -1099,12 +1111,7 @@ function TableUI:Refresh(st)
 		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
-	local potChips = 0
-	if hand and hand.pot and hand.pot > 0 and not showdown then
-		local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
-		potChips = max(1, min(25, floor(hand.pot / bb)))
-	end
-	for i, chip in ipairs(private.potChips) do chip:SetShown(i <= potChips) end
+	LayStacks(private.potChips, (hand and hand.pot and not showdown and hand.pot) or 0, (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1, private.pot, false, 5)
 	if cfg.kind == "tournament" and st.started then
 		private.info:SetText(("Level %d  -  blinds %d/%d%s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
 			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.lateOpen and "  -  late entry open" or "", hand and hand.key and ("  -  hand "..st.h) or ""))

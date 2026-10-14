@@ -84,10 +84,20 @@ The addon works on its own. The app is optional: it puts your fights on the site
 - **Hotspots**: the zones where enemy players are right now, busiest first, with their levels, the biggest
   guild there, PvP deaths and whether it's getting busier. Click a zone to open its map.
 
+## Poker
+
+Texas hold'em at the Wanted table, for when the hunting is done. The Poker page hosts a table or sits you at one
+another Wanted player is hosting: a cash game or a tournament, for chips, for gold, or for practice against computer
+players on play money. Every deal is shuffled from a secret each player's client makes, so nobody, the host included,
+can choose the deck, and every client checks the hand afterwards. Gold tables are cash on the table: your buy-in goes
+to the host first, by trade or by mail, and your stack comes back from them when you leave; the Settlement list keeps
+every line and a debt left two days counts against the host's reputation. Poker ships in the same download as a
+second addon, "Wanted: Dead Man's Hand Poker", on by default.
+
 ## Install
 
-Install from CurseForge, or download the latest release zip and extract the `WantedDeadOrDead` folder into
-`World of Warcraft\_classic_beta_\Interface\AddOns\` (the WoW Forever client).
+Install from CurseForge, or download the latest release zip and extract both folders, `WantedDeadOrDead` and
+`WantedDeadOrDead_Poker`, into `World of Warcraft\_classic_beta_\Interface\AddOns\` (the WoW Forever client).
 
 Open it with `/wanted` or the minimap button. Right-click the minimap button for the Nearby window.
 

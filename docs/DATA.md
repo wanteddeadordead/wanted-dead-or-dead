@@ -428,6 +428,31 @@ are held to their limits when read. A new key with defaults: no migration.
 `WantedDB.settings.lastPage` (from 1.5.0) is the window's page when it was last open; the window opens on Home when it's
 unset or that page is switched off. A new setting: no migration.
 
+## Poker's saved data (`WantedPokerDB`)
+
+The poker addon keeps its own saved-variables file, `WantedDeadOrDead_Poker.lua`, as `WantedPokerDB` (from 1.22.0).
+It has no layout number yet: every field has a default in its module's `OnLoad`, so adding one needs nothing. The
+rules above apply the moment a field is renamed, moved or changes meaning: add a layout number then, with a
+migration.
+
+- `ledger`: the settlement lines, newest last. A line is `{ id, table, title?, host, at, from, to, amount (copper),
+  kind, paid?, paidHow?, claim? }`. `kind` is `cashout`, `prize` or `refund` for a debt the host owes a player, or
+  `buyin` / `received` for a receipt (money that came in, marked paid as it's made). `paidHow` is `trade`, `mail` or
+  `hand` (the creditor's word). A `claim` is a line a player's client made when a gold host dropped; the host's own
+  line for the same table and player replaces it. Lines feed `Reputation` as paid and unpaid, like bounty claims.
+- `seat`: the table this character sat at, `{ id, host, buyin, password?, at }`, to take the seat again after a reload;
+  cleared on leaving, a refusal, a closed table or after six hours.
+- `host`: the host form's last choices (kind, stakes, blinds key, seats, turn, title, unit, stack, level length, late
+  entry, antes).
+- `options`: the table window's choices: `sounds`, `fourColor`, `popOnTurn`, and `sound` (a choice per poker sound:
+  `kit:NAME`, `lsm:Name` or `none`).
+- `window`: where the table window sits and its scale.
+
+The open debts and a snapshot of a gold table the character hosts are also written to character macros named
+`WantedPoker1` to `WantedPoker6` (the vault): the game writes saved variables only at logout, but a macro reaches the
+server at once, so a crash loses nothing. They're read back at login and merged into `ledger`; a table still in the
+vault then ended with the crash, and every seat is owed what it had.
+
 ## Shared records and the channel
 
 - Every message carries the sender's addon version (`v`). **The newest version wins**: when a client hears a

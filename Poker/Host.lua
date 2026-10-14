@@ -21,7 +21,8 @@ local function Copy(t)
 end
 
 ---Opens a table. The host sits down through their own client's join, like anyone else.
----@param o table { name, id?, cfg, send = fun(target, tbl), ad = fun(tbl)?, now = fun(): number, on = fun(event, ...)? }
+---@param o table { name, id?, cfg, send = fun(target, tbl), ad = fun(tbl)?, now = fun(): number, on = fun(event, ...)?,
+---blocked = fun(): boolean? (the game is refusing our messages: the clocks stop) }
 ---@return table? table
 ---@return string? reason
 function Host:New(o)
@@ -31,7 +32,7 @@ function Host:New(o)
 	end
 	local now = o.now()
 	local t = setmetatable({
-		name = o.name, id = o.id or Protocol:NewId(o.name, now), cfg = cfg, send = o.send, ad = o.ad, now = o.now, on = o.on or function() end,
+		name = o.name, id = o.id or Protocol:NewId(o.name, now), cfg = cfg, send = o.send, ad = o.ad, now = o.now, on = o.on or function() end, blocked = o.blocked,
 		term = o.term or 1, seq = 0, handNo = o.handNo or 0, attempt = 0,
 		seats = {}, -- seat -> { name, stack, out (false, or why: "away", "missed", "busted"), away (timeouts and misses in a row), since }
 		phase = "waiting", -- waiting | seeding | playing | showdown | closed
@@ -64,7 +65,7 @@ function Host:Restore(backup, o)
 			seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out }
 		end
 	end
-	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on,
+	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on, blocked = o.blocked,
 		term = (tonumber(backup.term) or 1) + 1, handNo = tonumber(backup.handNo) or 0, button = backup.button, seats = seats,
 		elapsed = tonumber(backup.elapsed), entrants = type(backup.entrants) == "table" and backup.entrants or nil, settled = tonumber(backup.settled), password = backup.password })
 end
@@ -691,6 +692,25 @@ function Table:Tick()
 		return
 	end
 	local now = self.now()
+	local since = self.lastTick and (now - self.lastTick) or 0
+	self.lastTick = now
+	if self.blocked and self.blocked() then
+		-- The game is refusing our messages (a boss fight, a PvP match): every clock stops where it is, and the beat
+		-- goes on so we learn when they go through again
+		if self.hs and self.hs.deadline then self.hs.deadline = self.hs.deadline + since end
+		self.nextHandAt = self.nextHandAt + since
+		if self.startedAt then self.startedAt = self.startedAt + since end
+		self.wasBlocked = true
+		if now - self.lastSent >= Protocol.BEAT_SECONDS then
+			self:Beat()
+		end
+		return
+	elseif self.wasBlocked then
+		-- Through again: everyone gets the table as it stands, clocks included
+		self.wasBlocked = nil
+		self:Bump()
+		self:Broadcast()
+	end
 	if self.phase == "waiting" and now >= self.nextHandAt then
 		self:StartSeedRound()
 	elseif self.phase == "seeding" and now >= self.hs.deadline then
@@ -752,6 +772,9 @@ function Table:Beat()
 end
 
 function Table:Advertise()
+	if not self.ad then
+		return -- a practice table is nobody's business
+	end
 	self.lastAd = self.now()
 	local taken = #self:Seated()
 	local sb, bb = self:Blinds()

@@ -12692,6 +12692,273 @@ end)()
 	ConfirmDialog()
 	check(Net:HostedTable() == nil, "cancelled")
 end)()
+-- Poker bots: a practice table's computer players (Poker/Bots.lua) read their cards like a rule player; at a table
+-- they join, shuffle, act and buy back in through the same messages as anyone, run by the host's own client; a
+-- tournament against them plays to the end
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Bots, Protocol, Engine = P.PokerHost, P.PokerBots, P.PokerProtocol, P.PokerEngine
+	local function Card(rank, suit) return Engine:Card(rank, suit) end
+	local function Near(a, b) return math.abs(a - b) < 0.001 end
+	-- Hole cards before the flop (Chen): aces 20 of 20, ace-king suited 12, jack-ten suited 9, a pair of fives 5, seven-deuce nothing
+	check(Bots:Preflop(Card(14, 4), Card(14, 3)) == 1, "a pair of aces is the best start")
+	check(Near(Bots:Preflop(Card(14, 4), Card(13, 4)), 0.6) and Near(Bots:Preflop(Card(11, 1), Card(10, 1)), 0.45), "suited high cards rate well: "..Bots:Preflop(Card(14, 4), Card(13, 4))..", "..Bots:Preflop(Card(11, 1), Card(10, 1)))
+	check(Near(Bots:Preflop(Card(5, 1), Card(5, 2)), 0.25) and Bots:Preflop(Card(7, 1), Card(2, 2)) == 0, "a small pair is middling, seven-deuce is nothing")
+	-- After the flop: top pair, the board's pair, nothing, a flush draw with two cards to come
+	check(Near(Bots:Strength({ Card(14, 4), Card(13, 4) }, { Card(14, 3), Card(7, 2), Card(2, 1) }), 0.55), "top pair")
+	check(Near(Bots:Strength({ Card(9, 1), Card(8, 2) }, { Card(13, 3), Card(13, 2), Card(2, 1), Card(5, 4), Card(3, 4) }), 0.12), "the board's pair is worth little")
+	check(Near(Bots:Strength({ Card(7, 1), Card(2, 2) }, { Card(14, 3), Card(13, 2), Card(12, 1) }), 0.1), "nothing")
+	local draw = Bots:Strength({ Card(9, 4), Card(8, 4) }, { Card(2, 4), Card(11, 4), Card(4, 2) })
+	check(draw > 0.35 and draw < 0.45, "a flush draw on the flop is worth a call: "..draw)
+	check(Bots:Strength({ Card(14, 4), Card(14, 3) }, { Card(14, 2), Card(14, 1), Card(2, 1), Card(3, 1), Card(4, 1) }) > 0.95, "four aces")
+	-- Decisions, with the dice fixed
+	local steady = Bots.STYLES[1]
+	local function Rng(v) return function() return v end end
+	local function State(o)
+		return { cfg = { bb = 20, kind = "cash" }, seats = { [1] = { s = o.stack or 1000, hole = o.hole }, [2] = { s = 1000 } },
+			hand = { key = "1.1", stage = "play", street = o.street, board = o.board or {}, pot = o.pot or 30, cur = o.cur or 20, legal = o.legal, log = {}, toAct = 1 } }
+	end
+	local aces = { Card(14, 4), Card(14, 3) }
+	local trash = { Card(7, 1), Card(2, 2) }
+	local action, amount = Bots:Decide(State({ hole = aces, street = "preflop", legal = { fold = true, call = 10, minRaise = 40, maxRaise = 1010 } }), 1, steady, Rng(0.5))
+	check(action == "raise" and amount == 50, "aces raise before the flop: "..action.." "..tostring(amount))
+	action = Bots:Decide(State({ hole = trash, street = "preflop", pot = 300, cur = 200, legal = { fold = true, call = 200 } }), 1, steady, Rng(0.5))
+	check(action == "fold", "seven-deuce folds to a raise: "..action)
+	action = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, legal = { fold = true, check = true, minBet = 20, maxBet = 1000 } }), 1, steady, Rng(0.5))
+	check(action == "check", "nothing checks when it's free: "..action)
+	action, amount = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, legal = { fold = true, check = true, minBet = 20, maxBet = 1000 } }), 1, steady, Rng(0))
+	check(action == "bet" and amount == 20, "and bluffs now and then: "..action.." "..tostring(amount))
+	action = Bots:Decide(State({ hole = { Card(14, 4), Card(13, 4) }, street = "flop", board = { Card(14, 3), Card(7, 2), Card(2, 1) }, pot = 150, cur = 50, legal = { fold = true, call = 50, minRaise = 150, maxRaise = 1000 } }), 1, steady, Rng(0.5))
+	check(action == "call", "top pair calls a bet: "..action)
+	action = Bots:Decide(State({ hole = aces, stack = 100, street = "preflop", legal = { fold = true, call = 10, minRaise = 40, maxRaise = 110 } }), 1, steady, Rng(0.5))
+	check(action == "allin", "short with a hand goes all in: "..action)
+
+	-- Settings: a practice table is chips only, keeps a seat for the host
+	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 3 }).bots == 3, "bots in the settings")
+	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 4 }) == nil, "the host keeps a seat")
+	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 2, stakes = "gold" }) == nil, "no gold against bots")
+	check(Protocol:Settings({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000 }).bots == 0, "none by default")
+
+	-- A cash table of four bots (the host's seat a bot too, so the table runs itself) delivered without a network,
+	-- the way Net does it; a bot's dice are its own, so the run is the same every time
+	math.randomseed(7)
+	local now = 30000
+	local function Now() return now end
+	local bots, host = {}, nil
+	local function Lcg(seed) local x = seed return function() x = (x * 1103515245 + 12345) % 2147483648 return x / 2147483648 end end
+	local function ToBot(target, tbl) if bots[target] then bots[target]:Receive("Host", ns.Sync:Decode(ns.Sync:Encode(tbl))) end end
+	host = Host:New({ name = "Host", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, bots = 3, turnSeconds = 20 }, send = ToBot, now = Now })
+	check(host and host.cfg.bots == 3, "a practice table opens")
+	local names = { "Host", Bots.NAMES[1], Bots.NAMES[2], Bots.NAMES[3] }
+	for i, name in ipairs(names) do
+		local bot = Bots:New({ name = name, style = Bots.STYLES[(i - 1) % #Bots.STYLES + 1], now = Now, rng = Lcg(i), send = function(_, tbl) host:Receive(name, ns.Sync:Decode(ns.Sync:Encode(tbl))) return true end })
+		bots[name] = bot
+		bot:Join("Host", host.id, 2000)
+	end
+	check(#host:Seated() == 4 and host.seats[2].name == Bots.NAMES[1] and host.seats[2].stack == 2000, "the bots sit with the table's top buy-in")
+	local function Tick(seconds)
+		for _ = 1, seconds do
+			now = now + 1
+			host:Tick()
+			for _, bot in pairs(bots) do bot:Tick() end
+		end
+	end
+	Tick(2)
+	check(host.phase == "playing", "the bots shuffled and the hand is dealt: "..host.phase)
+	local toAct = host.hand.toAct
+	local thinker = bots[host.seats[toAct].name]
+	check(thinker.turnKey and thinker.actAt and thinker.actAt > now - 1 and thinker.actAt <= now + Protocol.BOT_THINK_MAX, "a bot takes a moment over its turn: "..tostring(thinker.actAt and thinker.actAt - now))
+	Tick(Protocol.BOT_THINK_MAX)
+	check(host.hand.street == "done" or host.hand.toAct ~= toAct or host.phase ~= "playing", "and acts within its time")
+	Tick(600)
+	check(host.handNo >= 8, "hands are played one after another: "..host.handNo.." in ten minutes")
+	local stacks, bought, timeouts = 0, 0, 0
+	for _, p in pairs(host.seats) do stacks = stacks + p.stack bought = bought + p.bought timeouts = timeouts + p.away end
+	check(stacks == bought, "no chip is lost or made: "..stacks.." of "..bought)
+	check(timeouts == 0, "no bot ever times out")
+	local verified = 0
+	for _, bot in pairs(bots) do for _, a in pairs(bot.player.audits) do if a.ok then verified = verified + 1 end end end
+	check(verified >= host.handNo * 2, "the bots verify the deals like players: "..verified)
+	-- A bot that busts at a cash table buys back in
+	local poor
+	for seat, p in pairs(host.seats) do if seat ~= 1 then poor = poor or seat end end
+	host.seats[poor].stack = 0
+	host.seats[poor].out = "busted"
+	host.phase, host.hand, host.hs = "waiting", nil, nil
+	host.nextHandAt = now + 60
+	host:Bump()
+	host:Broadcast()
+	Tick(5)
+	check(host.seats[poor].stack == 2000 and host.seats[poor].out == false, "a busted bot buys back in: "..host.seats[poor].stack)
+
+	-- A tournament against bots runs to the end: one of them, or the host, holds every chip
+	bots = {}
+	local tourney = Host:New({ name = "Host", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 1, maxSeats = 4, bots = 3, turnSeconds = 20 }, send = ToBot, now = Now })
+	host = tourney
+	for i, name in ipairs(names) do
+		local bot = Bots:New({ name = name, style = Bots.STYLES[(i - 1) % #Bots.STYLES + 1], now = Now, rng = Lcg(10 + i), send = function(_, tbl) host:Receive(name, ns.Sync:Decode(ns.Sync:Encode(tbl))) return true end })
+		bots[name] = bot
+		bot:Join("Host", host.id, 0)
+	end
+	check(host:Start(), "the tournament starts with four entered")
+	local seconds = 0
+	while host.phase ~= "finished" and seconds < 3 * 3600 do
+		Tick(10)
+		seconds = seconds + 10
+	end
+	check(host.phase == "finished", "the tournament ends on its own: "..host.phase.." after "..seconds.."s, "..host.handNo.." hands")
+	local standings = host:Standings()
+	local places = {}
+	for _, row in ipairs(standings) do places[#places + 1] = row.place end
+	sort(places)
+	check(#places == 4 and places[1] == 1 and places[4] == 4, "every entrant has a place: "..table.concat(places, ","))
+	for _, row in ipairs(standings) do check(not row.left, "no bot walked out") end
+end)()
+
+-- Poker in instances: the game's chat messaging lockdown doesn't hold a plugin's whispers back (they go to players at
+-- the table), a refusal says why, and while the game refuses them the table's clocks stop on both sides
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Client, Protocol, Net, TableUI = P.PokerHost, P.PokerClient, P.PokerProtocol, P.PokerNet, P.PokerTable
+	local function Sent(target) local n = 0 for _, m in ipairs(addonSent) do if m.chatType == "WHISPER" and m.target == target then n = n + 1 end end return n end
+	addonSent = {}
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	ns.Sync:Greet("Locked Pal", "Other Realm")
+	check(Sent("Locked Pal") == 0, "Wanted's own whispers wait out the lockdown")
+	check(ns.Sync:SendPlugin(Protocol.TAG, { k = "sync", t = "x" }, "Seat-Realm") == true and Sent("Seat-Realm") == 1, "a table whisper goes during the lockdown")
+	lockdownNext = 1
+	local ok, why = ns.Sync:SendPlugin(Protocol.TAG, { k = "sync", t = "x" }, "Seat-Realm")
+	check(ok == false and why == "lockdown", "one the game refuses says so: "..tostring(why))
+	C_ChatInfo.InChatMessagingLockdown = nil
+	lockdownNext = nil
+
+	-- The host's clocks stop while the game refuses its messages; the player doesn't give the host up for gone
+	local now = 40000
+	local function Now() return now end
+	local blocked = false
+	local function Blocked() return blocked end
+	local nodes, queue = {}, {}
+	local refused = {} -- name -> true: the game refuses this one's messages (returned false, never delivered)
+	local function SendFrom(from) return function(target, tbl) queue[#queue + 1] = { from = from, to = target, text = ns.Sync:Encode(tbl) } return not (blocked or refused[from]) end end
+	local function Flush()
+		while #queue > 0 do
+			local m = tremove(queue, 1)
+			local node = nodes[m.to]
+			if node and not blocked and not refused[m.from] then
+				local tbl = ns.Sync:Decode(m.text)
+				if node.host and Protocol.TO_HOST[tbl.k] then node.host:Receive(m.from, tbl) end
+				if node.player and Protocol.TO_PLAYER[tbl.k] then node.player:Receive(m.from, tbl) end
+			end
+		end
+	end
+	local events = {}
+	local function Node(name)
+		local node = { name = name }
+		node.player = Client:New({ name = name, send = SendFrom(name), now = Now, blocked = Blocked, on = function(event) events[#events + 1] = name..":"..event end })
+		nodes[name] = node
+		return node
+	end
+	local function Tick(seconds) for _ = 1, seconds do now = now + 1 for _, node in pairs(nodes) do if node.host then node.host:Tick() end node.player:Tick() end Flush() end end
+	local ann, bob = Node("Ann-Realm"), Node("Bob-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, turnSeconds = 20 }, send = SendFrom("Ann-Realm"), now = Now, blocked = Blocked })
+	local host = ann.host
+	ann.player:Join("Ann-Realm", host.id, 1000)
+	bob.player:Join("Ann-Realm", host.id, 1000)
+	Flush()
+	Tick(2)
+	check(host.phase == "playing", "a hand under way: "..host.phase)
+	local toAct, deadline, seq = host.hand.toAct, host.hs.deadline, host.seq
+	blocked = true
+	Tick(45)
+	check(host.phase == "playing" and host.hand.toAct == toAct and host.seats[toAct].away == 0, "nobody times out while the game refuses the table's messages")
+	check(host.hs.deadline == deadline + 45, "the turn clock stood still: "..(host.hs.deadline - deadline))
+	check(bob.player.state.q == seq, "Bob heard nothing new")
+	local gone = false
+	for _, e in ipairs(events) do if e == "Bob-Realm:hostGone" then gone = true end end
+	check(not gone, "and didn't give the host up for gone")
+	blocked = false
+	Tick(1)
+	check(bob.player.state.q > seq and bob.player.state.hand.left >= 17, "through again: everyone gets the table with its clock where it stopped: "..tostring(bob.player.state.hand.left))
+	Tick(20)
+	check(host.hand.toAct ~= toAct or host.hand.street == "done" or host.phase ~= "playing", "then the turn runs out as usual")
+	-- A commitment the game refused goes again with the host's next state
+	host.phase, host.hand, host.hs, host.nextHandAt = "waiting", nil, nil, now
+	refused["Bob-Realm"] = true
+	Tick(1)
+	check(host.phase == "seeding" and host.hs.commits[1] and not host.hs.commits[2], "a hand is called: Ann's commitment is in, Bob's was refused")
+	refused["Bob-Realm"] = nil
+	host:SendState("Bob-Realm", "state")
+	Flush()
+	check(host.hs.commits[2], "Bob commits again on the next state")
+
+	-- Through Net and the window: a refused whisper to a seated player marks the table as waiting, and the status says so
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4 }, 1000), "a table through Net")
+	local netHost = Net:HostedTable()
+	local payload = ns.Sync:Encode({ k = "join", b = 1000, t = netHost.id, v = "0.1.0-dev" })
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:zq1:1/1:"..payload, "WHISPER", "Cal-Realm")
+	check(netHost.seats[2] and netHost.seats[2].name == "Cal-Realm", "Cal is seated by whisper")
+	TableUI:Show()
+	lockdownNext = 10
+	netHost:Beat()
+	check(Net:Blocked(), "the game refused the beat to Cal: the table is blocked")
+	check(OnScreen("The game is refusing table messages"), "the window says so")
+	lockdownNext = nil
+	clock = clock + 1
+	netHost:Beat()
+	check(not Net:Blocked(), "a whisper through again: not blocked")
+	-- The probe: a table whisper to ourselves, reported when it comes back
+	addonSent = {}
+	local from = #printed
+	Net:Probe()
+	local probe
+	for _, m in ipairs(addonSent) do if m.chatType == "WHISPER" and m.target == ns.Store:GetOrigin() and m.text:find("^P:") then probe = m.text end end
+	check(probe, "the probe whispers a table message to ourselves")
+	Fire("CHAT_MSG_ADDON", "WNTD", probe, "WHISPER", ns.Store:GetOrigin())
+	local said = false
+	for i = from + 1, #printed do said = said or printed[i]:find("came back", 1, true) ~= nil end
+	check(said, "and says when it comes back")
+	Net:Leave()
+	check(Net:HostedTable() == nil, "closed")
+end)()
+
+-- Poker UI, practice: Practice among the stakes fills the other seats with bots, advertises nothing and plays
+;(function()
+	local P = WantedPokerTestNS
+	local Net, TableUI, Bots = P.PokerNet, P.PokerTable, P.PokerBots
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
+	ns.UI:Show("poker")
+	check(OnScreen("HOST A TABLE") and OnScreen("Practice: pick Practice"), "the form, with practice explained")
+	local practice = Button("Practice")
+	check(practice, "Practice among the stakes")
+	practice._scripts.OnClick(practice)
+	WantedPokerDB.host.kind = "cash"
+	WantedPokerDB.host.seats = 3
+	addonSent = {}
+	local go = Button("Host table")
+	go._scripts.OnClick(go)
+	local host = Net:HostedTable()
+	check(host and host.cfg.bots == 2 and host.cfg.stakes == "chips" and #host:Seated() == 3, "hosting a practice table seats two bots: "..tostring(host and #host:Seated()))
+	local botsSeen = 0
+	for _ in pairs(Net:Bots()) do botsSeen = botsSeen + 1 end
+	local named = false
+	for _, name in ipairs(Bots.NAMES) do named = named or OnScreen(name) end
+	check(botsSeen == 2 and named, "the bots are at the table, by name")
+	local ads = 0
+	for _, m in ipairs(addonSent) do if m.text:find("^T:") then ads = ads + 1 end end
+	check(ads == 0, "a practice table is not advertised")
+	for _ = 1, 30 do
+		clock = clock + 1
+		host:Tick()
+		for _, bot in pairs(Net:Bots()) do bot:Tick() end
+	end
+	check(host.handNo >= 1 and (host.phase == "playing" or host.phase == "showdown" or host.phase == "seeding" or host.phase == "waiting"), "hands are dealt against the bots: "..host.handNo..", "..host.phase)
+	Net:Leave()
+	check(Net:HostedTable() == nil and next(Net:Bots()) == nil, "closing clears the bots")
+	WantedPokerDB.host.stakes = "chips"
+end)()
+
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

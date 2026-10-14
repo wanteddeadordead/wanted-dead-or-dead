@@ -36,6 +36,12 @@ Protocol.SCHEDULE = { { 10, 20 }, { 15, 30 }, { 25, 50 }, { 50, 100 }, { 75, 150
 Protocol.START_STACKS = { 1000, 1500, 3000 }
 Protocol.MIN_LEVEL_MINUTES, Protocol.MAX_LEVEL_MINUTES = 1, 60
 Protocol.ABSENT_BLIND_SECONDS = 0 -- an absent entrant loses a big blind every hand they miss
+-- A practice table: the host plays computer players run by their own client (Bots), for chips, never advertised
+Protocol.MAX_BOTS = Protocol.MAX_SEATS - 1
+Protocol.BOT_THINK_MIN, Protocol.BOT_THINK_MAX = 1, 4 -- a bot takes this long over its turn
+-- The game refused a table message (its addon message lockdown: a boss fight, a PvP match). The table's clocks stop
+-- until a message goes through again; the host's beat tries every BEAT_SECONDS, so this is two beats and a little
+Protocol.BLOCKED_SECONDS = 25
 
 ---How a tournament's prize pool splits: shares by place, for a number of entrants.
 ---@param entrants number
@@ -159,7 +165,7 @@ function Protocol:HostOf(id)
 end
 
 ---Checks a table's settings, filling in defaults. Returns the settings, or nil and what's wrong.
----@param cfg table { sb, bb, ante?, maxSeats?, buyMin, buyMax, turnSeconds?, stakes?, title? }
+---@param cfg table { sb, bb, ante?, maxSeats?, buyMin, buyMax, turnSeconds?, stakes?, title?, bots? }
 ---@return table? cfg
 ---@return string? reason
 function Protocol:Settings(cfg)
@@ -169,8 +175,14 @@ function Protocol:Settings(cfg)
 	local c = {
 		kind = cfg.kind or "cash", sb = cfg.sb, bb = cfg.bb, ante = cfg.ante or 0, maxSeats = cfg.maxSeats or 6, buyMin = cfg.buyMin, buyMax = cfg.buyMax,
 		turnSeconds = cfg.turnSeconds or Protocol.DEFAULT_TURN_SECONDS, stakes = cfg.stakes or "chips", title = cfg.title,
-		entry = cfg.entry, startStack = cfg.startStack, levelMinutes = cfg.levelMinutes,
+		entry = cfg.entry, startStack = cfg.startStack, levelMinutes = cfg.levelMinutes, bots = cfg.bots or 0,
 	}
+	if not Protocol:IsCount(c.bots, 0, Protocol.MAX_BOTS) then
+		return nil, ("a table takes up to %d computer players"):format(Protocol.MAX_BOTS)
+	end
+	if c.bots > 0 and c.stakes ~= "chips" then
+		return nil, "a practice table plays for chips"
+	end
 	if c.kind ~= "cash" and c.kind ~= "tournament" then
 		return nil, "a table is a cash game or a tournament"
 	end
@@ -196,6 +208,9 @@ function Protocol:Settings(cfg)
 	end
 	if not Protocol:IsCount(c.maxSeats, Protocol.MIN_SEATS, Protocol.MAX_SEATS) then
 		return nil, ("a table seats %d to %d"):format(Protocol.MIN_SEATS, Protocol.MAX_SEATS)
+	end
+	if c.bots >= c.maxSeats then
+		return nil, "a practice table keeps a seat for you"
 	end
 	if c.kind == "cash" and not (Protocol:IsCount(c.buyMin, c.bb) and Protocol:IsCount(c.buyMax, c.buyMin)) then
 		return nil, "the buy-in is at least a big blind, the most at least the least"

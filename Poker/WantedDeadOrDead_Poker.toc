@@ -15,6 +15,7 @@ Deal.lua
 Protocol.lua
 Host.lua
 Client.lua
+Bots.lua
 Net.lua
 Gold.lua
 Cards.lua

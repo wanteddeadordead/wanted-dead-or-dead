@@ -12,10 +12,11 @@ local Player = {}
 Player.__index = Player
 
 ---A player's client. Nothing happens until Join.
----@param o table { name, send = fun(target, tbl), now = fun(): number, on = fun(event, ...)? }
+---@param o table { name, send = fun(target, tbl): boolean?, now = fun(): number, on = fun(event, ...)?, blocked = fun(): boolean? }
+---A send that returns false didn't go (the game refused it); blocked says the game is refusing messages for now.
 ---@return table
 function Client:New(o)
-	return setmetatable({ name = o.name, send = o.send, now = o.now, on = o.on or function() end,
+	return setmetatable({ name = o.name, send = o.send, now = o.now, on = o.on or function() end, blocked = o.blocked,
 		id = nil, host = nil, seat = nil, state = nil, term = 0, seq = 0,
 		secrets = {}, -- hand key -> { secret, commit, committed, revealed }
 		audits = {}, -- hand key -> { ok, reason }
@@ -34,10 +35,12 @@ function Player:Join(host, id, buyin, password)
 	self:Send({ k = "join", b = buyin, pw = password })
 end
 
+---Sends to the host. Returns whether it went (false only when the game refused it).
+---@return boolean
 function Player:Send(tbl)
 	tbl.t = self.id
 	self.lastSent = self.now()
-	self.send(self.host, tbl)
+	return self.send(self.host, tbl) ~= false
 end
 
 ---Leaves the table.
@@ -172,14 +175,16 @@ function Player:AnswerSeedRound(st)
 			mine = { secret = secret, commit = Deal:Commit(secret) }
 			self.secrets[hand.key] = mine
 		end
+		-- Marked before it's sent: a host on this very client answers inside the send, with the next state. One the
+		-- game refused goes again with the host's next state
 		if not mine.committed then
 			mine.committed = true
-			self:Send({ k = "commit", h = hand.key, c = mine.commit })
+			if not self:Send({ k = "commit", h = hand.key, c = mine.commit }) then mine.committed = nil end
 		end
 	elseif hand.stage == "reveals" and mine and mine.committed and not mine.revealed then
 		if type(hand.commits) == "table" and hand.commits[self.seat] == mine.commit then
 			mine.revealed = true
-			self:Send({ k = "reveal", h = hand.key, s = mine.secret })
+			if not self:Send({ k = "reveal", h = hand.key, s = mine.secret }) then mine.revealed = nil end
 		elseif not mine.leftOut then
 			-- Our commitment isn't the one published: the deck can't be ours. Say so and keep the secret
 			mine.leftOut = true
@@ -280,6 +285,11 @@ function Player:Tick()
 		if now - self.joinedAt >= Protocol.JOIN_RETRY_SECONDS and now - self.lastSent >= Protocol.JOIN_RETRY_SECONDS then
 			self:Send({ k = "join", b = self.buyin, pw = self.password })
 		end
+		return
+	end
+	if self.blocked and self.blocked() then
+		-- The game is refusing messages (a boss fight, a PvP match): the host isn't gone, it's as cut off as we are
+		self.lastHeard = now
 		return
 	end
 	local silent = now - self.lastHeard

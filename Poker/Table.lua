@@ -24,6 +24,7 @@ local WIDTH, HEIGHT = 900, 560
 local HEADER = 26
 local LOG_WIDTH = 220
 local ACTION_H = 58
+local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE = 1.2, 0.7, 2 -- the whole table scales: dragged at its corner grip, kept in the saved window
 local STATUS_H = 24 -- the strip of rail under the felt where the status line goes (no seat can cover it there)
 local RAIL = { 0.26, 0.14, 0.07, 1 }
 local FELT = { 0.08, 0.21, 0.13, 1 }
@@ -134,8 +135,14 @@ function private.Build()
 	else
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
 	end
+	frame:SetScale(saved and saved.scale or DEFAULT_SCALE)
 	frame:Hide()
 	tinsert(UISpecialFrames, "WantedPokerTableFrame")
+	local function SaveWindow()
+		local point, _, _, x, y = frame:GetPoint(1)
+		if Poker.db then Poker.db.window = { point = point, x = x, y = y, scale = frame:GetScale() } end
+	end
+	private.SaveWindow = SaveWindow
 
 	local header = CreateFrame("Frame", nil, frame)
 	header:SetPoint("TOPLEFT", 1, -1)
@@ -147,8 +154,7 @@ function private.Build()
 	header:SetScript("OnDragStart", function() frame:StartMoving() end)
 	header:SetScript("OnDragStop", function()
 		frame:StopMovingOrSizing()
-		local point, _, _, x, y = frame:GetPoint(1)
-		if Poker.db then Poker.db.window = { point = point, x = x, y = y } end
+		SaveWindow()
 	end)
 	local mark = header:CreateTexture(nil, "ARTWORK")
 	mark:SetSize(3, 14)
@@ -281,7 +287,27 @@ function private.Build()
 	end)
 	private.log = log
 
+	-- The grip at the corner: drag it out for a bigger table, in for a smaller one (the whole window scales)
+	local grip = CreateFrame("Frame", nil, frame)
+	grip:SetSize(16, 16)
+	grip:SetPoint("BOTTOMRIGHT", -3, 3)
+	grip:SetFrameLevel(frame:GetFrameLevel() + 20)
+	grip:EnableMouse(true)
+	local gripTexture = grip:CreateTexture(nil, "OVERLAY")
+	gripTexture:SetAllPoints()
+	gripTexture:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+	grip:SetScript("OnMouseDown", function()
+		local x, y = GetCursorPosition()
+		private.sizing = { x = x, y = y, scale = frame:GetScale() }
+	end)
+	grip:SetScript("OnMouseUp", function()
+		private.sizing = nil
+		SaveWindow()
+	end)
+	W:AttachTooltip(grip, "Size", "Drag to make the table bigger or smaller.")
+
 	frame:SetScript("OnUpdate", function(_, elapsed)
+		if private.sizing then private.Size() end
 		private.sinceTick = (private.sinceTick or 0) + elapsed
 		if private.sinceTick >= 0.2 then
 			private.sinceTick = 0
@@ -290,6 +316,20 @@ function private.Build()
 	end)
 	private.frame = frame
 	return frame
+end
+
+-- The grip is held: the table's scale follows the cursor's distance from the window's middle
+function private.Size()
+	local s, frame = private.sizing, private.frame
+	local x, y = GetCursorPosition()
+	local eff = frame:GetEffectiveScale()
+	local cx = (frame:GetLeft() + frame:GetRight()) / 2 * eff
+	local cy = (frame:GetTop() + frame:GetBottom()) / 2 * eff
+	local was = max(math.abs(s.x - cx), math.abs(s.y - cy))
+	local now = max(math.abs(x - cx), math.abs(y - cy))
+	if was > 1 then
+		frame:SetScale(max(MIN_SCALE, min(MAX_SCALE, s.scale * now / was)))
+	end
 end
 
 -- ============================================================================

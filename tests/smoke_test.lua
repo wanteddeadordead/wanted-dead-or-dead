@@ -150,6 +150,7 @@ function Methods:SetPoint(point, ...)
 	end
 end
 function Methods:SetScale(scale) self._scale = scale end
+function Methods:GetScale() return self._scale or 1 end
 function Methods:CreateTexture() local t = NewMock("Texture") t._parent = self return t end
 Mock.fontStrings = {} -- every font string made, so tests can find text on screen
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end

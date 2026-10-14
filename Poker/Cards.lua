@@ -67,6 +67,7 @@ function Cards:New(parent, width, height, font)
 	f.back:SetPoint("BOTTOMRIGHT", -2, 2)
 	f.back:SetTexture(MEDIA.."card-back")
 	f.back:Hide()
+	f.raised, f.rise = false, false -- set, not left nil: a frame field the tests' mock would otherwise answer with a method
 	function f:SetCard(card)
 		self.card = card
 		if type(card) == "number" then
@@ -134,7 +135,7 @@ function Cards:New(parent, width, height, font)
 	function f:Settle()
 		local b = self.raised
 		if not b then return end
-		self.raised = nil
+		self.raised = false
 		if self.rise then self.rise:Stop() end
 		self:SetPoint(b[1], b[2], b[3], b[4], b[5])
 	end

@@ -38,6 +38,10 @@ function Host:New(o)
 		hand = nil, -- the engine's hand while one is played
 		hs = nil, -- the hand's session: players, commits, secrets, deck, deadline, stage, setup
 		button = o.button, open = true, nextHandAt = now, lastSent = now, lastAd = 0,
+		password = type(o.password) == "string" and o.password ~= "" and strlower(strtrim(o.password)) or nil, -- asked of anyone sitting down; never sent in the state
+		startedAt = o.elapsed and (now - o.elapsed) or nil, -- a tournament under way, and since when
+		entrants = o.entrants or {}, -- a tournament's players, by name: { seat, place?, left? }, kept after they bust or leave
+		settled = o.settled,
 	}, Table)
 	for seat, p in pairs(o.seats or {}) do
 		t.seats[seat] = { name = p.name, stack = p.stack, bought = p.bought or p.stack, out = type(p.out) == "string" and p.out or false, away = 0, since = now }
@@ -61,7 +65,8 @@ function Host:Restore(backup, o)
 		end
 	end
 	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on,
-		term = (tonumber(backup.term) or 1) + 1, handNo = tonumber(backup.handNo) or 0, button = backup.button, seats = seats })
+		term = (tonumber(backup.term) or 1) + 1, handNo = tonumber(backup.handNo) or 0, button = backup.button, seats = seats,
+		elapsed = tonumber(backup.elapsed), entrants = type(backup.entrants) == "table" and backup.entrants or nil, settled = tonumber(backup.settled), password = backup.password })
 end
 
 -- ============================================================================
@@ -97,12 +102,19 @@ function Table:Sit(name, buyin)
 	if self:SeatOf(name) then
 		return nil, "you're already seated"
 	end
+	local tournament = self.cfg.kind == "tournament"
+	if tournament and self.startedAt then
+		return nil, "the tournament has started"
+	end
 	if not Protocol:IsCount(buyin, self.cfg.buyMin, self.cfg.buyMax) then
-		return nil, ("the buy-in is %d to %d"):format(self.cfg.buyMin, self.cfg.buyMax)
+		return nil, tournament and ("the entry is %s"):format(Protocol:Money(self.cfg.entry, self.cfg.stakes)) or ("the buy-in is %d to %d"):format(self.cfg.buyMin, self.cfg.buyMax)
 	end
 	for seat = 1, self.cfg.maxSeats do
 		if not self.seats[seat] then
-			self.seats[seat] = { name = name, stack = buyin, bought = buyin, out = false, away = 0, since = self.now() }
+			self.seats[seat] = { name = name, stack = tournament and self.cfg.startStack or buyin, bought = buyin, out = false, away = 0, since = self.now() }
+			if tournament then
+				self.entrants[name] = { seat = seat }
+			end
 			self.on("sat", name, seat, buyin)
 			return seat
 		end
@@ -128,7 +140,26 @@ function Table:Stand(name)
 		self.hs.players[seat] = nil
 	end
 	self.seats[seat] = nil
-	self:Settle(seat, p)
+	if self.cfg.kind == "tournament" then
+		if self.startedAt and self.phase ~= "finished" and self.entrants[name] and not self.entrants[name].place then
+			-- Out of the running: the current place, the entry forfeited, their chips out of play
+			self.entrants[name].place, self.entrants[name].left = self:PlaceNow(), true
+			self:SettleAmount(name, -(p.bought or 0))
+			self.on("eliminated", name, self.entrants[name].place)
+			-- The last one standing wins: now, or once the hand under way has been shown
+			if self:PlaceNow() <= 2 then
+				if self.hand and self.hand.street ~= "done" then
+					self.finishPending = true
+				else
+					self.finishLater = true
+				end
+			end
+		elseif not self.startedAt then
+			self.entrants[name] = nil
+		end
+	else
+		self:Settle(seat, p)
+	end
 	self.on("stood", name, seat, p.stack)
 	if self.hand and self.hand.street == "done" and self.phase == "playing" then
 		self:Showdown()
@@ -184,7 +215,12 @@ function Table:Receive(sender, tbl)
 			self:SendState(sender, "welcome")
 			return
 		end
-		local seat, reason = self:Sit(sender, tbl.b)
+		local seat, reason
+		if self.password and (type(tbl.pw) ~= "string" or strlower(strtrim(tbl.pw)) ~= self.password) then
+			reason = "wrong password"
+		else
+			seat, reason = self:Sit(sender, tbl.b)
+		end
 		if seat then
 			self:Bump()
 			self:SendState(sender, "welcome")
@@ -224,7 +260,7 @@ function Table:Receive(sender, tbl)
 	elseif k == "rebuy" then
 		local p = self.seats[seat]
 		local inHand = self.hand and self.hand.street ~= "done" and self.hand.seats[seat] and not self.hand.seats[seat].folded
-		if not inHand and Protocol:IsCount(tbl.b, 1) and p.stack + tbl.b <= self.cfg.buyMax then
+		if self.cfg.kind ~= "tournament" and not inHand and Protocol:IsCount(tbl.b, 1) and p.stack + tbl.b <= self.cfg.buyMax then
 			p.stack = p.stack + tbl.b
 			p.bought = (p.bought or 0) + tbl.b
 			p.out, p.away = false, 0
@@ -285,8 +321,9 @@ end
 -- Who is dealt in: seated, not sitting out, with chips
 function Table:Players()
 	local players, n = {}, 0
+	local tournament = self.cfg.kind == "tournament"
 	for seat, p in pairs(self.seats) do
-		if not p.out and p.stack > 0 then
+		if p.stack > 0 and (tournament or not p.out) then
 			players[seat] = true
 			n = n + 1
 		end
@@ -294,8 +331,66 @@ function Table:Players()
 	return players, n
 end
 
+---A tournament's level now: 1 at the start, one more every levelMinutes.
+---@return number level
+---@return number secondsLeft in this level
+function Table:Level()
+	if self.cfg.kind ~= "tournament" or not self.startedAt then
+		return 1, 0
+	end
+	local length = self.cfg.levelMinutes * 60
+	local elapsed = self.now() - self.startedAt
+	local level = min(#Protocol.SCHEDULE, floor(elapsed / length) + 1)
+	return level, max(0, length - (elapsed % length))
+end
+
+---The blinds for the next hand: the table's, or a tournament's level.
+---@return number sb
+---@return number bb
+function Table:Blinds()
+	if self.cfg.kind == "tournament" then
+		local level = self:Level()
+		return Protocol.SCHEDULE[level][1], Protocol.SCHEDULE[level][2]
+	end
+	return self.cfg.sb, self.cfg.bb
+end
+
+---Starts a tournament: no more seats, the clock runs, the first hand is dealt.
+---@return boolean ok
+---@return string? reason
+function Table:Start()
+	if self.cfg.kind ~= "tournament" then
+		return false, "not a tournament"
+	end
+	if self.startedAt then
+		return false, "it has started"
+	end
+	if #self:Seated() < Protocol.MIN_SEATS then
+		return false, "it takes at least two players"
+	end
+	self.startedAt = self.now()
+	self.nextHandAt = self.now()
+	self:Bump()
+	self:Broadcast()
+	self:Backup()
+	if self.ad then self:Advertise() end
+	return true
+end
+
+---The place a player going out now finishes in: one more than the players still holding chips.
+function Table:PlaceNow()
+	local alive = 0
+	for _, p in pairs(self.seats) do
+		if p.stack > 0 then alive = alive + 1 end
+	end
+	return alive + 1
+end
+
 ---Calls the next hand: every player makes a secret and sends its commitment.
 function Table:StartSeedRound()
+	if self.cfg.kind == "tournament" and (not self.startedAt or self.phase == "finished") then
+		return false
+	end
 	local players, n = self:Players()
 	if n < Protocol.MIN_SEATS then
 		return false
@@ -349,6 +444,14 @@ function Table:SeedDeadline()
 		if p then
 			p.away = p.away + 1
 			if p.away >= Protocol.AWAY_TIMEOUTS then p.out = "missed" end
+			if self.cfg.kind == "tournament" and hs.stage == "commits" then
+				-- An absent entrant can't hold the table up: a big blind a hand leaves play until they're out
+				local _, bb = self:Blinds()
+				p.stack = max(0, p.stack - bb)
+				if p.stack == 0 then
+					self:Eliminate(seat)
+				end
+			end
 		end
 		hs.players[seat] = nil
 	end
@@ -397,8 +500,10 @@ function Table:DealHand()
 	for seat in pairs(hs.players) do
 		seats[seat] = { stack = self.seats[seat].stack, name = self.seats[seat].name }
 	end
-	hs.setup = { seats = Copy(seats), button = button, sb = self.cfg.sb, bb = self.cfg.bb, ante = self.cfg.ante }
-	self.hand = Engine:NewHand({ seats = seats, button = button, sb = self.cfg.sb, bb = self.cfg.bb, ante = self.cfg.ante, deck = deck })
+	local sb, bb = self:Blinds()
+	hs.setup = { seats = Copy(seats), button = button, sb = sb, bb = bb, ante = self.cfg.ante }
+	hs.level = self:Level()
+	self.hand = Engine:NewHand({ seats = seats, button = button, sb = sb, bb = bb, ante = self.cfg.ante, deck = deck })
 	Engine:Start(self.hand)
 	hs.stage = "play"
 	self.phase = "playing"
@@ -408,6 +513,16 @@ function Table:DealHand()
 end
 
 function Table:AfterAction()
+	-- A tournament deals in players sitting out, and plays their turn for them at once
+	if self.cfg.kind == "tournament" then
+		local hand = self.hand
+		local guard = 0
+		while hand.street ~= "done" and hand.toAct and self.seats[hand.toAct] and self.seats[hand.toAct].out and guard < 20 do
+			guard = guard + 1
+			local legal = Engine:Legal(hand, hand.toAct)
+			Engine:Act(hand, hand.toAct, legal and legal.check and "check" or "fold")
+		end
+	end
 	self.hs.deadline = self.now() + self.cfg.turnSeconds
 	self:Bump()
 	if self.hand.street == "done" then
@@ -419,12 +534,22 @@ end
 
 function Table:Showdown()
 	local hand, hs = self.hand, self.hs
+	local busted = {}
 	for seat, p in pairs(hand.seats) do
 		if self.seats[seat] then
 			self.seats[seat].stack = p.stack
 			if p.stack == 0 then
 				self.seats[seat].out = "busted"
+				busted[#busted + 1] = seat
 			end
+		end
+	end
+	if self.cfg.kind == "tournament" and #busted > 0 then
+		-- Two out in one hand: the one who started it with more chips places higher
+		sort(busted, function(a, b) return (hs.setup.seats[a] and hs.setup.seats[a].stack or 0) < (hs.setup.seats[b] and hs.setup.seats[b].stack or 0) end)
+		local alive = self:PlaceNow() - 1
+		for i, seat in ipairs(busted) do
+			self:Eliminate(seat, alive + #busted - i + 1)
 		end
 	end
 	self.phase = "showdown"
@@ -438,7 +563,84 @@ function Table:Showdown()
 		end
 	end
 	self.on("hand", self.handNo, hand, hs)
+	if self.cfg.kind == "tournament" and self:PlaceNow() <= 2 then
+		-- One player holds every chip: the tournament ends once the hand has been shown
+		self.finishPending = true
+	end
 	self:Backup()
+end
+
+---A tournament entrant is out: their place is one more than the players still holding chips, unless given (two
+---out in one hand).
+---@param seat number
+---@param place number?
+function Table:Eliminate(seat, place)
+	local p = self.seats[seat]
+	if not p then return end
+	local entrant = self.entrants[p.name]
+	if entrant and not entrant.place then
+		entrant.place = place or self:PlaceNow()
+		p.out, p.place = "busted", entrant.place
+		self.on("eliminated", p.name, entrant.place)
+	end
+end
+
+---A tournament's standings: every entrant by place (the winner first).
+---@return table[] { name, place, prize?, seat }
+function Table:Standings()
+	local list = {}
+	for name, e in pairs(self.entrants) do
+		list[#list + 1] = { name = name, place = e.place, seat = e.seat, left = e.left }
+	end
+	sort(list, function(a, b) return (a.place or 0) < (b.place or 0) end)
+	return list
+end
+
+---Ends a tournament: the last player with chips wins, the prizes are set by place, and at a gold table every
+---entrant's prize less their entry is settled with the host.
+function Table:Finish()
+	if self.phase == "finished" then return end
+	for _, p in pairs(self.seats) do
+		if p.stack > 0 and self.entrants[p.name] and not self.entrants[p.name].place then
+			self.entrants[p.name].place = 1
+			p.place = 1
+		end
+	end
+	local entrants = 0
+	for _ in pairs(self.entrants) do entrants = entrants + 1 end
+	local prizes = Protocol:Prizes(self.cfg.entry * entrants, entrants)
+	for name, e in pairs(self.entrants) do
+		e.prize = (not e.left and e.place and prizes[e.place]) or 0
+		if not e.left then
+			self:SettleAmount(name, e.prize - self.cfg.entry)
+		end
+	end
+	self.phase = "finished"
+	self.hand, self.hs = nil, nil
+	self.finishPending = nil
+	self:Bump()
+	self:Broadcast()
+	self.on("finished", self:Standings())
+	if self.ad then
+		self.open = false
+		self:Advertise()
+	end
+	self:Backup()
+end
+
+---Settles an amount of money with a player, the host being the bank: positive, the host owes them; negative, they
+---owe the host. Gold tables only; the host's own line is implied.
+---@param name string
+---@param net number
+function Table:SettleAmount(name, net)
+	if self.cfg.stakes ~= "gold" or name == self.name or net == 0 then
+		return
+	end
+	self.settled = (self.settled or 0) + 1
+	local line = { id = self.id..":"..self.settled, table = self.id, title = self.cfg.title, host = self.name, at = time(),
+		from = net < 0 and name or self.name, to = net < 0 and self.name or name, amount = math.abs(net) }
+	self.send(name, { k = "settle", t = self.id, l = line })
+	self.on("settle", line)
 end
 
 ---Closes the table: the final stacks go out and nothing more is dealt.
@@ -453,14 +655,17 @@ function Table:Close()
 			if self.seats[seat] then self.seats[seat].stack = p.stack + p.total end
 		end
 	end
+	local finished = self.phase == "finished"
 	self.phase = "closed"
 	self.hand, self.hs = nil, nil
 	self:Bump()
 	self:Broadcast()
-	for seat, p in pairs(self.seats) do
-		self:Settle(seat, p)
+	if self.cfg.kind ~= "tournament" then
+		for seat, p in pairs(self.seats) do
+			self:Settle(seat, p)
+		end
 	end
-	self.on("closed")
+	self.on("closed", finished)
 end
 
 ---At a gold table the host is the bank: a player who leaves (or is at the table when it closes) owes the host
@@ -472,15 +677,7 @@ function Table:Settle(seat, p)
 	if self.cfg.stakes ~= "gold" or p.name == self.name then
 		return
 	end
-	local net = p.stack - (p.bought or 0)
-	if net == 0 then
-		return
-	end
-	self.settled = (self.settled or 0) + 1
-	local line = { id = self.id..":"..self.settled, table = self.id, title = self.cfg.title, host = self.name, at = time(),
-		from = net < 0 and p.name or self.name, to = net < 0 and self.name or p.name, amount = math.abs(net) }
-	self.send(p.name, { k = "settle", t = self.id, l = line })
-	self.on("settle", line)
+	self:SettleAmount(p.name, p.stack - (p.bought or 0))
 end
 
 -- ============================================================================
@@ -489,7 +686,8 @@ end
 
 ---Runs the clock: deadlines, the next hand, heartbeats and ads. Call about once a second.
 function Table:Tick()
-	if not self.open then
+	if not self.open or self.phase == "finished" then
+		if self.phase == "finished" and self.open and self.now() - self.lastSent >= Protocol.BEAT_SECONDS then self:Beat() end
 		return
 	end
 	local now = self.now()
@@ -499,7 +697,13 @@ function Table:Tick()
 		self:SeedDeadline()
 	elseif self.phase == "playing" and now >= self.hs.deadline then
 		self:TimeOut()
+	elseif self.finishLater and self.phase ~= "playing" then
+		self.finishLater = nil
+		return self:Finish()
 	elseif self.phase == "showdown" and now >= self.nextHandAt then
+		if self.finishPending then
+			return self:Finish()
+		end
 		self.phase = "waiting"
 		self.hand = nil
 		self:StartSeedRound()
@@ -550,8 +754,11 @@ end
 function Table:Advertise()
 	self.lastAd = self.now()
 	local taken = #self:Seated()
-	self.ad({ id = self.id, h = self.name, n = self.cfg.title, s = taken, m = self.cfg.maxSeats, sb = self.cfg.sb, bb = self.cfg.bb,
-		g = self.cfg.stakes == "gold" and 1 or nil, lo = self.cfg.buyMin, hi = self.cfg.buyMax, c = not self.open and 1 or nil })
+	local sb, bb = self:Blinds()
+	self.ad({ id = self.id, h = self.name, n = self.cfg.title, s = taken, m = self.cfg.maxSeats, sb = sb, bb = bb,
+		g = self.cfg.stakes == "gold" and 1 or nil, lo = self.cfg.buyMin, hi = self.cfg.buyMax, c = (not self.open or self.phase == "finished") and 1 or nil,
+		k = self.cfg.kind == "tournament" and "t" or nil, e = self.cfg.entry, ss = self.cfg.startStack, lm = self.cfg.levelMinutes, on = self.startedAt and 1 or nil,
+		p = self.password and 1 or nil })
 end
 
 ---Sends every seat its view of the table.
@@ -572,8 +779,20 @@ function Table:StateFor(name)
 	local mySeat = self:SeatOf(name)
 	local hand, hs = self.hand, self.hs
 	local st = { t = self.id, host = self.name, e = self.term, q = self.seq, h = self.handNo, cfg = self.cfg, phase = self.phase, me = mySeat, seats = {}, open = self.open }
+	if self.cfg.kind == "tournament" then
+		local level, left = self:Level()
+		st.started = self.startedAt ~= nil
+		st.level, st.levelLeft = level, floor(left + 0.5)
+		st.levelBlinds = Protocol.SCHEDULE[level]
+		local nextLevel = Protocol.SCHEDULE[level + 1]
+		st.nextBlinds = nextLevel
+		if self.phase == "finished" or self.phase == "closed" then
+			st.standings = self:Standings()
+			for _, row in ipairs(st.standings) do row.prize = self.entrants[row.name] and self.entrants[row.name].prize end
+		end
+	end
 	for seat, p in pairs(self.seats) do
-		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil }
+		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil, place = p.place }
 		if hand and hand.seats[seat] then
 			local hp = hand.seats[seat]
 			s.s, s.b, s.tot = hp.stack, hp.bet, hp.total
@@ -628,7 +847,9 @@ function Table:BackupData()
 	for seat, p in pairs(self.seats) do
 		seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out or nil }
 	end
-	return { id = self.id, cfg = self.cfg, seats = seats, handNo = self.handNo, term = self.term, button = self.button, host = self.name }
+	return { id = self.id, cfg = self.cfg, seats = seats, handNo = self.handNo, term = self.term, button = self.button, host = self.name,
+		elapsed = self.startedAt and (self.now() - self.startedAt) or nil, entrants = self.cfg.kind == "tournament" and self.entrants or nil, settled = self.settled,
+		password = self.password }
 end
 
 function Table:Backup()

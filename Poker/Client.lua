@@ -26,11 +26,12 @@ end
 ---@param host string
 ---@param id string
 ---@param buyin number
-function Player:Join(host, id, buyin)
-	self.id, self.host, self.buyin, self.seat, self.state = id, host, buyin, nil, nil
+---@param password string? for a locked table
+function Player:Join(host, id, buyin, password)
+	self.id, self.host, self.buyin, self.password, self.seat, self.state = id, host, buyin, password, nil, nil
 	self.term, self.seq, self.left = 0, 0, false
 	self.joinedAt, self.lastHeard = self.now(), self.now()
-	self:Send({ k = "join", b = buyin })
+	self:Send({ k = "join", b = buyin, pw = password })
 end
 
 function Player:Send(tbl)
@@ -92,7 +93,8 @@ end
 ---@param sender string
 ---@param tbl table
 function Player:Receive(sender, tbl)
-	if type(tbl) ~= "table" or tbl.t ~= self.id or not Protocol.TO_PLAYER[tbl.k] or self.left then
+	-- After leaving, only the settlement the host sends on the way out is taken
+	if type(tbl) ~= "table" or tbl.t ~= self.id or not Protocol.TO_PLAYER[tbl.k] or (self.left and tbl.k ~= "settle") then
 		return
 	end
 	local k = tbl.k
@@ -276,7 +278,7 @@ function Player:Tick()
 	local now = self.now()
 	if not self.state then
 		if now - self.joinedAt >= Protocol.JOIN_RETRY_SECONDS and now - self.lastSent >= Protocol.JOIN_RETRY_SECONDS then
-			self:Send({ k = "join", b = self.buyin })
+			self:Send({ k = "join", b = self.buyin, pw = self.password })
 		end
 		return
 	end

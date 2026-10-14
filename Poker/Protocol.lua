@@ -55,6 +55,10 @@ Protocol.HOST_LOST_SECONDS = 120
 Protocol.HANDOFF_SECONDS = 30
 -- A pool traded to the next host counts toward a handoff for this long
 Protocol.POOL_SECONDS = 180
+-- A seat remembered across a reload: joined again this long after login, given up without an answer, forgotten after
+Protocol.REJOIN_DELAY_SECONDS = 4
+Protocol.REJOIN_GIVE_UP_SECONDS = 60
+Protocol.REJOIN_WINDOW_SECONDS = 6 * 60 * 60
 
 ---How a tournament's prize pool splits: shares by place, for a number of entrants.
 ---@param entrants number

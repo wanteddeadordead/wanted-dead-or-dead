@@ -70,13 +70,21 @@ function Cards:New(parent, width, height, font)
 	f.rank:SetFont(RANK_FONT, font == "small" and 15 or 19, "")
 	f.rank:SetPoint("TOPLEFT", 4, -3)
 	f.suitSmall = f:CreateTexture(nil, "ARTWORK")
-	-- The suits big enough to tell apart at a glance: a third of the card's width under the rank, two thirds in the corner
-	local small = max(12, floor(width * 0.34))
-	f.suitSmall:SetSize(small, small)
-	f.suitSmall:SetPoint("TOPLEFT", 4, -(height * 0.34))
+	-- The suits big enough to tell apart at a glance. A full card: a third of the width under the rank, two thirds in
+	-- the corner. A seat's small card has room for one mark only: the rank top left, the suit under it
 	f.suit = f:CreateTexture(nil, "ARTWORK")
-	f.suit:SetSize(floor(width * 0.64), floor(width * 0.64))
-	f.suit:SetPoint("BOTTOMRIGHT", -3, 3)
+	if font == "small" then
+		f.suitSmall:Hide()
+		f.suitSmall.never = true
+		f.suit:SetSize(floor(width * 0.56), floor(width * 0.56))
+		f.suit:SetPoint("BOTTOM", 0, 3)
+	else
+		local small = max(12, floor(width * 0.34))
+		f.suitSmall:SetSize(small, small)
+		f.suitSmall:SetPoint("TOPLEFT", 4, -(height * 0.34))
+		f.suit:SetSize(floor(width * 0.64), floor(width * 0.64))
+		f.suit:SetPoint("BOTTOMRIGHT", -3, 3)
+	end
 	f.back = f:CreateTexture(nil, "ARTWORK")
 	f.back:SetPoint("TOPLEFT", 2, -2)
 	f.back:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -95,7 +103,7 @@ function Cards:New(parent, width, height, font)
 			for _, tex in ipairs({ self.suit, self.suitSmall }) do
 				tex:SetTexture(SUIT_TEXTURE[suit])
 				tex:SetVertexColor(color[1], color[2], color[3], 1)
-				tex:Show()
+				tex:SetShown(not tex.never)
 			end
 			self.back:Hide()
 			self:SetAlpha(1)

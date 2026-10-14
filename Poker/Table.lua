@@ -34,7 +34,7 @@ local SEAT_BG = { 0, 0, 0, 0.5 }
 local SEAT_BORDER = { 1, 1, 1, 0.1 }
 local SEAT_W, SEAT_H = 150, 86 -- the name across the top, the stack and status at the left, the cards under the name at the right
 local CARD_W, CARD_H = 46, 64
-local SMALL_W, SMALL_H = 30, 42
+local SMALL_W, SMALL_H = 34, 48
 
 local function Name(full)
 	return Ambiguate and Ambiguate(full, "none") or (full:match("^([^%-]+)") or full)

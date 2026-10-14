@@ -12372,6 +12372,10 @@ end)()
 	parts.call._scripts.OnClick(parts.call)
 	check(host.phase == "showdown" and (OnScreen(" wins ") or OnScreen(" win ")), "the showdown, with the winner on screen")
 	check(type(bobs.cards[1].card) == "number", "Bob's cards are shown at the showdown")
+	local raised = 0
+	for _, c in ipairs(parts.board) do if c.raised then raised = raised + 1 end end
+	for _, s in ipairs({ mine, bobs }) do for _, c in ipairs(s.cards) do if c.raised then raised = raised + 1 end end end
+	check(raised == 5, "the winning five rise from the board and the winner's hand: "..raised)
 	check(parts.lock.state == "ok" and parts.lock:IsShown() and not Logged("verified"), "our client verified the host's hand: a check mark, nothing in the log: "..tostring(parts.lock.state))
 	check(Logged(" wins ") and Logged("River:"), "the result and the river are logged")
 	-- Sit out and come back

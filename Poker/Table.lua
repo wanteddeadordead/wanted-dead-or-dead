@@ -741,6 +741,7 @@ function private.LogChanges(st)
 		if hand.street == "flop" and #board >= 3 then TableUI:Log("Flop: "..Board(board, 1, 3), C.muted) end
 		if hand.street == "turn" and #board >= 4 then TableUI:Log("Turn: "..Board(board, 4, 4), C.muted) end
 		if hand.street == "river" and #board >= 5 then TableUI:Log("River: "..Board(board, 5, 5), C.muted) end
+		if private.loggedStreet and (hand.street == "flop" or hand.street == "turn" or hand.street == "river") then Play("deal") end
 		private.loggedStreet = hand.street
 	end
 	if hand.log then

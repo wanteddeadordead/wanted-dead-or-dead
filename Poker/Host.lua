@@ -519,7 +519,57 @@ function Table:Paid(name, silver, how)
 	return false
 end
 
----What the host holds for the players at the table, in silver: every paid seat's buy-ins and rebuys.
+---The host says the money came, by their own eyes (a trade or mail the client didn't see), and how much: a seat
+---waiting for its buy-in is dealt in with that much, within the table's range (a tournament's entry exactly, anything
+---over owed back); a rebuy asked for is filled with it. Returns whether, and why not.
+---@param name string
+---@param amount number copper
+---@return boolean ok
+---@return string? reason
+function Table:Admit(name, amount)
+	if self.cfg.stakes ~= "gold" or not Protocol:IsCount(amount, 1) then
+		return false, "a whole amount of money"
+	end
+	local seat, p = self:SeatOf(name)
+	if not p then
+		return false, "not at the table"
+	end
+	local tournament = self.cfg.kind == "tournament"
+	if p.unpaid then
+		if tournament and amount < self.cfg.entry then
+			return false, ("the entry is %s"):format(Protocol:Money(self.cfg.entry, "gold"))
+		end
+		if not tournament and (amount < self.cfg.buyMin or amount > self.cfg.buyMax) then
+			return false, ("the buy-in is %s to %s"):format(Protocol:Money(self.cfg.buyMin, "gold"), Protocol:Money(self.cfg.buyMax, "gold"))
+		end
+		local received = p.received or 0
+		p.bought = tournament and self.cfg.entry or amount
+		p.stack = tournament and self.cfg.startStack or amount
+		p.unpaid, p.received, p.paidHow = nil, nil, "hand"
+		self.on("paid", name, seat, p.bought)
+		self.on("admitted", name, amount)
+		local extra = received + amount - p.bought
+		if extra > 0 then self:SettleAmount(name, extra, "refund") end
+	elseif p.rebuyDue then
+		local room = self.cfg.buyMax - p.stack - (p.pendingChips or 0)
+		local chips = min(amount, room)
+		if chips >= 1 then
+			self:AddChips(seat, chips)
+			self.on("rebuy", name, seat, chips)
+		end
+		p.rebuyDue = nil
+		self.on("admitted", name, amount)
+		if amount - max(chips, 0) > 0 then self:SettleAmount(name, amount - max(chips, 0), "refund") end
+	else
+		return false, "nothing due from them"
+	end
+	self:Bump()
+	self:Broadcast()
+	self:Backup()
+	return true
+end
+
+---What the host holds for the players at the table, in copper: every paid seat's buy-ins and rebuys.
 ---@return number
 function Table:Holding()
 	local total = 0

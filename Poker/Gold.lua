@@ -591,6 +591,12 @@ end
 
 -- The table this character hosts: the vault follows it, and a closed table is summed up for them
 function private.OnHostEvent(event, ...)
+	if event == "admitted" then
+		-- The host's own word that money came: a receipt in their ledger, so the books match the seats
+		local name, amount = ...
+		local host = Net:HostedTable()
+		if host then Receipt(host.id, host.cfg.title, name, Net:Me(), amount, "buyin", "hand") end
+	end
 	if event == "closed" then
 		local me, owed = Net:Me(), {}
 		for _, l in ipairs(Poker.db.ledger) do

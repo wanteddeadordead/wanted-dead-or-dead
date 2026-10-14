@@ -127,9 +127,32 @@ local function BuildSeat(felt, k)
 	Theme:Skin(seat, SEAT_BG, SEAT_BORDER)
 	seat.name = Theme:Text(seat, "body", "")
 	seat.name:SetPoint("TOPLEFT", 8, -6)
-	seat.name:SetWidth(SEAT_W - 44) -- room for the dealer pill
+	seat.name:SetWidth(SEAT_W - 60) -- room for the trust stars
 	seat.name:SetJustifyH("LEFT")
 	seat.name:SetWordWrap(false)
+	-- How far to trust them to pay: Wanted's stars for paying what's owed (bounties and poker lines alike)
+	seat.trust = Theme:Text(seat, "tiny", "")
+	seat.trust:SetPoint("TOPRIGHT", -8, -8)
+	seat.trust:SetJustifyH("RIGHT")
+	seat.trustHit = CreateFrame("Frame", nil, seat)
+	seat.trustHit:SetPoint("TOPLEFT", seat.trust, "TOPLEFT", -4, 4)
+	seat.trustHit:SetPoint("BOTTOMRIGHT", seat.trust, "BOTTOMRIGHT", 4, -4)
+	seat.trustHit:EnableMouse(true)
+	seat.trustHit:SetScript("OnEnter", function(self)
+		local p = seat.player
+		if not p then return end
+		local tally = Wanted.Reputation:GetTally(p.n)
+		local label, color, detail, stars = Wanted.Reputation:GetPosterTrust(tally)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(Name(p.n), 1, 1, 1)
+		if label then
+			Wanted.Reputation:AddTrustLines("Pays what's owed", label, color, detail, stars)
+		else
+			GameTooltip:AddLine("No record of paying or owing yet, in bounties or poker.", C.muted[1], C.muted[2], C.muted[3], true)
+		end
+		GameTooltip:Show()
+	end)
+	seat.trustHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	seat.stack = Theme:Text(seat, "small", "", C.gold)
 	seat.stack:SetPoint("TOPLEFT", 8, -28)
 	seat.status = W:Pill(seat)
@@ -165,6 +188,10 @@ local function BuildSeat(felt, k)
 		chip:Hide()
 		seat.chips[i] = chip
 	end
+	seat.admit = W:Button(seat, "Let in", "primary", 62, 20, function() private.Admit(seat) end)
+	seat.admit:SetPoint("BOTTOMRIGHT", -6, 6)
+	seat.admit:Hide()
+	W:AttachTooltip(seat.admit, "Let them in", "You have their money (a trade or mail your client didn't see): say how much, and they're dealt in with it. Less than they asked for is fine within the table's range.")
 	seat.timer = TimerBar(seat)
 	seat.timer:SetPoint("BOTTOMLEFT", 1, 1)
 	seat.timer:SetPoint("BOTTOMRIGHT", -1, 1)
@@ -736,6 +763,24 @@ function private.Act(action, amount)
 	end
 end
 
+-- The host says a seat's money came, and how much
+function private.Admit(seatFrame)
+	local p, st = seatFrame.pending, private.state
+	if not p or not st then return end
+	local due = p.unpaid and (p.unpaid - (p.received or 0)) or p.rebuyDue or 0
+	W:Dialog({
+		title = "Let "..Name(p.n).." in?",
+		text = ("Only if you have their money in hand. They asked for %s. Type what you received: with less, they sit with that much (within the table's range); with more, the rest is owed back to them."):format(Chips(due, st.cfg)),
+		input = { placeholder = "e.g. 2g 50s", value = Chips(due, st.cfg) },
+		confirmLabel = "I have it, let them in",
+		validate = function(value) if not Protocol:ParseAmount(value, st.cfg.stakes) then return "An amount, like 2g 50s." end end,
+		onConfirm = function(value)
+			local ok, why = Net:Admit(p.n, Protocol:ParseAmount(value, st.cfg.stakes))
+			if not ok then Wanted.UI:Toast("Not let in: "..tostring(why)..".", C.red) end
+		end,
+	})
+end
+
 -- The raise amount set on the bar: slider, box and button together
 function private.SetAmount(n)
 	if not private.range then return end
@@ -1051,6 +1096,7 @@ function TableUI:Refresh(st)
 				seatFrame.name:SetText("")
 				seatFrame.stack:SetText("")
 				seatFrame.status:Set(nil)
+				seatFrame.admit:Hide()
 				seatFrame.won:Hide()
 				for _, chip in ipairs(seatFrame.chips) do chip:Hide() end
 				seatFrame.dealer:Set(nil)
@@ -1064,6 +1110,8 @@ function TableUI:Refresh(st)
 			else
 				seatFrame.empty:SetText("")
 				seatFrame.name:SetText(Name(p.n))
+				seatFrame.player = p
+				seatFrame.trust:SetText(Wanted.Reputation:GetPosterBadge(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
 				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize("  "..(net > 0 and "+" or "-")..Chips(math.abs(net), cfg), net > 0 and C.green or C.red) or ""))
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown. Dealt (slid in from
@@ -1106,6 +1154,10 @@ function TableUI:Refresh(st)
 				elseif p.away and p.away > 0 and not p.out then status, color = "Slow", C.amber
 				end
 				seatFrame.status:Set(status, color)
+				-- The host lets a seat in by hand while its buy-in or rebuy is due
+				seatFrame.admit:SetShown(Net:HostedTable() ~= nil and cfg.stakes == "gold" and (p.unpaid ~= nil or p.rebuyDue ~= nil) and p.n ~= Net:Me())
+				seatFrame.admit:SetText(p.rebuyDue and "Rebuy in" or "Let in")
+				seatFrame.pending = p
 				seatFrame.dealer:Set(hand and hand.button == seat and "D" or nil, C.gold)
 				-- At the showdown, the hand they showed, above the box: the winner's in green, the rest muted
 				local shownHand

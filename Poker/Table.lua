@@ -127,32 +127,169 @@ local function Place(seat, k, n, felt)
 	end
 end
 
--- The player's choices for the table: sounds, a four-colour deck, the window opening on their turn
+-- The player's choices for the table: sounds (each one picked from the game's own sounds, a SharedMedia sound, or
+-- none), a four-colour deck, the window opening on their turn
+local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
+local SOUND_KINDS = { { "deal", "Deal", "Cards dealt, and each new street." }, { "chips", "Chips", "A bet, a raise, a call." }, { "turn", "Your turn", "The moment it's yours to act." },
+	{ "win", "Pot won", "A pot that comes to you." }, { "tick", "Five seconds", "Once, when five seconds are left on your clock." } }
+-- The game's sounds offered, { SOUNDKIT name, label }; ones this client lacks aren't offered
+local GAME_SOUNDS = {
+	{ "IG_ABILITY_PAGE_TURN", "Page turn" }, { "LOOT_WINDOW_COIN_SOUND", "Coins" }, { "READY_CHECK", "Ready check" }, { "IG_QUEST_LIST_COMPLETE", "Quest complete" },
+	{ "IG_CREATURE_NEUTRAL_SELECT", "Tick" }, { "MAP_PING", "Map ping" }, { "TELL_MESSAGE", "Whisper" }, { "IG_PLAYER_INVITE", "Invite" }, { "IG_BACKPACK_OPEN", "Bag open" },
+	{ "IG_MAINMENU_OPEN", "Menu open" }, { "IG_SPELLBOOK_OPEN", "Spellbook" }, { "IG_QUEST_LOG_OPEN", "Quest log" }, { "AUCTION_WINDOW_OPEN", "Auction house" },
+	{ "GS_TITLE_OPTION_OK", "Click" }, { "UI_EPICLOOT_TOAST", "Epic loot" }, { "UI_LEGENDARY_LOOT_TOAST", "Legendary loot" }, { "UI_BONUS_LOOT_ROLL_END", "Bonus roll" },
+	{ "PVP_THROUGH_QUEUE", "Queue ready" }, { "RAID_WARNING", "Raid warning" }, { "RAID_BOSS_EMOTE_WARNING", "Boss emote" }, { "UI_RAID_BOSS_WHISPER_WARNING", "Boss whisper" },
+	{ "ALARM_CLOCK_WARNING_1", "Alarm clock 1" }, { "ALARM_CLOCK_WARNING_2", "Alarm clock 2" }, { "ALARM_CLOCK_WARNING_3", "Alarm clock 3" },
+}
+local SOUND_MENU_PAGE = 12
 local function Options()
 	Poker.db.options = Poker.db.options or { sounds = true, fourColor = false, popOnTurn = true }
+	Poker.db.options.sound = Poker.db.options.sound or {}
 	return Poker.db.options
 end
 TableUI.Options = Options
 
--- One of the game's own sounds, when sounds are on
-local SOUNDS = { deal = "IG_ABILITY_PAGE_TURN", chips = "LOOT_WINDOW_COIN_SOUND", turn = "READY_CHECK", win = "IG_QUEST_LIST_COMPLETE", tick = "IG_CREATURE_NEUTRAL_SELECT" }
-local function Play(what)
-	if Options().sounds and SOUNDKIT and SOUNDKIT[SOUNDS[what]] and PlaySound then
-		PlaySound(SOUNDKIT[SOUNDS[what]], "Master")
+---A poker sound's choice: "kit:NAME", "lsm:Name" or "none".
+---@param what string "deal" | "chips" | "turn" | "win" | "tick"
+---@return string
+function TableUI:SoundChoice(what)
+	return Options().sound[what] or SOUND_DEFAULTS[what] or "none"
+end
+
+---@param what string
+---@param choice string
+function TableUI:SetSound(what, choice)
+	Options().sound[what] = choice
+end
+
+---A sound choice as shown.
+---@param choice string
+---@return string
+function TableUI:SoundLabel(choice)
+	if choice == "none" then return "None" end
+	for _, entry in ipairs(GAME_SOUNDS) do
+		if choice == "kit:"..entry[1] then return entry[2] end
 	end
+	return choice:match("^lsm:(.+)$") or choice
+end
+
+-- Plays a poker sound as chosen, when sounds are on (or regardless, for a preview)
+local function Play(what, preview)
+	if not preview and not Options().sounds then return end
+	local choice = TableUI:SoundChoice(what)
+	local kit = choice:match("^kit:(.+)$")
+	if kit then
+		if SOUNDKIT and SOUNDKIT[kit] and PlaySound then PlaySound(SOUNDKIT[kit], "Master") end
+		return
+	end
+	local name = choice:match("^lsm:(.+)$")
+	local media = name and LibStub and LibStub("LibSharedMedia-3.0", true)
+	local path = media and media:Fetch("sound", name, true)
+	if path and PlaySoundFile then PlaySoundFile(path, "Master") end
 end
 TableUI.Play = Play
 
--- The options menu, from the header's button
-function private.OpenOptions(anchor)
-	local o = Options()
-	local function Item(label, key)
-		return { text = (o[key] and "|cff5ccc76on|r  " or "|cff666a78off|r  ")..label, onClick = function()
-			o[key] = not o[key]
-			if private.state then TableUI:Refresh(private.state) end
+-- The sound choices for one poker sound, under its button: the game's sounds, then SharedMedia's a page at a time
+function private.SoundMenu(what, anchor, page)
+	local current = TableUI:SoundChoice(what)
+	local function Item(choice, text)
+		return { text = text, color = choice == current and C.accent or nil, onClick = function()
+			TableUI:SetSound(what, choice)
+			Play(what, true)
+			private.RefreshSettings()
 		end }
 	end
-	W:Menu({ Item("Sounds", "sounds"), Item("Four-colour deck", "fourColor"), Item("Open the table on my turn", "popOnTurn") }, anchor)
+	local items = {}
+	local shared = Wanted.Alerts and Wanted.Alerts:GetSharedMediaSounds() or {}
+	if page then
+		tinsert(items, { text = "SharedMedia sounds", header = true })
+		local first = (page - 1) * SOUND_MENU_PAGE + 1
+		for i = first, min(#shared, first + SOUND_MENU_PAGE - 1) do
+			tinsert(items, Item("lsm:"..shared[i], shared[i]))
+		end
+		tinsert(items, "-")
+		if #shared > page * SOUND_MENU_PAGE then
+			tinsert(items, { text = "More...", onClick = function() private.SoundMenu(what, anchor, page + 1) end })
+		end
+		tinsert(items, { text = "Back", onClick = function() private.SoundMenu(what, anchor) end })
+	else
+		tinsert(items, Item("none", "None"))
+		for _, entry in ipairs(GAME_SOUNDS) do
+			if SOUNDKIT and SOUNDKIT[entry[1]] then tinsert(items, Item("kit:"..entry[1], entry[2])) end
+		end
+		if #shared > 0 then
+			tinsert(items, "-")
+			tinsert(items, { text = ("SharedMedia sounds (%d)..."):format(#shared), onClick = function() private.SoundMenu(what, anchor, 1) end })
+		end
+	end
+	W:Menu(items, anchor)
+end
+
+-- The settings panel over the felt
+function private.BuildSettings()
+	local panel = CreateFrame("Frame", nil, private.frame)
+	panel:SetSize(400, 300)
+	panel:SetPoint("CENTER", private.felt, "CENTER", 0, 0)
+	panel:SetFrameLevel(private.frame:GetFrameLevel() + 30)
+	panel:EnableMouse(true)
+	Theme:Skin(panel, C.bg, C.borderLight)
+	local title = Theme:Text(panel, "heading", "Table settings")
+	title:SetPoint("TOPLEFT", 14, -12)
+	local close = W:Button(panel, "X", "ghost", 22, 22, function() panel:Hide() end)
+	close:SetPoint("TOPRIGHT", -6, -6)
+	local o = Options()
+	panel.sounds = W:Toggle(panel, "Sounds", function(on) o.sounds = on end)
+	panel.sounds:SetPoint("TOPLEFT", 14, -40)
+	panel.picks = {}
+	local y = -66
+	for _, kind in ipairs(SOUND_KINDS) do
+		local label = Theme:Text(panel, "small", kind[2], C.muted)
+		label:SetPoint("TOPLEFT", 30, y - 5)
+		local pick = W:Button(panel, "", "secondary", 150, 22, function(self) private.SoundMenu(kind[1], self) end)
+		pick:SetPoint("TOPLEFT", 120, y)
+		pick.label:SetWidth(132)
+		pick.label:SetWordWrap(false)
+		W:AttachTooltip(pick, kind[2], kind[3])
+		panel.picks[kind[1]] = pick
+		local hear = W:Button(panel, "Hear it", "chip", 56, 22, function() Play(kind[1], true) end)
+		hear:SetPoint("LEFT", pick, "RIGHT", 6, 0)
+		y = y - 28
+	end
+	panel.fourColor = W:Toggle(panel, "Four-colour deck (green clubs, blue diamonds)", function(on)
+		o.fourColor = on
+		if private.state then TableUI:Refresh(private.state) end
+	end)
+	panel.fourColor:SetPoint("TOPLEFT", 14, y - 8)
+	panel.popOnTurn = W:Toggle(panel, "Open the table on my turn", function(on) o.popOnTurn = on end)
+	panel.popOnTurn:SetPoint("TOPLEFT", 14, y - 34)
+	local hint = Theme:Text(panel, "tiny", "Add your own sounds with a SharedMedia addon.", C.faint)
+	hint:SetPoint("BOTTOMLEFT", 14, 10)
+	panel:Hide()
+	private.settings = panel
+end
+
+function private.RefreshSettings()
+	local panel = private.settings
+	if not panel then return end
+	local o = Options()
+	panel.sounds:SetChecked(o.sounds ~= false)
+	panel.fourColor:SetChecked(o.fourColor == true)
+	panel.popOnTurn:SetChecked(o.popOnTurn ~= false)
+	for what, pick in pairs(panel.picks) do
+		pick:SetText(TableUI:SoundLabel(TableUI:SoundChoice(what)))
+	end
+end
+
+---Shows or hides the table's settings.
+function TableUI:ToggleSettings()
+	if not private.frame then private.Build() end
+	if not private.settings then private.BuildSettings() end
+	if private.settings:IsShown() then
+		private.settings:Hide()
+	else
+		private.RefreshSettings()
+		private.settings:Show()
+	end
 end
 
 function private.Build()
@@ -208,9 +345,9 @@ function private.Build()
 	W:AttachTooltip(main, "Open Wanted", "The Poker page: open tables and your seat.")
 	private.leave = W:Button(header, "Leave", "ghost", 60, 22, private.ConfirmLeave)
 	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
-	local options = W:Button(header, "...", "ghost", 22, 22, function(self) private.OpenOptions(self) end)
+	local options = W:Button(header, "...", "ghost", 22, 22, function() TableUI:ToggleSettings() end)
 	options:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
-	W:AttachTooltip(options, "Options", "Sounds, a four-colour deck, and whether the table opens on your turn.")
+	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, and whether the table opens on your turn.")
 
 	-- The felt, with its rail
 	local rail = CreateFrame("Frame", nil, frame)

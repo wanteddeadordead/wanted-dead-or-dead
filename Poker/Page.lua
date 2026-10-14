@@ -332,7 +332,7 @@ function private.Guide()
 			s.antes and (" Antes from level %d."):format(Protocol.ANTE_FROM_LEVEL) or "")..(" Expect %s with %d players."):format(length, s.seats or 6)
 		if stakes == "gold" then
 			lines[#lines + 1] = ("2.  ENTRY %s each, paid to you before they're dealt in, by a trade or by mail. You hold the pool. The prizes are the entries: winner takes all up to four entered, 65/35 from five, 50/30/20 from seven."):format(entry and entry > 0 and M(entry) or "(type one)")
-			lines[#lines + 1] = "3.  PAYING OUT: when it ends, each prize is a line under Settlement from you to the player, paid by trade or with Pay at a mailbox. Bust early and you can hand the table to the next seat by trading them the pool."
+			lines[#lines + 1] = "3.  PAYING OUT: when it ends, each prize is a line under Settlement from you to the player, paid by trade or with Pay at a mailbox. You hold the money, so the table stays with you until it ends: bust early and you can close the window and play on while it runs."
 		else
 			lines[#lines + 1] = practice and "2.  FREE ENTRY against computer players; the prizes are play money." or "2.  FREE ENTRY; the chips are play money and nothing is owed."
 		end
@@ -342,7 +342,7 @@ function private.Guide()
 			what, M(b.sb), M(b.bb), lo and M(lo) or "?", hi and M(hi) or "?", yours and M(yours) or "?")
 		if stakes == "gold" then
 			lines[#lines + 1] = "2.  CASH ON THE TABLE: each buy-in (and rebuy) goes to you first, by a trade in person or by mail, and the seat is dealt in once it has. You hold the money; nobody can run up a debt."
-			lines[#lines + 1] = "3.  PAYING OUT: when a player leaves you owe them their stack, a line under Settlement, paid by trade or with Pay at a mailbox. Close table settles everyone; Hand off passes the table and the pool to the next seat."
+			lines[#lines + 1] = "3.  PAYING OUT: when a player leaves you owe them their stack, a line under Settlement, paid by trade or with Pay at a mailbox. The table stays with you while it's open; Close table settles everyone from one set of books."
 		elseif practice then
 			lines[#lines + 1] = "2.  PLAY MONEY: the other seats are computer players who buy in for the most. It looks and counts like gold, nothing is owed, and nothing is advertised."
 		else
@@ -452,7 +452,7 @@ function private.BuildSeatCard(parent, width)
 	private.handoffButton = W:Button(card, "Hand off", "secondary", 90, 26, private.Handoff)
 	private.handoffButton:SetPoint("RIGHT", private.leaveButton, "LEFT", -6, 0)
 	private.handoffButton:Hide()
-	W:AttachTooltip(private.handoffButton, "Hand off the table", "The next seat hosts from here and you keep your chair, so you can leave without ending the game. At a gold table you trade them the pool first.")
+	W:AttachTooltip(private.handoffButton, "Hand off the table", "The next seat hosts from here and you keep your chair, so you can leave without ending the game. Chips tables only: a gold table stays with the host who holds the money.")
 	return card
 end
 
@@ -639,24 +639,17 @@ end
 -- The page
 -- ============================================================================
 
--- The host hands the table to the next seat: at once, or at a gold table once they've traded them the pool
+-- The host hands the table to the next seat (chips tables)
 function private.Handoff()
 	local st = Net:State()
 	local host = Net:HostedTable()
 	if not st or not host then return end
-	if st.handingTo and (st.pool or 0) > 0 then
-		Net:CancelHandoff()
-		private.Refresh()
-		return
-	end
 	local seat = host:Successor()
 	local next_ = seat and host.seats[seat] and Name(host.seats[seat].name) or "?"
-	local pool = host:Pool()
 	W:Dialog({
 		title = "Hand the table to "..next_.."?",
-		text = pool > 0 and ("Trade %s the table's pool of %s first. The table passes to them the moment it arrives, and they owe the players from then on. You keep your seat."):format(next_, Protocol:Money(pool, "gold"))
-			or ("%s hosts from the next hand and you keep your seat. Leave whenever you like after that."):format(next_),
-		confirmLabel = pool > 0 and "I'll trade it" or "Hand off",
+		text = ("%s hosts from the next hand and you keep your seat. Leave whenever you like after that."):format(next_),
+		confirmLabel = "Hand off",
 		onConfirm = function()
 			local ok, why = Net:Handoff()
 			if not ok then UI:Toast(why or "Couldn't hand the table off.", C.red) end
@@ -692,12 +685,10 @@ function private.Refresh()
 			private.startButton:Hide()
 		end
 		private.leaveButton:SetText(hosting and "Close table" or "Leave")
-		local canHand = hosting and st.cfg.bots == 0 and n >= 2 and st.phase ~= "closed" and st.phase ~= "finished"
+		local canHand = hosting and st.cfg.bots == 0 and st.cfg.stakes ~= "gold" and n >= 2 and st.phase ~= "closed" and st.phase ~= "finished"
 		private.handoffButton:SetShown(canHand)
-		private.handoffButton:SetText(st.handingTo and (st.pool or 0) > 0 and "Cancel hand-off" or "Hand off")
 		if hosting and st.handingTo then
-			private.seatSub:SetText(private.seatSub:GetText()..Theme:Colorize((st.pool or 0) > 0 and ("  -  trade %s the pool of %s and the table is theirs"):format(Name(st.handingTo), Protocol:Money(st.pool, "gold"))
-				or ("  -  handing the table to %s"):format(Name(st.handingTo)), C.amber))
+			private.seatSub:SetText(private.seatSub:GetText()..Theme:Colorize(("  -  handing the table to %s"):format(Name(st.handingTo)), C.amber))
 		end
 		local mine = st.me and st.seats[st.me]
 		local due
@@ -779,7 +770,7 @@ function Page:OnEnable()
 				UI:Toast(Name(name).." didn't take the table; it stays with you.", C.amber)
 				private.Refresh()
 			elseif what == "eliminated" and name == Net:Me() and Net:HostedTable() and Net:HostedTable().cfg.bots == 0 then
-				UI:Toast("You're out. Hand off the table from the Poker page if you want to leave before it ends.", C.amber)
+				UI:Toast(Net:HostedTable().cfg.stakes == "gold" and "You're out. The table runs on your client until it ends: close the window and play on, or Close table to settle everyone." or "You're out. Hand off the table from the Poker page if you want to leave before it ends.", C.amber)
 			end
 		elseif event == "left" then
 			private.shownOnce = nil

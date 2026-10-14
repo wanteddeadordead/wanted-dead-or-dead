@@ -13423,6 +13423,101 @@ end)()
 	check(Net:Rejoin() == false and Net:RememberedSeat() == nil, "a seat from yesterday is forgotten")
 end)()
 
+-- Poker polish: sounds and the your-turn alert, bet presets, hotkeys, pre-actions, the hand strength line, the all-in
+-- confirm at gold tables, the four-colour deck, all switched from the window's options menu
+;(function()
+	local P = WantedPokerTestNS
+	local Net, TableUI, Cards, Deal = P.PokerNet, P.PokerTable, P.PokerCards, P.PokerDeal
+	local played = {}
+	local realPlaySound, realKit = PlaySound, SOUNDKIT
+	PlaySound = function(kit) played[#played + 1] = kit end
+	SOUNDKIT = { IG_ABILITY_PAGE_TURN = 836, LOOT_WINDOW_COIN_SOUND = 120, READY_CHECK = 8960, IG_QUEST_LIST_COMPLETE = 878, IG_CREATURE_NEUTRAL_SELECT = 871 }
+	local function Played(kit) local n = 0 for _, k in ipairs(played) do if k == kit then n = n + 1 end end return n end
+	local o = TableUI.Options()
+	check(o.sounds == true and o.fourColor == false and o.popOnTurn == true, "the defaults: sounds on, two colours, the table opens on your turn")
+	check(Cards:SuitColor(1) == Cards:SuitColor(4) and Cards:SuitColor(2) == Cards:SuitColor(3), "two colours: clubs like spades, diamonds like hearts")
+	o.fourColor = true
+	check(Cards:SuitColor(1) ~= Cards:SuitColor(4) and Cards:SuitColor(2) ~= Cards:SuitColor(3) and Cards:SuitColor(1) ~= Cards:SuitColor(2), "four colours: every suit its own")
+	o.fourColor = false
+	-- A heads-up hand through Net, Bob by whisper, as in the window test
+	TableUI:Reset() -- as the page does before a table
+	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, title = "Polish" }, 2000), "a chips table")
+	local host = Net:HostedTable()
+	TableUI:Hide()
+	local id = host.id
+	local msgNo = 0
+	local function FromBob(tbl)
+		tbl.t, tbl.v = id, "0.1.0-dev"
+		msgNo = msgNo + 1
+		local payload = ns.Sync:Encode(tbl)
+		local total = math.ceil(#payload / 240)
+		for part = 1, total do Fire("CHAT_MSG_ADDON", "WNTD", "P:zp"..msgNo..":"..part.."/"..total..":"..payload:sub((part - 1) * 240 + 1, part * 240), "WHISPER", "Bob-Realm") end
+	end
+	local function ToBob(kind)
+		local messages, order = {}, {}
+		for _, m in ipairs(addonSent) do
+			if m.target == "Bob-Realm" and m.text:find("^P:") then
+				local msgId, part, total, chunk = m.text:match("^P:(%w+):(%d+)/(%d+):(.*)$")
+				local entry = messages[msgId]
+				if not entry then entry = { parts = {}, total = tonumber(total) } messages[msgId] = entry order[#order + 1] = msgId end
+				entry.parts[tonumber(part)] = chunk
+			end
+		end
+		for i = #order, 1, -1 do
+			local entry = messages[order[i]]
+			if #entry.parts == entry.total then
+				local tbl = ns.Sync:Decode(table.concat(entry.parts))
+				if tbl and (not kind or tbl.k == kind) then return tbl end
+			end
+		end
+	end
+	addonSent = {}
+	FromBob({ k = "join", b = 1000 })
+	clock = clock + 1
+	host:Tick()
+	local key = ToBob("state").st.hand.key
+	local secret = Deal:Secret()
+	FromBob({ k = "commit", h = key, c = Deal:Commit(secret) })
+	FromBob({ k = "reveal", h = key, s = secret })
+	check(host.phase == "playing" and host.hand.toAct == 1, "dealt; heads-up the button (us) acts first")
+	local parts = TableUI:GetParts()
+	check(TableUI:IsShown(), "our turn with the window hidden: it opens")
+	check(Played(8960) == 1 and Played(836) == 1, "a sound for the deal and one for our turn: turn "..Played(8960)..", deal "..Played(836)..", all "..#played)
+	check(parts.strength:IsShown() and parts.strength._text ~= "" and (parts.strength._text:find("suited") or parts.strength._text:find("offsuit") or parts.strength._text:find("a pair of")), "the strength line before the flop: "..tostring(parts.strength._text))
+	-- Presets: half the pot and the call on top of the bet to match; the most
+	check(parts.presets[1]:IsShown() and parts.range[1] == 40 and parts.range[2] == 2000, "presets with the raise range 40 to 2000")
+	TableUI.Preset(0.5)
+	check(parts.amount == 40, "half pot: 20 + half of (30 + 10) = 40: "..tostring(parts.amount))
+	TableUI.Preset(1)
+	check(parts.amount == 60, "pot: 20 + (30 + 10) = 60: "..tostring(parts.amount))
+	TableUI.Preset(nil)
+	check(parts.amount == 2000, "max")
+	TableUI.Preset(0)
+	check(parts.amount == 40, "min")
+	-- The C key calls
+	parts.frame._scripts.OnKeyDown(parts.frame, "C")
+	check(host.hand.toAct == 2 and Played(120) >= 1, "C calls, with the chips' sound")
+	-- A pre-action while Bob thinks: check/fold acts the moment the turn comes
+	check(parts.checkFold:IsShown() and parts.callAny:IsShown(), "waiting: the pre-actions are offered")
+	parts.checkFold:SetChecked(true)
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	check(host.hand.street == "flop" and host.hand.toAct == 2 and parts.checkFold.checked, "the flop: Bob (the big blind) acts first; our pre-action waits")
+	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
+	check(host.hand.street == "turn" and host.hand.toAct == 2 and not parts.checkFold.checked, "Bob checks: our check went by itself, the turn is dealt and the pre-action is spent")
+	FromBob({ k = "act", h = key, q = host.seq, a = "bet", m = 20 })
+	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
+	parts.frame._scripts.OnKeyDown(parts.frame, "F")
+	check(host.phase == "showdown" or host.hand.street == "done", "F folds")
+	-- All-in at a gold table asks first
+	Net:Leave()
+	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, stakes = "gold" }, 2000), "a gold table")
+	parts.allin._scripts.OnClick(parts.allin)
+	check(ns.Widgets:IsDialogShown(), "all in at a gold table asks first")
+	ConfirmDialog()
+	Net:Leave()
+	PlaySound, SOUNDKIT = realPlaySound, realKit
+end)()
+
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

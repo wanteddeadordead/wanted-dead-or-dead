@@ -16,6 +16,19 @@ local FACE = { 0.95, 0.94, 0.9, 1 }
 local FACE_BORDER = { 0.22, 0.2, 0.18, 1 }
 local BLACK = { 0.1, 0.1, 0.12 }
 local RED = { 0.72, 0.1, 0.12 }
+-- Suit colours: the usual two, or four (green clubs, blue diamonds), the colourblind aid every online room offers
+local GREEN = { 0.1, 0.5, 0.22 }
+local BLUE = { 0.12, 0.35, 0.85 }
+local TWO_COLOR = { BLACK, RED, RED, BLACK }
+local FOUR_COLOR = { GREEN, BLUE, RED, BLACK }
+
+---The colour a suit is drawn in, by the four-colour setting.
+---@param suit number 1 clubs, 2 diamonds, 3 hearts, 4 spades
+---@return number[]
+function Cards:SuitColor(suit)
+	local four = Poker.db and Poker.db.options and Poker.db.options.fourColor
+	return (four and FOUR_COLOR or TWO_COLOR)[suit]
+end
 local BACK = { 0.42, 0.08, 0.11, 1 }
 local HIGHLIGHT = { 1, 0.8, 0.32, 1 }
 local SLOT = { 1, 1, 1, 0.06 }
@@ -74,7 +87,7 @@ function Cards:New(parent, width, height, font)
 			Theme:SetBg(self, FACE)
 			Theme:SetBorderColor(self, FACE_BORDER)
 			local suit = Engine:SuitOf(card)
-			local color = (suit == 2 or suit == 3) and RED or BLACK
+			local color = Cards:SuitColor(suit)
 			self.rank:SetText(Cards:RankText(card))
 			self.rank:SetTextColor(color[1], color[2], color[3])
 			for _, tex in ipairs({ self.suit, self.suitSmall }) do

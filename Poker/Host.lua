@@ -219,80 +219,30 @@ end
 -- Handing the table on
 -- ============================================================================
 
----What the host holds for the table, in money: a tournament's whole prize pool (every entry, the host's own
----included), or at a cash table every stack on it (the host's own included, since the next host will owe it).
----@return number
-function Table:Pool()
-	if self.cfg.stakes ~= "gold" then
-		return 0
-	end
-	if self.cfg.kind == "tournament" then
-		local n = 0
-		for _ in pairs(self.entrants) do n = n + 1 end
-		return self.cfg.entry * n
-	end
-	local total = 0
-	for _, p in pairs(self.seats) do
-		if not p.unpaid then total = total + p.stack + (p.pendingChips or 0) end
-	end
-	return total
-end
-
 ---Hands the table to the next seat: everyone is told who, and the successor gets the backup to carry on from. The
----table runs on here until the successor announces, or HANDOFF_SECONDS pass. At a gold table the pool goes first
----(ProposeHandoff); pool says how much the successor was given.
----@param pool number?
+---table runs on here until the successor announces, or HANDOFF_SECONDS pass. Never at a gold table: the host holds
+---the money, and the books stay with one bank from the first buy-in to the last cash-out.
 ---@return boolean ok
 ---@return string? reason
-function Table:Handoff(pool)
+function Table:Handoff()
 	if not self.open or self.phase == "finished" then
 		return false, "the table is over"
+	end
+	if self.cfg.stakes == "gold" then
+		return false, "a gold table stays with the host who holds the money"
 	end
 	local seat = self:Successor()
 	if not seat then
 		return false, "nobody to hand the table to"
 	end
 	local name = self.seats[seat].name
-	self.handingTo, self.handingAt, self.handoffPending = name, self.now(), nil
+	self.handingTo, self.handingAt = name, self.now()
 	self:Bump()
 	for _, p in pairs(self.seats) do
-		self.send(p.name, { k = "handoff", t = self.id, to = name, b = p.name == name and self:BackupData() or nil, pool = p.name == name and pool or nil })
+		self.send(p.name, { k = "handoff", t = self.id, to = name, b = p.name == name and self:BackupData() or nil })
 	end
 	self.on("handing", name)
 	return true
-end
-
----At a gold table the pool goes to the successor by trade before the table does: the host is told whom to trade and
----how much, and Handoff follows once the trade is seen (Gold).
----@return boolean ok
----@return string? reason
-function Table:ProposeHandoff()
-	if not self.open or self.phase == "finished" then
-		return false, "the table is over"
-	end
-	local seat = self:Successor()
-	if not seat then
-		return false, "nobody to hand the table to"
-	end
-	if self.cfg.stakes ~= "gold" then
-		return self:Handoff()
-	end
-	self.handoffPending = { name = self.seats[seat].name, pool = self:Pool() }
-	if self.handoffPending.pool == 0 then
-		return self:Handoff(0)
-	end
-	self:Bump()
-	self:Broadcast()
-	return true
-end
-
----Thinks better of handing the table on (before the pool went).
-function Table:CancelHandoff()
-	if self.handoffPending then
-		self.handoffPending = nil
-		self:Bump()
-		self:Broadcast()
-	end
 end
 
 ---The successor announced (this host's own seat heard a takeover): the table is theirs now.
@@ -1190,9 +1140,7 @@ function Table:StateFor(name)
 	if self.cfg.stakes == "gold" then
 		st.holding = self:Holding()
 	end
-	if self.handoffPending then
-		st.handingTo, st.pool = self.handoffPending.name, self.handoffPending.pool
-	elseif self.handingTo then
+	if self.handingTo then
 		st.handingTo = self.handingTo
 	end
 	return st

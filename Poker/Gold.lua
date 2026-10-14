@@ -19,7 +19,6 @@ local private = {
 	pendingSend = nil, -- { lineId?, buyin?, recipient, amount, at, closedAt }
 	seenInbox = {}, -- line id, or a mail's mark -> true once recorded from the inbox
 	trade = nil, -- the trade window open: { name, give, get, before, accepted }
-	pools = {}, -- pools traded to this character by a host handing the table on: { name, amount, at }
 	asked = {}, -- name -> GetTime() we last asked them for the lines they owe us
 }
 local SUBJECT_PREFIX = "Wanted poker "
@@ -247,14 +246,6 @@ end
 function Gold:Received(name, copper, how)
 	local me = Net:Me()
 	local host = Net:HostedTable()
-	local st = Net:State()
-	if how == "trade" and st and st.cfg and st.cfg.stakes == "gold" and SameName(st.host, name) and SameName(st.handingTo, me) and (st.pool or 0) > 0 and copper >= st.pool then
-		-- The host hands this character the table: the pool first, the table once it's seen (TakePool)
-		tinsert(private.pools, { name = name, amount = copper, at = GetTime() })
-		Receipt(st.t, st.cfg.title, name, me, copper, "pool", how)
-		Wanted:Print("Poker: %s traded you the table's pool of %s.", Short(name), Money(copper))
-		return "pool"
-	end
 	if host and host.cfg.stakes == "gold" and host.open then
 		local due = host:Paid(name, copper, how)
 		Receipt(host.id, host.cfg.title, name, me, copper, due and "buyin" or "received", how)
@@ -269,20 +260,6 @@ function Gold:Received(name, copper, how)
 	return nil
 end
 
----Whether a pool of at least this much came by trade from a host handing the table on, lately; taken once.
----@param name string
----@param copper number
----@return boolean
-function Gold:TakePool(name, copper)
-	for i, pool in ipairs(private.pools) do
-		if SameName(pool.name, name) and pool.amount >= copper and GetTime() - pool.at <= Protocol.POOL_SECONDS then
-			tremove(private.pools, i)
-			return true
-		end
-	end
-	return false
-end
-
 ---Money went out to a player (a trade, a mail): this character's buy-in to their host, or a line paid.
 ---@param name string
 ---@param copper number
@@ -292,13 +269,6 @@ function Gold:Gave(name, copper, how)
 	local me = Net:Me()
 	local st = Net:State()
 	local mine = st and st.me and st.seats[st.me]
-	local host = Net:HostedTable()
-	if how == "trade" and host and host.handoffPending and SameName(host.handoffPending.name, name) and copper >= host.handoffPending.pool then
-		Receipt(host.id, host.cfg.title, me, name, copper, "pool", how)
-		local ok, why = host:Handoff(copper)
-		Wanted:Print(ok and "Poker: the pool went to %s; the table passes to them." or "Poker: the pool went to %s, but the table couldn't pass: %s.", Short(name), tostring(why))
-		return "pool"
-	end
 	if st and st.cfg and st.cfg.stakes == "gold" and SameName(st.host, name) and mine and (mine.unpaid or mine.rebuyDue) then
 		Receipt(st.t, st.cfg.title, me, st.host, copper, "buyin", how)
 		Wanted:Print("Poker: %s paid to %s for your seat (%s).", Money(copper), Short(name), how)

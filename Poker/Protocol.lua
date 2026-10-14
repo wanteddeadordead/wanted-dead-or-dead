@@ -56,8 +56,6 @@ Protocol.PAY_SECONDS = 180
 Protocol.HOST_LOST_SECONDS = 120
 -- A host handing the table to the next seat waits this long for them to take it before carrying on
 Protocol.HANDOFF_SECONDS = 30
--- A pool traded to the next host counts toward a handoff for this long
-Protocol.POOL_SECONDS = 180
 -- A seat remembered across a reload: joined again this long after login, given up without an answer, forgotten after
 Protocol.REJOIN_DELAY_SECONDS = 4
 Protocol.REJOIN_GIVE_UP_SECONDS = 60

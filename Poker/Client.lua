@@ -137,7 +137,7 @@ function Player:Receive(sender, tbl)
 		if Protocol:IsName(tbl.to) then
 			self.handoffTo = tbl.to
 			if tbl.to == self.name and type(tbl.b) == "table" then
-				self.on("handoff", tbl.b, tonumber(tbl.pool) or 0, sender)
+				self.on("handoff", tbl.b, sender)
 			end
 		end
 	elseif k == "said" then

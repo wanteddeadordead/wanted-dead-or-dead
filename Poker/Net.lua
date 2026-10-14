@@ -389,21 +389,18 @@ function private.TakeOver(backup, handed)
 	return true
 end
 
--- The host hands this character the table. At a gold table the pool must have come by trade first (Gold saw it)
-function private.OnHandoff(backup, pool, from)
-	local Gold = Poker.PokerGold
-	if pool > 0 and not (Gold and Gold:TakePool(from, pool)) then
-		Wanted:Print("Poker: %s is handing you the table, but the pool of %s hasn't come by trade. Not taking it.", from, Protocol:Money(pool, "gold"))
+-- The host hands this character the table (chips tables only: a gold table's host holds the money and keeps it)
+function private.OnHandoff(backup)
+	if type(backup) == "table" and type(backup.cfg) == "table" and backup.cfg.stakes == "gold" then
 		return
 	end
 	if private.TakeOver(backup, true) then
-		Wanted:Print("Poker: you host the table now%s.", pool > 0 and (", holding its pool of "..Protocol:Money(pool, "gold")) or "")
+		Wanted:Print("Poker: you host the table now.")
 		private.Notify("hosting")
 	end
 end
 
----Hands the table this character hosts to the next seat. At a gold table it asks for the pool to be traded first;
----the table passes once the trade is seen.
+---Hands the table this character hosts to the next seat (chips tables only).
 ---@return boolean ok
 ---@return string? reason
 function Net:Handoff()
@@ -413,7 +410,7 @@ function Net:Handoff()
 	if private.host.cfg.bots > 0 then
 		return false, "a practice table is yours alone"
 	end
-	return private.host:ProposeHandoff()
+	return private.host:Handoff()
 end
 
 ---The host lets a seat in by hand, with the money they say they received.
@@ -426,11 +423,6 @@ function Net:Admit(name, amount)
 		return false, "you aren't hosting"
 	end
 	return private.host:Admit(name, amount)
-end
-
----Thinks better of a handoff waiting on its trade.
-function Net:CancelHandoff()
-	if private.host then private.host:CancelHandoff() end
 end
 
 ---Whispers a table message to ourselves and says when it comes back: whether tables work where we stand (the game

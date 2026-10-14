@@ -12009,6 +12009,268 @@ end)()
 		fails(function(a) a.log[#a.log] = nil end, "payout", "an action left out of the log changes the settlement")
 	end
 end)()
+-- Poker table: a host and players (Poker/Host.lua, Poker/Client.lua) over a fake network that delivers in order,
+-- through the real encoding, and can lose a message on request. The clock is ours.
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Client, Protocol = P.PokerHost, P.PokerClient, P.PokerProtocol
+	local nodes, queue, drop, events, ads = {}, {}, nil, {}, {}
+	local now = 5000
+	local function Now() return now end
+	local function SendFrom(from)
+		return function(target, tbl)
+			queue[#queue + 1] = { from = from, to = target, text = ns.Sync:Encode(tbl), k = tbl.k }
+		end
+	end
+	local function Flush()
+		local guard = 0
+		while #queue > 0 do
+			guard = guard + 1
+			assert(guard < 20000, "the table never settles")
+			local m = tremove(queue, 1)
+			local node = nodes[m.to]
+			if node and not (drop and drop(m)) then
+				local tbl = ns.Sync:Decode(m.text)
+				if node.host and Protocol.TO_HOST[tbl.k] then node.host:Receive(m.from, tbl) end
+				if node.player and Protocol.TO_PLAYER[tbl.k] then node.player:Receive(m.from, tbl) end
+			end
+		end
+	end
+	local function Tick(seconds)
+		for _ = 1, seconds do
+			now = now + 1
+			for _, node in pairs(nodes) do
+				if node.host then node.host:Tick() end
+				if node.player then node.player:Tick() end
+			end
+			Flush()
+		end
+	end
+	local function Node(name)
+		events[name] = {}
+		local node = { name = name }
+		node.player = Client:New({ name = name, send = SendFrom(name), now = Now, on = function(event, ...) tinsert(events[name], { event, ... }) end })
+		nodes[name] = node
+		return node
+	end
+	local function Count(name, event)
+		local n = 0
+		for _, e in ipairs(events[name]) do if e[1] == event then n = n + 1 end end
+		return n
+	end
+	local function Last(name, event)
+		for i = #events[name], 1, -1 do if events[name][i][1] == event then return events[name][i] end end
+	end
+	local cfg = { sb = 10, bb = 20, buyMin = 200, buyMax = 1000, maxSeats = 4, turnSeconds = 20, title = "The Saloon" }
+	check(Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 5, buyMin = 1, buyMax = 1 }, send = function() end, now = Now }) == nil, "bad settings open no table")
+
+	-- Ann opens a table and sits; Bob and Cat join; Dan is refused for his buy-in, then seated; Eve finds it full
+	local ann = Node("Ann-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = cfg, send = SendFrom("Ann-Realm"), ad = function(ad) ads[#ads + 1] = ad end, now = Now })
+	local table1 = ann.host
+	check(Protocol:HostOf(table1.id) == "Ann-Realm", "the table id names its host: "..table1.id)
+	ann.player:Join("Ann-Realm", table1.id, 1000)
+	local bob, cat, dan, eve = Node("Bob-Realm"), Node("Cat-Realm"), Node("Dan-Realm"), Node("Eve-Realm")
+	bob.player:Join("Ann-Realm", table1.id, 500)
+	cat.player:Join("Ann-Realm", table1.id, 300)
+	dan.player:Join("Ann-Realm", table1.id, 100)
+	Flush()
+	check(ann.player.seat == 1 and bob.player.seat == 2 and cat.player.seat == 3 and dan.player.seat == nil, "seats in order of joining; a buy-in below the least is refused")
+	check(Last("Dan-Realm", "refused") and Last("Dan-Realm", "refused")[2]:find("200 to 1000"), "the refusal says why")
+	dan.player:Join("Ann-Realm", table1.id, 400)
+	eve.player:Join("Ann-Realm", table1.id, 400)
+	Flush()
+	check(dan.player.seat == 4 and eve.player.seat == nil and Last("Eve-Realm", "refused")[2] == "the table is full", "four seats, the fifth is turned away")
+	for _, n in ipairs({ ann, bob, cat, dan }) do
+		local st = n.player.state
+		check(st and st.phase == "waiting" and st.seats[1].n == "Ann-Realm" and st.seats[4].s == 400 and st.cfg.title == "The Saloon", n.name.." sees the table")
+	end
+	check(bob.player.backup and bob.player.backup.id == table1.id, "the seat after the host holds the backup")
+
+	-- The first hand: the secret round runs to a deal within the message exchange
+	Tick(1)
+	check(table1.phase == "playing" and table1.hand and table1.hand.street == "preflop", "a hand is dealt once everyone has committed and revealed: "..table1.phase)
+	local key = table1.hs.key
+	check(key == "1.1", "the first hand's first attempt")
+	for _, n in ipairs({ ann, bob, cat, dan }) do
+		local st = n.player.state
+		local mine = st.seats[n.player.seat]
+		check(mine.hole and #mine.hole == 2, n.name.." has two cards")
+		for seat, s in pairs(st.seats) do
+			check(seat == n.player.seat or s.hole == nil, n.name.." can't see seat "..seat.."'s cards")
+		end
+		check(st.hand.dh == table1.hs.deckHash and st.hand.commits[n.player.seat] == n.player.secrets[key].commit, n.name.." sees the deck hash and their own commitment")
+	end
+	local function Turn() for _, n in pairs(nodes) do if n.player.seat == table1.hand.toAct then return n end end end
+	local function Play(action, amount)
+		local n = Turn()
+		check(n and n.player:Act(action, amount), "the player to act can "..action)
+		Flush()
+	end
+	-- Button on seat 1: seat 4 opens. Everyone calls and checks it down
+	check(table1.hand.button == 1 and table1.hand.toAct == 4, "the first button is the lowest seat; the player after the big blind opens")
+	local stale = cat.player.seq
+	Play("call") Play("call") Play("call") Play("check")
+	check(table1.hand.street == "flop", "to the flop")
+	for _ = 1, 3 do for _ = 1, 4 do Play("check") end end
+	check(table1.phase == "showdown" and table1.hand.street == "done", "checked down to a showdown")
+	local total = 0
+	for _, s in pairs(table1.seats) do total = total + s.stack end
+	check(total == 2200, "chips are conserved across the table: "..total)
+	for _, n in ipairs({ ann, bob, cat, dan }) do
+		local audit = Last(n.name, "audit")
+		check(audit and audit[2] == key and audit[3] == true, n.name.."'s client verifies the hand: "..tostring(audit and audit[4]))
+		local st = n.player.state
+		check(st.hand.results and st.hand.results.pots[1].description, n.name.." sees the result: "..tostring(st.hand.results and st.hand.results.pots[1].description))
+		local shownCount = 0
+		for _, s in pairs(st.seats) do if s.hole then shownCount = shownCount + 1 end end
+		check(shownCount == 4, n.name.." sees every hand at the showdown")
+	end
+
+	-- Nobody but the host is believed, and nobody acts for another seat
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	check(table1.phase == "playing" and table1.hs.key == "2.1" and table1.hand.button == 2, "the next hand, the button moved")
+	local cheat = SendFrom("Bob-Realm")
+	local forged = cat.player.state
+	cheat("Cat-Realm", { k = "state", t = table1.id, st = { t = table1.id, host = "Ann-Realm", e = 9, q = 999, cfg = cfg, phase = "waiting", me = 3, seats = { [3] = { n = "Cat-Realm", s = 999999 } } } })
+	Flush()
+	check(cat.player.state == forged and cat.player.term == 1, "a state from someone other than the host is ignored")
+	local victim = Turn()
+	local other = victim == bob and cat or bob
+	local before = table1.seq
+	cheat(victim.name, {}) -- nothing
+	SendFrom(other.name)("Ann-Realm", { k = "act", t = table1.id, h = table1.hs.key, q = table1.seq, a = "fold" })
+	Flush()
+	check(table1.seq == before and table1.hand.toAct == victim.player.seat, "an action from a seat that isn't to act does nothing, whatever seat it names")
+	-- An action on stale state is refused and the state sent again
+	local seqBefore = victim.player.seq
+	SendFrom(victim.name)("Ann-Realm", { k = "act", t = table1.id, h = table1.hs.key, q = table1.seq - 1, a = "fold" })
+	Flush()
+	check(table1.hand.toAct == victim.player.seat and victim.player.seq == table1.seq, "a stale action is refused and answered with the state")
+
+	-- A lost state is noticed at the next heartbeat and asked for again
+	drop = function(m) return m.to == "Dan-Realm" and m.k == "state" end
+	Play(Turn().player.state.hand.legal.check and "check" or "call")
+	drop = nil
+	check(dan.player.seq < table1.seq, "Dan missed a state")
+	Tick(Protocol.BEAT_SECONDS)
+	check(dan.player.seq == table1.seq, "the heartbeat's seq tells Dan to ask, and the host answers")
+
+	-- Timeouts: a player who doesn't act is checked or folded; twice running they sit out until they say they're back
+	local slow = Turn()
+	local slowSeat = slow.player.seat
+	Tick(cfg.turnSeconds + 1)
+	check(table1.hand.toAct ~= slowSeat and table1.seats[slowSeat].away == 1, "the slow player's turn is taken for them")
+	-- Everyone else folds along; the slow player's next turn, this hand or the one after, times out too
+	local hands = 0
+	while table1.seats[slowSeat].out ~= "away" and hands < 3 do
+		while table1.phase == "playing" and table1.seats[slowSeat].out ~= "away" do
+			local n = Turn()
+			if n == slow then Tick(cfg.turnSeconds + 1) else Play("fold") end
+		end
+		if table1.seats[slowSeat].out ~= "away" then
+			while table1.phase == "playing" do Play("fold") end
+			Tick(Protocol.SHOWDOWN_SECONDS + 1)
+			hands = hands + 1
+		end
+	end
+	check(table1.seats[slowSeat].out == "away", "two timeouts running and the player sits out")
+	while table1.phase == "playing" do local n = Turn() if n == slow then Tick(cfg.turnSeconds + 1) else Play("fold") end end
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	check(table1.phase == "playing" and not table1.hand.seats[slowSeat] and table1.seats[slowSeat].out == "away", "the next hand is dealt without them, and they stay out")
+	-- A client that stops answering (not the player: a reload, a lag spike) misses rounds and sits out as "missed";
+	-- when it hears the table again it says it's back by itself
+	local gone = (Turn() ~= dan or dan == slow) and dan or bob
+	if gone == slow then gone = cat end
+	local goneSeat = gone.player.seat
+	while table1.phase == "playing" do local n = Turn() if n == slow or n == gone then Tick(cfg.turnSeconds + 1) else Play("fold") end end
+	nodes[gone.name] = nil
+	for _ = 1, 2 do
+		Tick(Protocol.SHOWDOWN_SECONDS + 1)
+		Tick(Protocol.COMMIT_SECONDS + Protocol.REVEAL_SECONDS + 2)
+		while table1.phase == "playing" do local n = Turn() if n and nodes[n.name] and n ~= slow then Play("fold") else Tick(cfg.turnSeconds + 1) end end
+	end
+	check(table1.seats[goneSeat].out == "missed", gone.name.." sat out for missing two rounds: "..tostring(table1.seats[goneSeat].out))
+	nodes[gone.name] = gone
+	slow.player:Back()
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	Tick(Protocol.COMMIT_SECONDS + Protocol.REVEAL_SECONDS + 2)
+	check(table1.phase == "playing" and table1.hand.seats[slowSeat] and table1.seats[slowSeat].out == false, "back when they say so, and dealt the next hand")
+	check(table1.seats[goneSeat].out == false, gone.name.."'s client said it was back by itself on hearing the table again: "..tostring(table1.seats[goneSeat].out))
+	while table1.phase == "playing" do local n = Turn() Play(n.player.state.hand.legal.check and "check" or "call") end
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	Tick(Protocol.COMMIT_SECONDS + Protocol.REVEAL_SECONDS + 2)
+	check(table1.phase == "playing" and table1.hand.seats[goneSeat], gone.name.." is dealt the hand after")
+	while table1.phase == "playing" do local n = Turn() Play(n.player.state.hand.legal.check and "check" or "call") end
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+
+	-- Reload: a fresh client under the same name joins again mid-hand and gets its seat and cards back
+	local holeBefore = cat.player.state.seats[3].hole
+	check(holeBefore, "Cat has cards")
+	cat.player = Client:New({ name = "Cat-Realm", send = SendFrom("Cat-Realm"), now = Now, on = function(event, ...) tinsert(events["Cat-Realm"], { event, ... }) end })
+	cat.player:Join("Ann-Realm", table1.id, 300)
+	Flush()
+	local hole = cat.player.state.seats[3].hole
+	check(cat.player.seat == 3 and hole and hole[1] == holeBefore[1] and hole[2] == holeBefore[2], "the same seat and the same cards")
+	-- Though the reloaded client didn't make this hand's secret, the hand plays on; its audit of this hand is skipped
+	local audits = Count("Cat-Realm", "audit")
+	while table1.phase == "playing" do local n = Turn() Play(n.player.state.hand.legal.check and "check" or "call") end
+	check(Count("Cat-Realm", "audit") == audits, "no audit result for a hand this client didn't deal into")
+
+	-- Leaving mid-hand folds; closing a table returns the chips of a hand cut short
+	Tick(Protocol.SHOWDOWN_SECONDS + 1)
+	check(table1.phase == "playing", "a hand is on")
+	local leaver = Turn()
+	local leaverSeat = leaver.player.seat
+	leaver.player:Leave()
+	Flush()
+	check(table1.seats[leaverSeat] == nil and (table1.hand.seats[leaverSeat].folded or table1.hand.street == "done"), "the seat is empty and the hand folded")
+	leaver.player:Join("Ann-Realm", table1.id, 500)
+	Flush()
+
+	-- The host vanishes: the seat after the host takes the table over from the backup, the others follow
+	local successor = nodes[table1.seats[table1:Successor()].name]
+	nodes["Ann-Realm"] = nil
+	local handBefore = table1.handNo
+	Tick(Protocol.HOST_TIMEOUT + 1)
+	local takeover = Last(successor.name, "takeover")
+	check(takeover and takeover[2].id == table1.id, successor.name.." is told to take over, with the backup")
+	nodes["Eve-Realm"] = nil -- never seated
+	for name, node in pairs(nodes) do
+		if node ~= successor then check(Last(name, "hostGone"), name.." knows the host is gone") end
+	end
+	successor.host = Host:Restore(takeover[2], { name = successor.name, send = SendFrom(successor.name), now = Now })
+	successor.host:AnnounceTakeover()
+	Flush()
+	for name, node in pairs(nodes) do
+		check(node.player.host == successor.name and node.player.term == 2, name.." follows the new host, term 2")
+	end
+	Tick(3)
+	Tick(Protocol.COMMIT_SECONDS + Protocol.REVEAL_SECONDS + 2)
+	check(successor.host.phase == "playing" and successor.host.handNo > handBefore, "the new host deals the next hand: "..successor.host.phase)
+	check(successor.host.seats[1] and successor.host.seats[1].name == "Ann-Realm", "the old host keeps their seat and stack until they're gone for good")
+	-- Ann's seat answers nothing: after two rounds it sits out, and the game goes on among the rest
+	table1 = successor.host
+	local function PlayOut()
+		local guard = 0
+		while table1.phase ~= "showdown" do
+			guard = guard + 1 assert(guard < 200, "the hand never ends")
+			local n = Turn()
+			if n and nodes[n.name] then Play(n.player.state.hand.legal.check and "check" or "call") else Tick(cfg.turnSeconds + 1) end
+		end
+	end
+	PlayOut()
+	Tick(Protocol.SHOWDOWN_SECONDS + 1) Tick(Protocol.COMMIT_SECONDS + 1)
+	PlayOut()
+	for name, node in pairs(nodes) do
+		local a = Last(name, "audit")
+		check(a and a[3] == true, name.."'s audit under the new host passes")
+	end
+	successor.host:Close()
+	Flush()
+	for name, node in pairs(nodes) do check(node.player.state.phase == "closed", name.." sees the table close") end
+	check(#ads >= 1 and ads[1].h == "Ann-Realm" and ads[1].m == 4, "the table was advertised")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

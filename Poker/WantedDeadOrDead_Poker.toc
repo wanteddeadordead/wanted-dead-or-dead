@@ -5,6 +5,7 @@
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@
 ## Dependencies: WantedDeadOrDead
+## DefaultState: enabled
 ## SavedVariables: WantedPokerDB
 ## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
 ## X-License: MIT

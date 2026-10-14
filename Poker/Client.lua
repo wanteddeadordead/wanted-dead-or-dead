@@ -126,6 +126,14 @@ function Player:Receive(sender, tbl)
 		self:OnAudit(tbl)
 	elseif k == "backup" then
 		self.backup = tbl.b
+	elseif k == "handoff" then
+		-- The host hands the table to a seat: their takeover is expected now, without waiting the host out
+		if Protocol:IsName(tbl.to) then
+			self.handoffTo = tbl.to
+			if tbl.to == self.name and type(tbl.b) == "table" then
+				self.on("handoff", tbl.b, tonumber(tbl.pool) or 0, sender)
+			end
+		end
 	elseif k == "settle" then
 		local l = tbl.l
 		if type(l) == "table" and type(l.id) == "string" and Protocol:IsName(l.from) and Protocol:IsName(l.to) and Protocol:IsCount(l.amount, 1)
@@ -224,10 +232,11 @@ function Player:OnTakeover(sender, tbl)
 	if type(st) ~= "table" or type(st.e) ~= "number" or st.e <= self.term or st.host ~= sender then
 		return
 	end
-	-- Only once the host is gone, and only from a player who was at the table
-	if self.now() - self.lastHeard < Protocol.HOST_TIMEOUT or not self:WasSeated(sender) then
+	-- Only once the host is gone (or handed the table to this very player), and only from a player who was at the table
+	if (self.now() - self.lastHeard < Protocol.HOST_TIMEOUT and sender ~= self.handoffTo) or not self:WasSeated(sender) then
 		return
 	end
+	self.handoffTo = nil
 	self.host = sender
 	self.on("newHost", sender)
 	self:Apply(st)

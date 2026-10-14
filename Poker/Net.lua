@@ -196,6 +196,15 @@ local function NewPlayer()
 	return Client:New({ name = Net:Me(), send = Send, now = Now, blocked = Blocked, on = function(event, ...)
 		if event == "takeover" then
 			private.TakeOver(...)
+		elseif event == "handoff" then
+			private.OnHandoff(...)
+		elseif event == "newHost" then
+			-- Our own table, handed on: the successor has it now
+			local name = ...
+			if private.host and private.host.handingTo == name and private.host:Handed() then
+				private.host = nil
+				private.bots = {}
+			end
 		end
 		private.Notify(event, ...)
 	end })
@@ -289,16 +298,52 @@ end
 
 -- The host vanished and this seat is next: the table carries on from the backup, under this character. Not a gold
 -- table: the host holds the money, so nobody else can carry it on (the client claims its stack instead)
-function private.TakeOver(backup)
-	if type(backup) == "table" and type(backup.cfg) == "table" and backup.cfg.stakes == "gold" then
-		return
+function private.TakeOver(backup, handed)
+	if type(backup) == "table" and type(backup.cfg) == "table" and backup.cfg.stakes == "gold" and not handed then
+		return false
+	end
+	if private.host then
+		return false
 	end
 	local host = Host:Restore(backup, { name = Net:Me(), send = Send, ad = Advertise, now = Now, on = private.OnHostEvent, blocked = Blocked })
 	if not host then
-		return
+		return false
 	end
 	private.host = host
 	host:AnnounceTakeover()
+	return true
+end
+
+-- The host hands this character the table. At a gold table the pool must have come by trade first (Gold saw it)
+function private.OnHandoff(backup, pool, from)
+	local Gold = Poker.PokerGold
+	if pool > 0 and not (Gold and Gold:TakePool(from, pool)) then
+		Wanted:Print("Poker: %s is handing you the table, but the pool of %s hasn't come by trade. Not taking it.", from, Protocol:Money(pool, "gold"))
+		return
+	end
+	if private.TakeOver(backup, true) then
+		Wanted:Print("Poker: you host the table now%s.", pool > 0 and (", holding its pool of "..Protocol:Money(pool, "gold")) or "")
+		private.Notify("hosting")
+	end
+end
+
+---Hands the table this character hosts to the next seat. At a gold table it asks for the pool to be traded first;
+---the table passes once the trade is seen.
+---@return boolean ok
+---@return string? reason
+function Net:Handoff()
+	if not private.host then
+		return false, "you aren't hosting"
+	end
+	if private.host.cfg.bots > 0 then
+		return false, "a practice table is yours alone"
+	end
+	return private.host:ProposeHandoff()
+end
+
+---Thinks better of a handoff waiting on its trade.
+function Net:CancelHandoff()
+	if private.host then private.host:CancelHandoff() end
 end
 
 ---Whispers a table message to ourselves and says when it comes back: whether tables work where we stand (the game

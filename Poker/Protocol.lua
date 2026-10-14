@@ -14,7 +14,7 @@ Protocol.AD_TAG = "T" -- open tables, on the channel
 -- Message kinds, in the message's k field. From a player to the host:
 Protocol.TO_HOST = { join = true, leave = true, sync = true, commit = true, reveal = true, act = true, back = true, sitout = true, rebuy = true }
 -- From the host to a player:
-Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true }
+Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true }
 
 Protocol.MAX_SEATS = 8
 Protocol.MIN_SEATS = 2

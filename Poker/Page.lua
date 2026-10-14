@@ -10,7 +10,8 @@ local C = Theme.C
 local Net = Poker.PokerNet
 local Protocol = Poker.PokerProtocol
 local TableUI = Poker.PokerTable
-local private = { list = nil, form = nil, seat = nil }
+local Gold = Poker.PokerGold
+local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 196
 local BLINDS = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } }
@@ -21,11 +22,12 @@ local HOW_IT_WORKS = table.concat({
 	"2.  Before each hand every player's client makes a secret; the deck is shuffled from all of them together, so nobody, the host included, can choose it.",
 	"3.  After each hand your client checks the host's account of it. A hand that doesn't check out is marked in red at the table.",
 	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
-	"5.  Chips are play money for now. Close the table window and you stay seated; leave from the table or here.",
+	"5.  Gold tables: the host is the bank. When you leave, what you won or lost against your buy-in is a line in Settlement below, paid by mail at a mailbox (Pay fills it in; you press Send). A debt left two days counts against your Wanted reputation with everyone who was at the table.",
+	"6.  Close the table window and you stay seated; leave from the table or here.",
 }, "\n")
 
 local function Settings()
-	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "" }
+	Poker.db.host = Poker.db.host or { blinds = "10/20", seats = 6, turn = 30, title = "", stakes = "chips" }
 	return Poker.db.host
 end
 
@@ -73,14 +75,20 @@ function private.BuildForm(parent, width)
 	private.turn = W:Choice(form, 64, { { key = 20, label = "20s" }, { key = 30, label = "30s" }, { key = 45, label = "45s" }, { key = 60, label = "60s" } }, function(key) Settings().turn = key end)
 	private.turn:SetPoint("LEFT", turnLabel, "RIGHT", 6, 0)
 	private.turn:SetChoice(s.turn)
+	private.stakes = W:Segmented(form, { { key = "chips", label = "Chips" }, { key = "gold", label = "Gold" } }, function(key)
+		Settings().stakes = key
+		private.RefreshBuyin()
+	end, 70)
+	private.stakes:SetPoint("TOPLEFT", 14, -66)
+	private.stakes:Select(s.stakes or "chips", true)
 	private.buyinNote = Theme:Text(form, "small", "", C.muted)
-	private.buyinNote:SetPoint("TOPLEFT", 14, -66)
+	private.buyinNote:SetPoint("LEFT", private.stakes, "RIGHT", 14, 0)
 	private.buyinBox = W:Input(form, 90, "Your buy-in")
 	private.buyinBox:SetPoint("LEFT", private.buyinNote, "RIGHT", 10, 0)
 	local go = W:Button(form, "Host table", "primary", 110, 26, private.Host)
 	go:SetPoint("LEFT", private.buyinBox, "RIGHT", 10, 0)
 	local how = Theme:Text(form, "tiny", HOW_IT_WORKS, C.faint)
-	how:SetPoint("TOPLEFT", 14, -100)
+	how:SetPoint("TOPLEFT", 14, -102)
 	how:SetPoint("RIGHT", -14, 0)
 	how:SetWordWrap(true)
 	how:SetJustifyH("LEFT")
@@ -92,7 +100,8 @@ end
 function private.RefreshBuyin()
 	local b = Blinds(Settings().blinds)
 	local low, high = b.bb * BUYIN_MIN_BB, b.bb * BUYIN_MAX_BB
-	private.buyinNote:SetText(("Buy-in %d to %d chips"):format(low, high))
+	local gold = Settings().stakes == "gold"
+	private.buyinNote:SetText(gold and ("Buy-in %dg to %dg, settled by mail"):format(low, high) or ("Buy-in %d to %d chips"):format(low, high))
 	local current = tonumber(private.buyinBox:GetText())
 	if not current or current < low or current > high then
 		private.buyinBox:SetValue(tostring(high))
@@ -104,11 +113,18 @@ function private.Host()
 	local b = Blinds(s.blinds)
 	s.title = strtrim(private.titleBox:GetText() or "")
 	local buyin = tonumber(private.buyinBox:GetText())
-	local cfg = { sb = b.sb, bb = b.bb, buyMin = b.bb * BUYIN_MIN_BB, buyMax = b.bb * BUYIN_MAX_BB, maxSeats = s.seats, turnSeconds = s.turn, stakes = "chips",
+	local cfg = { sb = b.sb, bb = b.bb, buyMin = b.bb * BUYIN_MIN_BB, buyMax = b.bb * BUYIN_MAX_BB, maxSeats = s.seats, turnSeconds = s.turn, stakes = s.stakes or "chips",
 		title = s.title ~= "" and s.title or nil }
 	if not buyin or buyin ~= floor(buyin) or buyin < cfg.buyMin or buyin > cfg.buyMax then
-		UI:Toast(("Your buy-in is %d to %d chips."):format(cfg.buyMin, cfg.buyMax), C.red)
+		UI:Toast(("Your buy-in is %d to %d%s."):format(cfg.buyMin, cfg.buyMax, cfg.stakes == "gold" and " gold" or " chips"), C.red)
 		return
+	end
+	if cfg.stakes == "gold" then
+		local ok, why = Gold:CanBuyIn(buyin)
+		if not ok then
+			UI:Toast("You can't host for that: "..why..".", C.red)
+			return
+		end
 	end
 	local ok, why = Net:HostTable(cfg, buyin)
 	if not ok then
@@ -165,9 +181,19 @@ function private.CreateRow(row)
 	row.action = Theme:Text(row, "small", "")
 	row.action:SetPoint("RIGHT", -14, 0)
 	row.action:SetJustifyH("RIGHT")
+	row.pay = W:Button(row, "Pay", "primary", 70, 22, function() private.Pay(row.item) end)
+	row.pay:SetPoint("RIGHT", -14, 0)
+	row.mark = W:Button(row, "Mark paid", "chip", 84, 22, function() private.MarkPaid(row.item) end)
+	row.mark:SetPoint("RIGHT", -14, 0)
 end
 
-function private.UpdateRow(row, ad)
+function private.UpdateRow(row, item)
+	if private.view == "settlement" then
+		return private.UpdateLine(row, item)
+	end
+	row.pay:Hide()
+	row.mark:Hide()
+	local ad = item
 	local title = ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")
 	row.title:SetText(title..Theme:Colorize("  "..Name(ad.h), C.muted))
 	row.sub:SetText(("blinds %d/%d  -  %d of %d seats  -  buy-in %d to %d%s"):format(ad.sb or 0, ad.bb or 0, ad.s or 0, ad.m or 0, ad.lo or 0, ad.hi or 0, ad.g and "  -  gold" or ""))
@@ -181,7 +207,48 @@ function private.UpdateRow(row, ad)
 	end
 end
 
+-- A settlement line: what you owe or are owed, paid or not
+function private.UpdateLine(row, line)
+	local me = Net:Me()
+	local owe = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
+	local other = Name(owe and line.to or line.from)
+	row.title:SetText(owe and ("You owe %s %dg"):format(other, line.amount) or ("%s owes you %dg"):format(other, line.amount))
+	row.sub:SetText((line.title and line.title ~= "" and line.title or "Poker")..Theme:Colorize("  -  "..Theme:Ago(time() - (line.at or time())).." ago", C.faint))
+	row.pay:SetShown(owe and not line.paid)
+	row.mark:SetShown(not owe and not line.paid)
+	if line.paid then
+		row.action:SetText(Theme:Colorize("Paid", C.green))
+	elseif owe then
+		row.action:SetText("")
+	else
+		row.action:SetText("")
+	end
+	if not line.paid and Gold:IsOverdue(line) then
+		row.sub:SetText(row.sub:GetText()..Theme:Colorize("  -  OVERDUE", C.red))
+	end
+end
+
+function private.Pay(line)
+	if not line or private.view ~= "settlement" then return end
+	local ok, why = Gold:Prefill(line)
+	UI:Toast(ok and ("Mail to %s filled in: check it and press Send."):format(Name(line.to)) or ("Can't fill the mail in: "..tostring(why).."."), ok and C.green or C.red)
+end
+
+function private.MarkPaid(line)
+	if not line or private.view ~= "settlement" then return end
+	W:Dialog({
+		title = "Mark as paid?",
+		text = ("Only if %s has paid you the %dg some other way (a trade, a mail your client missed). It counts for their reputation as paid."):format(Name(line.from), line.amount),
+		confirmLabel = "Mark paid",
+		onConfirm = function()
+			Gold:MarkPaid(line.id, "hand")
+			private.Refresh()
+		end,
+	})
+end
+
 function private.Sit(ad)
+	if private.view == "settlement" then return end
 	local st = Net:State()
 	if st and st.phase ~= "closed" and st.open ~= false then
 		UI:Toast("You're at a table already. Leave it first.", C.red)
@@ -193,12 +260,17 @@ function private.Sit(ad)
 	end
 	W:Dialog({
 		title = "Sit at "..(ad.n and ad.n ~= "" and ad.n or (Name(ad.h).."'s table")),
-		text = ("Blinds %d/%d. Buy in for %d to %d chips. Your client checks every deal; chips are play money for now."):format(ad.sb or 0, ad.bb or 0, ad.lo or 0, ad.hi or 0),
+		text = ad.g and ("Blinds %dg/%dg, for gold. Buy in for %dg to %dg. %s is the bank: when you leave, what you won or lost is settled with them by mail."):format(ad.sb or 0, ad.bb or 0, ad.lo or 0, ad.hi or 0, Name(ad.h))
+			or ("Blinds %d/%d. Buy in for %d to %d chips. Your client checks every deal; chips are play money."):format(ad.sb or 0, ad.bb or 0, ad.lo or 0, ad.hi or 0),
 		input = { placeholder = "Buy-in", value = tostring(ad.hi or 0) },
 		confirmLabel = "Sit down",
 		validate = function(value)
 			local n = tonumber(value)
 			if not n or n ~= floor(n) or n < (ad.lo or 0) or n > (ad.hi or 0) then return ("A whole number from %d to %d."):format(ad.lo or 0, ad.hi or 0) end
+			if ad.g then
+				local ok, why = Gold:CanBuyIn(n)
+				if not ok then return "You can't buy in for that: "..why.."." end
+			end
 		end,
 		onConfirm = function(value)
 			local ok, why = Net:JoinTable(ad.id, tonumber(value))
@@ -223,9 +295,11 @@ function private.Refresh()
 	local seated = st ~= nil and st.phase ~= "closed"
 	private.form:SetShown(not seated)
 	private.seat:SetShown(seated)
+	private.views:ClearAllPoints()
+	private.views:SetPoint("TOPLEFT", seated and private.seat or private.form, "BOTTOMLEFT", 0, -8)
 	private.list:ClearAllPoints()
-	private.list:SetPoint("TOPLEFT", seated and private.seat or private.form, "BOTTOMLEFT", 0, -12)
-	private.list:SetPoint("TOPRIGHT", seated and private.seat or private.form, "BOTTOMRIGHT", 0, -12)
+	private.list:SetPoint("TOPLEFT", private.views, "BOTTOMLEFT", 0, -6)
+	private.list:SetPoint("TOPRIGHT", seated and private.seat or private.form, "BOTTOMRIGHT", 0, -48)
 	if seated then
 		local n = 0
 		for _ in pairs(st.seats) do n = n + 1 end
@@ -233,7 +307,22 @@ function private.Refresh()
 		private.seatSub:SetText(("blinds %d/%d  -  %d of %d seated  -  host %s%s"):format(st.cfg.sb, st.cfg.bb, n, st.cfg.maxSeats, Name(st.host), Net:HostedTable() and " (you)" or ""))
 		private.leaveButton:SetText(Net:HostedTable() and "Close table" or "Leave")
 	end
-	private.list:SetItems(Net:Tables(), "No open tables right now.", "Host one above: every Wanted player of your faction sees it.")
+	local lines = Gold:Lines()
+	local open = 0
+	for _, l in ipairs(lines) do if not l.paid then open = open + 1 end end
+	for _, button in ipairs(private.views.buttons) do
+		if button.key == "settlement" then button:SetText(open > 0 and ("Settlement ("..open..")") or "Settlement") end
+	end
+	if private.view == "settlement" then
+		private.list:SetItems(lines, "Nothing to settle.", "Gold tables settle with the host when you leave; the lines show here.")
+	else
+		private.list:SetItems(Net:Tables(), "No open tables right now.", "Host one above: every Wanted player of your faction sees it.")
+	end
+end
+
+---Redraws the page (the ledger changed).
+function Page:Refresh()
+	private.Refresh()
 end
 
 function Page:OnEnable()
@@ -255,6 +344,9 @@ function Page:OnEnable()
 			local why = ...
 			UI:Toast("Poker: "..tostring(why), C.red)
 			private.shownOnce = nil
+			private.Refresh()
+		elseif event == "settle" then
+			TableUI:OnSettle(...)
 			private.Refresh()
 		elseif event == "hostGone" or event == "newHost" then
 			TableUI:OnHost(event, ...)
@@ -280,7 +372,12 @@ UI:RegisterPage("poker", {
 	build = function(container, width, height)
 		private.form = private.BuildForm(container, width)
 		private.seat = private.BuildSeatCard(container, width)
-		local listTop = CARD_HEIGHT + 12
+		private.views = W:Segmented(container, { { key = "tables", label = "Open tables" }, { key = "settlement", label = "Settlement" } }, function(key)
+			private.view = key
+			private.Refresh()
+		end, 130)
+		private.views:Select("tables", true)
+		local listTop = CARD_HEIGHT + 12 + 34
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
 		list.onClick = private.Sit
 		private.list = list

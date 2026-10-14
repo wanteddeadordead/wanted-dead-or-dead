@@ -117,6 +117,13 @@ function Player:Receive(sender, tbl)
 		self:OnAudit(tbl)
 	elseif k == "backup" then
 		self.backup = tbl.b
+	elseif k == "settle" then
+		local l = tbl.l
+		if type(l) == "table" and type(l.id) == "string" and Protocol:IsName(l.from) and Protocol:IsName(l.to) and Protocol:IsCount(l.amount, 1)
+			and (l.from == self.name or l.to == self.name) and (l.from == sender or l.to == sender) then
+			self.on("settle", { id = l.id, table = self.id, title = type(l.title) == "string" and l.title or nil, host = sender, at = time(),
+				from = l.from, to = l.to, amount = l.amount })
+		end
 	end
 end
 

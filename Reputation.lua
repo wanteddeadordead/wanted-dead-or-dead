@@ -80,6 +80,14 @@ end
 ---Everything the records say about one origin (a character name as the server writes it).
 ---@param origin string
 ---@return table tally
+---Lets another addon add to a player's tally (the poker addon's settlements: debts paid and left unpaid). The
+---source is called with (origin, tally, since, weights) and adds to tally.paid, tally.unpaid and tally.points.
+---@param source fun(origin: string, tally: table, since: number, weights: table)
+function Reputation:AddTallySource(source)
+	private.sources = private.sources or {}
+	tinsert(private.sources, source)
+end
+
 function Reputation:GetTally(origin, since)
 	since = since or 0
 	local tally = {
@@ -140,6 +148,9 @@ function Reputation:GetTally(origin, since)
 			end
 		end
 		end
+	end
+	for _, source in ipairs(private.sources or {}) do
+		source(origin, tally, since, WEIGHTS)
 	end
 	return tally
 end

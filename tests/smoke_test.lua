@@ -12385,6 +12385,106 @@ end)()
 	ns.UI:Show("poker")
 	check(OnScreen("HOST A TABLE"), "the page is back to the host form")
 end)()
+
+-- Poker gold: a gold table settles with the host as the bank when a player leaves or the table closes; the lines
+-- are paid by mail the way bounties are; a debt left unpaid two days counts against the debtor's reputation
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Client, Gold, Net = P.PokerHost, P.PokerClient, P.PokerGold, P.PokerNet
+	local now = 9000
+	local sent = {}
+	local function Sent(to, kind) for i = #sent, 1, -1 do local m = sent[i] if m.to == to and (m.tbl and m.tbl.k == kind or m.line and kind == "own") then return m end end end
+	local host = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4, stakes = "gold", title = "Gold Den" },
+		send = function(target, tbl) sent[#sent + 1] = { to = target, tbl = tbl } end, now = function() return now end,
+		on = function(event, line) if event == "settle" then sent[#sent + 1] = { to = "own", line = line } end end })
+	host:Receive("Ann-Realm", { k = "join", t = host.id, b = 2000 })
+	host:Receive("Bob-Realm", { k = "join", t = host.id, b = 1000 })
+	host:Receive("Cat-Realm", { k = "join", t = host.id, b = 500 })
+	-- Stacks as hands would leave them: Bob down, Cat up, then Bob rebuys and loses that too
+	host.seats[2].stack, host.seats[3].stack = 700, 900
+	host:Receive("Bob-Realm", { k = "rebuy", t = host.id, b = 300 })
+	check(host.seats[2].stack == 1000 and host.seats[2].bought == 1300, "a rebuy adds to the stack and to what was bought")
+	host.seats[2].stack = 600
+	host:Receive("Bob-Realm", { k = "leave", t = host.id })
+	local bobLine = Sent("Bob-Realm", "settle")
+	check(bobLine and bobLine.tbl.l.from == "Bob-Realm" and bobLine.tbl.l.to == "Ann-Realm" and bobLine.tbl.l.amount == 700 and bobLine.tbl.l.id == host.id..":1", "leaving down 700 on 1300 bought: Bob owes the host 700")
+	local own = Sent("own", "own")
+	check(own and own.line.id == host.id..":1" and own.line.from == "Bob-Realm", "the host's own ledger gets the same line")
+	host:Close()
+	local catLine = Sent("Cat-Realm", "settle")
+	check(catLine and catLine.tbl.l.from == "Ann-Realm" and catLine.tbl.l.to == "Cat-Realm" and catLine.tbl.l.amount == 400, "closing settles the rest: the host owes Cat 400")
+	check(Sent("Ann-Realm", "settle") == nil, "the host, the bank, gets no line of their own")
+	-- A chips table settles nothing
+	sent = {}
+	local chips = Host:New({ name = "Ann-Realm", cfg = { sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 4 }, send = function(target, tbl) sent[#sent + 1] = { to = target, tbl = tbl } end, now = function() return now end })
+	chips:Receive("Ann-Realm", { k = "join", t = chips.id, b = 2000 })
+	chips:Receive("Bob-Realm", { k = "join", t = chips.id, b = 1000 })
+	chips.seats[2].stack = 100
+	chips:Receive("Bob-Realm", { k = "leave", t = chips.id })
+	check(Sent("Bob-Realm", "settle") == nil, "play chips settle nothing")
+
+	-- A player's client takes a line only from its host and only about itself
+	local lines = {}
+	local player = Client:New({ name = "Cat-Realm", send = function() end, now = function() return now end, on = function(event, line) if event == "settle" then lines[#lines + 1] = line end end })
+	player:Join("Ann-Realm", host.id, 500)
+	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = host.id..":2", from = "Ann-Realm", to = "Cat-Realm", amount = 400, title = "Gold Den" } })
+	check(#lines == 1 and lines[1].amount == 400 and lines[1].host == "Ann-Realm" and lines[1].title == "Gold Den", "the line is taken")
+	player:Receive("Bob-Realm", { k = "settle", t = host.id, l = { id = "x", from = "Bob-Realm", to = "Cat-Realm", amount = 999 } })
+	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = "y", from = "Dan-Realm", to = "Eve-Realm", amount = 5 } })
+	player:Receive("Ann-Realm", { k = "settle", t = host.id, l = { id = "z", from = "Ann-Realm", to = "Cat-Realm", amount = 0.5 } })
+	check(#lines == 1, "not from someone else, not about others, not a fraction of gold")
+
+	-- The ledger, and paying by mail
+	local me = Net:Me()
+	wipe(P.db.ledger)
+	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 10, from = me, to = "Ann-Realm", amount = 150 })
+	Gold:Add({ id = "T1:1", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 10, from = me, to = "Ann-Realm", amount = 150 })
+	Gold:Add({ id = "T1:2", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 3 * 86400, from = "Bob-Realm", to = me, amount = 60 })
+	Gold:Add({ id = "T1:3", table = "T1", title = "Gold Den", host = "Ann-Realm", at = time() - 20, from = me, to = "Bob-Realm", amount = 40 })
+	check(#Gold:Lines() == 3 and Gold:Owing() == 190, "lines are kept once; you owe 190 in all")
+	local function Line(id) for _, l in ipairs(Gold:Lines()) do if l.id == id then return l end end end
+	check(Gold:IsOverdue(Line("T1:2")) and not Gold:IsOverdue(Line("T1:1")), "a line unpaid two days is overdue")
+	local realMoney, realSendMoney, realCount, realHeader = GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo
+	GetMoney = function() return 500 * 10000 end
+	check(Gold:CanBuyIn(310) == true and not Gold:CanBuyIn(311), "a buy-in is covered by the gold in the bags less what you owe: 500 - 190")
+	MailFrame._shown = true
+	check(Gold:Prefill(Line("T1:1")) and SendMailSubjectEditBox:GetText() == "Wanted poker T1:1" and SendMailNameEditBox:GetText() == "Ann-Realm", "Pay fills the mail in")
+	check(not Gold:Prefill(Line("T1:2")), "not a debt of yours: nothing filled in")
+	local function SendHook(recipient, subject, gold)
+		GetSendMailMoney = function() return gold * 10000 end
+		for _, f in ipairs(globalHooks.SendMail or {}) do f(recipient, subject, "") end
+	end
+	SendHook("Ann-Realm", "Wanted poker T1:1", 150)
+	Fire("MAIL_SEND_SUCCESS")
+	check(Line("T1:1").paid and Line("T1:1").paidHow == "mail", "sent with the amount: paid")
+	SendHook("Bob-Realm", "gg", 39)
+	Fire("MAIL_SEND_SUCCESS")
+	check(not Line("T1:3").paid, "a mail with less than the line isn't the payment")
+	SendHook("Bob-Realm", "gg", 40)
+	Fire("MAIL_SEND_SUCCESS")
+	check(Line("T1:3").paid, "a hand-written mail with the amount pays the oldest line to that player")
+	check(Gold:Owing() == 0, "nothing owed")
+	-- Receiving: a mail from the debtor with the amount
+	GetInboxNumItems = function() return 1 end
+	GetInboxHeaderInfo = function() return nil, nil, "Bob-Realm", "Wanted poker T1:2", 60 * 10000 end
+	Fire("MAIL_INBOX_UPDATE")
+	check(Line("T1:2").paid, "the creditor's client marks the line paid when the mail arrives")
+	-- Reputation: a debt left unpaid counts against its debtor; one paid counts for them
+	Gold:Add({ id = "T2:1", table = "T2", title = "Gold Den", host = "Ann-Realm", at = time() - 3 * 86400, from = "Stiff-Realm", to = me, amount = 500 })
+	local tally = ns.Reputation:GetTally("Stiff-Realm")
+	check(tally.unpaid == 1 and tally.points < 0, "a poker debt two days unpaid counts like a bounty left unpaid")
+	check(ns.Reputation:GetTally("Bob-Realm").paid >= 1, "a poker debt paid counts like a bounty paid")
+	GetMoney, GetSendMailMoney, GetInboxNumItems, GetInboxHeaderInfo = realMoney, realSendMoney, realCount, realHeader
+
+	-- The page's Settlement view
+	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
+	ns.UI:Show("poker")
+	local switch
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Settlement (1)" then switch = f end end
+	check(switch, "the Settlement view counts what's open")
+	switch._scripts.OnClick(switch)
+	check(OnScreen("Stiff owes you 500g") and OnScreen("OVERDUE") and OnScreen("Paid"), "the lines show, the overdue one marked")
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

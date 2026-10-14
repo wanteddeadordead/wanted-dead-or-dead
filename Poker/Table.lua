@@ -460,7 +460,8 @@ function TableUI:Refresh(st)
 			else
 				seatFrame.empty:SetText("")
 				seatFrame.name:SetText(seat == me and (Name(p.n).." (you)") or Name(p.n))
-				seatFrame.stack:SetText(Chips(p.s, cfg))
+				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil
+				seatFrame.stack:SetText(Chips(p.s, cfg)..(net and net ~= 0 and Theme:Colorize(("  %+d"):format(net), net > 0 and C.green or C.red) or ""))
 				-- Cards: yours face up, others' backs while they're in the hand, everyone's at a showdown
 				local inHand = hand and (p.b ~= nil or p.tot ~= nil) and not p.f
 				for i = 1, 2 do
@@ -632,6 +633,14 @@ function TableUI:OnAudit(key, ok, reason)
 		Wanted:Print("Poker: hand %s failed verification (%s).", handNo, tostring(reason))
 	end
 	if private.state then TableUI:Refresh(private.state) end
+end
+
+---A settlement line from the host (gold tables): said in the log.
+function TableUI:OnSettle(line)
+	local me = Net:Me()
+	local owe = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
+	TableUI:Log(owe and ("Settlement: you owe %s %dg. Pay from the Poker page at a mailbox."):format(Name(line.to), line.amount)
+		or ("Settlement: %s owes you %dg."):format(Name(line.from), line.amount), C.gold)
 end
 
 ---The host went quiet, or a new one took over.

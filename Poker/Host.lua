@@ -40,7 +40,7 @@ function Host:New(o)
 		button = o.button, open = true, nextHandAt = now, lastSent = now, lastAd = 0,
 	}, Table)
 	for seat, p in pairs(o.seats or {}) do
-		t.seats[seat] = { name = p.name, stack = p.stack, out = type(p.out) == "string" and p.out or false, away = 0, since = now }
+		t.seats[seat] = { name = p.name, stack = p.stack, bought = p.bought or p.stack, out = type(p.out) == "string" and p.out or false, away = 0, since = now }
 	end
 	return t
 end
@@ -57,7 +57,7 @@ function Host:Restore(backup, o)
 	local seats = {}
 	for seat, p in pairs(backup.seats) do
 		if Protocol:IsCount(seat, 1, Protocol.MAX_SEATS) and Protocol:IsName(p.name) and Protocol:IsCount(p.stack) then
-			seats[seat] = { name = p.name, stack = p.stack, out = p.out }
+			seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out }
 		end
 	end
 	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on,
@@ -102,7 +102,7 @@ function Table:Sit(name, buyin)
 	end
 	for seat = 1, self.cfg.maxSeats do
 		if not self.seats[seat] then
-			self.seats[seat] = { name = name, stack = buyin, out = false, away = 0, since = self.now() }
+			self.seats[seat] = { name = name, stack = buyin, bought = buyin, out = false, away = 0, since = self.now() }
 			self.on("sat", name, seat, buyin)
 			return seat
 		end
@@ -128,6 +128,7 @@ function Table:Stand(name)
 		self.hs.players[seat] = nil
 	end
 	self.seats[seat] = nil
+	self:Settle(seat, p)
 	self.on("stood", name, seat, p.stack)
 	if self.hand and self.hand.street == "done" and self.phase == "playing" then
 		self:Showdown()
@@ -225,6 +226,7 @@ function Table:Receive(sender, tbl)
 		local inHand = self.hand and self.hand.street ~= "done" and self.hand.seats[seat] and not self.hand.seats[seat].folded
 		if not inHand and Protocol:IsCount(tbl.b, 1) and p.stack + tbl.b <= self.cfg.buyMax then
 			p.stack = p.stack + tbl.b
+			p.bought = (p.bought or 0) + tbl.b
 			p.out, p.away = false, 0
 			self.on("rebuy", sender, seat, tbl.b)
 			self:Bump()
@@ -455,7 +457,30 @@ function Table:Close()
 	self.hand, self.hs = nil, nil
 	self:Bump()
 	self:Broadcast()
+	for seat, p in pairs(self.seats) do
+		self:Settle(seat, p)
+	end
 	self.on("closed")
+end
+
+---At a gold table the host is the bank: a player who leaves (or is at the table when it closes) owes the host
+---what they lost, or is owed what they won, against what they bought in for. The player is sent the line, and
+---the host's own ledger gets it (on "settle"). Chips tables settle nothing.
+---@param seat number
+---@param p table the seat's record
+function Table:Settle(seat, p)
+	if self.cfg.stakes ~= "gold" or p.name == self.name then
+		return
+	end
+	local net = p.stack - (p.bought or 0)
+	if net == 0 then
+		return
+	end
+	self.settled = (self.settled or 0) + 1
+	local line = { id = self.id..":"..self.settled, table = self.id, title = self.cfg.title, host = self.name, at = time(),
+		from = net < 0 and p.name or self.name, to = net < 0 and self.name or p.name, amount = math.abs(net) }
+	self.send(p.name, { k = "settle", t = self.id, l = line })
+	self.on("settle", line)
 end
 
 -- ============================================================================
@@ -548,7 +573,7 @@ function Table:StateFor(name)
 	local hand, hs = self.hand, self.hs
 	local st = { t = self.id, host = self.name, e = self.term, q = self.seq, h = self.handNo, cfg = self.cfg, phase = self.phase, me = mySeat, seats = {}, open = self.open }
 	for seat, p in pairs(self.seats) do
-		local s = { n = p.name, s = p.stack, out = p.out or nil, away = p.away > 0 and p.away or nil }
+		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil }
 		if hand and hand.seats[seat] then
 			local hp = hand.seats[seat]
 			s.s, s.b, s.tot = hp.stack, hp.bet, hp.total
@@ -601,7 +626,7 @@ end
 function Table:BackupData()
 	local seats = {}
 	for seat, p in pairs(self.seats) do
-		seats[seat] = { name = p.name, stack = p.stack, out = p.out or nil }
+		seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out or nil }
 	end
 	return { id = self.id, cfg = self.cfg, seats = seats, handNo = self.handNo, term = self.term, button = self.button, host = self.name }
 end

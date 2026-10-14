@@ -230,11 +230,11 @@ function private.Build()
 	private.status:SetWordWrap(false)
 	-- Bet presets on the strip's right, on your turn: a share of the pot, or the most you can
 	private.presets = {}
-	local PRESETS = { { "Min", 0 }, { "1/2", 0.5 }, { "3/4", 0.75 }, { "Pot", 1 }, { "Max", nil } }
+	local PRESETS = { { "Min", 0 }, { "1/4", 0.25 }, { "1/2", 0.5 }, { "3/4", 0.75 }, { "Pot", 1 }, { "2x", 2 }, { "Max", nil } }
 	local last
 	for i = #PRESETS, 1, -1 do
 		local def = PRESETS[i]
-		local b = W:Button(rail, def[1], "ghost", 40, 20, function() private.Preset(def[2]) end)
+		local b = W:Button(rail, def[1], "ghost", 36, 20, function() private.Preset(def[2]) end)
 		if last then b:SetPoint("RIGHT", last, "LEFT", -2, 0) else b:SetPoint("BOTTOMRIGHT", -8, 2) end
 		b:Hide()
 		private.presets[#private.presets + 1] = b

@@ -202,12 +202,110 @@ function Table:After(seat)
 	return out
 end
 
----The seat that takes the table over if this host vanishes: the next seated player after the host.
+---The seat that takes the table over if this host vanishes, or is handed it: the next seated player after the host
+---whose client is answering, else the next seated player.
 ---@return number? seat
 function Table:Successor()
 	local mine = self:SeatOf(self.name)
 	local after = self:After(mine or 0)
+	for _, seat in ipairs(after) do
+		local p = self.seats[seat]
+		if p and p.out ~= "missed" and p.away == 0 and not p.unpaid then return seat end
+	end
 	return after[1]
+end
+
+-- ============================================================================
+-- Handing the table on
+-- ============================================================================
+
+---What the host holds for the table, in money: a tournament's whole prize pool (every entry, the host's own
+---included), or at a cash table every stack on it (the host's own included, since the next host will owe it).
+---@return number
+function Table:Pool()
+	if self.cfg.stakes ~= "gold" then
+		return 0
+	end
+	if self.cfg.kind == "tournament" then
+		local n = 0
+		for _ in pairs(self.entrants) do n = n + 1 end
+		return self.cfg.entry * n
+	end
+	local total = 0
+	for _, p in pairs(self.seats) do
+		if not p.unpaid then total = total + p.stack + (p.pendingChips or 0) end
+	end
+	return total
+end
+
+---Hands the table to the next seat: everyone is told who, and the successor gets the backup to carry on from. The
+---table runs on here until the successor announces, or HANDOFF_SECONDS pass. At a gold table the pool goes first
+---(ProposeHandoff); pool says how much the successor was given.
+---@param pool number?
+---@return boolean ok
+---@return string? reason
+function Table:Handoff(pool)
+	if not self.open or self.phase == "finished" then
+		return false, "the table is over"
+	end
+	local seat = self:Successor()
+	if not seat then
+		return false, "nobody to hand the table to"
+	end
+	local name = self.seats[seat].name
+	self.handingTo, self.handingAt, self.handoffPending = name, self.now(), nil
+	self:Bump()
+	for _, p in pairs(self.seats) do
+		self.send(p.name, { k = "handoff", t = self.id, to = name, b = p.name == name and self:BackupData() or nil, pool = p.name == name and pool or nil })
+	end
+	self.on("handing", name)
+	return true
+end
+
+---At a gold table the pool goes to the successor by trade before the table does: the host is told whom to trade and
+---how much, and Handoff follows once the trade is seen (Gold).
+---@return boolean ok
+---@return string? reason
+function Table:ProposeHandoff()
+	if not self.open or self.phase == "finished" then
+		return false, "the table is over"
+	end
+	local seat = self:Successor()
+	if not seat then
+		return false, "nobody to hand the table to"
+	end
+	if self.cfg.stakes ~= "gold" then
+		return self:Handoff()
+	end
+	self.handoffPending = { name = self.seats[seat].name, pool = self:Pool() }
+	if self.handoffPending.pool == 0 then
+		return self:Handoff(0)
+	end
+	self:Bump()
+	self:Broadcast()
+	return true
+end
+
+---Thinks better of handing the table on (before the pool went).
+function Table:CancelHandoff()
+	if self.handoffPending then
+		self.handoffPending = nil
+		self:Bump()
+		self:Broadcast()
+	end
+end
+
+---The successor announced (this host's own seat heard a takeover): the table is theirs now.
+---@return boolean handed
+function Table:Handed()
+	if not self.handingTo then
+		return false
+	end
+	self.open = false
+	self.phase = "handed"
+	self.hand, self.hs = nil, nil
+	self.on("handed", self.handingTo)
+	return true
 end
 
 -- ============================================================================
@@ -863,6 +961,12 @@ function Table:Tick()
 		self:Bump()
 		self:Broadcast()
 	end
+	-- A successor who never took the table: it carries on here
+	if self.handingTo and now - self.handingAt >= Protocol.HANDOFF_SECONDS then
+		local name = self.handingTo
+		self.handingTo, self.handingAt = nil, nil
+		self.on("handoffFailed", name)
+	end
 	-- A seat whose buy-in never came is given up
 	for _, seat in ipairs(self:Seated()) do
 		local p = self.seats[seat]
@@ -1026,6 +1130,11 @@ function Table:StateFor(name)
 	end
 	if self.cfg.stakes == "gold" then
 		st.holding = self:Holding()
+	end
+	if self.handoffPending then
+		st.handingTo, st.pool = self.handoffPending.name, self.handoffPending.pool
+	elseif self.handingTo then
+		st.handingTo = self.handingTo
 	end
 	return st
 end

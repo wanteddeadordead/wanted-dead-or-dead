@@ -14,7 +14,7 @@ Protocol.AD_TAG = "T" -- open tables, on the channel
 -- Message kinds, in the message's k field. From a player to the host:
 Protocol.TO_HOST = { join = true, leave = true, sync = true, commit = true, reveal = true, act = true, back = true, sitout = true, rebuy = true }
 -- From the host to a player:
-Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true }
+Protocol.TO_PLAYER = { welcome = true, refuse = true, state = true, beat = true, audit = true, backup = true, takeover = true, settle = true, handoff = true }
 -- Between any two players, about no table: { k = "lines" } asks for the open lines the sender is owed by the receiver;
 -- { k = "lines", l = { line, ... } } answers with them (Gold). Only lines the SENDER owes are taken from an answer.
 Protocol.LINES = "lines"
@@ -51,6 +51,10 @@ Protocol.BLOCKED_SECONDS = 25
 Protocol.PAY_SECONDS = 180
 -- A gold table's host gone this long is lost: the table is over and the host owes every seat its stack (Client)
 Protocol.HOST_LOST_SECONDS = 120
+-- A host handing the table to the next seat waits this long for them to take it before carrying on
+Protocol.HANDOFF_SECONDS = 30
+-- A pool traded to the next host counts toward a handoff for this long
+Protocol.POOL_SECONDS = 180
 
 ---How a tournament's prize pool splits: shares by place, for a number of entrants.
 ---@param entrants number

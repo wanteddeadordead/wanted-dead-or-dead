@@ -318,6 +318,10 @@ function private.BuildSeatCard(parent, width)
 		})
 	end)
 	private.leaveButton:SetPoint("RIGHT", private.startButton, "LEFT", -6, 0)
+	private.handoffButton = W:Button(card, "Hand off", "secondary", 90, 26, private.Handoff)
+	private.handoffButton:SetPoint("RIGHT", private.leaveButton, "LEFT", -6, 0)
+	private.handoffButton:Hide()
+	W:AttachTooltip(private.handoffButton, "Hand off the table", "The next seat hosts from here and you keep your chair, so you can leave without ending the game. At a gold table you trade them the pool first.")
 	return card
 end
 
@@ -373,7 +377,7 @@ function private.UpdateRow(row, item)
 end
 
 -- A settlement line: a debt you owe or are owed, paid or not, or a receipt (a buy-in paid, money received)
-local KIND_WORDS = { cashout = "cash-out", prize = "prize", refund = "refund", buyin = "buy-in", received = "not asked for" }
+local KIND_WORDS = { cashout = "cash-out", prize = "prize", refund = "refund", buyin = "buy-in", received = "not asked for", pool = "the table's pool" }
 function private.UpdateLine(row, line)
 	local me = Net:Me()
 	local mine = strlower((gsub(line.from, "%-.*$", ""))) == strlower((gsub(me, "%-.*$", "")))
@@ -501,6 +505,32 @@ end
 -- The page
 -- ============================================================================
 
+-- The host hands the table to the next seat: at once, or at a gold table once they've traded them the pool
+function private.Handoff()
+	local st = Net:State()
+	local host = Net:HostedTable()
+	if not st or not host then return end
+	if st.handingTo and (st.pool or 0) > 0 then
+		Net:CancelHandoff()
+		private.Refresh()
+		return
+	end
+	local seat = host:Successor()
+	local next_ = seat and host.seats[seat] and Name(host.seats[seat].name) or "?"
+	local pool = host:Pool()
+	W:Dialog({
+		title = "Hand the table to "..next_.."?",
+		text = pool > 0 and ("Trade %s the table's pool of %s first. The table passes to them the moment it arrives, and they owe the players from then on. You keep your seat."):format(next_, Protocol:Money(pool, "gold"))
+			or ("%s hosts from the next hand and you keep your seat. Leave whenever you like after that."):format(next_),
+		confirmLabel = pool > 0 and "I'll trade it" or "Hand off",
+		onConfirm = function()
+			local ok, why = Net:Handoff()
+			if not ok then UI:Toast(why or "Couldn't hand the table off.", C.red) end
+			private.Refresh()
+		end,
+	})
+end
+
 function private.Refresh()
 	if not private.list then return end
 	local st = Net:State()
@@ -528,6 +558,13 @@ function private.Refresh()
 			private.startButton:Hide()
 		end
 		private.leaveButton:SetText(hosting and "Close table" or "Leave")
+		local canHand = hosting and st.cfg.bots == 0 and n >= 2 and st.phase ~= "closed" and st.phase ~= "finished"
+		private.handoffButton:SetShown(canHand)
+		private.handoffButton:SetText(st.handingTo and (st.pool or 0) > 0 and "Cancel hand-off" or "Hand off")
+		if hosting and st.handingTo then
+			private.seatSub:SetText(private.seatSub:GetText()..Theme:Colorize((st.pool or 0) > 0 and ("  -  trade %s the pool of %s and the table is theirs"):format(Name(st.handingTo), Protocol:Money(st.pool, "gold"))
+				or ("  -  handing the table to %s"):format(Name(st.handingTo)), C.amber))
+		end
 		local mine = st.me and st.seats[st.me]
 		local due
 		if mine and st.cfg.stakes == "gold" then due = (mine.unpaid and mine.unpaid - (mine.received or 0)) or mine.rebuyDue end
@@ -586,6 +623,22 @@ function Page:OnEnable()
 			TableUI:OnHost(event, ...)
 		elseif event == "blocked" then
 			TableUI:OnBlocked(...)
+		elseif event == "hosting" then
+			private.Refresh()
+		elseif event == "host" then
+			local what, name = ...
+			if what == "handing" then
+				TableUI:Log("Handing the table to "..Name(name).."...", C.amber)
+			elseif what == "handed" then
+				TableUI:Log(Name(name).." hosts the table now. You keep your seat.", C.amber)
+				private.Refresh()
+			elseif what == "handoffFailed" then
+				TableUI:Log(Name(name).." didn't take the table; it stays with you.", C.amber)
+				UI:Toast(Name(name).." didn't take the table; it stays with you.", C.amber)
+				private.Refresh()
+			elseif what == "eliminated" and name == Net:Me() and Net:HostedTable() and Net:HostedTable().cfg.bots == 0 then
+				UI:Toast("You're out. Hand off the table from the Poker page if you want to leave before it ends.", C.amber)
+			end
 		elseif event == "left" then
 			private.shownOnce = nil
 			private.Refresh()

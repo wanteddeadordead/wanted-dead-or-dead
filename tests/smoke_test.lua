@@ -13201,6 +13201,180 @@ end)()
 	check(standings[1].name == "Ann-Realm" and standings[1].place == 1 and standings[2].name == "Dan-Realm" and standings[3].name == "Cat-Realm" and standings[4].name == "Bob-Realm", "standings: Ann, Dan, Cat, Bob")
 end)()
 
+-- Poker handoff: a host hands the table to the next answering seat and keeps their chair; the successor carries it on
+-- at once from the backup; one who never answers leaves it where it was; at a gold table the pool goes by trade first,
+-- and the successor takes the table only once it has
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Client, Protocol, Net, Gold = P.PokerHost, P.PokerClient, P.PokerProtocol, P.PokerNet, P.PokerGold
+	local nodes, queue, events = {}, {}, {}
+	local now = 70000
+	local function Now() return now end
+	local function SendFrom(from) return function(target, tbl) queue[#queue + 1] = { from = from, to = target, text = ns.Sync:Encode(tbl) } return true end end
+	local function Flush()
+		local guard = 0
+		while #queue > 0 do
+			guard = guard + 1 assert(guard < 20000, "the table never settles")
+			local m = tremove(queue, 1)
+			local node = nodes[m.to]
+			if node then
+				local tbl = ns.Sync:Decode(m.text)
+				if node.host and Protocol.TO_HOST[tbl.k] then node.host:Receive(m.from, tbl) end
+				if node.player and Protocol.TO_PLAYER[tbl.k] then node.player:Receive(m.from, tbl) end
+			end
+		end
+	end
+	local function Tick(seconds)
+		for _ = 1, seconds do
+			now = now + 1
+			for _, node in pairs(nodes) do if node.host then node.host:Tick() end if node.player then node.player:Tick() end end
+			Flush()
+		end
+	end
+	-- Each node does what Net does: takes a table handed to it, lets go of one handed on
+	local function Node(name)
+		events[name] = {}
+		local node = { name = name }
+		node.player = Client:New({ name = name, send = SendFrom(name), now = Now, on = function(event, ...)
+			tinsert(events[name], { event, ... })
+			if event == "handoff" then
+				local backup = ...
+				node.host = Host:Restore(backup, { name = name, send = SendFrom(name), now = Now, on = function(e, ...) tinsert(events[name], { "host:"..e, ... }) end })
+				node.host:AnnounceTakeover()
+			elseif event == "newHost" then
+				local newHost = ...
+				if node.host and node.host.handingTo == newHost and node.host:Handed() then node.host = nil end
+			end
+		end })
+		nodes[name] = node
+		return node
+	end
+	local function Count(name, event) local n = 0 for _, e in ipairs(events[name]) do if e[1] == event then n = n + 1 end end return n end
+	local ann, bob, cat = Node("Ann-Realm"), Node("Bob-Realm"), Node("Cat-Realm")
+	ann.host = Host:New({ name = "Ann-Realm", cfg = { kind = "tournament", entry = 0, startStack = 1000, levelMinutes = 5, maxSeats = 4, lateLevels = 0 }, send = SendFrom("Ann-Realm"), now = Now,
+		on = function(e, ...) tinsert(events["Ann-Realm"], { "host:"..e, ... }) end })
+	local t = ann.host
+	ann.player:Join("Ann-Realm", t.id, 0) bob.player:Join("Ann-Realm", t.id, 0) cat.player:Join("Ann-Realm", t.id, 0)
+	Flush()
+	t:Start()
+	Tick(1)
+	check(t.phase == "playing", "under way")
+	-- Hand off: Bob, the next seat, hosts at once; everyone follows without waiting Ann out; Ann keeps her chair
+	check(t:ProposeHandoff() and t.handingTo == "Bob-Realm", "a chips table passes without a pool: Bob is next")
+	Flush()
+	check(bob.host and bob.host.term == 2 and bob.host.id == t.id and ann.host == nil and t.phase == "handed", "Bob has the table from the backup; Ann's copy is handed over")
+	check(cat.player.host == "Bob-Realm" and ann.player.host == "Bob-Realm" and Count("Cat-Realm", "newHost") == 1 and Count("Cat-Realm", "hostGone") == 0, "Cat and Ann follow to Bob at once")
+	check(bob.host:SeatOf("Ann-Realm") ~= nil and ann.player.seat ~= nil, "Ann keeps her seat")
+	Tick(4)
+	check(bob.host.phase == "playing" and bob.host.hand ~= nil, "the next hand is dealt under Bob")
+	ann.player:Leave()
+	Flush()
+	check(bob.host:SeatOf("Ann-Realm") == nil and bob.host.entrants["Ann-Realm"].left, "and Ann can leave: the game goes on without her")
+	-- The next seat whose client answers is the successor: a seat that missed its rounds is passed over
+	local t2 = bob.host
+	nodes["Cat-Realm"] = nil
+	local dan = Node("Dan-Realm")
+	t2.cfg.lateLevels = 6
+	dan.player:Join("Bob-Realm", t2.id, 0)
+	Flush()
+	t2.seats[t2:SeatOf("Cat-Realm")].out = "missed"
+	check(t2.seats[t2:Successor()].name == "Dan-Realm", "Cat's client is away: Dan is next in line")
+	-- A successor who never takes it: the table stays
+	nodes["Dan-Realm"] = nil
+	check(t2:ProposeHandoff() and t2.handingTo == "Dan-Realm", "handing to Dan")
+	Flush()
+	Tick(Protocol.HANDOFF_SECONDS + 1)
+	check(t2.handingTo == nil and t2.open and Count("Bob-Realm", "host:handoffFailed") == 1, "Dan never answered: the table stays with Bob")
+
+	-- Gold: the pool goes by trade first. Through Net and Gold, with the trade window faked
+	local me = Net:Me()
+	local money = 1000 * 10000
+	local realGetMoney, realGetUnitName = GetMoney, GetUnitName
+	GetMoney = function() return money end
+	local tradeWith, give, get = nil, 0, 0
+	GetUnitName = function(unit, full) if unit == "NPC" then return tradeWith end return realGetUnitName(unit, full) end
+	GetPlayerTradeMoney = function() return give end
+	GetTargetTradeMoney = function() return get end
+	local function Trade(name, giveCopper, getCopper)
+		tradeWith, give, get = name, giveCopper, getCopper
+		Fire("TRADE_SHOW")
+		Fire("TRADE_ACCEPT_UPDATE", 1, 1)
+		money = money - giveCopper + getCopper
+		Fire("TRADE_CLOSED")
+	end
+	-- The last message of a kind whispered to a player, its parts put back together
+	local function Sent(name, kind)
+		local messages, order = {}, {}
+		for _, m in ipairs(addonSent) do
+			if m.target == name and m.text:find("^P:") then
+				local msgId, part, total, chunk = m.text:match("^P:(%w+):(%d+)/(%d+):(.*)$")
+				local entry = messages[msgId]
+				if not entry then entry = { parts = {}, total = tonumber(total) } messages[msgId] = entry order[#order + 1] = msgId end
+				entry.parts[tonumber(part)] = chunk
+			end
+		end
+		for i = #order, 1, -1 do
+			local entry = messages[order[i]]
+			if #entry.parts == entry.total then
+				local tbl = ns.Sync:Decode(table.concat(entry.parts))
+				if tbl and tbl.k == kind then return tbl end
+			end
+		end
+	end
+	check(Net:HostTable({ kind = "tournament", entry = 100, startStack = 1000, levelMinutes = 5, maxSeats = 4, stakes = "gold", title = "Pool Den", lateLevels = 0 }, 100), "a gold tournament through Net")
+	local gh = Net:HostedTable()
+	local function From(name, tbl) tbl.t, tbl.v = gh.id, "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zh"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", name) end
+	From("Bob-Realm", { k = "join", b = 100 })
+	Trade("Bob-Realm", 0, 100)
+	check(gh.seats[2] and gh.seats[2].unpaid == nil, "Bob paid his entry by trade")
+	gh:Start()
+	check(gh:Pool() == 200, "the pool is both entries")
+	check(Net:Handoff() and gh.handoffPending and gh.handoffPending.name == "Bob-Realm" and gh.handoffPending.pool == 200 and gh.handingTo == nil, "handing off a gold table asks for the pool first")
+	check(Net:State().handingTo == "Bob-Realm" and Net:State().pool == 200, "the state says so")
+	addonSent = {}
+	Trade("Bob-Realm", 200, 0)
+	check(gh.handingTo == "Bob-Realm" and gh.handoffPending == nil, "the pool traded: the table passes")
+	local handoff = Sent("Bob-Realm", "handoff")
+	check(handoff and handoff.to == "Bob-Realm" and handoff.pool == 200 and type(handoff.b) == "table" and handoff.b.cfg.stakes == "gold", "Bob gets the backup and the pool's size")
+	local pool
+	for _, l in ipairs(Gold:Lines()) do if l.kind == "pool" and l.to == "Bob-Realm" then pool = l end end
+	check(pool and pool.amount == 200 and pool.paid, "the ledger has the pool going out")
+	-- Bob announces: our own seat follows and our copy of the table is let go
+	local st = gh:StateFor(me)
+	st.e, st.host, st.q = 2, "Bob-Realm", 1
+	From("Bob-Realm", { k = "takeover", st = st })
+	check(Net:HostedTable() == nil and Net:State().host == "Bob-Realm" and Net:State().me ~= nil, "Bob hosts; we keep our seat at his table")
+	Net:Leave()
+
+	-- The other side: a host hands us a gold table. The pool must have come by trade, or we don't take it
+	addonSent = {}
+	check(Net:JoinTable("Zed-Realm#h1", 100), "sitting at Zed's gold tournament")
+	local cfg = { kind = "tournament", entry = 100, startStack = 1000, levelMinutes = 5, maxSeats = 4, stakes = "gold", title = "Zed's Pool", lateLevels = 0 }
+	local function ZedState(extra)
+		local zs = { t = "Zed-Realm#h1", host = "Zed-Realm", e = 1, q = extra.q or 1, me = 2, phase = "playing", open = true, cfg = cfg, started = true, level = 1,
+			seats = { [1] = { n = "Zed-Realm", s = 1000, bought = 100 }, [2] = { n = me, s = 1000, bought = 100 } } }
+		for k, v in pairs(extra) do zs[k] = v end
+		return zs
+	end
+	local function FromZed(tbl) tbl.t, tbl.v = "Zed-Realm#h1", "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zz"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", "Zed-Realm") end
+	FromZed({ k = "welcome", st = ZedState({}) })
+	local backup = { id = "Zed-Realm#h1", cfg = cfg, seats = { [1] = { name = "Zed-Realm", stack = 1000, bought = 100 }, [2] = { name = me, stack = 1000, bought = 100 } }, handNo = 3, term = 1, button = 1,
+		entrants = { ["Zed-Realm"] = { seat = 1 }, [me] = { seat = 2 } }, elapsed = 60 }
+	FromZed({ k = "handoff", to = me, b = backup, pool = 200 })
+	check(Net:HostedTable() == nil and Net:State().host == "Zed-Realm", "handed the table before the pool: not taken")
+	FromZed({ k = "state", st = ZedState({ q = 2, handingTo = me, pool = 200 }) })
+	Trade("Zed-Realm", 0, 200)
+	local got
+	for _, l in ipairs(Gold:Lines()) do if l.kind == "pool" and l.from == "Zed-Realm" then got = l end end
+	check(got and got.amount == 200 and got.to == me, "Zed trades us the pool: a receipt, and no line of his marked paid by it")
+	FromZed({ k = "handoff", to = me, b = backup, pool = 200 })
+	local taken = Net:HostedTable()
+	check(taken and taken.name == me and taken.term == 2 and taken.id == "Zed-Realm#h1" and taken.cfg.stakes == "gold" and taken:SeatOf("Zed-Realm") == 1, "the pool came: we host Zed's table from his backup")
+	check(Sent("Zed-Realm", "takeover") ~= nil, "and announce it to Zed")
+	Net:Leave()
+	GetMoney, GetUnitName, GetPlayerTradeMoney, GetTargetTradeMoney = realGetMoney, realGetUnitName, nil, nil
+end)()
+
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

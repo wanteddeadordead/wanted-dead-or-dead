@@ -20,6 +20,9 @@ local BACK = { 0.42, 0.08, 0.11, 1 }
 local HIGHLIGHT = { 1, 0.8, 0.32, 1 }
 local SLOT = { 1, 1, 1, 0.06 }
 local SLOT_BORDER = { 1, 1, 1, 0.12 }
+-- The rank in the game's plain sans (ARIALN): the theme's Friz Quadrata draws a J with hardly any hook, so at card size a
+-- jack read as a one. Ranks are Latin letters and digits, so one file covers every client
+local RANK_FONT = "Fonts\\ARIALN.TTF"
 
 ---A card's rank as shown in its corner.
 ---@param card number
@@ -41,13 +44,14 @@ end
 ---@param parent Frame
 ---@param width number
 ---@param height number
----@param font string? the rank's theme font
+---@param font string? "small" for the seats' cards (a smaller rank)
 ---@return Frame
 function Cards:New(parent, width, height, font)
 	local f = CreateFrame("Frame", nil, parent)
 	f:SetSize(width, height)
 	Theme:Skin(f, SLOT, SLOT_BORDER)
-	f.rank = Theme:Text(f, font or "heading", "")
+	f.rank = f:CreateFontString(nil, "OVERLAY")
+	f.rank:SetFont(RANK_FONT, font == "small" and 15 or 19, "")
 	f.rank:SetPoint("TOPLEFT", 4, -3)
 	f.suitSmall = f:CreateTexture(nil, "ARTWORK")
 	f.suitSmall:SetSize(floor(width * 0.28), floor(width * 0.28))

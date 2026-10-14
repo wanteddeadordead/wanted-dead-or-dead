@@ -12827,6 +12827,8 @@ end)()
 	check(st.standings and st.standings[1].name == "Cat-Realm" and st.standings[1].place == 1 and st.standings[1].prize == 600 and st.standings[2].name == "Ann-Realm" and st.standings[3].name == "Bob-Realm", "standings with the winner's prize, the whole pool with three entered")
 	check(#settled == 1 and settled[1].to == "Cat-Realm" and settled[1].amount == 600 and settled[1].kind == "prize" and ads[#ads].c == 1, "one line: the host owes Cat the prize; the ad says the table is done")
 	check(Last("Cat-Realm", "settle")[2].amount == 600, "Cat is told")
+	check(Protocol:TournamentMinutes(1500, 8, 10) == 90 and Protocol:TournamentMinutes(1500, 2, 5) == 25 and Protocol:TournamentMinutes(1500, 8, 10, true) == 81, "a tournament's length: the level where the field holds 25 big blinds, times the level: "..Protocol:TournamentMinutes(1500, 8, 10)..", "..Protocol:TournamentMinutes(1500, 2, 5))
+	check(Protocol:AboutMinutes(90) == "about 1 h 30 min" and Protocol:AboutMinutes(25) == "about 25 min" and Protocol:AboutMinutes(120) == "about 2 h" and Protocol:AboutMinutes(81) == "about 1 h 20 min", "lengths in words")
 	check(Protocol:Prizes(1000, 5)[1] == 650 and Protocol:Prizes(1000, 5)[2] == 350 and Protocol:Prizes(1001, 7)[1] == 501 and Protocol:Prizes(1001, 7)[3] == 200, "prizes split 65/35 from five, 50/30/20 from seven, the rounding to first")
 	-- Cancelled: nothing settled
 	settled = {}

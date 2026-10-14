@@ -174,9 +174,11 @@ function private.BuildForm(parent, width)
 	At(private.stack, m, -4 - ROW * 3)
 	private.stack:SetChoice(s.startStack or 1500)
 	private.levelLabel = Label(m, -4 - ROW * 4, "Levels every")
-	private.levels = W:Choice(m, 120, { { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" } }, function(key) Settings().levelMinutes = key private.Guide() end)
+	private.levels = W:Choice(m, 120, { { key = 3, label = "3 min" }, { key = 5, label = "5 min" }, { key = 10, label = "10 min" }, { key = 15, label = "15 min" }, { key = 20, label = "20 min" }, { key = 30, label = "30 min" } }, function(key) Settings().levelMinutes = key private.Guide() end)
 	At(private.levels, m, -4 - ROW * 4)
 	private.levels:SetChoice(s.levelMinutes or 10)
+	private.lengthNote = Theme:Text(m, "tiny", "", C.faint)
+	private.lengthNote:SetPoint("LEFT", private.levels, "RIGHT", 12, 0)
 	private.lateLabel = Label(m, -4 - ROW * 5, "Late entry")
 	private.late = W:Choice(m, 120, { { key = 0, label = "none" }, { key = 2, label = "to level 2" }, { key = 4, label = "to level 4" }, { key = 6, label = "to level 6" } }, function(key) Settings().lateLevels = key private.Guide() end)
 	At(private.late, m, -4 - ROW * 5)
@@ -286,7 +288,7 @@ function private.RefreshBuyin(reset)
 		private.buyinBox:SetValue(Money(high))
 	end
 	for _, f in ipairs({ private.blindsLabel, private.blinds, private.buyinNote, private.minBox, private.toLabel, private.maxBox, private.yoursLabel, private.buyinBox }) do f:SetShown(not tournament) end
-	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels, private.lateLabel, private.late, private.antes }) do f:SetShown(tournament) end
+	for _, f in ipairs({ private.stackLabel, private.stack, private.levelLabel, private.levels, private.lateLabel, private.late, private.antes, private.lengthNote }) do f:SetShown(tournament) end
 	-- A chips tournament has no entry; the blinds come from the schedule
 	local entry = tournament and money
 	private.entryLabel:SetShown(entry)
@@ -311,12 +313,14 @@ function private.Guide()
 	local practice = s.stakes == "practice"
 	local function M(n) return Protocol:Money(n or 0, stakes) end
 	local lines = {}
+	local length = Protocol:AboutMinutes(Protocol:TournamentMinutes(s.startStack or 1500, s.seats or 6, s.levelMinutes or 10, s.antes))
+	if private.lengthNote then private.lengthNote:SetText(("%s with %d players"):format(length, s.seats or 6)) end
 	local what = stakes == "gold" and "gold" or practice and "play money that looks like gold" or "chips"
 	if tournament then
 		local entry = money and Protocol:ParseAmount(private.entryBox:GetText(), stakes) or 0
 		lines[#lines + 1] = ("1.  A TOURNAMENT for %s. Everyone starts with %d chips; the blinds start at 10/20 and rise every %d minutes until one player has them all. No rebuys.%s%s"):format(
 			what, s.startStack or 1500, s.levelMinutes or 10, (s.lateLevels or 0) > 0 and (" Late entry stays open to level %d."):format(s.lateLevels) or " Nobody enters after the start.",
-			s.antes and (" Antes from level %d."):format(Protocol.ANTE_FROM_LEVEL) or "")
+			s.antes and (" Antes from level %d."):format(Protocol.ANTE_FROM_LEVEL) or "")..(" Expect %s with %d players."):format(length, s.seats or 6)
 		if stakes == "gold" then
 			lines[#lines + 1] = ("2.  ENTRY %s each, paid to you before they're dealt in, by a trade or by mail. You hold the pool. The prizes are the entries: winner takes all up to four entered, 65/35 from five, 50/30/20 from seven."):format(entry and entry > 0 and M(entry) or "(type one)")
 			lines[#lines + 1] = "3.  PAYING OUT: when it ends, each prize is a line under Settlement from you to the player, paid by trade or with Pay at a mailbox. Bust early and you can hand the table to the next seat by trading them the pool."

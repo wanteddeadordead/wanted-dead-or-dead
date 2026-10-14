@@ -13,7 +13,7 @@ local TableUI = Poker.PokerTable
 local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
-local CARD_HEIGHT = 196
+local CARD_HEIGHT = 244 -- the form with how it works under it
 local BLINDS = { { key = "1/2", sb = 1, bb = 2 }, { key = "5/10", sb = 5, bb = 10 }, { key = "10/20", sb = 10, bb = 20 }, { key = "25/50", sb = 25, bb = 50 }, { key = "50/100", sb = 50, bb = 100 }, { key = "100/200", sb = 100, bb = 200 } }
 local BUYIN_MIN_BB, BUYIN_MAX_BB = 20, 100
 local HOW_IT_WORKS = table.concat({
@@ -22,8 +22,8 @@ local HOW_IT_WORKS = table.concat({
 	"2.  Before each hand every player's client makes a secret; the deck is shuffled from all of them together, so nobody, the host included, can choose it.",
 	"3.  After each hand your client checks the host's account of it. A hand that doesn't check out is marked in red at the table.",
 	"4.  The host's client deals, so a host who edited the addon could see cards. Play for stakes only with people you'd deal cards with.",
-	"5.  Gold tables: the host is the bank. When you leave, what you won or lost against your buy-in is a line in Settlement below, paid by mail at a mailbox (Pay fills it in; you press Send). A debt left two days counts against your Wanted reputation with everyone who was at the table.",
-	"6.  Close the table window and you stay seated; leave from the table or here.",
+	"5.  Gold tables: the host is the bank. When you leave, what you won or lost against your buy-in is a line under Settlement, paid by mail at a mailbox (Pay fills it in, you press Send). A debt left two days counts against your reputation with everyone who was at the table.",
+	"6.  Closing the table window keeps your seat; leave from the table or from here.",
 }, "\n")
 
 local function Settings()

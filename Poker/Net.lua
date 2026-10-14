@@ -30,13 +30,67 @@ function Net:OnEnable()
 	Sync:RegisterPlugin(Protocol.AD_TAG, function(tbl, sender)
 		private.OnAd(tbl, sender)
 	end)
-	private.ticker = C_Timer.NewTicker(1, function()
-		if private.host then private.host:Tick() end
-		if private.player then private.player:Tick() end
-		for _, bot in pairs(private.bots) do bot:Tick() end
-		private.ForgetStaleAds()
-		private.CheckBlocked()
-	end)
+	private.ticker = C_Timer.NewTicker(1, function() Net:Tick() end)
+	-- Back after a reload (or a crash) with a seat remembered: take it again
+	C_Timer.After(Protocol.REJOIN_DELAY_SECONDS, function() Net:Rejoin() end)
+end
+
+---Runs the table's clocks: called every second.
+function Net:Tick()
+	if private.host then private.host:Tick() end
+	if private.player then private.player:Tick() end
+	for _, bot in pairs(private.bots) do bot:Tick() end
+	private.ForgetStaleAds()
+	private.CheckBlocked()
+	-- A rejoin the host never answered
+	if private.rejoinAt and private.player and not private.player.left and not private.player.state and Now() - private.rejoinAt >= Protocol.REJOIN_GIVE_UP_SECONDS then
+		private.rejoinAt = nil
+		private.player.left = true
+		private.Forget()
+		Wanted:Print("Poker: your table didn't answer; it's gone.")
+		private.Notify("left")
+	end
+end
+
+-- ============================================================================
+-- The seat remembered across a reload
+-- ============================================================================
+
+-- The host keeps a seat whose client went quiet, so a reload (or a crash) needn't cost it: the table is remembered in
+-- the saved data and joined again at login. A table this character hosted lives on under the next seat (chips
+-- tables), and is followed there by its ad
+function private.Remember(id, host, buyin, password)
+	Poker.db.seat = { id = id, host = host, buyin = buyin, password = password, at = time() }
+end
+
+function private.Forget()
+	Poker.db.seat = nil
+	private.rejoinAt = nil
+end
+
+---The seat remembered, or nil.
+function Net:RememberedSeat()
+	return Poker.db.seat
+end
+
+---Takes the remembered seat again: a join to its host, or, for a table this character hosted, a wait for the ad of
+---whoever carries it on.
+function Net:Rejoin()
+	local seat = Poker.db.seat
+	if type(seat) ~= "table" or type(seat.id) ~= "string" or (private.player and not private.player.left) then
+		return false
+	end
+	if time() - (seat.at or 0) > Protocol.REJOIN_WINDOW_SECONDS then
+		private.Forget()
+		return false
+	end
+	if seat.host == Net:Me() then
+		Wanted:Print("Poker: you were hosting %s; if the next seat carried it on, you'll be sat back down when it's heard.", seat.id)
+		return false
+	end
+	Wanted:Print("Poker: taking your seat at %s's table again...", seat.host)
+	private.rejoinAt = Now()
+	return Net:JoinTable(seat.id, seat.buyin, seat.password, seat.host)
 end
 
 ---This character's name as the game gives it to others.
@@ -141,7 +195,8 @@ function Net:AskLines(name)
 end
 
 function private.OnAd(ad, sender)
-	if type(ad) ~= "table" or type(ad.id) ~= "string" or #ad.id > 100 or Protocol:HostOf(ad.id) ~= sender or not Protocol:IsName(ad.h) or ad.h ~= sender then
+	-- The ad is its sender's: the id names the host who opened the table, not always the one carrying it on
+	if type(ad) ~= "table" or type(ad.id) ~= "string" or #ad.id > 100 or not Protocol:HostOf(ad.id) or not Protocol:IsName(ad.h) or ad.h ~= sender then
 		return
 	end
 	if ad.c then
@@ -149,6 +204,14 @@ function private.OnAd(ad, sender)
 	else
 		ad.heard = Now()
 		private.tables[ad.id] = ad
+		-- Our remembered table, advertised by whoever hosts it now: sit back down
+		local seat = Poker.db.seat
+		if type(seat) == "table" and seat.id == ad.id and sender ~= Net:Me() and (not private.player or private.player.left or (not private.player.state and private.player.host ~= sender)) then
+			Wanted:Print("Poker: %s carries your table on; taking your seat again.", sender)
+			if private.player then private.player.left = true end
+			private.rejoinAt = Now()
+			Net:JoinTable(ad.id, seat.buyin, seat.password, sender)
+		end
 	end
 	private.Notify("tables")
 end
@@ -194,6 +257,13 @@ end
 
 local function NewPlayer()
 	return Client:New({ name = Net:Me(), send = Send, now = Now, blocked = Blocked, on = function(event, ...)
+		if event == "left" or event == "refused" or event == "hostLost" then
+			private.Forget()
+		elseif event == "state" then
+			private.rejoinAt = nil
+			local st = ...
+			if st and st.phase == "closed" then private.Forget() end
+		end
 		if event == "takeover" then
 			private.TakeOver(...)
 		elseif event == "handoff" then
@@ -249,6 +319,9 @@ function Net:HostTable(cfg, buyin, password)
 	private.player:Join(host.name, host.id, buyin, not practice and password or nil)
 	if practice then
 		SeatBots(host, host.cfg.bots)
+		private.Forget()
+	else
+		private.Remember(host.id, host.name, buyin, password)
 	end
 	host:Advertise()
 	return true
@@ -260,16 +333,18 @@ end
 ---@return boolean ok
 ---@return string? reason
 ---@param password string? for a locked table
-function Net:JoinTable(id, buyin, password)
+---@param hostName string? who hosts it now, when not the host its id names (a table carried on by the next seat)
+function Net:JoinTable(id, buyin, password, hostName)
 	if private.player and not private.player.left then
 		return false, "you're at a table already"
 	end
-	local host = Protocol:HostOf(id)
+	local host = hostName or Protocol:HostOf(id)
 	if not host then
 		return false, "no such table"
 	end
 	private.player = NewPlayer()
 	private.player:Join(host, id, buyin, password)
+	private.Remember(id, host, buyin, password)
 	return true
 end
 

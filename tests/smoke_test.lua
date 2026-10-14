@@ -13375,6 +13375,54 @@ end)()
 	GetMoney, GetUnitName, GetPlayerTradeMoney, GetTargetTradeMoney = realGetMoney, realGetUnitName, nil, nil
 end)()
 
+-- Poker rejoin: a seat is remembered in the saved data and taken again after a reload: a join to its host at login,
+-- given up after a minute without an answer; a table this character hosted is followed to whoever carries it on by
+-- their ad; leaving, a refusal, a closed table or a day's age forget it; a practice table is never remembered
+;(function()
+	local P = WantedPokerTestNS
+	local Net, Protocol = P.PokerNet, P.PokerProtocol
+	local me = Net:Me()
+	local function Sent(name, kind) for i = #addonSent, 1, -1 do local m = addonSent[i] if m.target == name and m.text:find("^P:") then local tbl = ns.Sync:Decode(m.text:match("^P:%w+:%d+/%d+:(.*)$")) if tbl and tbl.k == kind then return tbl end end end end
+	local function Ad(sender, ad)
+		ad.v = "0.1.0-dev"
+		Fire("CHAT_MSG_ADDON", "WNTD", "T:zr"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(ad), "CHANNEL", sender, nil, nil, nil, ns.Sync:GetInfo().channelName)
+	end
+	check(Net:JoinTable("Zed-Realm#rj", 300, "pass"), "sitting at Zed's locked table")
+	local seat = Net:RememberedSeat()
+	check(seat and seat.id == "Zed-Realm#rj" and seat.host == "Zed-Realm" and seat.buyin == 300 and seat.password == "pass", "the seat is remembered, password and all")
+	-- The reload: the player object is gone; the saved seat stays
+	Net:Player().left = true
+	addonSent = {}
+	check(Net:Rejoin() == true, "at login the seat is taken again")
+	local join = Sent("Zed-Realm", "join")
+	check(join and join.b == 300 and join.pw == "pass" and join.t == "Zed-Realm#rj", "a join to Zed with the buy-in and the password")
+	for _ = 1, Protocol.REJOIN_GIVE_UP_SECONDS + 1 do clock = clock + 1 Net:Tick() end
+	check(Net:RememberedSeat() == nil and Net:Player().left, "no answer for a minute: given up and forgotten")
+	-- A table this character hosted, carried on by Cat: her ad sits us back down
+	WantedPokerDB.seat = { id = me.."#old", host = me, buyin = 500, at = time() }
+	check(Net:Rejoin() == false and Net:RememberedSeat() ~= nil, "hosted before: nothing to join yet, the seat is kept")
+	addonSent = {}
+	Ad("Cat-Realm", { id = me.."#old", h = "Cat-Realm", n = "Old Den", s = 2, m = 6, sb = 5, bb = 10, lo = 200, hi = 1000 })
+	join = Sent("Cat-Realm", "join")
+	check(join and join.b == 500 and join.t == me.."#old", "Cat advertises our old table: we join her")
+	local st = { t = me.."#old", host = "Cat-Realm", e = 2, q = 1, me = 2, phase = "waiting", open = true, cfg = { sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 6 },
+		seats = { [1] = { n = "Cat-Realm", s = 1000 }, [2] = { n = me, s = 500 } } }
+	Fire("CHAT_MSG_ADDON", "WNTD", "P:zw1:1/1:"..ns.Sync:Encode({ k = "welcome", t = me.."#old", v = "0.1.0-dev", st = st }), "WHISPER", "Cat-Realm")
+	check(Net:State() and Net:State().host == "Cat-Realm" and Net:State().me == 2, "seated at Cat's")
+	for _ = 1, Protocol.REJOIN_GIVE_UP_SECONDS + 1 do clock = clock + 1 Net:Tick() end
+	check(Net:RememberedSeat() ~= nil and not Net:Player().left, "seated: the minute means nothing")
+	Net:Leave()
+	check(Net:RememberedSeat() == nil, "leaving forgets the seat")
+	-- Hosting remembers; a practice table doesn't; a seat from yesterday is dropped
+	check(Net:HostTable({ sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 4 }, 1000) and Net:RememberedSeat().host == me, "hosting remembers the table")
+	Net:Leave()
+	check(Net:RememberedSeat() == nil, "closing forgets it")
+	check(Net:HostTable({ sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 4, bots = 2 }, 1000) and Net:RememberedSeat() == nil, "a practice table is never remembered")
+	Net:Leave()
+	WantedPokerDB.seat = { id = "X-Realm#y", host = "X-Realm", buyin = 1, at = time() - 7 * 3600 }
+	check(Net:Rejoin() == false and Net:RememberedSeat() == nil, "a seat from yesterday is forgotten")
+end)()
+
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -453,6 +453,20 @@ function private.Build()
 	private.pot = Theme:Text(felt, "money", "")
 	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)
 	private.pot:SetJustifyH("CENTER")
+	-- The pot's chips: up to five stacks of five, a chip a big blind, left of the amount
+	private.potChips = {}
+	for col = 1, 5 do
+		for row = 1, 5 do
+			local chip = felt:CreateTexture(nil, "ARTWORK", nil, row)
+			chip:SetSize(CHIP, CHIP)
+			chip:SetTexture("Interface\\AddOns\\WantedDeadOrDead\\Media\\seal")
+			chip:SetPoint("RIGHT", private.pot, "LEFT", -6 - (col - 1) * (CHIP - 2), (row - 1) * 3)
+			local tint = CHIP_COLORS[col]
+			chip:SetVertexColor(tint[1], tint[2], tint[3], 1)
+			chip:Hide()
+			private.potChips[(col - 1) * 5 + row] = chip
+		end
+	end
 	for i = 1, 5 do
 		local card = Cards:New(felt, CARD_W, CARD_H)
 		card:SetPoint("CENTER", felt, "CENTER", (i - 3) * (CARD_W + 6), 0)
@@ -1077,6 +1091,12 @@ function TableUI:Refresh(st)
 		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
+	local potChips = 0
+	if hand and hand.pot and hand.pot > 0 and not showdown then
+		local bb = (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1
+		potChips = max(1, min(25, floor(hand.pot / bb)))
+	end
+	for i, chip in ipairs(private.potChips) do chip:SetShown(i <= potChips) end
 	if cfg.kind == "tournament" and st.started then
 		private.info:SetText(("Level %d  -  blinds %d/%d%s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
 			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.lateOpen and "  -  late entry open" or "", hand and hand.key and ("  -  hand "..st.h) or ""))

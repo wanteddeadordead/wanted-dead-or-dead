@@ -13543,6 +13543,9 @@ end)()
 	FromBob({ k = "act", h = key, q = host.seq, a = "bet", m = 20 })
 	check(parts.seats[1].status.text._text == "Bet 20" and Felt(1) == "20", "Bob's pill says Bet 20; the felt shows the 20")
 	check(parts.seats[1].chips[1]:IsShown() and not parts.seats[1].chips[2]:IsShown() and not parts.seats[0].chips[1]:IsShown(), "one chip by Bob's bet of a big blind; none by us")
+	local potChips = 0
+	for _, c in ipairs(parts.potChips) do if c:IsShown() then potChips = potChips + 1 end end
+	check(potChips == 3, "the pot of 60 (blinds, our call, Bob's bet) at blinds of 20 shows three chips: "..potChips)
 	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "F")
 	check((host.phase == "showdown" or host.hand.street == "done") and Played(1156) >= 1, "F folds, with the cards' sound")

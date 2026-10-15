@@ -190,6 +190,9 @@ local function BuildSeat(felt, k)
 		else
 			GameTooltip:AddLine("No record of paying or owing yet, in bounties or poker.", C.muted[1], C.muted[2], C.muted[3], true)
 		end
+		if Net:HostedTable() and p.n ~= Net:Me() then
+			GameTooltip:AddLine("Right-click the box to kick them from the table.", C.faint[1], C.faint[2], C.faint[3])
+		end
 		GameTooltip:Show()
 	end)
 	seat.trustHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -231,6 +234,13 @@ local function BuildSeat(felt, k)
 		chip:Hide()
 		seat.chips[i] = chip
 	end
+	-- The host kicks a player with a right-click on their box
+	seat:EnableMouse(true)
+	seat:SetScript("OnMouseUp", function(self, button)
+		local p = self.player
+		if button ~= "RightButton" or not Net:HostedTable() or not p or p.n == Net:Me() then return end
+		W:Menu({ { text = "Kick "..Name(p.n), onClick = function() private.ConfirmKick(p.n) end } }, self)
+	end)
 	seat.admit = W:Button(seat, "Let in", "primary", 62, 20, function() private.Admit(seat) end)
 	seat.admit:SetPoint("BOTTOMRIGHT", -6, 6)
 	seat.admit:Hide()
@@ -1071,6 +1081,23 @@ function private.AskRebuy()
 	})
 end
 
+-- The host kicks a player: what they get back is said first
+function private.ConfirmKick(name)
+	local st = private.state
+	local gold = st and st.cfg and st.cfg.stakes == "gold"
+	W:Dialog({
+		title = "Kick "..Name(name).."?",
+		text = gold and "They stand up with what's in front of them: you owe them their stack, a line under Settlement to pay by trade or by mail, like anyone leaving. A hand under way goes on without them."
+			or "They stand up and their chips leave with them. A hand under way goes on without them.",
+		confirmLabel = "Kick",
+		confirmStyle = "danger",
+		over = private.frame,
+		onConfirm = function()
+			if not Net:Kick(name) then Wanted.UI:Toast("They're not at your table.", C.red) end
+		end,
+	})
+end
+
 function private.ConfirmLeave()
 	local hosting = Net:HostedTable() ~= nil
 	local st = private.state
@@ -1353,6 +1380,7 @@ function TableUI:Refresh(st)
 			seatFrame:Show()
 			Place(seatFrame, k, n, private.felt)
 			if not p then
+				seatFrame.player = nil
 				seatFrame.name:SetText("")
 				seatFrame.stack:SetText("")
 				seatFrame.status:Set(nil)

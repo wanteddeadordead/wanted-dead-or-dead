@@ -12345,6 +12345,17 @@ end)()
 	local welcome = ToBob("welcome")
 	check(welcome and welcome.st.seats[2] and welcome.st.seats[2].n == "Bob-Realm" and welcome.st.me == 2, "Bob is seated and welcomed by whisper")
 	check(OnScreen("Bob") and OnScreen("1000"), "Bob shows at the table")
+	-- A right-click on Bob's box offers the host a kick; on the host's own box nothing
+	local menuItems
+	local realMenu = ns.Widgets.Menu
+	ns.Widgets.Menu = function(_, items) menuItems = items end
+	local seatsNow = TableUI:GetParts().seats
+	seatsNow[1]._scripts.OnMouseUp(seatsNow[1], "RightButton")
+	check(menuItems and menuItems[1].text == "Kick Bob", "right-click on Bob's box: Kick Bob, got "..tostring(menuItems and menuItems[1].text))
+	menuItems = nil
+	seatsNow[0]._scripts.OnMouseUp(seatsNow[0], "RightButton")
+	check(menuItems == nil, "nothing on the host's own box")
+	ns.Widgets.Menu = realMenu
 	-- Names in class colours: the class comes with the join (yours from the game), goes out in the state, colours the box
 	check(welcome.st.seats[2].c == "MAGE" and welcome.st.seats[1].c == "WARRIOR", "the state carries each seat's class: "..tostring(welcome.st.seats[2].c)..", "..tostring(welcome.st.seats[1].c))
 	check(TableUI:GetParts().seats[1].name._text == "|cffffffffBob|r", "Bob's name is in his class colour: "..tostring(TableUI:GetParts().seats[1].name._text))
@@ -12874,6 +12885,26 @@ end)()
 	h.hand = { seats = { [1] = S(1900), [2] = S(0), [3] = S(0), [4] = S(1000) }, results = { payouts = {}, shown = {}, pots = {} }, log = {}, board = {}, street = "done" }
 	h:Showdown()
 	check(h.entrants["Bob-Realm"].place == 4 and h.entrants["Cat-Realm"].place == 3, "two out in one hand: the shorter stack at the start places lower")
+end)()
+
+-- The host kicks a player: they stand up, their stack is owed to them at a gold table, and their client is told why
+;(function()
+	local P = WantedPokerTestNS
+	local Host = P.PokerHost
+	local sent, lines = {}, {}
+	local h = Host:New({ name = "Ann-Realm", cfg = { sb = 100, bb = 200, buyMin = 1000, buyMax = 100000, maxSeats = 4, stakes = "gold" },
+		send = function(target, tbl) sent[#sent + 1] = { to = target, tbl = tbl } end, now = function() return 60000 end,
+		on = function(event, line) if event == "settle" then lines[#lines + 1] = line end end })
+	h:Receive("Ann-Realm", { k = "join", t = h.id, b = 2000 }) h:Receive("Bob-Realm", { k = "join", t = h.id, b = 1000 })
+	h:Paid("Bob-Realm", 1000, "trade")
+	check(h:SeatOf("Bob-Realm") == 2 and h.seats[2].stack == 1000, "Bob is dealt in with 10s")
+	check(not h:Kick("Ann-Realm") and h:SeatOf("Ann-Realm") == 1, "the host can't kick their own seat")
+	check(not h:Kick("Cat-Realm"), "nor someone who isn't there")
+	check(h:Kick("Bob-Realm") and h:SeatOf("Bob-Realm") == nil, "Bob is kicked: his seat is empty")
+	local told
+	for _, m in ipairs(sent) do if m.to == "Bob-Realm" and m.tbl.k == "refuse" then told = m.tbl end end
+	check(told and told.why:find("removed you", 1, true), "Bob's client is told why: "..tostring(told and told.why))
+	check(#lines == 1 and lines[1].to == "Bob-Realm" and lines[1].amount == 1000 and lines[1].kind == "cashout", "his 10s are owed to him, a settlement line like anyone leaving")
 end)()
 
 -- A silver table (blinds in whole silver) takes no copper: the host refuses a buy-in or rebuy with copper in it and

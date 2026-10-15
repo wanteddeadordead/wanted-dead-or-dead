@@ -13550,9 +13550,10 @@ end)()
 	check(Lay(pool, 0, 20, anchor, false, 5) == 0 and not pool[1]:IsShown(), "nothing: no chips")
 	-- The pot's stacks stand under its amount, centred, on one line
 	check(Lay(pool, 140 * 20, 20, anchor, nil, 5) == 5 and pool[1]._point[1] == "BOTTOM" and pool[1]._point[3] == "BOTTOM" and pool[1]._point[4] == -13 and pool[5]._point[4] == 13 and pool[5]._point[5] == pool[3]._point[5] + 6, "the pot's three stacks are centred under it, chips three apart up a stack")
+	check(pool[1]._point[5] == -16 and pool[5]._point[5] == -16 and pool[3]._point[5] == -22, "each stack's top chip sits right under the amount; a taller stack reaches further down")
 	-- Bet labels: by their seats, never on the cards, the pot, a box or each other, at six seats on the stock felt
-	-- and at eight on the taller one
-	for _, case in ipairs({ { 660, 440, 6 }, { 660, 520, 8 } }) do
+	-- and at eight on the taller one (the felt's size as the window makes it: 980 - 220 - 22 by 560 - 130, or 640 - 130)
+	for _, case in ipairs({ { 738, 430, 6 }, { 738, 510, 8 } }) do
 		local w, h, n = case[1], case[2], case[3]
 		local felt = NewMock() felt:SetSize(w, h)
 		local boxes, labels = {}, {}
@@ -13601,6 +13602,18 @@ end)()
 	parts.allin._scripts.OnClick(parts.allin)
 	check(ns.Widgets:IsDialogShown(), "all in at a gold table asks first")
 	ConfirmDialog()
+	-- A silver game (blinds in whole silver) takes no copper: a half-pot preset and a typed amount round up to the silver
+	local saved = parts.state
+	parts.state, parts.range, parts.raiseLabel = { cfg = { stakes = "gold", sb = 100, bb = 200 }, hand = { pot = 725, cur = 0, legal = { call = 0 } } }, { 200, 2000 }, "Raise to"
+	TableUI.Preset(0.5)
+	check(parts.amount == 400, "half of 7s 25c rounds up to 4s, got "..tostring(parts.amount))
+	parts.amountBox:SetText("5s 62c")
+	parts.amountBox._scripts.OnTextChanged(parts.amountBox, true)
+	check(parts.amount == 600, "a typed 5s 62c becomes 6s, got "..tostring(parts.amount))
+	parts.state.cfg.bb = 250
+	TableUI.Preset(0.5)
+	check(parts.amount == 362, "with a 2s 50c big blind the game is in copper: no rounding, got "..tostring(parts.amount))
+	parts.state, parts.range = saved, nil
 	-- Boxes are filled the way amounts are typed, not with the coin icons: the rebuy box opens on 4s, which the box reads back
 	parts.rebuy._scripts.OnClick(parts.rebuy)
 	check(lastDialog and lastDialog.input and lastDialog.input.value == "4s", "the rebuy box opens on 4s, got "..tostring(lastDialog and lastDialog.input and lastDialog.input.value))

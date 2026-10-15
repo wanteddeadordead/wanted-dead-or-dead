@@ -23,7 +23,7 @@ local private = {
 	loggedKey = nil, loggedActions = 0, loggedStreet = nil, loggedResults = false,
 	acts = {}, -- seat -> what they did last this hand (NoteActions)
 }
-local WIDTH, HEIGHT = 900, 560
+local WIDTH, HEIGHT = 980, 560 -- the felt is 738 wide: room for the bets beside eight boxes (the grip scales the window)
 local HEADER = 26
 local LOG_WIDTH = 220
 local ACTION_H = 58
@@ -65,7 +65,8 @@ local function LayStacks(chips, amount, bb, anchor, rightward, maxColumns)
 			chip:ClearAllPoints()
 			local dx = (col - 1) * (CHIP - 1) + 5
 			if rightward == nil then
-				chip:SetPoint("BOTTOM", anchor, "BOTTOM", (col - (#columns + 1) / 2) * (CHIP - 1), -(PILE + 2) + (row - 1) * 3)
+				-- The top chip of each stack right under the anchor; a taller stack reaches further down
+				chip:SetPoint("BOTTOM", anchor, "BOTTOM", (col - (#columns + 1) / 2) * (CHIP - 1), -(CHIP + 2) - (column[1] - 1) * 3 + (row - 1) * 3)
 			elseif rightward then
 				chip:SetPoint("LEFT", anchor, "RIGHT", dx, (row - 1) * 3)
 			else
@@ -99,6 +100,20 @@ end
 -- reads, never the coin icons Chips draws
 local function Typed(n, cfg)
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
+end
+
+-- The coin a money table is played in: gold when both blinds are whole gold, silver when whole silver, else copper.
+-- A bet rounds up to it, so a silver game sees no copper from a half-pot preset or a typed amount
+local function Coin(cfg)
+	if not cfg or not Protocol:IsMoney(cfg.stakes) then return 1 end
+	local sb, bb = cfg.sb or 0, cfg.bb or 0
+	if sb % 10000 == 0 and bb % 10000 == 0 then return 10000 end
+	if sb % 100 == 0 and bb % 100 == 0 then return 100 end
+	return 1
+end
+local function Rounded(n, cfg)
+	local coin = Coin(cfg)
+	return ceil(n / coin) * coin
 end
 
 -- A bar button's text, with the button widened to fit a long amount ("All-in 1g 90s 38c"); icons and colours don't count
@@ -257,7 +272,7 @@ end
 -- labels already placed. Landing on the cards, the pot, a box or another label counts three times. The seats with the fewest clear
 -- spots go first. Beside the box when that is clear, else toward the middle, then the ring just above or below the
 -- card row on the seat's side, then along the box's own edge, and the ring on the far side only when nothing else is
-local LABEL_W, CHIPS_W, GROUP_H = 60, 45, 26 -- the amount, the three stacks of chips on its outer side, their height
+local LABEL_W, CHIPS_W, GROUP_H = 60, 45, 20 -- the amount, the three stacks of chips on its outer side, their height
 local layout = { spots = {} }
 -- The label group centred here: the amount, the chips on one side
 local function Group(cx, cy, rightward)
@@ -756,7 +771,7 @@ function private.Build()
 	private.amountBox = W:Input(bar, 60, "", function(text)
 		local n = Protocol:ParseAmount(text, private.state and private.state.cfg and private.state.cfg.stakes)
 		if n and private.range then
-			n = max(private.range[1], min(private.range[2], floor(n)))
+			n = max(private.range[1], min(private.range[2], Rounded(n, private.state and private.state.cfg)))
 			private.amount = n
 			private.slider:SetValue(n)
 			Fit(private.raise, private.raiseLabel.." "..Chips(n, private.state and private.state.cfg), 100)
@@ -764,6 +779,7 @@ function private.Build()
 	end)
 	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
 	private.slider = W:Slider(bar, "", 120, 0, 1, 1, function(v) return "" end, function(v)
+		v = max(private.range and private.range[1] or v, min(private.range and private.range[2] or v, Rounded(v, private.state and private.state.cfg)))
 		private.amount = v
 		private.amountBox:SetValue(Typed(v, private.state and private.state.cfg))
 		Fit(private.raise, private.raiseLabel.." "..Chips(v, private.state and private.state.cfg), 100)
@@ -911,7 +927,7 @@ end
 -- The raise amount set on the bar: slider, box and button together
 function private.SetAmount(n)
 	if not private.range then return end
-	n = max(private.range[1], min(private.range[2], floor(n)))
+	n = max(private.range[1], min(private.range[2], Rounded(n, private.state and private.state.cfg)))
 	private.amount = n
 	private.slider:SetValue(n)
 	private.amountBox:SetValue(Typed(n, private.state and private.state.cfg))

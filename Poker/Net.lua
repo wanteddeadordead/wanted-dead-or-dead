@@ -377,6 +377,13 @@ function Net:Leave()
 	end
 end
 
+---The host removes a player from their table.
+---@param name string
+---@return boolean
+function Net:Kick(name)
+	return private.host ~= nil and private.host:Kick(name)
+end
+
 ---The host thinks again: the table stays open after the hand.
 function Net:KeepOpen()
 	if private.host then private.host:KeepOpen() end

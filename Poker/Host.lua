@@ -912,6 +912,23 @@ function Table:SettleAmount(name, amount, kind)
 	self.on("settle", line)
 end
 
+---The host removes a player: they stand up as if they had left (at a gold table their stack is owed to them, a
+---settlement line like anyone leaving) and their client is told why. Never the host's own seat.
+---@param name string
+---@return boolean
+function Table:Kick(name)
+	if name == self.name or not self:SeatOf(name) then
+		return false
+	end
+	self:Stand(name)
+	self.send(name, { k = "refuse", t = self.id, why = "the host removed you from the table" })
+	self.on("kicked", name)
+	self:Bump()
+	self:Broadcast()
+	self:Backup()
+	return true
+end
+
 ---Closes the table once the hand under way is over, or now when none is; everyone is told. "closed" or "closing".
 function Table:CloseAfterHand()
 	if not self.open then

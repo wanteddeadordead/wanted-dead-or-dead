@@ -112,27 +112,20 @@ end
 -- ============================================================================
 
 private.Provider = CreateFromMixins(MapCanvasDataProviderMixin)
--- The overlay's own pin frame level, above the area POIs and so above the fog of war over unexplored ground (the
--- map's exploration layer is a pin too; a frame at the canvas's own level sits under it, 2026-10-15). Four levels:
--- the overlay, then the point buttons two above it.
-local FRAME_LEVEL = "PIN_FRAME_LEVEL_WANTED_CAPTURES"
-local FRAME_LEVEL_RANGE = 4
+-- The overlay sits in the map's pin frame levels, above the area POIs and so above the fog of war over unexplored
+-- ground (the map's exploration layer is a pin too; a frame at the canvas's own level sat under it, 2026-10-15): a slot
+-- in the world quests' band (500 levels, none used on this client), below the enemy markers (MapPins, index 400) and
+-- the group members. Only read from the map's level table: adding a level of our own rewrote the game's pins' levels
+-- with tainted numbers, and the client then blocked SetPassThroughButtons on each of them in a fight.
+local FRAME_LEVEL, FRAME_LEVEL_INDEX = "PIN_FRAME_LEVEL_WORLD_QUEST", 100
 
-function private.Provider:OnAdded(owningMap)
-	MapCanvasDataProviderMixin.OnAdded(self, owningMap)
-	local levels = owningMap.GetPinFrameLevelsManager and owningMap:GetPinFrameLevelsManager()
-	if levels and levels.InsertFrameLevelAbove then
-		levels:InsertFrameLevelAbove(FRAME_LEVEL, "PIN_FRAME_LEVEL_AREA_POI", FRAME_LEVEL_RANGE)
-	end
-end
-
----The overlay's frame level: the start of our pin level when the map gives one, else just over the canvas.
+---The overlay's frame level: our slot in the band when the map gives one, else just over the canvas.
 ---@param canvas table
 ---@return number
 function private.OverlayLevel(canvas)
 	local map = private.provider and private.provider.GetMap and private.provider:GetMap()
 	local levels = map and map.GetPinFrameLevelsManager and map:GetPinFrameLevelsManager()
-	local level = levels and levels.GetFrameLevelStart and levels:GetFrameLevelStart(FRAME_LEVEL)
+	local level = levels and levels.GetValidFrameLevel and levels:GetValidFrameLevel(FRAME_LEVEL, FRAME_LEVEL_INDEX)
 	if type(level) == "number" and level > 0 then
 		return level
 	end

@@ -7,16 +7,28 @@
 -- While the player stands in a point able to fight, the addon counts it every 30 seconds in a presence book the
 -- desktop app sends the site, and tells its side's channel (provisional news, shown, never counted). The site's holds
 -- come back through the app's catch-up, read at login.
+--
+-- Siege nights: every day one front is the siege front, its Nexuses vulnerable in a window the site picks (7 to 10 PM
+-- Eastern). The addon mirrors the site's rules provisionally, from what nearby clients say: per 30-second tick per
+-- point, the attacking side's players inside (at most 6) minus the defenders inside count toward the point's cost;
+-- a Nexus falling wins a round, then a 30-minute truce with the front reset, then the next round. The site's call,
+-- in the catch-up at login, overrides whatever this client believed.
 
 local _, Wanted = ...
 local Captures = Wanted:NewModule("Captures")
 local private = {
 	current = nil, -- the point the player is in, as of the last sample
 	holds = {}, -- point id -> { h = "Horde" | "Alliance", s = since, r = respawn at, t = when the site worked it out }
+	provisional = {}, -- point id -> { h, s, r }: takes this client worked out since login, over the site's holds
+	progress = {}, -- point id -> { n = samples toward its cost, at = server time of the last tick with an attacker }
+	enemiesAt = {}, -- point id -> enemies seen inside at the last tick
 	heard = {}, -- point id -> { [sender] = GetTime() } players of our side who said they're there
 	mine = nil, -- { p = point id, at = GetTime() } our own last counted sample
 	sentAt = 0, -- when we last told the channel
 	listeners = {},
+	siegeListeners = {},
+	siege = nil, -- tonight's siege (private.ReadSiege), or nil when the catch-up named none
+	frontWins = {}, -- front id -> { Horde = n, Alliance = n } this week's siege wins, from the catch-up
 	won = {}, -- front id -> the side that took the other's Nexus this week, by the site's holds
 	blocked = nil, -- why the player's presence doesn't count, at the last sample
 }
@@ -27,17 +39,33 @@ local MAX_SAMPLES = SLOT_SECONDS / SAMPLE_SECONDS
 -- The book keeps three days (the app sends it at its next catch-up) and at most this many entries
 local KEEP_SECONDS = 3 * 24 * 60 * 60
 local MAX_ENTRIES = 2000
--- The site's rules, for what the addon shows (stats/points.go): people a side needs at a point, slots in a row to take
--- a lane point or a base
+-- The site's rules, for what the addon shows (stats/points.go): people a side needs at a point for a tick to count;
+-- the most attackers that count; what a tower or inhibitor costs in samples, and a Nexus by how many of its
+-- inhibitors are down; how long with no attacker before a point's progress resets; a taken inhibitor's respawn
 local MIN_PEOPLE = 2
-local CAPTURE_SLOTS, NEXUS_SLOTS = 2, 4
+local ATTACK_CAP = 6
+local POINT_COST = 40
+local NEXUS_COST = { [1] = 120, [2] = 60, [3] = 30 }
+local RESET_SECONDS = 2 * 60
+local RESPAWN_SECONDS = 30 * 60
+-- The siege: respawns pause on its front this long before the window; the call this long before it; a truce after a
+-- win; the last round ends this long with no Nexus progress, or this long after the window at the latest
+local PAUSE_BEFORE_SECONDS = 60 * 60
+local CALL_SECONDS = 30 * 60
+local TRUCE_SECONDS = 30 * 60
+local IDLE_SECONDS = 15 * 60
+local OVERTIME_SECONDS = 60 * 60
+local SIEGE_TICK_SECONDS = 5
+-- A peer's "Nexus fell at" this far from ours is the same fall; one this far in the future is a bad clock
+local SAME_FALL_SECONDS = 120
 -- Our side's players heard at a point count as there this long; we tell the channel at most this often
 local HEARD_SECONDS = 90
 local SEND_SECONDS = 60
 local TOWER_RADIUS, BASE_RADIUS = 40, 50
 Captures.SLOT_SECONDS = SLOT_SECONDS
 Captures.MIN_PEOPLE = MIN_PEOPLE
-Captures.CAPTURE_SLOTS, Captures.NEXUS_SLOTS = CAPTURE_SLOTS, NEXUS_SLOTS
+Captures.SAMPLE_SECONDS, Captures.ATTACK_CAP, Captures.POINT_COST = SAMPLE_SECONDS, ATTACK_CAP, POINT_COST
+Captures.TRUCE_SECONDS, Captures.RESPAWN_SECONDS = TRUCE_SECONDS, RESPAWN_SECONDS
 -- The words the addon shows, in one place: a side's base is its Nexus (the maintainer may rename it)
 Captures.TERMS = { nexus = "Nexus", tower = "Tower", inhibitor = "Inhibitor" }
 -- Campaign weeks start at this Tuesday 15:00 UTC plus whole weeks, as the site's (stats.CampaignStart)
@@ -166,7 +194,7 @@ function Captures:OnLoad()
 	local settings = Wanted.db.settings
 	settings.captures = type(settings.captures) == "table" and settings.captures or {}
 	local c = settings.captures
-	for key, value in pairs({ map = true, minimap = true, bar = true, alerts = true, autoTrack = false }) do
+	for key, value in pairs({ map = true, minimap = true, bar = true, alerts = true, autoTrack = false, siegeCall = true }) do
 		if type(c[key]) ~= "boolean" then
 			c[key] = value
 		end
@@ -175,9 +203,10 @@ end
 
 function Captures:OnEnable()
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Captures sample", function() Captures:Sample() end))
+	C_Timer.NewTicker(SIEGE_TICK_SECONDS, Wanted:Timed("Captures siege", function() Captures:SiegeTick() end))
 end
 
----The capture settings: { map, minimap, bar, alerts, autoTrack }.
+---The capture settings: { map, minimap, bar, alerts, autoTrack, siegeCall }.
 function Captures:Settings()
 	return Wanted.db.settings.captures
 end
@@ -257,16 +286,18 @@ function Captures:PointAt(mapId, x, y)
 	return nil
 end
 
----Who holds a point as the site last told the app: its home side until the site says otherwise, and again once a taken
----inhibitor's respawn time has passed (the site will say so too, unless its takers held it since: provisional).
+---Who holds a point: as the site last told the app, or as this client worked out since (provisional); its home side
+---until either says otherwise, and again once a taken inhibitor's respawn time has passed (the site will say so too,
+---unless its takers held it since: provisional). Respawns pause on the siege front from an hour before the window.
 ---@param id string
 ---@return string "Horde" or "Alliance"
 function Captures:Holder(id)
-	local hold, point = private.holds[id], byId[id]
-	if not hold or not point then
+	local point = byId[id]
+	local hold = point and (private.provisional[id] or private.holds[id])
+	if not hold then
 		return point and point.home
 	end
-	if hold.r and GetServerTime() >= hold.r and hold.h ~= point.home and not private.won[point.front.id] then
+	if hold.r and GetServerTime() >= hold.r and hold.h ~= point.home and not private.won[point.front.id] and not Captures:RespawnPaused(point.front) then
 		return point.home
 	end
 	return hold.h
@@ -415,27 +446,29 @@ end
 -- ============================================================================
 
 ---Every 30 seconds: notes which point the player is in and counts a sample when the player's presence can count (and
----tells our side, at most once a minute). The bar at the top shows it (CapturesHUD).
+---tells our side, at most once a minute), then ticks every point's provisional progress. The bar at the top shows it
+---(CapturesHUD).
 function Captures:Sample()
 	local _, x, y, mapId = Wanted.Recorder:GetPosition()
 	local point = Captures:PointAt(mapId, x, y)
+	local now = GetServerTime()
 	private.current, private.blocked = point, nil
 	if point then
 		local blocked = Captures:Blocked()
 		if blocked then
 			private.mine, private.blocked = nil, blocked
 		else
-			local now = GetServerTime()
 			local entry = private.Count(point.id, now)
 			private.mine = { p = point.id, at = GetTime() }
 			if entry and GetTime() - private.sentAt >= SEND_SECONDS then
 				private.sentAt = GetTime()
-				Wanted.Sync:SendPoint({ p = point.id, s = entry.s, c = entry.c })
+				Wanted.Sync:SendPoint(private.WithFall({ p = point.id, s = entry.s, c = entry.c }))
 			end
 		end
 	else
 		private.mine = nil
 	end
+	private.Tick(now)
 	Captures:AutoTrack()
 	private.Changed()
 end
@@ -484,13 +517,20 @@ end
 -- Our side, right now (provisional)
 -- ============================================================================
 
----A player of our side says they're at a point (Sync, from the channel's own sender): { p, s, c }. Shown only.
+---A player of our side says they're at a point (Sync, from the channel's own sender): { p, s, c }, and during a truce
+---the fall that started it, { f = Nexus id, t = server time }, so late joiners agree. Shown only.
 ---@param tbl table
 ---@param sender string
 function Captures:OnPeer(tbl, sender)
+	if type(sender) ~= "string" then
+		return
+	end
+	if type(tbl.f) == "string" and type(tbl.t) == "number" then
+		private.PeerFall(tbl.f, tbl.t)
+	end
 	local point = type(tbl.p) == "string" and byId[tbl.p]
 	local slot = floor(GetServerTime() / SLOT_SECONDS)
-	if not point or type(sender) ~= "string" or type(tbl.s) ~= "number" or abs(tbl.s - slot) > 1 or type(tbl.c) ~= "number"
+	if not point or type(tbl.s) ~= "number" or abs(tbl.s - slot) > 1 or type(tbl.c) ~= "number"
 		or tbl.c < 1 or tbl.c > MAX_SAMPLES then
 		return
 	end
@@ -501,6 +541,15 @@ function Captures:OnPeer(tbl, sender)
 	private.heard[point.id] = private.heard[point.id] or {}
 	private.heard[point.id][sender] = GetTime()
 	private.Changed()
+end
+
+---Adds the fall that started the current truce to a channel message, if there is one.
+function private.WithFall(tbl)
+	local s = private.siege
+	if s and s.fell and Captures:Phase() == "truce" then
+		tbl.f, tbl.t = s.fell.id, s.fellAt
+	end
+	return tbl
 end
 
 ---How many of our side are at a point now: players heard in the last HEARD_SECONDS, and us.
@@ -521,12 +570,127 @@ function Captures:Allies(id)
 	return count
 end
 
----Whether our side looks to be taking a point now: enough of us there, and it's ours to attack.
+---Whether our side looks to be taking a point now: enough of us there, and it's ours to attack (a Nexus only in a
+---siege round on its front).
 ---@param point table
 ---@return boolean
 function Captures:Taking(point)
 	local side = UnitFactionGroup("player")
-	return Captures:Allies(point.id) >= MIN_PEOPLE and Captures:CanAttack(side, point)
+	return Captures:Allies(point.id) >= MIN_PEOPLE and Captures:CanAttack(side, point) and (point.lane ~= nil or Captures:RoundOn(point.front))
+end
+
+---How many enemies were seen inside a point at the last tick (nameplates, placed where the player stood when they
+---were scanned, so only points the player is in or near).
+---@param id string
+---@return number
+function Captures:Enemies(id)
+	return private.enemiesAt[id] or 0
+end
+
+---Counts the enemies seen in the last HEARD_SECONDS by the point they were seen in.
+function private.CountEnemies()
+	wipe(private.enemiesAt)
+	if not (Wanted.Enemies and Wanted.Enemies.EachNearby) then
+		return
+	end
+	local now = GetTime()
+	Wanted.Enemies:EachNearby(function(entry)
+		if type(entry.lastSeen) == "number" and now - entry.lastSeen <= HEARD_SECONDS then
+			local point = Captures:PointAt(entry.mapId, entry.x, entry.y)
+			if point then
+				private.enemiesAt[point.id] = (private.enemiesAt[point.id] or 0) + 1
+			end
+		end
+	end)
+end
+
+---What a point costs in samples: a tower or inhibitor 40; a Nexus 120, 60 or 30 by how many of its side's inhibitors
+---are down (the site's figure, from the catch-up, until this client sees an inhibitor on the front change).
+---@param point table
+---@return number
+function Captures:Cost(point)
+	if point.lane then
+		return POINT_COST
+	end
+	local s = private.siege
+	if s and s.nexusCost[point.id] and not s.touched[point.front.id] then
+		return s.nexusCost[point.id]
+	end
+	local down = 0
+	for l in ipairs(point.front.lanes) do
+		local ids = private.LaneIds(point.front, l)
+		if Captures:Holder(point.home == "Alliance" and ids[#ids] or ids[1]) ~= point.home then
+			down = down + 1
+		end
+	end
+	return NEXUS_COST[down] or NEXUS_COST[1]
+end
+
+---A point's provisional progress: attackers (the attacking side's players inside, our side from the channel, the
+---enemy from nameplates), defenders, the samples gained so far, its cost, and the net gain a tick (0 while the
+---defenders match the attackers or too few attack).
+---@param point table
+---@return table { side, attackers, defenders, n, cost, net }
+function Captures:Progress(point)
+	local side = UnitFactionGroup("player")
+	local holder = Captures:Holder(point.id)
+	local attacker = holder == "Horde" and "Alliance" or "Horde"
+	local ours, theirs = Captures:Allies(point.id), Captures:Enemies(point.id)
+	local attackers, defenders = ours, theirs
+	if attacker ~= side then
+		attackers, defenders = theirs, ours
+	end
+	local net = min(attackers, ATTACK_CAP) - defenders
+	if attackers < MIN_PEOPLE or net < 0 or not Captures:CanAttack(attacker, point) or (not point.lane and not Captures:RoundOn(point.front)) then
+		net = 0
+	end
+	local progress = private.progress[point.id]
+	return { side = attacker, attackers = attackers, defenders = defenders, n = progress and progress.n or 0, cost = Captures:Cost(point), net = net }
+end
+
+---Every 30 seconds: each point gains its net attackers toward its cost, resets after two minutes with none, and is
+---taken (provisionally) at its cost; a taken inhibitor's respawn moves on while its takers stay.
+function private.Tick(now)
+	private.CountEnemies()
+	for _, point in ipairs(points) do
+		local p = Captures:Progress(point)
+		local progress = private.progress[point.id]
+		if p.attackers > 0 then
+			progress = progress or { n = 0 }
+			progress.at = now
+			private.progress[point.id] = progress
+			if p.net > 0 then
+				progress.n = progress.n + p.net
+				if not point.lane and private.siege then
+					private.siege.nexusAt = now
+				end
+				if progress.n >= p.cost then
+					private.Taken(point, p.side, now)
+				end
+			end
+		elseif progress and now - progress.at >= RESET_SECONDS then
+			private.progress[point.id] = nil
+		end
+		local hold = private.provisional[point.id]
+		if hold and hold.r and p.defenders > 0 then
+			hold.r = now + RESPAWN_SECONDS
+		end
+	end
+end
+
+---A side reached a point's cost: it holds the point from now (provisionally), a taken inhibitor until its respawn;
+---a Nexus falling wins the siege round.
+function private.Taken(point, side, now)
+	private.progress[point.id] = nil
+	if not point.lane then
+		private.Fell(point, side, now, true)
+		return
+	end
+	local inhibitor = Captures:Kind(point) == "inhibitor"
+	private.provisional[point.id] = { h = side, s = now, r = inhibitor and side ~= point.home and now + RESPAWN_SECONDS or nil }
+	if inhibitor and private.siege then
+		private.siege.touched[point.front.id] = true
+	end
 end
 
 
@@ -536,10 +700,12 @@ end
 -- ============================================================================
 
 ---Takes the holders the site worked out, from the app's catch-up: { [point id] = { h = "H" | "A", s, r, t } }. Only
----shown, so it's read at every login.
+---shown, so it's read at every login; what this client worked out since the last one goes.
 ---@param list table?
 function Captures:Take(list)
 	private.holds = {}
+	wipe(private.provisional)
+	wipe(private.progress)
 	if type(list) == "table" then
 		for id, hold in pairs(list) do
 			if byId[id] and type(hold) == "table" and type(hold.t) == "number" and (hold.h == "H" or hold.h == "A") then
@@ -619,12 +785,239 @@ end
 ---"Held by the Horde when the app last checked (2h ago)." or what to say when the site hasn't said.
 function private.HolderText(id)
 	local hold = private.holds[id]
-	if not hold then
+	local provisional = private.provisional[id]
+	if provisional and Captures:Holder(id) == provisional.h then
+		return format("Taken by the %s %s (provisional: wanteddeadordead.com decides).", provisional.h, Wanted.Theme:Ago(GetServerTime() - provisional.s))
+	elseif not hold then
 		return format("The %s's at the start of the week; wanteddeadordead.com decides who holds it from the players there.", byId[id].home)
 	end
 	return format("Held by the %s when the app last checked (%s).", Captures:Holder(id), Wanted.Theme:Ago(GetServerTime() - hold.t))
 end
 Captures.HolderText = function(_, id) return private.HolderText(id) end
+
+
+
+-- ============================================================================
+-- Siege nights
+-- ============================================================================
+
+---Takes tonight's siege and this week's siege wins per front from the app's catch-up (docs/DATA.md): the site's call
+---overrides whatever this client believed. Only shown, so it's read at every login.
+---@param siege table?
+---@param frontWins table?
+function Captures:TakeSiege(siege, frontWins)
+	private.frontWins = {}
+	for _, front in ipairs(Captures.FRONTS) do
+		local w = type(frontWins) == "table" and frontWins[front.id]
+		if type(w) == "table" and type(w.h) == "number" and type(w.a) == "number" then
+			private.frontWins[front.id] = { Horde = w.h, Alliance = w.a }
+		end
+	end
+	private.siege = private.ReadSiege(siege, GetServerTime())
+	private.Changed()
+end
+
+---A front by id ("hb"), or nil.
+function private.FrontById(id)
+	for _, front in ipairs(Captures.FRONTS) do
+		if front.id == id then
+			return front
+		end
+	end
+	return nil
+end
+
+---The catch-up's siege, checked and in the addon's terms, or nil: { front, start, end, round = { n, start, truceUntil,
+---begun }, wins = { Horde, Alliance }, nexusCost = { [Nexus id] = samples }, next = { front, start, end } }, with
+---what this client adds: called and opened (announced already), over, nexusAt (the last Nexus progress, for the last
+---round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), and
+---the fall that started the current truce (fell, fellAt). Nothing that happened before login is announced.
+function private.ReadSiege(raw, now)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local front = private.FrontById(raw.front)
+	if not front or type(raw.start) ~= "number" or type(raw["end"]) ~= "number" or raw["end"] <= raw.start then
+		return nil
+	end
+	local s = { front = front, start = raw.start, ["end"] = raw["end"], wins = { Horde = 0, Alliance = 0 }, nexusCost = {}, touched = {}, nexusAt = now }
+	local wins = type(raw.wins) == "table" and raw.wins or {}
+	s.wins.Horde = type(wins.h) == "number" and wins.h or 0
+	s.wins.Alliance = type(wins.a) == "number" and wins.a or 0
+	if type(raw.nexusCost) == "table" then
+		for id, cost in pairs(raw.nexusCost) do
+			if byId[id] and not byId[id].lane and type(cost) == "number" and cost > 0 then
+				s.nexusCost[id] = cost
+			end
+		end
+	end
+	local round = raw.round
+	if type(round) == "table" and type(round.n) == "number" and round.n >= 1 then
+		local truce = type(round.truceUntil) == "number" and round.truceUntil or 0
+		s.round = { n = round.n, start = type(round.start) == "number" and round.start or s.start, truceUntil = truce, begun = truce <= now }
+	end
+	local nxt = raw.next
+	local nextFront = type(nxt) == "table" and private.FrontById(nxt.front)
+	if nextFront and type(nxt.start) == "number" and type(nxt["end"]) == "number" then
+		s.next = { front = nextFront, start = nxt.start, ["end"] = nxt["end"] }
+	end
+	s.called = now >= s.start - CALL_SECONDS
+	s.opened = now >= s.start
+	s.over = now >= s["end"] and not s.round
+	return s
+end
+
+---Tonight's siege, or nil when the catch-up named none: see private.ReadSiege.
+function Captures:Siege()
+	return private.siege
+end
+
+---This week's siege wins on a front, { Horde, Alliance }, or nil when the catch-up gave none.
+function Captures:FrontWins(front)
+	return private.frontWins[front.id]
+end
+
+---Where tonight's siege stands: nil (none), "before" the window, in a "round", in a "truce", or "over".
+---@param now number?
+---@return string?
+function Captures:Phase(now)
+	local s = private.siege
+	if not s then
+		return nil
+	end
+	now = now or GetServerTime()
+	if s.over then
+		return "over"
+	elseif now < s.start then
+		return "before"
+	elseif s.round and s.round.truceUntil > now then
+		return "truce"
+	end
+	return "round"
+end
+
+---Whether a siege round is on at a front right now: only then can its Nexuses fall.
+function Captures:RoundOn(front)
+	local s = private.siege
+	return s ~= nil and s.front == front and Captures:Phase() == "round"
+end
+
+---Whether inhibitor respawns are paused on a front: the siege front from an hour before the window until the siege
+---is over.
+function Captures:RespawnPaused(front)
+	local s = private.siege
+	return s ~= nil and s.front == front and not s.over and GetServerTime() >= s.start - PAUSE_BEFORE_SECONDS
+end
+
+---Registers a function called as the siege moves: func(kind, ...), kind "call" (30 minutes before the window), "open",
+---"fell" (point, side), "round" (n), "over".
+function Captures:OnSiege(func)
+	tinsert(private.siegeListeners, func)
+end
+
+function private.SiegeNews(kind, ...)
+	for _, func in ipairs(private.siegeListeners) do
+		func(kind, ...)
+	end
+	private.Changed()
+end
+
+---Every few seconds: the call, the open (round 1), a truce ending in the next round, and the last round's end (no
+---winner after a quarter hour with no Nexus progress, or an hour after the window at the latest).
+---@param now number?
+function Captures:SiegeTick(now)
+	local s = private.siege
+	if not s or s.over then
+		return
+	end
+	now = now or GetServerTime()
+	if not s.called and now >= s.start - CALL_SECONDS then
+		s.called = true
+		if now < s.start then
+			private.SiegeNews("call")
+		end
+	end
+	if now >= s.start and not s.round then
+		s.round = { n = 1, start = s.start, truceUntil = 0, begun = true }
+	end
+	if now >= s.start and not s.opened then
+		s.opened = true
+		private.SiegeNews("open")
+	end
+	local r = s.round
+	if r and not r.begun and now >= r.truceUntil then
+		r.begun = true
+		private.SiegeNews("round", r.n)
+	end
+	if r and r.begun and now >= s["end"] then
+		local quietSince = max(s.nexusAt, s["end"], r.truceUntil)
+		if now >= s["end"] + OVERTIME_SECONDS or now - quietSince >= IDLE_SECONDS then
+			s.over = true
+			private.SiegeNews("over")
+		end
+	end
+end
+
+---A Nexus fell at a server time: the attacking side wins the round, the front goes back to level and a truce starts;
+---a win before the window's end earns another round, one after it ends the siege. Mine: this client saw it, and
+---tells the channel.
+function private.Fell(point, side, at, mine)
+	local s = private.siege
+	s.wins[side] = s.wins[side] + 1
+	s.fell, s.fellAt = point, at
+	s.touched[point.front.id] = true
+	for _, p in ipairs(points) do
+		if p.front == point.front then
+			private.provisional[p.id], private.holds[p.id], private.progress[p.id] = nil, nil, nil
+		end
+	end
+	private.Won()
+	if at < s["end"] then
+		s.round = { n = (s.round and s.round.n or 1) + 1, start = at + TRUCE_SECONDS, truceUntil = at + TRUCE_SECONDS, begun = false }
+	else
+		s.over = true
+	end
+	if mine then
+		Wanted.Sync:SendPoint({ f = point.id, t = at })
+	end
+	private.SiegeNews("fell", point, side)
+	if s.over then
+		private.SiegeNews("over")
+	end
+end
+
+---A peer's "Nexus fell at t" (OnPeer): taken when it's news (a round is on and the fall is since it began); the same
+---fall heard again with a newer time moves the truce clock to it (the newest server-time fall wins ties).
+function private.PeerFall(id, t)
+	local s, point = private.siege, byId[id]
+	local now = GetServerTime()
+	if not s or s.over or not point or point.lane or point.front ~= s.front or t > now + SAME_FALL_SECONDS then
+		return
+	end
+	local phase = Captures:Phase(now)
+	if phase == "truce" and s.fellAt and abs(t - s.fellAt) <= SAME_FALL_SECONDS then
+		if t > s.fellAt then
+			s.fellAt = t
+			s.round.start, s.round.truceUntil = t + TRUCE_SECONDS, t + TRUCE_SECONDS
+		end
+		return
+	end
+	local roundStart = s.round and max(s.round.start, s.round.truceUntil) or s.start
+	if phase == "round" and t >= roundStart then
+		private.Fell(point, point.home == "Horde" and "Alliance" or "Horde", t, false)
+	end
+end
+
+---Development builds (/wanted siege now): a 30-minute siege on a front starting now, as if the site had picked it, so
+---the rules can be tried with two people on one point. The next catch-up replaces it.
+---@param front table
+---@param now number?
+function Captures:OpenTestSiege(front, now)
+	now = now or GetServerTime()
+	private.siege = private.ReadSiege({ front = front.id, start = now, ["end"] = now + 30 * 60 }, now)
+	private.siege.opened = false
+	Captures:SiegeTick(now)
+end
 
 
 
@@ -696,10 +1089,16 @@ function Captures:AutoTrack()
 end
 
 Wanted:RegisterCommand("points", "Lists the capture fronts and who held each point when the desktop app last checked.", function()
+	local s = private.siege
+	if s then
+		Wanted:Print("Tonight's siege: %s, %s; Horde %d, Alliance %d.", s.front.zone, Captures:Phase(), s.wins.Horde, s.wins.Alliance)
+	end
 	for _, front in ipairs(Captures.FRONTS) do
 		local horde, alliance = Captures:Count(front)
 		local winner = Captures:Winner(front)
-		Wanted:Print("%s: Horde %d, Alliance %d%s", front.zone, horde, alliance, winner and (", won by the "..winner) or "")
+		local wins = Captures:FrontWins(front)
+		Wanted:Print("%s: Horde %d, Alliance %d%s%s", front.zone, horde, alliance, winner and (", won by the "..winner) or "",
+			wins and format("; siege wins this week Horde %d, Alliance %d", wins.Horde, wins.Alliance) or "")
 		for _, point in ipairs(points) do
 			if point.front == front then
 				Wanted:Print("  %s (%s) %.0f,%.0f: %s", Captures:Role(point), point.name, point.x, point.y, private.HolderText(point.id))

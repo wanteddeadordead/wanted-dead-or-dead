@@ -930,6 +930,15 @@ function Enemies:CountNearby()
 	return count
 end
 
+---Calls func(entry) for each enemy on the nearby list: { guid, name, lastSeen (GetTime), mapId, x, y (where the player
+---stood when they were last scanned), ... }. Read only: the entries are Enemies' own.
+---@param func function
+function Enemies:EachNearby(func)
+	for _, entry in pairs(private.nearby) do
+		func(entry)
+	end
+end
+
 function Enemies:GetNearby()
 	-- Asked for at every redraw of the Nearby window, several times a second in a fight: each enemy's description
 	-- is kept while they're on the list and filled again in place

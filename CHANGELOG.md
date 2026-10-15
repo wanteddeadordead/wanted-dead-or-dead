@@ -18,6 +18,7 @@
   and your presets, slider and typed amounts round up too. A gold game does the same to the gold.
 - **Poker.** Ten painted felts from around Azeroth (Stormwind, Orgrimmar, Elwynn Forest, Durotar, Stranglethorn Vale,
   Winterspring, Tanaris, Undercity, Ironforge, Darnassus) under Felt in the table settings, beside the classic green.
+  Stranglethorn Vale is the felt unless you choose another.
 - **Poker.** The window is 80 wider, so eight seats' bets have room; the pot's chips sit right under its amount; the
   "Next hand in" clock no longer hides behind Rebuy; the table-talk buttons are small and bordered; the your-turn
   sound plays once when the window opens itself.

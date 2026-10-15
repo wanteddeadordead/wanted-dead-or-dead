@@ -14542,6 +14542,7 @@ end)()
 	C_Map, ns.Sync.SendPoint, ns.Alerts.Warn, ns.Enemies.EachNearby, PlaySound = real.C_Map, real.SendPoint, real.Warn, real.EachNearby, real.PlaySound
 	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
 	HUD:Update()
+end)()
 -- Rally leaders: a group's leader claims the rally in their zone (not in a fight, an instance or while another holds
 -- it), their position goes out on the channel, and players of their faction there see it on the map and in Nearby.
 -- Zones are told apart by their map, never their name. The earlier claim holds (a claim counts at most five minutes

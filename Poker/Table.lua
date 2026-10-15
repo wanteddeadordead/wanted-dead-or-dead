@@ -435,7 +435,7 @@ function private.ApplyFelt()
 	else
 		art:SetTexture("Interface\\AddOns\\"..Poker.FOLDER.."\\Media\\felt-"..key)
 		art:Show()
-		private.felt.shade:SetColorTexture(SEAT_BG[1], SEAT_BG[2], SEAT_BG[3], TableUI:Shade(key) / 100)
+		private.felt.shade:SetColorTexture(SEAT_BG[1], SEAT_BG[2], SEAT_BG[3], 1 - TableUI:Brightness(key) / 100)
 		private.felt.shade:Show()
 	end
 end
@@ -448,16 +448,19 @@ function TableUI:SetFelt(key)
 	private.RefreshSettings()
 end
 
--- How dark the glass over a painted felt is, in percent, per felt (TUNING: the maintainer picks each felt's number
--- with the slider in the settings; then the numbers go into the code and the slider goes)
-local SHADE_DEFAULT = 50
-function TableUI:Shade(key)
-	local shade = Options().shade
-	return shade and shade[key] or SHADE_DEFAULT
+---How bright a painted felt shows, in percent, kept per felt: the dark glass over it is the rest. 50 by default.
+---@param key string
+---@return number
+function TableUI:Brightness(key)
+	local brightness = Options().brightness
+	return brightness and brightness[key] or 50
 end
-function TableUI:SetShade(key, percent)
-	Options().shade = Options().shade or {}
-	Options().shade[key] = percent
+
+---@param key string
+---@param percent number 10 to 100
+function TableUI:SetBrightness(key, percent)
+	Options().brightness = Options().brightness or {}
+	Options().brightness[key] = percent
 	private.ApplyFelt()
 end
 
@@ -590,11 +593,12 @@ function private.BuildSettings()
 	panel.felt.label:SetWidth(132)
 	panel.felt.label:SetWordWrap(false)
 	W:AttachTooltip(panel.felt, "Felt", "The cloth on the table: the plain green, or a painted one from around Azeroth.")
-	-- TUNING: the darkness of the glass over the painted felt, per felt (goes once the numbers are chosen)
-	panel.shade = W:Slider(panel, "Darkness", 200, 0, 90, 5, function(v) return v.."%" end, function(v)
-		TableUI:SetShade(TableUI:Felt(), v)
+	-- How bright the painted felt shows, per felt
+	panel.brightness = W:Slider(panel, "Background brightness", 200, 10, 100, 5, function(v) return v.."%" end, function(v)
+		TableUI:SetBrightness(TableUI:Felt(), v)
 	end)
-	panel.shade:SetPoint("TOPLEFT", 30, y - 92)
+	panel.brightness:SetPoint("TOPLEFT", 30, y - 92)
+	W:AttachTooltip(panel.brightness, "Background brightness", "How much of the painting shows through the dark glass, for the felt chosen.")
 	local hint = Theme:Text(panel, "tiny", "Add your own sounds with a SharedMedia addon.", C.faint)
 	hint:SetPoint("BOTTOMLEFT", 14, 10)
 	panel:Hide()
@@ -612,7 +616,7 @@ function private.RefreshSettings()
 		pick:SetText(TableUI:SoundLabel(TableUI:SoundChoice(what)))
 	end
 	panel.felt:SetText(TableUI:FeltLabel(TableUI:Felt()))
-	panel.shade:SetValue(TableUI:Shade(TableUI:Felt()))
+	panel.brightness:SetValue(TableUI:Brightness(TableUI:Felt()))
 end
 
 ---Asks what went wrong and sends a bug report to the developers through the base (Report), with the table's state

@@ -13483,6 +13483,11 @@ end)()
 	TableUI:SetFelt("no such felt")
 	check(TableUI:Felt() == "stranglethorn" and felt.art:IsShown(), "a felt that isn't one falls back to Stranglethorn Vale")
 	check(#TableUI.FELTS == 11, "eleven felts: the green and ten painted")
+	-- Background brightness, per felt: the glass over the painting is the rest of it
+	TableUI:SetFelt("durotar")
+	check(TableUI:Brightness("durotar") == 50 and OnScreenNow("Background brightness"), "a painted felt shows at half by default, with a slider in the settings")
+	TableUI:SetBrightness("durotar", 80)
+	check(TableUI:Brightness("durotar") == 80 and WantedPokerDB.options.brightness.durotar == 80 and TableUI:Brightness("stormwind") == 50, "brightness is kept per felt")
 	TableUI:ToggleSettings()
 	-- Experimental, and a bug report with the table's log
 	ns.UI:Show("poker")

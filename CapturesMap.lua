@@ -112,6 +112,32 @@ end
 -- ============================================================================
 
 private.Provider = CreateFromMixins(MapCanvasDataProviderMixin)
+-- The overlay's own pin frame level, above the area POIs and so above the fog of war over unexplored ground (the
+-- map's exploration layer is a pin too; a frame at the canvas's own level sits under it, 2026-10-15). Four levels:
+-- the overlay, then the point buttons two above it.
+local FRAME_LEVEL = "PIN_FRAME_LEVEL_WANTED_CAPTURES"
+local FRAME_LEVEL_RANGE = 4
+
+function private.Provider:OnAdded(owningMap)
+	MapCanvasDataProviderMixin.OnAdded(self, owningMap)
+	local levels = owningMap.GetPinFrameLevelsManager and owningMap:GetPinFrameLevelsManager()
+	if levels and levels.InsertFrameLevelAbove then
+		levels:InsertFrameLevelAbove(FRAME_LEVEL, "PIN_FRAME_LEVEL_AREA_POI", FRAME_LEVEL_RANGE)
+	end
+end
+
+---The overlay's frame level: the start of our pin level when the map gives one, else just over the canvas.
+---@param canvas table
+---@return number
+function private.OverlayLevel(canvas)
+	local map = private.provider and private.provider.GetMap and private.provider:GetMap()
+	local levels = map and map.GetPinFrameLevelsManager and map:GetPinFrameLevelsManager()
+	local level = levels and levels.GetFrameLevelStart and levels:GetFrameLevelStart(FRAME_LEVEL)
+	if type(level) == "number" and level > 0 then
+		return level
+	end
+	return canvas:GetFrameLevel() + 5
+end
 
 function private.Provider:RemoveAllData()
 	private.ReleaseAll()
@@ -152,7 +178,8 @@ function private.Overlay(canvas)
 	overlay:SetParent(canvas)
 	overlay:ClearAllPoints()
 	overlay:SetAllPoints(canvas)
-	overlay:SetFrameLevel(canvas:GetFrameLevel() + 5)
+	private.overlayLevel = private.OverlayLevel(canvas)
+	overlay:SetFrameLevel(private.overlayLevel)
 	overlay:Show()
 	return overlay
 end
@@ -265,7 +292,7 @@ function private.Button(point)
 		return b
 	end)
 	button.point = point
-	button:SetFrameLevel(private.overlay:GetFrameLevel() + 2)
+	button:SetFrameLevel((private.overlayLevel or private.overlay:GetFrameLevel()) + 2)
 	local size = w * (point.lane and ICON_SIZE or NEXUS_SIZE)
 	button:SetSize(size, size)
 	button:ClearAllPoints()

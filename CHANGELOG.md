@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The count of players on the sync channel is no longer asked for during a fight, where the client blocks it
+  ("The client blocked ListChannelByName()"); the request waits until the fight is over.
+
 ## [1.23.1] - 2026-10-14
 
 - **Poker.** The host can kick a player: right-click their box. They stand up as if they had left, with their stack

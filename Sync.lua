@@ -389,6 +389,10 @@ function Sync:OnEnable()
 		private.FlushLive()
 		private.FlushForward()
 		private.Drain()
+		if private.membersAfterCombat then
+			private.membersAfterCombat = nil
+			private.RequestMembers()
+		end
 	end)
 	-- The game rejoins the channels it remembers at login, and its box asking for a password plays the invite sound
 	private.MuteInvite(LOGIN_MUTE_SECONDS)
@@ -657,6 +661,12 @@ function private.RequestMembers(attempt)
 	private.membersRetrying = false
 	if not ListChannelByName then
 		Wanted:Log("!! Sync: no ListChannelByName; can't ask for the member count")
+		return
+	end
+	if Wanted:InCombat() then
+		-- The client blocks ListChannelByName in a fight (ADDON_ACTION_BLOCKED, a player's report 2026-10-15): asked
+		-- once it's over (OnCombatEnd)
+		private.membersAfterCombat = true
 		return
 	end
 	if private.membersAskedAt and GetTime() - private.membersAskedAt < MEMBERS_ASK_SECONDS then

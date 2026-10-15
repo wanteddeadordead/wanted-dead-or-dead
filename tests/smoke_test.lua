@@ -3886,6 +3886,21 @@ end)()
 	for _ = 1, 7 do Fire("CHANNEL_UI_UPDATE") end
 	RunTimers()
 	check(asks == 1, "once the count is known, a rebuilt list doesn't ask")
+	-- In a fight the client blocks ListChannelByName (a player's report, 2026-10-15): the request waits for the end
+	clock = clock + 300
+	inCombat = true
+	Fire("PLAYER_REGEN_DISABLED")
+	for _, f in ipairs(tickers) do f() end
+	RunTimers()
+	check(asks == 1, "the member list isn't asked for in a fight")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(asks == 2, "it's asked for once the fight is over")
+	Fire("PLAYER_REGEN_DISABLED")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(asks == 2, "a fight with no request in it doesn't ask")
 	ListChannelByName = realList
 end)()
 -- The wait before the next try of the main channel is logged once, not every tick

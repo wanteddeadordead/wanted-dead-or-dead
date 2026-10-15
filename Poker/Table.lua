@@ -397,20 +397,21 @@ local function Options()
 end
 TableUI.Options = Options
 
--- The felts: the plain green, or a painted one from Media (felt-<key>.tga, 512 by 512, stretched over the felt)
+-- The felts: the plain green, or a painted one from Media (felt-<key>.tga, 512 by 512, stretched over the felt);
+-- Stranglethorn Vale unless another is chosen
 local FELTS = { { "green", "Classic green" }, { "stormwind", "Stormwind" }, { "orgrimmar", "Orgrimmar" }, { "elwynn", "Elwynn Forest" },
 	{ "durotar", "Durotar" }, { "stranglethorn", "Stranglethorn Vale" }, { "winterspring", "Winterspring" }, { "tanaris", "Tanaris" },
 	{ "undercity", "Undercity" }, { "ironforge", "Ironforge" }, { "darnassus", "Darnassus" } }
 TableUI.FELTS = FELTS
 
----The felt chosen: a key from FELTS ("green" by default).
+---The felt chosen: a key from FELTS (Stranglethorn Vale by default).
 ---@return string
 function TableUI:Felt()
-	local key = Options().felt or "green"
+	local key = Options().felt or "stranglethorn"
 	for _, felt in ipairs(FELTS) do
 		if felt[1] == key then return key end
 	end
-	return "green"
+	return "stranglethorn"
 end
 
 ---A felt's name as shown.

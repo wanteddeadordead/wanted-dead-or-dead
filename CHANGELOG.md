@@ -50,8 +50,18 @@
     Bot row, and the battlegrounds' capture bar under the minimap while you stand in a point (provisional: the site
     decides). Announcements in the middle of the screen as in a battleground: towers destroyed, inhibitors down and
     respawned, your side attacking, a Nexus under attack.
-  - `/wanted points` lists them; Settings > Sharing has the switches, and an optional waypoint on the nearest point to
-    attack.
+  - Siege nights: every day one front is the siege front, its Nexuses vulnerable from 7 to 10 PM Eastern. Taking a
+    point counts presence in samples, one per player of a side inside the circle every 30 s, each defender inside
+    cancelling one attacker and at most 6 attackers counting: a tower or inhibitor costs 40, a Nexus 120, 60 or 30
+    by how many of its inhibitors are down, and a downed inhibitor stays down on the siege front from 6 PM. A Nexus
+    falling wins the round, then a 30-minute truce with the front reset, then the next round; a win before 10 PM earns
+    another round, and the last round ends with no winner after a quiet quarter hour or at 11 PM. The display at the
+    top carries the siege (its window, the round and score, the truce clock, the result) and the capture bar how many
+    attack and defend and how long is left at that pace; announcements for the call half an hour before, the open,
+    each Nexus fall, each round and the end. The game's call is provisional, from what nearby clients say;
+    wanteddeadordead.com's, from the app at login, overrides it.
+  - `/wanted points` lists them; Settings > Sharing has the switches, an optional waypoint on the nearest point to
+    attack, and the siege call (the half-hour warning and the open, wherever you are).
 
 ## [1.23.3] - 2026-10-15
 

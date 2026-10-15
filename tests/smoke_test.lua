@@ -12397,6 +12397,7 @@ end)()
 	check(raised == 5, "the winning five rise from the board and the winner's hand: "..raised)
 	check(parts.lock.state == "ok" and parts.lock:IsShown() and not Logged("verified"), "our client verified the host's hand: a check mark, nothing in the log: "..tostring(parts.lock.state))
 	check((Logged(" wins ") or Logged("Split pot")) and Logged("River:"), "the result and the river are logged")
+	check(Logged(" showed ") or Logged("Split pot"), "the hand that showed and lost is logged too")
 	-- Sit out and come back
 	parts.sitOut._scripts.OnClick(parts.sitOut)
 	check(host.seats[1].out == "sitting" and parts.sitOut.label._text == "I'm back", "sitting out from the next hand")

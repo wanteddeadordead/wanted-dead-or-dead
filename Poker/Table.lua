@@ -41,28 +41,38 @@ local CHIP = 14 -- a chip by a bet
 -- A stack is the amount counted out in these, so the chips on the felt add up to the number beside them
 local DENOMINATIONS = { { 500, { 0.7, 0.4, 1 } }, { 100, { 0.3, 0.3, 0.32 } }, { 25, { 0.35, 1, 0.45 } }, { 5, { 1, 0.4, 0.4 } }, { 1, { 1, 1, 1 } } }
 local STACK_HEIGHT = 8 -- chips shown per stack at most
+local PILE = CHIP + 3 * (STACK_HEIGHT - 1) -- a full stack, each chip three up from the last
+local POT_Y = CARD_H / 2 + 8 + PILE + 2 + 7 -- the pot amount's centre line; its stacks stand between it and the board
 
 -- Lays an amount out as stacks of chips, one stack per denomination used, from the anchor outward (right to left,
--- or left to right when `rightward`). Returns how many textures it used
+-- or left to right when `rightward`); with `rightward` nil, centred under the anchor, standing on one line.
+-- Returns how many textures it used
 local function LayStacks(chips, amount, bb, anchor, rightward, maxColumns)
-	local used, col = 0, 0
+	local used, columns = 0, {}
 	local units = max(amount > 0 and 1 or 0, floor(amount / max(1, bb)))
 	for _, denom in ipairs(DENOMINATIONS) do
 		local n = floor(units / denom[1])
-		if n > 0 and col < maxColumns then
+		if n > 0 and #columns < maxColumns then
 			units = units - n * denom[1]
-			n = min(n, STACK_HEIGHT)
-			col = col + 1
-			for row = 1, n do
-				used = used + 1
-				local chip = chips[used]
-				if not chip then break end
-				chip:ClearAllPoints()
-				local dx = (col - 1) * (CHIP - 1) + 5
-				if rightward then chip:SetPoint("LEFT", anchor, "RIGHT", dx, (row - 1) * 3) else chip:SetPoint("RIGHT", anchor, "LEFT", -dx, (row - 1) * 3) end
-				chip:SetVertexColor(denom[2][1], denom[2][2], denom[2][3], 1)
-				chip:Show()
+			columns[#columns + 1] = { min(n, STACK_HEIGHT), denom[2] }
+		end
+	end
+	for col, column in ipairs(columns) do
+		for row = 1, column[1] do
+			used = used + 1
+			local chip = chips[used]
+			if not chip then break end
+			chip:ClearAllPoints()
+			local dx = (col - 1) * (CHIP - 1) + 5
+			if rightward == nil then
+				chip:SetPoint("BOTTOM", anchor, "BOTTOM", (col - (#columns + 1) / 2) * (CHIP - 1), -(PILE + 2) + (row - 1) * 3)
+			elseif rightward then
+				chip:SetPoint("LEFT", anchor, "RIGHT", dx, (row - 1) * 3)
+			else
+				chip:SetPoint("RIGHT", anchor, "LEFT", -dx, (row - 1) * 3)
 			end
+			chip:SetVertexColor(column[2][1], column[2][2], column[2][3], 1)
+			chip:Show()
 		end
 	end
 	for i = used + 1, #chips do chips[i]:Hide() end
@@ -226,58 +236,113 @@ local function BuildSeat(felt, k)
 end
 
 -- Where display position k of n seats sits around the felt: you at the bottom, the next seat to your left
-local function Place(seat, k, n, felt)
+local function SeatAt(k, n, w, h)
 	local angle = -math.pi / 2 - k * (2 * math.pi / n)
-	local w, h = felt:GetWidth() or 600, felt:GetHeight() or 400
 	local rx, ry = w / 2 - SEAT_W / 2 - 10, h / 2 - SEAT_H / 2 - 8
-	local x, y = rx * math.cos(angle), ry * math.sin(angle)
-	seat:ClearAllPoints()
-	seat:SetPoint("CENTER", felt, "CENTER", x, y)
-	-- The bet sits between the seat and the middle; the dealer button rests on the box's corner, on the side facing the middle
-	-- The bet label (and its chips) goes to the first spot by the box, trying toward the middle first, then above or
-	-- below the box, then beside it, that doesn't land on the board, the pot row or the hand line
+	return rx * math.cos(angle), ry * math.sin(angle)
+end
+-- The bet labels for n seats on a felt of w by h, each with the spot by its box that lands least on anything else:
+-- the board, the pot and its stacks, the boxes (its own too), the hand shown over a box, the dealer buttons, and the
+-- labels already placed. Landing on the cards, the pot, a box or another label counts three times. The seats with the fewest clear
+-- spots go first. Beside the box when that is clear, else toward the middle, then the ring just above or below the
+-- card row on the seat's side, then along the box's own edge, and the ring on the far side only when nothing else is
+local LABEL_W, CHIPS_W, GROUP_H = 60, 45, 26 -- the amount, the three stacks of chips on its outer side, their height
+local layout = { spots = {} }
+-- The label group centred here: the amount, the chips on one side
+local function Group(cx, cy, rightward)
+	return cx - LABEL_W / 2 - (rightward and 0 or CHIPS_W), cx + LABEL_W / 2 + (rightward and CHIPS_W or 0), cy - GROUP_H / 2, cy + GROUP_H / 2
+end
+-- How much of the group lands on the boxes to keep out of, weighted; off the felt is out of the question
+local function Covered(keepOut, w, h, l, r, b, t)
+	if l < -w / 2 + 4 or r > w / 2 - 4 or b < -h / 2 + 4 or t > h / 2 - 4 then return math.huge end
+	local area = 0
+	for _, box in ipairs(keepOut) do
+		local ow, oh = math.min(r, box[2]) - math.max(l, box[1]), math.min(t, box[4]) - math.max(b, box[3])
+		if ow > 0 and oh > 0 then area = area + ow * oh * box[5] end
+	end
+	return area
+end
+-- The spots to try for a seat centred at x, y: { cx, cy, chips rightward, order }
+local function Spots(x, y, w)
 	local len = math.sqrt(x * x + y * y)
 	local dx, dy = len > 0 and -x / len or 0, len > 0 and -y / len or 1
 	local ex = math.abs(dx) > 0.001 and (SEAT_W / 2) / math.abs(dx) or math.huge
 	local ey = math.abs(dy) > 0.001 and (SEAT_H / 2) / math.abs(dy) or math.huge
 	local edge = math.min(ex, ey)
-	local GROUP_W, GROUP_H = 96, 26 -- the label with three stacks of chips beside it
-	local halfBoard = 2.5 * (CARD_W + 6) + 8
-	local keepOut = {
-		{ -halfBoard, halfBoard, -CARD_H / 2 - 8, CARD_H / 2 + 8 }, -- the board
-		{ -halfBoard, 70, CARD_H / 2 + 8, CARD_H / 2 + 22 + 3 * STACK_HEIGHT + 14 }, -- the pot and its stacks
-		{ -70, 70, -CARD_H / 2 - 60, -CARD_H / 2 - 8 }, -- Hand N and the check mark
-	}
-	local function Clear(cx, cy)
-		local l, r, b, t = cx - GROUP_W / 2, cx + GROUP_W / 2, cy - GROUP_H / 2, cy + GROUP_H / 2
-		if l < -w / 2 + 4 or r > w / 2 - 4 or b < -h / 2 + 4 or t > h / 2 - 4 then return false end
-		for _, k in ipairs(keepOut) do
-			if l < k[2] and r > k[1] and b < k[4] and t > k[3] then return false end
-		end
-		return true
+	local spots = {}
+	local function Spot(cx, cy, rightward, order) spots[#spots + 1] = { cx, cy, rightward, order } end
+	local outer = x > 1 -- chips on the label's outer side, away from the board, unless only the inner side is free
+	Spot(x + SEAT_W / 2 + LABEL_W / 2 + 6, y, true, 10)
+	Spot(x - SEAT_W / 2 - LABEL_W / 2 - 6, y, false, 10)
+	for d = 20, 100, 10 do
+		Spot(x + dx * (edge + d), y + dy * (edge + d), outer, d)
+		Spot(x + dx * (edge + d), y + dy * (edge + d), not outer, d + 40)
 	end
-	-- Toward the middle first; when the board is in the way, on the ring just above or below the card row, nearest
-	-- the seat's side; the box's own edge only as a last resort
 	local ringY = CARD_H / 2 + 8 + GROUP_H / 2 + 4
-	local tx = x + dx * (edge + 40)
-	tx = max(-w / 2 + GROUP_W / 2 + 6, min(w / 2 - GROUP_W / 2 - 6, tx))
+	local tx = max(-w / 2 + LABEL_W, min(w / 2 - LABEL_W, x + dx * (edge + 40)))
 	local nearSide = y >= 0 and ringY or -ringY
-	local candidates = {
-		{ x + dx * (edge + 60), y + dy * (edge + 60) },
-		{ x + dx * (edge + 40), y + dy * (edge + 40) },
-		{ tx, nearSide },
-		{ tx, -nearSide },
-		{ tx + (x > 1 and 40 or -40), nearSide },
-		{ tx + (x > 1 and 40 or -40), -nearSide },
-		{ x, y + (y > 1 and -1 or 1) * (SEAT_H / 2 + 18) },
-	}
-	local lx, ly = candidates[3][1], candidates[3][2]
-	for _, c in ipairs(candidates) do
-		if Clear(c[1], c[2]) then lx, ly = c[1], c[2] break end
+	for _, off in ipairs({ 0, -25, 25, -50, 50, -75, 75 }) do
+		if math.abs(off) <= (math.abs(x) > SEAT_W and 25 or 75) then -- a seat off to a side stays on its side of the ring
+			Spot(tx + off, nearSide, outer, 100 + math.abs(off))
+			Spot(tx + off, nearSide, not outer, 140 + math.abs(off))
+			Spot(tx + off, -nearSide, outer, (math.abs(y) < 1 and 100 or 3000) + math.abs(off)) -- a side seat has no far side
+		end
 	end
+	local own = y + (y > 1 and -1 or 1) * (SEAT_H / 2 + 14)
+	for _, off in ipairs({ 0, -25, 25, -50, 50 }) do Spot(x + off, own, outer, 400 + math.abs(off)) end
+	return spots
+end
+local function LayoutLabels(n, w, h)
+	layout = { n = n, w = w, h = h, spots = {} }
+	local halfBoard = 2.5 * (CARD_W + 6) + 8
+	local fixed = {
+		{ -halfBoard, halfBoard, -CARD_H / 2 - 8, CARD_H / 2 + 8, 3 }, -- the board
+		{ -64, 64, CARD_H / 2 + 8, POT_Y + 11, 3 }, -- the pot's stacks and amount
+	}
+	local seats = {}
+	for k = 0, n - 1 do
+		local x, y = SeatAt(k, n, w, h)
+		seats[#seats + 1] = { k = k, x = x, y = y, spots = Spots(x, y, w) }
+		fixed[#fixed + 1] = { x - SEAT_W / 2 - 4, x + SEAT_W / 2 + 4, y - SEAT_H / 2 - 4, y + SEAT_H / 2 + 4, 3 } -- the box
+		fixed[#fixed + 1] = { x - SEAT_W / 2 + 4, x + SEAT_W / 2 - 32, y + SEAT_H / 2 + 4, y + SEAT_H / 2 + 34, 1 } -- the hand shown over it
+		local cornerX = x + (x < -1 and -(SEAT_W / 2 - 14) or (SEAT_W / 2 - 14))
+		if y > 0 then
+			fixed[#fixed + 1] = { cornerX - 10, cornerX + 10, y - SEAT_H / 2 - 23, y - SEAT_H / 2 - 3, 1 } -- the dealer button
+		else
+			fixed[#fixed + 1] = { cornerX - 10, cornerX + 10, y + SEAT_H / 2 + 3, y + SEAT_H / 2 + 23, 1 }
+		end
+	end
+	for _, seat in ipairs(seats) do
+		seat.room = 0
+		for _, spot in ipairs(seat.spots) do
+			if Covered(fixed, w, h, Group(spot[1], spot[2], spot[3])) == 0 then seat.room = seat.room + 1 end
+		end
+	end
+	table.sort(seats, function(a, b) return a.room < b.room or (a.room == b.room and a.k < b.k) end)
+	local keepOut = {}
+	for _, box in ipairs(fixed) do keepOut[#keepOut + 1] = box end
+	for _, seat in ipairs(seats) do
+		local best, chosen = math.huge, seat.spots[1]
+		for _, spot in ipairs(seat.spots) do
+			local score = Covered(keepOut, w, h, Group(spot[1], spot[2], spot[3])) * 10 + spot[4]
+			if score < best then best, chosen = score, spot end
+		end
+		layout.spots[seat.k] = { chosen[1], chosen[2], chosen[3], best }
+		local l, r, b, t = Group(chosen[1], chosen[2], chosen[3])
+		keepOut[#keepOut + 1] = { l, r, b, t, 3 }
+	end
+end
+
+local function Place(seat, k, n, felt)
+	local w, h = felt:GetWidth() or 600, felt:GetHeight() or 400
+	local x, y = SeatAt(k, n, w, h)
+	seat:ClearAllPoints()
+	seat:SetPoint("CENTER", felt, "CENTER", x, y)
+	if layout.n ~= n or layout.w ~= w or layout.h ~= h then LayoutLabels(n, w, h) end
+	local spot = layout.spots[k]
 	seat.bet:ClearAllPoints()
-	seat.bet:SetPoint("CENTER", felt, "CENTER", lx, ly)
-	seat.chipsRightward = x > 1 -- the chips on the label's outer side, away from the board
+	seat.bet:SetPoint("CENTER", felt, "CENTER", spot[1], spot[2])
+	seat.chipsRightward = spot[3]
 	-- The dealer button on the corner facing the middle vertically, and on the side AWAY from the bet label (which sits
 	-- toward the middle): the left corner for seats on the left half, the right corner otherwise
 	seat.dealer:ClearAllPoints()
@@ -288,6 +353,7 @@ local function Place(seat, k, n, felt)
 	else
 		seat.dealer:SetPoint("BOTTOM", seat, "TOP"..corner, dx, 3)
 	end
+	return spot
 end
 
 -- The player's choices for the table: sounds (each one picked from the game's own sounds, a SharedMedia sound, or
@@ -588,9 +654,9 @@ function private.Build()
 	private.strength:SetMaxLines(2)
 	private.strength:SetWidth(SEAT_W - 36) -- clear of the dealer button at the corner
 	private.pot = Theme:Text(felt, "money", "")
-	private.pot:SetPoint("CENTER", 0, CARD_H / 2 + 22)
+	private.pot:SetPoint("CENTER", 0, POT_Y)
 	private.pot:SetJustifyH("CENTER")
-	-- The pot's chips: up to five stacks of five, a chip a big blind, left of the amount
+	-- The pot's chips: up to five stacks, a chip a big blind, standing under the amount
 	private.potChips = {}
 	for i = 1, 5 * STACK_HEIGHT do
 		local chip = felt:CreateTexture(nil, "ARTWORK", nil, (i - 1) % STACK_HEIGHT)
@@ -604,19 +670,20 @@ function private.Build()
 		card:SetPoint("CENTER", felt, "CENTER", (i - 3) * (CARD_W + 6), 0)
 		private.board[i] = card
 	end
+	-- The hand's number (and a tournament's level) in the felt's bottom-right corner, the deal's check beside it
 	private.info = Theme:Text(felt, "tiny", "", C.muted)
-	private.info:SetPoint("TOP", felt, "CENTER", 0, -CARD_H / 2 - 8)
-	private.info:SetJustifyH("CENTER")
-	-- The deal's check, once the hand is over: a green check mark, or a red cross; what it means on hover
+	private.info:SetPoint("BOTTOMRIGHT", -30, 12)
+	private.info:SetJustifyH("RIGHT")
+	-- The deal's check, once the hand is over: a lock, or a red cross; what it means on hover
 	private.lock = CreateFrame("Frame", nil, felt)
 	private.lock:SetSize(18, 18)
-	private.lock:SetPoint("TOP", private.info, "BOTTOM", 0, -3)
+	private.lock:SetPoint("BOTTOMRIGHT", -8, 8)
 	private.lock.icon = private.lock:CreateTexture(nil, "ARTWORK")
 	private.lock.icon:SetAllPoints()
 	function private.lock:Set(state)
 		self.state = state
 		if state == "ok" then
-			self.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+			self.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-LOCK")
 		elseif state == "failed" then
 			self.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
 		end
@@ -1106,6 +1173,7 @@ function TableUI:Refresh(st)
 	end
 	local cfg = st.cfg
 	local n = cfg.maxSeats
+	private.frame:SetHeight(HEIGHT + (n > 6 and 80 or 0)) -- seven or eight boxes need the taller felt for their bets
 	local me = st.me
 	local hand = st.hand
 	local playing = hand and hand.stage == "play" and hand.street ~= "done"
@@ -1267,7 +1335,7 @@ function TableUI:Refresh(st)
 		private.board[i]:SetHighlight(card and showdown and next(best) and (best[card] or false) or nil)
 	end
 	private.pot:SetText(hand and hand.pot and hand.pot > 0 and ("Pot "..Chips(hand.pot, cfg)) or "")
-	LayStacks(private.potChips, (hand and hand.pot and not showdown and hand.pot) or 0, (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1, private.pot, false, 5)
+	LayStacks(private.potChips, (hand and hand.pot and not showdown and hand.pot) or 0, (st.levelBlinds and st.levelBlinds[2]) or cfg.bb or 1, private.pot, nil, 5)
 	if cfg.kind == "tournament" and st.started then
 		private.info:SetText(("Level %d  -  blinds %d/%d%s%s%s"):format(st.level or 1, st.levelBlinds and st.levelBlinds[1] or 0, st.levelBlinds and st.levelBlinds[2] or 0,
 			(st.ante or 0) > 0 and ("  -  ante "..st.ante) or "", st.lateOpen and "  -  late entry open" or "", hand and hand.key and ("  -  hand "..st.h) or ""))
@@ -1395,6 +1463,11 @@ function TableUI:Refresh(st)
 	local mine = me and st.seats[me]
 	local tournament = cfg.kind == "tournament"
 	private.sitOut:SetShown(mine ~= nil and st.phase ~= "closed" and st.phase ~= "finished")
+	-- On your turn the action buttons run in from the right; Sit out gives way when a long gold amount brings them over it
+	if legal and private.sitOut:IsShown() then
+		local used = 10 + private.allin:GetWidth() + 6 + private.raise:GetWidth() + 6 + private.amountBox:GetWidth() + 8 + private.slider:GetWidth() + 12 + private.call:GetWidth() + 6 + private.fold:GetWidth()
+		if used + 6 > private.bar:GetWidth() - 10 - private.sitOut:GetWidth() then private.sitOut:Hide() end
+	end
 	if mine then
 		private.sitOut:SetText(mine.out and mine.out ~= "busted" and "I'm back" or "Sit out")
 		private.sitOut:SetEnabled(mine.out ~= "busted")
@@ -1544,3 +1617,4 @@ end
 -- For the tests
 function TableUI:GetFrame() return private.frame end
 function TableUI:GetParts() return private end
+TableUI.Place = Place

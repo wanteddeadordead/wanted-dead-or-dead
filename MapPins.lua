@@ -16,7 +16,12 @@ local Store = Wanted.Store
 local private = { provider = nil }
 local WINDOW = 30 * 60
 local PIN_TEMPLATE = "WantedDeadOrDeadEnemyPinTemplate"
-local FRAME_LEVEL = "PIN_FRAME_LEVEL_WANTED_ENEMY"
+-- Our markers take a slot in the world quests' band of pin frame levels (500 levels, none used on this client), above
+-- the quest and POI icons and below you and your party. Reading the map's level table is safe; adding our own level
+-- to it was not: the insert rewrote the levels of the game's own pins with tainted numbers, and from then on every
+-- map refresh in combat ran tainted and the client blocked SetPassThroughButtons on each of the game's pins (a
+-- screen full of "The client blocked" lines, 2026-10-15).
+local FRAME_LEVEL, FRAME_LEVEL_INDEX = "PIN_FRAME_LEVEL_WORLD_QUEST", 400
 local MERGE_DISTANCE = 1.2 -- map percent: sightings closer than this share a marker
 local SIZE, MERGED_SIZE = 12, 18
 local TOOLTIP_NAMES = 12
@@ -44,7 +49,7 @@ end
 function PinMixin:OnLoad()
 	-- The same size on screen at any zoom
 	self:SetScalingLimits(1, 1, 1)
-	self:UseFrameLevelType(FRAME_LEVEL)
+	self:UseFrameLevelType(FRAME_LEVEL, FRAME_LEVEL_INDEX)
 end
 
 ---The colour for an enemy: red for Kill on Sight, gold for a bounty, otherwise their class.
@@ -129,16 +134,6 @@ end
 -- ============================================================================
 
 local Provider = CreateFromMixins(MapCanvasDataProviderMixin)
-
-function Provider:OnAdded(owningMap)
-	MapCanvasDataProviderMixin.OnAdded(self, owningMap)
-	-- Our own layer, just under group members: above the map artwork and other addons' icons, below you
-	-- and your party
-	local levels = owningMap:GetPinFrameLevelsManager()
-	if levels then
-		levels:InsertFrameLevelBelow(FRAME_LEVEL, "PIN_FRAME_LEVEL_GROUP_MEMBER")
-	end
-end
 
 function Provider:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)

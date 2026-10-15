@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Opening or refreshing the world map in a fight no longer fills the chat with "The client blocked
+  Button:SetPassThroughButtons()": Wanted's map markers no longer add a layer of their own to the map's layer table,
+  which tainted the game's own markers.
+
 ## [1.23.3] - 2026-10-15
 
 - Suggest a feature: `/wanted idea` (or Suggest a feature above Report a bug at the foot of the menu) sends your idea

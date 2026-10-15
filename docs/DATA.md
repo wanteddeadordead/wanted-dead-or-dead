@@ -186,9 +186,20 @@ id, slot = game-server time / 300, samples 1-10; the app sends only entries on t
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
 wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
 players (the `C` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,
-alerts, autoTrack }`, each defaulted at load (autoTrack off). `WantedDB.captureSeen` is `{ week, [point id] = "Horde"|"Alliance" }`: who held each point as the addon last showed the site's holds this campaign week, so the next login can tell what changed (towers destroyed, inhibitors down); a new week starts it afresh. New tables with defaults: no migration. The catch-up's
+alerts, autoTrack, siegeCall }`, each defaulted at load (autoTrack off). `WantedDB.captureSeen` is `{ week, [point id] = "Horde"|"Alliance" }`: who held each point as the addon last showed the site's holds this campaign week, so the next login can tell what changed (towers destroyed, inhibitors down); a new week starts it afresh. New tables with defaults: no migration. The catch-up's
 `points` (`{ [id] = { h = "H"|"A", s, r, t } }`: who holds each point and base, since when, when a taken inhibitor goes
 back, when the site worked it out) is only shown and isn't saved.
+
+Siege nights (the release after 1.23.3) add two fields to the catch-up beside `points`, only shown and not saved, every
+field optional and type-checked: `siege = { front, zone, start, end, round = { n, start, truceUntil, last } or nil,
+wins = { h, a }, nexusCost = { [Nexus id] = samples }, next = { front, zone, start, end } or nil }` (tonight's siege
+front by id "ah", "hb" or "av", its window as game-server times, the current round with its number, start, the truce
+it waits for or 0 and whether it's the last, tonight's wins a side, what each Nexus costs now, and tomorrow's) and
+`frontWins = { [front id] = { h, a } }` (this week's siege wins per front). The `C` message, `{ p, s, c }`, carries
+during a truce the Nexus fall that started it, `f` (the Nexus's point id) and `t` (the game-server time it fell), and
+a client that sees a Nexus reach its cost sends `{ f, t }` alone at once; a receiver in a round takes a fall since the
+round began, and in a truce moves its clock to a newer time for the same fall (the newest server-time fall wins ties).
+Whether a player heard at a point attacks or defends it is worked out by the receiver from who holds the point.
 
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.

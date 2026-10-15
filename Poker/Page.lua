@@ -383,6 +383,9 @@ function private.Host()
 	else
 		local buyMin, buyMax = Protocol:ParseAmount(private.minBox:GetText(), stakes), Protocol:ParseAmount(private.maxBox:GetText(), stakes)
 		buyin = Protocol:ParseAmount(private.buyinBox:GetText(), stakes)
+		-- Whole silver at a silver table (whole gold at a gold one): the range and the buy-in round up to the coin
+		local coinCfg = { stakes = stakes, sb = b.sb, bb = b.bb }
+		buyMin, buyMax, buyin = buyMin and Protocol:RoundUp(buyMin, coinCfg), buyMax and Protocol:RoundUp(buyMax, coinCfg), buyin and Protocol:RoundUp(buyin, coinCfg)
 		if not buyMin or not buyMax or buyMin < b.bb or buyMax < buyMin then
 			UI:Toast(("The buy-in range is two amounts, the least at least a big blind (%s)."):format(Money(b.bb)), C.red)
 			return
@@ -578,6 +581,7 @@ function private.Sit(ad)
 	local trustLabel = Wanted.Reputation:GetPosterTrust(Wanted.Reputation:GetTally(ad.h))
 	local hostTrust = ad.g and (" %s's record of paying what they owe: %s."):format(Name(ad.h), trustLabel or "none yet") or ""
 	local function Go(amount, password)
+		if amount then amount = Protocol:RoundUp(amount, { stakes = stakes, sb = ad.sb, bb = ad.bb }) end -- whole silver at a silver table
 		local ok, why = Net:JoinTable(ad.id, amount, password)
 		if not ok then
 			UI:Toast(why or "Couldn't sit down.", C.red)

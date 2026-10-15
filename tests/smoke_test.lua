@@ -12875,6 +12875,32 @@ end)()
 	check(h.entrants["Bob-Realm"].place == 4 and h.entrants["Cat-Realm"].place == 3, "two out in one hand: the shorter stack at the start places lower")
 end)()
 
+-- A silver table (blinds in whole silver) takes no copper: the host refuses a buy-in or rebuy with copper in it and
+-- rounds a bet or raise up to the silver whatever a client sends
+;(function()
+	local P = WantedPokerTestNS
+	local Host, Engine, Protocol = P.PokerHost, P.PokerEngine, P.PokerProtocol
+	check(Protocol:Coin({ sb = 100, bb = 200, stakes = "gold" }) == 100 and Protocol:Coin({ sb = 10000, bb = 20000, stakes = "gold" }) == 10000 and Protocol:Coin({ sb = 150, bb = 300, stakes = "gold" }) == 1 and Protocol:Coin({ sb = 100, bb = 200, stakes = "chips" }) == 1, "the table's coin: silver, gold, copper, and a chips table")
+	check(Protocol:RoundUp(1050, { sb = 100, bb = 200, stakes = "gold" }) == 1100 and Protocol:RoundUp(1000, { sb = 100, bb = 200, stakes = "gold" }) == 1000, "rounding up to the silver")
+	local h = Host:New({ name = "Ann-Realm", cfg = { sb = 100, bb = 200, buyMin = 1000, buyMax = 100000, maxSeats = 4, stakes = "gold" }, send = function() end, now = function() return 50000 end })
+	h:Receive("Ann-Realm", { k = "join", t = h.id, b = 1050 })
+	check(h:SeatOf("Ann-Realm") == nil, "a buy-in with copper is refused at a silver table")
+	h:Receive("Ann-Realm", { k = "join", t = h.id, b = 1000 }) h:Receive("Bob-Realm", { k = "join", t = h.id, b = 1000 })
+	check(h:SeatOf("Ann-Realm") == 1 and h:SeatOf("Bob-Realm") == 2, "whole silver sits down")
+	h:Receive("Ann-Realm", { k = "rebuy", t = h.id, b = 550 })
+	check(h.seats[1].stack == 1000, "a rebuy with copper is ignored")
+	h:Receive("Ann-Realm", { k = "rebuy", t = h.id, b = 500 })
+	check(h.seats[1].stack == 1500, "a whole-silver rebuy goes in")
+	local deck = {}
+	for suit = 1, 4 do for rank = 2, 14 do deck[#deck + 1] = Engine:Card(rank, suit) end end
+	h.phase, h.hs, h.seq = "playing", { key = "k" }, 0
+	h.hand = Engine:NewHand({ seats = { [1] = { stack = 1500 }, [2] = { stack = 1000 } }, button = 1, sb = 100, bb = 200, deck = deck })
+	Engine:Start(h.hand)
+	local actor = h.hand.toAct
+	h:OnAct(actor, { h = "k", q = 0, a = "raise", m = 520 })
+	check(h.hand.seats[actor].bet == 600, "a raise to 5s 20c from a client goes in as 6s: "..tostring(h.hand.seats[actor].bet))
+end)()
+
 -- Poker UI, tournaments: the form switches to a tournament's fields, hosting registers, the window says so, the
 -- host starts it once a second player has entered by whisper, and the level shows
 ;(function()
@@ -12947,6 +12973,11 @@ end)()
 	check(action == "raise" and amount == 52, "aces raise before the flop, the size a little varied: "..action.." "..tostring(amount))
 	action = Bots:Decide(State({ hole = trash, street = "preflop", pot = 300, cur = 200, legal = { fold = true, call = 200 } }), 1, steady, Rng(0.5))
 	check(action == "fold", "seven-deuce folds to a raise: "..action)
+	-- At a silver game a bot's raise is whole silver too: 2.6 x 2s = 5s 20c becomes 6s
+	local silver = State({ hole = aces, street = "preflop", cur = 200, stack = 100000, legal = { fold = true, call = 100, minRaise = 400, maxRaise = 100100 } })
+	silver.cfg = { sb = 100, bb = 200, stakes = "gold", kind = "cash" }
+	action, amount = Bots:Decide(silver, 1, steady, Rng(0.5))
+	check(action == "raise" and amount == 600, "a bot raises in whole silver at a silver game: "..action.." "..tostring(amount))
 	action = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, legal = { fold = true, check = true, minBet = 20, maxBet = 1000 } }), 1, steady, Rng(0.5))
 	check(action == "check", "nothing checks when it's free: "..action)
 	action, amount = Bots:Decide(State({ hole = trash, street = "flop", board = { Card(14, 3), Card(13, 2), Card(12, 1) }, legal = { fold = true, check = true, minBet = 20, maxBet = 1000 } }), 1, steady, Rng(0))

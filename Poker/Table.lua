@@ -102,18 +102,10 @@ local function Typed(n, cfg)
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
--- The coin a money table is played in: gold when both blinds are whole gold, silver when whole silver, else copper.
--- A bet rounds up to it, so a silver game sees no copper from a half-pot preset or a typed amount
-local function Coin(cfg)
-	if not cfg or not Protocol:IsMoney(cfg.stakes) then return 1 end
-	local sb, bb = cfg.sb or 0, cfg.bb or 0
-	if sb % 10000 == 0 and bb % 10000 == 0 then return 10000 end
-	if sb % 100 == 0 and bb % 100 == 0 then return 100 end
-	return 1
-end
+-- A bet rounded up to the table's coin (Protocol:Coin), so a silver game sees no copper from a half-pot preset, the
+-- slider or a typed amount
 local function Rounded(n, cfg)
-	local coin = Coin(cfg)
-	return ceil(n / coin) * coin
+	return Protocol:RoundUp(n, cfg)
 end
 
 -- A bar button's text, with the button widened to fit a long amount ("All-in 1g 90s 38c"); icons and colours don't count
@@ -768,7 +760,7 @@ function private.Build()
 	private.allin:SetPoint("RIGHT", -10, 0)
 	private.raise = W:Button(bar, "Raise", "primary", 100, 28, function() private.Act(private.raiseAction, private.amount) end)
 	private.raise:SetPoint("RIGHT", private.allin, "LEFT", -6, 0)
-	private.amountBox = W:Input(bar, 60, "", function(text)
+	private.amountBox = W:Input(bar, 90, "", function(text) -- wide enough for "1g 98s 90c"; a narrower box showed only its end
 		local n = Protocol:ParseAmount(text, private.state and private.state.cfg and private.state.cfg.stakes)
 		if n and private.range then
 			n = max(private.range[1], min(private.range[2], Rounded(n, private.state and private.state.cfg)))
@@ -974,7 +966,7 @@ function private.AskRebuy()
 			n = Protocol:ParseAmount(value, st.cfg.stakes)
 			if not n or n < 1 or n > room then return ("From %s to %s."):format(Chips(1, st.cfg), Chips(room, st.cfg)) end
 		end,
-		onConfirm = function(value) player:Rebuy(Protocol:ParseAmount(value, st.cfg.stakes)) end,
+		onConfirm = function(value) player:Rebuy(min(room, Protocol:RoundUp(Protocol:ParseAmount(value, st.cfg.stakes), st.cfg))) end,
 	})
 end
 

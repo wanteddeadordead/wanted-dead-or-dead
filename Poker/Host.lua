@@ -117,6 +117,9 @@ function Table:Sit(name, buyin, class)
 	if not Protocol:IsCount(buyin, self.cfg.buyMin, self.cfg.buyMax) then
 		return nil, tournament and ("the entry is %s"):format(Protocol:Money(self.cfg.entry, self.cfg.stakes)) or ("the buy-in is %d to %d"):format(self.cfg.buyMin, self.cfg.buyMax)
 	end
+	if buyin % Protocol:Coin(self.cfg) ~= 0 then
+		return nil, ("whole %s only at this table"):format(Protocol:CoinName(self.cfg))
+	end
 	for seat = 1, self.cfg.maxSeats do
 		if not self.seats[seat] then
 			-- At a gold table the seat waits, with no chips, until the buy-in has reached the host (Paid)
@@ -328,7 +331,7 @@ function Table:Receive(sender, tbl)
 	elseif k == "rebuy" then
 		local p = self.seats[seat]
 		local inHand = self.hand and self.hand.street ~= "done" and self.hand.seats[seat] and not self.hand.seats[seat].folded
-		if self.cfg.kind ~= "tournament" and not p.unpaid and Protocol:IsCount(tbl.b, 1) and p.stack + (p.pendingChips or 0) + tbl.b <= self.cfg.buyMax then
+		if self.cfg.kind ~= "tournament" and not p.unpaid and Protocol:IsCount(tbl.b, 1) and tbl.b % Protocol:Coin(self.cfg) == 0 and p.stack + (p.pendingChips or 0) + tbl.b <= self.cfg.buyMax then
 			if self.cfg.stakes == "gold" and sender ~= self.name then
 				-- The chips come once the money has (Paid)
 				p.rebuyDue = tbl.b
@@ -386,7 +389,15 @@ function Table:OnAct(seat, tbl)
 	if self.phase ~= "playing" or not hand or tbl.h ~= self.hs.key or tbl.q ~= self.seq or hand.toAct ~= seat then
 		return
 	end
-	local ok = Engine:Act(hand, seat, tbl.a, tbl.m)
+	-- A bet or raise in the table's coin, whatever the client sent: a silver game sees no copper
+	local amount = tbl.m
+	if type(amount) == "number" and (tbl.a == "bet" or tbl.a == "raise") then
+		local legal = Engine:Legal(hand, seat)
+		local cap = legal and (legal.maxBet or legal.maxRaise)
+		amount = Protocol:RoundUp(amount, self.cfg)
+		if cap and amount > cap then amount = cap end
+	end
+	local ok = Engine:Act(hand, seat, tbl.a, amount)
 	if not ok then
 		-- Their client works from the same rules: a refused action means stale state, so send it again
 		self:SendState(self.seats[seat].name, "state")

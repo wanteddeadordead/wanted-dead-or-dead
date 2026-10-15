@@ -13,8 +13,9 @@
 - **Poker.** Close table waits for the hand under way: everyone is told in the status line, the log and a toast, nobody
   new sits down, and the host's button offers Keep open until the hand is over. A table with no hand in play closes
   at once, as before.
-- **Poker.** A silver game (blinds in whole silver) takes no copper: a half-pot preset, the slider and a typed amount
-  round up to the silver; a gold game to the gold.
+- **Poker.** A silver game (blinds in whole silver) has no copper at all: the host rounds every bet and raise up to
+  the silver, the computer players bet in silver, buy-ins and rebuys must be whole silver (the forms round them up),
+  and your presets, slider and typed amounts round up too. A gold game does the same to the gold.
 - **Poker.** The window is 80 wider, so eight seats' bets have room; the pot's chips sit right under its amount; the
   "Next hand in" clock no longer hides behind Rebuy; the table-talk buttons are small and bordered; the your-turn
   sound plays once when the window opens itself.

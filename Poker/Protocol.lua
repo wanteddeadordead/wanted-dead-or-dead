@@ -209,6 +209,35 @@ function Protocol:IsName(s)
 	return type(s) == "string" and #s >= 2 and #s <= 60 and not strfind(s, "[|%c]")
 end
 
+---The coin a money table is played in: gold when both blinds are whole gold, silver when whole silver, else copper
+---(1 at a chips table). Bets round up to it, so a silver game sees no copper.
+---@param cfg table the table's settings
+---@return number copper per coin
+function Protocol:Coin(cfg)
+	if not cfg or not Protocol:IsMoney(cfg.stakes) then return 1 end
+	local sb, bb = cfg.sb or 0, cfg.bb or 0
+	if sb % 10000 == 0 and bb % 10000 == 0 then return 10000 end
+	if sb % 100 == 0 and bb % 100 == 0 then return 100 end
+	return 1
+end
+
+---The coin's name, for a refusal: "gold" or "silver"; nil at a copper or chips table, where anything goes.
+---@param cfg table
+---@return string?
+function Protocol:CoinName(cfg)
+	local coin = Protocol:Coin(cfg)
+	return coin == 10000 and "gold" or coin == 100 and "silver" or nil
+end
+
+---An amount rounded up to the table's coin.
+---@param n number
+---@param cfg table
+---@return number
+function Protocol:RoundUp(n, cfg)
+	local coin = Protocol:Coin(cfg)
+	return math.ceil(n / coin) * coin
+end
+
 ---Whether a value is a class token as the game gives it ("WARRIOR"), for the name's colour at the table.
 function Protocol:IsClass(s)
 	return type(s) == "string" and #s >= 4 and #s <= 12 and strfind(s, "^%u+$") ~= nil

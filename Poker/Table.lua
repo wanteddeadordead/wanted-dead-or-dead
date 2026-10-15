@@ -95,6 +95,12 @@ local function Chips(n, cfg, compact)
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
 end
 
+-- An amount as it is typed into a box: "2g 50s" at a money table, a number elsewhere. Boxes take what ParseAmount
+-- reads, never the coin icons Chips draws
+local function Typed(n, cfg)
+	return Protocol:Money(n or 0, cfg and cfg.stakes)
+end
+
 -- A bar button's text, with the button widened to fit a long amount ("All-in 1g 90s 38c"); icons and colours don't count
 local function Fit(button, text, least)
 	button:SetText(text)
@@ -759,7 +765,7 @@ function private.Build()
 	private.amountBox:SetPoint("RIGHT", private.raise, "LEFT", -6, 0)
 	private.slider = W:Slider(bar, "", 120, 0, 1, 1, function(v) return "" end, function(v)
 		private.amount = v
-		private.amountBox:SetValue(Chips(v, private.state and private.state.cfg))
+		private.amountBox:SetValue(Typed(v, private.state and private.state.cfg))
 		Fit(private.raise, private.raiseLabel.." "..Chips(v, private.state and private.state.cfg), 100)
 	end)
 	private.slider:SetPoint("RIGHT", private.amountBox, "LEFT", -8, 4)
@@ -891,7 +897,7 @@ function private.Admit(seatFrame)
 	W:Dialog({
 		title = "Let "..Name(p.n).." in?",
 		text = ("Only if you have their money in hand. They asked for %s. Type what you received: with less, they sit with that much (within the table's range); with more, the rest is owed back to them."):format(Chips(due, st.cfg)),
-		input = { placeholder = "e.g. 2g 50s", value = Chips(due, st.cfg) },
+		input = { placeholder = "e.g. 2g 50s", value = Typed(due, st.cfg) },
 		confirmLabel = "I have it, let them in",
 		validate = function(value) if not Protocol:ParseAmount(value, st.cfg.stakes) then return "An amount, like 2g 50s." end end,
 		onConfirm = function(value)
@@ -907,7 +913,7 @@ function private.SetAmount(n)
 	n = max(private.range[1], min(private.range[2], floor(n)))
 	private.amount = n
 	private.slider:SetValue(n)
-	private.amountBox:SetValue(Chips(n, private.state and private.state.cfg))
+	private.amountBox:SetValue(Typed(n, private.state and private.state.cfg))
 	Fit(private.raise, private.raiseLabel.." "..Chips(n, private.state and private.state.cfg), 100)
 end
 
@@ -943,7 +949,7 @@ function private.AskRebuy()
 	W:Dialog({
 		title = "Rebuy",
 		text = ("Add chips to your stack, up to %s (the table's most)."):format(Chips(room, st.cfg)),
-		input = { placeholder = st.cfg.stakes == "gold" and "e.g. 2g 50s" or "Chips", value = Chips(min(room, st.cfg.buyMin), st.cfg) },
+		input = { placeholder = st.cfg.stakes == "gold" and "e.g. 2g 50s" or "Chips", value = Typed(min(room, st.cfg.buyMin), st.cfg) },
 		confirmLabel = "Buy",
 		over = private.frame,
 		validate = function(value)
@@ -1420,7 +1426,7 @@ function TableUI:Refresh(st)
 			private.slider.slider:SetMinMaxValues(low, high)
 			private.slider:SetValue(low)
 			private.amount = low
-			private.amountBox:SetValue(Chips(low, cfg))
+			private.amountBox:SetValue(Typed(low, cfg))
 			private.raise:SetText(private.raiseLabel.." "..Chips(low, cfg))
 			private.slider.label:SetText(("%s to %s"):format(Chips(low, cfg), Chips(high, cfg)))
 		end

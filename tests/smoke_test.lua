@@ -13577,10 +13577,14 @@ end)()
 	check(Played(12889) == 0, "folding is no showdown loss: no buzzer")
 	-- All-in at a gold table asks first
 	Net:Leave()
-	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, stakes = "gold" }, 2000), "a gold table")
+	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, stakes = "gold" }, 1000), "a gold table")
 	parts.allin._scripts.OnClick(parts.allin)
 	check(ns.Widgets:IsDialogShown(), "all in at a gold table asks first")
 	ConfirmDialog()
+	-- Boxes are filled the way amounts are typed, not with the coin icons: the rebuy box opens on 4s, which the box reads back
+	parts.rebuy._scripts.OnClick(parts.rebuy)
+	check(lastDialog and lastDialog.input and lastDialog.input.value == "4s", "the rebuy box opens on 4s, got "..tostring(lastDialog and lastDialog.input and lastDialog.input.value))
+	ConfirmDialog(lastDialog.input.value)
 	Net:Leave()
 	PlaySound, SOUNDKIT = realPlaySound, realKit
 end)()

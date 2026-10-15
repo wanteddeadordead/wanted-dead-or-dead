@@ -13,7 +13,6 @@ local CapturesHUD = Wanted:NewModule("CapturesHUD")
 local Captures = Wanted.Captures
 local private = {
 	bar = nil,
-	takingSince = {},
 	alerted = {},
 	holders = {},
 	shownFront = nil, -- the front the widget was last placed and dressed for
@@ -37,6 +36,13 @@ local ALERTS = {
 	attacking = { "Your side is attacking the enemy %s", "ours", "PVP_ENTER_QUEUE" },
 	enemyNexus = { "Enemy %s under attack", "ours", "RAID_BOSS_EMOTE_WARNING" },
 	underAttack = { "Your %s is under attack", "theirs", "RAID_BOSS_EMOTE_WARNING" },
+	-- Siege nights: the text is made whole by private.SiegeAlert
+	siegeCall = { "%s", "neutral", "IG_PVP_UPDATE" },
+	siegeOpen = { "%s", "neutral", "PVP_ENTER_QUEUE" },
+	siegeWon = { "%s", "ours", "UI_BATTLEGROUND_COUNTDOWN_FINISHED" },
+	siegeLost = { "%s", "theirs", "RAID_WARNING" },
+	siegeRound = { "%s", "neutral", "PVP_ENTER_QUEUE" },
+	siegeOver = { "%s", "neutral", "UI_BATTLEGROUND_COUNTDOWN_FINISHED" },
 }
 -- Which news matters most, when several came at once
 local PRIORITY = { won = 1, beaten = 1, lostInhibitor = 2, takenInhibitor = 2, lost = 3, taken = 3, respawned = 4 }
@@ -75,6 +81,7 @@ function CapturesHUD:OnEnable()
 		end
 		private.CheckLive()
 	end)
+	Captures:OnSiege(function(kind, a, b) private.SiegeAlert(kind, a, b) end)
 	-- The catch-up read at login came before this module was enabled: its news waits for us
 	private.CheckRespawns(true)
 	CapturesHUD:DeliverNews()
@@ -128,7 +135,7 @@ end
 ---Makes the HUD: the top widget (both sides, the lane row) and the capture bar.
 function private.Build()
 	local bar = CreateFrame("Frame", "WantedCaptureBar", UIParent)
-	bar:SetSize(260, 64)
+	bar:SetSize(260, 80)
 	bar:SetFrameStrata("LOW")
 	bar.alliance = private.Side(bar, "Alliance")
 	bar.alliance:SetPoint("TOPLEFT", 10, 0)
@@ -158,6 +165,9 @@ function private.Build()
 		previous = last
 		bar.rows[lane] = r
 	end
+	-- Tonight's siege, under the lane row
+	bar.siege = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	bar.siege:SetPoint("TOP", 0, -64)
 	bar.capture = private.BuildCapture()
 	private.bar = bar
 	return bar
@@ -219,7 +229,6 @@ function CapturesHUD:Update()
 	private.CheckRespawns()
 	local _, _, _, mapId = Wanted.Recorder:GetPosition()
 	local front = Captures:FrontOn(mapId)
-	private.TrackTaking(front)
 	if not front or not Captures:Settings().bar then
 		if private.bar then
 			private.bar:Hide()
@@ -242,7 +251,9 @@ function CapturesHUD:Update()
 		bar.alliance.text:SetText(format("Towers: %d", alliance))
 		bar.horde.text:SetText(format("Towers: %d", horde))
 		local winner = Captures:Winner(front)
-		bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner) or front.zone)
+		local wins = Captures:FrontWins(front)
+		bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner)
+			or wins and format("%s: Horde %d, Alliance %d this week", front.zone, wins.Horde, wins.Alliance) or front.zone)
 		for row, lane in ipairs(front.lanes) do
 			local r = bar.rows[row]
 			r.label:SetText(lane.name)
@@ -251,8 +262,58 @@ function CapturesHUD:Update()
 			end
 		end
 	end
+	local siege = private.SiegeLine()
+	if bar.siegeText ~= siege then
+		bar.siegeText = siege
+		bar.siege:SetText(siege)
+	end
 	private.UpdateCapture(bar.capture)
 	bar:Show()
+end
+
+---An hour of the day as the client's clock shows it, "7 PM" (date() formats a server time in the PC's own zone, as
+---the respawn times on the map are shown).
+function private.Hour(t)
+	local ok, text = pcall(date, "%I %p", t)
+	if not ok or type(text) ~= "string" then
+		return "?"
+	end
+	return (text:gsub("^0", ""))
+end
+
+---A siege window as the client's clock shows it: "7 to 10 PM", or "11 AM to 2 PM" across noon.
+function private.Window(s)
+	local from, to = private.Hour(s.start), private.Hour(s["end"])
+	local fromSuffix, toSuffix = from:match("%a+$"), to:match("%a+$")
+	if fromSuffix and fromSuffix == toSuffix then
+		from = from:gsub(" %a+$", "")
+	end
+	return format("%s to %s", from, to)
+end
+
+---"12:40" from seconds.
+function private.Clock(seconds)
+	seconds = max(floor(seconds), 0)
+	return format("%d:%02d", floor(seconds / 60), seconds % 60)
+end
+
+---The top widget's siege line: the window before it opens, the round and the score during, the truce's clock
+---between rounds, the result after; nothing when the catch-up named no siege.
+function private.SiegeLine()
+	local s = Captures:Siege()
+	local phase = Captures:Phase()
+	if not s then
+		return ""
+	end
+	local score = format("Horde %d Alliance %d", s.wins.Horde, s.wins.Alliance)
+	if phase == "before" then
+		return format("Siege: %s %s", s.front.zone, private.Window(s))
+	elseif phase == "truce" then
+		return format("Truce %s · %s", private.Clock(s.round.truceUntil - GetServerTime()), score)
+	elseif phase == "over" then
+		return format("Siege over · %s", score)
+	end
+	return format("Round %d · %s", s.round and s.round.n or 1, score)
 end
 
 ---How many of a front's towers and inhibitors each side holds: horde, alliance.
@@ -308,38 +369,28 @@ function private.UpdateCapture(capture)
 		capture.left:SetDesaturated(capture.blocked)
 		capture.right:SetDesaturated(capture.blocked)
 	end
+	local p = Captures:Progress(point)
+	-- The spark moves toward the attacking side's end as the point's samples near its cost
+	local toward = p.side == "Alliance" and 0 or 1
+	private.Spark(capture, from + (toward - from) * min(p.n / p.cost, 1))
+	-- How long at this tick's pace: "3:10 left"
+	local left = p.net > 0 and format(", %s left", private.Clock(ceil((p.cost - p.n) / p.net) * Captures.SAMPLE_SECONDS)) or ""
 	if blocked then
-		private.Spark(capture, from)
 		private.Line(capture, format("%s: %s, so you don't count here", name, blocked))
 	elseif holder == side then
-		private.Spark(capture, from)
-		private.Line(capture, format("Holding the %s: %d of your side here", name, allies))
+		local attacked = p.attackers > 0 and format(", %d attacking%s", p.attackers, left) or ""
+		private.Line(capture, format("Holding the %s: %d of your side%s%s", name, p.defenders, attacked, p.attackers > 0 and " (provisional)" or ""))
+	elseif not point.lane and not Captures:RoundOn(point.front) then
+		private.Line(capture, format("%s: only falls in a siege round", name))
 	elseif not Captures:CanAttack(side, point) then
-		private.Spark(capture, from)
 		private.Line(capture, format("%s: take the lane before it first", name))
+	elseif allies < Captures.MIN_PEOPLE then
+		private.Line(capture, format("%s: %d of your side here, %d needed", name, allies, Captures.MIN_PEOPLE))
 	else
-		local need = (point.lane and Captures.CAPTURE_SLOTS or Captures.NEXUS_SLOTS) * Captures.SLOT_SECONDS
-		local since = private.takingSince[point.id]
-		local done = since and min(GetTime() - since, need) or 0
-		private.Spark(capture, from + (1 - 2 * from) * done / need)
-		if allies < Captures.MIN_PEOPLE then
-			private.Line(capture, format("%s: %d of your side here, %d needed", name, allies, Captures.MIN_PEOPLE))
-		else
-			private.Line(capture, format("Taking the %s: %d:%02d of %d:00 (provisional)", name, floor(done / 60), floor(done % 60), need / 60))
-		end
+		local held = p.net <= 0 and ", held off" or left
+		private.Line(capture, format("Taking the %s: %d of your side, %d defending%s (provisional)", name, p.attackers, p.defenders, held))
 	end
 	capture:Show()
-end
-
----Notes when our side started taking each point of the front, for the capture bar.
-function private.TrackTaking(front)
-	for _, point in ipairs(Captures.POINTS) do
-		if point.front == front and Captures:Taking(point) then
-			private.takingSince[point.id] = private.takingSince[point.id] or GetTime()
-		else
-			private.takingSince[point.id] = nil
-		end
-	end
 end
 
 
@@ -444,9 +495,45 @@ function private.CheckLive()
 	end
 end
 
----An inhibitor whose respawn time passes while playing goes back to its side (provisionally): say so once. Quiet only
----notes who holds what.
+---Whether the player is in a front's zone or has its map open: where the siege's rounds and falls are announced.
+function private.InZone(front)
+	local _, _, _, mapId = Wanted.Recorder:GetPosition()
+	if Captures:FrontOn(mapId) == front then
+		return true
+	end
+	return WorldMapFrame ~= nil and WorldMapFrame:IsShown() and WorldMapFrame:GetMapID() == front.mapId
+end
+
+---The siege's announcements (Captures:OnSiege): the call half an hour before the window and the open go to every
+---Wanted player wherever they are (the Siege call setting); a Nexus falling, the next round and the end only in the
+---zone or with its map open (the alerts setting).
+function private.SiegeAlert(kind, a, b)
+	local s = Captures:Siege()
+	if not s or not Wanted.Alerts then
+		return
+	end
+	local settings = Captures:Settings()
+	if kind == "call" and settings.siegeCall then
+		private.Alert("siegeCall", format("The %ses of %s open at %s", Captures.TERMS.nexus, s.front.zone, private.Hour(s.start)))
+	elseif kind == "open" and settings.siegeCall then
+		private.Alert("siegeOpen", format("The siege of %s has begun", s.front.zone))
+	elseif not settings.alerts or not private.InZone(s.front) then
+		return
+	elseif kind == "fell" then
+		local point, side = a, b
+		private.Alert(side == UnitFactionGroup("player") and "siegeWon" or "siegeLost", format("The %s %s has fallen", point.name, Captures.TERMS.nexus),
+			format("Round %d to the %s (provisional)", s.round and s.round.n - 1 or 1, side))
+	elseif kind == "round" then
+		private.Alert("siegeRound", format("Round %d begins", a))
+	elseif kind == "over" then
+		private.Alert("siegeOver", format("The siege is over: Horde %d, Alliance %d", s.wins.Horde, s.wins.Alliance))
+	end
+end
+
+---A point whose holder changed while playing: an inhibitor whose respawn time passed goes back to its side, a point
+---this client saw taken (provisionally) changes hands: say so once. Quiet only notes who holds what.
 function private.CheckRespawns(quiet)
+	local side = UnitFactionGroup("player")
 	for _, point in ipairs(Captures.POINTS) do
 		local holder = Captures:Holder(point.id)
 		local before = private.holders[point.id]
@@ -454,8 +541,17 @@ function private.CheckRespawns(quiet)
 		if before and before ~= holder then
 			private.dirty = true
 		end
-		if not quiet and before and before ~= holder and holder == point.home and Captures:Kind(point) == "inhibitor" and Captures:Settings().alerts and Wanted.Alerts then
-			private.Alert("respawned", nil, private.Where(point))
+		if not quiet and before and before ~= holder and point.lane and Captures:Settings().alerts and Wanted.Alerts then
+			local inhibitor = Captures:Kind(point) == "inhibitor"
+			if holder == point.home then
+				-- Not the siege front going back to level after a Nexus fell: that's the round's news
+				if inhibitor and not Captures:RespawnPaused(point.front) then
+					private.Alert("respawned", nil, private.Where(point))
+				end
+			elseif private.InZone(point.front) then
+				local key = (holder == side and "taken" or "lost")..(inhibitor and "Inhibitor" or "")
+				private.Alert(key, strlower(Captures.TERMS.tower), private.Where(point).." (provisional)")
+			end
 		end
 	end
 end

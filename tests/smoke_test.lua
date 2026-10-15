@@ -12367,6 +12367,12 @@ end)()
 	check(OnScreen("Hand 1") and not parts.lock:IsShown(), "the hand shows; no check mark until the hand is over")
 	-- Heads-up: the button (you) posts the small blind and acts first
 	check(parts.call:IsShown() and parts.call.label._text == "Call 10" and parts.raise.label._text == "Raise to 40", "the bar offers Call 10 and Raise to 40: "..tostring(parts.call.label._text)..", "..tostring(parts.raise.label._text))
+	-- Sit out gives way to the action buttons when the bar is too narrow for both, and stays when it isn't
+	check(not parts.sitOut:IsShown(), "on a narrow bar, Sit out gives way to the action buttons")
+	parts.bar._w = 800
+	TableUI:Refresh(parts.state)
+	check(parts.sitOut:IsShown() and parts.call:IsShown(), "on a wide one it stays beside them")
+	parts.bar._w = 100
 	parts.call._scripts.OnClick(parts.call)
 	check(host.hand.toAct == 2 and not parts.call:IsShown(), "the call went through; Bob to act and the bar is gone")
 	FromBob({ k = "act", h = key, q = host.seq, a = "check" })
@@ -13520,6 +13526,34 @@ end)()
 	check(Lay(pool, 140 * 20, 20, anchor, false, 5) == 5, "140 big blinds: 100 + 25 + 5 + 5 + 5, five chips in three stacks")
 	check(Lay(pool, 10, 20, anchor, false, 5) == 1, "half a big blind still shows one chip")
 	check(Lay(pool, 0, 20, anchor, false, 5) == 0 and not pool[1]:IsShown(), "nothing: no chips")
+	-- The pot's stacks stand under its amount, centred, on one line
+	check(Lay(pool, 140 * 20, 20, anchor, nil, 5) == 5 and pool[1]._point[1] == "BOTTOM" and pool[1]._point[3] == "BOTTOM" and pool[1]._point[4] == -13 and pool[5]._point[4] == 13 and pool[5]._point[5] == pool[3]._point[5] + 6, "the pot's three stacks are centred under it, chips three apart up a stack")
+	-- Bet labels: by their seats, never on the cards, the pot, a box or each other, at six seats on the stock felt
+	-- and at eight on the taller one
+	for _, case in ipairs({ { 660, 440, 6 }, { 660, 520, 8 } }) do
+		local w, h, n = case[1], case[2], case[3]
+		local felt = NewMock() felt:SetSize(w, h)
+		local boxes, labels = {}, {}
+		for k = 0, n - 1 do
+			local seat = NewMock() seat.bet = NewMock() seat.dealer = NewMock()
+			local spot = TableUI.Place(seat, k, n, felt)
+			local sx, sy = seat._point[4], seat._point[5]
+			boxes[#boxes + 1] = { sx - 75, sx + 75, sy - 48, sy + 48 }
+			local lx, ly = spot[1], spot[2]
+			labels[#labels + 1] = { k = k, text = { lx - 30, lx + 30, ly - 7, ly + 7 }, chips = spot[3] and { lx + 30, lx + 75, ly - 7, ly + 7 } or { lx - 75, lx - 30, ly - 7, ly + 7 }, near = math.sqrt((lx - sx) ^ 2 + (ly - sy) ^ 2) }
+		end
+		local function Overlaps(a, b) return a[1] < b[2] and a[2] > b[1] and a[3] < b[4] and a[4] > b[3] end
+		local fixed = { { -130, 130, -32, 32 }, { -60, 60, 77, 91 } } -- the cards, the pot amount
+		for _, box in ipairs(boxes) do fixed[#fixed + 1] = box end
+		for i, label in ipairs(labels) do
+			local clear = label.near < 200
+			for _, box in ipairs(fixed) do if Overlaps(label.text, box) or Overlaps(label.chips, box) then clear = false end end
+			for j, other in ipairs(labels) do
+				if j ~= i and (Overlaps(label.text, other.text) or Overlaps(label.text, other.chips) or Overlaps(label.chips, other.text)) then clear = false end
+			end
+			check(clear, ("%d seats on %dx%d: seat %d's bet at (%.0f, %.0f) is clear and near its box"):format(n, w, h, label.k, label.text[1] + 30, label.text[3] + 7))
+		end
+	end
 	check(host.hand.toAct == 1 and parts.strength._text ~= "" and not parts.checkFold:IsShown(), "Bob bets: our turn, the strength line reads the board: "..tostring(parts.strength._text))
 	parts.frame._scripts.OnKeyDown(parts.frame, "F")
 	check((host.phase == "showdown" or host.hand.street == "done") and Played(1156) >= 1, "F folds, with the cards' sound")

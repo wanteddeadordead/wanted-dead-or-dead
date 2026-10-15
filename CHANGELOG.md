@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- **Poker.** Bets stay off the pot. The pot's chips stand under its amount instead of beside it, and each bet label
+  takes the spot by its seat that lands on nothing else: not the cards, the pot, another box or another bet. Tables
+  of seven or eight seats get a taller felt. The hand number moves to the felt's bottom-right corner, with a lock
+  beside it once the deal checks out (a red cross if it fails). Sit out gives way when a long gold amount brings the
+  action buttons over it.
+
 ## [1.22.0] - 2026-10-14
 
 - **Poker.** Texas hold'em at the Wanted table, as a second addon folder in the same download (Wanted: Dead Man's

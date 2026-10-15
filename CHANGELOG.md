@@ -10,6 +10,14 @@
 - **Poker.** Names at the table and in the hand log are in class colours, the computer players' too.
 - **Poker.** The rebuy, let-in and raise boxes open on the amount as it is typed ("4s"), not on the coin icons, which they
   couldn't read back.
+- **Poker.** Close table waits for the hand under way: everyone is told in the status line, the log and a toast, nobody
+  new sits down, and the host's button offers Keep open until the hand is over. A table with no hand in play closes
+  at once, as before.
+- **Poker.** A silver game (blinds in whole silver) takes no copper: a half-pot preset, the slider and a typed amount
+  round up to the silver; a gold game to the gold.
+- **Poker.** The window is 80 wider, so eight seats' bets have room; the pot's chips sit right under its amount; the
+  "Next hand in" clock no longer hides behind Rebuy; the table-talk buttons are small and bordered; the your-turn
+  sound plays once when the window opens itself.
 
 ## [1.22.0] - 2026-10-14
 

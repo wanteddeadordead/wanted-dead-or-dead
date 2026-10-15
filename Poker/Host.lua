@@ -107,6 +107,9 @@ function Table:Sit(name, buyin, class)
 	if self:SeatOf(name) then
 		return nil, "you're already seated"
 	end
+	if self.closing then
+		return nil, "the table is closing"
+	end
 	local tournament = self.cfg.kind == "tournament"
 	if tournament and self.startedAt and (self.phase == "finished" or self:Level() > (self.cfg.lateLevels or 0)) then
 		return nil, (self.cfg.lateLevels or 0) > 0 and "late entry has closed" or "the tournament has started"
@@ -898,6 +901,31 @@ function Table:SettleAmount(name, amount, kind)
 	self.on("settle", line)
 end
 
+---Closes the table once the hand under way is over, or now when none is; everyone is told. "closed" or "closing".
+function Table:CloseAfterHand()
+	if not self.open then
+		return "closed"
+	end
+	if self.phase ~= "playing" and self.phase ~= "showdown" then
+		self:Close()
+		return "closed"
+	end
+	self.closing = true
+	self:Bump()
+	self:Broadcast()
+	return "closing"
+end
+
+---The host thinks again before the hand is over: the table stays open.
+function Table:KeepOpen()
+	if not self.closing then
+		return
+	end
+	self.closing = nil
+	self:Bump()
+	self:Broadcast()
+end
+
 ---Closes the table: the final stacks go out and nothing more is dealt.
 function Table:Close()
 	if not self.open then
@@ -986,7 +1014,9 @@ function Table:Tick()
 			self:Broadcast()
 		end
 	end
-	if self.phase == "waiting" and now >= self.nextHandAt then
+	if self.closing and self.phase == "waiting" then
+		return self:Close()
+	elseif self.phase == "waiting" and now >= self.nextHandAt then
 		self:StartSeedRound()
 	elseif self.phase == "seeding" and now >= self.hs.deadline then
 		self:SeedDeadline()
@@ -999,6 +1029,9 @@ function Table:Tick()
 		if self.finishPending then
 			return self:Finish()
 		end
+		if self.closing then
+			return self:Close() -- the hand the host waited for is over
+		end
 		self.phase = "waiting"
 		self.hand = nil
 		self:StartSeedRound()
@@ -1006,7 +1039,7 @@ function Table:Tick()
 	if self.open and now - self.lastSent >= Protocol.BEAT_SECONDS then
 		self:Beat()
 	end
-	if self.open and self.ad and now - self.lastAd >= Protocol.AD_SECONDS then
+	if self.open and self.ad and not self.closing and now - self.lastAd >= Protocol.AD_SECONDS then
 		self:Advertise()
 	end
 end
@@ -1077,7 +1110,7 @@ end
 function Table:StateFor(name)
 	local mySeat = self:SeatOf(name)
 	local hand, hs = self.hand, self.hs
-	local st = { t = self.id, host = self.name, e = self.term, q = self.seq, h = self.handNo, cfg = self.cfg, phase = self.phase, me = mySeat, seats = {}, open = self.open }
+	local st = { t = self.id, host = self.name, e = self.term, q = self.seq, h = self.handNo, cfg = self.cfg, phase = self.phase, me = mySeat, seats = {}, open = self.open, closing = self.closing }
 	if self.cfg.kind == "tournament" then
 		local level, left = self:Level()
 		st.started = self.startedAt ~= nil

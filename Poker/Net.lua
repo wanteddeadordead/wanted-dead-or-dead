@@ -247,6 +247,12 @@ end
 function private.OnHostEvent(event, ...)
 	if event == "settle" then
 		private.Notify("settle", ...)
+	elseif event == "closed" and private.host then
+		-- Closed, now or after the hand the host waited for: the last ad says so, and this seat leaves with the rest
+		private.host:Advertise()
+		private.host = nil
+		private.bots = {}
+		if private.player then private.player:Leave() end
 	end
 	private.Notify("host", event, ...)
 end
@@ -359,16 +365,21 @@ function Net:StartTournament()
 end
 
 ---Leaves the table; a host closes it.
+---Leaves the table; a host closes it. A hand under way at the host's table plays out first ("closing" comes back),
+---and the table closes itself after it (OnHostEvent "closed").
 function Net:Leave()
 	if private.host then
-		private.host:Close()
-		private.host:Advertise()
-		private.host = nil
-		private.bots = {}
+		private.host:CloseAfterHand()
+		return private.host and "closing" or nil
 	end
 	if private.player then
 		private.player:Leave()
 	end
+end
+
+---The host thinks again: the table stays open after the hand.
+function Net:KeepOpen()
+	if private.host then private.host:KeepOpen() end
 end
 
 -- The host vanished and this seat is next: the table carries on from the backup, under this character. Not a gold

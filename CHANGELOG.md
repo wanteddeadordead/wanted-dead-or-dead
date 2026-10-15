@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-10-14
+
 - **Poker.** Bets stay off the pot. The pot's chips stand under its amount instead of beside it, and each bet label
   takes the spot by its seat that lands on nothing else: not the cards, the pot, another box or another bet. Tables
   of seven or eight seats get a taller felt. The hand number moves to the felt's bottom-right corner, with a lock

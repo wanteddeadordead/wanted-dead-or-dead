@@ -14,6 +14,18 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.23.0",
+		note = "A round of polish for the poker table from the first week of games: the table can be dressed up, the money "
+			.."rounds to the table's coin, and the host has a few more controls.",
+		lines = {
+			"Ten painted felts from around Azeroth, chosen in the table settings, with a brightness slider per felt. Stranglethorn Vale is the default.",
+			"Names at the table and in the hand log are in class colours, the computer players' too.",
+			"A silver game has no copper: every bet, raise, buy-in and rebuy rounds to whole silver.",
+			"Close table waits for the hand under way and tells the players; Keep open undoes it.",
+			"The window is wider, bets stay off the pot, and the log names the hands that showed and lost.",
+		},
+	},
+	{
 		version = "1.22.0",
 		note = "Nothing better after a day of hunting than playing some poker with that hard-earned gold. Wanted now deals "
 			.."Texas hold'em: open the Poker page, host a table or sit at one, and play for chips, for gold, or against the "

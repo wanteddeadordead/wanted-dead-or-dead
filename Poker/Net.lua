@@ -256,7 +256,7 @@ local function Blocked()
 end
 
 local function NewPlayer()
-	return Client:New({ name = Net:Me(), send = Send, now = Now, blocked = Blocked, on = function(event, ...)
+	return Client:New({ name = Net:Me(), class = UnitClass and select(2, UnitClass("player")) or nil, send = Send, now = Now, blocked = Blocked, on = function(event, ...)
 		if event == "left" or event == "refused" or event == "hostLost" then
 			private.Forget()
 		elseif event == "state" then

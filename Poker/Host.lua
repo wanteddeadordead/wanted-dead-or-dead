@@ -49,7 +49,7 @@ function Host:New(o)
 		settled = o.settled,
 	}, Table)
 	for seat, p in pairs(o.seats or {}) do
-		t.seats[seat] = { name = p.name, stack = p.stack, bought = p.bought or p.stack, out = type(p.out) == "string" and p.out or false, away = 0, since = now }
+		t.seats[seat] = { name = p.name, class = p.class, stack = p.stack, bought = p.bought or p.stack, out = type(p.out) == "string" and p.out or false, away = 0, since = now }
 	end
 	return t
 end
@@ -66,7 +66,7 @@ function Host:Restore(backup, o)
 	local seats = {}
 	for seat, p in pairs(backup.seats) do
 		if Protocol:IsCount(seat, 1, Protocol.MAX_SEATS) and Protocol:IsName(p.name) and Protocol:IsCount(p.stack) then
-			seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out }
+			seats[seat] = { name = p.name, class = Protocol:IsClass(p.class) and p.class or nil, stack = p.stack, bought = p.bought, out = p.out }
 		end
 	end
 	return Host:New({ name = o.name, id = backup.id, cfg = backup.cfg, send = o.send, ad = o.ad, now = o.now, on = o.on, blocked = o.blocked,
@@ -100,7 +100,7 @@ end
 ---@param buyin number
 ---@return number? seat
 ---@return string? reason
-function Table:Sit(name, buyin)
+function Table:Sit(name, buyin, class)
 	if not self.open then
 		return nil, "the table is closed"
 	end
@@ -118,7 +118,7 @@ function Table:Sit(name, buyin)
 		if not self.seats[seat] then
 			-- At a gold table the seat waits, with no chips, until the buy-in has reached the host (Paid)
 			local owes = self.cfg.stakes == "gold" and name ~= self.name and buyin > 0
-			self.seats[seat] = { name = name, stack = owes and 0 or (tournament and self.cfg.startStack or buyin), bought = owes and 0 or buyin, out = false, away = 0, since = self.now(),
+			self.seats[seat] = { name = name, class = Protocol:IsClass(class) and class or nil, stack = owes and 0 or (tournament and self.cfg.startStack or buyin), bought = owes and 0 or buyin, out = false, away = 0, since = self.now(),
 				unpaid = owes and buyin or nil, received = owes and 0 or nil }
 			if tournament then
 				self.entrants[name] = { seat = seat }
@@ -284,7 +284,7 @@ function Table:Receive(sender, tbl)
 		if self.password and (type(tbl.pw) ~= "string" or strlower(strtrim(tbl.pw)) ~= self.password) then
 			reason = "wrong password"
 		else
-			seat, reason = self:Sit(sender, tbl.b)
+			seat, reason = self:Sit(sender, tbl.b, tbl.c)
 		end
 		if seat then
 			self:Bump()
@@ -1095,7 +1095,7 @@ function Table:StateFor(name)
 		end
 	end
 	for seat, p in pairs(self.seats) do
-		local s = { n = p.name, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil, place = p.place,
+		local s = { n = p.name, c = p.class, s = p.stack, bought = p.bought, out = p.out or nil, away = p.away > 0 and p.away or nil, place = p.place,
 			unpaid = p.unpaid, received = p.unpaid and p.received or nil, rebuyDue = p.rebuyDue, pending = p.pendingChips }
 		if hand and hand.seats[seat] then
 			local hp = hand.seats[seat]
@@ -1155,7 +1155,7 @@ end
 function Table:BackupData()
 	local seats = {}
 	for seat, p in pairs(self.seats) do
-		seats[seat] = { name = p.name, stack = p.stack, bought = p.bought, out = p.out or nil }
+		seats[seat] = { name = p.name, class = p.class, stack = p.stack, bought = p.bought, out = p.out or nil }
 	end
 	return { id = self.id, cfg = self.cfg, seats = seats, handNo = self.handNo, term = self.term, button = self.button, host = self.name,
 		elapsed = self.startedAt and (self.now() - self.startedAt) or nil, entrants = self.cfg.kind == "tournament" and self.entrants or nil, settled = self.settled,

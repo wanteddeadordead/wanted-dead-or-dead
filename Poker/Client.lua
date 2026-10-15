@@ -20,7 +20,7 @@ end
 ---A send that returns false didn't go (the game refused it); blocked says the game is refusing messages for now.
 ---@return table
 function Client:New(o)
-	return setmetatable({ name = o.name, send = o.send, now = o.now, on = o.on or function() end, blocked = o.blocked,
+	return setmetatable({ name = o.name, class = o.class, send = o.send, now = o.now, on = o.on or function() end, blocked = o.blocked,
 		id = nil, host = nil, seat = nil, state = nil, term = 0, seq = 0,
 		secrets = {}, -- hand key -> { secret, commit, committed, revealed }
 		audits = {}, -- hand key -> { ok, reason }
@@ -36,7 +36,7 @@ function Player:Join(host, id, buyin, password)
 	self.id, self.host, self.buyin, self.password, self.seat, self.state = id, host, buyin, password, nil, nil
 	self.term, self.seq, self.left = 0, 0, false
 	self.joinedAt, self.lastHeard = self.now(), self.now()
-	self:Send({ k = "join", b = buyin, pw = password })
+	self:Send({ k = "join", b = buyin, pw = password, c = self.class })
 end
 
 ---Sends to the host. Returns whether it went (false only when the game refused it).
@@ -330,7 +330,7 @@ function Player:Tick()
 	local now = self.now()
 	if not self.state then
 		if now - self.joinedAt >= Protocol.JOIN_RETRY_SECONDS and now - self.lastSent >= Protocol.JOIN_RETRY_SECONDS then
-			self:Send({ k = "join", b = self.buyin, pw = self.password })
+			self:Send({ k = "join", b = self.buyin, pw = self.password, c = self.class })
 		end
 		return
 	end

@@ -12,6 +12,8 @@ local Protocol = Poker.PokerProtocol
 
 -- Names no character can have (the game allows no spaces), so a bot is never mistaken for a player
 Bots.NAMES = { "Doc Holliday", "Calamity Jane", "Wild Bill", "Belle Starr", "Black Bart", "Annie Oakley", "Kid Curry" }
+-- Each has a class, so their names take a class colour at the table like anyone's
+Bots.CLASSES = { ["Doc Holliday"] = "ROGUE", ["Calamity Jane"] = "HUNTER", ["Wild Bill"] = "WARRIOR", ["Belle Starr"] = "MAGE", ["Black Bart"] = "WARLOCK", ["Annie Oakley"] = "HUNTER", ["Kid Curry"] = "PALADIN" }
 -- aggression scales how strong a hand must be to bet and how often to raise; bluff is the chance of betting nothing
 Bots.STYLES = {
 	{ key = "steady", aggression = 1, bluff = 0.1 },
@@ -212,7 +214,7 @@ Bot.__index = Bot
 ---@return table
 function Bots:New(o)
 	local bot = setmetatable({ name = o.name, style = o.style or Bots.STYLES[1], now = o.now, rng = o.rng or math.random, buyin = nil, turnKey = nil, actAt = nil, rebuyAt = 0 }, Bot)
-	bot.player = Client:New({ name = o.name, send = o.send, now = o.now })
+	bot.player = Client:New({ name = o.name, class = Bots.CLASSES[o.name], send = o.send, now = o.now })
 	return bot
 end
 

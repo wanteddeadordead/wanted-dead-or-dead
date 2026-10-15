@@ -12341,10 +12341,13 @@ end)()
 		end
 	end
 	addonSent = {}
-	FromBob({ k = "join", b = 1000 })
+	FromBob({ k = "join", b = 1000, c = "MAGE" })
 	local welcome = ToBob("welcome")
 	check(welcome and welcome.st.seats[2] and welcome.st.seats[2].n == "Bob-Realm" and welcome.st.me == 2, "Bob is seated and welcomed by whisper")
 	check(OnScreen("Bob") and OnScreen("1000"), "Bob shows at the table")
+	-- Names in class colours: the class comes with the join (yours from the game), goes out in the state, colours the box
+	check(welcome.st.seats[2].c == "MAGE" and welcome.st.seats[1].c == "WARRIOR", "the state carries each seat's class: "..tostring(welcome.st.seats[2].c)..", "..tostring(welcome.st.seats[1].c))
+	check(TableUI:GetParts().seats[1].name._text == "|cffffffffBob|r", "Bob's name is in his class colour: "..tostring(TableUI:GetParts().seats[1].name._text))
 	-- The hand: the host's clock runs, we commit by ourselves, Bob commits and reveals by whisper
 	clock = clock + 1
 	host:Tick()
@@ -12434,7 +12437,9 @@ end)()
 	check(#lines == 1 and lines[1].kind == "refund" and lines[1].amount == 100 and lines[1].from == "Ann-Realm" and lines[1].to == "Bob-Realm", "the 100 over is owed straight back")
 	check(select(2, host:Players()) == 2 and host:Holding() == 1000, "dealt in; the host holds his 1000")
 	-- A seat whose buy-in never comes is given up; part of one comes back
-	host:Receive("Cat-Realm", { k = "join", t = host.id, b = 500 })
+	host:Receive("Cat-Realm", { k = "join", t = host.id, b = 500, c = "not a class" })
+	local cat = host:SeatOf("Cat-Realm")
+	check(cat and host.seats[cat].class == nil, "a class that isn't one is dropped")
 	host:Receive("Dan-Realm", { k = "join", t = host.id, b = 500 })
 	host:Paid("Dan-Realm", 200, "trade")
 	now = now + Protocol.PAY_SECONDS + 1

@@ -431,9 +431,11 @@ function private.ApplyFelt()
 	local key = TableUI:Felt()
 	if key == "green" then
 		art:Hide()
+		private.felt.shade:Hide()
 	else
 		art:SetTexture("Interface\\AddOns\\"..Poker.FOLDER.."\\Media\\felt-"..key)
 		art:Show()
+		private.felt.shade:Show()
 	end
 end
 
@@ -704,10 +706,15 @@ function private.Build()
 	felt:SetPoint("TOPLEFT", 10, -10)
 	felt:SetPoint("BOTTOMRIGHT", -10, 10 + STATUS_H)
 	Theme:Skin(felt, FELT, FELT_LINE)
-	-- A painted felt lies over the green when one is chosen (ApplyFelt, once the window is built)
+	-- A painted felt lies over the green when one is chosen (ApplyFelt, once the window is built), under the same
+	-- dark glass as the seat boxes, so the cards and the gold text read on any of them
 	felt.art = felt:CreateTexture(nil, "BACKGROUND", nil, 1)
 	felt.art:SetAllPoints()
 	felt.art:Hide()
+	felt.shade = felt:CreateTexture(nil, "BACKGROUND", nil, 2)
+	felt.shade:SetAllPoints()
+	felt.shade:SetColorTexture(SEAT_BG[1], SEAT_BG[2], SEAT_BG[3], SEAT_BG[4])
+	felt.shade:Hide()
 	private.felt = felt
 	private.ApplyFelt()
 	private.status = Theme:Text(rail, "body", "", C.text)

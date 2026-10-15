@@ -349,7 +349,7 @@ end
 ---@return table hand
 function Engine:NewHand(o)
 	assert(type(o) == "table" and type(o.seats) == "table", "a hand needs seats")
-	local hand = { seats = {}, order = {}, button = o.button, sb = o.sb, bb = o.bb, ante = o.ante or 0, deck = {}, next = 1,
+	local hand = { seats = {}, order = {}, button = o.button, sb = o.sb, bb = o.bb, ante = o.ante or 0, coin = o.coin or 1, deck = {}, next = 1,
 		board = {}, log = {}, acted = {}, barred = {}, currentBet = 0, lastRaiseSize = 0 }
 	for seat, p in pairs(o.seats) do
 		assert(IsCount(seat) and IsCount(p.stack) and p.stack > 0, "a seat is a number with a stack of chips")
@@ -633,8 +633,9 @@ local function BuildPots(hand)
 	return pots, returned
 end
 
----Ends the hand: builds the pots, ranks the hands still in, pays the winners (the odd chip to the first winner
----left of the button) and returns any uncalled bet. Called by the engine; public for the replay.
+---Ends the hand: builds the pots, ranks the hands still in, pays the winners (a split pot divided in the table's
+---coin, what won't divide to the first winner left of the button) and returns any uncalled bet. Called by the
+---engine; public for the replay.
 ---@param hand table
 function Engine.Settle(hand)
 	local pots, returned = BuildPots(hand)
@@ -674,10 +675,11 @@ function Engine.Settle(hand)
 			pot.best = scores[winners[1]].best
 		end
 		pot.winners = winners
-		local share = floor(pot.amount / #winners)
+		local coin = hand.coin or 1
+		local share = floor(pot.amount / #winners / coin) * coin
 		local odd = pot.amount - share * #winners
 		for i, seat in ipairs(winners) do
-			local won = share + (i <= odd and 1 or 0)
+			local won = share + (i == 1 and odd or 0)
 			payouts[seat] = (payouts[seat] or 0) + won
 		end
 	end
@@ -701,7 +703,7 @@ end
 ---@param log table[] { seat, action, amount? }
 ---@return table? hand
 function Engine:Replay(setup, deck, log)
-	local ok, hand = pcall(Engine.NewHand, Engine, { seats = setup.seats, button = setup.button, sb = setup.sb, bb = setup.bb, ante = setup.ante, deck = deck })
+	local ok, hand = pcall(Engine.NewHand, Engine, { seats = setup.seats, button = setup.button, sb = setup.sb, bb = setup.bb, ante = setup.ante, coin = setup.coin, deck = deck })
 	if not ok then
 		return nil
 	end

@@ -770,9 +770,9 @@ function Table:DealHand()
 	end
 	local sb, bb = self:Blinds()
 	local ante = self:Ante()
-	hs.setup = { seats = Copy(seats), button = button, sb = sb, bb = bb, ante = ante }
+	hs.setup = { seats = Copy(seats), button = button, sb = sb, bb = bb, ante = ante, coin = Protocol:Coin(self.cfg) }
 	hs.level = self:Level()
-	self.hand = Engine:NewHand({ seats = seats, button = button, sb = sb, bb = bb, ante = ante, deck = deck })
+	self.hand = Engine:NewHand({ seats = seats, button = button, sb = sb, bb = bb, ante = ante, coin = hs.setup.coin, deck = deck })
 	Engine:Start(self.hand)
 	hs.stage = "play"
 	self.phase = "playing"

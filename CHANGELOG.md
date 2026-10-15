@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- **Poker.** The host can kick a player: right-click their box. They stand up as if they had left, with their stack
+  owed to them at a gold table, and their client says why.
+- **Poker.** A split pot at a silver table divides in whole silver, the odd silver to the first winner left of
+  the button; it used to hand each winner copper.
+
 ## [1.23.0] - 2026-10-14
 
 - **Poker.** Bets stay off the pot. The pot's chips stand under its amount instead of beside it, and each bet label
@@ -13,8 +18,6 @@
 - **Poker.** The rebuy, let-in and raise boxes open on the amount as it is typed ("4s"), not on the coin icons, which they
   couldn't read back.
 - **Poker.** The clock's warning tick comes at ten seconds, not five, and the clock turns red then.
-- **Poker.** The host can kick a player: right-click their box. They stand up as if they had left, with their stack
-  owed to them at a gold table, and their client says why.
 - **Poker.** At a showdown the log names the hands that showed and lost, after the winner's.
 - **Poker.** Close table waits for the hand under way: everyone is told in the status line, the log and a toast, nobody
   new sits down, and the host's button offers Keep open until the hand is over. A table with no hand in play closes

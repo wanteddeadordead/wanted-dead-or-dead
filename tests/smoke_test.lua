@@ -12887,6 +12887,30 @@ end)()
 	check(h.entrants["Bob-Realm"].place == 4 and h.entrants["Cat-Realm"].place == 3, "two out in one hand: the shorter stack at the start places lower")
 end)()
 
+-- A split pot at a silver table divides in silver: 15s between two is 8s and 7s, the odd silver to the first winner
+-- left of the button, never 7s 50c each
+;(function()
+	local P = WantedPokerTestNS
+	local Engine = P.PokerEngine
+	local function C(rank, suit) return Engine:Card(rank, suit) end
+	local function Seat(hole, total, folded) return { stack = 0, hole = hole, bet = 0, total = total, folded = folded, allin = false } end
+	local function Hand(coin)
+		return { seats = { [1] = Seat({ C(14, 1), C(13, 1) }, 500, false), [2] = Seat({ C(2, 2), C(3, 2) }, 500, true), [3] = Seat({ C(14, 3), C(13, 3) }, 500, false) },
+			order = { 1, 2, 3 }, button = 1, sb = 100, bb = 200, ante = 0, coin = coin, board = { C(2, 4), C(7, 1), C(9, 4), C(11, 2), C(4, 3) }, log = {}, acted = {}, barred = {}, currentBet = 0, lastRaiseSize = 0, street = "river" }
+	end
+	local h = Hand(100)
+	Engine.Settle(h)
+	local pays = h.results.payouts
+	check(h.results.pots[1].amount == 1500 and #h.results.pots[1].winners == 2, "ace-king against ace-king on a dry board: a 15s pot split two ways")
+	check((pays[1] == 700 and pays[3] == 800) or (pays[1] == 800 and pays[3] == 700), ("in silver: 8s and 7s, got %s and %s"):format(tostring(pays[1]), tostring(pays[3])))
+	h = Hand(1)
+	Engine.Settle(h)
+	pays = h.results.payouts
+	check(pays[1] == 750 and pays[3] == 750, "at a copper table 7s 50c each, as before")
+	local plain = Engine:NewHand({ seats = { [1] = { stack = 1000 }, [2] = { stack = 1000 } }, button = 1, sb = 10, bb = 20, deck = (function() local d = {} for s = 1, 4 do for r = 2, 14 do d[#d + 1] = C(r, s) end end return d end)() })
+	check(plain.coin == 1, "a hand made without a coin is in copper (chips)")
+end)()
+
 -- The host kicks a player: they stand up, their stack is owed to them at a gold table, and their client is told why
 ;(function()
 	local P = WantedPokerTestNS

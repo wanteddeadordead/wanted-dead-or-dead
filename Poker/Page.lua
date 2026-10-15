@@ -441,13 +441,12 @@ function private.BuildSeatCard(parent, width)
 		local hosting = Net:HostedTable() ~= nil
 		W:Dialog({
 			title = hosting and "Close the table?" or "Leave the table?",
-			text = hosting and ((Net:State() and Net:State().cfg.stakes == "gold") and "The table closes and you owe every player their stack: the lines go under Settlement, to pay by trade or by mail." or "Everyone at your table is sent their final stacks and the table closes.")
+			text = hosting and ((Net:State() and Net:State().cfg.stakes == "gold") and "The table closes (a hand under way plays out first) and you owe every player their stack: the lines go under Settlement, to pay by trade or by mail." or "A hand under way plays out first; then everyone at your table is sent their final stacks and the table closes.")
 				or "Your chips leave with you. A hand under way is folded.",
 			confirmLabel = hosting and "Close table" or "Leave",
 			confirmStyle = "danger",
 			onConfirm = function()
-				Net:Leave()
-				TableUI:Hide()
+				if Net:Leave() ~= "closing" then TableUI:Hide() end
 				private.Refresh()
 			end,
 		})
@@ -764,7 +763,11 @@ function Page:OnEnable()
 			private.Refresh()
 		elseif event == "host" then
 			local what, name = ...
-			if what == "handing" then
+			if what == "closed" then
+				-- Your table closed, now or after the hand it waited for
+				TableUI:Hide()
+				private.Refresh()
+			elseif what == "handing" then
 				TableUI:Log("Handing the table to "..Name(name).."...", C.amber)
 			elseif what == "handed" then
 				TableUI:Log(Name(name).." hosts the table now. You keep your seat.", C.amber)

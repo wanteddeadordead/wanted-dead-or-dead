@@ -8,6 +8,8 @@
   beside it once the deal checks out (a red cross if it fails). Sit out gives way when a long gold amount brings the
   action buttons over it.
 - **Poker.** Names at the table and in the hand log are in class colours, the computer players' too.
+- **Poker.** The rebuy, let-in and raise boxes open on the amount as it is typed ("4s"), not on the coin icons, which they
+  couldn't read back.
 
 ## [1.22.0] - 2026-10-14
 

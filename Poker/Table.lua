@@ -1209,9 +1209,25 @@ function private.LogChanges(st)
 		private.loggedResults = true
 		local pots = hand.results.pots or {}
 		local won = false
+		local winners = {}
 		for i, pot in ipairs(pots) do
 			TableUI:Log(PotLine(st, pot, i, #pots), C.green)
-			for _, seat in ipairs(pot.winners or {}) do if seat == st.me then won = true end end
+			for _, seat in ipairs(pot.winners or {}) do
+				winners[seat] = true
+				if seat == st.me then won = true end
+			end
+		end
+		-- The hands that showed and lost, after the winners', seat by seat
+		local seats = {}
+		for seat in pairs(st.seats) do seats[#seats + 1] = seat end
+		table.sort(seats)
+		for _, seat in ipairs(seats) do
+			local p = st.seats[seat]
+			if not winners[seat] and not p.f and p.tot ~= nil and p.hole and p.hole[1] and p.hole[2] and hand.board and #hand.board >= 3 then
+				local cards = { p.hole[1], p.hole[2] }
+				for _, c in ipairs(hand.board) do cards[#cards + 1] = c end
+				TableUI:Log(("%s showed %s"):format(ClassName(p), Engine:Describe(cards)), C.muted)
+			end
 		end
 		if won then
 			Play("win")

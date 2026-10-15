@@ -378,7 +378,7 @@ end
 -- none), a four-colour deck, the window opening on their turn
 local SOUND_DEFAULTS = { deal = "kit:IG_ABILITY_PAGE_TURN", chips = "kit:LOOT_WINDOW_COIN_SOUND", fold = "kit:IG_SPELLBOOK_OPEN", turn = "kit:READY_CHECK", win = "kit:IG_QUEST_LIST_COMPLETE", lose = "kit:LFG_DENIED", tick = "kit:IG_CREATURE_NEUTRAL_SELECT" }
 local SOUND_KINDS = { { "deal", "Deal", "Cards dealt, and each new street." }, { "chips", "Chips", "A bet, a raise, a call." }, { "fold", "Fold", "Cards thrown in." }, { "turn", "Your turn", "The moment it's yours to act." },
-	{ "win", "Pot won", "A pot that comes to you." }, { "lose", "Hand lost", "You showed down and lost." }, { "tick", "Five seconds", "Once, when five seconds are left on your clock." } }
+	{ "win", "Pot won", "A pot that comes to you." }, { "lose", "Hand lost", "You showed down and lost." }, { "tick", "Ten seconds", "Once, when ten seconds are left on your clock." } }
 -- The game's sounds offered, { SOUNDKIT name, label }; ones this client lacks aren't offered
 local GAME_SOUNDS = {
 	{ "IG_ABILITY_PAGE_TURN", "Page turn" }, { "LOOT_WINDOW_COIN_SOUND", "Coins" }, { "READY_CHECK", "Ready check" }, { "IG_QUEST_LIST_COMPLETE", "Quest complete" },
@@ -1642,8 +1642,8 @@ function private.TickClock()
 			local who = mine and "Your turn" or ((actor and Name(actor.n) or "?").." to act")
 			if not private.hostGone and not private.blocked then
 				private.status:SetText(("%s  -  %ds"):format(who, ceil(left)))
-				-- The last five seconds of your own clock: red, with one tick
-				if mine and left <= 5 then
+				-- The last ten seconds of your own clock: red, with one tick (five was too late to act on)
+				if mine and left <= 10 then
 					private.status:SetTextColor(C.red[1], C.red[2], C.red[3])
 					if not private.tickedAt then private.tickedAt = now Play("tick") end
 				elseif mine then

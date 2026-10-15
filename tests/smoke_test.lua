@@ -12402,10 +12402,18 @@ end)()
 	check(host.seats[1].out == "sitting" and parts.sitOut.label._text == "I'm back", "sitting out from the next hand")
 	parts.sitOut._scripts.OnClick(parts.sitOut)
 	check(host.seats[1].out == false and parts.sitOut.label._text == "Sit out", "and back")
-	-- Close the table from the window's header
+	-- Close the table from the window's header: the showdown is a hand under way, so the table closes after it
 	parts.leave._scripts.OnClick(parts.leave)
 	ConfirmDialog()
-	check(Net:HostedTable() == nil and not TableUI:IsShown(), "closed")
+	check(Net:HostedTable() ~= nil and TableUI:IsShown() and host.closing == true, "closing waits for the hand under way")
+	check(ToBob("state").st.closing == true and parts.leave.label._text == "Keep open" and Logged("closing the table after this hand") and OnScreen("The table closes after this hand"), "Bob is told it closes after this hand; the host's button offers Keep open")
+	parts.leave._scripts.OnClick(parts.leave)
+	check(host.closing == nil and ToBob("state").st.closing == nil and parts.leave.label._text == "Close table", "Keep open: the table stays, and everyone hears")
+	parts.leave._scripts.OnClick(parts.leave)
+	ConfirmDialog()
+	clock = clock + P.PokerProtocol.SHOWDOWN_SECONDS + 1
+	host:Tick()
+	check(Net:HostedTable() == nil and not TableUI:IsShown(), "closed once the hand is over")
 	check(ToBob("state").st.phase == "closed", "Bob is told the table closed")
 	ns.UI:Show("poker")
 	check(OnScreen("HOST A TABLE"), "the page is back to the host form")
@@ -13194,6 +13202,15 @@ end)()
 	end
 	check(host.handNo >= 1 and (host.phase == "playing" or host.phase == "showdown" or host.phase == "seeding" or host.phase == "waiting"), "hands are dealt against the bots: "..host.handNo..", "..host.phase)
 	Net:Leave()
+	if Net:HostedTable() then
+		check(host.closing == true, "a hand under way: the practice table closes after it")
+		for _ = 1, 600 do
+			if not Net:HostedTable() then break end
+			clock = clock + 1
+			host:Tick()
+			for _, bot in pairs(Net:Bots()) do bot:Tick() end
+		end
+	end
 	check(Net:HostedTable() == nil and next(Net:Bots()) == nil, "closing clears the bots")
 	WantedPokerDB.host.stakes = "chips"
 end)()
@@ -13575,8 +13592,11 @@ end)()
 	FromBob({ k = "say", e = 99 })
 	check(ToBob("said") == nil, "a line that isn't one of the set is dropped")
 	check(Played(12889) == 0, "folding is no showdown loss: no buzzer")
-	-- All-in at a gold table asks first
+	-- All-in at a gold table asks first (the table closes after the hand under way; the showdown's clock runs out first)
 	Net:Leave()
+	clock = clock + P.PokerProtocol.SHOWDOWN_SECONDS + 1
+	host:Tick()
+	check(Net:HostedTable() == nil, "the table closed after the showdown")
 	check(Net:HostTable({ sb = 10, bb = 20, buyMin = 400, buyMax = 2000, maxSeats = 6, stakes = "gold" }, 1000), "a gold table")
 	parts.allin._scripts.OnClick(parts.allin)
 	check(ns.Widgets:IsDialogShown(), "all in at a gold table asks first")

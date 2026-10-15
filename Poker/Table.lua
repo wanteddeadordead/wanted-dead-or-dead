@@ -779,11 +779,12 @@ function private.Build()
 	for i = #Protocol.EMOTES, 1, -1 do
 		local index = i
 		local label = Protocol.EMOTES[i]
-		local b = W:Button(bar, label, "ghost", 16 + #label * 6, 24, function()
+		local b = W:Button(bar, label, "secondary", 14 + #label * 5.5, 20, function()
 			local player = Net:Player()
 			if player then player:Say(index) end
 		end)
-		if lastEmote then b:SetPoint("RIGHT", lastEmote, "LEFT", -2, 0) else b:SetPoint("RIGHT", -10, 0) end
+		b.label:SetFontObject(Theme.Fonts.small) -- eight of them in a row: small, and bordered so they read as buttons
+		if lastEmote then b:SetPoint("RIGHT", lastEmote, "LEFT", -4, 0) else b:SetPoint("RIGHT", -10, 0) end
 		b:Hide()
 		private.emotes[#private.emotes + 1] = b
 		lastEmote = b
@@ -964,12 +965,19 @@ end
 function private.ConfirmLeave()
 	local hosting = Net:HostedTable() ~= nil
 	local st = private.state
+	if hosting and st and st.closing then
+		Net:KeepOpen()
+		return
+	end
 	local tournament = st and st.cfg and st.cfg.kind == "tournament"
+	local inHand = st and (st.phase == "playing" or st.phase == "showdown")
 	local text
 	if tournament and st.started and st.phase ~= "finished" then
-		text = hosting and "The tournament is cancelled: nothing is settled, nobody owes anything." or "You forfeit your entry and take your current place."
+		text = hosting and (inHand and "The hand plays out first, then the tournament is cancelled: nothing is settled, nobody owes anything." or "The tournament is cancelled: nothing is settled, nobody owes anything.")
+			or "You forfeit your entry and take your current place."
 	else
-		text = hosting and "Everyone at your table is sent their final stacks and the table closes." or "Your chips leave with you. A hand under way is folded."
+		text = hosting and (inHand and "The hand plays out first; everyone is told. Then everyone at your table is sent their final stacks and the table closes." or "Everyone at your table is sent their final stacks and the table closes.")
+			or "Your chips leave with you. A hand under way is folded."
 	end
 	W:Dialog({
 		title = hosting and "Close the table?" or "Leave the table?",
@@ -978,8 +986,7 @@ function private.ConfirmLeave()
 		confirmStyle = "danger",
 		over = private.frame,
 		onConfirm = function()
-			Net:Leave()
-			if private.frame then private.frame:Hide() end
+			if Net:Leave() ~= "closing" and private.frame then private.frame:Hide() end
 		end,
 	})
 end
@@ -1390,6 +1397,9 @@ function TableUI:Refresh(st)
 		end
 		text, color = table.concat(lines, "; "), C.green
 	end
+	if st.closing and st.phase ~= "closed" then
+		text, color = (text ~= "" and (text.."  -  ") or "").."The table closes after this hand", C.amber
+	end
 	local mine = me and st.seats[me]
 	if private.blocked then
 		text, color = "The game is refusing table messages here (a boss fight or a PvP match). The table waits for it to lift.", C.amber
@@ -1453,14 +1463,15 @@ function TableUI:Refresh(st)
 	end
 	-- Your turn: a sound, the window if it's hidden and wanted, a word in the log otherwise
 	local turnKey = legal and (hand.key..":"..#(hand.log or {})) or nil
-	if turnKey and turnKey ~= private.turnKey then
+	local newTurn = turnKey and turnKey ~= private.turnKey
+	private.turnKey = turnKey -- before the window opens: opening refreshes again, and the sound plays once
+	if newTurn then
 		Play("turn")
 		private.tickedAt = nil
 		if not private.frame:IsShown() then
 			if Options().popOnTurn then TableUI:Show() else Wanted.UI:Toast("Poker: your turn.", C.gold) end
 		end
 	end
-	private.turnKey = turnKey
 	-- What your cards make
 	local mine0 = me and st.seats[me]
 	if mine0 and mine0.hole and hand and hand.stage == "play" and not mine0.f and not showdown then
@@ -1490,7 +1501,15 @@ function TableUI:Refresh(st)
 	end
 	private.start:SetShown(tournament and not st.started and st.phase ~= "closed" and Net:HostedTable() ~= nil)
 	private.start:SetEnabled(seated >= Protocol.MIN_SEATS)
-	private.leave:SetText(Net:HostedTable() and "Close table" or (tournament and st.started and st.phase ~= "finished" and mine and not mine.place and "Forfeit" or "Leave"))
+	private.leave:SetText(Net:HostedTable() and (st.closing and "Keep open" or "Close table") or (tournament and st.started and st.phase ~= "finished" and mine and not mine.place and "Forfeit" or "Leave"))
+	-- The host closing after this hand: said once in the log, and to everyone else as a toast
+	if st.closing and not private.closingSaid then
+		private.closingSaid = true
+		TableUI:Log("The host is closing the table after this hand.", C.amber)
+		if not Net:HostedTable() then Wanted.UI:Toast("The host is closing the table after this hand.", C.amber) end
+	elseif not st.closing then
+		private.closingSaid = nil
+	end
 	private.LogChanges(st)
 	private.TickClock()
 end
@@ -1535,6 +1554,9 @@ function private.TickClock()
 	if private.nextAt and (st.phase == "showdown" or st.phase == "waiting") then
 		local left = max(0, private.nextAt - now)
 		private.countdown:SetText(left > 0 and ("Next hand in %ds"):format(ceil(left)) or "")
+		-- After whichever of Sit out, Rebuy and Start is the last one showing
+		private.countdown:ClearAllPoints()
+		private.countdown:SetPoint("LEFT", private.start:IsShown() and private.start or private.rebuy:IsShown() and private.rebuy or private.sitOut, "RIGHT", 12, 0)
 	else
 		private.countdown:SetText("")
 	end
@@ -1617,7 +1639,7 @@ end
 ---Forgets the last table: a new one starts with a clean window and an empty log (the log stays readable after a
 ---table closes, until the next one).
 function TableUI:Reset()
-	private.state, private.deadlineAt, private.nextAt, private.hostGone = nil, nil, nil, false
+	private.state, private.deadlineAt, private.nextAt, private.hostGone, private.closingSaid = nil, nil, nil, false, nil
 	private.dealtKey, private.turnKey, private.preKey = nil, nil, nil
 	if private.log then private.log:Clear() end
 	private.lines = {}

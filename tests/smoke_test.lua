@@ -331,7 +331,7 @@ insertedAbove = nil
 WorldMapFrame.GetPinFrameLevelsManager = function() return {
 	InsertFrameLevelBelow = function(_, name, below) insertedLevel = name.." below "..below end,
 	InsertFrameLevelAbove = function(_, name, above) insertedAbove = name.." above "..above end,
-	GetFrameLevelStart = function(_, name) return name == "PIN_FRAME_LEVEL_WANTED_CAPTURES" and 2345 or 2000 end,
+	GetValidFrameLevel = function(_, name, index) return name == "PIN_FRAME_LEVEL_WORLD_QUEST" and 2300 + (index or 1) - 1 or 2000 end,
 } end
 WorldMapFrame.RemoveAllPinsByTemplate = function(self) self.pins = {} end
 WorldMapFrame.AcquirePin = function(self, template, ...)
@@ -14179,10 +14179,11 @@ end)()
 	local buttons = {}
 	for i = before + 1, #Mock.created do if rawget(Mock.created[i], "point") then buttons[#buttons + 1] = Mock.created[i] end end
 	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
-	-- The overlay sits in the map's pin levels above the area POIs, so the fog of war over unexplored ground (a pin
-	-- layer itself) doesn't cover it; its buttons two above
-	check(insertedAbove == "PIN_FRAME_LEVEL_WANTED_CAPTURES above PIN_FRAME_LEVEL_AREA_POI", "own map layer above the POIs, got "..tostring(insertedAbove))
-	check(buttons[1]:GetParent()._level == 2345 and buttons[1]._level == 2347, "the overlay at its pin level and the icons above it: "..tostring(buttons[1]:GetParent()._level)..", "..tostring(buttons[1]._level))
+	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
+	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
+	-- map's level table: that taints the game's own pins
+	check(insertedAbove == nil, "no level of our own in the map's table, got "..tostring(insertedAbove))
+	check(buttons[1]:GetParent()._level == 2399 and buttons[1]._level == 2401, "the overlay at its slot and the icons above it: "..tostring(buttons[1]:GetParent()._level)..", "..tostring(buttons[1]._level))
 	local lostTower
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
 	check(lostTower and lostTower.icon._texture == "Interface\\Minimap\\POIIcons", "a tower shows the battlegrounds' tower icon")

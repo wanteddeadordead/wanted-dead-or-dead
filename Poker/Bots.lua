@@ -150,14 +150,14 @@ function Bots:Decide(st, seat, style, rng, memory)
 	end
 	strength = strength + (rng() * 0.08 - 0.04)
 	local canRaise = legal.minBet or legal.minRaise
-	-- Sizes vary a little, so the amount says nothing about the hand
+	-- Sizes vary a little, so the amount says nothing about the hand; in the table's coin, like anyone's
 	local function Bet()
 		if legal.minBet then
 			local to = hand.street == "preflop" and 3 * bb or floor(pot * (0.5 + rng() * 0.35))
-			return "bet", max(legal.minBet, min(legal.maxBet, to))
+			return "bet", max(legal.minBet, min(legal.maxBet, Protocol:RoundUp(to, st.cfg)))
 		end
 		local to = floor((hand.cur or 0) * (2.2 + rng() * 0.8))
-		return "raise", max(legal.minRaise, min(legal.maxRaise, to))
+		return "raise", max(legal.minRaise, min(legal.maxRaise, Protocol:RoundUp(to, st.cfg)))
 	end
 	local weak = strength < 0.3
 	local remembered = memory and memory.key == hand.key and memory or nil

@@ -397,6 +397,53 @@ local function Options()
 end
 TableUI.Options = Options
 
+-- The felts: the plain green, or a painted one from Media (felt-<key>.tga, 512 by 512, stretched over the felt)
+local FELTS = { { "green", "Classic green" }, { "stormwind", "Stormwind" }, { "orgrimmar", "Orgrimmar" }, { "elwynn", "Elwynn Forest" },
+	{ "durotar", "Durotar" }, { "stranglethorn", "Stranglethorn Vale" }, { "winterspring", "Winterspring" }, { "tanaris", "Tanaris" },
+	{ "undercity", "Undercity" }, { "ironforge", "Ironforge" }, { "darnassus", "Darnassus" } }
+TableUI.FELTS = FELTS
+
+---The felt chosen: a key from FELTS ("green" by default).
+---@return string
+function TableUI:Felt()
+	local key = Options().felt or "green"
+	for _, felt in ipairs(FELTS) do
+		if felt[1] == key then return key end
+	end
+	return "green"
+end
+
+---A felt's name as shown.
+---@param key string
+---@return string
+function TableUI:FeltLabel(key)
+	for _, felt in ipairs(FELTS) do
+		if felt[1] == key then return felt[2] end
+	end
+	return "Classic green"
+end
+
+-- Draws the chosen felt: the painting over the green, or the green alone
+function private.ApplyFelt()
+	local art = private.felt and private.felt.art
+	if not art then return end
+	local key = TableUI:Felt()
+	if key == "green" then
+		art:Hide()
+	else
+		art:SetTexture("Interface\\AddOns\\"..Poker.FOLDER.."\\Media\\felt-"..key)
+		art:Show()
+	end
+end
+
+---Chooses a felt and draws it.
+---@param key string
+function TableUI:SetFelt(key)
+	Options().felt = key
+	private.ApplyFelt()
+	private.RefreshSettings()
+end
+
 ---A poker sound's choice: "kit:NAME", "lsm:Name" or "none".
 ---@param what string "deal" | "chips" | "turn" | "win" | "tick"
 ---@return string
@@ -476,7 +523,7 @@ end
 -- The settings panel over the felt
 function private.BuildSettings()
 	local panel = CreateFrame("Frame", nil, private.frame)
-	panel:SetSize(400, 360)
+	panel:SetSize(400, 390)
 	panel:SetPoint("CENTER", private.felt, "CENTER", 0, 0)
 	panel:SetFrameLevel(private.frame:GetFrameLevel() + 30)
 	panel:EnableMouse(true)
@@ -510,6 +557,22 @@ function private.BuildSettings()
 	panel.fourColor:SetPoint("TOPLEFT", 14, y - 8)
 	panel.popOnTurn = W:Toggle(panel, "Open the table on my turn", function(on) o.popOnTurn = on end)
 	panel.popOnTurn:SetPoint("TOPLEFT", 14, y - 34)
+	-- The felt: the plain green or one of the painted ones
+	local feltLabel = Theme:Text(panel, "small", "Felt", C.muted)
+	feltLabel:SetPoint("TOPLEFT", 30, y - 65)
+	panel.felt = W:Button(panel, "", "secondary", 150, 22, function(self)
+		local current = TableUI:Felt()
+		local items = {}
+		for _, felt in ipairs(FELTS) do
+			local key = felt[1]
+			tinsert(items, { text = felt[2], color = key == current and C.accent or nil, onClick = function() TableUI:SetFelt(key) end })
+		end
+		W:Menu(items, self)
+	end)
+	panel.felt:SetPoint("TOPLEFT", 120, y - 60)
+	panel.felt.label:SetWidth(132)
+	panel.felt.label:SetWordWrap(false)
+	W:AttachTooltip(panel.felt, "Felt", "The cloth on the table: the plain green, or a painted one from around Azeroth.")
 	local hint = Theme:Text(panel, "tiny", "Add your own sounds with a SharedMedia addon.", C.faint)
 	hint:SetPoint("BOTTOMLEFT", 14, 10)
 	panel:Hide()
@@ -526,6 +589,7 @@ function private.RefreshSettings()
 	for what, pick in pairs(panel.picks) do
 		pick:SetText(TableUI:SoundLabel(TableUI:SoundChoice(what)))
 	end
+	panel.felt:SetText(TableUI:FeltLabel(TableUI:Felt()))
 end
 
 ---Asks what went wrong and sends a bug report to the developers through the base (Report), with the table's state
@@ -628,7 +692,7 @@ function private.Build()
 	W:AttachTooltip(report, "Report a bug", "Say what went wrong and the report goes to the developers with the table's log.")
 	local options = W:Button(header, "...", "ghost", 22, 22, function() TableUI:ToggleSettings() end)
 	options:SetPoint("RIGHT", report, "LEFT", -2, 0)
-	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, and whether the table opens on your turn.")
+	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, the felt, and whether the table opens on your turn.")
 
 	-- The felt, with its rail
 	local rail = CreateFrame("Frame", nil, frame)
@@ -639,7 +703,12 @@ function private.Build()
 	felt:SetPoint("TOPLEFT", 10, -10)
 	felt:SetPoint("BOTTOMRIGHT", -10, 10 + STATUS_H)
 	Theme:Skin(felt, FELT, FELT_LINE)
+	-- A painted felt lies over the green when one is chosen (ApplyFelt, once the window is built)
+	felt.art = felt:CreateTexture(nil, "BACKGROUND", nil, 1)
+	felt.art:SetAllPoints()
+	felt.art:Hide()
 	private.felt = felt
+	private.ApplyFelt()
 	private.status = Theme:Text(rail, "body", "", C.text)
 	private.status:SetPoint("BOTTOMLEFT", 10, 6)
 	private.status:SetPoint("BOTTOMRIGHT", -10, 6)

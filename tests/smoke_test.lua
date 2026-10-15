@@ -13473,6 +13473,14 @@ end)()
 	local function OnScreenNow(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find(text, 1, true) then return true end end return false end
 	TableUI:ToggleSettings()
 	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Five seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
+	-- The felt: the plain green by default; a painted one is a texture over it, chosen from the settings and kept
+	local felt = TableUI:GetParts().felt
+	check(TableUI:Felt() == "green" and OnScreenNow("Felt") and OnScreenNow("Classic green") and not felt.art:IsShown(), "the classic green felt by default, offered in the settings")
+	TableUI:SetFelt("stormwind")
+	check(TableUI:Felt() == "stormwind" and felt.art:IsShown() and felt.art._texture == "Interface\\AddOns\\WantedDeadOrDead_Poker\\Media\\felt-stormwind" and OnScreenNow("Stormwind") and WantedPokerDB.options.felt == "stormwind", "Stormwind's felt is drawn over the green and remembered: "..tostring(felt.art._texture))
+	TableUI:SetFelt("no such felt")
+	check(TableUI:Felt() == "green" and not felt.art:IsShown(), "a felt that isn't one falls back to the green")
+	check(#TableUI.FELTS == 11, "eleven felts: the green and ten painted")
 	TableUI:ToggleSettings()
 	-- Experimental, and a bug report with the table's log
 	ns.UI:Show("poker")

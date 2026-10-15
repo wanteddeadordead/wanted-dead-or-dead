@@ -16,6 +16,8 @@
 - **Poker.** A silver game (blinds in whole silver) has no copper at all: the host rounds every bet and raise up to
   the silver, the computer players bet in silver, buy-ins and rebuys must be whole silver (the forms round them up),
   and your presets, slider and typed amounts round up too. A gold game does the same to the gold.
+- **Poker.** Ten painted felts from around Azeroth (Stormwind, Orgrimmar, Elwynn Forest, Durotar, Stranglethorn Vale,
+  Winterspring, Tanaris, Undercity, Ironforge, Darnassus) under Felt in the table settings, beside the classic green.
 - **Poker.** The window is 80 wider, so eight seats' bets have room; the pot's chips sit right under its amount; the
   "Next hand in" clock no longer hides behind Rebuy; the table-talk buttons are small and bordered; the your-turn
   sound plays once when the window opens itself.

@@ -171,7 +171,7 @@ session's newest problems the recent lines don't have (`"<time> Problem: <text>"
 first. At most 40 lines and 8 KB in all (a line and its break): the oldest recent lines are dropped first, keeping
 room for the problems, and if it's still over 8 KB the problems are dropped too, oldest first. Other players' names
 are left out throughout. An `"idea"` (Suggest a feature, /wanted idea) adds nothing: `text` is the idea, and the
-app forwards it unchanged for other players to vote on at wanteddeadordead.com/ideas. At most 20 wait (the player is
+app forwards it unchanged to the developers. At most 20 wait (the player is
 told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the
 catch-up as `reportsReceived = { id, ... }`, read at every login (taken in or not) and dropped from the queue. A new
 top-level table: no migration.

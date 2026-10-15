@@ -451,8 +451,7 @@ function Report:QueueBug(text)
 	return Report:Queue({ kind = "bug", text = text, log = out })
 end
 
----Queues a feature idea: the player's words alone, no log. The app sends it on and other players vote for it on
----wanteddeadordead.com/ideas.
+---Queues a feature idea: the player's words alone, no log. The app sends it on to the developers.
 ---@param text string
 ---@return string? id
 function Report:QueueIdea(text)
@@ -584,7 +583,7 @@ end
 function Report:AskAboutIdea()
 	private.Ask({
 		title = "Suggest a feature",
-		text = "What should Wanted do? Other players can vote for it on wanteddeadordead.com/ideas.",
+		text = "What should Wanted do? It goes to the developers through the Wanted app.",
 		validate = function(text)
 			return private.Clip(text, MAX_TEXT) == "" and "Say what Wanted should do first." or nil
 		end,

@@ -11716,7 +11716,7 @@ end)()
 	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	local queuedBefore = Report:CountQueued()
 	ns:RunCommand("idea", "")
-	check(OnScreen("Suggest a feature") and OnScreen("What should Wanted do? Other players can vote for it on wanteddeadordead.com/ideas."), "/wanted idea asks what Wanted should do")
+	check(OnScreen("Suggest a feature") and OnScreen("What should Wanted do? It goes to the developers through the Wanted app."), "/wanted idea asks what Wanted should do")
 	dialog.confirm:Click()
 	check(Report:CountQueued() == queuedBefore and OnScreen("Say what Wanted should do first."), "an empty idea queues nothing")
 	dialog.area:SetText("Let me |cff00ff00pin|r a bounty to the map\n")

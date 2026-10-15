@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-10-14
+
 - **Poker.** The host can kick a player: right-click their box. They stand up as if they had left, with their stack
   owed to them at a gold table, and their client says why.
 - **Poker.** A split pot at a silver table divides in whole silver, the odd silver to the first winner left of

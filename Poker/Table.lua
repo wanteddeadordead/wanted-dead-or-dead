@@ -85,6 +85,11 @@ local function Name(full)
 	return Ambiguate and Ambiguate(full, "none") or (full:match("^([^%-]+)") or full)
 end
 
+-- A seat's name in its class colour, as the game colours players everywhere else
+local function ClassName(p)
+	return Theme:ClassName(Name(p.n), p.c)
+end
+
 local function Chips(n, cfg, compact)
 	if cfg and Protocol:IsMoney(cfg.stakes) then return Protocol:Coins(n, cfg.stakes, compact) end
 	return Protocol:Money(n or 0, cfg and cfg.stakes)
@@ -978,7 +983,7 @@ end
 -- ============================================================================
 
 local function Describe(entry, st)
-	local who = Name(st.seats[entry.seat] and st.seats[entry.seat].n or ("Seat "..entry.seat))
+	local who = st.seats[entry.seat] and ClassName(st.seats[entry.seat]) or ("Seat "..entry.seat)
 	local cfg = st.cfg
 	if entry.action == "fold" then return who.." folds" end
 	if entry.action == "check" then return who.." checks" end
@@ -1226,7 +1231,7 @@ function TableUI:Refresh(st)
 				BorderWidth(seatFrame, 1)
 			else
 				seatFrame.empty:SetText("")
-				seatFrame.name:SetText(Name(p.n))
+				seatFrame.name:SetText(ClassName(p))
 				seatFrame.player = p
 				seatFrame.trust:SetText(Wanted.Reputation:GetPosterBadge(p.n))
 				local net = cfg.stakes == "gold" and p.bought and (p.s or 0) - p.bought or nil

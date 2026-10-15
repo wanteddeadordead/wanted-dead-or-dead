@@ -209,6 +209,11 @@ function Protocol:IsName(s)
 	return type(s) == "string" and #s >= 2 and #s <= 60 and not strfind(s, "[|%c]")
 end
 
+---Whether a value is a class token as the game gives it ("WARRIOR"), for the name's colour at the table.
+function Protocol:IsClass(s)
+	return type(s) == "string" and #s >= 4 and #s <= 12 and strfind(s, "^%u+$") ~= nil
+end
+
 ---Whether a value is a hex string of the given length (a commitment, a secret, a deck hash).
 ---@param s any
 ---@param len number

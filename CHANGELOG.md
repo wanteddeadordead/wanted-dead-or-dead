@@ -7,6 +7,7 @@
   of seven or eight seats get a taller felt. The hand number moves to the felt's bottom-right corner, with a lock
   beside it once the deal checks out (a red cross if it fails). Sit out gives way when a long gold amount brings the
   action buttons over it.
+- **Poker.** Names at the table and in the hand log are in class colours, the computer players' too.
 
 ## [1.22.0] - 2026-10-14
 

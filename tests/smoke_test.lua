@@ -13472,7 +13472,7 @@ end)()
 	o.sounds = true
 	local function OnScreenNow(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find(text, 1, true) then return true end end return false end
 	TableUI:ToggleSettings()
-	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Five seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
+	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Ten seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
 	-- The felt: the plain green by default; a painted one is a texture over it, chosen from the settings and kept
 	local felt = TableUI:GetParts().felt
 	check(TableUI:Felt() == "stranglethorn" and OnScreenNow("Felt") and OnScreenNow("Stranglethorn Vale") and felt.art:IsShown(), "Stranglethorn Vale's felt by default, named in the settings")

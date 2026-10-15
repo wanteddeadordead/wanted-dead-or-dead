@@ -10,6 +10,7 @@
 - **Poker.** Names at the table and in the hand log are in class colours, the computer players' too.
 - **Poker.** The rebuy, let-in and raise boxes open on the amount as it is typed ("4s"), not on the coin icons, which they
   couldn't read back.
+- **Poker.** The clock's warning tick comes at ten seconds, not five, and the clock turns red then.
 - **Poker.** Close table waits for the hand under way: everyone is told in the status line, the log and a toast, nobody
   new sits down, and the host's button offers Keep open until the hand is over. A table with no hand in play closes
   at once, as before.

@@ -11711,6 +11711,28 @@ end)()
 	_G.WantedDialog.frame.cancel:Click()
 	check(asked == 0, "a second click while it asks doesn't queue another")
 	_G.WantedBugReport:Hide()
+	-- Suggest a feature: /wanted idea (or the title bar's button beside Report a bug) asks what Wanted should do and
+	-- queues the idea alone, no log, for the app to send on
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	local queuedBefore = Report:CountQueued()
+	ns:RunCommand("idea", "")
+	check(OnScreen("Suggest a feature") and OnScreen("What should Wanted do? Other players can vote for it on wanteddeadordead.com/ideas."), "/wanted idea asks what Wanted should do")
+	dialog.confirm:Click()
+	check(Report:CountQueued() == queuedBefore and OnScreen("Say what Wanted should do first."), "an empty idea queues nothing")
+	dialog.area:SetText("Let me |cff00ff00pin|r a bounty to the map\n")
+	dialog.confirm:Click()
+	local idea
+	for _, r in pairs(db.reports) do if r.kind == "idea" then idea = r end end
+	check(Report:CountQueued() == queuedBefore + 1 and idea and idea.text == "Let me pin a bounty to the map" and idea.log == nil and idea.duelId == nil
+		and idea.character == "Test Player" and type(idea.at) == "number" and idea.addonVersion == tostring(ns.VERSION), "Send queues the idea with the player's words alone")
+	check(OnScreen("Idea saved") and OnScreen("Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."), "and says it goes at the app's next sync")
+	dialog.confirm:Click()
+	local ideaButton
+	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Suggest a feature" and f._scripts.OnClick then ideaButton = f break end end
+	ideaButton:Click()
+	check(OnScreen("What should Wanted do?"), "the title bar's Suggest a feature asks the same")
+	dialog.cancel:Click()
+	check(Report:CountQueued() == queuedBefore + 1, "Cancel queues nothing")
 	-- Saved data from before reports gets an empty queue (a new key: no layout change)
 	local realDB = WantedDB
 	WantedDB = { version = 3, settings = {} }

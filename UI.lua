@@ -178,6 +178,9 @@ function private.Create()
 	local bug = W:Button(titleBar, "Report a bug", "ghost", 100, 26, function() Wanted.Report:Show() end)
 	bug:SetPoint("RIGHT", close, "LEFT", -6, 0)
 	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy (versions, settings, errors, recent log) and shows where to send it.")
+	local idea = W:Button(titleBar, "Suggest a feature", "ghost", 120, 26, function() Wanted.Report:AskAboutIdea() end)
+	idea:SetPoint("RIGHT", bug, "LEFT", -6, 0)
+	W:AttachTooltip(idea, "Suggest a feature", "Tell the developers what Wanted should do. Other players vote for it on wanteddeadordead.com/ideas. Also /wanted idea.")
 
 	-- Two status lights: the desktop app, and the in-game WantedNet channel. No player count: an empty count
 	-- early on only tells people nobody uses Wanted.
@@ -203,7 +206,7 @@ function private.Create()
 	private.netStatus = Indicator(150, function()
 		UI:Show(Wanted.db.settings.showTools and "tools" or "settings")
 	end)
-	private.netStatus:SetPoint("RIGHT", bug, "LEFT", -10, 0)
+	private.netStatus:SetPoint("RIGHT", idea, "LEFT", -10, 0)
 	private.appStatus = Indicator(140, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 

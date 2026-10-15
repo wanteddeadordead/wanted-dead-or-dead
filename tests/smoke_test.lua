@@ -14253,6 +14253,238 @@ end)()
 	GetShapeshiftForm, GetShapeshiftFormInfo, PlaySound = real.GetShapeshiftForm, real.GetShapeshiftFormInfo, real.PlaySound
 	ns.CapturesHUD:Update()
 end)()
+
+-- Siege nights: the site's sample rules mirrored provisionally (attackers less defenders a tick, at most 6, costs by
+-- kind and inhibitors down, a reset after two quiet minutes, the respawn pause), rounds and truces from a Nexus
+-- falling, the HUD's siege line and announcements, the settings and the dev command
+;(function()
+	local C, HUD = ns.Captures, ns.CapturesHUD
+	local real = { C_Map = C_Map, SendPoint = ns.Sync.SendPoint, Warn = ns.Alerts.Warn, EachNearby = ns.Enemies.EachNearby,
+		GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown, PlaySound = PlaySound }
+	local mapId, px, py = 1424, 0.508, 0.351 -- Hillsbrad's Alliance Mid Tower, the Horde player's to attack
+	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
+		GetMapInfo = function() return { mapType = 3, parentMapID = 1415 } end }
+	local told, warned, enemies = {}, {}, {}
+	ns.Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
+	ns.Enemies.EachNearby = function(_, f) for _, e in ipairs(enemies) do f(e) end end
+	PlaySound = function() end
+	WorldMapFrame.IsShown = function() return false end
+	local function Warned(text) for _, w in ipairs(warned) do if w:find(text, 1, true) then return true end end return false end
+	local function Sample(n) for _ = 1, n or 1 do clock = clock + 30 C:Sample() HUD:Update() end end
+	local function Slot() return math.floor(clock / C.SLOT_SECONDS) end
+	local function Peers(id, n) for i = 1, n do C:OnPeer({ p = id, s = Slot(), c = 1 }, "Siege Ally "..i) end end
+	-- n of our side at a point for so many ticks (heard players lapse after 90 s, so they're heard again each tick)
+	local function Attack(id, n, ticks) for _ = 1, ticks do Peers(id, n) Sample() end end
+	local function Enemy(x, y) enemies[#enemies + 1] = { mapId = 1424, x = x, y = y, lastSeen = clock } end
+	local P = function(id) return C:Get(id) end
+	local bar = _G.WantedCaptureBar
+	check(C:Settings().siegeCall == true, "the siege call is on by default")
+	check(C.ATTACK_CAP == 6 and C.POINT_COST == 40 and C.SAMPLE_SECONDS == 30, "the site's figures")
+	C:Take(nil)
+	C:TakeSiege(nil, nil)
+	check(C:Phase() == nil and not C:RoundOn(C.FRONTS[2]), "no siege until the catch-up names one")
+	-- Attackers less defenders a tick, at most 6 attackers; nothing while the defenders match them
+	Sample()
+	Peers("hb-mid-3", 7) -- and us: 8 of our side
+	local p = C:Progress(P("hb-mid-3"))
+	check(p.side == "Horde" and p.attackers == 8 and p.defenders == 0 and p.net == 6 and p.cost == 40, "8 attack, 6 count: net "..p.net)
+	Sample()
+	p = C:Progress(P("hb-mid-3"))
+	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left (provisional)", 1, true),
+		"a tick adds the net and the bar says how long at that pace: "..bar.capture.text._text)
+	Enemy(50.8, 35.1) Enemy(50.8, 35.1)
+	Sample()
+	check(C:Progress(P("hb-mid-3")).n == 10 and C:Enemies("hb-mid-3") == 2, "two defenders cancel two attackers: "..C:Progress(P("hb-mid-3")).n)
+	for _ = 1, 4 do Enemy(50.8, 35.1) end
+	Sample()
+	check(C:Progress(P("hb-mid-3")).n == 10 and bar.capture.text._text:find("6 defending, held off", 1, true), "six defenders hold eight attackers: "..bar.capture.text._text)
+	enemies = {}
+	Attack("hb-mid-3", 7, 5) -- 10 + 5 * 6 = 40
+	check(C:Holder("hb-mid-3") == "Horde" and C:Progress(P("hb-mid-3")).n == 0, "at 40 samples the tower is ours (provisionally)")
+	check(Warned("Enemy tower destroyed"), "and the HUD says so: "..table.concat(warned, "; "))
+	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 8 of your side", 1, true), "now holding it: "..bar.capture.text._text)
+	-- Progress resets after two minutes with no attacker; the holder's tower under attack reads the attackers
+	clock = clock + 100 -- our side heard there has lapsed
+	Enemy(50.8, 35.1) Enemy(50.8, 35.1) Enemy(50.8, 35.1)
+	Sample()
+	p = C:Progress(P("hb-mid-3"))
+	check(p.side == "Alliance" and p.attackers == 3 and p.defenders == 1 and p.n == 2, "three enemies at our tower less us: net 2, got "..p.n)
+	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 1 of your side, 3 attacking, 9:30 left (provisional)", 1, true), "the bar reads the attack: "..bar.capture.text._text)
+	enemies = {}
+	Sample(3)
+	check(C:Progress(P("hb-mid-3")).n == 2, "progress stays a while with nobody attacking")
+	Sample()
+	check(C:Progress(P("hb-mid-3")).n == 0, "and resets after two minutes")
+	-- A taken inhibitor respawns in 30 minutes unless its takers stay
+	warned = {}
+	Attack("hb-mid-4", 6, 7)
+	check(C:Holder("hb-mid-4") == "Horde" and Warned("Enemy inhibitor down"), "the inhibitor falls to six of us: "..table.concat(warned, "; "))
+	local respawnAt = clock + C.RESPAWN_SECONDS
+	Attack("hb-mid-4", 6, 1) -- the takers are still there: the respawn moves on
+	clock = respawnAt + 1
+	HUD:Update()
+	check(C:Holder("hb-mid-4") == "Horde", "its takers there a tick later moved the respawn on")
+	clock = clock + 30
+	HUD:Update()
+	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Inhibitor respawned"), "then it respawns: "..table.concat(warned, "; "))
+	-- Tonight's siege from the catch-up: the HUD names it; respawns on its front pause from an hour before
+	local start = clock + 3540
+	C:TakeSiege({ front = "hb", zone = "Hillsbrad Foothills", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 }, nexusCost = { ["hb-alliance"] = 120, ["hb-horde"] = 120 } },
+		{ hb = { h = 3, a = 1 }, ah = { h = 0, a = "x" } })
+	check(C:Phase() == "before" and C:RespawnPaused(C.FRONTS[2]) and not C:RespawnPaused(C.FRONTS[1]), "an hour before the window the siege front's respawns pause")
+	check(C:FrontWins(C.FRONTS[2]).Horde == 3 and C:FrontWins(C.FRONTS[1]) == nil, "this week's siege wins per front, well formed only")
+	HUD:Update()
+	check(bar.siege._text:find("^Siege: Hillsbrad Foothills %d+ to %d+ [AP]M$") or bar.siege._text:find("^Siege: Hillsbrad Foothills %d+ [AP]M to %d+ [AP]M$"),
+		"the HUD names the siege front and its window in the client's clock: "..bar.siege._text)
+	check(bar.title._text == "Hillsbrad Foothills: Horde 3, Alliance 1 this week", "the title carries the week's siege wins: "..bar.title._text)
+	local lines = ns:CapturePrints(function() ns:RunCommand("points", "") end)
+	check(lines[1]:find("Tonight's siege: Hillsbrad Foothills, before", 1, true) and table.concat(lines, "\n"):find("Hillsbrad Foothills: Horde 9, Alliance 5; siege wins this week Horde 3, Alliance 1", 1, true), "/wanted points tells the siege: "..table.concat(lines, " // "))
+	-- The Nexus costs the site's figure until an inhibitor on the front changes; by its inhibitors down after
+	check(C:Cost(P("hb-alliance")) == 120, "the site's Nexus cost")
+	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock }, ["hb-bot-4"] = { h = "H", t = clock } })
+	check(C:Cost(P("hb-alliance")) == 120 and C:Cost(P("hb-horde")) == 120, "still the site's, with the site's holds")
+	Attack("hb-mid-4", 6, 1) -- our side at the inhibitor we hold: defenders, no change
+	check(C:Cost(P("hb-alliance")) == 120, "the site's figure holds until this client sees an inhibitor change")
+	C:Take(nil)
+	Attack("hb-mid-3", 6, 7)
+	Attack("hb-mid-4", 6, 7)
+	check(C:Holder("hb-mid-4") == "Horde" and C:Cost(P("hb-alliance")) == 120, "one inhibitor down: 120")
+	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock } })
+	check(C:Cost(P("hb-alliance")) == 60, "two: 60")
+	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock }, ["hb-bot-4"] = { h = "H", t = clock } })
+	check(C:Cost(P("hb-alliance")) == 30, "three: 30")
+	C:Take({ ["hb-mid-3"] = { h = "H", t = clock }, ["hb-mid-4"] = { h = "H", r = start - 1700, t = clock } })
+	-- The call half an hour before the window, wherever the player is; the open with the setting off says nothing
+	mapId = 1411
+	warned = {}
+	clock = start - 1810
+	C:SiegeTick(clock)
+	check(#warned == 0, "not yet")
+	clock = start - 1800
+	C:SiegeTick(clock)
+	check(#warned == 1 and warned[1]:find("The Nexuses of Hillsbrad Foothills open at %d+ [AP]M"), "the call, outside the zone: "..table.concat(warned, "; "))
+	C:SiegeTick(clock + 5)
+	check(#warned == 1, "once")
+	clock = start - 1400
+	HUD:Update()
+	check(C:Holder("hb-mid-4") == "Horde", "a downed inhibitor stays down into the siege, past its respawn time")
+	C:Settings().siegeCall = false
+	clock = start
+	C:SiegeTick(clock)
+	check(#warned == 1 and C:Phase() == "round" and C:RoundOn(C.FRONTS[2]) and C:Siege().round.n == 1, "the window opens round 1, quietly with the siege call off")
+	C:Settings().siegeCall = true
+	mapId = 1424
+	-- A Nexus only falls in a round: six of us at the open Nexus, 120 samples at 6 a tick
+	px, py = 0.4985, 0.4468 -- the Alliance's Nexus, on the road into Southshore
+	check(not C:Taking(P("hb-horde")) and C:CanAttack("Horde", P("hb-alliance")), "our own Nexus isn't ours to take; theirs is open")
+	warned, told = {}, {}
+	Attack("hb-alliance", 5, 19)
+	check(C:Progress(P("hb-alliance")).n == 114 and C:Taking(P("hb-alliance")), "19 ticks in: "..C:Progress(P("hb-alliance")).n)
+	Attack("hb-alliance", 5, 1)
+	local fellAt = clock
+	local s = C:Siege()
+	check(C:Phase() == "truce" and s.wins.Horde == 1 and s.round.n == 2 and s.round.truceUntil == fellAt + C.TRUCE_SECONDS, "the Nexus falls: round 1 to the Horde, a 30-minute truce")
+	check(Warned("The Southshore Nexus has fallen | Round 1 to the Horde (provisional)"), "announced: "..table.concat(warned, "; "))
+	check(C:Holder("hb-mid-4") == "Alliance" and C:Holder("hb-mid-3") == "Alliance" and C:Progress(P("hb-alliance")).n == 0, "the front goes back to level")
+	check(told[#told].f == "hb-alliance" and told[#told].t == fellAt, "the channel hears when it fell")
+	check(bar.siege._text == "Truce 30:00 · Horde 1 Alliance 0", "the HUD's truce clock: "..bar.siege._text)
+	-- During the truce the presence message carries the fall for late joiners; a peer's newer time for the same fall
+	-- moves the truce clock, an older one doesn't
+	told = {}
+	clock = clock + 61
+	px, py = 0.503, 0.399 -- the Alliance's Mid Inhibitor
+	C:Sample()
+	check(told[1] and told[1].p == "hb-mid-4" and told[1].f == "hb-alliance" and told[1].t == fellAt, "the presence message repeats the fall")
+	C:OnPeer({ p = "hb-mid-4", s = Slot(), c = 1, f = "hb-alliance", t = fellAt + 20 }, "Siege Ally 9")
+	check(s.fellAt == fellAt + 20 and s.round.truceUntil == fellAt + 20 + C.TRUCE_SECONDS and s.wins.Horde == 1, "a peer's newer time wins the tie")
+	C:OnPeer({ p = "hb-mid-4", s = Slot(), c = 1, f = "hb-alliance", t = fellAt + 5 }, "Siege Ally 9")
+	check(s.fellAt == fellAt + 20, "an older one doesn't")
+	-- No Nexus progress in a truce, even with its inhibitor down
+	Attack("hb-mid-3", 6, 7)
+	Attack("hb-mid-4", 6, 7)
+	check(C:Holder("hb-mid-4") == "Horde", "a lane can fall in the truce")
+	px, py = 0.4985, 0.4468
+	Attack("hb-alliance", 5, 1)
+	check(C:Progress(P("hb-alliance")).n == 0 and not C:Taking(P("hb-alliance")) and bar.capture.text._text:find("only falls in a siege round", 1, true), "the Nexus doesn't: "..bar.capture.text._text)
+	-- The truce ends in round 2, announced with the map of the zone open from elsewhere
+	mapId = 1411
+	WorldMapFrame.IsShown = function() return true end
+	WorldMapFrame.GetMapID = function() return 1424 end
+	warned = {}
+	clock = s.round.truceUntil
+	C:SiegeTick(clock)
+	check(C:Phase() == "round" and Warned("Round 2 begins"), "round 2: "..table.concat(warned, "; "))
+	WorldMapFrame.IsShown = function() return false end
+	mapId = 1424
+	-- A win before the window's end earns another round even though its truce ends after it; that round is the last
+	-- and ends with no winner after a quiet quarter hour
+	Attack("hb-alliance", 5, 19)
+	clock = s["end"] - 80
+	Attack("hb-alliance", 5, 1)
+	check(s.wins.Horde == 2 and C:Phase() == "truce" and s.round.n == 3 and s.round.truceUntil > s["end"], "a second win at 9:59 earns round 3 after the window")
+	warned = {}
+	clock = s.round.truceUntil
+	C:SiegeTick(clock)
+	check(C:Phase() == "round" and Warned("Round 3 begins"), "round 3 begins after 10 PM")
+	clock = clock + 14 * 60
+	C:SiegeTick(clock)
+	check(C:Phase() == "round", "not over yet")
+	clock = clock + 60
+	warned = {}
+	C:SiegeTick(clock)
+	check(C:Phase() == "over" and Warned("The siege is over: Horde 2, Alliance 0"), "over after a quiet quarter hour: "..table.concat(warned, "; "))
+	HUD:Update()
+	check(bar.siege._text == "Siege over · Horde 2 Alliance 0", "the HUD's result: "..bar.siege._text)
+	-- The last round stops an hour after the window however the Nexus is going; the end outside the zone is quiet
+	local now = clock
+	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now, round = { n = 2, start = now - 600, truceUntil = 0, last = true }, wins = { h = 1, a = 0 } }, nil)
+	check(C:Phase() == "round" and C:Siege().round.n == 2, "the catch-up's round overrides")
+	mapId = 1411
+	warned = {}
+	for _ = 1, 11 do
+		clock = clock + 300
+		C:Siege().nexusAt = clock -- Nexus progress keeps coming
+		C:SiegeTick(clock)
+		check(C:Phase() == "round", "progress holds the last round open")
+	end
+	clock = clock + 300
+	C:Siege().nexusAt = clock
+	C:SiegeTick(clock)
+	check(C:Phase() == "over" and #warned == 0, "an hour after the window it's over, and quiet outside the zone")
+	mapId = 1424
+	clock = clock + 1 -- a new reading of where we are
+	-- The catch-up at login: a truce in progress, nothing already past announced again; a siege that ended
+	warned = {}
+	C:TakeSiege({ front = "ah", zone = "Arathi Highlands", start = clock - 3600, ["end"] = clock + 7200, round = { n = 2, start = clock + 600, truceUntil = clock + 600, last = false }, wins = { h = 0, a = 1 } }, nil)
+	C:SiegeTick(clock)
+	check(C:Phase() == "truce" and #warned == 0 and not C:RoundOn(C.FRONTS[1]), "a truce from the catch-up, quietly")
+	HUD:Update()
+	check(bar.siege._text == "Truce 10:00 · Horde 0 Alliance 1", "shown on every front's HUD: "..bar.siege._text)
+	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 2, a = 1 } }, nil)
+	C:SiegeTick(clock)
+	check(C:Phase() == "over" and #warned == 0 and not C:RespawnPaused(C.FRONTS[2]), "one that ended: over, respawns back on")
+	C:TakeSiege({ front = "xx", start = 1, ["end"] = 2 }, nil)
+	check(C:Phase() == nil, "an unknown front is no siege")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, siege = { front = "av", start = clock + 600, ["end"] = clock + 11400 }, frontWins = { av = { h = 1, a = 2 } } } }
+	ns.Catchup:Import()
+	check(C:Phase() == "before" and C:Siege().front.id == "av" and C:FrontWins(C.FRONTS[3]).Alliance == 2, "the catch-up passes the siege and the week's wins")
+	-- Development builds: /wanted siege now opens a 30-minute siege on the front the player stands in
+	warned = {}
+	clock = clock + 1
+	lines = ns:CapturePrints(function() ns:RunCommand("siege", "now") end)
+	check(C:Phase() == "round" and C:Siege().front.id == "hb" and C:Siege()["end"] == clock + 1800 and lines[1]:find("Test siege: Hillsbrad Foothills", 1, true), "a test siege here and now: "..tostring(lines[1]))
+	check(Warned("The siege of Hillsbrad Foothills has begun"), "and it opens: "..table.concat(warned, "; "))
+	mapId = 1411
+	clock = clock + 1
+	lines = ns:CapturePrints(function() ns:RunCommand("siege", "now") end)
+	check(lines[1]:find("Stand in a capture front", 1, true), "outside a front: "..tostring(lines[1]))
+	C:TakeSiege(nil, nil)
+	C:Take(nil)
+	C_Map, ns.Sync.SendPoint, ns.Alerts.Warn, ns.Enemies.EachNearby, PlaySound = real.C_Map, real.SendPoint, real.Warn, real.EachNearby, real.PlaySound
+	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
+	HUD:Update()
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

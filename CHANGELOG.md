@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Suggest a feature: `/wanted idea` (or Suggest a feature beside Report a bug) sends your idea to the developers
+  through the Wanted app; other players vote for it on wanteddeadordead.com/ideas.
+
 ## [1.23.2] - 2026-10-15
 
 - The count of players on the sync channel is no longer asked for during a fight, where the client blocks it

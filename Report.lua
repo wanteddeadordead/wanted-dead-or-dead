@@ -1,6 +1,6 @@
--- Wanted: bug reports and the beta welcome. An addon can't open a web page or send anything outside the
--- game, so a report the player sends (a bug, or a duel tip that looks wrong) waits in the saved data for the
--- desktop app to pass on to the developers.
+-- Wanted: bug reports, feature ideas and the beta welcome. An addon can't open a web page or send anything outside
+-- the game, so a report the player sends (a bug, a duel tip that looks wrong, or an idea for a feature) waits in
+-- the saved data for the desktop app to pass on to the developers.
 
 local _, Wanted = ...
 local Report = Wanted:NewModule("Report")
@@ -451,6 +451,14 @@ function Report:QueueBug(text)
 	return Report:Queue({ kind = "bug", text = text, log = out })
 end
 
+---Queues a feature idea: the player's words alone, no log. The app sends it on and other players vote for it on
+---wanteddeadordead.com/ideas.
+---@param text string
+---@return string? id
+function Report:QueueIdea(text)
+	return Report:Queue({ kind = "idea", text = text })
+end
+
 ---Lets go the reports the app says it has sent on (the catch-up's reportsReceived, read at every login).
 ---@param ids table? a list of report ids
 function Report:TakeReceived(ids)
@@ -519,7 +527,8 @@ function private.ShowFull()
 end
 
 ---Asks what's wrong, then queues the report and says where it goes.
----@param options table title, text, validate, over (as W:Dialog's), queue(text) -> id?
+---@param options table title, text, validate, over (as W:Dialog's), queue(text) -> id?, savedTitle (of the dialog
+---that says where it goes, default "Report saved")
 function private.Ask(options)
 	-- A second click while it asks does nothing (it would wait its turn behind this one)
 	if W:IsDialogShown() then
@@ -542,7 +551,7 @@ function private.Ask(options)
 				private.ShowFull()
 				return
 			end
-			W:Dialog({ title = "Report saved", text = private.SentText(), confirmLabel = "OK" })
+			W:Dialog({ title = options.savedTitle or "Report saved", text = private.SentText(), confirmLabel = "OK" })
 		end,
 	})
 end
@@ -568,6 +577,19 @@ function Report:AskAboutBug()
 			return private.Clip(text, MAX_TEXT) == "" and "Say what happened first." or nil
 		end,
 		queue = function(text) return Report:QueueBug(text) end,
+	})
+end
+
+---Asks the player what Wanted should do, and queues the idea for the developers.
+function Report:AskAboutIdea()
+	private.Ask({
+		title = "Suggest a feature",
+		text = "What should Wanted do? Other players can vote for it on wanteddeadordead.com/ideas.",
+		validate = function(text)
+			return private.Clip(text, MAX_TEXT) == "" and "Say what Wanted should do first." or nil
+		end,
+		queue = function(text) return Report:QueueIdea(text) end,
+		savedTitle = "Idea saved",
 	})
 end
 
@@ -632,6 +654,10 @@ end
 
 Wanted:RegisterCommand("bug", "Opens a bug report to send to the developers.", function()
 	Report:Show()
+end)
+
+Wanted:RegisterCommand("idea", "Suggests a feature to the developers.", function()
+	Report:AskAboutIdea()
 end)
 
 

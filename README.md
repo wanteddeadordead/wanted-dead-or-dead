@@ -3,8 +3,9 @@
 > **Under heavy development through the WoW Forever beta.** Expect frequent updates, and possible issues
 > while we work through the game's changes.
 
-> Found a problem or have an idea? Press **Report a bug** in the addon's title bar (or type `/wanted bug`):
-> it sends your report to the developers through the Wanted app.
+> Found a problem? Press **Report a bug** in the addon's title bar (or type `/wanted bug`): it sends your report
+> to the developers through the Wanted app. Have an idea? **Suggest a feature** beside it (or `/wanted idea`) sends
+> it the same way, and other players vote for it on wanteddeadordead.com/ideas.
 
 **The world PvP war on WoW Forever, as it's fought.** Which side holds each zone this week, the battles
 going on right now, who won the last one, and the price on every ganker's head. Counted from deaths other

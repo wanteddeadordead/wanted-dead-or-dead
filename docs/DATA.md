@@ -157,11 +157,11 @@ the network repo's `internal/linkaddon/duelreports.go`) and `eventsCut = true` w
 an older report comes back from the app without them, so the saved file holds at most 20 timelines.
 
 `WantedDB.reports` (added after 1.20.0) is what the player reported for the desktop app to send on to the developers
-(`Report.lua`), keyed `"<character>:report:<at>"`: `{ kind = "tip"|"bug", at,
+(`Report.lua`), keyed `"<character>:report:<at>"`: `{ kind = "tip"|"bug"|"idea", at,
 character, text, addonVersion }`, where `at` is whole server seconds (`GetServerTime()`; a second report in the same
 second takes the next free one), `character` the key's prefix: for a tip the character who fought the duel (its `id`
-before `":duel:"`, as the app's own tip reports name it; `Store:GetOrigin()` if the id doesn't parse), for a bug the
-character logged in. `text` is the player's words on one line without the game's escape codes (at most 500 letters,
+before `":duel:"`, as the app's own tip reports name it; `Store:GetOrigin()` if the id doesn't parse), for a bug or an
+idea the character logged in. `text` is the player's words on one line without the game's escape codes (at most 500 letters,
 counted in UTF-8 as the app and the server count them) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
 adds `duelId`, the finding's `rule` (at most 64 letters), `tip` (the finding's tip, or its text without one) and
 `finding` (its text), each at most 1,000 letters, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
@@ -170,7 +170,8 @@ faction and level; detection settings; the app and the network; signing and the 
 session's newest problems the recent lines don't have (`"<time> Problem: <text>"`), then the recent log lines, oldest
 first. At most 40 lines and 8 KB in all (a line and its break): the oldest recent lines are dropped first, keeping
 room for the problems, and if it's still over 8 KB the problems are dropped too, oldest first. Other players' names
-are left out throughout. At most 20 wait (the player is
+are left out throughout. An `"idea"` (Suggest a feature, /wanted idea) adds nothing: `text` is the idea, and the
+app forwards it unchanged for other players to vote on at wanteddeadordead.com/ideas. At most 20 wait (the player is
 told the queue is full), each at most 30 days (dropped at load). The app writes the ids it has sent on into the
 catch-up as `reportsReceived = { id, ... }`, read at every login (taken in or not) and dropped from the queue. A new
 top-level table: no migration.

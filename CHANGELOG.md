@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.3] - 2026-10-15
+
 - Suggest a feature: `/wanted idea` (or Suggest a feature above Report a bug at the foot of the menu) sends your idea
   to the developers through the Wanted app, the way a bug report goes.
 

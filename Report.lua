@@ -680,7 +680,7 @@ function Report:MaybeWelcome()
 		end
 		W:Dialog({
 			title = "Welcome, bounty hunter",
-			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug in the title bar (or /wanted bug) sends the details to the developers through the Wanted app.",
+			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug at the foot of the menu (or /wanted bug) sends the details to the developers through the Wanted app.",
 			confirmLabel = "Let's hunt",
 		})
 	end)

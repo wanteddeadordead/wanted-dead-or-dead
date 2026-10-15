@@ -11711,7 +11711,7 @@ end)()
 	_G.WantedDialog.frame.cancel:Click()
 	check(asked == 0, "a second click while it asks doesn't queue another")
 	_G.WantedBugReport:Hide()
-	-- Suggest a feature: /wanted idea (or the title bar's button beside Report a bug) asks what Wanted should do and
+	-- Suggest a feature: /wanted idea (or the foot of the menu, above Report a bug) asks what Wanted should do and
 	-- queues the idea alone, no log, for the app to send on
 	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	local queuedBefore = Report:CountQueued()
@@ -11730,7 +11730,7 @@ end)()
 	local ideaButton
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Suggest a feature" and f._scripts.OnClick then ideaButton = f break end end
 	ideaButton:Click()
-	check(OnScreen("What should Wanted do?"), "the title bar's Suggest a feature asks the same")
+	check(OnScreen("What should Wanted do?"), "the menu's Suggest a feature asks the same")
 	dialog.cancel:Click()
 	check(Report:CountQueued() == queuedBefore + 1, "Cancel queues nothing")
 	-- Saved data from before reports gets an empty queue (a new key: no layout change)

@@ -175,12 +175,6 @@ function private.Create()
 	local close = W:Button(titleBar, "X", "ghost", 30, 30, function() frame:Hide() end)
 	close:SetPoint("RIGHT", -10, 0)
 	W:AttachTooltip(close, "Close", "Escape also closes the window.")
-	local bug = W:Button(titleBar, "Report a bug", "ghost", 100, 26, function() Wanted.Report:Show() end)
-	bug:SetPoint("RIGHT", close, "LEFT", -6, 0)
-	W:AttachTooltip(bug, "Report a bug", "Builds a report to copy (versions, settings, errors, recent log) and shows where to send it.")
-	local idea = W:Button(titleBar, "Suggest a feature", "ghost", 120, 26, function() Wanted.Report:AskAboutIdea() end)
-	idea:SetPoint("RIGHT", bug, "LEFT", -6, 0)
-	W:AttachTooltip(idea, "Suggest a feature", "Tell the developers what Wanted should do. Other players vote for it on wanteddeadordead.com/ideas. Also /wanted idea.")
 
 	-- Two status lights: the desktop app, and the in-game WantedNet channel. No player count: an empty count
 	-- early on only tells people nobody uses Wanted.
@@ -206,7 +200,7 @@ function private.Create()
 	private.netStatus = Indicator(150, function()
 		UI:Show(Wanted.db.settings.showTools and "tools" or "settings")
 	end)
-	private.netStatus:SetPoint("RIGHT", idea, "LEFT", -10, 0)
+	private.netStatus:SetPoint("RIGHT", close, "LEFT", -10, 0)
 	private.appStatus = Indicator(140, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 
@@ -269,6 +263,28 @@ function private.Create()
 	private.LayoutNav()
 	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
+	-- Report a bug and Suggest a feature stay in reach with the Tools page hidden, and off the title bar, which the
+	-- status lights fill: the foot of the menu, above the version
+	local function Foot(label, bottom, onClick, tooltip)
+		local row = CreateFrame("Button", nil, sidebar)
+		row:SetSize(SIDEBAR_WIDTH - 1, 34)
+		row:SetPoint("BOTTOMLEFT", 0, bottom)
+		row.bg = Theme:Fill(row, C.transparent)
+		row.line = Theme:Line(row)
+		row.line:SetPoint("TOPLEFT", 16, 0)
+		row.line:SetPoint("TOPRIGHT", -16, 0)
+		row.label = Theme:Text(row, "body", label, C.amber)
+		row.label:SetPoint("LEFT", 22, 0)
+		row:SetScript("OnClick", onClick)
+		row:SetScript("OnEnter", function(self) self.bg:SetColorTexture(1, 1, 1, 0.035) end)
+		row:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0, 0, 0, 0) end)
+		W:AttachTooltip(row, label, tooltip)
+		return row
+	end
+	private.bugButton = Foot("Report a bug", 34, function() Wanted.Report:Show() end,
+		"Builds a report to copy (versions, settings, errors, recent log) and shows where to send it. Also /wanted bug.")
+	private.ideaButton = Foot("Suggest a feature", 68, function() Wanted.Report:AskAboutIdea() end,
+		"Tell the developers what Wanted should do. Other players vote for it on wanteddeadordead.com/ideas. Also /wanted idea.")
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)

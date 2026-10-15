@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.2] - 2026-10-15
+
 - The count of players on the sync channel is no longer asked for during a fight, where the client blocks it
   ("The client blocked ListChannelByName()"); the request waits until the fight is over.
 

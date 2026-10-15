@@ -320,7 +320,7 @@ local mapOpened
 function OpenWorldMap(mapId) mapOpened = mapId end
 -- The world map's pin system, enough to drive a data provider
 function CreateFromMixins(...) local t = {} for _, m in ipairs({ ... }) do for k, v in pairs(m) do t[k] = v end end return t end
-MapCanvasPinMixin = { CheckMouseButtonPassthrough = function(self) self:SetPassThroughButtons() end, SetPassThroughButtons = function() error("protected: SetPassThroughButtons") end, SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType) self._levelType = levelType end, SetPosition = function(self, x, y) self._x, self._y = x, y end, GetMap = function() return WorldMapFrame end }
+MapCanvasPinMixin = { CheckMouseButtonPassthrough = function(self) self:SetPassThroughButtons() end, SetPassThroughButtons = function() error("protected: SetPassThroughButtons") end, SetScalingLimits = function() end, UseFrameLevelType = function(self, levelType, index) self._levelType, self._levelIndex = levelType, index end, SetPosition = function(self, x, y) self._x, self._y = x, y end, GetMap = function() return WorldMapFrame end }
 MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, GetMap = function(self) return self.owningMap end }
 local insertedLevel
 WorldMapFrame = NewMock()
@@ -972,7 +972,7 @@ end
 end)()
 WantedDeadOrDead_OnCompartmentEnter(nil, NewMock())
 -- The world map: markers come through the map's own pin system, in their own layer under group members
-check(insertedLevel == "PIN_FRAME_LEVEL_WANTED_ENEMY below PIN_FRAME_LEVEL_GROUP_MEMBER", "own map layer, got "..tostring(insertedLevel))
+check(insertedLevel == nil, "no level of our own added to the map's table (it taints the game's pins), got "..tostring(insertedLevel))
 ns.MapPins:Refresh()
 local markedEnemies = 0
 for _, p in ipairs(WorldMapFrame.pins) do markedEnemies = markedEnemies + #p.group.members end
@@ -980,7 +980,7 @@ check(markedEnemies >= 40 and #WorldMapFrame.pins < markedEnemies, "enemies seen
 local pin = WorldMapFrame.pins[1]
 for _, p in ipairs(WorldMapFrame.pins) do if #p.group.members > 1 then pin = p end end
 check(pin.Count._text ~= "" and tonumber(pin.Count._text) == #pin.group.members, "a merged marker shows its count")
-check(pin._levelType == "PIN_FRAME_LEVEL_WANTED_ENEMY" and pin._x > 0 and pin._x < 1, "marker in our layer at a map position")
+check(pin._levelType == "PIN_FRAME_LEVEL_WORLD_QUEST" and pin._levelIndex == 400 and pin._x > 0 and pin._x < 1, "marker in the world quests' unused band at a map position")
 pin:OnMouseEnter()
 pin:OnMouseLeave()
 -- An enemy named in a PvP death is marked where it happened, even one never seen here (a zone known from other

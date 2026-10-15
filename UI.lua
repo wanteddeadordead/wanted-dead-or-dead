@@ -284,7 +284,7 @@ function private.Create()
 	private.bugButton = Foot("Report a bug", 34, function() Wanted.Report:Show() end,
 		"Builds a report to copy (versions, settings, errors, recent log) and shows where to send it. Also /wanted bug.")
 	private.ideaButton = Foot("Suggest a feature", 68, function() Wanted.Report:AskAboutIdea() end,
-		"Tell the developers what Wanted should do. Other players vote for it on wanteddeadordead.com/ideas. Also /wanted idea.")
+		"Tells the developers what Wanted should do, through the Wanted app. Also /wanted idea.")
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)

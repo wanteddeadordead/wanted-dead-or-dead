@@ -36,7 +36,7 @@ function private.BuildNetwork(container, width)
 	W:AttachTooltip(bug, "Report a bug", "Sends a report to the developers through the Wanted app. Also /wanted bug.")
 	local idea = W:Button(card, "Suggest a feature", "ghost", 120, 26, function() Wanted.Report:AskAboutIdea() end)
 	idea:SetPoint("RIGHT", bug, "LEFT", -6, 0)
-	W:AttachTooltip(idea, "Suggest a feature", "Tell the developers what Wanted should do; other players vote for it on wanteddeadordead.com/ideas. Also /wanted idea.")
+	W:AttachTooltip(idea, "Suggest a feature", "Tells the developers what Wanted should do, through the Wanted app. Also /wanted idea.")
 
 end
 

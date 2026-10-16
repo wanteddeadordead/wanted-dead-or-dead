@@ -116,6 +116,12 @@ function private.Position(mapId)
 	return floor(pos.x * 1000 + 0.5) / 10, floor(pos.y * 1000 + 0.5) / 10
 end
 
+---The zone map we're on, for the layer reading (Shard).
+---@return number?
+function Rally:ZoneMap()
+	return private.ZoneMap()
+end
+
 ---Whether a zone map says we've left our rally's zone. None (underground, a loading screen) says nothing.
 function private.Left(mapId)
 	return mapId ~= nil and mapId ~= private.mine.mapId

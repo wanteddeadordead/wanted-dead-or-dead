@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Everything the Wanted app carries says so when there is no app: saving a calling card and uploading your poster
+  now say it, as the challenges and Home already did, with where to get it and what to do (start it, then /reload).
 - Opening or refreshing the world map in a fight no longer fills the chat with "The client blocked
   Button:SetPassThroughButtons()": Wanted's map markers no longer add a layer of their own to the map's layer table,
   which tainted the game's own markers.

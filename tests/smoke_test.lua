@@ -5131,6 +5131,11 @@ end)()
 	check(Shown("Get the Wanted app to track challenges") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges"), "no app: get the app on Home")
 	ns.UI:Show("challenges")
 	check(Shown("Get the Wanted app to track challenges") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
+	-- Every page that needs the app says so: the calling card can't be saved without it (Home and Challenges already do)
+	ns.UI:Show("card")
+	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
+		"no app: the card page says saving needs the app")
+	ns.UI:Show("challenges")
 	-- The app's version alone says it's there (an app that wrote no catch-up yet)
 	WantedAppInfo = { running = "0.2.26" }
 	ns.UI:Refresh()

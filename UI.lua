@@ -374,7 +374,13 @@ function UI:Show(key)
 	if key and private.pageByKey[key] then
 		private.current = key
 	end
-	private.current = private.UsablePage(private.current or Wanted.db.settings.lastPage)
+	-- The first open since login goes to the page remembered, except that Home, the Dashboard now, gives way to the
+	-- Siege page: the window's main page (the Dashboard is one click away, and opens by its key as ever)
+	local remembered = Wanted.db.settings.lastPage
+	if remembered == "home" then
+		remembered = "siege"
+	end
+	private.current = private.UsablePage(private.current or remembered)
 	Wanted.db.settings.lastPage = private.current
 	for _, def in ipairs(private.pages) do
 		def.container:SetShown(def.key == private.current)

@@ -1,5 +1,5 @@
 -- Wanted: Home, the Dashboard in the menu (the Siege page opens first): what's happening now. Your challenge rank and daily streak, today's
--- challenge and hot zones, world PvP raids (yours, the one you signed up for, the ones forming: click to join), and a
+-- challenge, the hot zone and the next siege evenings (click for the Siege page), world PvP raids (yours, the one you signed up for, the ones forming: click to join), and a
 -- strip of what's going on: your bounty money, enemies nearby, the busiest zone and the latest kill or sighting. Every
 -- card opens its page; this week's challenges are on Progress. Challenges come from the Wanted app (Challenges.lua);
 -- without it the top shows what the app adds, and the raids and the strip still work.
@@ -189,6 +189,27 @@ function private.BuildHot(container, width, index)
 	card.big:SetText("2x")
 	card.big:SetPoint("BOTTOMRIGHT", -12, 8)
 	private.hot[index] = card
+end
+
+---The upcoming sieges, in the second hot zone's place: the next three evenings, each its day, hour and front (or that
+---it's to be picked); opens the Siege page.
+function private.BuildUpcoming(container, width)
+	local cardWidth = floor((width - DAILY_WIDTH - 2 * GAP) / 2)
+	local card = W:CardButton(container, function() UI:Show("siege") end)
+	card:SetPoint("TOPLEFT", DAILY_WIDTH + GAP + cardWidth + GAP, CARD_TOP)
+	card:SetSize(cardWidth, CARD_HEIGHT)
+	W:AttachTooltip(card, "Upcoming sieges", "The next siege evenings and their fronts. Opens the Siege page.")
+	card.label = W:SectionLabel(card, "Upcoming sieges")
+	card.label:SetPoint("TOPLEFT", 16, -14)
+	card.lines = {}
+	for i = 1, 3 do
+		local line = Theme:Text(card, "small", "", C.text)
+		line:SetPoint("TOPLEFT", 16, -38 - (i - 1) * 22)
+		line:SetWidth(cardWidth - 32)
+		line.fitWidth = cardWidth - 32
+		card.lines[i] = line
+	end
+	private.upcoming = card
 end
 
 ---The raids row: up to three cards (the raid you lead or joined first, then the ones forming).
@@ -457,6 +478,23 @@ function private.RefreshHot(data, byZone)
 end
 
 
+---The upcoming sieges card: "Fri 7 PM · Hillsbrad Foothills", "Sat 7 PM · to be picked"; nothing known, said so.
+function private.RefreshUpcoming()
+	local card = private.upcoming
+	local Captures = Wanted.Captures
+	if not Captures:Siege() then
+		card.lines[1]:SetText("No siege picked yet")
+		private.Fit(card.lines[2], { Theme:Colorize("Picked each evening the day before", C.muted), Theme:Colorize("Picked the evening before", C.muted) }, "tiny")
+		card.lines[3]:SetText("")
+		return
+	end
+	for i, evening in ipairs(Captures:Evenings(#card.lines)) do
+		local day, hour = date("%a", evening.day), Wanted.CapturesHUD:HourText(evening.start)
+		local front = evening.front and evening.front.zone or Theme:Colorize("to be picked", C.muted)
+		private.Fit(card.lines[i], { format("%s %s · %s", day, hour, front), format("%s · %s", day, front) }, "tiny")
+	end
+end
+
 function private.RefreshStrip()
 	local summary = Wanted.Model:GetMySummary()
 	local hunting = Theme:Money(summary.hunting)
@@ -544,6 +582,7 @@ function private.Refresh()
 	end
 	private.band:SetShown(shown)
 	private.daily:SetShown(shown)
+	private.upcoming:SetShown(shown)
 	for _, card in ipairs(private.hot) do
 		card:SetShown(shown)
 	end
@@ -552,6 +591,7 @@ function private.Refresh()
 		private.RefreshBand(data, mine)
 		private.RefreshDaily(data, mine)
 		private.RefreshHot(data, private.HotspotsByZone(Wanted.Hotspots:Get()))
+		private.RefreshUpcoming()
 		if Challenges:IsDemo() then
 			private.footer:SetText("Demo challenges, made up to show the page. /wanted demo again to turn them off.")
 		else
@@ -575,7 +615,7 @@ UI:RegisterPage("home", {
 		private.BuildBand(container, width)
 		private.BuildDaily(container)
 		private.BuildHot(container, width, 1)
-		private.BuildHot(container, width, 2)
+		private.BuildUpcoming(container, width)
 		private.BuildRaids(container, width)
 		private.BuildStrip(container, width)
 	end,

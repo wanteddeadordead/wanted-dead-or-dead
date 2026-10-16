@@ -54,6 +54,7 @@ Mock.__index = function(t, k)
 	return function() return NewMock() end
 end
 function Methods:SetScript(name, f) self._scripts[name] = f end
+function Methods:SetAlpha(a) self._alpha = a end
 function Methods:Play() self._playing = true end
 function Methods:Stop() self._playing = false end
 function Methods:IsPlaying() return self._playing == true end
@@ -14196,6 +14197,7 @@ end)()
 	local lostTower
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
 	check(lostTower and lostTower.icon._texture == "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\tower-a", "a Horde tower the Alliance took shows the Alliance's painted tower: "..tostring(lostTower and lostTower.icon._texture))
+	check(lostTower and lostTower.icon._alpha == 0.55, "and faded, as a point its home side lost: "..tostring(lostTower and lostTower.icon._alpha))
 	-- Nobody is taking anything: no piece flashes (a false compared with nil once made every piece flash, 2026-10-16)
 	local flashing = 0
 	for _, b in ipairs(buttons) do if b.flash and b.flash._playing then flashing = flashing + 1 end end

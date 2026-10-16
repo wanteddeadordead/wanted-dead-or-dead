@@ -195,7 +195,7 @@ Captures.POINTS = points
 
 function Captures:OnLoad()
 	-- The presence book, for the app: "point:slot:guid" -> { g = GUID, n = name, f = side, p = point id, s = slot,
-	-- c = samples }
+	-- c = samples, l = our layer of the zone at the last sample (Shard), left out while it isn't known }
 	Wanted.db.presence = type(Wanted.db.presence) == "table" and Wanted.db.presence or {}
 	private.Prune(GetServerTime())
 	-- What the site last said of each point, as the addon showed it: { week, [id] = holder }, to tell what changed since
@@ -518,6 +518,7 @@ function private.Count(pointId, now)
 		book[key] = entry
 	end
 	entry.c = min(entry.c + 1, MAX_SAMPLES)
+	entry.l = Wanted.Shard:Current() or entry.l
 	return entry
 end
 

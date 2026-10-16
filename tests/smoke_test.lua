@@ -688,6 +688,22 @@ check(#stealthEvents == 2, "and just after its nameplate was removed")
 clock = clock + 5
 Fire("UNIT_SPELLCAST_SUCCEEDED", "nameplate1", "cast", 26889)
 check(#stealthEvents == 2, "but not long after, when the token may be someone else")
+-- In a fight the client refuses CheckInteractDistance (every call an "Interface action failed because of an AddOn",
+-- the siege of 2026-10-16): the distance isn't asked then, and is again once the fight is over
+do
+	local asked, real = 0, CheckInteractDistance
+	CheckInteractDistance = function(...) asked = asked + 1 return real(...) end
+	enemyUnits.nameplate4 = { guid = "Player-9-INFIGHT", name = "Close Fighter", class = "WARRIOR", level = 25, close = true }
+	inCombat = true
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate4")
+	check(asked == 0, "in a fight the distance isn't asked of the client, asked "..asked)
+	inCombat = false
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate4")
+	check(asked >= 1, "out of the fight it is")
+	CheckInteractDistance = real
+	enemyUnits.nameplate4 = nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate4")
+end
 enemyUnits.nameplate1 = stabUnit
 Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
 -- The game hides enemy spells (a secret value) and doesn't report Stealth or Vanish at all: the nameplate just

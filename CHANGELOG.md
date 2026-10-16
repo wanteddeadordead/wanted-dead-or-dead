@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- No more "Interface action failed because of an AddOn" in a fight: the Nearby window no longer asks the client how
+  close an enemy is while you are in combat (the client refuses that call there); the last answer before the fight
+  stands for telling stealth from walking away.
+
 ## [1.23.5] - 2026-10-16
 
 - Sync across realm names no longer starves. Each minute one realm link per realm name gets the full list of what

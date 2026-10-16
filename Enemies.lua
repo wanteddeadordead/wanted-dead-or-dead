@@ -452,8 +452,13 @@ function private.StealthKind(spellID)
 	return kind
 end
 
----Whether a unit is within about 28 yards; nil when the game won't say.
+---Whether a unit is within about 28 yards; nil when the game won't say. Not asked in a fight: the client refuses
+---CheckInteractDistance then (ADDON_ACTION_BLOCKED, "Interface action failed because of an AddOn", the siege of
+---2026-10-16), and a pcall doesn't stop the block; the last answer before the fight stands (closeAt).
 function private.IsClose(unit)
+	if InCombatLockdown and InCombatLockdown() then
+		return nil
+	end
 	local ok, close = pcall(CheckInteractDistance, unit, CLOSE_DISTANCE_INDEX)
 	return ok and private.Readable(close) or nil
 end

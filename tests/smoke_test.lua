@@ -2068,15 +2068,10 @@ do
 		local full, keep = Haves()
 		check(#full == 1 and not turns[full[1]], "minute "..minute..": the full have goes to one link of the realm name, one not served yet: "..table.concat(full, ","))
 		turns[full[1] or "?"] = minute
-		-- A keepalive goes only to a link not messaged for two minutes: never one served this minute or the last
-		for _, name in ipairs(keep) do
-			check(turns[name] == nil or turns[name] < minute - 1, "minute "..minute..": no keepalive to "..name..", served in minute "..tostring(turns[name]))
-		end
-		if minute == 3 then
-			local served = false
-			for _, name in ipairs(keep) do if turns[name] == 1 then served = true end end
-			check(served, "minute 3: the link served in minute 1 gets a one-part keepalive: "..table.concat(keep, ","))
-		end
+		-- The two not served this minute get a one-part keepalive (a minute without a word would risk the link)
+		local other = 0
+		for _, name in ipairs(keep) do if name ~= full[1] then other = other + 1 end end
+		check(#keep == 2 and other == 2, "minute "..minute..": the other two links get a one-part keepalive: "..table.concat(keep, ","))
 	end
 	-- An origin both links hold is asked of one at a time: the second have for it within a minute and a half waits
 	ClearSent()
@@ -3495,23 +3490,26 @@ end)()
 	ClearSent()
 	local chains = {}
 	for _, name in ipairs({ "Chain A", "Chain B", "Chain C", "Chain D", "Chain E", "Chain F", "Chain G", "Chain H" }) do chains[name] = 3 end
-	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = chains, b = { "Chain H", "Chain G" } }), "CHANNEL", "Bounty Peer", nil, nil, nil, "WantedNetHorde")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = chains, o = { "Chain H", "Chain G" } }), "CHANNEL", "Bounty Peer", nil, nil, nil, "WantedNetHorde")
 	RunTimers()
 	local need
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then need = m.tbl.n end end
 	local count = 0
 	for _ in pairs(need or {}) do count = count + 1 end
 	check(need and count == 5 and need["Chain H"] == 1 and need["Chain G"] == 1, "the origins with open bounties are asked for first, "..count.." asked")
-	-- Our own hello names the open bounties' posters among what we hold
+	-- Our own hello names the open bounties' posters among what we hold (o: b is the Blizzard rank)
 	ClearSent()
 	ns.Sync:SayHello()
 	local hello
 	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
-	local poster = nil
-	for bounty in ns.Bounties:OpenIterator() do if hello.c[bounty.origin] then poster = bounty.origin break end end
-	local named = false
-	for _, origin in ipairs(hello and hello.b or {}) do if origin == poster then named = true end end
-	check(hello and (poster == nil or named), "our hello names an open bounty's poster: "..tostring(poster))
+	local poster = next(hello.c)
+	local openIterator = ns.Bounties.OpenIterator
+	ns.Bounties.OpenIterator = function() local done = false return function() if done then return nil end done = true return { origin = poster } end end
+	ClearSent()
+	ns.Sync:SayHello()
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
+	ns.Bounties.OpenIterator = openIterator
+	check(type(hello.o) == "table" and #hello.o == 1 and hello.o[1] == poster, "our hello names an open bounty's poster: "..tostring(poster))
 	-- Every five minutes or so, what we hold is said again on the channel, so late arrivals keep asking
 	ClearSent()
 	clock = clock + 400

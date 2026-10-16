@@ -70,6 +70,7 @@ DeathCard.lua
 Emotes.lua
 NearbyWindow.lua
 PageHome.lua
+PageSiege.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua

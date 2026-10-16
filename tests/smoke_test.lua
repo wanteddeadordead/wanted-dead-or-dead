@@ -15652,6 +15652,165 @@ end)()
 	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
 	clock = startClock
 end)()
+-- The layer lines: Nearby's rally line (the target layer with Hop; the rally leader told to lead from it; the rally
+-- when we're on the layer), the Hotspots page (each zone's layer, and our own zone's line with Hop) and the Siege
+-- page's Tonight card (the siege's layer with Hop); and a host's refusals in a raid without invite rights, in an
+-- instance, or dead
+;(function()
+	local Shard, C, Sync, Store = ns.Shard, ns.Captures, ns.Sync, ns.Store
+	local startClock = clock
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn, Here = ns.Rally.Here, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
+		UnitInParty = UnitInParty, C_PartyInfo = C_PartyInfo, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown }
+	local best = 1
+	C_Map = { GetBestMapForUnit = function() return best end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
+		GetMapInfo = function(id) if id == 1415 or id == 2 then return { mapType = 2 } end return { mapType = 3, parentMapID = id == 1 and 2 or 1415 } end }
+	GetZoneText = function() return best == 1424 and "Hillsbrad Foothills" or "Durotar" end
+	ns.Alerts.Warn = function() end
+	WorldMapFrame.IsShown = function() return false end
+	local inGroup, invited = {}, {}
+	IsInGroup = function() return next(inGroup) ~= nil end
+	UnitInParty = function(n) return inGroup[n] or nil end
+	C_PartyInfo = { InviteUnit = function(name) invited[#invited + 1] = name end, LeaveParty = function() wipe(inGroup) end }
+	local function On(f)
+		local on, p = f._shown, f._parent
+		while on and p do on, p = p._shown, p._parent end
+		return on
+	end
+	local function Plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+	local function shows(text, exact)
+		for _, f in ipairs(Mock.fontStrings) do
+			if type(f._text) == "string" and On(f) then
+				local plain = Plain(f._text)
+				if exact and plain == text or not exact and plain:find(text, 1, true) then return true end
+			end
+		end
+		return false
+	end
+	local msgs = 0
+	local function Ask(sender)
+		msgs = msgs + 1
+		Fire("CHAT_MSG_ADDON", "WNTD", "O:ul"..msgs..":1/1:"..Sync:Encode({ a = 1 }), "WHISPER", sender)
+		for i = #addonSent, 1, -1 do
+			local m = addonSent[i]
+			if m.chatType == "WHISPER" and m.target == sender and m.text:sub(1, 2) == "O:" then
+				return Sync:Decode(m.text:match("^%u:%w+:%d+/%d+:(.*)$")).r
+			end
+		end
+	end
+	local HB = "Hillsbrad Foothills"
+	local L = function(n) return "4615-1-"..n end
+	local n = 0
+	local function Look(key)
+		n = n + 1
+		enemyUnits.mouseover = { guid = format("Creature-0-%s-%d-%010X", key, 7000 + n, n), npc = true }
+		Fire("UPDATE_MOUSEOVER_UNIT", "mouseover")
+		enemyUnits.mouseover = nil
+	end
+	clock = clock + 14401
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C:TakeSiege(nil, nil)
+	Shard:TakeLayers(nil)
+	-- Nearby's rally line
+	local nearbyPrivate
+	for i = 1, 60 do
+		local name, value = debug.getupvalue(ns.NearbyWindow.Refresh, i)
+		if name == "private" then nearbyPrivate = value break end
+		if not name then break end
+	end
+	ns.NearbyWindow:SetShown(true)
+	ns.Rally.Here = function() return nil end
+	ns.NearbyWindow:Refresh()
+	local line = nearbyPrivate.rally
+	check(not line:IsShown(), "no rally and no target: no line")
+	Shard:TakeLayers({ Durotar = { active = L(571), since = clock } })
+	ns.NearbyWindow:Refresh()
+	check(line:IsShown() and Plain(line.text._text) == "The fight is on layer 571, yours isn't read yet" and line.hop:IsShown() and line.hop._text == "Hop", "the target layer, ours unread, with Hop: "..tostring(line.text._text))
+	for _ = 1, 3 do Look(L(573)) end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text) == "The fight is on layer 571, you're on 573" and line.hop:IsShown(), "ours read: "..tostring(line.text._text))
+	ns.Rally.Here = function() return { name = "Grimshaw", class = "HUNTER", x = 50, y = 60 } end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text) == "The fight is on layer 571, you're on 573" and line.hop:IsShown(), "a rally here: the target line still, one line only")
+	ns.Rally.Here = function() return { name = "Test Player", mine = true } end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text) == "You lead the rally here: lead from layer 571" and not line.hop:IsShown(), "the rally leader is told to lead from it, no Hop: "..tostring(line.text._text))
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for _ = 1, 3 do Look(L(571)) end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text) == "You lead the rally here" and not line.hop:IsShown(), "on it, the leader's line is the rally's: "..tostring(line.text._text))
+	ns.Rally.Here = function() return { name = "Grimshaw", class = "HUNTER", x = 50, y = 60 } end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text):find("Rally: Grimshaw", 1, true) and not line.hop:IsShown(), "on it, the rally shows: "..tostring(line.text._text))
+	ns.Rally.Here = function() return nil end
+	ns.NearbyWindow:Refresh()
+	check(Plain(line.text._text) == "You're on the fight's layer" and not line.hop:IsShown(), "on it without a rally: said: "..tostring(line.text._text))
+	ns.Rally.Here = real.Here
+	ns.NearbyWindow:SetShown(false) -- its Hop would show up in the pages' checks below
+	-- The Hotspots page: a zone with a known layer says it; our own zone's line, with Hop
+	Store:UpdatePlayer("Player-9-HBROW", { name = "Hills Rower", class = "ROGUE", level = 30, faction = "Alliance", zone = HB, mapId = 1424 })
+	Shard:TakeLayers({ Durotar = { active = L(571), since = clock }, [HB] = { active = L(575), since = clock } })
+	ns.UI:Show("hotspots")
+	check(shows("on layer 575") and shows("You're on the fight's layer") and not shows("Hop", true), "Hotspots: Hillsbrad's layer on its row; our zone's line, on it: "..tostring(shows("on layer 575")))
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for _ = 1, 3 do Look(L(573)) end
+	ns.UI:Refresh(true)
+	check(shows("The fight is on layer 571, you're on 573") and shows("Hop", true), "off it: the line with Hop")
+	best = 1424
+	clock = clock + 1
+	Fire("ZONE_CHANGED_NEW_AREA")
+	ns.UI:Refresh(true)
+	check(shows("The fight is on layer 575, yours isn't read yet"), "a new zone: its line at once")
+	Shard:TakeLayers(nil)
+	ns.UI:Refresh(true)
+	check(shows("No fight layer known in Hillsbrad Foothills yet.") and not shows("Hop", true), "nothing known: said, no Hop")
+	-- The Siege page's Tonight card: the siege's layer with Hop
+	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
+	ns.UI:Show("siege")
+	check(shows("The siege's layer isn't picked yet.") and not shows("Hop", true), "the siege's layer not picked: said, no Hop")
+	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = L(581), layerSince = clock }, nil)
+	ns.UI:Refresh(true)
+	check(shows("The siege is on layer 581, yours isn't read yet") and shows("Hop", true), "picked: the line with Hop")
+	for _ = 1, 3 do Look(L(581)) end
+	ns.CapturesHUD:Update() -- the HUD's own Hop goes too
+	ns.UI:Refresh(true)
+	check(shows("You're on the siege's layer") and not shows("Hop", true), "on it: said, no Hop")
+	best = 1
+	clock = clock + 1
+	Fire("ZONE_CHANGED_NEW_AREA")
+	ns.CapturesHUD:Update()
+	ns.UI:Refresh(true)
+	check(shows("The siege is on layer 581") and not shows("yours isn't read yet") and not shows("Hop", true), "from another zone: the siege's layer alone, no Hop")
+	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 1, a = 0 }, layer = L(581), layerSince = clock }, nil)
+	ns.UI:Refresh(true)
+	check(not shows("The siege is on layer 581") and not shows("isn't picked yet"), "over: no layer line")
+	C:TakeSiege(nil, nil)
+	ns.UI:Show("home")
+	-- A host in a raid without invite rights, in an instance, or dead refuses and says why
+	Shard:Settings().host = true
+	addonSent = {}
+	inGroup.Member = true
+	IsInRaid = function() return true end
+	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant = function() return false end, function() return false end
+	check(Ask("Hopper Raid") == "cant" and #invited == 0, "a raid member without invite rights can't host")
+	_G.UnitIsGroupAssistant = function() return true end
+	check(Ask("Hopper Raid Two") == "ok" and invited[1] == "Hopper Raid Two", "a raid assistant can")
+	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant = nil, nil
+	IsInRaid = real.IsInRaid
+	wipe(inGroup)
+	local realInstance = IsInInstance
+	IsInInstance = function() return true, "party" end
+	check(Ask("Hopper Inst") == "instance" and #invited == 1, "in an instance: refused, said")
+	IsInInstance = realInstance
+	enemyUnits.player = { dead = true }
+	check(Ask("Hopper Dead") == "dead" and #invited == 1, "dead: refused, said")
+	enemyUnits.player = nil
+	Shard:Settings().host = false
+	-- Put back
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C_Map, GetZoneText, ns.Alerts.Warn, ns.Rally.Here = real.C_Map, real.GetZoneText, real.Warn, real.Here
+	IsInGroup, IsInRaid, UnitInParty, C_PartyInfo, WorldMapFrame.IsShown = real.IsInGroup, real.IsInRaid, real.UnitInParty, real.C_PartyInfo, real.IsShown
+	clock = startClock
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

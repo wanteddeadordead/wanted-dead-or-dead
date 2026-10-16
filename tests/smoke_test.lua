@@ -54,6 +54,9 @@ Mock.__index = function(t, k)
 	return function() return NewMock() end
 end
 function Methods:SetScript(name, f) self._scripts[name] = f end
+function Methods:Play() self._playing = true end
+function Methods:Stop() self._playing = false end
+function Methods:IsPlaying() return self._playing == true end
 function Methods:GetScript(name) return self._scripts[name] end
 function Methods:SetVerticalScroll(v) self._vscroll = v Mock.lastScrolled = self end
 function Methods:GetVerticalScroll() return self._vscroll or 0 end
@@ -14193,6 +14196,10 @@ end)()
 	local lostTower
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
 	check(lostTower and lostTower.icon._texture == "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\tower-a", "a Horde tower the Alliance took shows the Alliance's painted tower: "..tostring(lostTower and lostTower.icon._texture))
+	-- Nobody is taking anything: no piece flashes (a false compared with nil once made every piece flash, 2026-10-16)
+	local flashing = 0
+	for _, b in ipairs(buttons) do if b.flash and b.flash._playing then flashing = flashing + 1 end end
+	check(flashing == 0, "no piece flashes while nobody is taking it, got "..flashing)
 	waypoint = nil
 	buttons[1]:Click()
 	check(waypoint and waypoint.uiMapID == 1424 and superTracked == true, "clicking a point sets and tracks a waypoint")

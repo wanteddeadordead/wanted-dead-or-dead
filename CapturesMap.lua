@@ -81,7 +81,7 @@ end
 function CapturesMap:SetIcon(texture, point)
 	local holder = Captures:Holder(point.id)
 	local lost = holder ~= point.home
-	local taking = Captures:Taking(point) ~= nil
+	local taking = Captures:Taking(point)
 	local kind = Captures:Kind(point)
 	texture:SetVertexColor(1, 1, 1, 1)
 	texture:SetTexCoord(0, 1, 0, 1)

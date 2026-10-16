@@ -21,19 +21,14 @@ CapturesMap.COLORS = COLORS
 -- confirm in game: both are textures of the client's Mainline family.
 local CREST = { Horde = "Interface\\Timer\\Horde-Logo", Alliance = "Interface\\Timer\\Alliance-Logo" }
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
--- The battlegrounds' map icons (Interface\\Minimap\\POIIcons, by index through C_Minimap.GetPOITextureCoords, as
--- Blizzard's SharedMapPoiTemplates draw them; the indices are Alterac Valley's, read off the texture as the Forever
--- CDN has it): each side's tower and graveyard, the grey ones nobody holds, and the half-coloured ones a side is
--- assaulting. A Nexus is its side's crest (atlases AllianceSymbol / HordeSymbol, in the client's atlas table).
-local POI_FILE = "Interface\\Minimap\\POIIcons"
-local POI = {
-	tower = { Alliance = 11, Horde = 10, lost = 6, assaulted = { Alliance = 9, Horde = 12 } },
-	inhibitor = { Alliance = 15, Horde = 13, lost = 8, assaulted = { Alliance = 4, Horde = 14 } },
-}
-CapturesMap.POI = POI
-local NEXUS_ATLAS = { Alliance = "AllianceSymbol", Horde = "HordeSymbol" }
--- Sizes as a share of the map's width
-local LINE_WIDTH, ICON_SIZE, NEXUS_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.024, 0.034, 0.04, 0.04
+-- The pieces on the map, painted for the site's war table (Media\\pieces, 64 px BLPs with alpha): a wax seal on each
+-- Nexus and a tower or a crystal (the inhibitor) on each lane point, in its holder's colour, so a lost tower shows as
+-- the other side's. A taken Nexus is its seal greyed. The battlegrounds' flash plays on a point our side is taking.
+local PIECES = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\"
+local SIDE = { Alliance = "a", Horde = "h" }
+CapturesMap.PIECES = PIECES
+-- Sizes as a share of the map's width (the pieces carry a little clear padding, so they draw larger than the old icons)
+local LINE_WIDTH, ICON_SIZE, NEXUS_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.032, 0.042, 0.04, 0.04
 local MAP_TYPE_WORLD = Enum and Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
 -- The minimap's dots: how often they move, and their size in pixels
@@ -81,28 +76,23 @@ function CapturesMap:ColorOf(point)
 	return COLORS[Captures:Holder(point.id)]
 end
 
----Sets a texture to a point's battleground icon: its side's tower or graveyard, the grey one once its side lost it, the
----assaulted one while our side is taking it; a Nexus as its side's crest, greyed once taken. Returns whether its side
----lost it, and whether our side is taking it.
+---Sets a texture to a point's piece: its holder's tower or crystal (so a lost one shows as the other side's); a Nexus
+---as its home side's seal, greyed once taken. Returns whether its side lost it, and whether our side is taking it.
 function CapturesMap:SetIcon(texture, point)
 	local holder = Captures:Holder(point.id)
 	local lost = holder ~= point.home
-	local attacker = Captures:Taking(point) and UnitFactionGroup("player") or nil
-	texture:SetVertexColor(1, 1, 1, 1)
+	local taking = Captures:Taking(point) ~= nil
 	local kind = Captures:Kind(point)
+	texture:SetVertexColor(1, 1, 1, 1)
+	texture:SetTexCoord(0, 1, 0, 1)
 	if kind == "nexus" then
-		texture:SetAtlas(NEXUS_ATLAS[point.home])
+		texture:SetTexture(PIECES.."nexus-"..SIDE[point.home])
 		texture:SetDesaturated(lost)
-		return lost, attacker ~= nil
+	else
+		texture:SetTexture(PIECES..kind.."-"..(SIDE[holder] or SIDE[point.home]))
+		texture:SetDesaturated(false)
 	end
-	local set = POI[kind]
-	local index = attacker and set.assaulted[attacker] or lost and set.lost or set[holder]
-	texture:SetTexture(POI_FILE)
-	if C_Minimap and C_Minimap.GetPOITextureCoords then
-		texture:SetTexCoord(C_Minimap.GetPOITextureCoords(index))
-	end
-	texture:SetDesaturated(false)
-	return lost, attacker ~= nil
+	return lost, taking
 end
 
 

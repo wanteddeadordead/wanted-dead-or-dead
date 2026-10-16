@@ -1062,20 +1062,22 @@ function private.WaypointIsOurs()
 	return current.uiMapID == ours.mapId and type(x) == "number" and type(y) == "number" and abs(x - ours.x) < 0.001 and abs(y - ours.y) < 0.001
 end
 
----With the setting on, keeps the waypoint on the nearest point in the player's front that our side may attack. Never
----replaces a waypoint the player set.
-function Captures:AutoTrack()
-	if not Captures:Settings().autoTrack or not private.WaypointIsOurs() then
-		return
-	end
-	local _, x, y, mapId = Wanted.Recorder:GetPosition()
-	local front, yards = Captures:FrontOn(mapId), MAP_YARDS[mapId]
-	if not front or not x then
-		return
-	end
-	local side, best, bestDistance = UnitFactionGroup("player"), nil, nil
+---The point of a front nearest a place on its map (0 to 100), among those a filter allows (every point without one),
+---and how far it is in yards; without a place, the first allowed point from the Horde base. nil when none is allowed.
+---@param front table
+---@param x number?
+---@param y number?
+---@param filter fun(point: table): boolean?
+---@return table? point
+---@return number? yards
+function Captures:Nearest(front, x, y, filter)
+	local yards = MAP_YARDS[front.mapId]
+	local best, bestDistance
 	for _, point in ipairs(points) do
-		if point.front == front and Captures:CanAttack(side, point) then
+		if point.front == front and (not filter or filter(point)) then
+			if type(x) ~= "number" or type(y) ~= "number" then
+				return point, nil
+			end
 			local dx, dy = (x - point.x) / 100 * yards[1], (y - point.y) / 100 * yards[2]
 			local distance = dx * dx + dy * dy
 			if not bestDistance or distance < bestDistance then
@@ -1083,6 +1085,22 @@ function Captures:AutoTrack()
 			end
 		end
 	end
+	return best, bestDistance and math.sqrt(bestDistance) or nil
+end
+
+---With the setting on, keeps the waypoint on the nearest point in the player's front that our side may attack. Never
+---replaces a waypoint the player set.
+function Captures:AutoTrack()
+	if not Captures:Settings().autoTrack or not private.WaypointIsOurs() then
+		return
+	end
+	local _, x, y, mapId = Wanted.Recorder:GetPosition()
+	local front = Captures:FrontOn(mapId)
+	if not front or not x then
+		return
+	end
+	local side = UnitFactionGroup("player")
+	local best = Captures:Nearest(front, x, y, function(point) return Captures:CanAttack(side, point) end)
 	if best and (not private.ours or private.ours.id ~= best.id) then
 		Captures:Track(best)
 	end

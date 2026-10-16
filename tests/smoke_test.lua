@@ -15182,11 +15182,29 @@ end)()
 	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
 	clock = clock + 1
 	Rallying("Grimshaw", B)
-	-- Hosting: an ask gets an invite (the Raids module's) and "ok"; in a fight, full, dead or with hosting off, why not
+	-- Hosting is on while we lead a group or the rally, else only with the setting on: an ask gets an invite (the Raids
+	-- module's) and "ok"; in a fight, full, dead or with hosting off, why not
 	addonSent, invited = {}, {}
+	check(Shard:Settings().host == false and not Shard:Hosting(), "hosting is off by default, leading nothing")
 	Hear("O", { a = 1 }, "WHISPER", "Hopper")
 	local answerTo, answer = LastWhisper("O")
+	check(#invited == 0 and answerTo == "Hopper" and answer.r == "off", "leading nothing, with the setting off: not hosting, said: "..tostring(answer and answer.r))
+	inGroup.Member = true
+	_G.UnitIsGroupLeader = function() return true end
+	check(Shard:Hosting(), "leading a group: hosting")
+	_G.UnitIsGroupLeader = function() return false end
+	check(not Shard:Hosting(), "a group member who doesn't lead it: not hosting")
+	_G.UnitIsGroupLeader = nil
+	wipe(inGroup)
+	local realMine = ns.Rally.Mine
+	ns.Rally.Mine = function() return {} end
+	check(Shard:Hosting(), "leading the rally: hosting")
+	Hear("O", { a = 1 }, "WHISPER", "Hopper")
+	answerTo, answer = LastWhisper("O")
 	check(invited[1] == "Hopper" and answerTo == "Hopper" and answer.r == "ok" and Said("Inviting Hopper to your group"), "an ask is invited and told ok: "..tostring(answer and answer.r))
+	ns.Rally.Mine = realMine
+	Shard:Settings().host = true
+	check(Shard:Hosting(), "the setting on: hosting while leading nothing")
 	Hear("O", { a = 1 }, "WHISPER", "Hopper")
 	answerTo, answer = LastWhisper("O")
 	check(#invited == 1 and answer.r == "busy", "asked again at once: not invited twice")
@@ -15206,7 +15224,7 @@ end)()
 	Hear("O", { a = 1 }, "WHISPER", "Hopper Two")
 	answerTo, answer = LastWhisper("O")
 	check(#invited == 1 and answer.r == "off", "hosting off invites nobody")
-	Shard:Settings().host = true
+	Shard:Settings().host = false -- the default
 	-- Accepting: the invite from our host alone, within the time; a stranger's is left to the player
 	clock = clock + 31
 	addonSent = {}
@@ -15312,7 +15330,7 @@ end)()
 	check(bar.hop:IsShown() and bar.hop._text == "You're on the siege's layer" and not bar.hopButton:IsShown(), "on it: said, without a button: "..tostring(bar.hop._text))
 	ns.Captures:TakeSiege(nil, nil)
 	-- The settings, and /wanted shard
-	check(Shard:Settings().host == true and Shard:Settings().accept == true, "hosting and auto-accept are on by default")
+	check(Shard:Settings().host == false and Shard:Settings().accept == true, "hosting is off by default (on while leading), auto-accept on")
 	best = 1
 	Rallying("Grimshaw", B)
 	RunTimers()

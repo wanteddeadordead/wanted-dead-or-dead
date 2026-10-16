@@ -5360,12 +5360,14 @@ end)()
 	check(moneyLine, "no zero amounts on the bounty money card")
 	ns.Challenges:SetDemo(nil)
 
-	-- The window remembers its page; a page switched off falls back to Home
+	-- The window remembers its page; a page switched off falls back to the Siege page, the window's first
 	ns.UI:Show("hotspots")
 	check(db.settings.lastPage == "hotspots", "the page shown is remembered")
 	db.settings.showTools = false
 	ns.UI:Show("tools")
-	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "a hidden page opens Home instead")
+	check(db.settings.lastPage == "siege" and ns.UI:IsShown("siege"), "a hidden page opens the Siege page instead")
+	ns.UI:Show("home")
+	check(ns.UI:IsShown("home") and db.settings.lastPage == "home", "Home, the Dashboard now, still opens by its key and is remembered as home")
 	check(not Shown("WORLD PVP") and not Shown("BATTLEGROUNDS") and Shown("Bounties") and Shown("Progress") and Shown("You"),
 		"the menu is one short list, with no group headings")
 	-- The calling card and the poster are tabs of You now, not buttons at the menu's foot
@@ -5867,8 +5869,8 @@ end)()
 		end
 		return n
 	end
-	local calendarTabs, homeTabs = Count("Calendar"), Count("Home")
-	check(calendarTabs == 1 and homeTabs == 1 and Count("Challenges") == 1, "the calendar shows Progress's tabs, and Home's menu entry: "..calendarTabs.." "..homeTabs)
+	local calendarTabs, homeTabs = Count("Calendar"), Count("Dashboard")
+	check(calendarTabs == 1 and homeTabs == 1 and Count("Challenges") == 1, "the calendar shows Progress's tabs, and Home's menu entry (Dashboard): "..calendarTabs.." "..homeTabs)
 	check(Count("Your wanted poster") == 0, "no poster button at the menu's foot on the calendar")
 	ns.UI:Show("home")
 	check(ns.UI:IsShown("home") and not Shown("Calendar"), "Home has no tabs now")
@@ -7738,17 +7740,17 @@ end)()
 	UI:Show("home")
 	local labels = {}
 	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
-	check(table.concat(labels, ", ") == "Home, Bounties, Enemies, Raids, Poker, Progress, You", "the six menu entries, and Poker from the poker addon: "..table.concat(labels, ", "))
+	check(table.concat(labels, ", ") == "Siege, Dashboard, Bounties, Enemies, Raids, Poker, Progress, You", "the menu entries, Siege first and Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
 	local function selected()
 		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Home", poker = "Poker" }) do
+		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Dashboard", siege = "Siege", poker = "Poker" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
-		if entry ~= "Home" and entry ~= "Raids" and entry ~= "Poker" then
+		if entry ~= "Dashboard" and entry ~= "Siege" and entry ~= "Raids" and entry ~= "Poker" then
 			check(tabs and tabs.selected == key, key.."'s tab is selected")
 		end
 	end
@@ -14486,8 +14488,10 @@ end)()
 	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
 	HUD:Update()
 end)()
--- The siege card at the top of Home: nothing known, before the window (the window, a countdown, what to do, the
--- buttons), a round, a truce and the result with the lanes and the rally leader, and this week's siege wins per front
+-- The Siege page, the window's first: tonight's siege (nothing known, before the window with the countdown and
+-- what to do, a round, a truce and the result with the lanes and the rally leader), the results with tonight's rounds
+-- and the week's wins per front, the three fronts with their lanes' holders and waypoints, the rules, and the
+-- website's addresses to copy
 ;(function()
 	local C = ns.Captures
 	local real = { C_Map = C_Map, UiMapPoint = UiMapPoint, C_SuperTrack = C_SuperTrack, Leader = UnitIsGroupLeader, Rally = ns.Rally,
@@ -14507,57 +14511,81 @@ end)()
 		while on and p do on, p = p._shown, p._parent end
 		return on
 	end
+	local function Plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
 	local function shows(text, exact)
 		for _, f in ipairs(Mock.fontStrings) do
 			if type(f._text) == "string" and On(f) then
-				local plain = f._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+				local plain = Plain(f._text)
 				if exact and plain == text or not exact and plain:find(text, 1, true) then return true end
 			end
 		end
 		return false
 	end
-	local function click(label)
+	local function box(url)
+		for _, f in ipairs(Mock.created) do
+			if f._kind == "EditBox" and f._text == url and On(f) then return true end
+		end
+		return false
+	end
+	local function click(label, nth)
+		local n = 0
 		for _, f in ipairs(Mock.fontStrings) do
-			if f._text == label and On(f) and f._parent:GetScript("OnClick") then f._parent:Click() return true end
+			if f._text == label and On(f) and f._parent:GetScript("OnClick") then
+				n = n + 1
+				if n == (nth or 1) then f._parent:Click() return true end
+			end
 		end
 		return false
 	end
 	local function fits()
 		for _, fs in ipairs(Mock.fontStrings) do
 			if rawget(fs, "fitWidth") and fs._text ~= "" and On(fs) and not fs._wrap then
-				check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for the siege card: "..fs._text)
+				check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for the Siege page: "..fs._text)
 			end
 		end
 	end
-	-- No siege known: the one text, and the week's wins only once a front has any
+	local function Subtitle()
+		for _, f in ipairs(Mock.fontStrings) do
+			if On(f) and type(f._text) == "string" and f._text:find("^Hillsbrad Foothills, ") then return f._text end
+		end
+	end
+	-- No siege known: the header says so, the one text, the results and fronts without wins, the rules and the links
 	C:Take(nil)
 	C:TakeSiege(nil, nil)
-	ns.UI:Show("home")
-	check(shows("Siege nights", true) and shows("picks each evening's front the day before") and not shows("Open the map") and not shows("no wins yet"),
-		"no siege: Siege nights, how it's picked, no buttons and no wins")
+	ns.UI:Show("siege")
+	check(ns.UI:IsShown("siege") and shows("Siege", true) and shows("No siege picked yet", true), "the Siege page: its title, and no siege picked yet")
+	check(shows("picks each evening's front the day before") and not shows("Go to the front") and shows("No siege tonight yet.") and shows("no wins yet")
+		and shows("no siege wins this week yet"), "no siege: how it's picked, no buttons, nothing to show in the results or on the fronts")
+	check(shows("HOW IT WORKS") and shows("One front a night.") and shows("Taking a point.") and shows("Rounds.") and shows("Who decides."), "the rules, in full")
+	check(box("https://wanteddeadordead.com/rules#points") and box("https://wanteddeadordead.com/sieges") and box("https://wanteddeadordead.com/war"), "the website's addresses to copy")
+	check(shows("THE FRONTS") and shows("Hillsbrad Foothills", true) and shows("Arathi Highlands", true) and shows("Ashenvale", true)
+		and shows("Top: Horde 2 · Alliance 2   Mid: Horde 2 · Alliance 2   Bot: Horde 2 · Alliance 2"), "the fronts, with their lanes level")
+	check(click("Go there") and waypoint and waypoint.uiMapID == 1417 and abs(waypoint.position.x - 0.5655) < 0.001, "Go there on Arathi: a waypoint on its first point our side can attack")
+	check(click("Open the map", 2) and mapOpened == 1424, "Open the map on Hillsbrad opens its map")
 	C:TakeSiege(nil, { hb = { h = 3, a = 1 } })
 	ns.UI:Refresh(true)
-	check(shows("Siege nights", true) and shows("SIEGE WINS THIS WEEK") and shows("Hillsbrad Foothills", true) and shows("Horde 3") and shows("Alliance 1")
-		and shows("no wins yet"), "the week's wins per front once any are known, no wins yet for the rest")
+	check(shows("THIS WEEK") and shows("Horde 3 · Alliance 1") and shows("Horde 3 · Alliance 1 this week") and shows("no wins yet"), "the week's wins per front in the results and on the front")
 	fits()
-	-- Before the window: the window and the countdown, what to do, the lanes closed, the map and the front buttons
+	-- Before the window: the header and the label, the window pill and the countdown, what to do, the lanes closed,
+	-- the next siege, the map and the front buttons
 	local start = clock + 21 * 3600 + 40 * 60
 	local before = #tickers
-	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 } }, { hb = { h = 3, a = 1 } })
+	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 }, next = { front = "av", start = start + 86400, ["end"] = start + 86400 + 3 * 3600 } }, { hb = { h = 3, a = 1 } })
 	ns.UI:Refresh(true)
-	check(shows("Siege: Hillsbrad Foothills", true) and shows("Opens in 21:40") and shows("Break a lane before") and shows("they stay down from"),
-		"before the window: the front, the countdown in hours and minutes, and what to do")
-	local pill = false
-	for _, f in ipairs(Mock.fontStrings) do
-		if On(f) and (f._text:find("^%a%a%a %d+ to %d+ [AP]M$") or f._text:find("^%a%a%a %d+ [AP]M to %d+ [AP]M$")) then pill = true end
-	end
-	check(pill, "the pill carries the window, with its day as the test's clock isn't today")
-	check(shows(date("%a", start), true), "the siege front's wins row is marked with the siege's day")
-	check(shows("Top", true) and shows("Mid", true) and shows("Bot", true) and shows("closed") and not shows("open", true), "the three lanes, both Nexuses closed")
-	check(shows("Open the map", true) and shows("Go to the front", true) and not shows("Lead the rally") and not shows("Set waypoint") and #tickers == before,
+	local subtitle = Subtitle()
+	check(subtitle and (subtitle:find("^Hillsbrad Foothills, %a%a%a %d+ to %d+ [AP]M$") or subtitle:find("^Hillsbrad Foothills, %a%a%a %d+ [AP]M to %d+ [AP]M$")), "the header: the front and its window: "..tostring(subtitle))
+	check(shows("NEXT: "..string.upper(date("%A", start)), true) and shows("Opens in 21:40") and shows("Break a lane before") and shows("they stay down from"),
+		"before the window: the day (the test's clock isn't today), the countdown in hours and minutes, and what to do")
+	check(shows("Then: Ashenvale, "), "the siege after it, from the catch-up")
+	check(shows(string.upper(date("%a", start)), true) and shows(date("%a", start), true), "the front's rows are marked with the siege's day")
+	check(shows("Top", true) and shows("Mid", true) and shows("Bot", true) and shows("closed", true) and not shows("open", true), "the three lanes, both Nexuses closed")
+	check(shows("Open the map", true) and shows("Go to the front", true) and not shows("Lead the rally") and not shows("Set waypoint") and not shows("same layer") and #tickers == before,
 		"the map and the front buttons, no rally without the module, no ticker with over an hour to go")
+	check(shows(date("%A", start)..": not started."), "the results: not started")
+	waypoint = nil
 	check(click("Go to the front") and waypoint and waypoint.uiMapID == 1424 and abs(waypoint.position.x - 0.508) < 0.001 and abs(waypoint.position.y - 0.351) < 0.001,
 		"Go to the front: a waypoint on the nearest point our side can attack")
+	mapOpened = nil
 	check(click("Open the map") and mapOpened == 1424, "Open the map opens the front's map")
 	fits()
 	-- Under an hour: minutes and seconds on a one-second ticker, which stops with the window closed
@@ -14569,30 +14597,30 @@ end)()
 	check(shows("Opens in 40:11"), "the ticker moves it")
 	ns.UI:GetFrame():Hide()
 	tickers[#tickers]()
-	ns.UI:Show("home")
-	check(#tickers == before + 3, "closed, the ticker stops; opening Home starts one again (with the window's own)")
-	-- A round: the pill and the score, a lane broken opens a Nexus, a point being taken says so when hovered
+	ns.UI:Show("siege")
+	check(#tickers == before + 3, "closed, the ticker stops; opening the page starts one again (with the window's own)")
+	-- A round: the pill and the score, a lane broken opens a Nexus and shows on the front's line, a point being taken
+	-- says so when hovered
 	C:Take({ ["hb-mid-3"] = { h = "H", t = clock }, ["hb-mid-4"] = { h = "H", t = clock } })
 	clock = start
 	C:SiegeTick(clock)
 	ns.UI:Refresh(true)
-	check(shows("Round 1", true) and shows("Horde 0") and shows("Alliance 0") and not shows("Opens in") and not shows("Break a lane"),
-		"the window opens: Round 1 and the score")
-	check(shows("open", true) and shows("closed", true), "the Alliance Nexus is open with its Mid inhibitor down, the Horde's closed")
-	for i = 1, 3 do C:OnPeer({ p = "hb-top-3", s = math.floor(clock / C.SLOT_SECONDS), c = 1 }, "Home Ally "..i) end
+	check(shows("Round 1", true) and shows("Horde 0 · Alliance 0") and not shows("Opens in") and not shows("Break a lane"), "the window opens: Round 1 and the score")
+	check(shows("open", true) and shows("closed", true) and shows("Mid: Horde 4 · Alliance 0"), "the Alliance Nexus is open with its Mid inhibitor down, the Horde's closed; the front's line says the lane is broken")
+	for i = 1, 3 do C:OnPeer({ p = "hb-top-3", s = math.floor(clock / C.SLOT_SECONDS), c = 1 }, "Siege Page Ally "..i) end
 	clock = clock + 30
 	C:Sample()
 	local lines, icon = {}, nil
 	for _, f in ipairs(Mock.created) do
-		-- The card's icon, not the map's button for the point (which carries a respawn timer)
+		-- The page's icon, not the map's button for the point (which carries a respawn timer)
 		if rawget(f, "point") == C:Get("hb-top-3") and f._scripts.OnEnter and not rawget(f, "timer") then icon = f end
 	end
 	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
 	icon._scripts.OnEnter(icon)
 	GameTooltip.AddLine = nil
 	check(icon and table.concat(lines, "|"):find("Being taken by the Horde: 3 of 40", 1, true), "hovering a lane icon: its progress toward being taken: "..table.concat(lines, "|"))
-	-- The rally: as the group's leader on the front with none live, Lead the rally; a leader live, their line and a
-	-- waypoint on them (the module stands in: it's on its own branch)
+	-- The rally: as the group's leader on the front with none live, Lead the rally; a leader live, their line, the layer
+	-- note and a waypoint on them (the module stands in: it's on its own branch)
 	local claimed = false
 	ns.Rally = { Holder = function() return nil end, Claim = function() claimed = true return nil end }
 	UnitIsGroupLeader = function() return true end
@@ -14602,7 +14630,8 @@ end)()
 	local leader = { name = "Grimshaw", class = "ROGUE", zone = "Hillsbrad Foothills", mapId = 1424, x = 52.3, y = 30.9, heard = clock }
 	ns.Rally.Holder = function(_, m) return m == 1424 and leader or nil end
 	ns.UI:Refresh(true)
-	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and not shows("Lead the rally"), "a rally live: who leads it and where, with Set waypoint")
+	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and shows("Join the leader's raid to fight on the same layer.") and not shows("Lead the rally"),
+		"a rally live: who leads it and where, the layer note, and Set waypoint")
 	waypoint = nil
 	check(click("Set waypoint") and waypoint and abs(waypoint.position.x - 0.523) < 0.001 and abs(waypoint.position.y - 0.309) < 0.001, "Set waypoint puts it on the leader")
 	leader.mine = true
@@ -14610,14 +14639,17 @@ end)()
 	check(shows("You lead the rally at Darrow Hill") and not shows("Set waypoint"), "our own rally: said so, no waypoint on ourselves")
 	ns.Rally, UnitIsGroupLeader = real.Rally, real.Leader
 	fits()
-	-- A truce, with its clock; the result
-	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, round = { n = 2, start = clock + 600, truceUntil = clock + 600 }, wins = { h = 1, a = 0 } }, nil)
+	-- A Nexus falls (a peer's word): the round in the results with its time, the truce's clock
+	C:OnPeer({ p = "hb-mid-4", s = math.floor(clock / C.SLOT_SECONDS), c = 1, f = "hb-alliance", t = clock }, "Siege Page Ally 9")
 	ns.UI:Refresh(true)
-	check(shows("Truce 10:00", true) and shows("Horde 1") and shows("Alliance 0") and shows("Go to the front", true), "a truce: its clock and the score")
+	check(shows("Truce 30:00", true) and shows("Horde 1 · Alliance 0") and shows("Round 1 to the Horde: the Southshore Nexus fell at ")
+		and not shows("Rounds before you logged in"), "a Nexus falls: the truce clock, the score, and the round in the results")
+	-- The catch-up's wins outnumber the rounds seen: said so; the result
 	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 2, a = 1 } }, nil)
 	C:SiegeTick(clock)
 	ns.UI:Refresh(true)
-	check(shows("Over", true) and shows("Horde 2") and shows("Alliance 1") and not shows("Go to the front") and shows("Open the map", true), "over: the result, the map still")
+	check(shows("Over", true) and shows("Horde 2 · Alliance 1") and shows("(over)") and shows("Rounds before you logged in aren't listed") and not shows("Go to the front") and shows("Open the map", true),
+		"over: the result, the rounds not seen noted, the map still")
 	fits()
 	C:TakeSiege(nil, nil)
 	C:Take(nil)

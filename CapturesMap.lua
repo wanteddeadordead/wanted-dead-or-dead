@@ -90,9 +90,12 @@ function CapturesMap:SetIcon(texture, point)
 	if kind == "nexus" then
 		texture:SetTexture(PIECES.."nexus-"..SIDE[point.home])
 		texture:SetDesaturated(lost)
+		texture:SetAlpha(1)
 	else
+		-- A point its home side lost shows its taker's piece, faded, as the site draws it: up or down at a glance
 		texture:SetTexture(PIECES..kind.."-"..(SIDE[holder] or SIDE[point.home]))
 		texture:SetDesaturated(false)
+		texture:SetAlpha(lost and 0.55 or 1)
 	end
 	return lost, taking
 end

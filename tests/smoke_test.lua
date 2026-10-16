@@ -15059,6 +15059,7 @@ end)()
 	end
 	local function Hear(tag, tbl, how, sender)
 		Fire("CHAT_MSG_ADDON", "WNTD", Msg(tag, tbl), how, sender, nil, nil, nil, how == "CHANNEL" and channelName or nil)
+		RunFrames() -- a hello waits out any background work
 	end
 	local function LastWhisper(tag)
 		for i = #addonSent, 1, -1 do
@@ -15127,6 +15128,7 @@ end)()
 	check(Shard:IsOther("Grimshaw") and Shard:IsOther("Thrall"), "both are in our zone on another layer")
 	Rallying("Grimshaw", A)
 	check(not Shard:IsOther("Grimshaw"), "on ours: not another")
+	clock = clock + 1 -- heard after Thrall
 	Rallying("Grimshaw", B)
 	-- Nearby's rally line says so, with Hop
 	local nearbyPrivate
@@ -15139,15 +15141,16 @@ end)()
 	ns.NearbyWindow:Refresh()
 	local line = nearbyPrivate.rally
 	check(line:IsShown() and line.text._text:find("Grimshaw", 1, true) and not line.hop:IsShown(), "the rally line names the leader; no fight layer known, so no Hop: "..tostring(line.text._text))
-	-- The hop: who to ask, and when we can't
-	local host, why, layer = Shard:HopTarget()
-	check(host == "Grimshaw" and layer == B and why == nil, "the rally leader is the host to ask")
+	-- The hop: to the zone's target layer only, and when we can't
+	check(Shard:Hop():find("No fight layer is known in Durotar", 1, true), "no target: no hop, said: "..tostring(Shard:Hop()))
+	Shard:TakeLayers({ Durotar = { active = B, since = clock } })
+	check(Shard:Target("Durotar") == B, "the site's word names Durotar's fight layer")
 	Fire("PLAYER_REGEN_DISABLED")
 	check(Shard:Hop():find("fight", 1, true), "no hop in a fight")
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
 	inGroup.Someone = true
-	check(Shard:Hop():find("leave it first", 1, true), "nor in a group")
+	check(Shard:Hop():find("leave your group first", 1, true), "nor in a group")
 	wipe(inGroup)
 	local realInstance = IsInInstance
 	IsInInstance = function() return true, "party" end
@@ -15156,20 +15159,29 @@ end)()
 	enemyUnits.player = { dead = true }
 	check(Shard:Hop():find("dead", 1, true), "nor while dead")
 	enemyUnits.player = nil
-	-- Asking: a whisper to the leader; their refusal in a fight moves the ask to the next host on that layer
+	ns:RunCommand("hop", "Thrall")
+	check(Said("Hops go to the fight's layer only") and Shard:Hopping() == nil, "/wanted hop Name is gone: "..tostring(printed[#printed]))
+	-- Asking: a whisper to the Wanted player of our side heard latest on the target layer here; a refusal says why and
+	-- moves the ask to the next one; none left, the hop is over
 	addonSent = {}
-	check(Shard:Hop() == nil and Said("Asking Grimshaw for an invite"), "the ask goes to the leader: "..tostring(printed[#printed]))
+	check(Shard:Hop() == nil and Said("Asking Grimshaw for an invite onto layer 501"), "the ask goes to the one heard latest on the layer: "..tostring(printed[#printed]))
 	local target, ask = LastWhisper("O")
 	check(target == "Grimshaw" and ask and ask.a == 1, "by addon whisper")
-	check(Shard:Hop():find("already hopping", 1, true), "one hop at a time")
+	check(Shard:Hop():find("already hopping to layer 501", 1, true), "one hop at a time")
 	Hear("O", { r = "combat" }, "WHISPER", "Grimshaw")
 	check(Said("Grimshaw couldn't invite (in combat)") and Said("Asking Thrall instead"), "a refusal says why and asks the next host on that layer: "..tostring(printed[#printed]))
 	target, ask = LastWhisper("O")
 	check(target == "Thrall" and ask.a == 1 and Shard:Hopping().host == "Thrall", "the ask goes to them")
 	Hear("O", { r = "zzz" }, "WHISPER", "Grimshaw")
 	check(Shard:Hopping() and Shard:Hopping().host == "Thrall", "an answer from someone we didn't ask changes nothing")
-	Hear("O", { r = "full" }, "WHISPER", "Thrall")
-	check(Said("Thrall couldn't invite (their group is full)") and Shard:Hopping() == nil, "nobody else to ask: the hop is over")
+	Hear("O", { r = "cant" }, "WHISPER", "Thrall")
+	check(Said("Thrall couldn't invite (not their group's leader or an assistant)") and Shard:Hopping() == nil, "nobody else to ask: the hop is over")
+	Rallying("Grimshaw", A)
+	Hear("H", { c = {}, l = A, lm = 1 }, "CHANNEL", "Thrall")
+	check(Shard:Hop():find("No one on layer 501 can invite you yet", 1, true), "nobody heard on the target layer: said, "..tostring(Shard:Hop()))
+	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
+	clock = clock + 1
+	Rallying("Grimshaw", B)
 	-- Hosting: an ask gets an invite (the Raids module's) and "ok"; in a fight, full, dead or with hosting off, why not
 	addonSent, invited = {}, {}
 	Hear("O", { a = 1 }, "WHISPER", "Hopper")
@@ -15209,41 +15221,51 @@ end)()
 	inGroup.Grimshaw = true
 	printed = {}
 	Fire("GROUP_ROSTER_UPDATE")
-	check(Said("You joined Grimshaw's group, the rally leader's") and Said("Staying in it") and not Shard:Holding(), "the rally leader's group is kept: "..tostring(printed[#printed]))
+	check(Said("You joined Grimshaw's group, the rally leader's: it takes you to layer 501") and Said("Staying in it") and not Shard:Holding(), "the rally leader's group is kept: "..tostring(printed[#printed]))
 	RunTimers()
 	check(left == 0 and Shard:Hopping() == nil, "and not left")
 	wipe(inGroup)
-	-- A host who isn't the rally leader: held twenty seconds, then left, with the move checked against the creatures
+	-- One hop every ten minutes
 	clock = clock + 31
 	local function OnA() for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end end
 	OnA()
-	check(Shard:HopTo("Thrall", B) == nil and Shard:Hopping().from == A, "hopping to another host remembers the layer we leave")
+	check(Shard:Hop():find("One hop every 10 minutes: your next is allowed in 10 min", 1, true), "a second hop within ten minutes waits: "..tostring(Shard:Hop()))
+	-- Ten minutes on: a host who isn't the rally leader, heard latest on the layer; held twenty seconds, then left, with
+	-- the move checked against the creatures
+	local function Later()
+		clock = clock + 601
+		Shard:TakeLayers({ Durotar = { active = B, since = clock } })
+		Rallying("Grimshaw", B)
+		clock = clock + 1
+		Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
+		OnA()
+	end
+	Later()
+	check(Shard:Hop() == nil and Shard:Hopping().host == "Thrall" and Shard:Hopping().from == A, "ten minutes on, the hop asks Thrall, heard latest on the layer, and remembers the layer we leave")
 	Fire("PARTY_INVITE_REQUEST", "Thrall")
 	inGroup.Thrall = true
 	Fire("GROUP_ROSTER_UPDATE")
-	check(Said("Leaving it in 20 seconds") and Shard:Holding() and Shard:Current() == nil, "joined: holding, the old layer's creatures forgotten")
+	check(Said("it takes you to layer 501. Leaving it in 20 seconds") and Shard:Holding() and Shard:Current() == nil, "joined: holding, the old layer's creatures forgotten")
 	ns.NearbyWindow:Refresh()
-	check(line.hop:IsShown() and line.hop._text == "Stay", "the rally line's button is Stay while holding")
+	check(line.hop:IsShown() and line.hop._text == "Stay" and line.text._text:find("In Thrall's group for layer 501: leaving it in 20 s", 1, true), "the rally line says so, with Stay: "..tostring(line.text._text))
 	check(warned[#warned] and warned[#warned]:find("LAYER HOP Leaving Thrall's group in 20 s", 1, true), "the countdown at the top of the screen: "..tostring(warned[#warned]))
 	for _ = 1, 3 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
 	RunTimers()
-	check(left == 1 and Said("Moved to Thrall's layer") and Shard:Hopping() == nil, "the creatures say we moved: the group is left after the hold: "..tostring(printed[#printed]))
+	check(left == 1 and Said("Moved to layer 501") and Shard:Hopping() == nil, "the creatures say we moved: the group is left after the hold: "..tostring(printed[#printed]))
 	-- Still on the old layer at the watchdog: said, and left
 	wipe(inGroup)
-	clock = clock + 31
-	OnA()
-	check(Shard:HopTo("Thrall", B) == nil, "hopping again")
+	Later()
+	check(Shard:Hop() == nil, "hopping again")
 	Fire("PARTY_INVITE_REQUEST", "Thrall")
 	inGroup.Thrall = true
 	Fire("GROUP_ROSTER_UPDATE")
-	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	OnA()
 	RunTimers()
 	check(left == 2 and Said("still on your old layer") and Shard:Hopping() == nil, "the move didn't happen: said, and the group left: "..tostring(printed[#printed]))
 	-- Stay keeps the group
 	wipe(inGroup)
-	clock = clock + 31
-	OnA()
-	check(Shard:HopTo("Thrall", B) == nil, "hopping once more")
+	Later()
+	check(Shard:Hop() == nil, "hopping once more")
 	Fire("PARTY_INVITE_REQUEST", "Thrall")
 	inGroup.Thrall = true
 	Fire("GROUP_ROSTER_UPDATE")
@@ -15253,9 +15275,8 @@ end)()
 	wipe(inGroup)
 	-- Auto-accept off: the invite is left to the player, who's told
 	Shard:Settings().accept = false
-	clock = clock + 31
-	OnA()
-	check(Shard:HopTo("Thrall", B) == nil, "hopping with auto-accept off")
+	Later()
+	check(Shard:Hop() == nil, "hopping with auto-accept off")
 	local acceptedBefore = accepted
 	Fire("PARTY_INVITE_REQUEST", "Thrall")
 	check(accepted == acceptedBefore and Said("Accept Thrall's invite"), "the invite waits for the player: "..tostring(printed[#printed]))
@@ -15266,9 +15287,8 @@ end)()
 	wipe(inGroup)
 	Shard:Settings().accept = true
 	-- The host's invite too late is left to the player
-	clock = clock + 31
-	OnA()
-	check(Shard:HopTo("Thrall", B) == nil, "hopping, then waiting")
+	Later()
+	check(Shard:Hop() == nil, "hopping, then waiting")
 	clock = clock + 31
 	acceptedBefore = accepted
 	Fire("PARTY_INVITE_REQUEST", "Thrall")

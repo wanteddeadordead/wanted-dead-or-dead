@@ -14486,6 +14486,146 @@ end)()
 	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
 	HUD:Update()
 end)()
+-- The siege card at the top of Home: nothing known, before the window (the window, a countdown, what to do, the
+-- buttons), a round, a truce and the result with the lanes and the rally leader, and this week's siege wins per front
+;(function()
+	local C = ns.Captures
+	local real = { C_Map = C_Map, UiMapPoint = UiMapPoint, C_SuperTrack = C_SuperTrack, Leader = UnitIsGroupLeader, Rally = ns.Rally,
+		Warn = ns.Alerts.Warn, PlaySound = PlaySound, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown }
+	local mapId, px, py, waypoint = 1424, 0.508, 0.351, nil -- Hillsbrad's Alliance Mid Tower, the Horde player's to attack
+	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
+		GetMapInfo = function() return { mapType = 3, parentMapID = 1415 } end,
+		SetUserWaypoint = function(p) waypoint = p return true end, CanSetUserWaypointOnMap = function() return true end }
+	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
+	C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
+	ns.Alerts.Warn = function() end
+	PlaySound = function() end
+	WorldMapFrame.IsShown = function() return false end
+	clock = clock + 1 -- a new reading of where we are
+	local function On(f)
+		local on, p = f._shown, f._parent
+		while on and p do on, p = p._shown, p._parent end
+		return on
+	end
+	local function shows(text, exact)
+		for _, f in ipairs(Mock.fontStrings) do
+			if type(f._text) == "string" and On(f) then
+				local plain = f._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+				if exact and plain == text or not exact and plain:find(text, 1, true) then return true end
+			end
+		end
+		return false
+	end
+	local function click(label)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == label and On(f) and f._parent:GetScript("OnClick") then f._parent:Click() return true end
+		end
+		return false
+	end
+	local function fits()
+		for _, fs in ipairs(Mock.fontStrings) do
+			if rawget(fs, "fitWidth") and fs._text ~= "" and On(fs) and not fs._wrap then
+				check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for the siege card: "..fs._text)
+			end
+		end
+	end
+	-- No siege known: the one text, and the week's wins only once a front has any
+	C:Take(nil)
+	C:TakeSiege(nil, nil)
+	ns.UI:Show("home")
+	check(shows("Siege nights", true) and shows("picks each evening's front the day before") and not shows("Open the map") and not shows("no wins yet"),
+		"no siege: Siege nights, how it's picked, no buttons and no wins")
+	C:TakeSiege(nil, { hb = { h = 3, a = 1 } })
+	ns.UI:Refresh(true)
+	check(shows("Siege nights", true) and shows("SIEGE WINS THIS WEEK") and shows("Hillsbrad Foothills", true) and shows("Horde 3") and shows("Alliance 1")
+		and shows("no wins yet"), "the week's wins per front once any are known, no wins yet for the rest")
+	fits()
+	-- Before the window: the window and the countdown, what to do, the lanes closed, the map and the front buttons
+	local start = clock + 21 * 3600 + 40 * 60
+	local before = #tickers
+	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 } }, { hb = { h = 3, a = 1 } })
+	ns.UI:Refresh(true)
+	check(shows("Siege: Hillsbrad Foothills", true) and shows("Opens in 21:40") and shows("Break a lane before") and shows("they stay down from"),
+		"before the window: the front, the countdown in hours and minutes, and what to do")
+	local pill = false
+	for _, f in ipairs(Mock.fontStrings) do
+		if On(f) and (f._text:find("^%a%a%a %d+ to %d+ [AP]M$") or f._text:find("^%a%a%a %d+ [AP]M to %d+ [AP]M$")) then pill = true end
+	end
+	check(pill, "the pill carries the window, with its day as the test's clock isn't today")
+	check(shows(date("%a", start), true), "the siege front's wins row is marked with the siege's day")
+	check(shows("Top", true) and shows("Mid", true) and shows("Bot", true) and shows("closed") and not shows("open", true), "the three lanes, both Nexuses closed")
+	check(shows("Open the map", true) and shows("Go to the front", true) and not shows("Lead the rally") and not shows("Set waypoint") and #tickers == before,
+		"the map and the front buttons, no rally without the module, no ticker with over an hour to go")
+	check(click("Go to the front") and waypoint and waypoint.uiMapID == 1424 and abs(waypoint.position.x - 0.508) < 0.001 and abs(waypoint.position.y - 0.351) < 0.001,
+		"Go to the front: a waypoint on the nearest point our side can attack")
+	check(click("Open the map") and mapOpened == 1424, "Open the map opens the front's map")
+	fits()
+	-- Under an hour: minutes and seconds on a one-second ticker, which stops with the window closed
+	clock = start - 40 * 60 - 12
+	ns.UI:Refresh(true)
+	check(shows("Opens in 40:12") and #tickers == before + 1, "under an hour the countdown has seconds, and a ticker")
+	clock = clock + 1
+	tickers[#tickers]()
+	check(shows("Opens in 40:11"), "the ticker moves it")
+	ns.UI:GetFrame():Hide()
+	tickers[#tickers]()
+	ns.UI:Show("home")
+	check(#tickers == before + 3, "closed, the ticker stops; opening Home starts one again (with the window's own)")
+	-- A round: the pill and the score, a lane broken opens a Nexus, a point being taken says so when hovered
+	C:Take({ ["hb-mid-3"] = { h = "H", t = clock }, ["hb-mid-4"] = { h = "H", t = clock } })
+	clock = start
+	C:SiegeTick(clock)
+	ns.UI:Refresh(true)
+	check(shows("Round 1", true) and shows("Horde 0") and shows("Alliance 0") and not shows("Opens in") and not shows("Break a lane"),
+		"the window opens: Round 1 and the score")
+	check(shows("open", true) and shows("closed", true), "the Alliance Nexus is open with its Mid inhibitor down, the Horde's closed")
+	for i = 1, 3 do C:OnPeer({ p = "hb-top-3", s = math.floor(clock / C.SLOT_SECONDS), c = 1 }, "Home Ally "..i) end
+	clock = clock + 30
+	C:Sample()
+	local lines, icon = {}, nil
+	for _, f in ipairs(Mock.created) do
+		-- The card's icon, not the map's button for the point (which carries a respawn timer)
+		if rawget(f, "point") == C:Get("hb-top-3") and f._scripts.OnEnter and not rawget(f, "timer") then icon = f end
+	end
+	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+	icon._scripts.OnEnter(icon)
+	GameTooltip.AddLine = nil
+	check(icon and table.concat(lines, "|"):find("Being taken by the Horde: 3 of 40", 1, true), "hovering a lane icon: its progress toward being taken: "..table.concat(lines, "|"))
+	-- The rally: as the group's leader on the front with none live, Lead the rally; a leader live, their line and a
+	-- waypoint on them (the module stands in: it's on its own branch)
+	local claimed = false
+	ns.Rally = { Holder = function() return nil end, Claim = function() claimed = true return nil end }
+	UnitIsGroupLeader = function() return true end
+	ns.UI:Refresh(true)
+	check(shows("Lead the rally", true) and shows("No rally leader on this front yet."), "a group leader on the front may lead the rally")
+	check(click("Lead the rally") and claimed, "Lead the rally claims it")
+	local leader = { name = "Grimshaw", class = "ROGUE", zone = "Hillsbrad Foothills", mapId = 1424, x = 52.3, y = 30.9, heard = clock }
+	ns.Rally.Holder = function(_, m) return m == 1424 and leader or nil end
+	ns.UI:Refresh(true)
+	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and not shows("Lead the rally"), "a rally live: who leads it and where, with Set waypoint")
+	waypoint = nil
+	check(click("Set waypoint") and waypoint and abs(waypoint.position.x - 0.523) < 0.001 and abs(waypoint.position.y - 0.309) < 0.001, "Set waypoint puts it on the leader")
+	leader.mine = true
+	ns.UI:Refresh(true)
+	check(shows("You lead the rally at Darrow Hill") and not shows("Set waypoint"), "our own rally: said so, no waypoint on ourselves")
+	ns.Rally, UnitIsGroupLeader = real.Rally, real.Leader
+	fits()
+	-- A truce, with its clock; the result
+	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, round = { n = 2, start = clock + 600, truceUntil = clock + 600 }, wins = { h = 1, a = 0 } }, nil)
+	ns.UI:Refresh(true)
+	check(shows("Truce 10:00", true) and shows("Horde 1") and shows("Alliance 0") and shows("Go to the front", true), "a truce: its clock and the score")
+	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 2, a = 1 } }, nil)
+	C:SiegeTick(clock)
+	ns.UI:Refresh(true)
+	check(shows("Over", true) and shows("Horde 2") and shows("Alliance 1") and not shows("Go to the front") and shows("Open the map", true), "over: the result, the map still")
+	fits()
+	C:TakeSiege(nil, nil)
+	C:Take(nil)
+	ns.UI:GetFrame():Hide()
+	C_Map, UiMapPoint, C_SuperTrack, ns.Alerts.Warn, PlaySound = real.C_Map, real.UiMapPoint, real.C_SuperTrack, real.Warn, real.PlaySound
+	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
+	ns.CapturesHUD:Update()
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

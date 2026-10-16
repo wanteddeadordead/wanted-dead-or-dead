@@ -397,7 +397,8 @@ function private.Create()
 	rally.skull, rally.flare = Wanted.Rally:CreateMarkButtons(rally)
 	rally.flare:SetPoint("RIGHT", -4, 0)
 	rally.skull:SetPoint("RIGHT", rally.flare, "LEFT", -4, 0)
-	-- Hop: onto the rally's layer when the leader is on another one (Shard); Stay while holding the hop's group
+	-- Hop: onto the zone's target layer, the fight's or the siege's, when we're not on it (Shard); Stay while holding
+	-- the hop's group
 	rally.hop = W:Button(rally, "Hop", "chip", 44, 16, function()
 		local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
 		if why then
@@ -406,7 +407,7 @@ function private.Create()
 	end)
 	rally.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
 	rally.hop:SetPoint("RIGHT", -4, 0)
-	W:AttachTooltip(rally.hop, "Hop to the rally's layer", "The rally leader is on another copy of this zone. Hop asks them (or a Wanted player of your side on their layer) for a group invite: your addon accepts it, holds the group twenty seconds so the move sticks, then leaves it, unless you click Stay or the host leads the rally. Not in a fight, while dead, or in a group.")
+	W:AttachTooltip(rally.hop, "Hop to the fight's layer", "The fight (or tonight's siege) is on another copy of this zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 	rally.hop:Hide()
 	rally:Hide()
 	private.rally = rally
@@ -470,17 +471,29 @@ function private.LayoutKey(compact)
 	return (compact and "c" or "n")..(private.Show().icon and "i" or "")..(private.Show().pvp ~= false and "p" or "")..(private.rallyShown and "r" or "")
 end
 
----The rally line's text: who leads the rally here and where, or nil when nobody does.
+---The rally line's text and its button: the hop under way, or the zone's target layer while we're not on it ("The
+---fight is on layer 3, you're on 5" with Hop; leading the rally, "lead from layer 3"), else who leads the rally here
+---and where, or that we're on the fight's layer; nil when there's none of that.
+---@return string? text
+---@return string? button "Hop" or "Stay"
 function private.RallyText()
+	local Shard = Wanted.Shard
 	local leader = Wanted.Rally:Here()
+	local text, button = Shard:Line(Shard:Zone())
+	if button then
+		if leader and leader.mine and not Shard:Hopping() then
+			-- The leader is told first: their group can't hop, the raid follows them
+			return Theme:Colorize(format("You lead the rally here: lead from %s", Shard:LayerText((Shard:Target(Shard:Zone())))), C.amber), nil
+		end
+		return Theme:Colorize(text, C.amber), button
+	end
 	if not leader then
-		return nil
+		return text and Theme:Colorize(text, C.faint) or nil, nil
 	end
 	if leader.mine then
-		return Theme:Colorize("You lead the rally here", C.gold)
+		return Theme:Colorize("You lead the rally here", C.gold), nil
 	end
-	local layer = Wanted.Shard:IsOther(leader.name) and ("  "..Theme:Colorize("on another layer", C.amber)) or ""
-	return format("%s %s  %.0f, %.0f%s", Theme:Colorize("Rally:", C.gold), Theme:ClassName(leader.name, leader.class), leader.x, leader.y, layer)
+	return format("%s %s  %.0f, %.0f", Theme:Colorize("Rally:", C.gold), Theme:ClassName(leader.name, leader.class), leader.x, leader.y), nil
 end
 
 local function Readable(value)
@@ -692,7 +705,7 @@ function Nearby:Refresh()
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)
 	private.empty:SetText(#items == 0 and EMPTY_TEXT[view] or "")
-	local rallyText = private.RallyText()
+	local rallyText, hopButton = private.RallyText()
 	if private.rallyShown then
 		-- Shown until the next layout: in a fight it says the rally has ended rather than leave a gap
 		private.rally.text:SetText(rallyText or Theme:Colorize("The rally here has ended", C.faint))
@@ -764,10 +777,9 @@ function Nearby:Refresh()
 	local leading = Wanted.Rally:Mine() ~= nil
 	private.rally.skull:SetShown(leading)
 	private.rally.flare:SetShown(leading)
-	local holding = Wanted.Shard:Holding()
-	local hopping = rallyText ~= nil and not leading and (holding or Wanted.Shard:HopTarget() ~= nil)
+	local hopping = hopButton ~= nil and not leading
 	private.rally.hop:SetShown(hopping)
-	private.rally.hop:SetText(holding and "Stay" or "Hop")
+	private.rally.hop:SetText(hopButton or "Hop")
 	local anchor = leading and private.rally.skull or hopping and private.rally.hop or private.rally
 	private.rally.text:SetPoint("RIGHT", anchor, anchor ~= private.rally and "LEFT" or "RIGHT", anchor ~= private.rally and -4 or -8, 0)
 	if rallyText then

@@ -753,10 +753,49 @@ function Shard:Holding()
 	return hop ~= nil and hop.state == "joined" and not hop.stay
 end
 
----The hop under way, { host, state }, or nil.
+---The hop under way, { host, state, target }, or nil.
 ---@return table?
 function Shard:Hopping()
 	return private.hop
+end
+
+---The hop under way as one line: who's asked, who's inviting, or whose group is held and for how long. nil without one.
+---@return string?
+function Shard:HopText()
+	local hop = private.hop
+	if not hop then
+		return nil
+	end
+	local where = Shard:LayerText(hop.target)
+	if hop.state == "joined" then
+		if hop.stay then
+			return format("In %s's group: it takes you to %s", hop.host, where)
+		end
+		return format("In %s's group for %s: leaving it in %d s", hop.host, where, max(0, HOLD_SECONDS - floor(GetTime() - hop.joined + 0.5)))
+	elseif hop.state == "invited" or hop.state == "accepted" then
+		return format("%s is inviting you onto %s", hop.host, where)
+	end
+	return format("Asking %s for an invite onto %s", hop.host, where)
+end
+
+---One line on a zone's layer and the button to go with it: the hop under way (Stay while its group is held), else
+---the zone's target layer as Shard:TargetText says it, with Hop while it's our zone and we're not on it. Nothing
+---without either.
+---@param zone string
+---@param mapId number?
+---@return string? text
+---@return string? button "Hop" or "Stay"
+function Shard:Line(zone, mapId)
+	if private.hop then
+		return Shard:HopText(), Shard:Holding() and "Stay" or nil
+	end
+	local text = Shard:TargetText(zone, mapId)
+	if not text then
+		return nil, nil
+	end
+	local map = mapId or private.MapOf(zone)
+	local here = map ~= nil and map == Shard:ZoneMap()
+	return text, here and Shard:Target(zone, mapId) ~= Shard:Current() and "Hop" or nil
 end
 
 function private.Leave()

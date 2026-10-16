@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.6] - 2026-10-16
+
 - No more "Interface action failed because of an AddOn" in a fight: the Nearby window no longer asks the client how
   close an enemy is while you are in combat (the client refuses that call there); the last answer before the fight
   stands for telling stealth from walking away.

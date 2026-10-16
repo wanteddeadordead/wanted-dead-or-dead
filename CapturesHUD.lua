@@ -201,6 +201,9 @@ function private.BuildCapture()
 	private.Atlas(capture.spark, CAPTURE_ART.spark, { 1, 0.82, 0 })
 	capture.text = capture:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	capture.text:SetPoint("TOP", capture, "BOTTOM", 0, -2)
+	-- Which way the spark is going, over it: chevrons toward the end the attackers are pushing it to
+	capture.arrow = capture:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	capture.arrow:SetPoint("BOTTOM", capture.spark, "TOP", 0, -3)
 	return capture
 end
 
@@ -385,9 +388,18 @@ function private.UpdateCapture(capture)
 		capture.right:SetDesaturated(capture.blocked)
 	end
 	local p = Captures:Progress(point)
-	-- The spark moves toward the attacking side's end as the point's samples near its cost
+	-- The spark moves toward the attacking side's end as the point's samples near its cost; the chevrons over it say
+	-- which way, in the attackers' colour, only while it's moving
 	local toward = p.side == "Alliance" and 0 or 1
 	private.Spark(capture, from + (toward - from) * min(p.n / p.cost, 1))
+	if p.attackers > 0 and p.net > 0 and not blocked then
+		local c = Wanted.CapturesMap.COLORS[p.side] or { 1, 0.82, 0 }
+		capture.arrow:SetText(toward == 0 and "<<" or ">>")
+		capture.arrow:SetTextColor(c[1], c[2], c[3])
+		capture.arrow:Show()
+	else
+		capture.arrow:Hide()
+	end
 	-- How long at this tick's pace: "3:10 left"
 	local left = p.net > 0 and format(", %s left", private.Clock(ceil((p.cost - p.n) / p.net) * Captures.SAMPLE_SECONDS)) or ""
 	if blocked then

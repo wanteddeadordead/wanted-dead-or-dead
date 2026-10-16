@@ -318,6 +318,9 @@ function private.BuildSharing(panel, width)
 	private.Toggle(captures, Settings, "alerts", "Warn about capture points near me", "When your side gathers at a point in your zone, or enemies are close while you stand in one; and the siege's rounds and Nexus falls while you're in its zone or have its map open.", 440, -38)
 	private.Toggle(captures, Settings, "autoTrack", "Keep a waypoint on the nearest point to attack", "In a front's zone. Only ever replaces a waypoint Wanted set, never your own.", 440, -62, function() Wanted.Captures:AutoTrack() end)
 	private.Toggle(captures, Settings, "siegeCall", "Siege call", "Half an hour before each night's siege and when it opens, wherever you are.", 440, -86)
+	local Shard = function() return Wanted.Shard:Settings() end
+	private.Toggle(captures, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone (never while dead, in a fight or in a full group). They leave your group twenty seconds later unless you lead the rally.", 16, -110)
+	private.Toggle(captures, Shard, "accept", "Auto-accept my hops", "When you hop to the rally's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.", 440, -110)
 
 	local iconLabel = Theme:Text(display, "small", "Class icons")
 	iconLabel:SetPoint("TOPLEFT", 360, -20)

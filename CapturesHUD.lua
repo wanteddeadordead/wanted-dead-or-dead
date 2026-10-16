@@ -281,14 +281,16 @@ function private.Hour(t)
 	return (text:gsub("^0", ""))
 end
 
----A siege window as the client's clock shows it: "7 to 10 PM", or "11 AM to 2 PM" across noon.
+---A siege window as the client's clock shows it: "7 to 10 PM", or "11 AM to 2 PM" across noon; on another day than
+---today, with the day first: "Fri 7 to 10 PM" (the catch-up names the next siege as soon as it's picked).
 function private.Window(s)
 	local from, to = private.Hour(s.start), private.Hour(s["end"])
 	local fromSuffix, toSuffix = from:match("%a+$"), to:match("%a+$")
 	if fromSuffix and fromSuffix == toSuffix then
 		from = from:gsub(" %a+$", "")
 	end
-	return format("%s to %s", from, to)
+	local day = date("%j", s.start) ~= date("%j") and date("%a", s.start).." " or ""
+	return format("%s%s to %s", day, from, to)
 end
 
 ---"12:40" from seconds.

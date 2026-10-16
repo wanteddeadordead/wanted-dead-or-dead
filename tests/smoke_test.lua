@@ -14335,8 +14335,9 @@ end)()
 	check(C:Phase() == "before" and C:RespawnPaused(C.FRONTS[2]) and not C:RespawnPaused(C.FRONTS[1]), "an hour before the window the siege front's respawns pause")
 	check(C:FrontWins(C.FRONTS[2]).Horde == 3 and C:FrontWins(C.FRONTS[1]) == nil, "this week's siege wins per front, well formed only")
 	HUD:Update()
-	check(bar.siege._text:find("^Siege: Hillsbrad Foothills %d+ to %d+ [AP]M$") or bar.siege._text:find("^Siege: Hillsbrad Foothills %d+ [AP]M to %d+ [AP]M$"),
-		"the HUD names the siege front and its window in the client's clock: "..bar.siege._text)
+	-- The test's clock isn't today, so the window carries its weekday, as a siege picked for tomorrow does
+	check(bar.siege._text:find("^Siege: Hillsbrad Foothills %a%a%a %d+ to %d+ [AP]M$") or bar.siege._text:find("^Siege: Hillsbrad Foothills %a%a%a %d+ [AP]M to %d+ [AP]M$"),
+		"the HUD names the siege front, its day and its window in the client's clock: "..bar.siege._text)
 	check(bar.title._text == "Hillsbrad Foothills: Horde 3, Alliance 1 this week", "the title carries the week's siege wins: "..bar.title._text)
 	local lines = ns:CapturePrints(function() ns:RunCommand("points", "") end)
 	check(lines[1]:find("Tonight's siege: Hillsbrad Foothills, before", 1, true) and table.concat(lines, "\n"):find("Hillsbrad Foothills: Horde 9, Alliance 5; siege wins this week Horde 3, Alliance 1", 1, true), "/wanted points tells the siege: "..table.concat(lines, " // "))

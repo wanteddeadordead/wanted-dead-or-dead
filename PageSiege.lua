@@ -1,7 +1,7 @@
 -- Wanted: the Siege page, the one the window opens on: everything about siege nights (Captures) in one place.
 -- Tonight's siege (or the next one picked): its front, window and a countdown, or the round, the score and the
 -- three lanes while it's on, with the rally leader and buttons for the map, the rally and a waypoint to the front;
--- the results (tonight's rounds as this client saw them, this week's wins per front); the three fronts, each with its
+-- the next seven evenings; the results (tonight's rounds as this client saw them, this week's wins per front); the three fronts, each with its
 -- lanes' holders, a map and a waypoint; and the rules. The game can't open a browser, so each website address is in
 -- a box to copy, as the Website & app page does. Everything scrolls together.
 
@@ -21,6 +21,10 @@ local LANE_ICON, LANE_PITCH, CREST = 22, 26, 40
 local LANES_WIDTH = CREST + 8 + 30 + 4 * LANE_PITCH + 8 + CREST
 local BUTTON_GAP = 6
 local FRONT_ROW = 48
+local EVENINGS = 7
+local EVENING_ROW = 22
+-- The site's window, said when no siege is known and so the client can't place it on its own clock
+local WINDOW_EASTERN = "7 to 10 PM Eastern"
 local RULES = {
 	{ "One front a night.", "Every day one of Arathi Highlands, Hillsbrad Foothills and Ashenvale is the siege front, picked the evening before: the most fought front of the last week, never the same one twice in a row. Its Nexuses can fall from 7 to 10 PM Eastern. The other two fronts' lanes stay open as usual; their Nexuses don't." },
 	{ "The lanes, all day.", "Each lane holds each side's tower and inhibitor. Take a lane from your end: the enemy's tower, then the inhibitor behind it. An inhibitor down opens that side's Nexus. It respawns 30 minutes after its takers last held it, except on the siege front from 6 PM, where it stays down until the siege ends: a lane broken before 7 is still broken at 7." },
@@ -270,6 +274,44 @@ function private.BuildTonight(body, width)
 	return card
 end
 
+---A day as the client's clock shows it, "Fri 17 Oct".
+function private.DayText(t)
+	local ok, text = pcall(date, "%a %d %b", t)
+	if not ok or type(text) ~= "string" then
+		return "?"
+	end
+	return (text:gsub(" 0", " "))
+end
+
+---The upcoming evenings: one row per evening for the next week, its day, its window and its front where the catch-up
+---named it, with the map for those; tonight's marked.
+function private.BuildUpcoming(body, width)
+	local card = W:Card(body)
+	card:SetWidth(width)
+	card.label = W:SectionLabel(card, "Upcoming")
+	card.label:SetPoint("TOPLEFT", PAD, -14)
+	card.rows = {}
+	for i = 1, EVENINGS do
+		local row = {}
+		local y = -34 - (i - 1) * EVENING_ROW
+		row.day = Theme:Text(card, "small", "", C.text)
+		row.day:SetPoint("TOPLEFT", PAD, y)
+		row.window = Theme:Text(card, "small", "", C.text)
+		row.window:SetPoint("TOPLEFT", PAD + 90, y)
+		row.front = Theme:Text(card, "small", "")
+		row.front:SetPoint("TOPLEFT", PAD + 230, y)
+		row.mark = W:Pill(card)
+		row.mark:SetPoint("LEFT", row.front, "RIGHT", 10, 0)
+		row.map = W:Button(card, "Open the map", "secondary", 96, 20, function() private.OpenMap(row.evening.front) end)
+		row.map:SetPoint("TOPRIGHT", -PAD, y + 3)
+		W:AttachTooltip(row.map, "Open the map", "The front's zone map: its lanes, who holds each point, and a waypoint on any of them.")
+		card.rows[i] = row
+	end
+	card:SetHeight(34 + EVENINGS * EVENING_ROW + PAD - 4)
+	private.upcoming = card
+	return card
+end
+
 ---The results: tonight's score and the rounds this client saw end, this week's siege wins per front, and the site's
 ---schedule and results.
 function private.BuildResults(body, width)
@@ -372,6 +414,7 @@ function private.Build(container, width)
 	private.body = body
 	private.cards = {
 		private.BuildTonight(body, width - 30),
+		private.BuildUpcoming(body, width - 30),
 		private.BuildResults(body, width - 30),
 		private.BuildFronts(body, width - 30),
 		private.BuildRules(body, width - 30),
@@ -521,6 +564,24 @@ function private.RefreshTonight()
 	end
 end
 
+---The upcoming card's rows: the next week's evenings (Captures:Evenings).
+function private.RefreshUpcoming()
+	local card = private.upcoming
+	for i, evening in ipairs(Captures:Evenings(EVENINGS)) do
+		local row = card.rows[i]
+		row.evening = evening
+		row.day:SetText(private.DayText(evening.day))
+		row.window:SetText(evening.start and Wanted.CapturesHUD:WindowText(evening, true) or WINDOW_EASTERN)
+		row.front:SetText(evening.front and evening.front.zone or Theme:Colorize("front picked the evening before", C.muted))
+		if evening.today then
+			row.mark:Set("TONIGHT", C.gold)
+		else
+			row.mark:Hide()
+		end
+		row.map:SetShown(evening.front ~= nil and OpenWorldMap ~= nil)
+	end
+end
+
 ---The week's siege wins per front, from the catch-up, on three rows: "Horde 3 · Alliance 1" or "no wins yet", the
 ---siege front marked tonight (or its weekday).
 function private.RefreshWeek(s)
@@ -659,6 +720,7 @@ function private.Refresh()
 		return
 	end
 	private.RefreshTonight()
+	private.RefreshUpcoming()
 	private.RefreshResults()
 	private.RefreshFronts()
 	private.RefreshRules()

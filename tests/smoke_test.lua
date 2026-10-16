@@ -15240,6 +15240,7 @@ end)()
 	printed = {}
 	Fire("GROUP_ROSTER_UPDATE")
 	check(Said("You joined Grimshaw's group, the rally leader's: it takes you to layer 501") and Said("Staying in it") and not Shard:Holding(), "the rally leader's group is kept: "..tostring(printed[#printed]))
+	clock = clock + 20
 	RunTimers()
 	check(left == 0 and Shard:Hopping() == nil, "and not left")
 	wipe(inGroup)
@@ -15268,6 +15269,9 @@ end)()
 	check(line.hop:IsShown() and line.hop._text == "Stay" and line.text._text:find("In Thrall's group for layer 501: leaving it in 20 s", 1, true), "the rally line says so, with Stay: "..tostring(line.text._text))
 	check(warned[#warned] and warned[#warned]:find("LAYER HOP Leaving Thrall's group in 20 s", 1, true), "the countdown at the top of the screen: "..tostring(warned[#warned]))
 	for _ = 1, 3 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	RunTimers()
+	check(left == 0 and Shard:Holding(), "the hold isn't over before twenty seconds")
+	clock = clock + 20
 	RunTimers()
 	check(left == 1 and Said("Moved to layer 501") and Shard:Hopping() == nil, "the creatures say we moved: the group is left after the hold: "..tostring(printed[#printed]))
 	-- Still on the old layer at the watchdog: said, and left
@@ -15301,6 +15305,7 @@ end)()
 	inGroup.Thrall = true
 	Fire("GROUP_ROSTER_UPDATE")
 	check(Shard:Holding(), "accepted by hand, the hold runs the same")
+	clock = clock + 20
 	RunTimers()
 	wipe(inGroup)
 	Shard:Settings().accept = true
@@ -15313,6 +15318,50 @@ end)()
 	check(accepted == acceptedBefore, "an invite after half a minute isn't accepted")
 	RunTimers()
 	check(Said("Thrall didn't invite you") and Shard:Hopping() == nil, "and the hop gives up")
+	-- The game's word first: its transfer countdown holds the group until it runs out, the transfer confirms the move
+	-- (whatever the creatures say), and the creature check at fifteen seconds stands down
+	Later()
+	check(Shard:Hop() == nil, "hopping, with the game's events")
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	_G.GetEvictionTimeRemaining = function() return 45 end
+	Fire("SHARD_TRANSFER_IMMINENT")
+	check(Said("The game is moving you to layer 501 in 45 s"), "the countdown is said: "..tostring(printed[#printed]))
+	check(Shard:HopText():find("leaving it in 48 s", 1, true), "and the hold runs to its end, plus a moment: "..tostring(Shard:HopText()))
+	OnA()
+	clock = clock + 21
+	RunTimers()
+	check(Shard:Holding(), "the creatures still say the old layer, but the game spoke: no leaving at fifteen or twenty seconds: left "..left..", "..tostring(printed[#printed]))
+	local leftBefore = left
+	Fire("SHARD_TRANSFER")
+	check(Said("Moved to layer 501: the game confirmed it") and Shard:Current() == nil, "the transfer confirms the move and forgets the old creatures: "..tostring(printed[#printed]))
+	clock = clock + 28
+	RunTimers()
+	check(left == leftBefore + 1 and Said("Moved to layer 501") and Shard:Hopping() == nil, "the hold over, the group is left: "..tostring(printed[#printed]))
+	_G.GetEvictionTimeRemaining = nil
+	wipe(inGroup)
+	-- The game calls the move off: said, and the group left at once
+	Later()
+	check(Shard:Hop() == nil, "hopping, then the game cancels")
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	Fire("SHARD_TRANSFER_IMMINENT")
+	Fire("SHARD_TRANSFER_CANCELLED")
+	check(left == leftBefore + 2 and Said("The game called the move off") and Shard:Hopping() == nil, "the move called off: said and left: "..tostring(printed[#printed]))
+	wipe(inGroup)
+	-- A transfer outside a hop (a group we joined by hand) forgets the creatures seen: our layer is read afresh
+	OnA()
+	check(Shard:Current() == A, "the layer is known")
+	Fire("SHARD_TRANSFER")
+	check(Shard:Current() == nil, "moved by the game: read afresh")
+	-- A zone change redraws the lines at once
+	OnA()
+	ns.NearbyWindow:Refresh()
+	local before = line.text._text
+	Fire("ZONE_CHANGED_NEW_AREA")
+	check(line.text._text ~= before and line.text._text:find("yours isn't read yet", 1, true), "a new zone: the line says the layer must be read again: "..tostring(line.text._text))
 	-- The HUD during a siege at the front we're in
 	best = 1424
 	clock = clock + 1

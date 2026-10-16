@@ -73,6 +73,7 @@ function Catchup:Import()
 		Wanted.Duels:TakeReports(nil, nil)
 		Wanted.Captures:Take(nil)
 		Wanted.Captures:TakeSiege(nil, nil)
+		Wanted.Shard:TakeLayers(nil)
 		return
 	end
 	-- Fight reports the app made of this account's duels, read at every login like the challenges
@@ -113,6 +114,8 @@ function Catchup:Import()
 	Wanted.Captures:Take(entry.points)
 	-- Tonight's siege and this week's siege wins per front (siege nights): the site's call overrides the client's
 	Wanted.Captures:TakeSiege(entry.siege, entry.frontWins)
+	-- Each zone's fight layer as the site worked it out (layers): only shown, so read at every login
+	Wanted.Shard:TakeLayers(entry.layers)
 	-- Signing keys the server took from the apps of the accounts their characters are confirmed to (1.19.0)
 	Wanted.KeyBook:FromApp(entry.addonKeys, entry.t)
 	if entry.t <= (Wanted.db.catchupT or 0) then

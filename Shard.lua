@@ -22,6 +22,9 @@ local private = {
 	seenAt = nil, -- GetTime() a creature of this zone was last looked at, counted before or not
 	counts = {}, -- scratch for Current: key -> creatures
 	peers = {}, -- name -> { key, mapId, at (GetTime) }: the layer each Wanted player last said they were on, and where
+	site = {}, -- zone name -> { active, deaths, since }: each zone's fight layer as the site last said it (the catch-up)
+	deaths = {}, -- the deaths heard lately with a layer, oldest first: { t, zone, key, id }
+	tally = {}, -- scratch for the estimate: key -> count
 	hop = nil, -- the hop under way: { id, host, target, from, state, asked, joined, stay, tried } (see Shard:HopTo)
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
@@ -55,6 +58,14 @@ local MAX_KEY_BYTES = 32
 -- A peer's word on their layer is kept this long (rally positions and point presence come every half minute)
 local PEER_SECONDS = 10 * 60
 local MAX_PEERS = 200
+-- A zone's fight layer: the site's word holds this long; this client's own estimate counts the deaths heard in the
+-- last FIGHT_SECONDS and the Wanted players of our side heard in the zone, and names a layer from this many
+local SITE_SECONDS = 15 * 60
+local FIGHT_SECONDS = 10 * 60
+local FIGHT_FLOOR = 5
+local MAX_DEATHS = 500
+-- A record's time this far past our clock is a bad clock
+local AHEAD_SECONDS = 120
 -- Events that put a unit in reach, and the unit token each one is about
 local UNIT_EVENTS = {
 	PLAYER_TARGET_CHANGED = "target",
@@ -91,6 +102,9 @@ function Shard:OnEnable()
 		private.Register(event)
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Shard events", private.OnEvent))
+	-- The deaths our side hears of (both sides' kills and deaths reach the channel) say where the fight is, by layer
+	Wanted.Store:OnRecord("kill", private.OnDeath)
+	Wanted.Store:OnRecord("death", private.OnDeath)
 end
 
 ---The layer hop settings: { host, accept }.
@@ -216,6 +230,19 @@ function Shard:Short(key)
 	return key and strmatch(key, "(%d+)$") or "?"
 end
 
+---A layer as the site and the addon name it: "layer 497".
+---@param key string?
+---@return string
+function Shard:LayerText(key)
+	return "layer "..Shard:Short(key)
+end
+
+---The name of the zone we're in, as records carry it (the game's zone text).
+---@return string
+function Shard:Zone()
+	return (Wanted.Recorder:GetPosition())
+end
+
 
 
 -- ============================================================================
@@ -225,6 +252,13 @@ end
 ---Whether a value a peer sent is a layer.
 function private.IsKey(key)
 	return type(key) == "string" and #key <= MAX_KEY_BYTES and strfind(key, "^%d+%-%d+%-%d+$") ~= nil
+end
+
+---Whether a value (a peer's, or the catch-up's) is a layer.
+---@param key any
+---@return boolean
+function Shard:IsKey(key)
+	return private.IsKey(key)
 end
 
 ---A Wanted player's layer, as their last message said (a hello, a rally position, their presence at a capture
@@ -276,6 +310,155 @@ function Shard:IsOther(name)
 	local entry = Shard:Of(name)
 	local mine, mapId = Shard:Current(), Shard:ZoneMap()
 	return entry ~= nil and mine ~= nil and mapId ~= nil and entry.mapId == mapId and entry.key ~= mine
+end
+
+
+
+-- ============================================================================
+-- The target layer: where the fight is
+-- ============================================================================
+
+---Takes each zone's fight layer as the site worked it out, from the app's catch-up: { [zone name] = { active, deaths,
+---since } }. Only shown, so it's read at every login; malformed zones are left out.
+---@param list table?
+function Shard:TakeLayers(list)
+	wipe(private.site)
+	if type(list) ~= "table" then
+		return
+	end
+	for zone, entry in pairs(list) do
+		if type(zone) == "string" and type(entry) == "table" and private.IsKey(entry.active) and type(entry.since) == "number" then
+			private.site[zone] = { active = entry.active, deaths = type(entry.deaths) == "number" and entry.deaths or 0, since = entry.since }
+		end
+	end
+end
+
+---A kill or death record, ours or heard: one with a layer and a zone, from the last ten minutes, is counted toward
+---that zone's fight layer, each death once (a kill and a death record can tell of the same one).
+function private.OnDeath(record)
+	local data = record.data
+	local now = GetServerTime()
+	if type(data) ~= "table" or not private.IsKey(data.l) or type(data.zone) ~= "string" or type(record.t) ~= "number"
+		or now - record.t > FIGHT_SECONDS or record.t > now + AHEAD_SECONDS or Wanted.Store:IsTest(record) then
+		return
+	end
+	local id = data.deathId or record.id
+	local deaths = private.deaths
+	for i = #deaths, 1, -1 do
+		if now - deaths[i].t > FIGHT_SECONDS then
+			tremove(deaths, i)
+		elseif deaths[i].id == id then
+			return
+		end
+	end
+	if #deaths >= MAX_DEATHS then
+		tremove(deaths, 1)
+	end
+	tinsert(deaths, { t = record.t, zone = data.zone, key = data.l, id = id })
+end
+
+---Whether layer a comes before b: the lower zone instance number (ties between layers as busy go to it).
+function private.Lower(a, b)
+	local na, nb = tonumber(Shard:Short(a)), tonumber(Shard:Short(b))
+	if na and nb and na ~= nb then
+		return na < nb
+	end
+	return a < b
+end
+
+---This client's own estimate of a zone's fight layer, from the channel: the deaths heard there in the last ten
+---minutes by layer, plus the Wanted players of our side heard in the zone by layer (their hello, rally position or
+---point presence; us too when it's our zone), the busiest layer once it reaches the floor. nil below it.
+---@param zone string
+---@param mapId number?
+---@return string?
+function private.Estimate(zone, mapId)
+	local tally, now = wipe(private.tally), GetServerTime()
+	for _, death in ipairs(private.deaths) do
+		if death.zone == zone and now - death.t <= FIGHT_SECONDS then
+			tally[death.key] = (tally[death.key] or 0) + 1
+		end
+	end
+	if mapId then
+		for _, entry in pairs(private.peers) do
+			if entry.mapId == mapId and GetTime() - entry.at <= PEER_SECONDS then
+				tally[entry.key] = (tally[entry.key] or 0) + 1
+			end
+		end
+		local mine = Shard:Current()
+		if mine and mapId == Shard:ZoneMap() then
+			tally[mine] = (tally[mine] or 0) + 1
+		end
+	end
+	local best
+	for key, n in pairs(tally) do
+		if n >= FIGHT_FLOOR and (not best or n > tally[best] or (n == tally[best] and private.Lower(key, best))) then
+			best = key
+		end
+	end
+	return best
+end
+
+---A zone's map: ours when it's the zone we're in, a front's by its name, else nil.
+function private.MapOf(zone)
+	if zone == Shard:Zone() then
+		return Shard:ZoneMap()
+	end
+	for _, front in ipairs(Wanted.Captures.FRONTS) do
+		if front.zone == zone then
+			return front.mapId
+		end
+	end
+	return nil
+end
+
+---A zone's target layer, the one to be on: during the siege at that front (from an hour before the window until it's
+---over) the layer the site picked for it, once picked; else the zone's fight layer as the site last said it (the
+---catch-up, for a quarter hour), else this client's own estimate from the channel. Returns the layer and which it
+---is, "siege" or "fight", or nil when there's none.
+---@param zone string the zone's name, as records carry it
+---@param mapId number? its zone map (worked out when left out: ours, or a front's)
+---@return string? key
+---@return string? kind
+function Shard:Target(zone, mapId)
+	if type(zone) ~= "string" then
+		return nil, nil
+	end
+	local Captures = Wanted.Captures
+	local s = Captures:Siege()
+	if s and s.front.zone == zone and s.layer and Captures:RespawnPaused(s.front) then
+		return s.layer, "siege"
+	end
+	local site = private.site[zone]
+	if site and GetServerTime() - site.since <= SITE_SECONDS then
+		return site.active, "fight"
+	end
+	local key = private.Estimate(zone, mapId or private.MapOf(zone))
+	return key, key and "fight" or nil
+end
+
+---One line on a zone's target layer: "The fight is on layer 3, you're on 5" (or "The siege is ..."), "You're on
+---the fight's layer", and for a zone we're not in "The siege is on layer 3"; nil when there's no target.
+---@param zone string
+---@param mapId number?
+---@return string?
+function Shard:TargetText(zone, mapId)
+	local key, kind = Shard:Target(zone, mapId)
+	if not key then
+		return nil
+	end
+	local what = kind == "siege" and "siege" or "fight"
+	local map = mapId or private.MapOf(zone)
+	if not map or map ~= Shard:ZoneMap() then
+		return format("The %s is on %s", what, Shard:LayerText(key))
+	end
+	local mine = Shard:Current()
+	if mine == key then
+		return format("You're on the %s's layer", what)
+	elseif not mine then
+		return format("The %s is on %s, yours isn't read yet", what, Shard:LayerText(key))
+	end
+	return format("The %s is on %s, you're on %s", what, Shard:LayerText(key), Shard:Short(mine))
 end
 
 

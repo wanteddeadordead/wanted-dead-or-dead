@@ -549,7 +549,8 @@ end
 -- ============================================================================
 
 ---A player of our side says they're at a point (Sync, from the channel's own sender): { p, s, c, l = their layer }, and during a truce
----the fall that started it, { f = Nexus id, t = server time }, so late joiners agree. Shown only.
+---the fall that started it, { f = Nexus id, t = server time }, so late joiners agree; during the siege its layer as
+---they last heard it, { sl, st = since }, so a client that reloads spreads the site's pick. Shown only.
 ---@param tbl table
 ---@param sender string
 function Captures:OnPeer(tbl, sender)
@@ -558,6 +559,9 @@ function Captures:OnPeer(tbl, sender)
 	end
 	if type(tbl.f) == "string" and type(tbl.t) == "number" then
 		private.PeerFall(tbl.f, tbl.t)
+	end
+	if tbl.sl ~= nil then
+		private.PeerLayer(tbl.sl, tbl.st)
 	end
 	local point = type(tbl.p) == "string" and byId[tbl.p]
 	local slot = floor(GetServerTime() / SLOT_SECONDS)
@@ -575,11 +579,15 @@ function Captures:OnPeer(tbl, sender)
 	private.Changed()
 end
 
----Adds the fall that started the current truce to a channel message, if there is one.
+---Adds the fall that started the current truce to a channel message, if there is one, and the siege's layer while
+---the siege is on.
 function private.WithFall(tbl)
 	local s = private.siege
 	if s and s.fell and Captures:Phase() == "truce" then
 		tbl.f, tbl.t = s.fell.id, s.fellAt
+	end
+	if s and s.layer and Captures:RespawnPaused(s.front) then
+		tbl.sl, tbl.st = s.layer, s.layerSince
 	end
 	return tbl
 end
@@ -847,7 +855,11 @@ function Captures:TakeSiege(siege, frontWins)
 			private.frontWins[front.id] = { Horde = w.h, Alliance = w.a }
 		end
 	end
+	local before = private.siege and private.siege.layer
 	private.siege = private.ReadSiege(siege, GetServerTime())
+	if private.siege and private.siege.layer and private.siege.layer ~= before then
+		private.SiegeNews("layer", private.siege.layer)
+	end
 	private.Changed()
 end
 
@@ -862,7 +874,8 @@ function private.FrontById(id)
 end
 
 ---The catch-up's siege, checked and in the addon's terms, or nil: { front, start, end, round = { n, start, truceUntil,
----begun }, wins = { Horde, Alliance }, nexusCost = { [Nexus id] = samples }, next = { front, start, end } }, with
+---begun }, wins = { Horde, Alliance }, nexusCost = { [Nexus id] = samples }, next = { front, start, end }, layer (the
+---site's pick of the layer the siege is fought on, nil before it's picked) and layerSince (when it was picked) }, with
 ---what this client adds: called and opened (announced already), over, nexusAt (the last Nexus progress, for the last
 ---round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), the
 ---fall that started the current truce (fell, fellAt) and the rounds this client saw end, { n, side, point, at }
@@ -879,6 +892,9 @@ function private.ReadSiege(raw, now)
 	local wins = type(raw.wins) == "table" and raw.wins or {}
 	s.wins.Horde = type(wins.h) == "number" and wins.h or 0
 	s.wins.Alliance = type(wins.a) == "number" and wins.a or 0
+	if Wanted.Shard:IsKey(raw.layer) then
+		s.layer, s.layerSince = raw.layer, type(raw.layerSince) == "number" and raw.layerSince or 0
+	end
 	if type(raw.nexusCost) == "table" then
 		for id, cost in pairs(raw.nexusCost) do
 			if byId[id] and not byId[id].lane and type(cost) == "number" and cost > 0 then
@@ -905,6 +921,35 @@ end
 ---Tonight's siege, or nil when the catch-up named none: see private.ReadSiege.
 function Captures:Siege()
 	return private.siege
+end
+
+---The layer tonight's siege is fought on, as the site picked it (the catch-up, or a peer's word), and since when;
+---nil before it's picked.
+---@return string? key
+---@return number? since
+function Captures:SiegeLayer()
+	local s = private.siege
+	if not s or not s.layer then
+		return nil, nil
+	end
+	return s.layer, s.layerSince
+end
+
+---The siege's layer as a peer's message carried it (sl, st): taken when it's newer than this client's word (the site
+---re-picks with cause, and the clients that heard it spread it). A change is news.
+function private.PeerLayer(key, since)
+	local s = private.siege
+	if not s or s.over or not Wanted.Shard:IsKey(key) or type(since) ~= "number" or since > GetServerTime() + SAME_FALL_SECONDS then
+		return
+	end
+	if s.layer and s.layerSince >= since then
+		return
+	end
+	local changed = s.layer ~= key
+	s.layer, s.layerSince = key, since
+	if changed then
+		private.SiegeNews("layer", key)
+	end
 end
 
 ---The rounds of tonight's siege this client saw end, oldest first: { n, side, point (the Nexus), at }.
@@ -991,7 +1036,7 @@ function Captures:RespawnPaused(front)
 end
 
 ---Registers a function called as the siege moves: func(kind, ...), kind "call" (30 minutes before the window), "open",
----"fell" (point, side), "round" (n), "over".
+---"fell" (point, side), "round" (n), "over", "layer" (key: the siege's layer picked or switched).
 function Captures:OnSiege(func)
 	tinsert(private.siegeListeners, func)
 end

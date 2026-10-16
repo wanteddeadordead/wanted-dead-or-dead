@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.5] - 2026-10-16
+
 - Sync across realm names no longer starves. Each minute one realm link per realm name gets the full list of what
   we hold (the others a one-part keepalive each minute), an origin's records are asked of one link at a time
   instead of every link answering the same request with the same records, and fills take at most 32 of the 40

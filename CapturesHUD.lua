@@ -220,6 +220,12 @@ function private.Place(bar)
 	local capture = bar.capture
 	capture:ClearAllPoints()
 	capture:SetPoint("TOP", bar, "BOTTOM", 0, -6)
+	-- The announcements under the capture bar's line, never over it (the XML's fixed spot crossed it, 2026-10-16)
+	local announce = WantedCaptureAnnounceFrame
+	if announce and announce.ClearAllPoints and announce.SetPoint then
+		announce:ClearAllPoints()
+		announce:SetPoint("TOP", capture, "BOTTOM", 0, -30)
+	end
 end
 
 ---Shows the HUD for the front the player is in, or hides it; and notes inhibitors respawning as their time comes. The

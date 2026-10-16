@@ -830,8 +830,9 @@ end
 ---The catch-up's siege, checked and in the addon's terms, or nil: { front, start, end, round = { n, start, truceUntil,
 ---begun }, wins = { Horde, Alliance }, nexusCost = { [Nexus id] = samples }, next = { front, start, end } }, with
 ---what this client adds: called and opened (announced already), over, nexusAt (the last Nexus progress, for the last
----round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), and
----the fall that started the current truce (fell, fellAt). Nothing that happened before login is announced.
+---round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), the
+---fall that started the current truce (fell, fellAt) and the rounds this client saw end, { n, side, point, at }
+---(rounds: the catch-up carries only the wins). Nothing that happened before login is announced.
 function private.ReadSiege(raw, now)
 	if type(raw) ~= "table" then
 		return nil
@@ -840,7 +841,7 @@ function private.ReadSiege(raw, now)
 	if not front or type(raw.start) ~= "number" or type(raw["end"]) ~= "number" or raw["end"] <= raw.start then
 		return nil
 	end
-	local s = { front = front, start = raw.start, ["end"] = raw["end"], wins = { Horde = 0, Alliance = 0 }, nexusCost = {}, touched = {}, nexusAt = now }
+	local s = { front = front, start = raw.start, ["end"] = raw["end"], wins = { Horde = 0, Alliance = 0 }, nexusCost = {}, touched = {}, nexusAt = now, rounds = {} }
 	local wins = type(raw.wins) == "table" and raw.wins or {}
 	s.wins.Horde = type(wins.h) == "number" and wins.h or 0
 	s.wins.Alliance = type(wins.a) == "number" and wins.a or 0
@@ -870,6 +871,12 @@ end
 ---Tonight's siege, or nil when the catch-up named none: see private.ReadSiege.
 function Captures:Siege()
 	return private.siege
+end
+
+---The rounds of tonight's siege this client saw end, oldest first: { n, side, point (the Nexus), at }.
+function Captures:Rounds()
+	local s = private.siege
+	return s and s.rounds or {}
 end
 
 ---This week's siege wins on a front, { Horde, Alliance }, or nil when the catch-up gave none.
@@ -965,6 +972,7 @@ function private.Fell(point, side, at, mine)
 	local s = private.siege
 	s.wins[side] = s.wins[side] + 1
 	s.fell, s.fellAt = point, at
+	tinsert(s.rounds, { n = s.round and s.round.n or 1, side = side, point = point, at = at })
 	s.touched[point.front.id] = true
 	for _, p in ipairs(points) do
 		if p.front == point.front then

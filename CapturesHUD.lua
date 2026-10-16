@@ -180,7 +180,7 @@ function private.Build()
 	-- Tonight's siege, under the lane rows
 	bar.siege = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	bar.siege:SetPoint("TOP", 0, -(ROW_TOP + 3 * ROW_STEP + 4))
-	-- During the siege, when the rally leader here is on another layer (Shard): the line and Hop, or Stay while holding
+	-- During the siege: its layer and whether we're on it (Shard), with Hop, or the hop under way with Stay
 	bar.hop = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	bar.hop:SetPoint("TOP", -26, -(ROW_TOP + 3 * ROW_STEP + 22))
 	bar.hopButton = W:Button(bar, "Hop", "chip", 44, 16, function()
@@ -191,7 +191,7 @@ function private.Build()
 	end)
 	bar.hopButton.label:SetFontObject(Wanted.Theme.Fonts.small)
 	bar.hopButton:SetPoint("LEFT", bar.hop, "RIGHT", 6, 0)
-	W:AttachTooltip(bar.hopButton, "Hop to the rally's layer", "Asks the rally leader (or a Wanted player of your side on their layer) for a group invite: your addon accepts it, holds the group twenty seconds so the move sticks, then leaves it, unless you click Stay or the host leads the rally.")
+	W:AttachTooltip(bar.hopButton, "Hop to the siege's layer", "Asks a Wanted player of your side on the siege's layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes.")
 	bar.capture = private.BuildCapture()
 	private.bar = bar
 	return bar
@@ -303,34 +303,29 @@ function CapturesHUD:Update()
 		bar.siegeText = siege
 		bar.siege:SetText(siege)
 	end
-	local hop = private.HopLine(front)
+	local hop, button = private.HopLine(front)
 	if hop then
 		bar.hop:SetText(hop)
-		bar.hopButton:SetText(Wanted.Shard:Holding() and "Stay" or "Hop")
+		bar.hopButton:SetText(button or "Hop")
 	end
 	bar.hop:SetShown(hop ~= nil)
-	bar.hopButton:SetShown(hop ~= nil)
+	bar.hopButton:SetShown(button ~= nil)
 	bar:SetHeight(hop and 100 or 80)
 	private.UpdateCapture(bar.capture)
 	bar:Show()
 end
 
----The top widget's layer line while the siege is on at this front and the rally leader here is on another layer
----than ours (Shard): nil otherwise.
+---The top widget's layer line while the siege is on at this front (from an hour before the window until it's over):
+---the siege's layer and whether we're on it, or the hop under way (Shard:Line), and its button; nil otherwise.
 ---@param front table
----@return string?
+---@return string? text
+---@return string? button
 function private.HopLine(front)
 	local s = Captures:Siege()
-	local phase = Captures:Phase()
-	if not s or s.front ~= front or (phase ~= "round" and phase ~= "truce") then
-		return nil
+	if not s or s.front ~= front or not Captures:RespawnPaused(front) then
+		return nil, nil
 	end
-	if Wanted.Shard:Holding() then
-		return "On the rally's layer: leaving the hop's group soon"
-	elseif Wanted.Shard:HopTarget() then
-		return "You're not on the rally's layer"
-	end
-	return nil
+	return Wanted.Shard:Line(front.zone, front.mapId)
 end
 
 ---An hour of the day as the client's clock shows it, "7 PM" (date() formats a server time in the PC's own zone, as

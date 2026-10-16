@@ -260,8 +260,18 @@ function private.BuildTonight(body, width)
 	card.waypoint = W:Button(card, "Set waypoint", "chip", 90, 20, function() private.TrackRally() end)
 	card.waypoint:SetPoint("TOPLEFT", middleX, top - 44)
 	W:AttachTooltip(card.waypoint, "Set waypoint", "Puts the game's map waypoint where the rally leader stands.")
-	card.layer = Theme:Text(card, "small", "Join the leader's raid to fight on the same layer.", C.muted)
+	-- The siege's layer and whether we're on it (Shard), with Hop; Stay while a hop's group is held
+	card.layer = Theme:Text(card, "small", "", C.amber)
 	card.layer:SetPoint("TOPLEFT", middleX, top - 70)
+	card.hop = W:Button(card, "Hop", "chip", 44, 16, function()
+		local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
+		if why then
+			Wanted:Print("%s", why)
+		end
+	end)
+	card.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
+	card.hop:SetPoint("LEFT", card.layer, "RIGHT", 8, 0)
+	W:AttachTooltip(card.hop, "Hop to the siege's layer", "Asks a Wanted player of your side on the siege's layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 	-- The buttons, on a row of their own under the lanes
 	card.buttonsTop = -top + 3 * LANE_PITCH + 10
 	card.map = W:Button(card, "Open the map", "secondary", 96, 24, function() private.OpenMap(Captures:Siege().front) end)
@@ -503,6 +513,7 @@ function private.RefreshTonight()
 		card.text:SetText("wanteddeadordead.com picks each evening's front the day before, the most fought front of the week; the next one shows here once your app has synced.")
 		card.waypoint:Hide()
 		card.layer:Hide()
+		card.hop:Hide()
 		card.map:Hide()
 		card.front:Hide()
 		card.rally:Hide()
@@ -548,7 +559,19 @@ function private.RefreshTonight()
 	end
 	private.rallyLeader = leader
 	card.waypoint:SetShown(leader ~= nil)
-	card.layer:SetShown(leader ~= nil)
+	-- The siege's layer, once the site has picked it
+	local layerText, button
+	if phase ~= "over" then
+		if Captures:SiegeLayer() then
+			layerText, button = Wanted.Shard:Line(front.zone, front.mapId)
+		else
+			layerText = Theme:Colorize("The siege's layer isn't picked yet.", C.muted)
+		end
+	end
+	card.layer:SetText(layerText or "")
+	card.layer:SetShown(layerText ~= nil)
+	card.hop:SetText(button or "Hop")
+	card.hop:SetShown(button ~= nil)
 	card.map:SetShown(OpenWorldMap ~= nil)
 	card.front:SetShown(phase ~= "over")
 	card.rally:SetShown(Wanted.Rally ~= nil and phase ~= "over" and private.OnFront(front) and private.GroupLeader() and Wanted.Rally:Holder(front.mapId) == nil)

@@ -14856,8 +14856,8 @@ end)()
 	local leader = { name = "Grimshaw", class = "ROGUE", zone = "Hillsbrad Foothills", mapId = 1424, x = 52.3, y = 30.9, heard = clock }
 	ns.Rally.Holder = function(_, m) return m == 1424 and leader or nil end
 	ns.UI:Refresh(true)
-	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and shows("Join the leader's raid to fight on the same layer.") and not shows("Lead the rally"),
-		"a rally live: who leads it and where, the layer note, and Set waypoint")
+	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and shows("The siege's layer isn't picked yet.") and not shows("Lead the rally"),
+		"a rally live: who leads it and where, the siege's layer not picked yet, and Set waypoint")
 	waypoint = nil
 	check(click("Set waypoint") and waypoint and abs(waypoint.position.x - 0.523) < 0.001 and abs(waypoint.position.y - 0.309) < 0.001, "Set waypoint puts it on the leader")
 	leader.mine = true
@@ -15138,8 +15138,7 @@ end)()
 	ns.NearbyWindow:SetShown(true)
 	ns.NearbyWindow:Refresh()
 	local line = nearbyPrivate.rally
-	check(line:IsShown() and line.text._text:find("Grimshaw", 1, true) and line.text._text:find("on another layer", 1, true), "the rally line says the leader is on another layer: "..tostring(line.text._text))
-	check(line.hop:IsShown() and line.hop._text == "Hop", "with a Hop button")
+	check(line:IsShown() and line.text._text:find("Grimshaw", 1, true) and not line.hop:IsShown(), "the rally line names the leader; no fight layer known, so no Hop: "..tostring(line.text._text))
 	-- The hop: who to ask, and when we can't
 	local host, why, layer = Shard:HopTarget()
 	check(host == "Grimshaw" and layer == B and why == nil, "the rally leader is the host to ask")
@@ -15281,16 +15280,16 @@ end)()
 	clock = clock + 1
 	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
 	ns.Captures:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
-	Rallying("Grimshaw", B, { m = 1424, z = "Hillsbrad Foothills" })
-	RunTimers()
 	ns.CapturesHUD:Update()
 	local bar = _G.WantedCaptureBar
-	check(bar:IsShown() and bar.hop:IsShown() and bar.hop._text == "You're not on the rally's layer" and bar.hopButton:IsShown() and bar.hopButton._text == "Hop",
-		"the HUD says we're not on the rally's layer, with Hop: "..tostring(bar.hop._text))
-	Rallying("Grimshaw", A, { m = 1424, z = "Hillsbrad Foothills" })
-	RunTimers()
+	check(bar:IsShown() and not bar.hop:IsShown() and not bar.hopButton:IsShown(), "no layer line on the HUD while the siege's layer isn't picked")
+	ns.Captures:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = B, layerSince = clock }, nil)
 	ns.CapturesHUD:Update()
-	check(not bar.hop:IsShown() and not bar.hopButton:IsShown(), "on the rally's layer: no line")
+	check(bar.hop:IsShown() and bar.hop._text == "The siege is on layer 501, you're on 497" and bar.hopButton:IsShown() and bar.hopButton._text == "Hop",
+		"the HUD says the siege's layer and ours, with Hop: "..tostring(bar.hop._text))
+	for _ = 1, 7 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	ns.CapturesHUD:Update()
+	check(bar.hop:IsShown() and bar.hop._text == "You're on the siege's layer" and not bar.hopButton:IsShown(), "on it: said, without a button: "..tostring(bar.hop._text))
 	ns.Captures:TakeSiege(nil, nil)
 	-- The settings, and /wanted shard
 	check(Shard:Settings().host == true and Shard:Settings().accept == true, "hosting and auto-accept are on by default")
@@ -15298,7 +15297,7 @@ end)()
 	Rallying("Grimshaw", B)
 	RunTimers()
 	ns:RunCommand("shard", "")
-	check(Said("Your layer: 497") and Said("Grimshaw leads the rally here on layer 501: not yours"), "/wanted shard says ours and the leader's: "..tostring(printed[#printed]))
+	check(Said("Your layer: 501") and Said("Grimshaw leads the rally here on layer 501: yours"), "/wanted shard says ours and the leader's: "..tostring(printed[#printed]))
 	-- Put back
 	Rallying("Grimshaw", B, { e = 1, c = clock + 10 })
 	RunTimers()

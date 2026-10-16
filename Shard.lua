@@ -475,8 +475,9 @@ function private.OnInvite(name)
 		return
 	end
 	local popup = StaticPopup_Visible and StaticPopup_Visible("PARTY_INVITE")
-	if popup and _G[popup] then
-		_G[popup].inviteAccepted = 1
+	local frame = type(popup) == "string" and _G[popup] or type(popup) == "table" and popup or nil
+	if frame then
+		frame.inviteAccepted = 1
 	end
 	AcceptGroup()
 	StaticPopup_Hide("PARTY_INVITE")
@@ -614,8 +615,12 @@ function private.HostWhyNot(name)
 	end
 end
 
----Someone asks us for an invite: they get one (the Raids module's invite) and "ok", or why not.
+---Someone asks us for an invite: they get one (the Raids module's invite) and "ok", or why not. Where the game
+---blocks whispers (an instance) no answer can go: they're left to their half-minute wait.
 function private.Host(name)
+	if Wanted.Sync:WhispersLocked() then
+		return
+	end
 	local why = private.HostWhyNot(name) or Wanted.Raids:Invite(name)
 	if why then
 		Wanted.Sync:SendHop(name, { r = why })

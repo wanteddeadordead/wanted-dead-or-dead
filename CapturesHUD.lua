@@ -282,22 +282,24 @@ function private.Hour(t)
 end
 
 ---A siege window as the client's clock shows it: "7 to 10 PM", or "11 AM to 2 PM" across noon; on another day than
----today, with the day first: "Fri 7 to 10 PM" (the catch-up names the next siege as soon as it's picked).
-function private.Window(s)
+---today, with the day first: "Fri 7 to 10 PM" (the catch-up names the next siege as soon as it's picked), unless
+---plain asks for the hours alone.
+function private.Window(s, plain)
 	local from, to = private.Hour(s.start), private.Hour(s["end"])
 	local fromSuffix, toSuffix = from:match("%a+$"), to:match("%a+$")
 	if fromSuffix and fromSuffix == toSuffix then
 		from = from:gsub(" %a+$", "")
 	end
-	local day = date("%j", s.start) ~= date("%j") and date("%a", s.start).." " or ""
+	local day = not plain and date("%j", s.start) ~= date("%j") and date("%a", s.start).." " or ""
 	return format("%s%s to %s", day, from, to)
 end
 
----A siege's window as the client's clock shows it, "Fri 7 to 10 PM", for the Home page's siege card.
----@param s table a siege (Captures:Siege)
+---A siege's window as the client's clock shows it, "Fri 7 to 10 PM" (the hours alone with plain), for the Siege page.
+---@param s table a siege (Captures:Siege), or anything with start and ["end"]
+---@param plain boolean?
 ---@return string
-function CapturesHUD:WindowText(s)
-	return private.Window(s)
+function CapturesHUD:WindowText(s, plain)
+	return private.Window(s, plain)
 end
 
 ---An hour of the day as the client's clock shows it, "7 PM".

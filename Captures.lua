@@ -884,6 +884,40 @@ function Captures:FrontWins(front)
 	return private.frontWins[front.id]
 end
 
+---The next n siege evenings, from tonight's (tomorrow's once tonight's window has closed): { day (noon that day),
+---start, ["end"] (the window, at the known siege's time of day; nil when no siege is known), front (when the catch-up
+---named that evening's), today }. Every evening has a siege; the catch-up names at most two in advance.
+---@param n number
+---@param now number?
+---@return table[]
+function Captures:Evenings(n, now)
+	now = now or GetServerTime()
+	local s = private.siege
+	local known, at = {}, nil
+	if s then
+		at = date("*t", s.start)
+		known[date("%Y%m%d", s.start)] = s.front
+		if s.next then
+			known[date("%Y%m%d", s.next.start)] = s.next.front
+		end
+	end
+	local today = date("*t", now)
+	local evenings, offset = {}, 0
+	while #evenings < n do
+		local day = time({ year = today.year, month = today.month, day = today.day + offset, hour = 12, min = 0, sec = 0 })
+		local evening = { day = day, front = known[date("%Y%m%d", day)], today = offset == 0 }
+		if at then
+			evening.start = time({ year = today.year, month = today.month, day = today.day + offset, hour = at.hour, min = at.min, sec = 0 })
+			evening["end"] = evening.start + (s["end"] - s.start)
+		end
+		if not evening["end"] or evening["end"] > now then
+			tinsert(evenings, evening)
+		end
+		offset = offset + 1
+	end
+	return evenings
+end
+
 ---Where tonight's siege stands: nil (none), "before" the window, in a "round", in a "truce", or "over".
 ---@param now number?
 ---@return string?

@@ -7,11 +7,17 @@
 -- our rally position and our capture-point presence (Sync, Rally, Captures), so every Wanted player's layer is known
 -- with their zone, and the Nearby window says when the rally leader is on another one.
 --
--- The only way onto another layer is to join a group whose leader is on it. A layer hop asks a Wanted player on the
--- rally's layer in our zone for an invite (by addon whisper); their addon invites us (never dead, in a fight, in a
--- full group, or with hosting off), ours accepts the invite from that host alone, holds the group twenty seconds so
--- the server doesn't bounce us back, then leaves it, unless we chose to stay or the host leads the rally. Fifteen
--- seconds in, the creatures around us say whether the move happened: still on the old layer, we say so and leave.
+-- Each zone has one target layer (Shard:Target): the layer the site picked for tonight's siege while the siege is on
+-- at that front, else the zone's fight layer, as the site last said it or as this client reckons it from the deaths
+-- and the Wanted players heard on the channel. Nobody picks a layer: the hop goes to the target or nowhere.
+--
+-- The only way onto another layer is to join a group whose leader is on it. A layer hop asks the Wanted player of
+-- our side heard latest on the target layer in our zone for an invite (by addon whisper); their addon invites us
+-- (never dead, in a fight, in an instance, in a full group, in a raid they can't invite to, or with hosting off, and
+-- a refusal moves the ask to the next host), ours accepts the invite from that host alone, holds the group twenty
+-- seconds so the server doesn't bounce us back, then leaves it, unless we chose to stay or the host leads the rally.
+-- Fifteen seconds in, the creatures around us say whether the move happened: still on the old layer, we say so and
+-- leave. One hop every ten minutes.
 
 local _, Wanted = ...
 local Shard = Wanted:NewModule("Shard")
@@ -28,6 +34,7 @@ local private = {
 	hop = nil, -- the hop under way: { id, host, target, from, state, asked, joined, stay, tried } (see Shard:HopTo)
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
+	lastHopAt = nil, -- GetTime() we last joined a host's group for a hop (the cooldown runs from it)
 }
 -- A host has this long to invite after we ask; an invite from them later than this is left to the player
 local INVITE_SECONDS = 30
@@ -37,12 +44,14 @@ local HOLD_SECONDS = 20
 local WATCHDOG_SECONDS = 15
 -- A host invites one player this often at most
 local HOST_AGAIN_SECONDS = 30
+-- One hop this often: layers aren't for picking
+local COOLDOWN_SECONDS = 10 * 60
 -- Why a host couldn't invite, as their addon said it (r), in plain words
 local REFUSALS = {
 	combat = "in combat",
 	dead = "dead",
 	full = "their group is full",
-	cant = "not their group's leader",
+	cant = "not their group's leader or an assistant",
 	off = "hosting layer hops is off in their settings",
 	instance = "in an instance",
 	busy = "they invited you a moment ago",
@@ -467,36 +476,9 @@ end
 -- Hopping: asking for an invite
 -- ============================================================================
 
----Who can invite us onto the rally's layer in our zone: the rally leader when they're on another layer than ours,
----else the Wanted player of our side last heard on the rally's layer in our zone. Returns the host and the layer, or
----nil and why there's nobody to ask.
----@return string? host
----@return string? why
----@return string? layer
-function Shard:HopTarget()
-	local mapId = Shard:ZoneMap()
-	if not mapId then
-		return nil, "Your zone isn't known here."
-	end
-	local mine = Shard:Current()
-	if not mine then
-		return nil, "Your layer isn't known yet: look at a creature nearby."
-	end
-	local leader = Wanted.Rally:Here()
-	if not leader or leader.mine then
-		return nil, "There's no rally to hop to in your zone."
-	end
-	local theirs = Shard:Of(leader.name)
-	if not theirs or theirs.mapId ~= mapId then
-		return nil, format("%s's layer isn't known yet.", leader.name)
-	end
-	if theirs.key == mine then
-		return nil, "You're on the rally's layer."
-	end
-	return leader.name, nil, theirs.key
-end
-
----Another host on a layer in our zone, heard latest, leaving out the ones that couldn't invite this hop.
+---The Wanted player of our side to ask for an invite onto a layer in our zone: the one heard there latest (their
+---hello, rally position or point presence), leaving out the ones that couldn't invite this hop. nil when there's
+---nobody.
 ---@param layer string
 ---@param tried table name -> true
 ---@return string?
@@ -514,7 +496,7 @@ end
 ---@return string?
 function Shard:HopWhyNot()
 	if private.hop then
-		return format("You're already hopping to %s's layer.", private.hop.host)
+		return format("You're already hopping to %s.", Shard:LayerText(private.hop.target))
 	end
 	if Wanted:InInstance() then
 		return "Layer hops are for the open world, not instances."
@@ -526,43 +508,52 @@ function Shard:HopWhyNot()
 		return "You can't hop layers while dead."
 	end
 	if IsInGroup() then
-		return "You're in a group: leave it first, then hop."
+		return "You're in a group: leave your group first, then hop."
 	end
 	if Wanted:GetRequiredUpdate() then
 		return format("Update Wanted to %s first: nothing is shared until you do.", Wanted:GetRequiredUpdate())
 	end
+	local since = private.lastHopAt and GetTime() - private.lastHopAt
+	if since and since < COOLDOWN_SECONDS then
+		local left = COOLDOWN_SECONDS - since
+		return format("One hop every %d minutes: your next is allowed in %s.", COOLDOWN_SECONDS / 60, left >= 60 and format("%d min", ceil(left / 60)) or format("%d s", ceil(left)))
+	end
 end
 
----Hops to the rally's layer: asks the rally leader, or whoever of our side is on it in our zone. Returns why not, or
----nil.
+---Hops to our zone's target layer, the fight's or the siege's (Shard:Target): asks the Wanted player of our side
+---heard latest on it in our zone for an invite. Their addon invites us (or says why it can't, and the next host is
+---asked); ours accepts their invite and holds their group a while (private.Joined). Returns why not, or nil.
 ---@return string?
 function Shard:Hop()
-	local host, why, layer = Shard:HopTarget()
-	if not host then
-		return why
-	end
-	return Shard:HopTo(host, layer)
-end
-
----Asks a Wanted player of our side for an invite onto their layer. Their addon invites us (or says why it can't);
----ours accepts their invite and holds their group a while (private.Joined). Returns why not, or nil.
----@param name string the host, as the game names them
----@param layer string? their layer, when known: the move is checked against it
----@return string?
-function Shard:HopTo(name, layer)
 	local why = Shard:HopWhyNot()
 	if why then
 		return why
 	end
-	if type(name) ~= "string" or name == "" or name == Wanted.Store:GetOrigin() then
-		return "Name a Wanted player of your side in your zone to hop to."
+	local zone = Shard:Zone()
+	if not Shard:ZoneMap() then
+		return "Your zone isn't known here."
 	end
-	if not Wanted.Sync:SendHop(name, { a = 1 }) then
-		return format("%s couldn't be asked (not in the sync channel, or whispers are blocked here).", name)
+	local target, kind = Shard:Target(zone)
+	if not target then
+		return format("No fight layer is known in %s yet.", zone)
+	end
+	local mine = Shard:Current()
+	if not mine then
+		return "Your layer isn't known yet: look at a creature nearby."
+	end
+	if mine == target then
+		return format("You're on the %s's layer.", kind)
+	end
+	local host = private.NextHost(target, {})
+	if not host then
+		return format("No one on %s can invite you yet.", Shard:LayerText(target))
+	end
+	if not Wanted.Sync:SendHop(host, { a = 1 }) then
+		return format("%s couldn't be asked (not in the sync channel, or whispers are blocked here).", host)
 	end
 	private.hops = private.hops + 1
-	private.hop = { id = private.hops, host = name, target = layer, from = Shard:Current(), state = "asked", asked = GetTime(), tried = { [name] = true } }
-	Wanted:Print("Asking %s for an invite onto their layer.", name)
+	private.hop = { id = private.hops, host = host, target = target, from = mine, state = "asked", asked = GetTime(), tried = { [host] = true } }
+	Wanted:Print("Asking %s for an invite onto %s.", host, Shard:LayerText(target))
 	private.GiveUpLater()
 	private.Changed()
 	return nil
@@ -623,7 +614,8 @@ function private.Answer(sender, r)
 		return
 	end
 	Wanted:Print("%s couldn't invite (%s).", sender, REFUSALS[r] or "no reason given")
-	local other = hop.target and private.NextHost(hop.target, hop.tried)
+	-- Their word on their layer is stale too: the next ask, if any, goes elsewhere
+	local other = private.NextHost(hop.target, hop.tried)
 	if other and Wanted.Sync:SendHop(other, { a = 1 }) then
 		hop.host, hop.asked, hop.tried[other] = other, GetTime(), true
 		Wanted:Print("Asking %s instead.", other)
@@ -684,14 +676,16 @@ end
 function private.Joined()
 	local hop = private.hop
 	hop.state, hop.joined = "joined", GetTime()
+	private.lastHopAt = hop.joined
 	-- The creatures here are the new layer's: what the old ones said is forgotten
 	private.Forget()
+	local where = Shard:LayerText(hop.target)
 	local leader = Wanted.Rally:Here()
 	if leader and not leader.mine and leader.name == hop.host then
 		hop.stay = true
-		Wanted:Print("You joined %s's group, the rally leader's: it takes you to their layer. Staying in it.", hop.host)
+		Wanted:Print("You joined %s's group, the rally leader's: it takes you to %s. Staying in it.", hop.host, where)
 	else
-		Wanted:Print("You joined %s's group: it takes you to their layer. Leaving it in %d seconds (/wanted hop stay to stay).", hop.host, HOLD_SECONDS)
+		Wanted:Print("You joined %s's group: it takes you to %s. Leaving it in %d seconds (/wanted hop stay to stay).", hop.host, where, HOLD_SECONDS)
 	end
 	private.Countdown()
 	private.Later(WATCHDOG_SECONDS, function()
@@ -706,7 +700,7 @@ function private.Joined()
 			private.Leave()
 			local now = Shard:Current()
 			if now and now ~= hop.from then
-				Wanted:Print("Moved to %s's layer.", hop.host)
+				Wanted:Print("Moved to %s.", Shard:LayerText(hop.target))
 			else
 				Wanted:Print("Left %s's group. Look at a creature nearby to read your layer.", hop.host)
 			end
@@ -855,13 +849,13 @@ function private.Host(name)
 	Wanted:Print("Inviting %s to your group: they asked for a hop onto your layer.", name)
 end
 
-Wanted:RegisterCommand("hop", "Hops to the rally's layer in your zone (/wanted hop), to a Wanted player's (/wanted hop Name), or stays in the group after one (/wanted hop stay).", function(args)
-	args = strtrim(args or "")
+Wanted:RegisterCommand("hop", "Hops to the fight's (or the siege's) layer in your zone (/wanted hop), or stays in the group after one (/wanted hop stay).", function(args)
+	args = strlower(strtrim(args or ""))
 	local why
-	if strlower(args) == "stay" then
+	if args == "stay" then
 		why = Shard:Stay()
 	elseif args ~= "" then
-		why = Shard:HopTo(args)
+		why = "Hops go to the fight's layer only: /wanted hop, or /wanted hop stay to keep the group after one."
 	else
 		why = Shard:Hop()
 	end
@@ -870,9 +864,11 @@ Wanted:RegisterCommand("hop", "Hops to the rally's layer in your zone (/wanted h
 	end
 end)
 
-Wanted:RegisterCommand("shard", "Says which layer of your zone you're on, and which the rally leader is on.", function()
+Wanted:RegisterCommand("shard", "Says which layer of your zone you're on, which the fight is on, and which the rally leader is on.", function()
 	local mine = Shard:Current()
 	Wanted:Print("Your layer: %s%s.", Shard:Short(mine), mine and (Shard:IsFresh() and " (confirmed in the last minute)" or "") or " (look at a creature nearby to read it)")
+	local text = Shard:TargetText(Shard:Zone())
+	Wanted:Print("%s.", text or format("No fight layer is known in %s yet", Shard:Zone()))
 	local leader = Wanted.Rally and Wanted.Rally:Here()
 	if not leader or leader.mine then
 		return

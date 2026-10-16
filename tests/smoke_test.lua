@@ -14109,7 +14109,11 @@ end)()
 	local hud = _G.WantedCaptureBar
 	check(hud.alliance.text._text == "Towers: 6" and hud.horde.text._text == "Towers: 6", "each side's towers: "..tostring(hud.alliance.text._text))
 	check(hud.alliance.icon._atlas == "alliance_tower-icon" and hud.horde.icon._atlas == "horde_tower-icon", "the widgets' tower icons")
-	check(poi[1] == 13 and poi[2] == 10 and poi[3] == 11 and poi[4] == 15, "the lane row: the Horde's graveyard (inhibitor) and tower, the Alliance's tower and graveyard: "..table.concat(poi, ",", 1, 4))
+	local row = hud.rows[1].icons
+	local pieces = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\"
+	check(row[1]._texture == pieces.."inhibitor-h" and row[2]._texture == pieces.."tower-h" and row[3]._texture == pieces.."tower-a" and row[4]._texture == pieces.."inhibitor-a",
+		"the lane row: the Horde's crystal (inhibitor) and tower, the Alliance's tower and crystal, the painted pieces: "..tostring(row[1]._texture))
+	check(#poi == 0, "the battlegrounds' POI icons are no longer read")
 	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
 	ns.CapturesHUD.TestAlert = nil
 	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
@@ -14188,7 +14192,7 @@ end)()
 	check(buttons[1]:GetParent()._level == 2399 and buttons[1]._level == 2401, "the overlay at its slot and the icons above it: "..tostring(buttons[1]:GetParent()._level)..", "..tostring(buttons[1]._level))
 	local lostTower
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
-	check(lostTower and lostTower.icon._texture == "Interface\\Minimap\\POIIcons", "a tower shows the battlegrounds' tower icon")
+	check(lostTower and lostTower.icon._texture == "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\tower-a", "a Horde tower the Alliance took shows the Alliance's painted tower: "..tostring(lostTower and lostTower.icon._texture))
 	waypoint = nil
 	buttons[1]:Click()
 	check(waypoint and waypoint.uiMapID == 1424 and superTracked == true, "clicking a point sets and tracks a waypoint")

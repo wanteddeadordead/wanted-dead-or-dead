@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+- Siege nights ship switched off: capture fronts, the HUD and map pieces, rally leaders and layer hops wait for
+  `/wanted siege on` (or Settings > Capture fronts) and a /reload, until their first public night makes them the
+  default. Everything else below is live.
+
+- The capture front's points on the map are the painted pieces from the site's war table: a wax seal on each Nexus, a
+  tower or a crystal on each lane point in its holder's colour (a lost tower shows as the other side's), greyed when a
+  Nexus falls. New files: restart the client after updating.
+- Layers. WoW Forever runs each zone as several copies (layers), and only a group whose leader is on another layer
+  can take you there. Wanted reads your layer from the creatures around you and stamps it on your capture-point
+  presence, kills, deaths and sightings, so wanteddeadordead.com tells one layer's fight from another's. Each zone
+  has one target layer, nobody's to pick: during a siege night, from an hour before the window, the layer the site
+  picked for the siege (announced "The siege of Hillsbrad Foothills is on layer 3" when picked or switched, under
+  Siege call); otherwise the zone's fight layer, as the site last said it or as your addon reckons it from the deaths
+  and the Wanted players of your side heard on the channel in the last ten minutes, from five of them ("Big fight on
+  layer 3" once in ten minutes when one appears in your zone, under the capture alerts). One line says where you
+  stand, with a Hop button: the rally line in Nearby ("The fight is on layer 3, you're on 5"; a rally leader is told
+  to "lead from layer 3"), the Hotspots page (each zone's layer on its row, and your own zone's line), the Siege
+  page's Tonight card and the capture HUD during the siege. `/wanted shard` says yours, the target and the rally
+  leader's.
+- Layer hop: `/wanted hop` or the Hop button goes to the target layer only. It asks the Wanted player of your side
+  heard latest on that layer in your zone for a group invite by addon whisper: their addon invites you (never while
+  dead, in a fight, in an instance, in a full group, or in a raid they can't invite to; a refusal moves the ask to the
+  next one; nobody there: "No one on layer 3 can invite you yet"), yours accepts the invite from that host alone,
+  holds the group so the move sticks (twenty seconds, or until the game's own "refresh world" countdown runs out),
+  then leaves it, unless you click Stay or `/wanted hop stay`, or the host leads the rally. The game's shard-transfer
+  events say whether you moved (confirmed, or called off: it says so and leaves); without them, the creatures around
+  you decide at fifteen seconds. One hop every ten minutes; not in a fight, while dead, in an instance or in a group
+  (leave your group first). Hosting is on while you lead a group or the rally; Settings > Capture fronts > "Host
+  layer hops" turns it on otherwise (off by default), and "Auto-accept my hops" (on) takes the invite by itself.
+
 ## [1.23.6] - 2026-10-16
 
 - No more "Interface action failed because of an AddOn" in a fight: the Nearby window no longer asks the client how
@@ -34,41 +64,6 @@
 - Opening or refreshing the world map in a fight no longer fills the chat with "The client blocked
   Button:SetPassThroughButtons()": Wanted's map markers no longer add a layer of their own to the map's layer table,
   which tainted the game's own markers.
-- Capture fronts: Arathi Highlands, Hillsbrad Foothills and Ashenvale played like a MOBA. Each side's Nexus stands on
-  the road into its flight-master town, just outside the guards; three lanes (Top, Mid, Bot) run between them, each with
-  each side's tower and inhibitor. Take a lane in order, the enemy's tower then their inhibitor; one inhibitor down
-  opens their Nexus, and taking it wins the front for the week. wanteddeadordead.com decides who holds what from at
-  least two different players' apps and the kills there; one player's addon never does.
-  - Standing in a point able to fight (not mounted, flying, on a flight, in travel form, stealthed, dead or away)
-    counts every 30 s in a presence book the desktop app sends the site, and tells your side's channel.
-  - On the world map, as Alterac Valley's map shows its towers and graveyards: the game's tower icon for a tower and its
-    graveyard icon for an inhibitor, in their holder's colour, grey once their side lost them, flashing while your side
-    is taking them; each side's crest for its Nexus; each point's circle, the lanes coloured up to each front line, and
-    a crest per front on the continent and Azeroth maps. Click a point for a waypoint. The icons also show on the
-    minimap (switch in the minimap's tracking menu).
-  - In a front's zone, a battleground-style display under the game's own: "Towers: N" for each side and a Top / Mid /
-    Bot row, and the battlegrounds' capture bar under the minimap while you stand in a point (provisional: the site
-    decides). Announcements in the middle of the screen as in a battleground: towers destroyed, inhibitors down and
-    respawned, your side attacking, a Nexus under attack.
-  - Siege nights: every day one front is the siege front, its Nexuses vulnerable from 7 to 10 PM Eastern. Taking a
-    point counts presence in samples, one per player of a side inside the circle every 30 s, each defender inside
-    cancelling one attacker and at most 6 attackers counting: a tower or inhibitor costs 40, a Nexus 120, 60 or 30
-    by how many of its inhibitors are down, and a downed inhibitor stays down on the siege front from 6 PM. A Nexus
-    falling wins the round, then a 30-minute truce with the front reset, then the next round; a win before 10 PM earns
-    another round, and the last round ends with no winner after a quiet quarter hour or at 11 PM. The display at the
-    top carries the siege (its window, the round and score, the truce clock, the result) and the capture bar how many
-    attack and defend and how long is left at that pace; announcements for the call half an hour before, the open,
-    each Nexus fall, each round and the end. The game's call is provisional, from what nearby clients say;
-    wanteddeadordead.com's, from the app at login, overrides it.
-  - The Siege page, first in the menu and the page the window opens on (Home is now Dashboard, second): tonight's
-    front, its window and a countdown, or the round and the score with the three lanes once it's on, the rally leader,
-    and buttons for the map, the rally and a waypoint to the front; the results (tonight's rounds, this week's siege
-    wins per front); the three fronts with their lanes' holders, a map and a waypoint each; the rules in full; and the
-    website's schedule, fronts and rules pages as addresses to copy. Upcoming: the next week's siege evenings on the
-    Siege page (the windows in your clock, the fronts the app has named, the rest picked the evening before, with the
-    map) and the next three on the Dashboard, in the second hot zone's place.
-  - `/wanted points` lists them; Settings > Sharing has the switches, an optional waypoint on the nearest point to
-    attack, and the siege call (the half-hour warning and the open, wherever you are).
 
 ## [1.23.3] - 2026-10-15
 

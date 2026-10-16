@@ -14209,8 +14209,21 @@ end)()
 	WorldMapFrame.GetMapID = function() return 947 end
 	C_Map.GetMapInfo = function(id) if id == 947 then return { mapType = 1 } end return { mapType = 3, parentMapID = 1415 } end
 	ns.CapturesMap:Refresh()
-	-- The minimap's icons, and its tracking menu's switch
+	-- The minimap's icons, each point's circle round its icon when it fits the view (200 yards; the mock minimap is
+	-- 100 px wide across 400 yards, so an 80-yard circle is 20 px), and its tracking menu's switch
+	local made = {}
+	local createTexture = Minimap.CreateTexture
+	Minimap.CreateTexture = function(self, ...) local t = createTexture(self, ...) made[#made + 1] = t return t end
 	ns.CapturesMap:UpdateMinimap()
+	Minimap.CreateTexture = createTexture
+	local rings = 0
+	for _, t in ipairs(made) do
+		if rawget(t, "_texture") and tostring(t._texture):find("pieces\\ring", 1, true) and t._shown ~= false then
+			rings = rings + 1
+			check(t._w == 20 and t._h == 20, "a point's circle on the minimap is its 40 yards round: "..tostring(t._w).." px")
+		end
+	end
+	check(rings >= 1, "the circles of the points in view are drawn round their icons, got "..rings)
 	local root = {}
 	root.CreateDivider = function() end
 	root.CreateCheckbox = function(_, text, isSelected, setSelected) if text:find("Capture points", 1, true) then root.box = { isSelected, setSelected } end end

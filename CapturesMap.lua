@@ -31,9 +31,11 @@ CapturesMap.PIECES = PIECES
 local LINE_WIDTH, ICON_SIZE, NEXUS_SIZE, BASE_CREST, MAP_CREST = 0.004, 0.032, 0.042, 0.04, 0.04
 local MAP_TYPE_WORLD = Enum and Enum.UIMapType and Enum.UIMapType.World or 1
 local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
--- The minimap's dots: how often they move, and their size in pixels
+-- The minimap's dots: how often they move, and their size in pixels. Each point's circle (the yards that count as
+-- being there) is drawn round its dot in its holder's colour, when the whole circle fits in the minimap's view
 local MINIMAP_SECONDS = 0.5
 local MINIMAP_DOT = 14
+local RING = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\ring"
 
 
 
@@ -378,7 +380,7 @@ end
 
 ---Moves the minimap's dots to where the points are around the player.
 function CapturesMap:UpdateMinimap()
-	local dots = private.minimapDots
+	local dots, rings = private.minimapDots, private.minimapRings
 	local _, x, y, mapId = Wanted.Recorder:GetPosition()
 	local front = Captures:FrontOn(mapId)
 	local show = front and x and Captures:Settings().minimap and Minimap and C_Minimap and C_Minimap.GetViewRadius
@@ -386,11 +388,14 @@ function CapturesMap:UpdateMinimap()
 		for _, dot in pairs(dots or {}) do
 			dot:Hide()
 		end
+		for _, ring in pairs(rings or {}) do
+			ring:Hide()
+		end
 		return
 	end
 	if not dots then
-		dots = {}
-		private.minimapDots = dots
+		dots, rings = {}, {}
+		private.minimapDots, private.minimapRings = dots, rings
 	end
 	local yards = Captures.MAP_YARDS[mapId]
 	local radius = C_Minimap.GetViewRadius()
@@ -400,10 +405,13 @@ function CapturesMap:UpdateMinimap()
 		facing = nil
 	end
 	for _, point in ipairs(Captures.POINTS) do
-		local dot = dots[point.id]
+		local dot, ring = dots[point.id], rings[point.id]
 		if point.front ~= front then
 			if dot then
 				dot:Hide()
+			end
+			if ring then
+				ring:Hide()
 			end
 		else
 			-- Yards east and south of the player, turned with the minimap when it rotates (the way you face is up)
@@ -412,9 +420,13 @@ function CapturesMap:UpdateMinimap()
 				local c, s = math.cos(facing), math.sin(facing)
 				dx, dy = dx * c - dy * s, dx * s + dy * c
 			end
-			if type(radius) ~= "number" or radius <= 0 or dx * dx + dy * dy > radius * radius then
+			local away = math.sqrt(dx * dx + dy * dy)
+			if type(radius) ~= "number" or radius <= 0 or away > radius then
 				if dot then
 					dot:Hide()
+				end
+				if ring then
+					ring:Hide()
 				end
 			else
 				if not dot then
@@ -426,6 +438,24 @@ function CapturesMap:UpdateMinimap()
 				dot:ClearAllPoints()
 				dot:SetPoint("CENTER", Minimap, "CENTER", dx / radius * half, -dy / radius * half)
 				dot:Show()
+				-- The circle, under the dot, in the holder's colour: only when it fits in the view (the minimap is round,
+				-- and a texture on it isn't clipped to it)
+				if away + point.r <= radius then
+					if not ring then
+						ring = Minimap:CreateTexture(nil, "ARTWORK")
+						ring:SetTexture(RING)
+						rings[point.id] = ring
+					end
+					local color = COLORS[Captures:Holder(point.id)] or COLORS[point.home]
+					ring:SetVertexColor(color[1], color[2], color[3], 0.9)
+					local size = 2 * point.r / radius * half
+					ring:SetSize(size, size)
+					ring:ClearAllPoints()
+					ring:SetPoint("CENTER", dot, "CENTER")
+					ring:Show()
+				elseif ring then
+					ring:Hide()
+				end
 			end
 		end
 	end

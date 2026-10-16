@@ -1,6 +1,7 @@
 -- Wanted: PvP hotspots. The zones where enemy players were seen in the last hour, busiest first: how many
 -- now and in the hour, their levels, the biggest guild there, PvP deaths, and whether it's getting
--- busier. Hover a zone for who was there; click it to open the map on it.
+-- busier. Hover a zone for who was there; click it to open the map on it. A zone whose fight layer is known says it,
+-- and one line says your own zone's, with Hop.
 
 local _, Wanted = ...
 local UI = Wanted.UI
@@ -75,13 +76,20 @@ function private.UpdateRow(row, group)
 		row.hot:ClearAllPoints()
 		row.hot:SetPoint("LEFT", row.zone, "LEFT", min(row.zone:GetStringWidth(), 225) + 8, 0)
 	end
+	local sub
 	if group.guild then
-		row.sub:SetText(Theme:Colorize(format("%d from <%s>", group.guildCount, group.guild), C.gold))
+		sub = Theme:Colorize(format("%d from <%s>", group.guildCount, group.guild), C.gold)
 	elseif group.hour > 0 then
-		row.sub:SetText(Theme:Colorize(format("%d enem%s in the last hour", group.hour, group.hour == 1 and "y" or "ies"), C.faint))
+		sub = Theme:Colorize(format("%d enem%s in the last hour", group.hour, group.hour == 1 and "y" or "ies"), C.faint)
 	else
-		row.sub:SetText(Theme:Colorize("PvP deaths only", C.faint))
+		sub = Theme:Colorize("PvP deaths only", C.faint)
 	end
+	-- The zone's fight (or siege) layer, when the site or this client's own estimate knows it
+	local layer = Wanted.Shard:Target(group.zone, group.mapId)
+	if layer then
+		sub = sub..Theme:Colorize("  on "..Wanted.Shard:LayerText(layer), C.amber)
+	end
+	row.sub:SetText(sub)
 	row.recent:SetText(group.recent > 0 and Theme:Colorize(tostring(group.recent), heat) or Theme:Colorize("0", C.faint))
 	row.hour:SetText(group.hour)
 	row.levels:SetText(group.hour > 0 and Hotspots:FormatLevels(group) or Theme:Colorize("-", C.faint))
@@ -140,6 +148,11 @@ function private.Refresh()
 	local groups = Hotspots:Get()
 	local busy = private.CountBusy(groups)
 	private.count:SetText(format("%d zone%s with enemies in the last 15 minutes", busy, busy == 1 and "" or "s"))
+	local Shard = Wanted.Shard
+	local text, button = Shard:Line(Shard:Zone())
+	private.layer:SetText(text and Theme:Colorize(text, C.amber) or Theme:Colorize(format("No fight layer known in %s yet.", Shard:Zone()), C.faint))
+	private.hop:SetText(button or "Hop")
+	private.hop:SetShown(button ~= nil)
 	private.list:SetItems(groups, "No enemies seen in the last hour.", "Zones fill in as you and other Wanted users spot enemy players.")
 end
 
@@ -176,10 +189,22 @@ UI:RegisterPage("hotspots", {
 		W:AttachTooltip(private.risingToggle, "Rising-zone alerts", "A warning like RISING FAST: The Barrens when many more enemies show up in a zone than 5 minutes before.")
 		private.note = Theme:Text(container, "tiny", "", C.faint)
 		private.note:SetPoint("TOPLEFT", 0, -18)
+		-- Your own zone's fight layer, with Hop when you're not on it (Shard); Stay while a hop's group is held
+		private.layer = Theme:Text(container, "small", "")
+		private.layer:SetPoint("TOPLEFT", 0, -36)
+		private.hop = W:Button(container, "Hop", "chip", 44, 16, function()
+			local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
+			if why then
+				Wanted:Print("%s", why)
+			end
+		end)
+		private.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
+		private.hop:SetPoint("LEFT", private.layer, "RIGHT", 8, 0)
+		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight (or tonight's siege) is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 
 		local headerBar = CreateFrame("Frame", nil, container)
-		headerBar:SetPoint("TOPLEFT", 0, -34)
-		headerBar:SetPoint("TOPRIGHT", 0, -34)
+		headerBar:SetPoint("TOPLEFT", 0, -52)
+		headerBar:SetPoint("TOPRIGHT", 0, -52)
 		headerBar:SetHeight(24)
 		local line = Theme:Line(headerBar)
 		line:SetPoint("BOTTOMLEFT")
@@ -189,7 +214,7 @@ UI:RegisterPage("hotspots", {
 			label:SetPoint("LEFT", col.x, 0)
 		end
 
-		local listTop = 62
+		local listTop = 80
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
 		list:SetPoint("TOPLEFT", 0, -listTop)
 		list:SetPoint("TOPRIGHT", 0, -listTop)

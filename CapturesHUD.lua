@@ -204,8 +204,9 @@ function private.BuildCapture()
 	return capture
 end
 
----Where the HUD goes: the top widget under the game's top-centre widgets, the capture bar under the minimap's, as a
----battleground's sit.
+---Where the HUD goes: the top widget under the game's top-centre widgets, and the capture bar right under it. (A
+---battleground's capture bar sits under the minimap; ours did too, and under a moved minimap or another addon's
+---panels it was never seen: the maintainer stood in a point on 2026-10-16 with the bar shown and nothing on screen.)
 function private.Place(bar)
 	bar:ClearAllPoints()
 	if UIWidgetTopCenterContainerFrame then
@@ -215,11 +216,7 @@ function private.Place(bar)
 	end
 	local capture = bar.capture
 	capture:ClearAllPoints()
-	if UIWidgetBelowMinimapContainerFrame then
-		capture:SetPoint("TOP", UIWidgetBelowMinimapContainerFrame, "BOTTOM", 0, -4)
-	else
-		capture:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -220)
-	end
+	capture:SetPoint("TOP", bar, "BOTTOM", 0, -6)
 end
 
 ---Shows the HUD for the front the player is in, or hides it; and notes inhibitors respawning as their time comes. The

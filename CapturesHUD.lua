@@ -293,6 +293,20 @@ function private.Window(s)
 	return format("%s%s to %s", day, from, to)
 end
 
+---A siege's window as the client's clock shows it, "Fri 7 to 10 PM", for the Home page's siege card.
+---@param s table a siege (Captures:Siege)
+---@return string
+function CapturesHUD:WindowText(s)
+	return private.Window(s)
+end
+
+---An hour of the day as the client's clock shows it, "7 PM".
+---@param t number a server time
+---@return string
+function CapturesHUD:HourText(t)
+	return private.Hour(t)
+end
+
 ---"12:40" from seconds.
 function private.Clock(seconds)
 	seconds = max(floor(seconds), 0)

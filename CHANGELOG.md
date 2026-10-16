@@ -59,9 +59,12 @@
     top carries the siege (its window, the round and score, the truce clock, the result) and the capture bar how many
     attack and defend and how long is left at that pace; announcements for the call half an hour before, the open,
     each Nexus fall, each round and the end. The game's call is provisional, from what nearby clients say;
-    wanteddeadordead.com's, from the app at login, overrides it. The siege is the first card on Home: the front, its
-    window and a countdown, the round and the score with the three lanes once it's on, this week's siege wins per
-    front, and buttons for the map, the rally and a waypoint to the front.
+    wanteddeadordead.com's, from the app at login, overrides it.
+  - The Siege page, first in the menu and the page the window opens on (Home is now Dashboard, second): tonight's
+    front, its window and a countdown, or the round and the score with the three lanes once it's on, the rally leader,
+    and buttons for the map, the rally and a waypoint to the front; the results (tonight's rounds, this week's siege
+    wins per front); the three fronts with their lanes' holders, a map and a waypoint each; the rules in full; and the
+    website's schedule, fronts and rules pages as addresses to copy.
   - `/wanted points` lists them; Settings > Sharing has the switches, an optional waypoint on the nearest point to
     attack, and the siege call (the half-hour warning and the open, wherever you are).
 

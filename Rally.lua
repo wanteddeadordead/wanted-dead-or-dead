@@ -250,8 +250,9 @@ function private.Send(ended)
 	local mine = private.mine
 	mine.sends = mine.sends + 1
 	local _, class = UnitClass("player")
+	-- l: our layer of the zone (Shard), so the others know whether they can reach us
 	return Sync:SendRally({ c = mine.claimed, z = mine.zone, m = mine.mapId, x = mine.x, y = mine.y, k = class, f = UnitFactionGroup("player"),
-		e = ended and 1 or nil }, ended or mine.sends % LINK_EVERY == 1) and true or false
+		e = ended and 1 or nil, l = Wanted.Shard:Current() }, ended or mine.sends % LINK_EVERY == 1) and true or false
 end
 
 ---Whether we lead our group (with assistant, or are one of its assistants). The game keeps both secret in
@@ -387,7 +388,7 @@ end
 ---sense, or from the other faction, is dropped. A claim earlier than ours in our zone ends ours; each later one is
 ---answered once, so its leader hears ours and stands down (a few times per player at most: past that they hear our
 ---regular sends like everyone else).
----@param tbl table { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it ended }
+---@param tbl table { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it ended, l = layer }
 ---@param sender string
 function Rally:OnMessage(tbl, sender)
 	if type(tbl) ~= "table" or type(sender) ~= "string" or sender == Store:GetOrigin() or tbl.f ~= UnitFactionGroup("player") then
@@ -426,6 +427,7 @@ function Rally:OnMessage(tbl, sender)
 	end
 	entry.name, entry.claimed, entry.heard, entry.zone, entry.mapId, entry.x, entry.y = sender, claimed, now, zone, mapId, x, y
 	entry.class = type(tbl.k) == "string" and strmatch(tbl.k, "^%u+$") and #tbl.k <= 12 and tbl.k or nil
+	Wanted.Shard:Note(sender, tbl.l, mapId)
 	local mine = private.mine
 	if mine and mine.mapId == mapId then
 		local key = sender..":"..claimed

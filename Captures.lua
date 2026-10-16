@@ -477,7 +477,8 @@ function Captures:Sample()
 			private.mine = { p = point.id, at = GetTime() }
 			if entry and GetTime() - private.sentAt >= SEND_SECONDS then
 				private.sentAt = GetTime()
-				Wanted.Sync:SendPoint(private.WithFall({ p = point.id, s = entry.s, c = entry.c }))
+				-- l: our layer of the zone (Shard), so our side knows who's on which copy of the front
+				Wanted.Sync:SendPoint(private.WithFall({ p = point.id, s = entry.s, c = entry.c, l = Wanted.Shard:Current() }))
 			end
 		end
 	else
@@ -546,7 +547,7 @@ end
 -- Our side, right now (provisional)
 -- ============================================================================
 
----A player of our side says they're at a point (Sync, from the channel's own sender): { p, s, c }, and during a truce
+---A player of our side says they're at a point (Sync, from the channel's own sender): { p, s, c, l = their layer }, and during a truce
 ---the fall that started it, { f = Nexus id, t = server time }, so late joiners agree. Shown only.
 ---@param tbl table
 ---@param sender string
@@ -569,6 +570,7 @@ function Captures:OnPeer(tbl, sender)
 	end
 	private.heard[point.id] = private.heard[point.id] or {}
 	private.heard[point.id][sender] = GetTime()
+	Wanted.Shard:Note(sender, tbl.l, point.front.mapId)
 	private.Changed()
 end
 

@@ -124,7 +124,7 @@ Captures.FRONTS = {
 			{ id = "mid", name = "Mid", points = {
 				{ id = "hb-mid-1", name = "near Darrow Hill", x = 54.10, y = 26.90 }, -- on the lane, placed by hand
 				{ id = "hb-mid-2", name = "Darrow Hill", x = 52.30, y = 30.90 }, -- on the lane, placed by hand
-				{ id = "hb-mid-3", name = "Darrow Hill", x = 50.80, y = 35.10 }, -- on the lane, placed by hand
+				{ id = "hb-mid-3", name = "Darrow Hill", x = 50.05, y = 35.20 }, -- the tower on the hill, where the maintainer stood at it (2026-10-16: 50.6,35.4 and 49.5,35.1)
 				{ id = "hb-mid-4", name = "near Darrow Hill", x = 50.30, y = 39.90 }, -- on the lane, placed by hand
 			} },
 			{ id = "bot", name = "Bot", points = {

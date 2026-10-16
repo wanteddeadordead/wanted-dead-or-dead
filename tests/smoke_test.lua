@@ -14594,7 +14594,7 @@ end)()
 		"the map and the front buttons, no rally without the module, no ticker with over an hour to go")
 	check(shows(date("%A", start)..": not started."), "the results: not started")
 	waypoint = nil
-	check(click("Go to the front") and waypoint and waypoint.uiMapID == 1424 and abs(waypoint.position.x - 0.508) < 0.001 and abs(waypoint.position.y - 0.351) < 0.001,
+	check(click("Go to the front") and waypoint and waypoint.uiMapID == 1424 and abs(waypoint.position.x - 0.5005) < 0.001 and abs(waypoint.position.y - 0.352) < 0.001,
 		"Go to the front: a waypoint on the nearest point our side can attack")
 	mapOpened = nil
 	check(click("Open the map") and mapOpened == 1424, "Open the map opens the front's map")

@@ -44,6 +44,7 @@ local MAX_SHARED_ON_PER_SENDER = 3 -- raids one player's shared-on copies (fw) m
 local PLAN_AHEAD_SECONDS = 7 * 24 * 3600 -- a raid can be planned this far ahead (Create), so no ad says further
 local AD_PAST_SECONDS = 24 * 3600 -- an ad for a raid that started longer ago than this is nonsense (raids close after OPEN_HOURS)
 local PARTY_SIZE = 5
+local MAX_RAID_SIZE = 40
 local WHO_SECONDS = 10 -- a player is told who's going at most this often
 local ROSTER_SECONDS = 30 -- a leader is asked who's going at most this often per raid
 local ROSTER_ROOM = 180 -- letters of names an answer holds (one addon message)
@@ -590,6 +591,35 @@ function private.InGroup(name)
 		end
 	end
 	return false
+end
+
+---Whether a player is in our group, by their name as it reached us.
+---@param name string
+---@return boolean
+function Raids:InGroup(name)
+	return private.InGroup(name)
+end
+
+---Invites a player to our group now, for a layer hop (Shard): never in a fight, without the right to invite, or into
+---a full party or raid (a hop never turns a party into a raid). Returns why not ("combat", "cant", "full") or nil.
+---@param name string
+---@return string?
+function Raids:Invite(name)
+	if InCombatLockdown() or Wanted:InCombat() then
+		return "combat"
+	end
+	if not Raids:CanInvite() then
+		return "cant"
+	end
+	if private.GroupSize() >= (IsInRaid() and MAX_RAID_SIZE or PARTY_SIZE) then
+		return "full"
+	end
+	local invite = (C_PartyInfo and C_PartyInfo.InviteUnit) or InviteUnit
+	if not invite then
+		return "cant"
+	end
+	invite(name)
+	return nil
 end
 
 ---Whether we may invite: alone, or the group's leader or an assistant. A client without the game's checks may.

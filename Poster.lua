@@ -291,7 +291,7 @@ function private.GetFrame()
 	end)
 	frame.shoot = shoot
 	shoot:SetPoint("LEFT")
-	W:AttachTooltip(shoot, "Upload your wanted poster", "Photographs your character for your poster on wanteddeadordead.com. The Wanted app uploads it after your next /reload or logout.")
+	W:AttachTooltip(shoot, "Upload your wanted poster", "Photographs your character for your poster on wanteddeadordead.com. Needs the Wanted app: it uploads the picture after your next /reload or logout.")
 	frame.amountButton = W:Button(buttons, "Set amount", "secondary", 130, 28, function()
 		private.ToggleCustomAmount()
 	end)

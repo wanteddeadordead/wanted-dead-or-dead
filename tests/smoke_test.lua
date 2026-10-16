@@ -5135,6 +5135,14 @@ end)()
 	ns.UI:Show("card")
 	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
 		"no app: the card page says saving needs the app")
+	ns.UI:Show("calendar")
+	check(Shown("Needs the Wanted app") and not Shown("Not known yet"), "no app: the calendar's season tile says it needs the app")
+	ns.UI:Show("hotspots")
+	check(Shown("Now = last 15 minutes. Counts only enemies a Wanted user has seen. Today's hot zones need the Wanted app."), "no app: the hotspots note says hot zones need the app")
+	ns.CallingCard:Show()
+	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
+		"no app: the calling-card window says saving needs the app")
+	WantedCallingCardFrame:Hide()
 	ns.UI:Show("challenges")
 	-- The app's version alone says it's there (an app that wrote no catch-up yet)
 	WantedAppInfo = { running = "0.2.26" }
@@ -5773,8 +5781,11 @@ end)()
 	local upcoming = {}
 	for _, e in ipairs(ns.PvPCalendar:GetUpcoming()) do upcoming[e.text] = e.kind end
 	check(upcoming["Forever Open: check-in"] == "event" and upcoming["Forever Open: finals"] == "event", "coming up")
-	-- The page: the title in the day's box, the rest in its tooltip
+	-- The page: the title in the day's box, the rest in its tooltip (back to this clock's month: an earlier test opened the page)
 	ns.UI:Show("calendar")
+	for _, f in ipairs(Mock.created) do
+		if f._kind == "Button" and rawget(f, "label") and f.label._text == "Today" then f._scripts.OnClick(f) end
+	end
 	local cell
 	for _, f in ipairs(Mock.created) do
 		for _, e in ipairs(rawget(f, "events") or {}) do

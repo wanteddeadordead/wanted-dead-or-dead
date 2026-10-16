@@ -62,7 +62,7 @@ function private.RefreshTiles()
 		tile.note:SetText(season.endsAt and season.endsAt > now and Theme:Left(season.endsAt - now) or "")
 	else
 		-- From the Wanted app's catch-up; the note would run into the value on a tile this wide
-		tile.value:SetText("Not known yet")
+		tile.value:SetText(Wanted:HasApp() and "Not known yet" or "Needs the Wanted app")
 		tile.note:SetText("")
 	end
 end

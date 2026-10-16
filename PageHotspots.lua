@@ -134,6 +134,9 @@ function private.Refresh()
 	end
 	private.mapToggle:SetChecked(Wanted.MapPins:IsShown())
 	private.risingToggle:SetChecked(Wanted.db.settings.detect.risingAlerts)
+	-- The HOT marks come down with the app's catch-up: without it the page can't show them
+	private.note:SetText("Now = last 15 minutes. Counts only enemies a Wanted user has seen."
+		..(Wanted:HasApp() and "" or " Today's hot zones need the Wanted app."))
 	local groups = Hotspots:Get()
 	local busy = private.CountBusy(groups)
 	private.count:SetText(format("%d zone%s with enemies in the last 15 minutes", busy, busy == 1 and "" or "s"))
@@ -171,8 +174,8 @@ UI:RegisterPage("hotspots", {
 		end)
 		private.risingToggle:SetPoint("RIGHT", private.mapToggle, "LEFT", -16, 0)
 		W:AttachTooltip(private.risingToggle, "Rising-zone alerts", "A warning like RISING FAST: The Barrens when many more enemies show up in a zone than 5 minutes before.")
-		local note = Theme:Text(container, "tiny", "Now = last 15 minutes. Counts only enemies a Wanted user has seen.", C.faint)
-		note:SetPoint("TOPLEFT", 0, -18)
+		private.note = Theme:Text(container, "tiny", "", C.faint)
+		private.note:SetPoint("TOPLEFT", 0, -18)
 
 		local headerBar = CreateFrame("Frame", nil, container)
 		headerBar:SetPoint("TOPLEFT", 0, -34)

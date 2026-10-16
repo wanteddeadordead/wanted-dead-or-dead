@@ -25,10 +25,10 @@ local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 30
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
--- The menu is one short list (Home, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
+-- The menu is one short list (Siege, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
 -- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
 local GROUPS = {}
-local DEFAULT_PAGE = "home"
+local DEFAULT_PAGE = "siege"
 
 
 
@@ -38,7 +38,8 @@ local DEFAULT_PAGE = "home"
 
 ---Registers a page.
 ---@param key string
----@param def table title, subtitle, order, group (one of GROUPS), noHeader (the page takes the header's room too),
+---@param def table title, subtitle (a string, or a function returning one for a subtitle that changes), order, group
+---(one of GROUPS), noHeader (the page takes the header's room too),
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
 ---out of the menu itself), tabLabel (its tab's label), menuLabel (its menu entry's label, when not its title)
@@ -563,7 +564,8 @@ function UI:Refresh(allBadges)
 	private.owner = owner
 	local tabbed = private.tabBars[owner] ~= nil
 	private.title:SetText((def.noHeader or tabbed) and "" or def.title)
-	private.subtitle:SetText(def.noHeader and "" or def.subtitle or "")
+	local subtitle = type(def.subtitle) == "function" and def.subtitle() or def.subtitle
+	private.subtitle:SetText(def.noHeader and "" or subtitle or "")
 	private.subtitle:ClearAllPoints()
 	private.subtitle:SetPoint("TOPLEFT", 0, tabbed and -32 or -26)
 	private.subtitle:SetPoint("RIGHT", 0, 0)
@@ -725,7 +727,7 @@ end
 -- Commands
 -- ============================================================================
 
-Wanted:RegisterCommand("show", "Opens the window: /wanted show [home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
+Wanted:RegisterCommand("show", "Opens the window: /wanted show [siege|home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
 	local key = strtrim(args or "")
 	UI:Show(key ~= "" and key or nil)
 end)

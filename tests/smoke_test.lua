@@ -15309,6 +15309,49 @@ end)()
 	UnitInParty, UnitInRaid, ns.Alerts.Warn = real.UnitInParty, real.UnitInRaid, real.Warn
 	clock = startClock
 end)()
+-- The layer is stamped on what this client records: presence samples, kills, deaths, spotted records and our own
+-- sightings carry l (Shard:Current()), left out while it isn't known
+;(function()
+	local Shard, Store, db = ns.Shard, ns.Store, ns.db
+	local real = { C_Map = C_Map, SendPoint = ns.Sync.SendPoint }
+	C_Map = { GetBestMapForUnit = function() return 1424 end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
+		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
+	ns.Sync.SendPoint = function() return true end
+	Fire("ZONE_CHANGED_NEW_AREA")
+	check(Shard:Current() == nil, "no layer known yet")
+	local function Kill(id) return Store:NewRecord("kill", { killer = "Player-1-ME", killerName = Store:GetOrigin(), victim = "Player-9-L"..id, victimName = "Layer "..id, deathId = "layer-"..id, zone = "Hillsbrad Foothills", honor = true }) end
+	check(Kill(0).data.l == nil, "a kill before the layer is known carries no l")
+	local n = 0
+	local function Look(key)
+		n = n + 1
+		enemyUnits.mouseover = { guid = format("Creature-0-%s-%d-%010X", key, 4000 + n, n), npc = true }
+		Fire("UPDATE_MOUSEOVER_UNIT", "mouseover")
+		enemyUnits.mouseover = nil
+	end
+	for _ = 1, 3 do Look("4615-1-497") end
+	check(Shard:Current() == "4615-1-497", "the layer is read")
+	check(Kill(1).data.l == "4615-1-497", "a kill carries the layer")
+	local r = Store:NewRecord("death", { deathId = "layer-2", victim = "Player-9-L2", victimName = "Layer Two", victimFaction = "Alliance", zone = "Hillsbrad Foothills" })
+	check(r.data.l == "4615-1-497", "so does a death")
+	r = Store:NewRecord("spotted", { target = "Player-9-L2", zone = "Hillsbrad Foothills" })
+	check(r.data.l == "4615-1-497", "and a spotted record")
+	r = Store:NewRecord("mark", { about = "Player-9-L2", category = "test" })
+	check(r.data.l == nil, "other kinds don't")
+	Store:AddSighting("Player-9-L2", "Hillsbrad Foothills", 50, 50, 1424)
+	local own = Store:SightingIterator()()
+	check(own.l == "4615-1-497" and own.by == nil, "our own sighting carries the layer")
+	Store:AddSighting("Player-9-L2", "Hillsbrad Foothills", 50, 50, 1424, "Thrall")
+	check(Store:SightingIterator()().l == nil, "a shared one doesn't: the sharer's layer isn't ours")
+	db.presence = {}
+	clock = clock + 30
+	ns.Captures:Sample()
+	local key = next(db.presence)
+	local entry = key and db.presence[key]
+	check(entry and entry.p == "hb-mid-2" and entry.l == "4615-1-497", "a presence sample carries the layer: "..tostring(entry and entry.l))
+	db.presence = {}
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C_Map, ns.Sync.SendPoint = real.C_Map, real.SendPoint
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

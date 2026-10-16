@@ -45,6 +45,9 @@ local NUMBER_FIELDS = { killT = true, seenAt = true, postedAt = true, level = tr
 -- Kinds this client announces to its own listeners without being records (our own sightings; "*" is every kind):
 -- never taken from a peer
 local RESERVED_KINDS = { sighting = true, ["*"] = true }
+-- Kinds whose data carries the recorder's layer of the zone, l (Shard:Current()), left out while it isn't known: the
+-- site tells one layer's fight from another's
+local LAYERED_KINDS = { kill = true, death = true, spotted = true }
 
 
 
@@ -797,6 +800,9 @@ end
 ---@return table record
 function Store:NewRecord(kind, data)
 	local Signing = Wanted.Signing
+	if LAYERED_KINDS[kind] and data.l == nil then
+		data.l = Store:Layer()
+	end
 	if Signing.KINDS[kind] and (private.Pending() or (Wanted:InCombat() and Signing:CanSign())) then
 		local waiting = { kind = kind, data = data, t = GetServerTime(), pending = true }
 		local all = Wanted.db.signing.pending
@@ -1649,6 +1655,12 @@ function Store:FindPlayerByName(name)
 	return foundGuid, foundPlayer
 end
 
+---Our layer of the zone (Shard:Current()), or nil while it isn't known: stamped on what this client records, as l.
+---@return string?
+function Store:Layer()
+	return Wanted.Shard and Wanted.Shard:Current() or nil
+end
+
 ---Adds a sighting to the bounded ring.
 ---@param guid string
 ---@param zone string
@@ -1657,8 +1669,8 @@ end
 function Store:AddSighting(guid, zone, x, y, mapId, by)
 	local db = Wanted.db
 	db.sightingsPos = db.sightingsPos % MAX_SIGHTINGS + 1
-	-- by = the player who shared it, nil for our own
-	local sighting = { guid = guid, zone = zone, x = x, y = y, mapId = mapId, by = by, t = GetServerTime() }
+	-- by = the player who shared it, nil for our own; l = our layer of the zone, for our own sightings
+	local sighting = { guid = guid, zone = zone, x = x, y = y, mapId = mapId, by = by, t = GetServerTime(), l = not by and Store:Layer() or nil }
 	db.sightings[db.sightingsPos] = sighting
 	-- Not a record (never synced), but the interface wants to know about it
 	private.Notify({ kind = "sighting", sighting = sighting }, true)

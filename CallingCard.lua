@@ -489,8 +489,10 @@ function private.Refresh()
 	frame.save:SetShown(not private.trying and mine ~= nil)
 	frame.save:SetEnabled(allUnlocked)
 	if private.trying then
+		-- Without the app nothing carries the unlocks down or a card up: say so, instead of a Save that never comes
 		frame.note:SetText(mine and "Trying anything: step through every piece, or shuffle. Nothing here is saved."
-			or "Try any combination. Your own card shows here once the Wanted app has brought it from wanteddeadordead.com.")
+			or not Wanted:HasApp() and Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up."
+			or "Try any combination. Your own card shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts).")
 	else
 		frame.note:SetText(allUnlocked and "Your card. Step through the pieces, click a stat to change it, then Save."
 			or "Locked pieces can be tried but not saved: earn them through their challenges.")
@@ -617,7 +619,7 @@ function private.GetFrame()
 	buttons:SetPoint("TOP", previous, "BOTTOM", 0, -14)
 	frame.save = W:Button(buttons, "Save", "primary", 110, 28, private.Save)
 	frame.save:SetPoint("LEFT")
-	W:AttachTooltip(frame.save, "Save your calling card", "The Wanted app sends it to wanteddeadordead.com after your next /reload or logout. Only unlocked pieces can be saved.")
+	W:AttachTooltip(frame.save, "Save your calling card", "Needs the Wanted app: it sends the card to wanteddeadordead.com after your next /reload or logout. Only unlocked pieces can be saved.")
 	frame.mode = W:Button(buttons, "Try anything", "secondary", 130, 28, function()
 		private.trying = not private.trying
 		private.Load()

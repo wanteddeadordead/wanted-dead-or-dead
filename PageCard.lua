@@ -21,7 +21,7 @@ function private.Refresh()
 	else
 		local sample, stats = CallingCard:Sample()
 		CallingCard:Draw(private.banner, sample, UnitName("player") or "Your Name", stats)
-		private.note:SetText("A sample card. Yours shows here once the Wanted app has brought it from wanteddeadordead.com.")
+		private.note:SetText((not Wanted:HasApp() and Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up." or "A sample card. Yours shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts)."))
 	end
 end
 

@@ -420,7 +420,7 @@ function private.TakeScreenshot()
 		return
 	end
 	if not Wanted:AppVersion() then
-		Wanted:Print("Uploading your poster needs the Wanted app on this computer: it puts the picture on wanteddeadordead.com. Get it at wanteddeadordead.com/app.")
+		Wanted:Print(Wanted:NeedsApp("Uploading your poster").." It puts the picture on wanteddeadordead.com.")
 		return
 	end
 	if InCombatLockdown and InCombatLockdown() then

@@ -625,6 +625,19 @@ function Wanted:AppNotRunningFor()
 	return GetServerTime() - seen
 end
 
+---Whether the Wanted app is on this computer: it says its version, or it wrote this account a catch-up.
+---@return boolean
+function Wanted:HasApp()
+	return Wanted:AppVersion() ~= nil or (Wanted.Challenges ~= nil and Wanted.Challenges:HasApp())
+end
+
+---The one sentence for a feature the app carries, when there is no app: what needs it, and what to do.
+---@param what string "Saving a calling card", "Uploading your poster"
+---@return string
+function Wanted:NeedsApp(what)
+	return what.." needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload."
+end
+
 ---How many apps the network has running, for development builds to show; nil when the app hasn't said.
 ---@return number?
 function Wanted:AppsRunning()

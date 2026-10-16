@@ -319,8 +319,8 @@ function private.BuildSharing(panel, width)
 	private.Toggle(captures, Settings, "autoTrack", "Keep a waypoint on the nearest point to attack", "In a front's zone. Only ever replaces a waypoint Wanted set, never your own.", 440, -62, function() Wanted.Captures:AutoTrack() end)
 	private.Toggle(captures, Settings, "siegeCall", "Siege call", "Half an hour before each night's siege and when it opens, wherever you are.", 440, -86)
 	local Shard = function() return Wanted.Shard:Settings() end
-	private.Toggle(captures, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone (never while dead, in a fight or in a full group). They leave your group twenty seconds later unless you lead the rally.", 16, -110)
-	private.Toggle(captures, Shard, "accept", "Auto-accept my hops", "When you hop to the rally's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.", 440, -110)
+	private.Toggle(captures, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group or the rally you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later unless you lead the rally.", 16, -110)
+	private.Toggle(captures, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.", 440, -110)
 
 	local iconLabel = Theme:Text(display, "small", "Class icons")
 	iconLabel:SetPoint("TOPLEFT", 360, -20)

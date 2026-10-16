@@ -181,8 +181,9 @@ written at logout and taken (then cleared) at the next load, so the game's late 
 playing" answers after a /reload stay hidden. A new top-level table: no migration.
 
 `WantedDB.presence` (capture fronts, from the release after 1.22.0) is the account's characters' time at capture points (`Captures.lua`):
-`presence["point:slot:guid"] = { g, n, f, p, s, c }` (GUID, name as the site names it, side "Horde" or "Alliance", point
-id, slot = game-server time / 300, samples 1-10; the app sends only entries on the side it catches up for). A sample is added every 30 s while the character stands in a point able to fight. Entries older
+`presence["point:slot:guid"] = { g, n, f, p, s, c, l }` (GUID, name as the site names it, side "Horde" or "Alliance", point
+id, slot = game-server time / 300, samples 1-10, and `l`, the character's layer of the zone at the last sample as
+`Shard:Current()` reads it, left out while it isn't known; the app sends only entries on the side it catches up for). A sample is added every 30 s while the character stands in a point able to fight. Entries older
 than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
 wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
 players (the `C` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,
@@ -192,14 +193,22 @@ back, when the site worked it out) is only shown and isn't saved.
 
 Siege nights (the release after 1.23.3) add two fields to the catch-up beside `points`, only shown and not saved, every
 field optional and type-checked: `siege = { front, zone, start, end, round = { n, start, truceUntil, last } or nil,
-wins = { h, a }, nexusCost = { [Nexus id] = samples }, next = { front, zone, start, end } or nil }` (tonight's siege
+wins = { h, a }, nexusCost = { [Nexus id] = samples }, next = { front, zone, start, end } or nil, layer, layerSince }` (tonight's siege
 front by id "ah", "hb" or "av", its window as game-server times, the current round with its number, start, the truce
-it waits for or 0 and whether it's the last, tonight's wins a side, what each Nexus costs now, and tomorrow's) and
-`frontWins = { [front id] = { h, a } }` (this week's siege wins per front). The `C` message, `{ p, s, c }`, carries
+it waits for or 0 and whether it's the last, tonight's wins a side, what each Nexus costs now, tomorrow's, and the
+layer the site picked for the siege, `layer` as `Shard:Current()` writes one or "" before it's picked, with
+`layerSince`, when it was picked) and
+`frontWins = { [front id] = { h, a } }` (this week's siege wins per front). The `C` message, `{ p, s, c, l }`, carries
 during a truce the Nexus fall that started it, `f` (the Nexus's point id) and `t` (the game-server time it fell), and
 a client that sees a Nexus reach its cost sends `{ f, t }` alone at once; a receiver in a round takes a fall since the
 round began, and in a truce moves its clock to a newer time for the same fall (the newest server-time fall wins ties).
-Whether a player heard at a point attacks or defends it is worked out by the receiver from who holds the point.
+While the siege is on (from an hour before the window until it's over) it also carries the siege's layer as the sender
+last heard it, `sl` and `st` (= `layerSince`), so a client that reloads spreads the site's pick; a receiver takes a
+newer `st` than its own word (never one from the future), and a change is announced. Whether a player heard at a
+point attacks or defends it is worked out by the receiver from who holds the point. The catch-up also carries
+`layers = { [zone name] = { active, deaths, since } }`, each zone's fight layer as the site worked it out from the
+last ten minutes' deaths and the Wanted players present (`Shard:TakeLayers`): only shown, read at every login, never
+saved, and trusted for a quarter hour from `since`; malformed zones are left out.
 
 `WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
 `{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
@@ -518,14 +527,22 @@ vault then ended with the crash, and every seat is owed what it had.
   holds, ties going to the name that sorts first. A leader answers each later claim once, at most three per rival. An
   end (`e`) drops only a claim no newer than its `c`. Older versions ignore the tag. Nothing saved: no migration.
 - Layers (`Shard.lua`, from the release after 1.22.0): a client's layer of its zone is `"server-map-zone instance"`
-  from the creature GUIDs it looks at (`Shard:Current()`). It goes out as `l` in the hello (with `lm`, the zone map it
-  was read on), in rally positions (`L`, the zone is `m`) and in point presence (`C`, the zone is the point's front).
-  Each receiver keeps the sender's last word on it for ten minutes, never saved; a missing or malformed `l` forgets
-  them. A layer hop (`O`, whispers only): `{ a = 1 }` asks the player for a group invite onto their layer; their
-  answer `{ r = "ok" }` says the invite is coming, any other `r` (`combat`, `dead`, `full`, `cant`, `off`,
-  `instance`, `busy`) says why not. The hopper takes an invite only from the host it asked, within thirty seconds.
-  Older versions ignore the tag and the fields. `WantedDB.settings.shard` is `{ host, accept }`, both defaulted on at
-  load: no migration.
+  from the creature GUIDs it looks at (`Shard:Current()`); the site shows the zone instance part as "layer N". It goes
+  out as `l` in the hello (with `lm`, the zone map it was read on), in rally positions (`L`, the zone is `m`) and in
+  point presence (`C`, the zone is the point's front). Each receiver keeps the sender's last word on it for ten
+  minutes, never saved; a missing or malformed `l` forgets them. `kill`, `death` and `spotted` records carry the
+  recorder's layer as `l` in their data, left out while it isn't known (an optional field: no migration), and so do
+  the client's own entries in the `WantedDB.sightings` ring (shared sightings carry none: the sharer's layer isn't
+  ours). A receiver counts the kills and deaths it hears with a zone and `l` from the last ten minutes, each death
+  once, toward that zone's fight layer (`Shard:Target`): the busiest layer by deaths plus Wanted players of its side
+  heard in the zone, from five; the catch-up's `layers` overrides it for a quarter hour, and the siege's layer
+  overrides both at the siege front while the siege is on. A layer hop (`O`, whispers only): `{ a = 1 }` asks the
+  player for a group invite onto their layer (the zone's target layer, never a named one); their answer `{ r = "ok" }`
+  says the invite is coming, any other `r` (`combat`, `dead`, `full`, `cant` (not the group's leader or an
+  assistant), `off`, `instance`, `busy`) says why not. The hopper takes an invite only from the host it asked, within
+  thirty seconds, and hops once in ten minutes. Older versions ignore the tag and the fields. `WantedDB.settings.shard`
+  is `{ host, accept }`: `host` defaults off (hosting is on anyway while the player leads a group or the rally),
+  `accept` on, both set at load: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

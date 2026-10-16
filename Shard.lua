@@ -16,8 +16,9 @@
 -- (never dead, in a fight, in an instance, in a full group, in a raid they can't invite to, or with hosting off, and
 -- a refusal moves the ask to the next host), ours accepts the invite from that host alone, holds the group twenty
 -- seconds so the server doesn't bounce us back, then leaves it, unless we chose to stay or the host leads the rally.
--- Fifteen seconds in, the creatures around us say whether the move happened: still on the old layer, we say so and
--- leave. One hop every ten minutes.
+-- The game says whether the move happens: SHARD_TRANSFER_IMMINENT (its "refresh world" countdown; the group is held
+-- until it runs out), then SHARD_TRANSFER (moved) or SHARD_TRANSFER_CANCELLED (not moved: we say so and leave). When
+-- no such event comes, the creatures around us say at fifteen seconds whether we moved. One hop every ten minutes.
 
 local _, Wanted = ...
 local Shard = Wanted:NewModule("Shard")
@@ -31,16 +32,19 @@ local private = {
 	site = {}, -- zone name -> { active, deaths, since }: each zone's fight layer as the site last said it (the catch-up)
 	deaths = {}, -- the deaths heard lately with a layer, oldest first: { t, zone, key, id }
 	tally = {}, -- scratch for the estimate: key -> count
-	hop = nil, -- the hop under way: { id, host, target, from, state, asked, joined, stay, tried } (see Shard:HopTo)
+	hop = nil, -- the hop under way: { id, host, target, from, state, asked, joined, leaveAt, stay, tried, imminent, moved } (Shard:Hop)
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
 	lastHopAt = nil, -- GetTime() we last joined a host's group for a hop (the cooldown runs from it)
 }
 -- A host has this long to invite after we ask; an invite from them later than this is left to the player
 local INVITE_SECONDS = 30
--- Once in the host's group, how long we stay so the server doesn't bounce us back, and when the creatures around us
--- are asked whether the move happened
+-- Once in the host's group, how long we stay so the server doesn't bounce us back (longer while the game's own
+-- transfer countdown runs, up to MAX_HOLD_SECONDS, plus a moment for the move itself), and when the creatures around
+-- us are asked whether the move happened, failing any word from the game
 local HOLD_SECONDS = 20
+local MAX_HOLD_SECONDS = 120
+local MOVE_GRACE_SECONDS = 3
 local WATCHDOG_SECONDS = 15
 -- A host invites one player this often at most
 local HOST_AGAIN_SECONDS = 30
@@ -108,7 +112,8 @@ function Shard:OnEnable()
 	for event in pairs(UNIT_EVENTS) do
 		private.Register(event)
 	end
-	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "PARTY_INVITE_REQUEST", "GROUP_ROSTER_UPDATE" }) do
+	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "PARTY_INVITE_REQUEST", "GROUP_ROSTER_UPDATE",
+		"SHARD_TRANSFER_IMMINENT", "SHARD_TRANSFER", "SHARD_TRANSFER_CANCELLED" }) do
 		private.Register(event)
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Shard events", private.OnEvent))
@@ -153,8 +158,18 @@ function private.OnEvent(_, event, unit)
 		private.OnRoster()
 		return
 	elseif event == "ZONE_CHANGED_NEW_AREA" or event == "PLAYER_ENTERING_WORLD" then
-		-- Each zone has its own layers
+		-- Each zone has its own layers: read afresh, and the lines say the new zone's target at once
 		private.Forget()
+		private.Changed()
+		return
+	elseif event == "SHARD_TRANSFER_IMMINENT" then
+		private.OnImminent()
+		return
+	elseif event == "SHARD_TRANSFER" then
+		private.OnTransfer()
+		return
+	elseif event == "SHARD_TRANSFER_CANCELLED" then
+		private.OnCancelled()
 		return
 	end
 	-- In an instance there are no layers to meet anyone on, and unit identity is secret
@@ -216,6 +231,45 @@ function private.Look(unit)
 	end
 	tinsert(votes, { guid = guid, key = key })
 	private.voted[guid] = true
+end
+
+---The game is about to move us to another layer (its "refresh world" countdown, after joining a group whose leader
+---is elsewhere): a hop holds the group until the countdown runs out, so the move isn't called off by leaving.
+function private.OnImminent()
+	local hop = private.hop
+	if not hop or hop.state ~= "joined" or hop.moved then
+		return
+	end
+	hop.imminent = true
+	local left = type(GetEvictionTimeRemaining) == "function" and select(2, pcall(GetEvictionTimeRemaining))
+	left = type(left) == "number" and not (issecretvalue and issecretvalue(left)) and left > 0 and left or nil
+	if left then
+		hop.leaveAt = max(hop.leaveAt, min(GetTime() + left + MOVE_GRACE_SECONDS, hop.joined + MAX_HOLD_SECONDS))
+	end
+	Wanted:Print("The game is moving you to %s%s.", Shard:LayerText(hop.target), left and format(" in %d s", ceil(left)) or "")
+	private.Changed()
+end
+
+---The game moved us to another layer: the creatures seen so far were the old one's, and a hop's move is confirmed.
+function private.OnTransfer()
+	private.Forget()
+	local hop = private.hop
+	if hop and hop.state == "joined" and not hop.moved then
+		hop.moved = true
+		Wanted:Print("Moved to %s: the game confirmed it.", Shard:LayerText(hop.target))
+	end
+	private.Changed()
+end
+
+---The game called the move off: a hop's group is left, we're still where we were.
+function private.OnCancelled()
+	local hop = private.hop
+	if not hop or hop.state ~= "joined" or hop.moved then
+		return
+	end
+	Wanted:Print("The game called the move off: you're still on your layer. Leaving %s's group.", hop.host)
+	private.Leave()
+	private.End()
 end
 
 ---Our layer of the zone we're in ("server-map-zone instance"), or nil while it isn't known.
@@ -688,11 +742,13 @@ function private.OnRoster()
 end
 
 ---In the host's group: the game moves us to their layer. We hold the group HOLD_SECONDS so the server doesn't bounce
----us back, then leave it, unless we chose to stay or the host leads the rally here. At WATCHDOG_SECONDS the creatures
----around us say whether we moved: still on the old layer, we say so and leave.
+---us back (longer while the game's transfer countdown runs: private.OnImminent), then leave it, unless we chose to
+---stay or the host leads the rally here. The game's events say whether we moved; failing them, at WATCHDOG_SECONDS the
+---creatures around us do: still on the old layer, we say so and leave.
 function private.Joined()
 	local hop = private.hop
 	hop.state, hop.joined = "joined", GetTime()
+	hop.leaveAt = hop.joined + HOLD_SECONDS
 	private.lastHopAt = hop.joined
 	-- The creatures here are the new layer's: what the old ones said is forgotten
 	private.Forget()
@@ -705,26 +761,42 @@ function private.Joined()
 		Wanted:Print("You joined %s's group: it takes you to %s. Leaving it in %d seconds (/wanted hop stay to stay).", hop.host, where, HOLD_SECONDS)
 	end
 	private.Countdown()
-	private.Later(WATCHDOG_SECONDS, function()
-		if hop.from and Shard:Current() == hop.from then
-			Wanted:Print("You're still on your old layer: the move didn't happen. Leaving %s's group.", hop.host)
-			private.Leave()
-			private.End()
-		end
-	end)
-	private.Later(HOLD_SECONDS, function()
-		if not hop.stay then
-			private.Leave()
-			local now = Shard:Current()
-			if now and now ~= hop.from then
-				Wanted:Print("Moved to %s.", Shard:LayerText(hop.target))
-			else
-				Wanted:Print("Left %s's group. Look at a creature nearby to read your layer.", hop.host)
-			end
-		end
-		private.End()
-	end)
+	private.Later(WATCHDOG_SECONDS, private.Watchdog)
+	private.Later(HOLD_SECONDS, private.Settle)
 	private.Changed()
+end
+
+---No word from the game by now: the creatures around us say whether we moved. Still on the old layer, we say so and
+---leave the group.
+function private.Watchdog()
+	local hop = private.hop
+	if hop.moved or hop.imminent or not hop.from or Shard:Current() ~= hop.from then
+		return
+	end
+	Wanted:Print("You're still on your old layer: the move didn't happen. Leaving %s's group.", hop.host)
+	private.Leave()
+	private.End()
+end
+
+---The hold is over (or goes on while the game's countdown runs): the group is left unless we stay, and the move is
+---told from the game's word or, failing it, from the creatures around us.
+function private.Settle()
+	local hop = private.hop
+	local left = hop.leaveAt - GetTime()
+	if left > 0.5 then
+		private.Later(left, private.Settle)
+		return
+	end
+	if not hop.stay then
+		private.Leave()
+		local now = Shard:Current()
+		if hop.moved or (now and now ~= hop.from) then
+			Wanted:Print("Moved to %s.", Shard:LayerText(hop.target))
+		else
+			Wanted:Print("Left %s's group. Look at a creature nearby to read your layer.", hop.host)
+		end
+	end
+	private.End()
 end
 
 ---The hold's countdown at the top of the screen, a second at a time.
@@ -733,7 +805,7 @@ function private.Countdown()
 	if not hop or hop.state ~= "joined" or hop.stay then
 		return
 	end
-	local left = HOLD_SECONDS - floor(GetTime() - hop.joined + 0.5)
+	local left = floor(hop.leaveAt - GetTime() + 0.5)
 	if left <= 0 then
 		return
 	end
@@ -782,7 +854,7 @@ function Shard:HopText()
 		if hop.stay then
 			return format("In %s's group: it takes you to %s", hop.host, where)
 		end
-		return format("In %s's group for %s: leaving it in %d s", hop.host, where, max(0, HOLD_SECONDS - floor(GetTime() - hop.joined + 0.5)))
+		return format("In %s's group for %s: leaving it in %d s", hop.host, where, max(0, floor(hop.leaveAt - GetTime() + 0.5)))
 	elseif hop.state == "invited" or hop.state == "accepted" then
 		return format("%s is inviting you onto %s", hop.host, where)
 	end
@@ -817,13 +889,16 @@ function private.Leave()
 	end
 end
 
----Redraws the Nearby window and the HUD for a hop's change.
+---Redraws the layer lines (Nearby, the HUD, the Hotspots and Siege pages when open) for a hop's or a zone's change.
 function private.Changed()
 	if Wanted.NearbyWindow and Wanted.NearbyWindow:IsShown() then
 		Wanted.NearbyWindow:Refresh()
 	end
 	if Wanted.CapturesHUD then
 		Wanted.CapturesHUD:Update()
+	end
+	if Wanted.UI and (Wanted.UI:IsShown("hotspots") or Wanted.UI:IsShown("siege")) then
+		Wanted.UI:Refresh()
 	end
 end
 

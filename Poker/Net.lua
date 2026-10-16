@@ -27,9 +27,13 @@ function Net:OnEnable()
 	Sync:RegisterPlugin(Protocol.TAG, function(tbl, sender)
 		private.OnMessage(tbl, sender)
 	end)
+	-- The ad goes ahead of everything but our own records (players wait on a table), and one that comes over a realm
+	-- link is shared once on this realm's channel, so both realm names hear the table
 	Sync:RegisterPlugin(Protocol.AD_TAG, function(tbl, sender)
 		private.OnAd(tbl, sender)
-	end)
+	end, { priority = 1, relay = true })
+	-- Someone logged in, or a realm link formed: they hear the table now, not at its next repeat
+	Sync:OnPeerHello(function() Net:Readvertise() end)
 	private.ticker = C_Timer.NewTicker(1, function() Net:Tick() end)
 	-- Back after a reload (or a crash) with a seat remembered: take it again
 	C_Timer.After(Protocol.REJOIN_DELAY_SECONDS, function() Net:Rejoin() end)
@@ -142,6 +146,26 @@ local function Advertise(ad)
 	Wanted.Sync:BroadcastPlugin(Protocol.AD_TAG, ad)
 end
 
+---Repeats the open table's ad for a player who just arrived, a moment after their hello and at most every
+---Protocol.AD_HELLO_SECONDS, so a busy login hour doesn't turn into a stream of ads.
+function Net:Readvertise()
+	local host = private.host
+	if not host or not host.open or host.closing or not host.ad then
+		return
+	end
+	local now = Now()
+	if private.readvertiseAt and now - private.readvertiseAt < Protocol.AD_HELLO_SECONDS then
+		return
+	end
+	private.readvertiseAt = now
+	C_Timer.After(Protocol.AD_HELLO_DELAY_SECONDS, function()
+		local h = private.host
+		if h and h == host and h.open and not h.closing then
+			h:Advertise()
+		end
+	end)
+end
+
 function private.OnMessage(tbl, sender)
 	if type(tbl) ~= "table" then
 		return
@@ -195,10 +219,12 @@ function Net:AskLines(name)
 end
 
 function private.OnAd(ad, sender)
-	-- The ad is its sender's: the id names the host who opened the table, not always the one carrying it on
-	if type(ad) ~= "table" or type(ad.id) ~= "string" or #ad.id > 100 or not Protocol:HostOf(ad.id) or not Protocol:IsName(ad.h) or ad.h ~= sender then
+	-- The ad is its sender's (h, who hosts it now: the id names the host who opened the table, not always the one
+	-- carrying it on), unless a realm link shared it on from the other realm name (fw), where the sender is the sharer
+	if type(ad) ~= "table" or type(ad.id) ~= "string" or #ad.id > 100 or not Protocol:HostOf(ad.id) or not Protocol:IsName(ad.h) or (ad.h ~= sender and not ad.fw) then
 		return
 	end
+	local host = ad.h
 	if ad.c then
 		private.tables[ad.id] = nil
 	else
@@ -206,11 +232,11 @@ function private.OnAd(ad, sender)
 		private.tables[ad.id] = ad
 		-- Our remembered table, advertised by whoever hosts it now: sit back down
 		local seat = Poker.db.seat
-		if type(seat) == "table" and seat.id == ad.id and sender ~= Net:Me() and (not private.player or private.player.left or (not private.player.state and private.player.host ~= sender)) then
-			Wanted:Print("Poker: %s carries your table on; taking your seat again.", sender)
+		if type(seat) == "table" and seat.id == ad.id and host ~= Net:Me() and (not private.player or private.player.left or (not private.player.state and private.player.host ~= host)) then
+			Wanted:Print("Poker: %s carries your table on; taking your seat again.", host)
 			if private.player then private.player.left = true end
 			private.rejoinAt = Now()
-			Net:JoinTable(ad.id, seat.buyin, seat.password, sender)
+			Net:JoinTable(ad.id, seat.buyin, seat.password, host)
 		end
 	end
 	private.Notify("tables")

@@ -26,6 +26,7 @@ end
 
 function private.BuildSite(container, width)
 	local card = W:Card(container)
+	private.siteCard = card
 	card:SetPoint("TOPLEFT")
 	card:SetSize(width, 196)
 	local label = W:SectionLabel(card, "The website")
@@ -41,6 +42,7 @@ end
 
 function private.BuildApp(container, width)
 	local card = W:Card(container)
+	private.appCard = card
 	card:SetPoint("TOPLEFT", 0, -208)
 	card:SetSize(width, 226)
 	local label = W:SectionLabel(card, "The desktop app")
@@ -87,6 +89,16 @@ function private.Refresh()
 	local text, color = private.AppState()
 	private.appStatus:SetText(text)
 	private.appStatus:SetTextColor(color[1], color[2], color[3])
+	-- Without the app, its card comes first: the red light at the top opens this page for the download link
+	private.siteCard:ClearAllPoints()
+	private.appCard:ClearAllPoints()
+	if Wanted:HasApp() then
+		private.siteCard:SetPoint("TOPLEFT")
+		private.appCard:SetPoint("TOPLEFT", 0, -208)
+	else
+		private.appCard:SetPoint("TOPLEFT")
+		private.siteCard:SetPoint("TOPLEFT", 0, -238)
+	end
 	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
 	private.appPrompt:SetChecked(Wanted.db.settings.appPrompt)
 	-- The name the network knows us by (first and last name on WoW Forever), as the site's pages use
@@ -135,6 +147,30 @@ function Wanted:PromptForApp()
 		onConfirm = function() end,
 		onCancel = stopReminding,
 	})
+end
+
+-- Minutes into a session with no app detected, the one line saying what the app brings, once a day (appNudgedAt).
+-- The popup at login (PromptForApp) can be turned off; this follows that setting
+local APP_NUDGE_SECONDS = 10 * 60
+local APP_NUDGE_EVERY = 24 * 60 * 60
+
+---Says, APP_NUDGE_SECONDS into the session, that no Wanted app has been detected and what that costs, with where to
+---get it. Not with the app, not when reminders are off, and once a day.
+function Wanted:NudgeForApp()
+	if Wanted:HasApp() or not Wanted.db.settings.appPrompt or Wanted.idle then
+		return
+	end
+	local now = GetServerTime()
+	if now - (Wanted.db.appNudgedAt or 0) < APP_NUDGE_EVERY then
+		return
+	end
+	Wanted.db.appNudgedAt = now
+	Wanted:Print("No Wanted app detected after %d minutes. The app brings your bounties and kills from wanteddeadordead.com in full at every login; without it you only get what players on your channel pass along. Get it at wanteddeadordead.com/app (the link is under Website & app in /wanted).", APP_NUDGE_SECONDS / 60)
+end
+
+---How long after login the nudge comes, for the login sequence (Core).
+function Wanted:AppNudgeSeconds()
+	return APP_NUDGE_SECONDS
 end
 
 UI:RegisterPage("web", {

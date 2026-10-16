@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+- Sync across realm names no longer starves. Each minute one realm link per realm name gets the full list of what
+  we hold (the others a one-part keepalive every two minutes), an origin's records are asked of one link at a time
+  instead of every link answering the same request with the same records, and fills take at most 32 of the 40
+  whisper parts a minute so the conversation always gets through. A client with five links to one realm spent most
+  of its budget on duplicate answers and held back 6,700 fills in a day.
+- The channel says again what each client holds every five minutes or so, so a player who logged in after your hello
+  keeps catching up instead of waiting for someone's next login.
+- Open bounties come first: a hello or have names the origins with an open bounty, and those chains are asked for
+  before the week's kills.
+- Poker tables are heard at once. An open table's ad goes ahead of everything but your own records, is repeated for
+  a player who just said hello (a moment later, at most every 15 seconds), and one that arrives over a realm link is
+  shared once on this realm name's channel, so both realm names see the table.
+- Ten minutes into a session with no Wanted app detected, one line says what the app brings (your bounties and kills
+  from wanteddeadordead.com in full at every login) and where to get it, once a day; the Website & app page puts the
+  app's card first without the app, where the red light at the top opens it.
+
 ## [1.23.4] - 2026-10-16
 
 - Everything the Wanted app carries says so when there is no app: saving a calling card, uploading your poster, the

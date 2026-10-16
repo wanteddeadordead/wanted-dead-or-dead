@@ -2040,6 +2040,87 @@ check(#Sent("WHISPER", "Far Friend") == 0, "a catch-up goes out a batch a frame,
 RunFrames()
 local fills = Sent("WHISPER", "Far Friend")
 check(#fills >= 1 and fills[1].tag == "F", "a link asking for records gets them back over the next frames")
+-- Two links on one realm name: each minute one of them gets the full have (turns), the other a one-part keepalive
+-- every two minutes, so a realm with several links costs the budget no more than one does
+do
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Other Realm" }), "WHISPER", "Far Second")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Other Realm" }), "WHISPER", "Far Third")
+	check(ns.Sync:GetLinks()["Far Second"] ~= nil and ns.Sync:GetLinks()["Far Third"] ~= nil, "two more links on the same realm name")
+	local names = { "Far Friend", "Far Second", "Far Third" }
+	local function Haves()
+		local full, keep = {}, {}
+		for _, name in ipairs(names) do
+			for _, m in ipairs(Sent("WHISPER", name)) do
+				if m.tag == "V" then
+					if next(m.tbl.c) then full[#full + 1] = name else keep[#keep + 1] = name end
+				end
+			end
+		end
+		return full, keep
+	end
+	local turns = {}
+	for minute = 1, 3 do
+		clock = clock + 61
+		-- The other side keeps its links alive the same way (a link nobody hears from for three minutes is dropped)
+		for _, name in ipairs(names) do Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = {} }), "WHISPER", name) end
+		ClearSent()
+		Tick()
+		local full, keep = Haves()
+		check(#full == 1 and not turns[full[1]], "minute "..minute..": the full have goes to one link of the realm name, one not served yet: "..table.concat(full, ","))
+		turns[full[1] or "?"] = minute
+		-- A keepalive goes only to a link not messaged for two minutes: never one served this minute or the last
+		for _, name in ipairs(keep) do
+			check(turns[name] == nil or turns[name] < minute - 1, "minute "..minute..": no keepalive to "..name..", served in minute "..tostring(turns[name]))
+		end
+		if minute == 3 then
+			local served = false
+			for _, name in ipairs(keep) do if turns[name] == 1 then served = true end end
+			check(served, "minute 3: the link served in minute 1 gets a one-part keepalive: "..table.concat(keep, ","))
+		end
+	end
+	-- An origin both links hold is asked of one at a time: the second have for it within a minute and a half waits
+	ClearSent()
+	RunFrames() -- background work left by the fills above: a message that arrives while it waits is handled after it
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Fresh Origin"] = 9 } }), "WHISPER", "Far Friend")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Fresh Origin"] = 9 } }), "WHISPER", "Far Second")
+	RunFrames()
+	local asks = { Sent("WHISPER", "Far Friend"), Sent("WHISPER", "Far Second") }
+	local n1, n2 = 0, 0
+	for _, m in ipairs(asks[1]) do if m.tag == "N" and m.tbl.n["Fresh Origin"] then n1 = n1 + 1 end end
+	for _, m in ipairs(asks[2]) do if m.tag == "N" and m.tbl.n["Fresh Origin"] then n2 = n2 + 1 end end
+	check(n1 == 1 and n2 == 0, "records of an origin are asked of one link at a time, got "..n1.." and "..n2)
+	clock = clock + 91
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = { ["Fresh Origin"] = 9 } }), "WHISPER", "Far Second")
+	RunFrames()
+	local again = 0
+	for _, m in ipairs(Sent("WHISPER", "Far Second")) do if m.tag == "N" and m.tbl.n["Fresh Origin"] then again = again + 1 end end
+	check(again == 1, "once that answer's time is up, the other link is asked")
+	-- A plugin registered to relay: one of its messages that comes over a link goes once onto our channel (fw)
+	local relayed = {}
+	ns.Sync:RegisterPlugin("Q", function(tbl, sender) relayed[#relayed + 1] = sender end, { relay = true, priority = 1 })
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("Q", { x = 1 }), "WHISPER", "Far Friend")
+	local onChannel = {}
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "Q" then onChannel[#onChannel + 1] = m.tbl end end
+	check(#relayed == 1 and relayed[1] == "Far Friend" and #onChannel == 1 and onChannel[1].fw == 1, "a relay plugin's message from a link is shared once on our channel")
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("Q", { x = 1, fw = 1 }), "WHISPER", "Far Friend")
+	local twice = 0
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "Q" then twice = twice + 1 end end
+	check(#relayed == 2 and twice == 0, "one already shared on isn't shared again")
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("Q", { x = 1 }), "WHISPER", "Nobody Linked")
+	local strangers = 0
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "Q" then strangers = strangers + 1 end end
+	check(#relayed == 3 and strangers == 0, "a stranger's reaches the plugin (a table's players needn't be links) but isn't shared on")
+	-- Who says hello is told to the listeners: on the channel, and when a link forms
+	local hellos = {}
+	ns.Sync:OnPeerHello(function(name, viaLink) hellos[#hellos + 1] = name..(viaLink and " (link)" or "") end)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {} }), "CHANNEL", "Hello Peer", nil, nil, nil, "WantedNetHorde")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Fifth Realm" }), "WHISPER", "Fifth Peer")
+	check(hellos[1] == "Hello Peer" and hellos[2] == "Fifth Peer (link)", "a hello on the channel and a new link reach the listeners: "..table.concat(hellos, ", "))
+end
 ClearSent()
 Fire("CHAT_MSG_ADDON", "WNTD", Message("F", { r = { { kind = "pass", id = "Stranger:1", origin = "Stranger", seq = 1, prev = "0", hash = "x", t = clock, data = {} } } }), "WHISPER", "Stranger")
 check(ns.Store:Get("Stranger:1") == nil, "records whispered by someone who isn't a link are ignored")
@@ -2780,6 +2861,34 @@ end)()
 	WantedAppInfo = { running = "0.2.0", latest = "0.2.0" }
 	ns:PromptForApp()
 	check(lastDialog == nil, "with the app set up, no popup")
+	-- Ten minutes in with no app detected: one line on what it brings and where to get it, once a day
+	do
+		local function Said() for i = #printed, 1, -1 do if tostring(printed[i]):find("No Wanted app detected after 10 minutes", 1, true) then return i end end end
+		WantedAppInfo = nil
+		ns.db.appNudgedAt = nil
+		-- An earlier test took in an app catch-up, which counts as the app: this computer has none
+		local hadApp = ns.Challenges.HasApp
+		ns.Challenges.HasApp = function() return false end
+		local before = #printed
+		ns:NudgeForApp()
+		local at = Said()
+		check(at and at > before and tostring(printed[at]):find("wanteddeadordead.com/app", 1, true), "without the app, the ten-minute line says what it brings and where to get it")
+		ns:NudgeForApp()
+		check(Said() == at, "not twice a day")
+		ns.db.appNudgedAt = GetServerTime() - 25 * 3600
+		ns:NudgeForApp()
+		check(Said() > at, "the next day it comes again")
+		at = Said()
+		ns.db.appNudgedAt = nil
+		ns.db.settings.appPrompt = false
+		ns:NudgeForApp()
+		check(Said() == at, "not with reminders off")
+		ns.db.settings.appPrompt = true
+		WantedAppInfo = { running = "0.2.0", latest = "0.2.0" }
+		ns:NudgeForApp()
+		check(Said() == at and ns.db.appNudgedAt == nil, "not with the app")
+		ns.Challenges.HasApp = hadApp
+	end
 	-- Set up, but it hadn't run for hours when the game read its file: the popup asks whether it's running, and
 	-- the light says so (1790270000 is the clock when the addon loaded)
 	WantedAppInfo = { running = "0.2.1", latest = "0.2.1", seen = 1790270000 - 5 * 3600, apps = 12 }
@@ -3380,6 +3489,41 @@ end)()
 	for id, r in pairs(db.records) do if r.origin == "Catchup Far" then db.records[id] = nil end end
 	db.records[claim.id] = nil
 	db.chains["Catchup Far"], db.catchupT = nil, savedT
+end)()
+;(function()
+	-- A have naming the origins with open bounties (b): those chains are asked for first, within the five a request takes
+	ClearSent()
+	local chains = {}
+	for _, name in ipairs({ "Chain A", "Chain B", "Chain C", "Chain D", "Chain E", "Chain F", "Chain G", "Chain H" }) do chains[name] = 3 end
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = chains, b = { "Chain H", "Chain G" } }), "CHANNEL", "Bounty Peer", nil, nil, nil, "WantedNetHorde")
+	RunTimers()
+	local need
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then need = m.tbl.n end end
+	local count = 0
+	for _ in pairs(need or {}) do count = count + 1 end
+	check(need and count == 5 and need["Chain H"] == 1 and need["Chain G"] == 1, "the origins with open bounties are asked for first, "..count.." asked")
+	-- Our own hello names the open bounties' posters among what we hold
+	ClearSent()
+	ns.Sync:SayHello()
+	local hello
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
+	local poster = nil
+	for bounty in ns.Bounties:OpenIterator() do if hello.c[bounty.origin] then poster = bounty.origin break end end
+	local named = false
+	for _, origin in ipairs(hello and hello.b or {}) do if origin == poster then named = true end end
+	check(hello and (poster == nil or named), "our hello names an open bounty's poster: "..tostring(poster))
+	-- Every five minutes or so, what we hold is said again on the channel, so late arrivals keep asking
+	ClearSent()
+	clock = clock + 400
+	Tick()
+	local haves = 0
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "V" and next(m.tbl.c) then haves = haves + 1 end end
+	check(haves == 1, "the channel hears what we hold again after a few minutes, got "..haves)
+	ClearSent()
+	Tick()
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "V" then haves = haves + 1 end end
+	check(haves == 1, "not again the next minute")
+	RunTimers() -- the tick's background work, before the next block's messages (which would wait behind it)
 end)()
 ;(function()
 	-- A fill answering for records pruned here says where our copy starts, and a receiver moves its chain on
@@ -12354,6 +12498,11 @@ end)()
 	check(#Net:Tables() == 1, "an ad for someone else's table is ignored")
 	Ad("Zed-Realm", { id = "Zed-Realm#abc1", h = "Zed-Realm", c = 1 })
 	check(#Net:Tables() == 0, "a closed table leaves the list")
+	-- One a realm link shared on from the other realm name (fw): the sharer isn't the host, and it's listed under the host
+	Ad("Sharer-Realm", { id = "Zed-Realm#abc4", h = "Zed-Realm", fw = 1, n = "Far Den", s = 2, m = 6, sb = 5, bb = 10, lo = 200, hi = 1000 })
+	check(#Net:Tables() == 1 and Net:Tables()[1].h == "Zed-Realm" and OnScreen("Far Den"), "a table's ad shared on by a realm link is listed under its host")
+	Ad("Sharer-Realm", { id = "Zed-Realm#abc4", h = "Zed-Realm", fw = 1, c = 1 })
+	check(#Net:Tables() == 0, "and its close too")
 	-- Host from the form (default blinds 10/20: buy-in 400 to 2000, the box filled with 2000), from the wizard's last step
 	P.PokerPage:GoToStep(4)
 	local go = Button("Host table")
@@ -12670,6 +12819,20 @@ end)()
 	end
 	check(Net:HostTable({ sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 4, stakes = "gold", title = "Trade Den" }, 1000), "a gold table through Net")
 	local netHost = Net:HostedTable()
+	-- Someone says hello on the channel: the host repeats the table's ad for them a moment later, not at its next
+	-- 45-second repeat, and not again for another hello within 15 seconds
+	do
+		-- (Sent here is this block's own helper for the table's whispers: the ad is read off the channel sends)
+		local function Ads() local ids, n = {}, 0 for _, m in ipairs(addonSent) do local id = m.chatType == "CHANNEL" and m.text:match("^T:(%w+):") if id and not ids[id] then ids[id] = true n = n + 1 end end return n end
+		ClearSent()
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {} }), "CHANNEL", "Late Arrival", nil, nil, nil, ns.Sync:GetInfo().channelName)
+		check(Ads() == 0, "the ad for a late arrival waits a moment")
+		RunTimers()
+		check(Ads() == 1, "then the open table is advertised again for them, got "..Ads())
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {} }), "CHANNEL", "Later Arrival", nil, nil, nil, ns.Sync:GetInfo().channelName)
+		RunTimers()
+		check(Ads() == 1, "not again for a hello right after")
+	end
 	local function From(name, tbl) tbl.t, tbl.v = netHost.id, "0.1.0-dev" Fire("CHAT_MSG_ADDON", "WNTD", "P:zt"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", name) end
 	From("Bob-Realm", { k = "join", b = 500 })
 	check(netHost.seats[2] and netHost.seats[2].unpaid == 500, "Bob's seat waits for 5g")

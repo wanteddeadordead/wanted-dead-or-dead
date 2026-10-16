@@ -372,6 +372,9 @@ older than 30 days at login (the history's length). Kill on Sight sightings are 
 `WantedDB.farPeers` (name -> `{ realm, seen }`, the last 20, a week) remembers realm links: players on another
 realm name of the same world, synced by hidden whisper (Sync). They're greeted again at login.
 
+`WantedDB.appNudgedAt` (server time, or nil) is when the addon last said, minutes into a session, that no Wanted app
+was detected; the line comes once a day (1.23.5, PageWeb).
+
 Development builds only: `WantedDB.devLog` keeps the last 5000 debug log lines (`{ lines, pos }`, a ring) so
 network traffic can be read back after a session; `/wanted netlog` summarises it. Lines starting `!!` mark
 anomalies (altered records, broken chains, bad messages, limits hit, version locks, rejected notices).

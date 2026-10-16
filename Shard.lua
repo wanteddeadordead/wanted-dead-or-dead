@@ -52,7 +52,7 @@ local REFUSALS = {
 	dead = "dead",
 	full = "their group is full",
 	cant = "not their group's leader or an assistant",
-	off = "hosting layer hops is off in their settings",
+	off = "they aren't leading a group or the rally, and hosting hops is off in their settings",
 	instance = "in an instance",
 	busy = "they invited you a moment ago",
 }
@@ -93,10 +93,11 @@ local GUID_KINDS = { Creature = true, Vehicle = true }
 -- ============================================================================
 
 function Shard:OnLoad()
-	-- host: invite Wanted players who ask for a hop onto our layer; accept: take the invite our hop asked for by itself
+	-- host: invite Wanted players who ask for a hop onto our layer even when we lead nothing (Shard:Hosting); accept:
+	-- take the invite our hop asked for by itself
 	local settings = Wanted.db.settings
 	settings.shard = type(settings.shard) == "table" and settings.shard or {}
-	for key, value in pairs({ host = true, accept = true }) do
+	for key, value in pairs({ host = false, accept = true }) do
 		if type(settings.shard[key]) ~= "boolean" then
 			settings.shard[key] = value
 		end
@@ -119,6 +120,22 @@ end
 ---The layer hop settings: { host, accept }.
 function Shard:Settings()
 	return Wanted.db.settings.shard
+end
+
+---Whether we lead our group (the game keeps it secret in instances, where there's no hosting anyway).
+function private.LeadsGroup()
+	if not IsInGroup() or type(UnitIsGroupLeader) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(UnitIsGroupLeader, "player")
+	return ok and not (issecretvalue and issecretvalue(yes)) and yes == true
+end
+
+---Whether we host layer hops now: while we lead a group or the rally here, hosting is on (whoever gathers people
+---takes them onto their layer); otherwise only with the setting switched on.
+---@return boolean
+function Shard:Hosting()
+	return Shard:Settings().host == true or private.LeadsGroup() or (Wanted.Rally and Wanted.Rally:Mine() ~= nil) or false
 end
 
 ---Registers an event if this client has it.
@@ -818,7 +835,7 @@ end
 
 ---Why we can't invite a player onto our layer now, or nil.
 function private.HostWhyNot(name)
-	if not Shard:Settings().host then
+	if not Shard:Hosting() then
 		return "off"
 	end
 	if Wanted:InInstance() then

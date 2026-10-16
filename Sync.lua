@@ -197,13 +197,13 @@ local MAX_FILL_PER_REQUEST = 200
 -- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list. Fills take at most
 -- MAX_LINK_FILL_PARTS of the minute's budget: the conversation (hellos, haves, needs, keepalives) always has the rest.
 -- Each minute one link per realm name gets the full have (the one waiting longest); the others get a one-part
--- keepalive every LINK_KEEPALIVE_SECONDS, so a realm with several links costs no more than one. Records of an origin
+-- keepalive, so a realm with five links costs the reserve (4 + 4 parts) and no more. Records of an origin
 -- are asked of one link at a time (LINK_ASK_SECONDS): every link answering the same request sent the same records.
 local MAX_LINK_PARTS_PER_MINUTE = 40
 local MAX_LINK_FILL_PARTS = 32
 local MAX_PLUGIN_PARTS_PER_MINUTE = 150 -- plugin whispers (a poker table's traffic) have their own budget
 local LINK_HAVE_SECONDS = 60
-local LINK_KEEPALIVE_SECONDS = 2 * 60
+local LINK_KEEPALIVE_SECONDS = 60 -- one part a minute keeps a link under LINK_TIMEOUT even when a tick is missed
 local LINK_ASK_SECONDS = 90
 local LINK_TIMEOUT = 3 * 60 -- a link that misses a few resyncs is dropped (and greeted again later)
 local LINK_FORWARD_SECONDS = 2
@@ -1632,7 +1632,7 @@ end
 -- are on their board before the week's kills are. At most this many, the latest active first
 local MAX_HAVE_BOUNTIES = 30
 
----What we hold (c) and which of those origins posted an open bounty (b), in a message's fields.
+---What we hold (c) and which of those origins posted an open bounty (o), in a message's fields (b is the Blizzard rank).
 ---@param fields table
 ---@return table fields
 function private.HaveFields(fields)
@@ -1658,7 +1658,7 @@ function private.HaveFields(fields)
 			for i = #posters, MAX_HAVE_BOUNTIES + 1, -1 do
 				tremove(posters, i)
 			end
-			fields.b = posters
+			fields.o = posters
 		end
 	end
 	return fields
@@ -1678,7 +1678,7 @@ end
 function private.SendHello()
 	local fields = private.HelloFields()
 	if private.Send(TAG_HELLO, fields) then
-		private.lastChannelHave = GetTime()
+		private.lastChannelHave, private.nextChannelHave = GetTime(), nil
 		if fields.kr then
 			Wanted.Signing:ResetSent()
 		end
@@ -2032,7 +2032,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		if type(tbl.c) ~= "table" then
 			return
 		end
-		private.HandleHave(tbl.c, sender, tag == TAG_HELLO, false, tbl.b)
+		private.HandleHave(tbl.c, sender, tag == TAG_HELLO, false, tbl.o)
 		if tag == TAG_HELLO then
 			private.PeerHello(sender, false)
 		end
@@ -2102,7 +2102,7 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 			private.NoteAdvertised(origin, seq, sender)
 		end
 	end
-	-- What they hold past us: the origins with an open bounty first (b), then the sender's own chain, then the rest
+	-- What they hold past us: the origins with an open bounty first (o), then the sender's own chain, then the rest
 	local posted = {}
 	if type(bounties) == "table" then
 		for i = 1, min(#bounties, MAX_HAVE_BOUNTIES) do
@@ -2545,7 +2545,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		if not tbl.a then
 			private.SendLinkHello(sender, true)
 		end
-		private.HandleHave(tbl.c, sender, false, true, tbl.b)
+		private.HandleHave(tbl.c, sender, false, true, tbl.o)
 		private.PeerHello(sender, true)
 		return
 	end
@@ -2560,7 +2560,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 	link.heard = GetTime()
 	link.received = link.received + 1
 	if tag == TAG_HAVE and type(tbl.c) == "table" then
-		private.HandleHave(tbl.c, sender, false, true, tbl.b)
+		private.HandleHave(tbl.c, sender, false, true, tbl.o)
 	elseif tag == TAG_NEED and type(tbl.n) == "table" then
 		private.HandleNeed(tbl.n, sender, true)
 	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then

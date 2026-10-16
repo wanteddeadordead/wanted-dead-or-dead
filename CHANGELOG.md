@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 - Sync across realm names no longer starves. Each minute one realm link per realm name gets the full list of what
-  we hold (the others a one-part keepalive every two minutes), an origin's records are asked of one link at a time
+  we hold (the others a one-part keepalive each minute), an origin's records are asked of one link at a time
   instead of every link answering the same request with the same records, and fills take at most 32 of the 40
   whisper parts a minute so the conversation always gets through. A client with five links to one realm spent most
   of its budget on duplicate answers and held back 6,700 fills in a day.

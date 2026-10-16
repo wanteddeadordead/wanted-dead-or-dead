@@ -124,6 +124,7 @@ local DEFAULTS = {
 	bountyRequests = {}, -- request id -> bounty asked for from Discord, waiting to be asked on its character (Catchup)
 	requestAnswers = {}, -- request id -> { state = "posted"|"discarded"|"refused", reason, t }, read by the app (Catchup)
 	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
+	appNudgedAt = nil, -- server time of the last "no Wanted app detected" line (PageWeb), once a day
 	recentPeers = {}, -- name -> seen: the last players heard on the sync channel, to whisper if locked out of it
 	homeCheck = { wait = 5 * 60, tried = 0 }, -- trying the main sync channel again while it turns us away (Sync CheckMain)
 	syncChannelState = { mainRefused = false, mainOpen = false, at = 0, epoch = 0 }, -- what the main channel last did, for the app
@@ -1083,6 +1084,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		Wanted:CheckAppVersion()
 		-- A moment after the loading screen, so it isn't lost behind it
 		C_Timer.After(6, function() Wanted:PromptForApp() end)
+		-- Minutes in with no app detected: the one line on what it brings (PageWeb)
+		C_Timer.After(Wanted:AppNudgeSeconds(), function() Wanted:NudgeForApp() end)
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		private.OnCombatChanged(event == "PLAYER_REGEN_DISABLED")
 	elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then

@@ -53,6 +53,10 @@ local private = {
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
 	pluginTimes = {}, -- outbound plugin whisper times in the last minute (their own budget)
 	plugins = {}, -- tag -> handler(tbl, sender, channel): other addons' messages carried by this transport (Sync:RegisterPlugin)
+	pluginOptions = {}, -- tag -> { priority, relay } (Sync:RegisterPlugin)
+	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
+	linkAsked = {}, -- origin -> { from, t }: the records last asked of a realm link, so no other link is asked the same
+	lastChannelHave = nil, -- GetTime() we last said on the channel what we hold (hello or have)
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
 	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
@@ -140,9 +144,14 @@ local SIGHTING_QUEUE_SECONDS = 15
 -- rest are left to the resync
 local MAX_DEFERRED_MESSAGES = 300
 local MAX_DEFERRED_PER_SENDER = 50
--- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills
+-- Which messages go first: our new records, then sightings, then the sync conversation, then gap fills. A plugin
+-- may ask for a place of its own (an open poker table's ad goes with our records: players wait on it)
 local SEND_PRIORITY = { R = 1, S = 2, F = 4 }
 local DEFAULT_SEND_PRIORITY = 3
+-- The channel resync: what we hold is said again this often (plus a little), so a player who logged in after our
+-- hello keeps catching up without waiting for someone's login. Not while the queue is busy with fills
+local CHANNEL_RESYNC_SECONDS = 5 * 60
+local CHANNEL_RESYNC_JITTER = 60
 -- A cap on what any one sender may push at us, and a pause when our own queue overflows two minutes running
 -- Sightings have their own budget and never trigger the pause, so a big fight can't hold up bounties, kills and
 -- claims (10 parts a minute: a raid on Undercity hit 6 over and over while the game still had room). A new enemy waits up to 8s to share a message with others seen around the same time;
@@ -185,10 +194,17 @@ local PEER_TIMEOUT = 10 * 60
 local FILL_BATCH = 8
 local MAX_FILL_PER_REQUEST = 200
 -- Realm links (whispers to players on another realm name): their own budget, a resync every minute so a
--- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list
+-- catch-up cut short by the budget carries on, forwarding in small batches, a remembered list. Fills take at most
+-- MAX_LINK_FILL_PARTS of the minute's budget: the conversation (hellos, haves, needs, keepalives) always has the rest.
+-- Each minute one link per realm name gets the full have (the one waiting longest); the others get a one-part
+-- keepalive every LINK_KEEPALIVE_SECONDS, so a realm with several links costs no more than one. Records of an origin
+-- are asked of one link at a time (LINK_ASK_SECONDS): every link answering the same request sent the same records.
 local MAX_LINK_PARTS_PER_MINUTE = 40
+local MAX_LINK_FILL_PARTS = 32
 local MAX_PLUGIN_PARTS_PER_MINUTE = 150 -- plugin whispers (a poker table's traffic) have their own budget
 local LINK_HAVE_SECONDS = 60
+local LINK_KEEPALIVE_SECONDS = 2 * 60
+local LINK_ASK_SECONDS = 90
 local LINK_TIMEOUT = 3 * 60 -- a link that misses a few resyncs is dropped (and greeted again later)
 local LINK_FORWARD_SECONDS = 2
 local MAX_FORWARD_QUEUE = 200
@@ -401,6 +417,7 @@ function Sync:OnEnable()
 	C_Timer.After(5, private.LeaveOldChannel)
 	-- The main channel, tried again while it turns us away or we're on the server's channel
 	C_Timer.NewTicker(MAIN_TICK_SECONDS, private.CheckMain)
+	C_Timer.NewTicker(MAIN_TICK_SECONDS, private.ChannelTick)
 	-- Realm links
 	Store:OnRecord("*", private.OnAnyRecord)
 	C_Timer.NewTicker(LINK_HAVE_SECONDS, private.LinkTick)
@@ -1190,7 +1207,8 @@ function private.Send(tag, tbl, attempt, target)
 		end
 	elseif target then
 		PruneTimes(private.linkTimes, now)
-		if #private.linkTimes + total > MAX_LINK_PARTS_PER_MINUTE then
+		local room = (tag == TAG_FILL or tag == TAG_LIVE) and MAX_LINK_FILL_PARTS or MAX_LINK_PARTS_PER_MINUTE
+		if #private.linkTimes + total > room then
 			Wanted:Log("!! Sync: realm link budget reached, holding %s to %s (the next resync picks it up)", tag, target)
 			private.Drop("realm link budget", 1)
 			return false
@@ -1237,7 +1255,8 @@ function private.Send(tag, tbl, attempt, target)
 				tinsert(private.sightingTimes, now)
 			end
 		end
-		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
+		local options = private.pluginOptions[tag]
+		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or (options and options.priority) or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
 		return true
 	end
 	-- A plugin's whisper goes to a player at its table, who is online and sent to us moments ago, so the lockdown's
@@ -1609,9 +1628,45 @@ function private.GetHaveTable()
 	return chains
 end
 
+-- The origins with an open bounty, among what's advertised: a newcomer asks for those chains first, so the bounties
+-- are on their board before the week's kills are. At most this many, the latest active first
+local MAX_HAVE_BOUNTIES = 30
+
+---What we hold (c) and which of those origins posted an open bounty (b), in a message's fields.
+---@param fields table
+---@return table fields
+function private.HaveFields(fields)
+	local chains = private.GetHaveTable()
+	fields.c = chains
+	if Wanted.Bounties and Wanted.Bounties.OpenIterator then
+		local seen, posters = {}, {}
+		for bounty in Wanted.Bounties:OpenIterator() do
+			local origin = bounty.origin
+			if type(origin) == "string" and chains[origin] and not seen[origin] then
+				seen[origin] = true
+				tinsert(posters, origin)
+			end
+		end
+		sort(posters, function(a, b)
+			local ta, tb = Store:GetLastActive(a), Store:GetLastActive(b)
+			if ta ~= tb then
+				return ta > tb
+			end
+			return a < b
+		end)
+		if #posters > 0 then
+			for i = #posters, MAX_HAVE_BOUNTIES + 1, -1 do
+				tremove(posters, i)
+			end
+			fields.b = posters
+		end
+	end
+	return fields
+end
+
 ---A hello's fields: what we hold, our version, and our Blizzard PvP rank and its season when we have one.
 function private.HelloFields()
-	local fields = { c = private.GetHaveTable(), v = Wanted.VERSION }
+	local fields = private.HaveFields({ v = Wanted.VERSION })
 	if Wanted.BlizzRank then
 		fields.b, fields.bs = Wanted.BlizzRank:Mine()
 	end
@@ -1622,8 +1677,31 @@ end
 
 function private.SendHello()
 	local fields = private.HelloFields()
-	if private.Send(TAG_HELLO, fields) and fields.kr then
-		Wanted.Signing:ResetSent()
+	if private.Send(TAG_HELLO, fields) then
+		private.lastChannelHave = GetTime()
+		if fields.kr then
+			Wanted.Signing:ResetSent()
+		end
+	end
+end
+
+---Every minute: say again on the channel what we hold, once CHANNEL_RESYNC_SECONDS (and a little) have passed since
+---the last time, so the players who heard no hello of ours since they logged in ask for what they lack. Skipped in a
+---fight, out of the channel, and while fills are queued (they'd only be pushed out).
+function private.ChannelTick()
+	if not private.channelId or Wanted:InCombat() or private.outboxParts > 0 or Wanted:GetRequiredUpdate() then
+		return
+	end
+	local now = GetTime()
+	if private.nextChannelHave == nil then
+		private.nextChannelHave = (private.lastChannelHave or now) + CHANNEL_RESYNC_SECONDS + math.random() * CHANNEL_RESYNC_JITTER
+	end
+	if now < private.nextChannelHave then
+		return
+	end
+	private.nextChannelHave = nil
+	if private.Send(TAG_HAVE, private.HaveFields({})) then
+		private.lastChannelHave = now
 	end
 end
 
@@ -1904,6 +1982,13 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	end
 	if private.plugins[tag] then
 		private.plugins[tag](tbl, sender, channel)
+		-- One a realm link sent (an open table's ad) goes on our channel once, so this realm name hears it too: never
+		-- one from a stranger, nor one already shared on (fw)
+		local options = private.pluginOptions[tag]
+		if options and options.relay and viaLink and private.links[sender] and tbl.fw == nil and private.channelId then
+			tbl.fw = 1
+			private.Send(tag, tbl)
+		end
 		return
 	end
 	if tag == TAG_RAID then
@@ -1947,7 +2032,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		if type(tbl.c) ~= "table" then
 			return
 		end
-		private.HandleHave(tbl.c, sender, tag == TAG_HELLO)
+		private.HandleHave(tbl.c, sender, tag == TAG_HELLO, false, tbl.b)
+		if tag == TAG_HELLO then
+			private.PeerHello(sender, false)
+		end
 	elseif tag == TAG_NEED then
 		if type(tbl.n) ~= "table" then
 			return
@@ -2005,7 +2093,7 @@ end
 
 ---A peer told us what it holds. Ask for what we lack, and if this was a HELLO, tell it what we hold. Over a
 ---realm link the request goes straight back to that player, for more origins at once.
-function private.HandleHave(chains, sender, isHello, viaLink)
+function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 	local need = {}
 	local numNeed = 0
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
@@ -2014,16 +2102,44 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 			private.NoteAdvertised(origin, seq, sender)
 		end
 	end
-	for origin, seq in pairs(chains) do
-		if type(origin) == "string" and Store:IsSeq(seq) and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
-			need[origin] = Store:GetChainSeq(origin) + 1
-			numNeed = numNeed + 1
-			if numNeed >= maxNeed then
-				break
+	-- What they hold past us: the origins with an open bounty first (b), then the sender's own chain, then the rest
+	local posted = {}
+	if type(bounties) == "table" then
+		for i = 1, min(#bounties, MAX_HAVE_BOUNTIES) do
+			if type(bounties[i]) == "string" then
+				posted[bounties[i]] = true
 			end
 		end
 	end
+	local lacking, now = {}, GetTime()
+	for origin, seq in pairs(chains) do
+		if type(origin) == "string" and Store:IsSeq(seq) and seq > Store:GetChainSeq(origin) and origin ~= Store:GetOrigin() then
+			-- Over a link, an origin another link was asked for a moment ago waits for that answer
+			local asked = viaLink and private.linkAsked[origin]
+			if not (asked and now - asked.t < LINK_ASK_SECONDS and asked.from > Store:GetChainSeq(origin)) then
+				tinsert(lacking, origin)
+			end
+		end
+	end
+	sort(lacking, function(a, b)
+		local pa, pb = posted[a] == true, posted[b] == true
+		if pa ~= pb then
+			return pa
+		end
+		if (a == sender) ~= (b == sender) then
+			return a == sender
+		end
+		return a < b
+	end)
+	for i = 1, min(#lacking, maxNeed) do
+		local origin = lacking[i]
+		need[origin] = Store:GetChainSeq(origin) + 1
+		numNeed = numNeed + 1
+	end
 	if numNeed > 0 and viaLink then
+		for origin, from in pairs(need) do
+			private.linkAsked[origin] = { from = from, t = now }
+		end
 		private.Send(TAG_NEED, { n = need }, nil, sender)
 	elseif numNeed > 0 then
 		-- Spread requests so a busy channel is not hit by everyone at once
@@ -2033,9 +2149,9 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 	end
 	if isHello then
 		-- Answer with what we hold, only if it has something the newcomer lacks
-		local mine = private.GetHaveTable()
+		local mine = private.HaveFields({ v = Wanted.VERSION })
 		local hasMore = false
-		for origin, seq in pairs(mine) do
+		for origin, seq in pairs(mine.c) do
 			if (chains[origin] or 0) < seq then
 				hasMore = true
 				break
@@ -2043,7 +2159,9 @@ function private.HandleHave(chains, sender, isHello, viaLink)
 		end
 		if hasMore then
 			C_Timer.After(1 + math.random() * 3, function()
-				private.Send(TAG_HAVE, { c = mine, v = Wanted.VERSION })
+				if private.Send(TAG_HAVE, mine) then
+					private.lastChannelHave = GetTime()
+				end
 			end)
 		end
 	end
@@ -2378,7 +2496,7 @@ end
 
 function private.SendLinkHello(name, isAnswer)
 	-- x: locked out of the channel, so a player on this very realm should link by whisper too
-	private.Send(TAG_HELLO, { c = private.GetHaveTable(), r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil }, nil, name)
+	private.Send(TAG_HELLO, private.HaveFields({ r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil }), nil, name)
 end
 
 function private.AddLink(name, realm)
@@ -2427,7 +2545,8 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		if not tbl.a then
 			private.SendLinkHello(sender, true)
 		end
-		private.HandleHave(tbl.c, sender, false, true)
+		private.HandleHave(tbl.c, sender, false, true, tbl.b)
+		private.PeerHello(sender, true)
 		return
 	end
 	if not link and private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS then
@@ -2441,7 +2560,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 	link.heard = GetTime()
 	link.received = link.received + 1
 	if tag == TAG_HAVE and type(tbl.c) == "table" then
-		private.HandleHave(tbl.c, sender, false, true)
+		private.HandleHave(tbl.c, sender, false, true, tbl.b)
 	elseif tag == TAG_NEED and type(tbl.n) == "table" then
 		private.HandleNeed(tbl.n, sender, true)
 	elseif (tag == TAG_FILL or tag == TAG_LIVE) and type(tbl.r) == "table" then
@@ -2488,11 +2607,31 @@ end
 ---(their own budget, not the realm links') or on the channel. One tag letter each, not one the sync uses.
 ---@param tag string one capital letter
 ---@param handler fun(tbl: table, sender: string, channel: string)
-function Sync:RegisterPlugin(tag, handler)
+---@param options table? priority: its place in the channel queue (1 with our own records, 4 behind the fills; 3 when
+---not given); relay: one that arrives over a realm link goes once onto this realm's channel (fw = 1), as raid ads do
+function Sync:RegisterPlugin(tag, handler, options)
 	assert(type(tag) == "string" and #tag == 1 and strmatch(tag, "^%u$"), "a plugin tag is one capital letter")
 	assert(not private.plugins[tag] and not private.OwnTag(tag), "the tag "..tag.." is taken")
 	assert(type(handler) == "function", "a plugin handler is a function")
 	private.plugins[tag] = handler
+	private.pluginOptions[tag] = type(options) == "table" and { priority = tonumber(options.priority), relay = options.relay == true } or nil
+end
+
+---Calls func(name, viaLink) when a player says hello on the channel (they just logged in or joined it) or a realm
+---link forms: whatever they should hear at once (an open table's ad) can go now instead of at its next repeat.
+---@param func fun(name: string, viaLink: boolean)
+function Sync:OnPeerHello(func)
+	assert(type(func) == "function", "a peer hello listener is a function")
+	tinsert(private.peerHello, func)
+end
+
+function private.PeerHello(name, viaLink)
+	for _, func in ipairs(private.peerHello) do
+		local ok, err = pcall(func, name, viaLink)
+		if not ok then
+			Wanted:Log("!! Sync: a peer hello listener failed: %s", tostring(err))
+		end
+	end
 end
 
 ---Whispers a plugin's message to one player. Returns whether it went out, and when not and the game refused it,
@@ -2630,12 +2769,40 @@ function private.LinkTick()
 		return
 	end
 	local now = GetTime()
+	for origin, asked in pairs(private.linkAsked) do
+		if now - asked.t >= LINK_ASK_SECONDS then
+			private.linkAsked[origin] = nil
+		end
+	end
+	-- The link of each realm name that has waited longest for a resync gets the full have; the rest a keepalive
+	local turn = {}
 	for name, link in pairs(private.links) do
 		if now - (link.heard or 0) >= LINK_TIMEOUT then
 			private.links[name] = nil
 			Wanted:Log("Sync: realm link with %s went quiet; dropped", name)
 		else
-			private.Send(TAG_HAVE, { c = private.GetHaveTable() }, nil, name)
+			local realm = NormalizeRealm(link.realm) or name
+			local other = turn[realm]
+			if not other or (link.resyncAt or 0) < (private.links[other].resyncAt or 0) or ((link.resyncAt or 0) == (private.links[other].resyncAt or 0) and name < other) then
+				turn[realm] = name
+			end
+		end
+	end
+	local chosen = {}
+	for _, name in pairs(turn) do
+		chosen[name] = true
+	end
+	local have = nil
+	for name, link in pairs(private.links) do
+		if chosen[name] then
+			have = have or private.HaveFields({})
+			if private.Send(TAG_HAVE, have, nil, name) then
+				link.resyncAt, link.keptAt = now, now
+			end
+		elseif now - (link.keptAt or link.since or 0) >= LINK_KEEPALIVE_SECONDS then
+			if private.Send(TAG_HAVE, { c = {} }, nil, name) then
+				link.keptAt = now
+			end
 		end
 	end
 end

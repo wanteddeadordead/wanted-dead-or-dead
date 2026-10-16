@@ -126,7 +126,10 @@ local TAG_RAID_WHO, TAG_RAID_ROSTER = "W", "Y"
 -- server chose it), h = whispers since an app delivered it, q = 1 when asking }. Whispers only, never on a channel.
 -- Before 1.4.0 it was { e, n, p = password } with names addons picked; those are ignored.
 local TAG_MOVE = "M"
-local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true, C = true, L = true }
+-- A layer hop (Shard), whispers only: { a = 1 } asks the player for a group invite onto their layer; their answer
+-- { r = "ok" } says the invite is coming, any other r says why not ("combat", "full", ...). Older versions ignore it.
+local TAG_HOP = "O"
+local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true, C = true, L = true, O = true }
 function private.OwnTag(tag) return OWN_TAGS[tag] == true end
 -- A player standing at a capture point (Captures): { p = point id, s = slot, c = samples }. Passing news like
 -- sightings: on the channel (or the guild's) only, from the player it's about, never stored, relayed or counted; the
@@ -245,7 +248,7 @@ end
 
 -- Whispers sent because the player asked (a raid sign-up or its roster, a posse join): in a lockdown they're told it
 -- didn't go
-local PLAYER_WHISPERS = { [TAG_RAID_JOIN] = true, [TAG_RAID_WHO] = true, [TAG_POSSE_JOIN] = true }
+local PLAYER_WHISPERS = { [TAG_RAID_JOIN] = true, [TAG_RAID_WHO] = true, [TAG_POSSE_JOIN] = true, [TAG_HOP] = true }
 
 ---Whether the game's chat messaging lockdown is on (an encounter, a PvP match or a restricted map): its system lines
 ---are secret then, and the game runs no chat filter on a secret line, so a whisper to someone offline would print
@@ -1784,6 +1787,15 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		end
 		return
 	end
+	-- A layer hop: someone asking us for an invite, or a host's answer to ours
+	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_HOP..":" then
+		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
+		local tbl = payload and Decode(payload)
+		if type(tbl) == "table" then
+			Wanted.Shard:OnMessage(tbl, sender)
+		end
+		return
+	end
 	-- A join for a raid we lead
 	if channel == "WHISPER" and strsub(text, 1, 2) == TAG_RAID_JOIN..":" then
 		local payload = strmatch(text, "^%u:%w+:%d+/%d+:(.*)$")
@@ -2737,6 +2749,14 @@ end
 ---@param kind string?
 function Sync:SendRaidJoin(leader, raidId, kind)
 	return private.Send(TAG_RAID_JOIN, { r = raidId, k = kind }, nil, leader)
+end
+
+---A layer hop's whisper (Shard): the ask, { a = 1 }, or the host's answer, { r }.
+---@param target string
+---@param tbl table
+---@return boolean sent
+function Sync:SendHop(target, tbl)
+	return private.Send(TAG_HOP, tbl, nil, target)
 end
 
 ---Asks a raid's leader who's going.

@@ -517,6 +517,15 @@ vault then ended with the crash, and every seat is owed what it had.
   `c`, but never more than five minutes before this client first heard it; the earlier claim per faction and zone map
   holds, ties going to the name that sorts first. A leader answers each later claim once, at most three per rival. An
   end (`e`) drops only a claim no newer than its `c`. Older versions ignore the tag. Nothing saved: no migration.
+- Layers (`Shard.lua`, from the release after 1.22.0): a client's layer of its zone is `"server-map-zone instance"`
+  from the creature GUIDs it looks at (`Shard:Current()`). It goes out as `l` in the hello (with `lm`, the zone map it
+  was read on), in rally positions (`L`, the zone is `m`) and in point presence (`C`, the zone is the point's front).
+  Each receiver keeps the sender's last word on it for ten minutes, never saved; a missing or malformed `l` forgets
+  them. A layer hop (`O`, whispers only): `{ a = 1 }` asks the player for a group invite onto their layer; their
+  answer `{ r = "ok" }` says the invite is coming, any other `r` (`combat`, `dead`, `full`, `cant`, `off`,
+  `instance`, `busy`) says why not. The hopper takes an invite only from the host it asked, within thirty seconds.
+  Older versions ignore the tag and the fields. `WantedDB.settings.shard` is `{ host, accept }`, both defaulted on at
+  load: no migration.
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

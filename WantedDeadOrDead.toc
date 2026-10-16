@@ -63,6 +63,7 @@ Streaks.lua
 Posse.lua
 Raids.lua
 Rally.lua
+Shard.lua
 UI.lua
 Rows.lua
 EnemyMenu.lua

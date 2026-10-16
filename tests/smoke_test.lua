@@ -14658,6 +14658,71 @@ end)()
 	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
 	ns.CapturesHUD:Update()
 end)()
+-- The upcoming siege evenings: Captures:Evenings (a week from tonight, or from tomorrow once tonight's window has
+-- closed, the fronts the catch-up named in place), the Siege page's Upcoming card and the Dashboard's card
+;(function()
+	local C, HUD = ns.Captures, ns.CapturesHUD
+	local real = { Warn = ns.Alerts.Warn, PlaySound = PlaySound }
+	ns.Alerts.Warn = function() end
+	PlaySound = function() end
+	local function On(f)
+		local on, p = f._shown, f._parent
+		while on and p do on, p = p._shown, p._parent end
+		return on
+	end
+	local function Plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+	local function count(text, pattern)
+		local n = 0
+		for _, f in ipairs(Mock.fontStrings) do
+			if type(f._text) == "string" and On(f) and (pattern and Plain(f._text):find(text) or not pattern and Plain(f._text) == text) then n = n + 1 end
+		end
+		return n
+	end
+	local function shows(text) for _, f in ipairs(Mock.fontStrings) do if type(f._text) == "string" and On(f) and Plain(f._text):find(text, 1, true) then return true end end return false end
+	local function Day(t) return date("%Y%m%d", t) end
+	-- Tonight's siege at 7 PM on the client's clock, the next one named
+	local t = date("*t", clock)
+	local start = time({ year = t.year, month = t.month, day = t.day, hour = 19, min = 0, sec = 0 })
+	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, next = { front = "av", start = start + 86400, ["end"] = start + 86400 + 3 * 3600 } }, nil)
+	local evenings = C:Evenings(7, clock)
+	local closed = start + 3 * 3600 <= clock -- the test's clock may be past tonight's window already
+	check(#evenings == 7 and evenings[1].today == not closed and Day(evenings[1].day) == Day(clock + (closed and 86400 or 0)), "seven evenings from tonight, or tomorrow once tonight's window has closed")
+	for i, e in ipairs(evenings) do
+		check(date("%H:%M", e.start) == "19:00" and e["end"] - e.start == 3 * 3600 and Day(e.day) == Day(e.start) and (i == 1 or Day(e.day) == Day(evenings[i - 1].day + 86400)),
+			"each evening a day on, at the known siege's hours: "..tostring(date("%c", e.start)))
+		local expected = Day(e.day) == Day(start) and "hb" or Day(e.day) == Day(start + 86400) and "av" or nil
+		check((e.front and e.front.id) == expected, "the catch-up's fronts on their evenings, none on the rest: "..tostring(e.front and e.front.id))
+	end
+	check(C:Evenings(7, start + 3 * 3600)[1].front.id == "av" and not C:Evenings(7, start + 3 * 3600)[1].today, "once tonight's window closes, tomorrow's is first")
+	-- The Siege page's Upcoming card: the rows, the windows, the fronts named, the rest to be picked, tonight marked
+	ns.UI:Show("siege")
+	check(shows("UPCOMING") and count("^%a%a%a %d+ %a%a%a$", true) >= 7 and count("7 to 10 PM") == 7, "the Upcoming card: seven days with the window in the client's clock")
+	check(count("Hillsbrad Foothills") >= 1 and count("Ashenvale") >= 1 and count("front picked the evening before") == 5, "the fronts named for two evenings, the rest picked the evening before")
+	-- (The tonight card and the fronts' pill go by the PC's own day, which the test's clock isn't: only the row's pill here)
+	check(count("TONIGHT") == (closed and 0 or 1), "tonight's row marked: "..count("TONIGHT"))
+	check(count("Open the map") == 1 + 3 + 2, "Open the map on the two evenings with a front: "..count("Open the map"))
+	-- The Dashboard's card: the next three evenings in a line each; click for the Siege page
+	ns:RunCommand("demo", "")
+	ns.UI:Show("home")
+	for i, e in ipairs(C:Evenings(3, clock)) do
+		local line = format("%s %s · %s", date("%a", e.day), HUD:HourText(e.start), e.front and e.front.zone or "to be picked")
+		check(count(line) == 1, "the Dashboard's upcoming line "..i..": "..line)
+	end
+	check(shows("UPCOMING SIEGES"), "under its label")
+	for _, f in ipairs(Mock.fontStrings) do
+		if f._text == "UPCOMING SIEGES" and On(f) then f._parent:Click() end
+	end
+	check(ns.UI:IsShown("siege"), "clicking the card opens the Siege page")
+	-- Nothing known: the site's window on the page, and said so on the Dashboard
+	C:TakeSiege(nil, nil)
+	ns.UI:Show("siege")
+	check(count("7 to 10 PM Eastern") == 7 and count("front picked the evening before") == 7 and count("Open the map") == 3, "no siege known: the site's window, every front to be picked")
+	ns.UI:Show("home")
+	check(shows("No siege picked yet") and (shows("Picked each evening the day before") or shows("Picked the evening before")), "the Dashboard says none is picked yet")
+	ns:RunCommand("demo", "")
+	ns.UI:GetFrame():Hide()
+	ns.Alerts.Warn, PlaySound = real.Warn, real.PlaySound
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

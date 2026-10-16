@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.23.4] - 2026-10-16
+
 - Everything the Wanted app carries says so when there is no app: saving a calling card, uploading your poster, the
   calendar's season tile and the hotspots' HOT marks now say it, as the challenges and Home already did, with where
   to get it and what to do (start it, then /reload).

@@ -15352,6 +15352,126 @@ end)()
 	Fire("ZONE_CHANGED_NEW_AREA")
 	C_Map, ns.Sync.SendPoint = real.C_Map, real.SendPoint
 end)()
+-- The target layer of a zone: the siege's layer while the siege is on at that front, else the zone's fight layer as
+-- the site last said it (the catch-up's layers, for a quarter hour), else this client's own estimate from the channel
+-- (deaths heard there and Wanted players of our side heard there, by layer, from five). One line says it.
+;(function()
+	local Shard, Store, C, Sync = ns.Shard, ns.Store, ns.Captures, ns.Sync
+	local startClock = clock
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText, SendPoint = Sync.SendPoint }
+	local best = 1424
+	C_Map = { GetBestMapForUnit = function() return best end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
+		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
+	GetZoneText = function() return best == 1424 and "Hillsbrad Foothills" or "Durotar" end
+	local told = {}
+	Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
+	local channelName, msgs = Sync:GetInfo().channelName, 0
+	local function Hear(tag, tbl, sender)
+		msgs = msgs + 1
+		Fire("CHAT_MSG_ADDON", "WNTD", tag..":tl"..msgs..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, channelName)
+		RunFrames() -- a hello waits out the background work the new records queued
+	end
+	local HB, AH = "Hillsbrad Foothills", "Arathi Highlands"
+	local L = function(n) return "4615-1-"..n end
+	clock = clock + 601 -- the deaths and players heard before have lapsed
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C:TakeSiege(nil, nil)
+	Shard:TakeLayers(nil)
+	check(Shard:Target(HB) == nil and Shard:TargetText(HB) == nil, "no target before anything is heard")
+	-- The estimate: deaths heard with a layer, five of them
+	local deaths = 0
+	local function Death(key, zone)
+		deaths = deaths + 1
+		Store:NewRecord("death", { deathId = "tl-"..deaths, victim = "Player-9-TL"..deaths, victimName = "Target "..deaths, victimFaction = "Alliance", zone = zone or HB, l = key })
+	end
+	for _ = 1, 4 do Death(L(501)) end
+	check(Shard:Target(HB) == nil, "four deaths on a layer name no fight layer")
+	Death(L(501))
+	local key, kind = Shard:Target(HB)
+	check(key == L(501) and kind == "fight", "five do: the fight layer, "..tostring(key))
+	Death(L(501), AH)
+	check(Shard:Target(AH) == nil, "a death in another zone counts there, not here")
+	Store:NewRecord("death", { deathId = "tl-1", victim = "Player-9-TL1", victimName = "Target 1", victimFaction = "Alliance", zone = HB, l = L(503) })
+	check(Shard:Target(HB) == L(501), "the same death told again counts once")
+	-- Wanted players of our side heard in the zone count too; a tie goes to the lower id
+	for i = 1, 5 do Hear("H", { c = {}, l = L(497), lm = 1424 }, "Peer "..i) end
+	check(Shard:Target(HB) == L(497), "five players and five deaths tie: the lower id, "..tostring(Shard:Target(HB)))
+	Death(L(501))
+	check(Shard:Target(HB) == L(501), "six deaths beat five players")
+	Hear("H", { c = {}, l = L(497), lm = 1 }, "Peer 6")
+	check(Shard:Target(HB) == L(501), "a player in another zone doesn't count here")
+	Hear("H", { c = {}, l = L(497), lm = 1424 }, "Peer 6")
+	check(Shard:Target(HB) == L(497), "six players beat six deaths: the lower id")
+	local n = 0
+	local function Look(key)
+		n = n + 1
+		enemyUnits.mouseover = { guid = format("Creature-0-%s-%d-%010X", key, 5000 + n, n), npc = true }
+		Fire("UPDATE_MOUSEOVER_UNIT", "mouseover")
+		enemyUnits.mouseover = nil
+	end
+	for _ = 1, 3 do Look(L(501)) end
+	check(Shard:Target(HB) == L(501), "we count too, on our own layer")
+	check(Shard:TargetText(HB) == "You're on the fight's layer", "and the line says so: "..tostring(Shard:TargetText(HB)))
+	Fire("ZONE_CHANGED_NEW_AREA")
+	check(Shard:Target(HB) == L(497) and Shard:TargetText(HB) == "The fight is on layer 497, yours isn't read yet", "our layer unknown: "..tostring(Shard:TargetText(HB)))
+	for _ = 1, 3 do Look(L(503)) end
+	check(Shard:TargetText(HB) == "The fight is on layer 497, you're on 503", "ours known: "..tostring(Shard:TargetText(HB)))
+	clock = clock + 601
+	check(Shard:Target(HB) == nil, "ten minutes on, the deaths and the players heard have lapsed")
+	clock = clock - 601
+	-- The site's word overrides the estimate for a quarter hour; malformed zones are left out
+	Shard:TakeLayers({ [HB] = { active = L(505), deaths = 9, since = clock - 60 }, [AH] = { active = L(507), since = clock }, Durotar = { active = "junk", since = clock }, [42] = { active = L(509), since = clock } })
+	key, kind = Shard:Target(HB)
+	check(key == L(505) and kind == "fight", "the site's fight layer over the estimate: "..tostring(key))
+	check(Shard:Target(AH) == L(507) and Shard:Target("Durotar") == nil, "a zone without deaths: the site's word; a malformed one: nothing")
+	check(Shard:TargetText(AH) == "The fight is on layer 507", "a zone we're not in says the layer alone: "..tostring(Shard:TargetText(AH)))
+	Shard:TakeLayers({ [HB] = { active = L(505), deaths = 9, since = clock - 16 * 60 } })
+	check(Shard:Target(HB) == L(497), "the site's word from over a quarter hour ago: the estimate again")
+	Shard:TakeLayers({ [HB] = { active = L(505), deaths = 9, since = clock }, [AH] = { active = L(507), since = clock } })
+	-- The siege's layer wins at its front from an hour before the window until the siege is over
+	C:TakeSiege({ front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(511), layerSince = clock }, nil)
+	key, kind = Shard:Target(HB)
+	check(key == L(511) and kind == "siege" and C:SiegeLayer() == L(511), "the siege's layer over the fight layer: "..tostring(key))
+	check(Shard:TargetText(HB) == "The siege is on layer 511, you're on 503", "the line says the siege: "..tostring(Shard:TargetText(HB)))
+	check(Shard:Target(AH) == L(507), "the other fronts keep their fight layer")
+	C:TakeSiege({ front = "hb", start = clock + 7200, ["end"] = clock + 7200 + 3 * 3600, layer = L(511), layerSince = clock }, nil)
+	check(Shard:Target(HB) == L(505), "two hours before the window the fight layer still rules")
+	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, layer = L(511), layerSince = clock }, nil)
+	check(Shard:Target(HB) == L(505), "the siege over: the fight layer")
+	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
+	check(Shard:Target(HB) == L(505) and C:SiegeLayer() == nil, "a siege whose layer isn't picked yet: the fight layer")
+	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = "junk" }, nil)
+	check(C:SiegeLayer() == nil, "a malformed siege layer is nothing")
+	-- A peer's word on the siege's layer (the C message) is taken when newer, and our own C message carries it
+	local news = {}
+	C:OnSiege(function(k, a) news[#news + 1] = tostring(k)..":"..tostring(a) end)
+	local slot = math.floor(clock / C.SLOT_SECONDS)
+	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(513), st = clock - 30 }, "Thrall")
+	check(C:SiegeLayer() == L(513) and Shard:Target(HB) == L(513) and news[#news] == "layer:"..L(513), "a peer's word picks the siege's layer: "..tostring(news[#news]))
+	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock - 60 }, "Thrall")
+	check(C:SiegeLayer() == L(513), "an older word doesn't replace it")
+	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock + 600 }, "Thrall")
+	check(C:SiegeLayer() == L(513), "nor one from the future")
+	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock }, "Thrall")
+	check(C:SiegeLayer() == L(515) and news[#news] == "layer:"..L(515), "a newer word switches it")
+	clock = clock + 61
+	C:Sample()
+	check(told[#told] and told[#told].sl == L(515) and told[#told].st == clock - 61, "our own presence message carries the siege's layer: "..tostring(told[#told] and told[#told].sl))
+	-- The catch-up carries both
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, layers = { [AH] = { active = L(517), deaths = 7, since = clock } },
+		siege = { front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(519), layerSince = clock } } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(Shard:Target(HB) == L(519) and Shard:Target(AH) == L(517) and news[#news] == "layer:"..L(519), "the catch-up's siege layer and fight layers: "..tostring(Shard:Target(HB)))
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
+	ns.Catchup:Import()
+	RunTimers()
+	check(Shard:Target(AH) == nil and C:Siege() == nil, "a catch-up without them: none")
+	-- Put back
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C_Map, GetZoneText, Sync.SendPoint = real.C_Map, real.GetZoneText, real.SendPoint
+	clock = startClock
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

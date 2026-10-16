@@ -1682,6 +1682,8 @@ function private.HelloFields()
 	end
 	-- This character's signing key and GUID (1.19.0); kr = 1 once after /wanted key reset
 	Wanted.Signing:AddToHello(fields)
+	-- l, lm: our layer of the zone and the zone's map (Shard), so peers know which copy of it we're on
+	fields.l, fields.lm = Wanted.Shard:Current(), Wanted.Shard:ZoneMap()
 	return fields
 end
 
@@ -1977,6 +1979,10 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	-- development build is not a release, so it neither locks others nor turns them away.
 	Wanted:NoteVersion(tbl.v, sender)
 	Store:NoteAddonVersion(sender, tbl.v)
+	-- Their layer of their zone, in a hello (Shard)
+	if tag == TAG_HELLO then
+		Wanted.Shard:Note(sender, tbl.l, tbl.lm)
+	end
 	-- Their Blizzard PvP rank, in a hello (from 1.10.0)
 	if tbl.b and Wanted.BlizzRank then
 		Wanted.BlizzRank:Note(sender, tbl.b, tbl.bs)
@@ -2520,7 +2526,8 @@ end
 
 function private.SendLinkHello(name, isAnswer)
 	-- x: locked out of the channel, so a player on this very realm should link by whisper too
-	private.Send(TAG_HELLO, private.HaveFields({ r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil }), nil, name)
+	private.Send(TAG_HELLO, private.HaveFields({ r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil,
+		l = Wanted.Shard:Current(), lm = Wanted.Shard:ZoneMap() }), nil, name)
 end
 
 function private.AddLink(name, realm)

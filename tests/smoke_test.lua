@@ -15025,6 +15025,290 @@ end)()
 	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant, _G.UnitCanAttack = nil, nil, nil
 	C_Map.GetMapInfo = realInfo
 end)()
+-- Layers: our layer of the zone is read from the GUIDs of the creatures we look at, goes out with our hello, rally
+-- position and point presence, and the rally line says when the leader is on another one. A layer hop asks a Wanted
+-- player on the rally's layer for an invite by whisper: their addon invites (never in a fight, a full group, or with
+-- hosting off), ours accepts the invite from that host alone, holds the group twenty seconds, then leaves unless we
+-- stay or the host leads the rally; still on the old layer at fifteen seconds, it says so and leaves.
+;(function()
+	local Shard, Rally, Sync = ns.Shard, ns.Rally, ns.Sync
+	local startClock = clock
+	local real = { GetMapInfo = C_Map.GetMapInfo, GetBestMapForUnit = C_Map.GetBestMapForUnit, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
+		groupSize = groupSize, C_PartyInfo = C_PartyInfo, AcceptGroup = AcceptGroup, UnitInParty = UnitInParty, UnitInRaid = UnitInRaid, Warn = ns.Alerts.Warn }
+	local maps = { [1] = { name = "Durotar", mapType = 3, parentMapID = 2 }, [2] = { name = "Kalimdor", mapType = 2 }, [1424] = { name = "Hillsbrad Foothills", mapType = 3, parentMapID = 1415 }, [1415] = { mapType = 2 } }
+	local best = 1
+	C_Map.GetMapInfo = function(id) return maps[id] end
+	C_Map.GetBestMapForUnit = function() return best end
+	local inGroup, invited, accepted, left, warned = {}, {}, 0, 0, {}
+	IsInGroup = function() return next(inGroup) ~= nil end
+	IsInRaid = function() return false end
+	UnitInParty = function(n) return inGroup[n] or nil end
+	UnitInRaid = function() return nil end
+	C_PartyInfo = { InviteUnit = function(name) invited[#invited + 1] = name end, LeaveParty = function() left = left + 1 wipe(inGroup) end }
+	AcceptGroup = function() accepted = accepted + 1 end
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." "..(sub or "") end
+	hiddenPopups = {}
+	local function Said(text)
+		for i = #printed, math.max(1, #printed - 4), -1 do if printed[i]:find(text, 1, true) then return printed[i] end end
+		return nil
+	end
+	local channelName, msgs = Sync:GetInfo().channelName, 0
+	local function Msg(tag, tbl)
+		msgs = msgs + 1
+		return tag..":sh"..msgs..":1/1:"..Sync:Encode(tbl)
+	end
+	local function Hear(tag, tbl, how, sender)
+		Fire("CHAT_MSG_ADDON", "WNTD", Msg(tag, tbl), how, sender, nil, nil, nil, how == "CHANNEL" and channelName or nil)
+	end
+	local function LastWhisper(tag)
+		for i = #addonSent, 1, -1 do
+			local m = addonSent[i]
+			if m.chatType == "WHISPER" and m.text:sub(1, 2) == tag..":" then
+				return m.target, Sync:Decode(m.text:match("^%u:%w+:%d+/%d+:(.*)$"))
+			end
+		end
+	end
+	-- Detection from a GUID
+	check(Shard:ParseGUID("Creature-0-4615-1-497-3123-0000123ABC") == "4615-1-497", "a creature's GUID names its layer")
+	check(Shard:ParseGUID("Vehicle-0-4621-0-507-5624-0004C97619") == "4621-0-507", "so does a vehicle's")
+	for _, bad in ipairs({ "Player-4613-015669D9", "Pet-0-4615-1-544-1863-0102C1A2B3", "Creature-0-4615-1", 42, false }) do
+		check(Shard:ParseGUID(bad) == nil, "no layer in "..tostring(bad))
+	end
+	local A, B = "4615-1-497", "4615-1-501"
+	Fire("ZONE_CHANGED_NEW_AREA")
+	check(Shard:Current() == nil and not Shard:IsFresh(), "no layer known before a creature is seen")
+	local n = 0
+	local function Look(key, unit, event, guid)
+		n = n + 1
+		local was = enemyUnits[unit]
+		enemyUnits[unit] = { guid = guid or format("Creature-0-%s-%d-%010X", key, 3000 + n, n), npc = true }
+		Fire(event, unit)
+		enemyUnits[unit] = was
+	end
+	Look(A, "mouseover", "UPDATE_MOUSEOVER_UNIT")
+	check(Shard:Current() == A and Shard:IsFresh(), "a creature under the mouse gives the layer, fresh")
+	Look(A, "target", "PLAYER_TARGET_CHANGED")
+	Look(A, "softenemy", "PLAYER_SOFT_ENEMY_CHANGED")
+	Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED")
+	check(Shard:Current() == A, "one creature from over a zone border doesn't change it")
+	for _ = 1, 5 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED", "Creature-0-4615-1-501-3000-0000000001") end
+	check(Shard:Current() == A, "the same creature seen again counts once")
+	for _ = 1, 8 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	check(Shard:Current() == B, "most of the creatures lately on another layer: that's ours now")
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	check(Shard:Current() == A, "a new zone reads afresh")
+	-- The hello says our layer and zone map
+	addonSent = {}
+	clock = clock + 61
+	Sync:SayHello()
+	RunTimers()
+	local parts, id = {}, nil
+	for _, m in ipairs(addonSent) do
+		local mid, part, chunk = m.text:match("^H:(%w+):(%d+)/%d+:(.*)$")
+		if mid and m.chatType == "CHANNEL" and (not id or id == mid) then id, parts[tonumber(part)] = mid, chunk end
+	end
+	local hello = id and Sync:Decode(table.concat(parts))
+	check(hello and hello.l == A and hello.lm == 1, "our hello says our layer and its zone map: "..tostring(hello and hello.l))
+	-- Theirs: a hello, a rally position or point presence says a peer's layer; nonsense says nothing
+	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
+	check(Shard:Of("Thrall") and Shard:Of("Thrall").key == B and Shard:Of("Thrall").mapId == 1, "a peer's hello says their layer and zone map")
+	Hear("H", { c = {}, l = "junk", lm = 1 }, "CHANNEL", "Thrall")
+	check(Shard:Of("Thrall") == nil, "one that isn't a layer forgets them")
+	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
+	local function Rallying(sender, layer, extra)
+		local t = { c = clock - 60, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde", l = layer }
+		for k, v in pairs(extra or {}) do t[k] = v end
+		Hear("L", t, "CHANNEL", sender)
+	end
+	Rallying("Grimshaw", B)
+	RunTimers()
+	check(Rally:Here() and Rally:Here().name == "Grimshaw" and Shard:Of("Grimshaw").key == B, "the rally leader's position says their layer")
+	check(Shard:IsOther("Grimshaw") and Shard:IsOther("Thrall"), "both are in our zone on another layer")
+	Rallying("Grimshaw", A)
+	check(not Shard:IsOther("Grimshaw"), "on ours: not another")
+	Rallying("Grimshaw", B)
+	-- Nearby's rally line says so, with Hop
+	local nearbyPrivate
+	for i = 1, 60 do
+		local name, value = debug.getupvalue(ns.NearbyWindow.Refresh, i)
+		if name == "private" then nearbyPrivate = value break end
+		if not name then break end
+	end
+	ns.NearbyWindow:SetShown(true)
+	ns.NearbyWindow:Refresh()
+	local line = nearbyPrivate.rally
+	check(line:IsShown() and line.text._text:find("Grimshaw", 1, true) and line.text._text:find("on another layer", 1, true), "the rally line says the leader is on another layer: "..tostring(line.text._text))
+	check(line.hop:IsShown() and line.hop._text == "Hop", "with a Hop button")
+	-- The hop: who to ask, and when we can't
+	local host, why, layer = Shard:HopTarget()
+	check(host == "Grimshaw" and layer == B and why == nil, "the rally leader is the host to ask")
+	Fire("PLAYER_REGEN_DISABLED")
+	check(Shard:Hop():find("fight", 1, true), "no hop in a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	inGroup.Someone = true
+	check(Shard:Hop():find("leave it first", 1, true), "nor in a group")
+	wipe(inGroup)
+	local realInstance = IsInInstance
+	IsInInstance = function() return true, "party" end
+	check(Shard:Hop():find("instances", 1, true), "nor in an instance")
+	IsInInstance = realInstance
+	enemyUnits.player = { dead = true }
+	check(Shard:Hop():find("dead", 1, true), "nor while dead")
+	enemyUnits.player = nil
+	-- Asking: a whisper to the leader; their refusal in a fight moves the ask to the next host on that layer
+	addonSent = {}
+	check(Shard:Hop() == nil and Said("Asking Grimshaw for an invite"), "the ask goes to the leader: "..tostring(printed[#printed]))
+	local target, ask = LastWhisper("O")
+	check(target == "Grimshaw" and ask and ask.a == 1, "by addon whisper")
+	check(Shard:Hop():find("already hopping", 1, true), "one hop at a time")
+	Hear("O", { r = "combat" }, "WHISPER", "Grimshaw")
+	check(Said("Grimshaw couldn't invite (in combat)") and Said("Asking Thrall instead"), "a refusal says why and asks the next host on that layer: "..tostring(printed[#printed]))
+	target, ask = LastWhisper("O")
+	check(target == "Thrall" and ask.a == 1 and Shard:Hopping().host == "Thrall", "the ask goes to them")
+	Hear("O", { r = "zzz" }, "WHISPER", "Grimshaw")
+	check(Shard:Hopping() and Shard:Hopping().host == "Thrall", "an answer from someone we didn't ask changes nothing")
+	Hear("O", { r = "full" }, "WHISPER", "Thrall")
+	check(Said("Thrall couldn't invite (their group is full)") and Shard:Hopping() == nil, "nobody else to ask: the hop is over")
+	-- Hosting: an ask gets an invite (the Raids module's) and "ok"; in a fight, full, dead or with hosting off, why not
+	addonSent, invited = {}, {}
+	Hear("O", { a = 1 }, "WHISPER", "Hopper")
+	local answerTo, answer = LastWhisper("O")
+	check(invited[1] == "Hopper" and answerTo == "Hopper" and answer.r == "ok" and Said("Inviting Hopper to your group"), "an ask is invited and told ok: "..tostring(answer and answer.r))
+	Hear("O", { a = 1 }, "WHISPER", "Hopper")
+	answerTo, answer = LastWhisper("O")
+	check(#invited == 1 and answer.r == "busy", "asked again at once: not invited twice")
+	inCombat = true
+	Hear("O", { a = 1 }, "WHISPER", "Hopper Two")
+	answerTo, answer = LastWhisper("O")
+	check(#invited == 1 and answerTo == "Hopper Two" and answer.r == "combat", "in a fight the host says so, invites nobody")
+	inCombat = false
+	for i = 1, 5 do inGroup["Member "..i] = true end
+	groupSize = 5
+	Hear("O", { a = 1 }, "WHISPER", "Hopper Two")
+	answerTo, answer = LastWhisper("O")
+	check(#invited == 1 and answer.r == "full", "a full party invites nobody")
+	wipe(inGroup)
+	groupSize = 0
+	Shard:Settings().host = false
+	Hear("O", { a = 1 }, "WHISPER", "Hopper Two")
+	answerTo, answer = LastWhisper("O")
+	check(#invited == 1 and answer.r == "off", "hosting off invites nobody")
+	Shard:Settings().host = true
+	-- Accepting: the invite from our host alone, within the time; a stranger's is left to the player
+	clock = clock + 31
+	addonSent = {}
+	check(Shard:Hop() == nil and Shard:Hopping().host == "Grimshaw", "asking again")
+	Fire("PARTY_INVITE_REQUEST", "Stranger")
+	check(accepted == 0, "a stranger's invite isn't accepted")
+	Hear("O", { r = "ok" }, "WHISPER", "Grimshaw")
+	check(Said("Grimshaw is inviting you") and Shard:Hopping().state == "invited", "ok: the invite is coming")
+	Fire("PARTY_INVITE_REQUEST", "Grimshaw-Realm")
+	check(accepted == 1 and hiddenPopups[#hiddenPopups].which == "PARTY_INVITE" and Shard:Hopping().state == "accepted", "the host's invite is accepted and the popup closed")
+	-- In the group: the hold, the countdown, and the rally leader's group kept
+	inGroup.Grimshaw = true
+	printed = {}
+	Fire("GROUP_ROSTER_UPDATE")
+	check(Said("You joined Grimshaw's group, the rally leader's") and Said("Staying in it") and not Shard:Holding(), "the rally leader's group is kept: "..tostring(printed[#printed]))
+	RunTimers()
+	check(left == 0 and Shard:Hopping() == nil, "and not left")
+	wipe(inGroup)
+	-- A host who isn't the rally leader: held twenty seconds, then left, with the move checked against the creatures
+	clock = clock + 31
+	local function OnA() for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end end
+	OnA()
+	check(Shard:HopTo("Thrall", B) == nil and Shard:Hopping().from == A, "hopping to another host remembers the layer we leave")
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	check(Said("Leaving it in 20 seconds") and Shard:Holding() and Shard:Current() == nil, "joined: holding, the old layer's creatures forgotten")
+	ns.NearbyWindow:Refresh()
+	check(line.hop:IsShown() and line.hop._text == "Stay", "the rally line's button is Stay while holding")
+	check(warned[#warned] and warned[#warned]:find("LAYER HOP Leaving Thrall's group in 20 s", 1, true), "the countdown at the top of the screen: "..tostring(warned[#warned]))
+	for _ = 1, 3 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	RunTimers()
+	check(left == 1 and Said("Moved to Thrall's layer") and Shard:Hopping() == nil, "the creatures say we moved: the group is left after the hold: "..tostring(printed[#printed]))
+	-- Still on the old layer at the watchdog: said, and left
+	wipe(inGroup)
+	clock = clock + 31
+	OnA()
+	check(Shard:HopTo("Thrall", B) == nil, "hopping again")
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	RunTimers()
+	check(left == 2 and Said("still on your old layer") and Shard:Hopping() == nil, "the move didn't happen: said, and the group left: "..tostring(printed[#printed]))
+	-- Stay keeps the group
+	wipe(inGroup)
+	clock = clock + 31
+	OnA()
+	check(Shard:HopTo("Thrall", B) == nil, "hopping once more")
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	check(Shard:Stay() == nil and not Shard:Holding() and Said("Staying in Thrall's group"), "Stay keeps the group")
+	RunTimers()
+	check(left == 2 and Shard:Hopping() == nil, "and it isn't left")
+	wipe(inGroup)
+	-- Auto-accept off: the invite is left to the player, who's told
+	Shard:Settings().accept = false
+	clock = clock + 31
+	OnA()
+	check(Shard:HopTo("Thrall", B) == nil, "hopping with auto-accept off")
+	local acceptedBefore = accepted
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	check(accepted == acceptedBefore and Said("Accept Thrall's invite"), "the invite waits for the player: "..tostring(printed[#printed]))
+	inGroup.Thrall = true
+	Fire("GROUP_ROSTER_UPDATE")
+	check(Shard:Holding(), "accepted by hand, the hold runs the same")
+	RunTimers()
+	wipe(inGroup)
+	Shard:Settings().accept = true
+	-- The host's invite too late is left to the player
+	clock = clock + 31
+	OnA()
+	check(Shard:HopTo("Thrall", B) == nil, "hopping, then waiting")
+	clock = clock + 31
+	acceptedBefore = accepted
+	Fire("PARTY_INVITE_REQUEST", "Thrall")
+	check(accepted == acceptedBefore, "an invite after half a minute isn't accepted")
+	RunTimers()
+	check(Said("Thrall didn't invite you") and Shard:Hopping() == nil, "and the hop gives up")
+	-- The HUD during a siege at the front we're in
+	best = 1424
+	clock = clock + 1
+	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
+	ns.Captures:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
+	Rallying("Grimshaw", B, { m = 1424, z = "Hillsbrad Foothills" })
+	RunTimers()
+	ns.CapturesHUD:Update()
+	local bar = _G.WantedCaptureBar
+	check(bar:IsShown() and bar.hop:IsShown() and bar.hop._text == "You're not on the rally's layer" and bar.hopButton:IsShown() and bar.hopButton._text == "Hop",
+		"the HUD says we're not on the rally's layer, with Hop: "..tostring(bar.hop._text))
+	Rallying("Grimshaw", A, { m = 1424, z = "Hillsbrad Foothills" })
+	RunTimers()
+	ns.CapturesHUD:Update()
+	check(not bar.hop:IsShown() and not bar.hopButton:IsShown(), "on the rally's layer: no line")
+	ns.Captures:TakeSiege(nil, nil)
+	-- The settings, and /wanted shard
+	check(Shard:Settings().host == true and Shard:Settings().accept == true, "hosting and auto-accept are on by default")
+	best = 1
+	Rallying("Grimshaw", B)
+	RunTimers()
+	ns:RunCommand("shard", "")
+	check(Said("Your layer: 497") and Said("Grimshaw leads the rally here on layer 501: not yours"), "/wanted shard says ours and the leader's: "..tostring(printed[#printed]))
+	-- Put back
+	Rallying("Grimshaw", B, { e = 1, c = clock + 10 })
+	RunTimers()
+	Fire("ZONE_CHANGED_NEW_AREA")
+	ns.NearbyWindow:Refresh()
+	C_Map.GetMapInfo, C_Map.GetBestMapForUnit = real.GetMapInfo, real.GetBestMapForUnit
+	IsInGroup, IsInRaid, groupSize, C_PartyInfo, AcceptGroup = real.IsInGroup, real.IsInRaid, real.groupSize, real.C_PartyInfo, real.AcceptGroup
+	UnitInParty, UnitInRaid, ns.Alerts.Warn = real.UnitInParty, real.UnitInRaid, real.Warn
+	clock = startClock
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

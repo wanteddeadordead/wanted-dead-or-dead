@@ -313,7 +313,9 @@ function private.OnEnterPoint(self)
 	if allies > 0 then
 		GameTooltip:AddLine(format("%d of your side there now%s (provisional)", allies, Captures:Taking(point) and ", attacking it" or ""), 1, 0.8, 0.32)
 	end
-	GameTooltip:AddLine("Click: set a waypoint", 0.6, 0.62, 0.68)
+	if self.GetScript and self:GetScript("OnClick") then
+		GameTooltip:AddLine("Click: set a waypoint", 0.6, 0.62, 0.68)
+	end
 	GameTooltip:Show()
 end
 
@@ -430,11 +432,19 @@ function CapturesMap:UpdateMinimap()
 				end
 			else
 				if not dot then
-					dot = Minimap:CreateTexture(nil, "OVERLAY")
+					-- A small frame, so the mouse finds it: hovering says which point it is, as the world map's do
+					dot = CreateFrame("Frame", nil, Minimap)
 					dot:SetSize(MINIMAP_DOT, MINIMAP_DOT)
+					dot:SetFrameLevel(Minimap:GetFrameLevel() + 5)
+					dot.icon = dot:CreateTexture(nil, "OVERLAY")
+					dot.icon:SetAllPoints()
+					dot:EnableMouse(true)
+					dot:SetScript("OnEnter", private.OnEnterPoint)
+					dot:SetScript("OnLeave", function() GameTooltip:Hide() end)
 					dots[point.id] = dot
 				end
-				CapturesMap:SetIcon(dot, point)
+				dot.point = point
+				CapturesMap:SetIcon(dot.icon, point)
 				dot:ClearAllPoints()
 				dot:SetPoint("CENTER", Minimap, "CENTER", dx / radius * half, -dy / radius * half)
 				dot:Show()

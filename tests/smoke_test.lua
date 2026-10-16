@@ -14224,6 +14224,18 @@ end)()
 		end
 	end
 	check(rings >= 1, "the circles of the points in view are drawn round their icons, got "..rings)
+	-- Hovering a minimap icon names the point, as the world map's icons do
+	local dot
+	for _, f in ipairs(Mock.created) do if rawget(f, "point") and f._scripts.OnEnter and not f._scripts.OnClick and f:GetParent() == Minimap then dot = f end end
+	check(dot, "the minimap's icons take the mouse")
+	if dot then
+		local lines, origAdd = {}, GameTooltip.AddLine
+		GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+		dot._scripts.OnEnter(dot)
+		GameTooltip.AddLine = origAdd
+		check(tostring(GameTooltip._text):find(dot.point.home.." ", 1, true) and lines[1] == dot.point.name and not tostring(lines[#lines]):find("waypoint", 1, true),
+			"hovering a minimap icon says which point it is, with no click to offer: "..tostring(GameTooltip._text).." / "..tostring(lines[1]))
+	end
 	local root = {}
 	root.CreateDivider = function() end
 	root.CreateCheckbox = function(_, text, isSelected, setSelected) if text:find("Capture points", 1, true) then root.box = { isSelected, setSelected } end end

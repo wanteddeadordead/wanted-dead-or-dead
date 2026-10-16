@@ -380,15 +380,22 @@ function Shard:HopTo(name, layer)
 	private.hops = private.hops + 1
 	private.hop = { id = private.hops, host = name, target = layer, from = Shard:Current(), state = "asked", asked = GetTime(), tried = { [name] = true } }
 	Wanted:Print("Asking %s for an invite onto their layer.", name)
+	private.GiveUpLater()
+	private.Changed()
+	return nil
+end
+
+---Gives the hop up once the host we asked last hasn't invited us in time (a refusal moves the ask to the next host,
+---whose own time starts then).
+function private.GiveUpLater()
+	local askedAt = private.hop.asked
 	private.Later(INVITE_SECONDS, function()
 		local hop = private.hop
-		if hop.state == "asked" or hop.state == "invited" then
+		if hop.asked == askedAt and (hop.state == "asked" or hop.state == "invited") then
 			Wanted:Print("%s didn't invite you.", hop.host)
 			private.End()
 		end
 	end)
-	private.Changed()
-	return nil
 end
 
 ---Runs func after seconds, for the hop under way now only.
@@ -437,12 +444,7 @@ function private.Answer(sender, r)
 	if other and Wanted.Sync:SendHop(other, { a = 1 }) then
 		hop.host, hop.asked, hop.tried[other] = other, GetTime(), true
 		Wanted:Print("Asking %s instead.", other)
-		private.Later(INVITE_SECONDS, function()
-			if private.hop.state == "asked" or private.hop.state == "invited" then
-				Wanted:Print("%s didn't invite you.", private.hop.host)
-				private.End()
-			end
-		end)
+		private.GiveUpLater()
 		private.Changed()
 		return
 	end

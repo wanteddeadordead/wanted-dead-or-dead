@@ -15558,6 +15558,100 @@ end)()
 	C_Map, GetZoneText, Sync.SendPoint = real.C_Map, real.GetZoneText, real.SendPoint
 	clock = startClock
 end)()
+-- The layer announcements: the siege's layer when it's picked or switches (the Siege call setting), and a fight layer
+-- newly known in our zone, at most once in ten minutes (the capture alerts setting)
+;(function()
+	local Shard, C, Sync = ns.Shard, ns.Captures, ns.Sync
+	local startClock = clock
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn }
+	local best = 1424
+	C_Map = { GetBestMapForUnit = function() return best end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
+		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
+	GetZoneText = function() return best == 1424 and "Hillsbrad Foothills" or "Durotar" end
+	local warned = {}
+	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
+	local channelName, msgs = Sync:GetInfo().channelName, 0
+	local function Hear(tag, tbl, sender)
+		msgs = msgs + 1
+		Fire("CHAT_MSG_ADDON", "WNTD", tag..":al"..msgs..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, channelName)
+		RunFrames()
+	end
+	local HB, AH = "Hillsbrad Foothills", "Arathi Highlands"
+	local L = function(n) return "4615-1-"..n end
+	clock = clock + 7201 -- whatever was heard before has lapsed, and the last announcements too (earlier blocks ran the clock ahead)
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C:TakeSiege(nil, nil)
+	Shard:TakeLayers(nil)
+	C:Settings().alerts, C:Settings().siegeCall = true, true
+	warned = {}
+	-- The siege's layer
+	local siege = { front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600 }
+	C:TakeSiege(siege, nil)
+	check(#warned == 0, "a siege without its layer picked: nothing to announce")
+	siege.layer, siege.layerSince = L(531), clock
+	C:TakeSiege(siege, nil)
+	check(#warned == 1 and warned[1] == "The siege of Hillsbrad Foothills is on layer 531 | Hop to it: /wanted hop, or Hop in Nearby", "the siege's layer picked is announced, with the Hop hint: "..tostring(warned[1]))
+	C:TakeSiege(siege, nil)
+	check(#warned == 1, "the same pick again (another login) isn't")
+	local slot = math.floor(clock / C.SLOT_SECONDS)
+	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(533), st = clock + 1 }, "Thrall")
+	check(#warned == 2 and warned[2]:find("The siege of Hillsbrad Foothills is on layer 533", 1, true), "a switch heard from a peer is announced: "..tostring(warned[2]))
+	C:Settings().siegeCall = false
+	siege.layer, siege.layerSince = L(535), clock + 2
+	C:TakeSiege(siege, nil)
+	check(#warned == 2, "the Siege call setting off: not announced")
+	C:Settings().siegeCall = true
+	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, layer = L(537), layerSince = clock }, nil)
+	check(#warned == 2, "a siege that's over: not announced")
+	C:TakeSiege(nil, nil)
+	-- A fight layer newly known in our zone
+	warned = {}
+	Shard:TakeLayers({ [AH] = { active = L(541), since = clock } })
+	check(#warned == 0, "a fight layer in another zone: nothing")
+	Shard:TakeLayers({ [HB] = { active = L(541), since = clock } })
+	check(#warned == 1 and warned[1] == "Big fight on layer 541 | Hillsbrad Foothills. Hop to it: /wanted hop, or Hop in Nearby", "one in our zone is announced, with the Hop hint: "..tostring(warned[1]))
+	Shard:TakeLayers({ [HB] = { active = L(541), since = clock } })
+	check(#warned == 1, "the same layer again isn't")
+	Shard:TakeLayers({ [HB] = { active = L(543), since = clock } })
+	check(#warned == 1, "nor another within ten minutes")
+	clock = clock + 601
+	Shard:TakeLayers({ [HB] = { active = L(543), since = clock } })
+	check(#warned == 1, "ten minutes on, a layer already seen isn't news")
+	Shard:TakeLayers({ [HB] = { active = L(545), since = clock } })
+	check(#warned == 2 and warned[2]:find("Big fight on layer 545", 1, true), "a new one is: "..tostring(warned[2]))
+	clock = clock + 601
+	C:Settings().alerts = false
+	Shard:TakeLayers({ [HB] = { active = L(547), since = clock } })
+	check(#warned == 2, "the alerts setting off: not announced")
+	C:Settings().alerts = true
+	clock = clock + 601
+	local n = 0
+	local function Look(key)
+		n = n + 1
+		enemyUnits.mouseover = { guid = format("Creature-0-%s-%d-%010X", key, 6000 + n, n), npc = true }
+		Fire("UPDATE_MOUSEOVER_UNIT", "mouseover")
+		enemyUnits.mouseover = nil
+	end
+	for _ = 1, 3 do Look(L(549)) end
+	Shard:TakeLayers({ [HB] = { active = L(549), since = clock } })
+	check(#warned == 3 and warned[3] == "Big fight on layer 549 | Hillsbrad Foothills: you're on it", "on the fight's layer already: said so: "..tostring(warned[3]))
+	clock = clock + 601
+	local before = #warned
+	C:TakeSiege({ front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(551), layerSince = clock }, nil)
+	Shard:TakeLayers({ [HB] = { active = L(553), since = clock } })
+	local siegeSaid, fightSaid = false, false
+	for i = before + 1, #warned do
+		siegeSaid = siegeSaid or warned[i]:find("The siege of Hillsbrad Foothills is on layer 551", 1, true) ~= nil
+		fightSaid = fightSaid or warned[i]:find("Big fight", 1, true) ~= nil
+	end
+	check(siegeSaid and not fightSaid, "during the siege at the front, its layer is the word; no fight-layer announcement: "..table.concat(warned, "; ", before + 1))
+	-- Put back
+	C:TakeSiege(nil, nil)
+	Shard:TakeLayers(nil)
+	Fire("ZONE_CHANGED_NEW_AREA")
+	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
+	clock = startClock
+end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

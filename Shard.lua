@@ -36,6 +36,9 @@ local private = {
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
 	lastHopAt = nil, -- GetTime() we last joined a host's group for a hop (the cooldown runs from it)
+	siegeTold = nil, -- the siege layer last announced
+	fight = nil, -- the fight layer last seen in our zone, { zone, key }, so a new one is news
+	fightToldAt = nil, -- GetTime() a fight layer was last announced
 }
 -- A host has this long to invite after we ask; an invite from them later than this is left to the player
 local INVITE_SECONDS = 30
@@ -77,6 +80,8 @@ local SITE_SECONDS = 15 * 60
 local FIGHT_SECONDS = 10 * 60
 local FIGHT_FLOOR = 5
 local MAX_DEATHS = 500
+-- A zone's fight layer is announced at most this often
+local FIGHT_TOLD_SECONDS = 10 * 60
 -- A record's time this far past our clock is a bad clock
 local AHEAD_SECONDS = 120
 -- Events that put a unit in reach, and the unit token each one is about
@@ -120,6 +125,14 @@ function Shard:OnEnable()
 	-- The deaths our side hears of (both sides' kills and deaths reach the channel) say where the fight is, by layer
 	Wanted.Store:OnRecord("kill", private.OnDeath)
 	Wanted.Store:OnRecord("death", private.OnDeath)
+	-- The siege's layer, picked or switched (a peer's word, or the catch-up); the catch-up read at login came before
+	-- this module was enabled, so its pick is told now
+	Wanted.Captures:OnSiege(function(kind)
+		if kind == "layer" then
+			private.TellSiegeLayer()
+		end
+	end)
+	private.TellSiegeLayer()
 end
 
 ---The layer hop settings: { host, accept }.
@@ -160,6 +173,7 @@ function private.OnEvent(_, event, unit)
 	elseif event == "ZONE_CHANGED_NEW_AREA" or event == "PLAYER_ENTERING_WORLD" then
 		-- Each zone has its own layers: read afresh, and the lines say the new zone's target at once
 		private.Forget()
+		private.CheckFight()
 		private.Changed()
 		return
 	elseif event == "SHARD_TRANSFER_IMMINENT" then
@@ -369,6 +383,7 @@ function Shard:Note(name, key, mapId)
 		end
 	end
 	private.peers[name] = { key = key, mapId = mapId, at = now }
+	private.CheckFight()
 end
 
 ---A Wanted player's layer as they last said it, { key, mapId, at }, or nil when they haven't said lately.
@@ -411,6 +426,7 @@ function Shard:TakeLayers(list)
 			private.site[zone] = { active = entry.active, deaths = type(entry.deaths) == "number" and entry.deaths or 0, since = entry.since }
 		end
 	end
+	private.CheckFight()
 end
 
 ---A kill or death record, ours or heard: one with a layer and a zone, from the last ten minutes, is counted toward
@@ -435,6 +451,7 @@ function private.OnDeath(record)
 		tremove(deaths, 1)
 	end
 	tinsert(deaths, { t = record.t, zone = data.zone, key = data.l, id = id })
+	private.CheckFight()
 end
 
 ---Whether layer a comes before b: the lower zone instance number (ties between layers as busy go to it).
@@ -515,6 +532,56 @@ function Shard:Target(zone, mapId)
 	end
 	local key = private.Estimate(zone, mapId or private.MapOf(zone))
 	return key, key and "fight" or nil
+end
+
+---The Hop hint under an announcement.
+local HOP_HINT = "Hop to it: /wanted hop, or Hop in Nearby"
+
+---Says which layer tonight's siege is on, when it's picked or switches (the Siege call setting, wherever we are),
+---once per pick.
+function private.TellSiegeLayer()
+	local Captures = Wanted.Captures
+	local s, key = Captures:Siege(), Captures:SiegeLayer()
+	if not s or not key or s.over or key == private.siegeTold then
+		return
+	end
+	private.siegeTold = key
+	if Captures:Settings().siegeCall then
+		Wanted.Alerts:Warn(format("The siege of %s is on %s", s.front.zone, Shard:LayerText(key)), HOP_HINT, Wanted.Theme.C.gold)
+		Wanted:Print("The siege of %s is on %s. %s.", s.front.zone, Shard:LayerText(key), HOP_HINT)
+	end
+	private.Changed()
+end
+
+---A fight layer newly known in our zone (the site's word or this client's estimate) is announced, at most once in
+---ten minutes (the capture alerts setting); the siege's layer is told by private.TellSiegeLayer instead.
+function private.CheckFight()
+	if Wanted:InInstance() then
+		return
+	end
+	local zone, mapId = Shard:Zone(), Shard:ZoneMap()
+	if not mapId then
+		return
+	end
+	local key, kind = Shard:Target(zone, mapId)
+	if kind ~= "fight" then
+		private.fight = nil
+		return
+	end
+	local last = private.fight
+	if last and last.zone == zone and last.key == key then
+		return
+	end
+	private.fight = { zone = zone, key = key }
+	local now = GetTime()
+	if (private.fightToldAt and now - private.fightToldAt < FIGHT_TOLD_SECONDS) or not Wanted.Captures:Settings().alerts then
+		return
+	end
+	private.fightToldAt = now
+	local sub = Shard:Current() == key and zone..": you're on it" or zone..". "..HOP_HINT
+	Wanted.Alerts:Warn(format("Big fight on %s", Shard:LayerText(key)), sub, Wanted.Theme.C.amber)
+	Wanted:Print("Big fight on %s in %s.", Shard:LayerText(key), sub)
+	private.Changed()
 end
 
 ---One line on a zone's target layer: "The fight is on layer 3, you're on 5" (or "The siege is ..."), "You're on

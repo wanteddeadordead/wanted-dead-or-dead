@@ -64,7 +64,9 @@
     front, its window and a countdown, or the round and the score with the three lanes once it's on, the rally leader,
     and buttons for the map, the rally and a waypoint to the front; the results (tonight's rounds, this week's siege
     wins per front); the three fronts with their lanes' holders, a map and a waypoint each; the rules in full; and the
-    website's schedule, fronts and rules pages as addresses to copy.
+    website's schedule, fronts and rules pages as addresses to copy. Upcoming: the next week's siege evenings on the
+    Siege page (the windows in your clock, the fronts the app has named, the rest picked the evening before, with the
+    map) and the next three on the Dashboard, in the second hot zone's place.
   - `/wanted points` lists them; Settings > Sharing has the switches, an optional waypoint on the nearest point to
     attack, and the siege call (the half-hour warning and the open, wherever you are).
 

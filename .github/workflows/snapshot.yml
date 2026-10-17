@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "30 9 * * *" # after the war's day rolls at 5 am US Eastern
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the package but upload nothing (a rehearsal)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -60,5 +65,18 @@ jobs:
           echo "TAG=$tag" >> "$GITHUB_ENV"
           printf '%s\n\n- The daily data refresh: the site as of %s. The code is %s, unchanged.\n' "## [${tag#v}]" "$DAY" "$BASE" > RELEASE_NOTES.md
       - name: Upload to CurseForge (no GitHub release, nothing pushed)
-        if: env.SKIP != '1'
+        if: env.SKIP != '1' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
         uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+      - name: Rehearsal (package only, nothing uploaded)
+        if: env.SKIP != '1' && github.event_name == 'workflow_dispatch' && inputs.dry_run
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: -d
+      - name: The package carries the day's snapshot
+        if: env.SKIP != '1' && github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: |
+          set -euo pipefail
+          ls .release
+          head -c 18 .release/WantedDeadOrDead_Data/Snapshot.lua | grep -q '^WantedSnapshot = {'
+          grep -q "Version: $TAG" .release/WantedDeadOrDead/WantedDeadOrDead.toc
+          echo "Rehearsal OK: $TAG, $(wc -c < .release/WantedDeadOrDead_Data/Snapshot.lua) bytes of snapshot"

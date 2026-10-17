@@ -16,8 +16,8 @@ Wanted.WHATS_NEW = {
 	{
 		version = "1.25.0",
 		note = "Two things about layers. Forever runs each zone as several layers, and Horde and Alliance can't talk in game, "
-			.."so the Wanted Battle.net group is now the place both sides share: it's where everyone sees which layer the fight "
-			.."is on. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
+			.."so the Wanted Battle.net group is now the place both sides share: say there which layer the fight is on, and "
+			.."the other side can come to it. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
 			.."under each red mark.",
 		lines = {
 			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on, siege features. Website & app has every address to copy and a Turn on button for the nameplates.",

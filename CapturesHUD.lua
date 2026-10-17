@@ -354,7 +354,10 @@ function private.SiegeLine()
 	elseif phase == "over" then
 		return format("Siege over · %s", score)
 	end
-	return format("Round %d · %s", s.round and s.round.n or 1, score)
+	-- A round runs until a Nexus falls or the window closes: the window's clock, then overtime (a round still moving
+	-- past the window plays out, up to an hour)
+	local left = s["end"] - GetServerTime()
+	return format("Round %d · %s · %s", s.round and s.round.n or 1, score, left > 0 and private.Clock(left).." left" or "overtime")
 end
 
 ---How many of a front's towers and inhibitors each side holds: horde, alliance.

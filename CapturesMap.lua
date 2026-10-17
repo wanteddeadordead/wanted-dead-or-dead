@@ -199,10 +199,23 @@ function private.Size()
 	return private.overlay:GetWidth(), private.overlay:GetHeight()
 end
 
+---The map's zoom: the canvas grows with it, so a piece sized from the canvas would grow too (a Nexus seal filled the
+---zoomed map, 2026-10-16). Sizes divide by this to keep their screen size; places still scale with the canvas.
+function private.Zoom()
+	local map = private.provider and private.provider.GetMap and private.provider:GetMap()
+	local scale = map and map.GetCanvasScale and map:GetCanvasScale()
+	return type(scale) == "number" and scale > 0 and scale or 1
+end
+
+---The map zoomed: draw again at the new size.
+function private.Provider:OnCanvasScaleChanged()
+	self:RefreshAllData()
+end
+
 function private.Line(x1, y1, x2, y2, color, alpha)
 	local w, h = private.Size()
 	local line = private.Acquire("lines", function() return private.overlay:CreateLine(nil, "ARTWORK") end)
-	line:SetThickness(max(w * LINE_WIDTH, 2))
+	line:SetThickness(max(w / private.Zoom() * LINE_WIDTH, 2))
 	line:SetColorTexture(color[1], color[2], color[3], alpha or 0.9)
 	line:SetStartPoint("TOPLEFT", private.overlay, x1 / 100 * w, -y1 / 100 * h)
 	line:SetEndPoint("TOPLEFT", private.overlay, x2 / 100 * w, -y2 / 100 * h)
@@ -286,7 +299,7 @@ function private.Button(point)
 	end)
 	button.point = point
 	button:SetFrameLevel((private.overlayLevel or private.overlay:GetFrameLevel()) + 2)
-	local size = w * (point.lane and ICON_SIZE or NEXUS_SIZE)
+	local size = w / private.Zoom() * (point.lane and ICON_SIZE or NEXUS_SIZE)
 	button:SetSize(size, size)
 	button:ClearAllPoints()
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", point.x / 100 * w, -point.y / 100 * h)

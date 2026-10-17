@@ -62,6 +62,9 @@ local function Readable(value)
 end
 
 function Rally:OnEnable()
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	for _, event in ipairs({ "PLAYER_DEAD", "ZONE_CHANGED_NEW_AREA", "PLAYER_LOGOUT" }) do
 		private.frame:RegisterEvent(event)
 	end
@@ -391,6 +394,9 @@ end
 ---@param tbl table { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it ended, l = layer }
 ---@param sender string
 function Rally:OnMessage(tbl, sender)
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	if type(tbl) ~= "table" or type(sender) ~= "string" or sender == Store:GetOrigin() or tbl.f ~= UnitFactionGroup("player") then
 		return
 	end

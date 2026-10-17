@@ -446,6 +446,9 @@ do
 	broken.Deserialize = function() error("Division by zero") end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
+-- Siege nights are shipped off; the suite runs them on (the toggle itself is checked below)
+assert(ns.db.settings.siege == false and not ns:SiegeOn(), "siege nights are off by default")
+ns.db.settings.siege = true
 -- The poker addon depends on the base: its files load after the base's ADDON_LOADED, into its own namespace
 WantedPokerTestNS = {} -- global: the main chunk is at its limit of locals
 for line in io.lines(ADDON.."Poker/WantedDeadOrDead_Poker.toc") do
@@ -4361,6 +4364,15 @@ end)()
 	end
 	PlaySoundFile, PlaySound = realFile, realKit
 end)()
+-- The siege toggle: off hides the Siege page and reads off; the command turns it on and off (a /reload applies it)
+do
+	ns.db.settings.siege = false
+	ns.UI:Show("siege")
+	check(not ns:SiegeOn() and not ns.UI:IsShown("siege"), "siege nights off: the Siege page is hidden")
+	ns.db.settings.siege = true
+	ns.UI:Show("siege")
+	check(ns:SiegeOn() and ns.UI:IsShown("siege"), "siege nights on: the Siege page shows")
+end
 print("wanted smoke: all checks pass")
 ;(function()
 	-- Underground, where no zone map reaches, the game places the player on the continent's map, where a tenth of

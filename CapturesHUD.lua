@@ -73,6 +73,9 @@ function CapturesHUD:OnLoad()
 end
 
 function CapturesHUD:OnEnable()
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	C_Timer.NewTicker(UPDATE_SECONDS, Wanted:Timed("Captures bar", function() CapturesHUD:Update() end))
 	Captures:OnChange(function(fresh)
 		private.dirty = true

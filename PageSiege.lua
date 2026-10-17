@@ -761,6 +761,7 @@ end
 
 UI:RegisterPage("siege", {
 	title = "Siege",
+	hidden = function() return not Wanted:SiegeOn() end,
 	subtitle = private.Subtitle,
 	order = -1,
 	build = private.Build,

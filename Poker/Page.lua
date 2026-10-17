@@ -858,7 +858,9 @@ UI:RegisterPage("poker", {
 
 -- The poker tour (Wanted.Tour): the first time the Poker page opens, and /wanted tour poker
 UI:Mark("pokerhost", function() return private.form end)
-UI:Mark("pokerstakes", function() return private.stakes end)
+-- The steps' breadcrumb, not a control on one step: the form may be on any step (2026-10-17: the stakes control's
+-- border sat over the review text on step 4)
+UI:Mark("pokersteps", function() return private.dots end)
 UI:Mark("pokergo", function() return private.go end)
 UI:Mark("pokertables", function() return private.list end)
 UI:Mark("pokerseat", function() return private.seat end)
@@ -869,7 +871,7 @@ if Wanted.Tour then
 		{ title = "The Wanted table", page = "poker", mark = "pokerhost",
 			text = "Texas hold'em with the players of your faction, from inside the game. Tables play for chips (play money), for gold (real coin, buy-ins by mail), or in practice against computer players.\n\n"
 				.."Every deal is shuffled by everyone at the table and checked by every seat after each hand, so nobody can rig it, the host included." },
-		{ title = "Host a table", page = "poker", mark = { "pokerstakes", "pokergo" },
+		{ title = "Host a table", page = "poker", mark = { "pokersteps", "pokergo" },
 			text = "Three steps: the game (a cash game or a tournament), the stakes (People or Practice; Chips or Gold), then the seats, the turn time, the blinds, the buy-in, a title and a password if you want one. Then Host table.\n\n"
 				.."Host a Practice table now to go on with the tour: it opens the table window with computer players in the other seats.",
 			wait = function() return Poker.PokerTable:IsShown() end, waitText = "Host a table first" },

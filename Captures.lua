@@ -347,6 +347,11 @@ function Captures:CanAttack(side, point)
 	if Captures:Winner(point.front) or Captures:Holder(point.id) == side then
 		return false
 	end
+	-- A truce holds the front between rounds: nothing on it can be taken (the site's rule; the client counted on,
+	-- "under attack" during the truce, 2026-10-16)
+	if point.lane and Captures:TruceOn(point.front) then
+		return false
+	end
 	if not point.lane then
 		for l in ipairs(point.front.lanes) do
 			local ids = private.LaneIds(point.front, l)
@@ -967,6 +972,12 @@ end
 function Captures:RoundOn(front)
 	local s = private.siege
 	return s ~= nil and s.front == front and Captures:Phase() == "round"
+end
+
+---Whether a truce holds a front: the siege's, between a Nexus falling and the next round.
+function Captures:TruceOn(front)
+	local s = private.siege
+	return s ~= nil and s.front == front and Captures:Phase() == "truce"
 end
 
 ---Whether inhibitor respawns are paused on a front: the siege front from an hour before the window until the siege

@@ -14436,6 +14436,7 @@ end)()
 	local fellAt = clock
 	local s = C:Siege()
 	check(C:Phase() == "truce" and s.wins.Horde == 1 and s.round.n == 2 and s.round.truceUntil == fellAt + C.TRUCE_SECONDS, "the Nexus falls: round 1 to the Horde, a 30-minute truce")
+	check(C:TruceOn(C.FRONTS[2]) and not C:CanAttack("Alliance", P("hb-mid-2")) and not C:CanAttack("Horde", P("hb-mid-3")), "a truce holds the front: no lane point can be attacked by either side")
 	check(Warned("The Southshore Nexus has fallen | Round 1 to the Horde (provisional)"), "announced: "..table.concat(warned, "; "))
 	check(C:Holder("hb-mid-4") == "Alliance" and C:Holder("hb-mid-3") == "Alliance" and C:Progress(P("hb-alliance")).n == 0, "the front goes back to level")
 	check(told[#told].f == "hb-alliance" and told[#told].t == fellAt, "the channel hears when it fell")
@@ -14451,13 +14452,12 @@ end)()
 	check(s.fellAt == fellAt + 20 and s.round.truceUntil == fellAt + 20 + C.TRUCE_SECONDS and s.wins.Horde == 1, "a peer's newer time wins the tie")
 	C:OnPeer({ p = "hb-mid-4", s = Slot(), c = 1, f = "hb-alliance", t = fellAt + 5 }, "Siege Ally 9")
 	check(s.fellAt == fellAt + 20, "an older one doesn't")
-	-- No Nexus progress in a truce, even with its inhibitor down
+	-- Nothing falls in a truce (the site's rule): not a lane point, not the Nexus; the bar says a truce holds the front
 	Attack("hb-mid-3", 6, 7)
-	Attack("hb-mid-4", 6, 7)
-	check(C:Holder("hb-mid-4") == "Horde", "a lane can fall in the truce")
+	check(C:Holder("hb-mid-3") == "Alliance" and C:Progress(P("hb-mid-3")).n == 0 and bar.capture.text._text:find("a truce holds the front until", 1, true), "a lane can't fall in the truce: "..bar.capture.text._text)
 	px, py = 0.4985, 0.4468
 	Attack("hb-alliance", 5, 1)
-	check(C:Progress(P("hb-alliance")).n == 0 and not C:Taking(P("hb-alliance")) and bar.capture.text._text:find("only falls in a siege round", 1, true), "the Nexus doesn't: "..bar.capture.text._text)
+	check(C:Progress(P("hb-alliance")).n == 0 and not C:Taking(P("hb-alliance")) and bar.capture.text._text:find("a truce holds the front until", 1, true), "the Nexus doesn't: "..bar.capture.text._text)
 	-- The truce ends in round 2, announced with the map of the zone open from elsewhere
 	mapId = 1411
 	WorldMapFrame.IsShown = function() return true end
@@ -14468,6 +14468,13 @@ end)()
 	check(C:Phase() == "round" and Warned("Round 2 begins"), "round 2: "..table.concat(warned, "; "))
 	WorldMapFrame.IsShown = function() return false end
 	mapId = 1424
+	-- Round 2: the mid lane falls again (the front went level), which opens the Nexus
+	px, py = 0.508, 0.351
+	Attack("hb-mid-3", 6, 7)
+	px, py = 0.503, 0.399
+	Attack("hb-mid-4", 6, 7)
+	check(C:Holder("hb-mid-4") == "Horde" and C:CanAttack("Horde", P("hb-alliance")), "in round 2 the lane falls and opens the Nexus")
+	px, py = 0.4985, 0.4468
 	-- A win before the window's end earns another round even though its truce ends after it; that round is the last
 	-- and ends with no winner after a quiet quarter hour
 	Attack("hb-alliance", 5, 19)

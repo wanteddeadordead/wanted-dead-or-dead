@@ -15904,6 +15904,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	end
 	local texts = Texts(home)
 	check(home and home:IsShown() and home.label._text == "Your setup", "the Dashboard's setup card says what's missing")
+	check(home.rows[3].name._text == "In the group" and home.rows[4].name._text == "Enemy plates", "the one-line card uses the short names, got "..tostring(home.rows[3].name._text))
 	check(texts:find("Wanted app running: ", 1, true) and texts:find("wanteddeadordead.com/app", 1, true) and texts:find("Enemy nameplates on: ", 1, true), "a fix line under each red step, with the address")
 	check(not texts:find("Addon up to date: ", 1, true) and home:GetHeight() > 60, "no fix line under a green step; the card has grown for the red ones")
 	-- Fixed one by one

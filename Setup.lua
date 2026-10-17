@@ -25,42 +25,42 @@ local ICONS = {
 local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
 local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "off" }
 
----The steps, in order: { key, title, state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar? }.
+---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar? }.
 ---@return table[]
 function Setup:Steps()
 	local steps = {}
 	local newer = Wanted.newerVersion
 	steps[1] = {
-		key = "addon", title = "Addon up to date", state = newer and "bad" or "ok",
+		key = "addon", title = "Addon up to date", short = "Addon current", state = newer and "bad" or "ok",
 		detail = newer and format("Version %s is out, you have %s.", tostring(newer), tostring(Wanted.VERSION)) or format("Version %s.", tostring(Wanted.VERSION)),
 		fix = newer and "Update from CurseForge or the Wanted app, then restart the game." or nil,
 		url = newer and SITE.."/addon" or nil,
 	}
 	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
 	if app and notRunning then
-		steps[2] = { key = "app", title = "Wanted app running", state = "warn",
+		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "warn",
 			detail = format("Set up here (version %s), but it last ran %s ago.", app, Theme:Ago(notRunning)),
 			fix = "Start it from the Start menu: Wanted Dead or Dead." }
 	elseif app then
-		steps[2] = { key = "app", title = "Wanted app running", state = "ok", detail = format("Version %s.", app) }
+		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "ok", detail = format("Version %s.", app) }
 	else
-		steps[2] = { key = "app", title = "Wanted app running", state = "bad",
+		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "bad",
 			detail = "No Wanted app on this computer: your kills don't reach the website and the siege's layer doesn't reach you.",
 			fix = "Get it, start it, then /reload.", url = SITE.."/app" }
 	end
 	local inGroup = Wanted.Bridge ~= nil and Wanted.Bridge:InCommunity()
-	steps[3] = { key = "group", title = "In the Wanted Battle.net group", state = inGroup and "ok" or "bad",
+	steps[3] = { key = "group", title = "In the Wanted Battle.net group", short = "In the group", state = inGroup and "ok" or "bad",
 		detail = inGroup and "Both sides, one layer: your addon trades the fight layer with the other side's through it, as data." or "Horde and Alliance can't talk in game; through the group your addon learns which layer the other side is fighting on, as data, not chat.",
 		fix = (not inGroup) and "Join it (members can see each other's BattleTag):" or nil,
 		url = (not inGroup) and Wanted.Bridge and Wanted.Bridge.INVITE_URL or nil }
 	local plates = GetCVar and GetCVar("nameplateShowEnemies")
 	local on = plates == "1" or plates == 1 or plates == true
-	steps[4] = { key = "nameplates", title = "Enemy nameplates on", state = on and "ok" or "bad",
+	steps[4] = { key = "nameplates", title = "Enemy nameplates on", short = "Enemy plates", state = on and "ok" or "bad",
 		detail = on and "Wanted sees enemies through them, out to 45 yards." or "Wanted sees enemies through their nameplates; with them off, only what you target or mouse over.",
 		fix = (not on) and "Press V, or Interface > Names > Enemy Players." or nil,
 		cvar = (not on) and "nameplateShowEnemies" or nil }
 	local siege = Wanted:SiegeOn()
-	steps[5] = { key = "siege", title = "Siege features", state = siege and "ok" or "off",
+	steps[5] = { key = "siege", title = "Siege features", short = "Siege features", state = siege and "ok" or "off",
 		detail = siege and "On: capture fronts, the HUD, map pieces, rally leaders and layer hops."
 			or "Off until the first public siege night. /wanted siege on and a /reload to try them." }
 	return steps
@@ -131,7 +131,7 @@ function private.Layout(card, width, brief)
 			row.icon:SetPoint("TOPLEFT", x, y)
 			row.icon:SetTexture(ICONS[step.state])
 			row.icon:SetAlpha(step.state == "off" and 0.5 or 1)
-			row.name:SetText(step.title)
+			row.name:SetText(step.short) -- the title is too long for a fifth of the card (2026-10-17: "In the Wanted Batt...")
 			row.name:SetTextColor(COLORS[step.state][1], COLORS[step.state][2], COLORS[step.state][3])
 			row.name:ClearAllPoints()
 			row.name:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)

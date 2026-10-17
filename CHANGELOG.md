@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The Website & app page scrolls: with the setup steps on top, the app card ran past the window.
 - The setup line on the Dashboard uses short names (App running, In the group, Enemy plates), so none is cut off, and the siege toggle is no longer listed: it is a feature switch, not setup.
 
 ## [1.26.0] - 2026-10-17

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Wanted Battle.net group's new invite (blizzard.com/invite/A33mYmik4b) in Settings, and why to join on the Siege page: Horde and Alliance can't talk in game, and the group is where both sides see which layer the fight is on. A hop with nobody to invite you says so too.
+
 ## [1.24.1] - 2026-10-16
 
 - The What's new window for 1.24.0: siege nights wait behind Settings > Capture fronts (or `/wanted siege on`), and how to take a look before the first public night.

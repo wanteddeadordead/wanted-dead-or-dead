@@ -71,7 +71,7 @@ local ALERT_GATHER_SECONDS = 2 -- notices arriving together (a login's catch-up)
 -- The community in use (a field so the tests can set one)
 Bridge.clubId = WANTED_CLUB_ID
 -- Its invite link (never expires): shown in Settings and by /wanted community
-Bridge.INVITE_URL = "https://blizzard.com/invite/7mmzbzC47G"
+Bridge.INVITE_URL = "https://blizzard.com/invite/A33mYmik4b"
 
 ---Values the game hides from addons for now (in a chat lockdown) can't be read or compared.
 local function IsSecret(value)

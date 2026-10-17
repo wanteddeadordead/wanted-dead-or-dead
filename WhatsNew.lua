@@ -32,7 +32,7 @@ Wanted.WHATS_NEW = {
 			.."through which your addon learns which layer the other side is fighting on. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
 			.."under each red mark.",
 		lines = {
-			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on, siege features. Website & app has every address to copy and a Turn on button for the nameplates.",
+			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on. Website & app has every address to copy and a Turn on button for the nameplates.",
 			"Join the Wanted Battle.net group from Settings or the Siege page: both sides, one layer. Members can see each other's BattleTag.",
 			"/wanted setup prints the checklist in chat.",
 		},

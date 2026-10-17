@@ -15,10 +15,11 @@ local private = {}
 Wanted.WHATS_NEW = {
 	{
 		version = "1.26.0",
-		note = "The Battle.net group is now a data link between the two sides. Horde and Alliance can't talk in game, so "
-			.."through the group's members your addon passes where your side is fighting, by layer, to the other side's addons "
-			.."as hidden game data, and takes theirs. Both factions reckon the same fight layer, and hunters and prey land in "
-			.."the same copy of the zone. Nothing to type there: it isn't a chat.",
+		note = "The Battle.net group is now a data link between the two sides, not a chat. Horde and Alliance can't talk "
+			.."in game, so through the group's members the addons on both sides trade one thing as hidden game data: how many "
+			.."Wanted players are in a zone, by layer. Where you are never crosses, no names and no positions; the other side "
+			.."sees you only when they see you in the game. The fight layer is picked automatically, always the zone's most "
+			.."active Wanted PvP layer, and there is no choosing one.",
 		lines = {
 			"Join the group from Settings or the Siege page; the setup checklist on the Dashboard shows whether you're in.",
 			"The fight layer now counts both sides' Wanted players, so Hop takes everyone to the same place.",

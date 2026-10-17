@@ -16087,6 +16087,36 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		P.PokerNet:Leave()
 		P.PokerTable:Hide()
 	end
+	-- The daily snapshot (the data addon): with no app it fills the site's public data, and the app still counts as
+	-- missing; an app's catch-up wins unless the snapshot is newer by six hours; a snapshot for another format is ignored
+	do
+		local savedInfo, savedLinks = WantedAppInfo, nil
+		WantedAppInfo = nil
+		local side = UnitFactionGroup("player")
+		local function Snap(t, name, v)
+			WantedSnapshot = { v = v or 1, t = t, day = "2026-10-17", [side] = { links = { { n = name, r = "Snap Realm", t = t } } } }
+		end
+		Snap(clock, "Snap Only")
+		WantedAppCatchup = nil
+		ns.Catchup:Import()
+		local names = table.concat(ns.Sync:DirectoryNames(), ",")
+		check(names:find("Snap Only", 1, true) and not ns.Challenges:HasApp() and WantedSnapshot == nil, "no app: the snapshot's directory, the app still missing: "..names)
+		Snap(clock, "Snap Newer")
+		WantedAppCatchup = { [ns.db.accountMark] = { t = clock - 7 * 3600, records = {}, links = { { n = "App Older", r = "Snap Realm", t = clock } } } }
+		ns.Catchup:Import()
+		names = table.concat(ns.Sync:DirectoryNames(), ",")
+		check(names:find("Snap Newer", 1, true) and not names:find("App Older", 1, true), "a stale app: the snapshot's public data: "..names)
+		Snap(clock, "Snap Older")
+		WantedAppCatchup = { [ns.db.accountMark] = { t = clock - 3600, records = {}, links = { { n = "App Fresh", r = "Snap Realm", t = clock } } } }
+		ns.Catchup:Import()
+		names = table.concat(ns.Sync:DirectoryNames(), ",")
+		check(names:find("App Fresh", 1, true) and not names:find("Snap Older", 1, true), "a fresh app wins: "..names)
+		Snap(clock, "Wrong Format", 2)
+		WantedAppCatchup = nil
+		ns.Catchup:Import()
+		check(not table.concat(ns.Sync:DirectoryNames(), ","):find("Wrong Format", 1, true), "another format is ignored")
+		WantedAppInfo = savedInfo
+	end
 	-- Safety: the foot of the menu and /wanted safety open the statement with the website's Safety page to copy
 	local realDialog, shown = ns.Widgets.Dialog, nil
 	ns.Widgets.Dialog = function(_, options) shown = options end

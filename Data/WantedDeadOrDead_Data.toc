@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Wanted: Dead or... Dead (Data)
+## IconTexture: Interface\AddOns\WantedDeadOrDead\Media\icon
+## Notes: The daily snapshot of wanteddeadordead.com for the Wanted addon: challenges, badges, ranks, the siege and the realm-link directory, for players without the Wanted app.
+## Author: Wanted: Dead or... Dead
+## Version: @project-version@
+## DefaultState: enabled
+## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
+## X-License: MIT
+
+Snapshot.lua

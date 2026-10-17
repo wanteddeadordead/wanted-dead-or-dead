@@ -65,6 +65,7 @@ Raids.lua
 Rally.lua
 Shard.lua
 UI.lua
+Setup.lua
 Rows.lua
 EnemyMenu.lua
 TargetFile.lua

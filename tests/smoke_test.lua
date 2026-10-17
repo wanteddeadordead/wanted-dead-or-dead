@@ -15827,6 +15827,85 @@ end)()
 end)()
 -- No module registers an event the client forbids (the first 1.19 build's signing seed did, and the game blocked it)
 check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.concat(forbiddenRegistrations, ", "))
+
+-- Setup: the five steps with their marks and fixes, all set or not; the Dashboard's line of marks with a fix line
+-- under each red step; the Website & app page's full list with the address to copy and the "Turn on" button;
+-- /wanted setup
+;(function()
+	local Setup = ns.Setup
+	local saved = { info = WantedAppInfo, newer = ns.newerVersion, club = ns.Bridge.clubId, siege = ns.db.settings.siege,
+		plates = cvars.nameplateShowEnemies, C_Club = C_Club, IsSecret = IsSecret, Print = ns.Print }
+	local printed = {}
+	ns.Print = function(_, fmt, ...) printed[#printed + 1] = select("#", ...) > 0 and string.format(fmt, ...) or tostring(fmt) end
+	IsSecret = IsSecret or function() return false end
+	-- Nothing set up but the addon itself
+	WantedAppInfo = nil
+	ns.newerVersion = nil
+	ns.Bridge.clubId = 0
+	cvars.nameplateShowEnemies = "0"
+	ns.db.settings.siege = false
+	local steps = Setup:Steps()
+	local by = {}
+	for _, step in ipairs(steps) do by[step.key] = step end
+	check(#steps == 5 and by.addon.state == "ok" and by.app.state == "bad" and by.group.state == "bad" and by.nameplates.state == "bad" and by.siege.state == "off",
+		"nothing set up: the app, the group and the plates red, the siege off, the addon ok")
+	check(by.app.url == "https://wanteddeadordead.com/app" and by.group.url == ns.Bridge.INVITE_URL and by.nameplates.cvar == "nameplateShowEnemies" and by.app.fix and by.group.fix and by.nameplates.fix,
+		"each red step says how to fix it and where")
+	check(not Setup:AllSet(steps), "not all set")
+	-- The Dashboard: the line of marks, a fix line for each red step, and it opens Website & app
+	ns.UI:Show("home")
+	local home = Setup.cards.home
+	local function Texts(card)
+		local texts = { card.label._text }
+		for _, row in ipairs(card.rows) do
+			for _, fs in ipairs({ row.name, row.title, row.detail, row.box }) do
+				if fs:IsShown() and type(fs._text) == "string" then texts[#texts + 1] = fs._text end
+			end
+		end
+		return table.concat(texts, "\n")
+	end
+	local texts = Texts(home)
+	check(home and home:IsShown() and home.label._text == "Your setup", "the Dashboard's setup card says what's missing")
+	check(texts:find("Wanted app running: ", 1, true) and texts:find("wanteddeadordead.com/app", 1, true) and texts:find("Enemy nameplates on: ", 1, true), "a fix line under each red step, with the address")
+	check(not texts:find("Addon up to date: ", 1, true) and home:GetHeight() > 60, "no fix line under a green step; the card has grown for the red ones")
+	-- Fixed one by one
+	cvars.nameplateShowEnemies = "1"
+	check(Setup:Steps()[4].state == "ok", "plates on: green")
+	WantedAppInfo = { running = "0.2.54", latest = "0.2.54" }
+	check(Setup:Steps()[2].state == "ok", "the app running: green")
+	C_Club = { GetSubscribedClubs = function() return { { clubId = "23053871", name = "Wanted", clubType = 0 } } end, GetClubMembers = function() return {} end }
+	ns.Bridge.clubId = "23053871"
+	check(Setup:Steps()[3].state == "ok", "in the group: green")
+	check(Setup:AllSet(), "all set with the siege still off")
+	ns.db.settings.siege = true
+	check(Setup:Steps()[5].state == "ok", "the siege features on: green")
+	ns.newerVersion = "9.9.9"
+	local addon = Setup:Steps()[1]
+	check(addon.state == "bad" and addon.url == "https://wanteddeadordead.com/addon" and addon.detail:find("9.9.9", 1, true), "a newer version out: the addon step red, with the site's addon page")
+	ns.newerVersion = nil
+	ns.UI:Show("home")
+	check(home.label._text == "Your setup: all set" and home:GetHeight() <= 70, "all set: the Dashboard's card says so in one line")
+	-- The Website & app page: every step, the invite to copy when not in the group, and Turn on sets the plates
+	ns.Bridge.clubId = 0
+	cvars.nameplateShowEnemies = "0"
+	ns.UI:Show("web")
+	local web = Setup.cards.web
+	local web = Setup.cards.web
+	check(web and web.rows[3].box:IsShown() and web.rows[3].box._text == ns.Bridge.INVITE_URL, "Website & app has the group's invite to copy under its step")
+	local turnOn = web.rows[4].button
+	check(turnOn:IsShown() and turnOn._scripts.OnClick, "and a Turn on button under the nameplates step")
+	turnOn._scripts.OnClick(turnOn)
+	check(not turnOn:IsShown() and web.rows[4].detail._text:find("45 yards", 1, true), "the button goes, the step is green")
+	check(cvars.nameplateShowEnemies == "1" and Setup:Steps()[4].state == "ok", "Turn on sets the enemy nameplates on")
+	-- /wanted setup prints the steps
+	ns:RunCommand("setup", "")
+	check(#printed >= 6 and printed[#printed - 5]:find("Your setup", 1, true) and printed[#printed - 2]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed]:find("[ok] Siege features", 1, true), "/wanted setup prints each step with its mark")
+	-- Put back
+	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId, ns.db.settings.siege = saved.info, saved.newer, saved.club, saved.siege
+	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print
+	ns.UI:Show("home")
+end)()
+print("wanted smoke: setup checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -14,10 +14,22 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.26.0",
+		note = "The Battle.net group is now a data link between the two sides. Horde and Alliance can't talk in game, so "
+			.."through the group's members your addon passes where your side is fighting, by layer, to the other side's addons "
+			.."as hidden game data, and takes theirs. Both factions reckon the same fight layer, and hunters and prey land in "
+			.."the same copy of the zone. Nothing to type there: it isn't a chat.",
+		lines = {
+			"Join the group from Settings or the Siege page; the setup checklist on the Dashboard shows whether you're in.",
+			"The fight layer now counts both sides' Wanted players, so Hop takes everyone to the same place.",
+			"Siege features still wait behind Settings > Capture fronts until the first public night.",
+		},
+	},
+	{
 		version = "1.25.0",
 		note = "Two things about layers. Forever runs each zone as several layers, and Horde and Alliance can't talk in game, "
-			.."so the Wanted Battle.net group is now the place both sides share: say there which layer the fight is on, and "
-			.."the other side can come to it. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
+			.."so the Wanted Battle.net group is now the link between both sides' addons: not a chat, a data line, "
+			.."through which your addon learns which layer the other side is fighting on. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
 			.."under each red mark.",
 		lines = {
 			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on, siege features. Website & app has every address to copy and a Turn on button for the nameplates.",

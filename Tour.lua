@@ -1,5 +1,6 @@
--- Wanted: the first-run tour, "First steps". A fresh install gets it in place of a welcome note, at the first login out
--- of combat; /wanted tour brings it back any time, and remembers the page it was closed on. A card beside the main
+-- Wanted: the tours. "First steps" for a fresh install, in place of a welcome note, at the first login out of combat;
+-- /wanted tour brings it back any time. Other addons register their own set (the poker addon's, the first time the
+-- Poker page opens: /wanted tour poker). Each remembers the page it was closed on. A card beside the main
 -- window, one stop a page: a heading, a short paragraph, Back / Next / Skip. The real page opens in the window behind
 -- the card, and the part the page talks about gets a pulsing amber border (UI:Mark). Never in combat: it closes itself
 -- when a fight starts and comes back after. After the last page, or Skip, the app prompt as the welcome gave it.
@@ -10,16 +11,22 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Tour = Wanted:NewModule("Tour")
-local private = { frame = nil, glows = {}, ticker = nil, resume = false, events = CreateFrame("Frame") }
+local private = { frame = nil, glows = {}, ticker = nil, waitTicker = nil, resume = nil, set = "first", events = CreateFrame("Frame") }
 
 local WIDTH, HEIGHT = 520, 330
 local PAD = 20
 local PULSE_SECONDS = 0.6
 local GLOW_PAD = 6
+local WAIT_SECONDS = 1
+
+-- The sets of stops by name (Tour:Register): "first" is below. A stop may carry wait = function() -> boolean and
+-- waitText: Next waits for it ("Host a table first")
+Tour.SETS = {}
 
 -- The stops: title, text; page = the window page to open; nearby = show the Nearby window too; mark = the UI:Mark
 -- name(s) to border (nil: the whole page)
-Tour.STOPS = {
+Tour.SETS.first = {
+	label = "First steps",
 	{ title = "Welcome to Wanted", page = "home", mark = "setup",
 		text = "Wanted is world PvP between players who chose it: enemies near you, kills counted, bounties posted and hunted, siege nights. Everything you see comes from other players' addons and the website.\n\n"
 			.."Three things make it work in full, and the card bordered here says which you still need: the Wanted app on this computer, the Wanted Battle.net group, and enemy nameplates on." },
@@ -44,6 +51,14 @@ Tour.STOPS = {
 	{ title = "Siege nights", page = "siege",
 		text = "Every evening one front is the siege front: three lanes of towers and inhibitors between two Nexus, fought on one layer, 7 to 10 PM US Eastern. The siege features ship switched off until the first public night (Settings > Capture fronts).\n\nThat's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
+Tour.STOPS = Tour.SETS.first
+
+---Registers a set of stops under a name (/wanted tour <name>; Tour:Start(name)).
+---@param name string
+---@param stops table its label, and the stops
+function Tour:Register(name, stops)
+	Tour.SETS[name] = stops
+end
 
 ---Whether the tour is open.
 ---@return boolean
@@ -51,23 +66,45 @@ function Tour:IsShown()
 	return private.frame ~= nil and private.frame:IsShown()
 end
 
----The saved state: { seen, page, done }.
-function private.State()
+---A set's saved state: { seen, page, done }. The first steps' lives at db.tour itself (as it shipped), the others
+---under db.tour[name].
+---@param name string
+function private.State(name)
 	local db = Wanted.db
 	if not db then
 		return {}
 	end
 	db.tour = type(db.tour) == "table" and db.tour or {}
-	return db.tour
+	if name == "first" then
+		return db.tour
+	end
+	db.tour[name] = type(db.tour[name]) == "table" and db.tour[name] or {}
+	return db.tour[name]
 end
 
----Opens the tour at a page (default: the page it was closed on, else the first).
+---Whether a set has been opened before.
+---@param name string
+---@return boolean
+function Tour:Seen(name)
+	return private.State(name).seen == true
+end
+
+---Opens a set at a page (default: the page it was closed on, else the first). Not in a fight.
+---@param name string|number? the set ("first" when left out), or the first steps' page
 ---@param page number?
-function Tour:Start(page)
-	local state = private.State()
+function Tour:Start(name, page)
+	if type(name) == "number" then
+		name, page = "first", name
+	end
+	name = (name and Tour.SETS[name]) and name or "first"
+	if Wanted:InCombat() then
+		return
+	end
+	local stops, state = Tour.SETS[name], private.State(name)
 	page = tonumber(page) or state.page or 1
-	page = max(1, min(#Tour.STOPS, page))
+	page = max(1, min(#stops, page))
 	local f = private.frame or private.Create()
+	private.set = name
 	state.seen = true
 	private.Go(page)
 	f:Show()
@@ -83,22 +120,24 @@ function Tour:Close(done)
 	f:Hide()
 	private.Unmark()
 	if done then
-		local state = private.State()
+		local state = private.State(private.set)
 		state.done, state.page = true, nil
-		Wanted:PromptForApp()
+		if private.set == "first" then
+			Wanted:PromptForApp()
+		end
 	end
 end
 
 ---Shows a page: the window's page behind, the marks bordered, the text and the buttons.
 function private.Go(page)
-	local f, stop = private.frame, Tour.STOPS[page]
+	local f, stops = private.frame, Tour.SETS[private.set]
+	local stop = stops[page]
 	private.page = page
-	private.State().page = page
-	f.counter:SetText(format("First steps · %d of %d", page, #Tour.STOPS))
+	private.State(private.set).page = page
+	f.counter:SetText(format("%s · %d of %d", stops.label, page, #stops))
 	f.title:SetText(stop.title)
 	f.body:SetText(stop.text)
 	f.back:SetEnabled(page > 1)
-	f.next:SetText(page == #Tour.STOPS and "Finish" or "Next")
 	if stop.page then
 		UI:Show(stop.page)
 	end
@@ -106,6 +145,31 @@ function private.Go(page)
 		Wanted.NearbyWindow:Toggle()
 	end
 	private.Mark(stop.mark)
+	private.Wait(stop)
+end
+
+---Next waits for a stop's condition (stop.wait), saying so on the button, and looks again every WAIT_SECONDS.
+function private.Wait(stop)
+	local f, stops = private.frame, Tour.SETS[private.set]
+	if private.waitTicker then
+		private.waitTicker:Cancel()
+		private.waitTicker = nil
+	end
+	local last = private.page == #stops
+	local function Check()
+		local ready = not stop.wait or stop.wait() == true
+		f.next:SetEnabled(ready)
+		f.next:SetText(ready and (last and "Finish" or "Next") or (stop.waitText or "Not yet"))
+		return ready
+	end
+	if not Check() and C_Timer and C_Timer.NewTicker then
+		private.waitTicker = C_Timer.NewTicker(WAIT_SECONDS, function()
+			if Check() and private.waitTicker then
+				private.waitTicker:Cancel()
+				private.waitTicker = nil
+			end
+		end)
+	end
 end
 
 ---Borders the named marks (UI:Mark) with a pulsing amber frame each; none: nothing bordered.
@@ -185,8 +249,8 @@ function private.Create()
 	f.body:SetSpacing(3)
 	f.skip = W:Button(f, "Skip the tour", "chip", 110, 24, function() Tour:Close(true) end)
 	f.skip:SetPoint("BOTTOMLEFT", PAD, 16)
-	f.next = W:Button(f, "Next", "primary", 110, 26, function()
-		if private.page >= #Tour.STOPS then
+	f.next = W:Button(f, "Next", "primary", 150, 26, function()
+		if private.page >= #Tour.SETS[private.set] then
 			Tour:Close(true)
 		else
 			private.Go(private.page + 1)
@@ -202,7 +266,13 @@ function private.Create()
 	f.close = W:Button(f, "X", "chip", 24, 22, function() Tour:Close() end)
 	f.close:SetPoint("TOPRIGHT", -10, -10)
 	f:SetScript("OnShow", function() private.Place() end)
-	f:SetScript("OnHide", function() private.Unmark() end)
+	f:SetScript("OnHide", function()
+		private.Unmark()
+		if private.waitTicker then
+			private.waitTicker:Cancel()
+			private.waitTicker = nil
+		end
+	end)
 	f:Hide()
 	private.frame = f
 	return f
@@ -223,17 +293,19 @@ end
 private.events:RegisterEvent("PLAYER_REGEN_DISABLED")
 private.events:SetScript("OnEvent", function()
 	if Tour:IsShown() then
-		private.resume = true
+		private.resume = private.set
 		Tour:Close()
 	end
 end)
 Wanted:OnCombatEnd(function()
 	if private.resume then
-		private.resume = false
-		Tour:Start()
+		local set = private.resume
+		private.resume = nil
+		Tour:Start(set)
 	end
 end)
 
-Wanted:RegisterCommand("tour", "First steps: a tour of Wanted, page by page: /wanted tour", function()
-	Tour:Start()
+Wanted:RegisterCommand("tour", "First steps, a tour of Wanted page by page: /wanted tour; the poker table's: /wanted tour poker", function(args)
+	local name = strtrim(args or "")
+	Tour:Start(name ~= "" and name or "first")
 end)

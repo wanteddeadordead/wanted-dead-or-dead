@@ -845,6 +845,8 @@ function private.Build()
 	bar:SetHeight(ACTION_H)
 	Theme:Fill(bar, C.titleBar)
 	private.bar = bar
+	Wanted.UI:Mark("pokerbar", function() return private.bar end)
+	Wanted.UI:Mark("pokerlog", function() return private.log end)
 	private.sitOut = W:Button(bar, "Sit out", "ghost", 70, 24, private.ToggleSitOut)
 	private.sitOut:SetPoint("LEFT", 10, 0)
 	private.rebuy = W:Button(bar, "Rebuy", "secondary", 70, 24, private.AskRebuy)

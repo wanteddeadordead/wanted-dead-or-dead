@@ -15940,6 +15940,13 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	turnOn._scripts.OnClick(turnOn)
 	check(not turnOn:IsShown() and web.rows[4].detail._text:find("45 yards", 1, true), "the button goes, the step is green")
 	check(cvars.nameplateShowEnemies == "1" and Setup:Steps()[4].state == "ok", "Turn on sets the enemy nameplates on")
+	-- Safety: the foot of the menu and /wanted safety open the statement with the website's Safety page to copy
+	local realDialog, shown = ns.Widgets.Dialog, nil
+	ns.Widgets.Dialog = function(_, options) shown = options end
+	ns:RunCommand("safety", "")
+	ns.Widgets.Dialog = realDialog
+	check(shown and shown.title == "Safety" and shown.text:find("takes online bullying seriously", 1, true) and shown.text:find("admin@wanteddeadordead.com", 1, true)
+		and shown.input and shown.input.value == "https://wanteddeadordead.com/safety", "/wanted safety: the statement and the Safety page's address to copy")
 	-- /wanted setup prints the steps
 	ns:RunCommand("setup", "")
 	check(#printed >= 5 and printed[#printed - 4]:find("Your setup", 1, true) and printed[#printed - 1]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed]:find("[ok] Enemy nameplates on", 1, true), "/wanted setup prints each step with its mark")

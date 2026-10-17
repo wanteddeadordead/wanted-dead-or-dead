@@ -136,6 +136,9 @@ function private.OnEvent(_, event, arg1, arg2)
 		private.tracked[arg1] = nil
 	elseif event == "UNIT_HEALTH" then
 		private.CheckDeath(arg1)
+		if Wanted.Enemies and Wanted.Enemies.NoteHealthChange then
+			Wanted.Enemies:NoteHealthChange(arg1)
+		end
 	elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then
 		private.HandleHonorGain(arg1)
 	elseif event == "PARTY_KILL" then

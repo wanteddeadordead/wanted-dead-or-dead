@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-10-16
+
 - Siege nights ship switched off: capture fronts, the HUD and map pieces, rally leaders and layer hops wait for
   `/wanted siege on` (or Settings > Capture fronts) and a /reload, until their first public night makes them the
   default. Everything else below is live.

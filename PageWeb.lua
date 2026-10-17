@@ -101,6 +101,7 @@ function private.Refresh()
 		private.appCard:SetPoint("TOPLEFT", 0, -top)
 		private.siteCard:SetPoint("TOPLEFT", 0, -top - 238)
 	end
+	private.body:SetHeight(top + 434 + 12)
 	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
 	private.appPrompt:SetChecked(Wanted.db.settings.appPrompt)
 	-- The name the network knows us by (first and last name on WoW Forever), as the site's pages use
@@ -183,10 +184,19 @@ UI:RegisterPage("web", {
 	tabLabel = "Website & app",
 	under = "card",
 	build = function(container, width)
-		private.setup = Wanted.Setup:BuildCard(container, width)
+		-- Everything in a scroll frame: with the setup steps on top, the cards run past the window (2026-10-17)
+		local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
+		scroll.scrollBarHideable = true
+		scroll:SetPoint("TOPLEFT")
+		scroll:SetPoint("BOTTOMRIGHT", -26, 0)
+		local body = CreateFrame("Frame", nil, scroll)
+		body:SetSize(width - 30, 1)
+		scroll:SetScrollChild(body)
+		private.body = body
+		private.setup = Wanted.Setup:BuildCard(body, width - 30)
 		private.setup:SetPoint("TOPLEFT")
-		private.BuildSite(container, width)
-		private.BuildApp(container, width)
+		private.BuildSite(body, width - 30)
+		private.BuildApp(body, width - 30)
 	end,
 	refresh = private.Refresh,
 })

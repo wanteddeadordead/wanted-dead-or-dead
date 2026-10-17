@@ -2957,6 +2957,11 @@ end)()
 	WantedAppInfo.seen = clock - 600
 	ns:PromptForApp()
 	check(lastDialog == nil, "a running app: no popup")
+	-- An app that said it quit (stopped, from 0.2.55) isn't running, however fresh its time
+	WantedAppInfo.stopped = 1
+	check(ns:AppNotRunningFor() ~= nil and ns:AppNotRunningFor() >= 1, "an app that said it quit: not running")
+	WantedAppInfo.stopped = nil
+	check(ns:AppNotRunningFor() == nil, "without the mark, its fresh time says it runs")
 	local dev = ns.DEV
 	ns.DEV = true
 	ns.UI:Refresh()

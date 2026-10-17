@@ -614,13 +614,22 @@ local APP_STALE_SECONDS = 3 * 60 * 60
 -- ("!!" sorts first), so this is the moment its "seen" was current.
 local APP_INFO_READ_AT = GetServerTime()
 
----How long ago the app last ran, when it had already stopped by the time the game read its file; nil when it
----was running then, isn't set up, or is too old to say (before 0.2.1). The file is read only at login or /reload,
+---How long ago the app last ran, when it had already stopped by the time the game read its file: it said so on
+---quitting (stopped, from app 0.2.55), or its time is stale; nil when it was running then, isn't set up, or is too
+---old to say (before 0.2.1). The file is read only at login or /reload,
 ---so hours into a session its time is old even while the app runs: it's judged against the moment it was read.
 ---@return number? seconds
 function Wanted:AppNotRunningFor()
 	local info = WantedAppInfo
-	local seen = type(info) == "table" and Wanted:AppVersion() and tonumber(info.seen)
+	if type(info) ~= "table" or not Wanted:AppVersion() then
+		return nil
+	end
+	local seen = tonumber(info.seen)
+	if info.stopped == 1 or info.stopped == true then
+		-- The app said it quit (from 0.2.55; it writes again without this when it starts), however fresh its time
+		-- (2026-10-17: "app is quit, reloaded, still shows running")
+		return max(1, GetServerTime() - (seen or GetServerTime()))
+	end
 	if not seen or APP_INFO_READ_AT - seen <= APP_STALE_SECONDS then
 		return nil
 	end

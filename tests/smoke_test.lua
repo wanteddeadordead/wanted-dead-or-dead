@@ -14134,7 +14134,7 @@ end)()
 		["hb-top-2"] = { h = "A", t = clock - 7200 }, ["nowhere"] = { h = "H", t = clock }, ["hb-top-3"] = { h = "X", t = clock } })
 	check(C:Holder("hb-mid-4") == "Horde" and C:Hold("hb-mid-4").r == clock + 1200 and C:Holder("hb-top-3") == "Alliance" and C:Hold("nowhere") == nil,
 		"the site's holders are taken, unknown points and sides left out")
-	check(Warned("Enemy inhibitor down") and not Warned("Your tower"), "the biggest news is the alert: "..table.concat(warned, "; "))
+	check(Warned("Enemy Mid Inhibitor down") and not Warned("Your Mid"), "the biggest news is the alert: "..table.concat(warned, "; "))
 	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
 	-- The announcement frame (CapturesHUD.xml, from Blizzard's template, which registers the BG system events) has them
 	-- all unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
@@ -14157,7 +14157,7 @@ end)()
 	check(#warned == 0 and db.captureSeen["hb-bot-2"] == seenBefore, "nothing shown or marked before the HUD is there")
 	ns.CapturesHUD.DeliverNews = realDeliver
 	ns.CapturesHUD:DeliverNews()
-	check(Warned("Your tower has been destroyed") and db.captureSeen["hb-bot-2"] == "Alliance", "the HUD shows the waiting news and marks it: "..table.concat(warned, "; "))
+	check(Warned("Your Bot Tower has been destroyed") and db.captureSeen["hb-bot-2"] == "Alliance", "the HUD shows the waiting news and marks it: "..table.concat(warned, "; "))
 	warned = {}
 	ns.CapturesHUD:DeliverNews()
 	check(#warned == 0, "once")
@@ -14167,7 +14167,7 @@ end)()
 	warned = {}
 	clock = clock + 1201
 	ns.CapturesHUD:Update()
-	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Inhibitor respawned"), "the inhibitor respawns: "..table.concat(warned, "; "))
+	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Mid Inhibitor respawned"), "the inhibitor respawns: "..table.concat(warned, "; "))
 	warned = {}
 	ns.CapturesHUD:Update()
 	check(#warned == 0, "and says so once")
@@ -14265,7 +14265,7 @@ end)()
 	ns.Enemies.CountNearby = function() return 3 end
 	clock = clock + 30
 	C:Sample()
-	check(Warned("Your tower is under attack"), "enemies at our tower warn: "..table.concat(warned, "; "))
+	check(Warned("Your Mid Tower is under attack"), "enemies at our tower warn: "..table.concat(warned, "; "))
 	-- A C message on the channel from the player it's about counts them there; the same from a guild member too
 	local heardBefore = C:Allies("ah-top-3")
 	slot = math.floor(clock / C.SLOT_SECONDS)
@@ -14346,7 +14346,7 @@ end)()
 	enemies = {}
 	Attack("hb-mid-3", 7, 5) -- 10 + 5 * 6 = 40
 	check(C:Holder("hb-mid-3") == "Horde" and C:Progress(P("hb-mid-3")).n == 0, "at 40 samples the tower is ours (provisionally)")
-	check(Warned("Enemy tower destroyed"), "and the HUD says so: "..table.concat(warned, "; "))
+	check(Warned("Enemy Mid Tower destroyed"), "and the HUD says so: "..table.concat(warned, "; "))
 	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 8 of your side", 1, true), "now holding it: "..bar.capture.text._text)
 	-- Progress resets after two minutes with no attacker; the holder's tower under attack reads the attackers
 	clock = clock + 100 -- our side heard there has lapsed
@@ -14363,7 +14363,7 @@ end)()
 	-- A taken inhibitor respawns in 30 minutes unless its takers stay
 	warned = {}
 	Attack("hb-mid-4", 6, 7)
-	check(C:Holder("hb-mid-4") == "Horde" and Warned("Enemy inhibitor down"), "the inhibitor falls to six of us: "..table.concat(warned, "; "))
+	check(C:Holder("hb-mid-4") == "Horde" and Warned("Enemy Mid Inhibitor down"), "the inhibitor falls to six of us: "..table.concat(warned, "; "))
 	local respawnAt = clock + C.RESPAWN_SECONDS
 	Attack("hb-mid-4", 6, 1) -- the takers are still there: the respawn moves on
 	clock = respawnAt + 1

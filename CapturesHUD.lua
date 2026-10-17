@@ -26,11 +26,12 @@ local ENEMY_ALERT = 2
 -- What each announcement says and plays (the game's own sounds, SoundKitConstants): title, side whose colour it takes
 -- ("ours", "theirs" or "neutral"), SOUNDKIT name
 local ALERTS = {
+	-- %s names the point: its lane and role ("Mid Inhibitor"), or the Nexus
 	lost = { "Your %s has been destroyed", "theirs", "RAID_WARNING" },
-	lostInhibitor = { "Your inhibitor is down", "theirs", "RAID_WARNING" },
+	lostInhibitor = { "Your %s is down", "theirs", "RAID_WARNING" },
 	taken = { "Enemy %s destroyed", "ours", "PVP_THROUGH_QUEUE" },
-	takenInhibitor = { "Enemy inhibitor down", "ours", "PVP_THROUGH_QUEUE" },
-	respawned = { "Inhibitor respawned", "neutral", "IG_PVP_UPDATE" },
+	takenInhibitor = { "Enemy %s down", "ours", "PVP_THROUGH_QUEUE" },
+	respawned = { "%s respawned", "neutral", "IG_PVP_UPDATE" },
 	won = { "Victory: the enemy %s has fallen", "ours", "UI_BATTLEGROUND_COUNTDOWN_FINISHED" },
 	beaten = { "Defeat: your %s has fallen", "theirs", "RAID_WARNING" },
 	attacking = { "Your side is attacking the enemy %s", "ours", "PVP_ENTER_QUEUE" },
@@ -488,8 +489,8 @@ function private.TellNews(news)
 		local what = nil
 		if key == "won" or key == "beaten" then
 			what = Captures.TERMS.nexus
-		elseif key == "lost" or key == "taken" then
-			what = strlower(Captures.TERMS.tower)
+		else
+			what = Captures:Role(item.point)
 		end
 		if i == 1 then
 			private.Alert(key, what, nil)
@@ -524,7 +525,7 @@ function private.CheckLive()
 	local enemies = Wanted.Enemies and Wanted.Enemies:CountNearby() or 0
 	local side = UnitFactionGroup("player")
 	if current and Captures:Holder(current.id) == side and enemies >= ENEMY_ALERT and private.Due("enemies:"..current.id, now) then
-		private.Alert("underAttack", current.lane and strlower(Captures:Kind(current)) or Captures.TERMS.nexus, format("%d enemies near you at %s", enemies, current.name))
+		private.Alert("underAttack", Captures:Role(current), format("%d enemies near you at %s", enemies, current.name))
 	end
 end
 
@@ -579,11 +580,11 @@ function private.CheckRespawns(quiet)
 			if holder == point.home then
 				-- Not the siege front going back to level after a Nexus fell: that's the round's news
 				if inhibitor and not Captures:RespawnPaused(point.front) then
-					private.Alert("respawned", nil, private.Where(point))
+					private.Alert("respawned", Captures:Role(point), private.Where(point))
 				end
 			elseif private.InZone(point.front) then
 				local key = (holder == side and "taken" or "lost")..(inhibitor and "Inhibitor" or "")
-				private.Alert(key, strlower(Captures.TERMS.tower), private.Where(point).." (provisional)")
+				private.Alert(key, Captures:Role(point), private.Where(point).." (provisional)")
 			end
 		end
 	end

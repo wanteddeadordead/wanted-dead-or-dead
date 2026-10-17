@@ -92,8 +92,9 @@ function CapturesMap:SetIcon(texture, point)
 		texture:SetDesaturated(lost)
 		texture:SetAlpha(1)
 	else
-		-- A point its home side lost shows its taker's piece, faded, as the site draws it: up or down at a glance
-		texture:SetTexture(PIECES..kind.."-"..(SIDE[holder] or SIDE[point.home]))
+		-- A lane point keeps its home side's piece, so the lanes read as whose they are; one its home side lost is
+		-- faded, with an X in its taker's colour over it (the maps' buttons and the HUD draw the X)
+		texture:SetTexture(PIECES..kind.."-"..SIDE[point.home])
 		texture:SetDesaturated(false)
 		texture:SetAlpha(lost and 0.55 or 1)
 	end
@@ -283,11 +284,12 @@ function private.Button(point)
 		b.flash:SetLooping("BOUNCE")
 		b.timer = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		b.timer:SetPoint("TOP", b, "BOTTOM", 0, -1)
-		-- A red X over a lane point its home side lost: destroyed, at a glance
+		-- An X in its taker's colour over a lane point its home side lost: destroyed, and by whom, at a glance
 		b.cross = b:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
 		b.cross:SetPoint("CENTER", 0, 1)
 		b.cross:SetText("X")
-		b.cross:SetTextColor(0.9, 0.12, 0.1)
+		b.cross:SetShadowColor(0, 0, 0, 1)
+		b.cross:SetShadowOffset(1, -1)
 		b:SetScript("OnEnter", private.OnEnterPoint)
 		b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		b:SetScript("OnClick", function(self)
@@ -305,6 +307,10 @@ function private.Button(point)
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", point.x / 100 * w, -point.y / 100 * h)
 	local lost, taking = CapturesMap:SetIcon(button.icon, point)
 	button.cross:SetShown(lost and point.lane ~= nil)
+	if lost then
+		local c = COLORS[Captures:Holder(point.id)] or COLORS.taking
+		button.cross:SetTextColor(c[1], c[2], c[3])
+	end
 	if taking then
 		button.flash:Play()
 	else
@@ -463,7 +469,8 @@ function CapturesMap:UpdateMinimap()
 					dot.cross = dot:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 					dot.cross:SetPoint("CENTER", 0, 1)
 					dot.cross:SetText("X")
-					dot.cross:SetTextColor(0.9, 0.12, 0.1)
+					dot.cross:SetShadowColor(0, 0, 0, 1)
+					dot.cross:SetShadowOffset(1, -1)
 					dot:EnableMouse(true)
 					dot:SetScript("OnEnter", private.OnEnterPoint)
 					dot:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -472,6 +479,10 @@ function CapturesMap:UpdateMinimap()
 				dot.point = point
 				local lostDot = CapturesMap:SetIcon(dot.icon, point)
 				dot.cross:SetShown(lostDot and point.lane ~= nil)
+				if lostDot then
+					local c = COLORS[Captures:Holder(point.id)] or COLORS.taking
+					dot.cross:SetTextColor(c[1], c[2], c[3])
+				end
 				dot:ClearAllPoints()
 				dot:SetPoint("CENTER", Minimap, "CENTER", dx / radius * half, -dy / radius * half)
 				dot:Show()

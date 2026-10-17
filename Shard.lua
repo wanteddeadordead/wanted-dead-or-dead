@@ -324,6 +324,17 @@ function Shard:Short(key)
 	return key and strmatch(key, "(%d+)$") or "?"
 end
 
+---Whether two layer ids name the same layer: the same id, or the same layer number (the part after the last dash).
+---The server and map parts can differ between what the site stored (an operator's typed pin, another client's
+---reading) and what this client reads off creature GUIDs; the number is the layer (2026-10-16: "4615-0-6" against a
+---reading ending in 6 said "you're on 6" with a Hop button).
+---@param a string?
+---@param b string?
+---@return boolean
+function Shard:Same(a, b)
+	return a ~= nil and b ~= nil and (a == b or Shard:Short(a) == Shard:Short(b))
+end
+
 ---A layer as the site and the addon name it: "layer 497".
 ---@param key string?
 ---@return string
@@ -578,7 +589,7 @@ function private.CheckFight()
 		return
 	end
 	private.fightToldAt = now
-	local sub = Shard:Current() == key and zone..": you're on it" or zone..". "..HOP_HINT
+	local sub = Shard:Same(Shard:Current(), key) and zone..": you're on it" or zone..". "..HOP_HINT
 	Wanted.Alerts:Warn(format("Big fight on %s", Shard:LayerText(key)), sub, Wanted.Theme.C.amber)
 	Wanted:Print("Big fight on %s in %s.", Shard:LayerText(key), sub)
 	private.Changed()
@@ -600,7 +611,7 @@ function Shard:TargetText(zone, mapId)
 		return format("The %s is on %s", what, Shard:LayerText(key))
 	end
 	local mine = Shard:Current()
-	if mine == key then
+	if Shard:Same(mine, key) then
 		return format("You're on the %s's layer", what)
 	elseif not mine then
 		return format("The %s is on %s, yours isn't read yet", what, Shard:LayerText(key))
@@ -623,7 +634,7 @@ end
 function private.NextHost(layer, tried)
 	local mapId, best, bestAt = Shard:ZoneMap(), nil, 0
 	for name, entry in pairs(private.peers) do
-		if not tried[name] and entry.key == layer and entry.mapId == mapId and Shard:Of(name) and entry.at > bestAt then
+		if not tried[name] and Shard:Same(entry.key, layer) and entry.mapId == mapId and Shard:Of(name) and entry.at > bestAt then
 			best, bestAt = name, entry.at
 		end
 	end
@@ -679,7 +690,7 @@ function Shard:Hop()
 	if not mine then
 		return "Your layer isn't known yet: look at a creature nearby."
 	end
-	if mine == target then
+	if Shard:Same(mine, target) then
 		return format("You're on the %s's layer.", kind)
 	end
 	local host = private.NextHost(target, {})
@@ -945,7 +956,7 @@ function Shard:Line(zone, mapId)
 	end
 	local map = mapId or private.MapOf(zone)
 	local here = map ~= nil and map == Shard:ZoneMap()
-	return text, here and Shard:Target(zone, mapId) ~= Shard:Current() and "Hop" or nil
+	return text, here and not Shard:Same(Shard:Target(zone, mapId), Shard:Current()) and "Hop" or nil
 end
 
 function private.Leave()

@@ -14246,6 +14246,17 @@ end)()
 	local buttons = {}
 	for i = before + 1, #Mock.created do if rawget(Mock.created[i], "point") then buttons[#buttons + 1] = Mock.created[i] end end
 	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
+	-- A button on the map itself turns the fronts off and on
+	local mapButton
+	for _, f in ipairs(Mock.created) do
+		local icon = rawget(f, "icon")
+		if type(icon) == "table" and tostring(rawget(icon, "_texture")):find("pieces\\tower%-h$") and f._scripts and f._scripts.OnClick and not rawget(f, "point") then mapButton = f end
+	end
+	check(mapButton ~= nil, "a capture fronts button on the map")
+	mapButton._scripts.OnClick(mapButton)
+	check(ns.Captures:Settings().map == false, "it hides the fronts")
+	mapButton._scripts.OnClick(mapButton)
+	check(ns.Captures:Settings().map == true, "and shows them again")
 	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
 	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
 	-- map's level table: that taints the game's own pins

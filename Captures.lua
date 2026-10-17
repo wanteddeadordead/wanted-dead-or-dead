@@ -33,6 +33,9 @@ local private = {
 	blocked = nil, -- why the player's presence doesn't count, at the last sample
 }
 local SAMPLE_SECONDS = 30
+-- How often the player's place is looked at between samples, so the bar shows the point they stepped into within
+-- seconds (a sample still counts only every SAMPLE_SECONDS)
+local WATCH_SECONDS = 3
 -- A slot is five minutes of game-server time; a sample adds one to the player's count at a point in the slot
 local SLOT_SECONDS = 300
 local MAX_SAMPLES = SLOT_SECONDS / SAMPLE_SECONDS
@@ -203,6 +206,7 @@ end
 
 function Captures:OnEnable()
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Captures sample", function() Captures:Sample() end))
+	C_Timer.NewTicker(WATCH_SECONDS, Wanted:Timed("Captures watch", function() Captures:Watch() end))
 	C_Timer.NewTicker(SIEGE_TICK_SECONDS, Wanted:Timed("Captures siege", function() Captures:SiegeTick() end))
 end
 
@@ -471,6 +475,20 @@ function Captures:Sample()
 	private.Tick(now)
 	Captures:AutoTrack()
 	private.Changed()
+end
+
+---Between samples: notes the point the player is in now, so the bar and the map follow their steps at once; the
+---sample's count (and the blocking reason) still comes every SAMPLE_SECONDS.
+function Captures:Watch()
+	local _, x, y, mapId = Wanted.Recorder:GetPosition()
+	local point = Captures:PointAt(mapId, x, y)
+	if point ~= private.current then
+		private.current = point
+		if not point then
+			private.mine, private.blocked = nil, nil
+		end
+		private.Changed()
+	end
 end
 
 ---Adds a sample to the book for this character at a point. Returns the entry.

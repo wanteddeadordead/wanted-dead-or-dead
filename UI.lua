@@ -490,6 +490,29 @@ function UI:Tabs()
 end
 
 
+-- The parts of the window the tour borders (Tour), by name: a function returning the frame, or nil when the page
+-- hasn't been built
+local marks = {}
+
+---Names a frame for the tour: pages register the parts worth pointing at.
+---@param name string
+---@param get fun(): table?
+function UI:Mark(name, get)
+	marks[name] = get
+end
+
+---The frame a mark names, if it exists now.
+---@param name string
+---@return table?
+function UI:MarkFrame(name)
+	local get = marks[name]
+	return get and get() or nil
+end
+
+UI:Mark("app", function() return private.appStatus end)
+UI:Mark("net", function() return private.netStatus end)
+UI:Mark("setup", function() return Wanted.Setup and Wanted.Setup.cards.home end)
+
 function UI:IsShown(key)
 	return private.frame and private.frame:IsShown() and (not key or private.current == key)
 end

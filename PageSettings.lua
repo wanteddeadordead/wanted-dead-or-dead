@@ -291,6 +291,8 @@ function private.BuildSharing(panel, width)
 	join:SetWordWrap(true)
 	local invite = W:CopyBox(card, width - 416, Wanted.Bridge.INVITE_URL)
 	invite:SetPoint("TOPLEFT", 400, -86)
+	private.invite = invite
+	UI:Mark("invite", function() return private.invite end)
 	local note = Theme:Text(card, "tiny", "Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild).")
 	note:SetPoint("TOPLEFT", 16, -118)
 

@@ -252,7 +252,12 @@ function private.Check()
 	end
 	if Wanted.freshInstall and not db.whatsNewSeen then
 		db.whatsNewSeen = current
-		private.Open("Welcome to Wanted", nil, { { lines = Wanted.WELCOME } }, true)
+		-- The tour in place of the welcome note (Tour); the welcome stays for /wanted welcome and older clients
+		if Wanted.Tour then
+			Wanted.Tour:Start(1)
+		else
+			private.Open("Welcome to Wanted", nil, { { lines = Wanted.WELCOME } }, true)
+		end
 		return
 	end
 	-- Never seen it (the update that brought it): the newest version only, whose lines sum up what came before; then

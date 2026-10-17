@@ -52,6 +52,7 @@ function private.BuildPostCard(parent, width)
 	local post = W:Button(card, "Post bounty", "primary", 124, 26, private.Post)
 	post:SetPoint("LEFT", private.amountBox, "RIGHT", 8, 0)
 	private.postButton = post
+	UI:Mark("post", function() return private.postButton end)
 
 	local quickLabel = Theme:Text(card, "tiny", "Quick")
 	quickLabel:SetPoint("TOPLEFT", 16, -76)

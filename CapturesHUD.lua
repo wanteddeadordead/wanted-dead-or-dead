@@ -430,6 +430,8 @@ function private.UpdateCapture(capture)
 	elseif holder == side then
 		local attacked = p.attackers > 0 and format(", %d attacking%s", p.attackers, left) or ""
 		private.Line(capture, format("Holding the %s: %d of your side%s%s", name, p.defenders, attacked, p.attackers > 0 and " (provisional)" or ""))
+	elseif Captures:TruceOn(point.front) then
+		private.Line(capture, format("%s: a truce holds the front until %s", name, private.Clock(Captures:Siege().round.truceUntil - GetServerTime())))
 	elseif not point.lane and not Captures:RoundOn(point.front) then
 		private.Line(capture, format("%s: only falls in a siege round", name))
 	elseif not Captures:CanAttack(side, point) then
@@ -540,7 +542,7 @@ function private.CheckLive()
 	end
 	local enemies = Wanted.Enemies and Wanted.Enemies:CountNearby() or 0
 	local side = UnitFactionGroup("player")
-	if current and Captures:Holder(current.id) == side and enemies >= ENEMY_ALERT and private.Due("enemies:"..current.id, now) then
+	if current and Captures:Holder(current.id) == side and enemies >= ENEMY_ALERT and not Captures:TruceOn(current.front) and private.Due("enemies:"..current.id, now) then
 		private.Alert("underAttack", Captures:Role(current), format("%d enemies near you at %s", enemies, current.name))
 	end
 end

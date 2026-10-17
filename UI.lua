@@ -402,7 +402,12 @@ end
 function private.UsablePage(key)
 	local def = key and private.pageByKey[key]
 	if not def or (def.hidden and def.hidden()) then
-		return DEFAULT_PAGE
+		-- The main page itself switched off (the Siege page while siege nights are off): Home
+		local main = private.pageByKey[DEFAULT_PAGE]
+		if key ~= DEFAULT_PAGE and main and not (main.hidden and main.hidden()) then
+			return DEFAULT_PAGE
+		end
+		return "home"
 	end
 	return key
 end

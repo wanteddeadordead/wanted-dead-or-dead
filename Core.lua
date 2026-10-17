@@ -45,6 +45,7 @@ local DEFAULTS = {
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)
+		siege = false, -- siege nights: capture fronts, rally leaders and layer hops; off until their first public night (Wanted:SiegeOn)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
@@ -626,6 +627,14 @@ function Wanted:AppNotRunningFor()
 	return GetServerTime() - seen
 end
 
+---Whether the siege features run on this client: capture fronts, the HUD and map pieces, rally leaders and layer hops.
+---Shipped off (settings.siege), switched on with /wanted siege on (or in Settings) and a /reload, until their first
+---public siege night makes them the default.
+---@return boolean
+function Wanted:SiegeOn()
+	return Wanted.db ~= nil and Wanted.db.settings.siege == true
+end
+
 ---Whether the Wanted app is on this computer: it says its version, or it wrote this account a catch-up.
 ---@return boolean
 function Wanted:HasApp()
@@ -777,6 +786,16 @@ local SHARED_COMMANDS = { post = true, raise = true, pass = true, confirm = true
 function Wanted:RegisterCommand(name, help, func)
 	private.commands[name] = { help = help, func = func }
 end
+
+Wanted:RegisterCommand("siege", "Siege nights on or off on this client: /wanted siege on, /wanted siege off (then /reload).", function(args)
+	local want = strlower(strtrim(args or ""))
+	if want == "on" or want == "off" then
+		Wanted.db.settings.siege = want == "on"
+		Wanted:Print("Siege nights %s. Type /reload to apply it.", want)
+		return
+	end
+	Wanted:Print("Siege nights are %s on this client: /wanted siege on, or /wanted siege off (then /reload).", Wanted:SiegeOn() and "on" or "off")
+end)
 
 ---Runs a subcommand by name.
 ---@param cmd string

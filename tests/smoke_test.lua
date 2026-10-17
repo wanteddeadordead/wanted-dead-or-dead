@@ -15376,6 +15376,8 @@ end)()
 		"the HUD says the siege's layer and ours, with Hop: "..tostring(bar.hop._text))
 	for _ = 1, 7 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
 	ns.CapturesHUD:Update()
+	check(Shard:Same("4615-0-6", "1-1424-6") and not Shard:Same("4615-0-6", "4615-0-2") and not Shard:Same(nil, "4615-0-6"),
+		"two ids with the same layer number are the same layer, whatever their server and map parts")
 	check(bar.hop:IsShown() and bar.hop._text == "You're on the siege's layer" and not bar.hopButton:IsShown(), "on it: said, without a button: "..tostring(bar.hop._text))
 	ns.Captures:TakeSiege(nil, nil)
 	-- The settings, and /wanted shard

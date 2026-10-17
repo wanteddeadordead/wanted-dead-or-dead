@@ -211,6 +211,9 @@ function Captures:OnLoad()
 end
 
 function Captures:OnEnable()
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Captures sample", function() Captures:Sample() end))
 	C_Timer.NewTicker(WATCH_SECONDS, Wanted:Timed("Captures watch", function() Captures:Watch() end))
 	C_Timer.NewTicker(SIEGE_TICK_SECONDS, Wanted:Timed("Captures siege", function() Captures:SiegeTick() end))
@@ -554,6 +557,9 @@ end
 ---@param tbl table
 ---@param sender string
 function Captures:OnPeer(tbl, sender)
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	if type(sender) ~= "string" then
 		return
 	end

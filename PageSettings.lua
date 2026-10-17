@@ -310,7 +310,10 @@ function private.BuildSharing(panel, width)
 	local link = W:CopyBox(proof, 360, Wanted.Proof.DISCORD_URL)
 	link:SetPoint("TOPLEFT", 16, -84)
 
-	local captures = private.Card(panel, -460, 150, "Capture fronts", width)
+	local captures = private.Card(panel, -460, 174, "Capture fronts", width)
+	private.Toggle(captures, function() return Wanted.db.settings end, "siege", "Siege nights on this client (then /reload)", "Capture fronts, the HUD and map pieces, rally leaders and layer hops. Off until their first public siege night; a /reload applies the change.", 16, -134, function(checked)
+		Wanted:Print("Siege nights %s. Type /reload to apply it.", checked and "on" or "off")
+	end)
 	local Settings = function() return Wanted.Captures:Settings() end
 	private.Toggle(captures, Settings, "map", "Show capture fronts on the world map", "Each point at its real size, coloured by who holds it, and the lanes between them. Click a point for a waypoint.", 16, -38, function() Wanted.CapturesMap:Refresh() end)
 	private.Toggle(captures, Settings, "minimap", "Show capture points on the minimap", "Also in the minimap's tracking menu.", 16, -62, function() Wanted.CapturesMap:UpdateMinimap() end)

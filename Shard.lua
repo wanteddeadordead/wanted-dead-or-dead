@@ -114,6 +114,9 @@ function Shard:OnLoad()
 end
 
 function Shard:OnEnable()
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	for event in pairs(UNIT_EVENTS) do
 		private.Register(event)
 	end
@@ -372,6 +375,9 @@ end
 ---@param key any their layer
 ---@param mapId any the zone map they were on
 function Shard:Note(name, key, mapId)
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	if type(name) ~= "string" then
 		return
 	end
@@ -741,6 +747,9 @@ end
 ---@param tbl table
 ---@param sender string
 function Shard:OnMessage(tbl, sender)
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	if type(tbl) ~= "table" or type(sender) ~= "string" then
 		return
 	end

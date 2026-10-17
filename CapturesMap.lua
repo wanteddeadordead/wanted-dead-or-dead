@@ -44,6 +44,9 @@ local RING = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\ring"
 -- ============================================================================
 
 function CapturesMap:OnEnable()
+	if not Wanted:SiegeOn() then
+		return -- siege nights are off on this client (Wanted:SiegeOn)
+	end
 	C_Timer.After(2, private.Attach)
 	Captures:OnChange(function() CapturesMap:Refresh() end)
 	C_Timer.NewTicker(MINIMAP_SECONDS, Wanted:Timed("Captures minimap", function() CapturesMap:UpdateMinimap() end))

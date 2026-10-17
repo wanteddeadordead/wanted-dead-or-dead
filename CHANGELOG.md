@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Safety, at the foot of the menu and as `/wanted safety`: Wanted takes online bullying seriously and no one should feel unsafe because of the addon; misuse, griefing or bullying gets you banned; what to do, and the website's Safety page to copy (wanteddeadordead.com/safety: what the addon shares and never does, and where to find help).
 - The "Both sides, one layer" card says plainly what crosses the group (how many Wanted players are in a zone, by layer; never where anyone is), that layers are picked automatically with no choosing one, and that misuse, griefing or bullying gets you banned.
 - The Website & app page scrolls: with the setup steps on top, the app card ran past the window.
 - An app that quit says so (Wanted app 0.2.55 or newer), so after the next /reload the app light, the login reminder and the setup step say "not running" at once instead of three hours later.

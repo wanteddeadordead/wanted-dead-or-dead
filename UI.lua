@@ -286,6 +286,8 @@ function private.Create()
 		"Builds a report to copy (versions, settings, errors, recent log) and shows where to send it. Also /wanted bug.")
 	private.ideaButton = Foot("Suggest a feature", 68, function() Wanted.Report:AskAboutIdea() end,
 		"Tells the developers what Wanted should do, through the Wanted app. Also /wanted idea.")
+	private.safetyButton = Foot("Safety", 102, function() UI:ShowSafety() end,
+		"Wanted takes online bullying seriously. What the addon shares and never does, what to do if someone makes you feel unsafe, and where to find help: the website's Safety page. Also /wanted safety.")
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)
@@ -431,6 +433,23 @@ function private.LayoutNav()
 		label:Hide()
 	end
 end
+
+---Safety: the statement, and the website's Safety page to copy (the game can't open a browser). The foot of the
+---menu and /wanted safety.
+function UI:ShowSafety()
+	W:Dialog({
+		title = "Safety",
+		text = "Wanted: Dead or... Dead takes online bullying seriously. No one should feel unsafe because of this addon. Misuse, griefing or bullying gets you banned from the system.\n\n"
+			.."If someone is making you feel unsafe: hide your character on the website, and write to admin@wanteddeadordead.com. The website's Safety page says what the addon shares and never does, and where to find help with online bullying. Copy the address:",
+		input = { value = "https://wanteddeadordead.com/safety" },
+		confirmLabel = "Close",
+		onConfirm = function() end,
+	})
+end
+
+Wanted:RegisterCommand("safety", "Wanted takes online bullying seriously: the statement and the website's Safety page: /wanted safety", function()
+	UI:ShowSafety()
+end)
 
 function UI:Toggle()
 	if private.frame and private.frame:IsShown() then

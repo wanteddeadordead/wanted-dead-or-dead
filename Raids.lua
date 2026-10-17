@@ -374,10 +374,16 @@ function Raids:Announce(text, target)
 	private.lastAnnounce = GetTime()
 	if target == "guild" then
 		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "GUILD")
-	else
-		C_ChatInfo.SendChatMessage(strsub(text, 1, 255), "CHANNEL", nil, target)
+		return nil
 	end
-	return nil
+	-- A public channel: the client refuses an addon's post there outright (ADDON_ACTION_BLOCKED even from a click,
+	-- 2026-10-16), so the line goes into the chat box, ready in that channel, and the player's Enter posts it
+	local OpenChat = ChatFrameUtil and ChatFrameUtil.OpenChat or ChatFrame_OpenChat
+	if not OpenChat then
+		return "This client can't open the chat box for it."
+	end
+	OpenChat("/"..tostring(target).." "..strsub(text, 1, 255))
+	return nil, "ready"
 end
 
 ---Opens the guild-only raid we lead to everyone: its ad goes out to every Wanted player of our faction from now on.

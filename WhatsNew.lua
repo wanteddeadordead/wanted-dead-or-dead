@@ -14,6 +14,18 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.25.0",
+		note = "Two things about layers. Forever runs each zone as several layers, and Horde and Alliance can't talk in game, "
+			.."so the Wanted Battle.net group is now the place both sides share: it's where everyone sees which layer the fight "
+			.."is on. And a setup checklist at the top of the Dashboard shows what Wanted still needs from you, with the fix "
+			.."under each red mark.",
+		lines = {
+			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on, siege features. Website & app has every address to copy and a Turn on button for the nameplates.",
+			"Join the Wanted Battle.net group from Settings or the Siege page: both sides, one layer. Members can see each other's BattleTag.",
+			"/wanted setup prints the checklist in chat.",
+		},
+	},
+	{
 		version = "1.24.0",
 		note = "Siege nights are coming: a capture front across the zone, three lanes of towers and inhibitors between two "
 			.."Nexus, fought on one layer, with a HUD, painted pieces on the maps and a way to hop layers. The first public "

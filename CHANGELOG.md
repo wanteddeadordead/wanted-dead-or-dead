@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The setup line on the Dashboard uses short names (App running, In the group, Enemy plates), so none is cut off.
+
 ## [1.26.0] - 2026-10-17
 
 - The group is described as what it is now, a data link and not a chat, on the Siege page, in Settings, in the setup checklist and in What's new; a hop with nobody to invite you no longer points at it (invites come from your own side).

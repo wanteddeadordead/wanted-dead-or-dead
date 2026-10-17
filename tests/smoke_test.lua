@@ -1706,6 +1706,23 @@ ClearBn()
 Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "0.1.0" }), "WHISPER", 101)
 RunTimers()
 check(ns.Bridge:Status():find("^Bridge: 1 players on the other faction run Wanted"), "the answer makes a bridge: "..ns.Bridge:Status())
+-- Where the fight is crosses too, as data, never chat: our players by zone map and layer go to the bridge; the other
+-- side's come into our reckoning and on to our channel for the rest of our side
+do
+ns.Shard:Note("Our Peer", "4615-1-9", 1424)
+ClearBn()
+RunTimers()
+local layersMsg
+for i = 1, #bnSent do local t = BnDecode(i) if bnSent[i].id == 101 and type(t) == "table" and t.k == "L" then layersMsg = t end end
+check(layersMsg and layersMsg.z[1].m == 1424 and layersMsg.z[1].l == "4615-1-9" and layersMsg.z[1].n == 1, "our players by layer go to the bridge as data")
+addonSent = {}
+Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "L", z = { { m = 1424, l = "4615-1-11", n = 6 } } }), "WHISPER", 101)
+RunTimers()
+check(ns.Shard:Target("Hillsbrad Foothills", 1424) == "4615-1-11", "the other side's six players name the fight layer here: "..tostring(ns.Shard:Target("Hillsbrad Foothills", 1424)))
+local passedOn
+for _, m in ipairs(addonSent) do if m.text:sub(1, 1) == "X" then passedOn = m end end
+check(passedOn ~= nil, "and it goes on to our channel")
+end
 ClearBn()
 local crossBounty = ns.Store:NewRecord("bounty", { target = "Player-9-ALLY", targetName = "Ally Target", amount = 50000 })
 RunTimers()
@@ -15509,6 +15526,20 @@ end)()
 	check(Shard:Target(HB) == L(501), "a player in another zone doesn't count here")
 	Hear("H", { c = {}, l = L(497), lm = 1424 }, "Peer 6")
 	check(Shard:Target(HB) == L(497), "six players beat six deaths: the lower id")
+	-- The other side's players, through the group's bridges (Shard:NoteFar): counted like ours, the most any one sender
+	-- says of a layer, so two bridges telling of the same players don't double them
+	Shard:NoteFar("bnet:7", { { m = 1424, l = L(501), n = 2 } })
+	check(Shard:Target(HB) == L(501), "the other side's players tip the fight layer: "..tostring(Shard:Target(HB)))
+	Shard:NoteFar("bnet:8", { { m = 1424, l = L(501), n = 2 }, { m = 1424, l = L(497), n = 1 } })
+	check(Shard:Target(HB) == L(501), "two senders telling of the same players count once")
+	Shard:NoteFar("bnet:7", { { m = 1424, l = L(497), n = 3 } })
+	check(Shard:Target(HB) == L(497), "a sender's newer word replaces its old one: "..tostring(Shard:Target(HB)))
+	Shard:NoteFar("bnet:8", { { m = "1424", l = L(501), n = 9 }, { m = 1424, l = 12, n = 9 } })
+	check(Shard:Target(HB) == L(497), "malformed entries are left out")
+	local summary = Shard:FarSummary()
+	check(#summary >= 1 and summary[1].m == 1424 and summary[1].l == L(497) and summary[1].n == 6, "our summary for the other side: our players by layer, busiest first, got "..tostring(summary[1] and summary[1].n))
+	Shard:NoteFar("bnet:7", {}) -- an empty word forgets the sender; the checks below reckon with our side alone
+	check(Shard:Target(HB) == L(497), "the other side forgotten")
 	local n = 0
 	local function Look(key)
 		n = n + 1

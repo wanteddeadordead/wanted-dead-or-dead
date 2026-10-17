@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Battle.net group is a data link between the two sides, not a chat: every two minutes your addon passes where your side's Wanted players are, by zone and layer, to the other side's addons through the group's members as hidden game data, and takes theirs (a bridge of your side passes them on to your channel), so both factions reckon the same fight layer and Hop takes everyone to the same place. Bounty warnings crossed the same way already.
+
 ## [1.25.2] - 2026-10-17
 
 - The Battle.net group is described as it is: the place both sides share, where you say which layer the fight is on and the other side can come to it; nothing shows the layer there by itself yet.

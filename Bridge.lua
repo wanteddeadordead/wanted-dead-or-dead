@@ -24,6 +24,8 @@ local private = {
 	community = nil, -- what the last scan found in the Wanted community, for /wanted community
 	helloSent = {}, -- gameAccountID -> time of our last hello
 	sent = {}, -- gameAccountID -> { [bountyId] = amount } notices already sent this session
+	layersSent = {}, -- gameAccountID -> the layers summary last sent, encoded
+	farShared = 0, -- GetTime() the other side's summary last went on to our channel
 	queue = {}, -- { id, tbl } waiting to go out, one every SEND_SPACING seconds
 	sending = false,
 	lastScan = nil,
@@ -34,12 +36,18 @@ local private = {
 	inbound = {}, -- senderID -> { count, minute }
 	noticeTimes = {}, -- senderID -> when each new notice from them in the last hour was taken
 	targetTimes = {}, -- target GUID -> when each new notice about them in the last hour was taken
-	stats = { hellos = 0, noticesSent = 0, noticesReceived = 0, noticesStored = 0, skipped = 0, pushes = 0, partsSent = 0, partsReceived = 0, partsExpired = 0 },
+	stats = { hellos = 0, noticesSent = 0, noticesReceived = 0, noticesStored = 0, skipped = 0, pushes = 0, partsSent = 0, partsReceived = 0, partsExpired = 0, layersSent = 0, layersReceived = 0 },
 }
 local PREFIX = "WNTDB"
 -- A message in parts: "msgId:part/total:chunk". Its own prefix, so a client before parts never sees one
 local PART_PREFIX = "WNTDP"
 local TAG_HELLO, TAG_ANSWER, TAG_NOTICES = "H", "A", "N"
+-- Our side's Wanted players by zone map and layer (Shard:FarSummary), for the other side's reckoning of where the
+-- fight is: to each bridge every LAYERS_SECONDS when it changed; one taken from the other side goes on to our channel
+-- at most every FAR_SHARE_SECONDS
+local TAG_LAYERS = "L"
+local LAYERS_SECONDS = 120
+local FAR_SHARE_SECONDS = 120
 local SCAN_INTERVAL = 30 -- friend list and community changes come in bursts; look at most this often
 local HELLO_INTERVAL = 10 * 60 -- per game account
 local HELLO_MIN_SECONDS = 60 -- a bridge that comes and goes is greeted at most this often
@@ -100,6 +108,28 @@ function Bridge:OnEnable()
 	Store:OnRecord("raise", private.OnRaise)
 	Store:OnRecord("notice", private.OnNotice)
 	C_Timer.After(10, private.Scan)
+	C_Timer.After(LAYERS_SECONDS, private.SendLayers)
+end
+
+---Every LAYERS_SECONDS: our side's players by zone map and layer (Shard:FarSummary) to each bridge, when it changed
+---for them. Data only, never chat: the other side's addons reckon the fight layer with it.
+function private.SendLayers()
+	C_Timer.After(LAYERS_SECONDS, private.SendLayers)
+	if not private.Enabled() or not Wanted.Shard or not Wanted:SiegeOn() then
+		return
+	end
+	local list = Wanted.Shard:FarSummary()
+	if #list == 0 then
+		return
+	end
+	local text = Sync:Encode(list)
+	for id in pairs(private.bridges) do
+		if private.layersSent[id] ~= text then
+			private.layersSent[id] = text
+			private.stats.layersSent = private.stats.layersSent + 1
+			private.Queue(id, { k = TAG_LAYERS, z = list })
+		end
+	end
 end
 
 function private.OnEvent(_, event, ...)
@@ -531,6 +561,14 @@ function private.OnMessage(text, senderID)
 	elseif tbl.k == TAG_NOTICES and type(tbl.n) == "table" then
 		for _, notice in ipairs(tbl.n) do
 			private.Receive(notice, senderID)
+		end
+	elseif tbl.k == TAG_LAYERS and type(tbl.z) == "table" and Wanted.Shard then
+		-- The other side's players by layer: into our reckoning, and on to our channel for the rest of our side
+		private.stats.layersReceived = private.stats.layersReceived + 1
+		Wanted.Shard:NoteFar("bnet:"..tostring(senderID), tbl.z)
+		if Wanted:SiegeOn() and GetTime() - private.farShared >= FAR_SHARE_SECONDS then
+			private.farShared = GetTime()
+			Sync:BroadcastPlugin("X", { z = tbl.z })
 		end
 	end
 end

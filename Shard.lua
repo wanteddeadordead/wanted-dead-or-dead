@@ -32,6 +32,11 @@ local private = {
 	site = {}, -- zone name -> { active, deaths, since }: each zone's fight layer as the site last said it (the catch-up)
 	deaths = {}, -- the deaths heard lately with a layer, oldest first: { t, zone, key, id }
 	tally = {}, -- scratch for the estimate: key -> count
+	-- The other side's Wanted players by zone map and layer, as their bridges summarise them (Bridge: hidden game data
+	-- through the Wanted Battle.net group, never chat), and as a bridge of our side passes them on to the channel
+	-- ("X"): sender -> { at (GetTime), list = { [mapId] = { [layer] = n } } }. Counted in the estimate, the most any
+	-- one sender says of a layer, so two bridges telling of the same players don't double them
+	far = {},
 	hop = nil, -- the hop under way: { id, host, target, from, state, asked, joined, leaveAt, stay, tried, imminent, moved } (Shard:Hop)
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
@@ -82,6 +87,11 @@ local FIGHT_FLOOR = 5
 local MAX_DEATHS = 500
 -- A zone's fight layer is announced at most this often
 local FIGHT_TOLD_SECONDS = 10 * 60
+-- The other side's summaries (Shard:NoteFar) count this long, from this many senders, this many entries each
+local FAR_SECONDS = 10 * 60
+local MAX_FAR_SENDERS = 20
+local MAX_FAR_ENTRIES = 12
+local MAX_FAR_COUNT = 200
 -- A record's time this far past our clock is a bad clock
 local AHEAD_SECONDS = 120
 -- Events that put a unit in reach, and the unit token each one is about
@@ -503,6 +513,7 @@ function private.Estimate(zone, mapId)
 		if mine and mapId == Shard:ZoneMap() then
 			tally[mine] = (tally[mine] or 0) + 1
 		end
+		private.FarCounts(mapId, tally)
 	end
 	local best
 	for key, n in pairs(tally) do
@@ -511,6 +522,105 @@ function private.Estimate(zone, mapId)
 		end
 	end
 	return best
+end
+
+---Adds the other side's players on a zone map to the tally, by layer: the most any one sender says lately.
+function private.FarCounts(mapId, tally)
+	local now, best = GetTime(), {}
+	for _, entry in pairs(private.far) do
+		local layers = now - entry.at <= FAR_SECONDS and entry.list[mapId]
+		if layers then
+			for key, n in pairs(layers) do
+				if n > (best[key] or 0) then
+					best[key] = n
+				end
+			end
+		end
+	end
+	for key, n in pairs(best) do
+		tally[key] = (tally[key] or 0) + n
+	end
+end
+
+---Our side's Wanted players by zone map and layer, from the channel in the last PEER_SECONDS (us too), for the other
+---side's reckoning: { { m = mapId, l = layer, n = count }, ... }, the busiest first, at most MAX_FAR_ENTRIES. Empty
+---while the siege features are off.
+---@return table[]
+function Shard:FarSummary()
+	local list = {}
+	if not Wanted:SiegeOn() then
+		return list
+	end
+	local now, counts = GetTime(), {}
+	local function Add(mapId, key)
+		counts[mapId] = counts[mapId] or {}
+		counts[mapId][key] = (counts[mapId][key] or 0) + 1
+	end
+	for _, entry in pairs(private.peers) do
+		if now - entry.at <= PEER_SECONDS then
+			Add(entry.mapId, entry.key)
+		end
+	end
+	local mine, mapId = Shard:Current(), Shard:ZoneMap()
+	if mine and mapId then
+		Add(mapId, mine)
+	end
+	for m, layers in pairs(counts) do
+		for l, n in pairs(layers) do
+			tinsert(list, { m = m, l = l, n = n })
+		end
+	end
+	sort(list, function(a, b)
+		if a.n ~= b.n then
+			return a.n > b.n
+		elseif a.m ~= b.m then
+			return a.m < b.m
+		end
+		return a.l < b.l
+	end)
+	for i = MAX_FAR_ENTRIES + 1, #list do
+		list[i] = nil
+	end
+	return list
+end
+
+---Takes the other side's summary (Shard:FarSummary as their bridge sent it, or as a bridge of our side passed it on
+---the channel), by sender; malformed entries are left out.
+---@param sender string who it came from (a Battle.net game account, or the channel peer passing it on)
+---@param list any
+function Shard:NoteFar(sender, list)
+	if not Wanted:SiegeOn() or type(sender) ~= "string" or type(list) ~= "table" then
+		return
+	end
+	local kept, count = {}, 0
+	for _, entry in ipairs(list) do
+		if type(entry) == "table" and type(entry.m) == "number" and private.IsKey(entry.l) and type(entry.n) == "number" and entry.n >= 1 then
+			kept[entry.m] = kept[entry.m] or {}
+			kept[entry.m][entry.l] = min(floor(entry.n), MAX_FAR_COUNT)
+			count = count + 1
+			if count >= MAX_FAR_ENTRIES then
+				break
+			end
+		end
+	end
+	local now = GetTime()
+	if count == 0 then
+		private.far[sender] = nil
+		return
+	end
+	local senders = 0
+	for other, entry in pairs(private.far) do
+		if now - entry.at > FAR_SECONDS then
+			private.far[other] = nil
+		else
+			senders = senders + 1
+		end
+	end
+	if not private.far[sender] and senders >= MAX_FAR_SENDERS then
+		return
+	end
+	private.far[sender] = { at = now, list = kept }
+	private.CheckFight()
 end
 
 ---A zone's map: ours when it's the zone we're in, a front's by its name, else nil.
@@ -1056,3 +1166,11 @@ Wanted:RegisterCommand("shard", "Says which layer of your zone you're on, which 
 	Wanted:Print("%s leads the rally here on layer %s%s.", leader.name, Shard:Short(theirs and theirs.key),
 		Shard:IsOther(leader.name) and ": not yours" or theirs and theirs.key == mine and ": yours" or "")
 end)
+
+-- The other side's summary passed on the channel by a bridge of our side (Bridge), so every Wanted player of the
+-- faction reckons with it, not only those with a bridge of their own
+Wanted.Sync:RegisterPlugin("X", function(tbl, sender)
+	if type(tbl) == "table" then
+		Shard:NoteFar(sender, tbl.z)
+	end
+end, { priority = 3 })

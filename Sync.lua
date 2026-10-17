@@ -50,6 +50,9 @@ local private = {
 	testStartedAt = nil,
 	links = {}, -- name -> { realm, heard, since, sent, received } realm links (players on another realm name)
 	directory = {}, -- { name, realm } players on other realm names from the app, newest first (TakeDirectory)
+	-- name -> { name, realm, at }: players on other realm names a peer of our channel is linked to, from their hello
+	-- (fl): greeted like the directory, so a player without the app gets bridged through his own realm's peers
+	learned = {},
 	linkTimes = {}, -- outbound link message times in the last minute (their own budget)
 	pluginTimes = {}, -- outbound plugin whisper times in the last minute (their own budget)
 	plugins = {}, -- tag -> handler(tbl, sender, channel): other addons' messages carried by this transport (Sync:RegisterPlugin)
@@ -232,6 +235,9 @@ local OFFLINE_SECONDS = 10 * 60 -- someone the game said wasn't online isn't whi
 local MAX_DIRECTORY = 20
 local DIRECTORY_GREETS = 3 -- names greeted per realm name each round
 local DIRECTORY_SECONDS = GREET_SECONDS -- how often a round runs
+-- A hello names a few of its sender's live links on other realm names (fl); names learned so are kept this long
+local FAR_LINKS_IN_HELLO = 4
+local LEARNED_SECONDS = 60 * 60
 
 ---Whispers addon data to target, noting it so the game's "No player named ... is currently playing" for them is
 ---hidden (HideNotFound). Someone the game just said wasn't online isn't whispered again for a while, and nothing
@@ -1687,7 +1693,64 @@ function private.HelloFields()
 	Wanted.Signing:AddToHello(fields)
 	-- l, lm: our layer of the zone and the zone's map (Shard), so peers know which copy of it we're on
 	fields.l, fields.lm = Wanted.Shard:Current(), Wanted.Shard:ZoneMap()
+	-- fl: a few of our live realm links, so a peer with no directory (no Wanted app) can greet them too
+	local far = private.FarLinks()
+	if #far > 0 then
+		fields.fl = far
+	end
 	return fields
+end
+
+---Our live realm links on other realm names, newest heard first, at most FAR_LINKS_IN_HELLO: { n, r }.
+function private.FarLinks()
+	local now, list = GetTime(), {}
+	for name, link in pairs(private.links) do
+		if type(link.realm) == "string" and link.realm ~= "" and not Sync:IsOwnRealm(link.realm) and now - (link.heard or 0) < LINK_TIMEOUT then
+			tinsert(list, { n = name, r = link.realm, h = link.heard or 0 })
+		end
+	end
+	sort(list, function(a, b) return a.h > b.h end)
+	for i = #list, FAR_LINKS_IN_HELLO + 1, -1 do
+		tremove(list, i)
+	end
+	for _, entry in ipairs(list) do
+		entry.h = nil
+	end
+	return list
+end
+
+---Keeps the far-realm links a peer of our channel named in their hello (fl): greeted by GreetDirectory like the app's
+---directory. Malformed entries, our own realm and ourselves are left out; at most MAX_DIRECTORY names, the oldest go.
+---@param list any
+function private.LearnFarLinks(list)
+	if type(list) ~= "table" then
+		return
+	end
+	local now, me = GetTime(), Store:GetOrigin()
+	for i, entry in ipairs(list) do
+		if i > FAR_LINKS_IN_HELLO then
+			break
+		end
+		local name, realm = type(entry) == "table" and entry.n, type(entry) == "table" and entry.r
+		if type(name) == "string" and type(realm) == "string" and name ~= "" and #name <= 48 and realm ~= "" and #realm <= 64
+			and not strfind(name, "|", 1, true) and not strfind(realm, "|", 1, true) and name ~= me and not Sync:IsOwnRealm(realm) then
+			private.learned[name] = { name = name, realm = realm, at = now }
+		end
+	end
+	local count, oldest = 0, nil
+	for name, entry in pairs(private.learned) do
+		if now - entry.at > LEARNED_SECONDS then
+			private.learned[name] = nil
+		else
+			count = count + 1
+			if not oldest or entry.at < private.learned[oldest].at then
+				oldest = name
+			end
+		end
+	end
+	if count > MAX_DIRECTORY and oldest then
+		private.learned[oldest] = nil
+	end
 end
 
 function private.SendHello()
@@ -2070,6 +2133,7 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		-- The sender's signing key (1.19.0): a hello is the only message that teaches one, and only for its sender
 		if tag == TAG_HELLO then
 			Wanted.KeyBook:FromHello(tbl, sender)
+			private.LearnFarLinks(tbl.fl)
 		end
 		if type(tbl.c) ~= "table" then
 			return
@@ -2931,11 +2995,21 @@ end
 ---One round of the directory: for each realm name with no live link, greet the next few names not greeted lately
 ---(nor said to be offline). The first to answer makes the link, and that realm is left alone while it lasts.
 function Sync:GreetDirectory()
-	if Wanted:InCombat() or #private.directory == 0 then
+	local entries = {}
+	for _, entry in ipairs(private.directory) do
+		tinsert(entries, entry)
+	end
+	-- Then the names our channel's peers are linked to (their hellos): a player without the app has only these
+	for _, entry in pairs(private.learned) do
+		if GetTime() - entry.at <= LEARNED_SECONDS then
+			tinsert(entries, entry)
+		end
+	end
+	if Wanted:InCombat() or #entries == 0 then
 		return
 	end
 	local now, linked, greets = GetTime(), private.LinkedRealms(), {}
-	for _, entry in ipairs(private.directory) do
+	for _, entry in ipairs(entries) do
 		local realm = NormalizeRealm(entry.realm)
 		local recent = private.greeted[entry.name] and now - private.greeted[entry.name] < GREET_SECONDS
 		local offline = private.offline[entry.name] and now - private.offline[entry.name] < OFFLINE_SECONDS
@@ -2952,6 +3026,9 @@ function Sync:DirectoryNames()
 	local names = {}
 	for _, entry in ipairs(private.directory) do
 		tinsert(names, entry.name)
+	end
+	for name in pairs(private.learned) do
+		tinsert(names, name)
 	end
 	return names
 end

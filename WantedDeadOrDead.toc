@@ -8,6 +8,7 @@
 ## Author: Wanted: Dead or... Dead
 ## Version: @project-version@
 ## SavedVariables: WantedDB
+## OptionalDeps: WantedDeadOrDead_Data
 ## X-Website: https://github.com/wanteddeadordead/wanted-dead-or-dead
 ## X-License: MIT
 ## X-Curse-Project-ID: 1710798

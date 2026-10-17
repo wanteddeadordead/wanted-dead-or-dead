@@ -43,6 +43,9 @@ jobs:
           test -f "$pkg/WantedDeadOrDead.toc"
           test -f .release/WantedDeadOrDead_Poker/WantedDeadOrDead_Poker.toc
           if test -d "$pkg/Poker"; then echo "the poker folder was not moved out of the base"; exit 1; fi
+          test -f .release/WantedDeadOrDead_Data/WantedDeadOrDead_Data.toc
+          test -f .release/WantedDeadOrDead_Data/Snapshot.lua
+          if test -d "$pkg/Data"; then echo "the data folder was not moved out of the base"; exit 1; fi
           if test -e "$pkg/Debug.lua"; then echo "Debug.lua is in the package"; exit 1; fi
           if grep -q '^Debug.lua' "$pkg/WantedDeadOrDead.toc"; then echo "the toc still loads Debug.lua"; exit 1; fi
           if grep -rq 'RegisterCommand("\(simulate\|purge\|freshstart\)"' "$pkg"; then echo "a development command is registered"; exit 1; fi

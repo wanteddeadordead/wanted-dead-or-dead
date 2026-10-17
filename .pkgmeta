@@ -3,6 +3,8 @@ package-as: WantedDeadOrDead
 # The poker addon ships beside the base as its own folder (its .toc depends on WantedDeadOrDead)
 move-folders:
   WantedDeadOrDead/Poker: WantedDeadOrDead_Poker
+  # The site's daily snapshot, its own folder so the app can write it (WantedDeadOrDead_Data)
+  WantedDeadOrDead/Data: WantedDeadOrDead_Data
 
 # Written by .github/release-notes.sh from CHANGELOG.md: only the version being released
 manual-changelog:

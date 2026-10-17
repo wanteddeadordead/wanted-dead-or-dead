@@ -63,17 +63,72 @@ function private.LookUpUnnamed(unnamed)
 end
 
 ---Takes in this account's catch-up, if the app has written one newer than the last taken in.
+-- The snapshot's public data wins over an app's catch-up this much older
+local STALE_APP_SECONDS = 6 * 60 * 60
+
+---The daily snapshot of the site (the WantedDeadOrDead_Data addon, written by a release or the app) for this
+---character's side: { t, challenges, events, blizzRanks, achievements, ... }, the public half of a catch-up, or nil.
+function private.Snapshot()
+	local snap = WantedSnapshot
+	-- Read once: let it go (a /reload loads the file again)
+	WantedSnapshot = nil
+	local side = UnitFactionGroup and UnitFactionGroup("player")
+	local entry = type(snap) == "table" and snap.v == 1 and type(snap.t) == "number" and type(side) == "string" and snap[side]
+	if type(entry) ~= "table" then
+		return nil
+	end
+	entry.t = snap.t
+	Wanted:Log("Snapshot: the site as of %s", tostring(snap.day))
+	return entry
+end
+
+---Takes in the site's public data, from a catch-up or the snapshot: challenges, the calendar, ranks, badges, medals,
+---the realm-link directory, the points' holders and the siege. All only shown, so read at every login.
+---@param src table
+---@param fromSnapshot boolean the snapshot: no app is there (the challenges' "app seen" stays off)
+function private.TakePublic(src, fromSnapshot)
+	-- Challenges, hot zones and ranks
+	Wanted.Challenges:Take(src.challenges, fromSnapshot)
+	-- Events on the calendar from wanteddeadordead.com (app 0.2.47), kept in saved data
+	Wanted.PvPCalendar:TakeEvents(src.events, src.t)
+	-- Blizzard PvP ranks other Wanted players shared, from the site (app with addon 1.10.0)
+	if Wanted.BlizzRank then
+		Wanted.BlizzRank:Take(src.blizzRanks)
+	end
+	-- World PvP achievements and what each is, from the site (app 0.2.33)
+	Wanted.Achievements:Take(src.achievementDefs, src.achievements)
+	-- Weekly medals and this week's boards (app 0.2.34)
+	Wanted.Achievements:TakeWeekly(src.medals, src.weekBoards)
+	Wanted.Achievements:TakePlaystyle(src.playstyle) -- app 0.2.35
+	Wanted.Achievements:TakeCosmetics(src.cosmetics) -- app 0.2.36
+	-- Players on other realm names to greet as realm links
+	Sync:TakeDirectory(src.links)
+	-- Who holds each capture point, as the site worked it out
+	Wanted.Captures:Take(src.points)
+	-- Tonight's siege and this week's siege wins per front (siege nights): the site's call overrides the client's
+	Wanted.Captures:TakeSiege(src.siege, src.frontWins)
+	if fromSnapshot then
+		Wanted.Achievements:CheckNew()
+	end
+end
+
 function Catchup:Import()
 	local all = WantedAppCatchup
 	-- It can be large, and it's read once: let it go (a /reload loads the file again)
 	WantedAppCatchup = nil
 	local entry = type(all) == "table" and all[Wanted.db.accountMark]
+	local snapshot = private.Snapshot()
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
-		Wanted.Challenges:Take(nil, true)
 		Wanted.Duels:TakeReports(nil, nil)
-		Wanted.Captures:Take(nil)
-		Wanted.Captures:TakeSiege(nil, nil)
 		Wanted.Shard:TakeLayers(nil)
+		if snapshot then
+			-- No app: the site's public data from the daily snapshot (the data addon), the app's step still red
+			private.TakePublic(snapshot, true)
+		else
+			Wanted.Challenges:Take(nil, true)
+			Wanted.Captures:Take(nil)
+			Wanted.Captures:TakeSiege(nil, nil)
+		end
 		return
 	end
 	-- Fight reports the app made of this account's duels, read at every login like the challenges
@@ -88,32 +143,19 @@ function Catchup:Import()
 	end
 	-- Bounty requests are kept by id, so taking in the same ones again changes nothing
 	private.TakeRequests(entry.requests)
-	-- Challenges, hot zones and ranks are only shown, so they're read at every login, taken in or not
-	Wanted.Challenges:Take(entry.challenges)
-	-- Events on the calendar from wanteddeadordead.com (app 0.2.47), kept in saved data
-	Wanted.PvPCalendar:TakeEvents(entry.events, entry.t)
-	-- Blizzard PvP ranks other Wanted players shared, from the site (app with addon 1.10.0)
-	if Wanted.BlizzRank then
-		Wanted.BlizzRank:Take(entry.blizzRanks)
+	-- The site's public data: the app's, unless the snapshot is newer by STALE_APP_SECONDS (an app that hasn't run
+	-- for a while); the account's own parts always come from the app
+	if snapshot and snapshot.t > entry.t + STALE_APP_SECONDS then
+		private.TakePublic(snapshot, false)
+	else
+		private.TakePublic(entry, false)
 	end
-	-- World PvP achievements and what each is, from the site (app 0.2.33)
-	Wanted.Achievements:Take(entry.achievementDefs, entry.achievements)
-	-- Weekly medals and this week's boards (app 0.2.34), then a banner for any badge that's new to this character
-	Wanted.Achievements:TakeWeekly(entry.medals, entry.weekBoards)
-	Wanted.Achievements:TakePlaystyle(entry.playstyle) -- app 0.2.35
-	Wanted.Achievements:TakeCosmetics(entry.cosmetics) -- app 0.2.36
 	Wanted.CallingCard:TakeMine(entry.myCards) -- your own characters' calling cards (app 0.2.37)
 	Wanted.Achievements:CheckNew()
-	-- Players on other realm names to greet as realm links, also at every login
-	Sync:TakeDirectory(entry.links)
 	-- The guilds' Kill on Sight lists as the server keeps them: newer changes only, so taking them again is harmless
 	if Wanted.GuildKoS then
 		Wanted.GuildKoS:TakeServer(entry.guildKos)
 	end
-	-- Who holds each capture point, as the site worked it out: only shown, so read at every login
-	Wanted.Captures:Take(entry.points)
-	-- Tonight's siege and this week's siege wins per front (siege nights): the site's call overrides the client's
-	Wanted.Captures:TakeSiege(entry.siege, entry.frontWins)
 	-- Each zone's fight layer as the site worked it out (layers): only shown, so read at every login
 	Wanted.Shard:TakeLayers(entry.layers)
 	-- Signing keys the server took from the apps of the accounts their characters are confirmed to (1.19.0)

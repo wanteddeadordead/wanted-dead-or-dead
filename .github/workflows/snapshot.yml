@@ -1,0 +1,64 @@
+name: Data snapshot
+
+# The nightly data-only update: the last released code, unchanged, with the site's snapshot of the day
+# (GET /v1/snapshot.lua) in WantedDeadOrDead_Data, uploaded to CurseForge as <release>-data.<date>. Nothing is pushed
+# to the repository: the data commit and its tag live only in the runner. Scheduled runs happen only while the
+# repository variable SNAPSHOT_NIGHTLY is "on" (the maintainer's switch); a manual run always goes.
+on:
+  schedule:
+    - cron: "30 9 * * *" # after the war's day rolls at 5 am US Eastern
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.event_name == 'workflow_dispatch' || vars.SNAPSHOT_NIGHTLY == 'on'
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - name: The last released code
+        run: |
+          set -euo pipefail
+          base=$(git tag --list 'v*' --sort=-v:refname | grep -Ev -- '-(data|alpha|beta)' | head -1)
+          test -n "$base"
+          git checkout -q "$base"
+          echo "BASE=$base" >> "$GITHUB_ENV"
+          echo "Released code: $base"
+          # Releases before the data addon don't read a snapshot: nothing to ship until one does
+          if ! test -f Data/WantedDeadOrDead_Data.toc; then echo "SKIP=1" >> "$GITHUB_ENV"; echo "$base has no data addon: skipped"; fi
+      - name: The site's snapshot
+        if: env.SKIP != '1'
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 60 https://wanteddeadordead.com/v1/snapshot.lua -o Data/Snapshot.lua
+          size=$(wc -c < Data/Snapshot.lua)
+          test "$size" -lt 8000000 || { echo "snapshot too large: $size bytes"; exit 1; }
+          head -c 18 Data/Snapshot.lua | grep -q '^WantedSnapshot = {' || { echo "not a snapshot"; exit 1; }
+          # Data only: it must run in an empty environment, setting WantedSnapshot and calling nothing
+          lua5.4 -e 'local env = {}; local f = assert(loadfile("Data/Snapshot.lua", "t", env)); f();
+            assert(type(env.WantedSnapshot) == "table" and env.WantedSnapshot.v == 1, "no snapshot table");
+            for k in pairs(env) do assert(k == "WantedSnapshot", "sets " .. k) end'
+          echo "DAY=$(date -u +%Y%m%d)" >> "$GITHUB_ENV"
+      - name: Commit and tag in the runner only
+        if: env.SKIP != '1'
+        run: |
+          set -euo pipefail
+          git config user.name "Wanted: Dead or... Dead"
+          git config user.email "noreply@wanteddeadordead.com"
+          git add Data/Snapshot.lua
+          git commit -q -m "data: the site's snapshot of $DAY"
+          tag="$BASE-data.$DAY"
+          git tag "$tag"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          printf '%s\n\n- The daily data refresh: the site as of %s. The code is %s, unchanged.\n' "## [${tag#v}]" "$DAY" "$BASE" > RELEASE_NOTES.md
+      - name: Upload to CurseForge (no GitHub release, nothing pushed)
+        if: env.SKIP != '1'
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1

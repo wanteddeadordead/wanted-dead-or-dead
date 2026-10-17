@@ -14320,10 +14320,11 @@ end)()
 	local function Peers(id, n) for i = 1, n do C:OnPeer({ p = id, s = Slot(), c = 1 }, "Siege Ally "..i) end end
 	-- n of our side at a point for so many ticks (heard players lapse after 90 s, so they're heard again each tick)
 	local function Attack(id, n, ticks) for _ = 1, ticks do Peers(id, n) Sample() end end
-	local function Enemy(x, y) enemies[#enemies + 1] = { mapId = 1424, x = x, y = y, lastSeen = clock } end
-	-- The enemies registered stay in sight: each sample sees them again (an enemy counts only while seen)
+	local function Enemy(x, y) enemies[#enemies + 1] = { mapId = 1424, x = x, y = y, lastSeen = clock, closeAt = clock } end
+	-- The enemies registered stay in sight and in the fight: each sample sees them again, close by (an enemy counts
+	-- only while seen and near: within 28 yards by the last check, or their health changing)
 	local sampleAt = Sample
-	local function Sample(n) for _ = 1, n or 1 do for _, e in ipairs(enemies) do e.lastSeen = clock + 30 end sampleAt() end end
+	local function Sample(n) for _ = 1, n or 1 do for _, e in ipairs(enemies) do e.lastSeen = clock + 30 if e.closeAt then e.closeAt = clock + 30 end end sampleAt() end end
 	local P = function(id) return C:Get(id) end
 	local bar = _G.WantedCaptureBar
 	check(C:Settings().siegeCall == true, "the siege call is on by default")
@@ -14341,8 +14342,10 @@ end)()
 	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left (provisional)", 1, true),
 		"a tick adds the net and the bar says how long at that pace: "..bar.capture.text._text)
 	Enemy(50.8, 35.1) Enemy(50.8, 35.1)
+	enemies[#enemies + 1] = { mapId = 1424, x = 50.8, y = 35.1, lastSeen = clock + 30 } -- a nameplate off at 50 yards: seen, not near
 	Sample()
-	check(C:Progress(P("hb-mid-3")).n == 10 and C:Enemies("hb-mid-3") == 2, "two defenders cancel two attackers: "..C:Progress(P("hb-mid-3")).n)
+	check(C:Progress(P("hb-mid-3")).n == 10 and C:Enemies("hb-mid-3") == 2, "two defenders cancel two attackers; a nameplate neither close nor fighting isn't one: "..C:Progress(P("hb-mid-3")).n)
+	table.remove(enemies)
 	for _ = 1, 4 do Enemy(50.8, 35.1) end
 	Sample()
 	check(C:Progress(P("hb-mid-3")).n == 10 and bar.capture.text._text:find("6 defending, held off", 1, true), "six defenders hold eight attackers: "..bar.capture.text._text)

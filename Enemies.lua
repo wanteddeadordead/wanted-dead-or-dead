@@ -933,6 +933,18 @@ end
 ---Calls func(entry) for each enemy on the nearby list: { guid, name, lastSeen (GetTime), mapId, x, y (where the player
 ---stood when they were last scanned), ... }. Read only: the entries are Enemies' own.
 ---@param func function
+---A nearby enemy's health changed: someone is fighting them, so they're in the fight here now (fightAt). The client
+---gives no positions, no combat log and no distance in a fight, so this is how a defender at a capture point is told
+---from a nameplate 50 yards off (Captures).
+---@param unit string
+function Enemies:NoteHealthChange(unit)
+	local guid = private.Readable(UnitGUID(unit))
+	local entry = guid and private.nearby[guid]
+	if entry then
+		entry.fightAt = GetTime()
+	end
+end
+
 function Enemies:EachNearby(func)
 	for _, entry in pairs(private.nearby) do
 		func(entry)

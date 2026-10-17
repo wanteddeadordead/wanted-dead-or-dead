@@ -64,9 +64,12 @@ local SAME_FALL_SECONDS = 120
 -- Our side's players heard at a point count as there this long; we tell the channel at most this often
 local HEARD_SECONDS = 90
 local SEND_SECONDS = 60
--- An enemy counts as defending a point only while the nameplates see them there, as a battleground's bar does: a few
--- seconds of grace covers the scan, no more (90 s after, and nobody would ever take anything, 2026-10-16)
+-- An enemy counts as defending a point only while the nameplates see them, as a battleground's bar does (a few seconds
+-- of grace covers the scan), and only when they're in the fight here: within 28 yards by the last check (out of combat)
+-- or their health changing (someone is fighting them) within ENEMY_NEAR_SECONDS. A nameplate alone reaches 60 yards,
+-- well outside the circle (2026-10-16: "I will ALWAYS see an enemy"). The client gives nothing closer to a position.
 local ENEMY_SEEN_SECONDS = 5
+local ENEMY_NEAR_SECONDS = 10
 local TOWER_RADIUS, BASE_RADIUS = 40, 50
 Captures.SLOT_SECONDS = SLOT_SECONDS
 Captures.MIN_PEOPLE = MIN_PEOPLE
@@ -616,7 +619,9 @@ function private.CountEnemies()
 	end
 	local now = GetTime()
 	Wanted.Enemies:EachNearby(function(entry)
-		if type(entry.lastSeen) == "number" and now - entry.lastSeen <= ENEMY_SEEN_SECONDS then
+		local near = (type(entry.closeAt) == "number" and now - entry.closeAt <= ENEMY_NEAR_SECONDS)
+			or (type(entry.fightAt) == "number" and now - entry.fightAt <= ENEMY_NEAR_SECONDS)
+		if type(entry.lastSeen) == "number" and now - entry.lastSeen <= ENEMY_SEEN_SECONDS and near then
 			local point = Captures:PointAt(entry.mapId, entry.x, entry.y)
 			if point then
 				private.enemiesAt[point.id] = (private.enemiesAt[point.id] or 0) + 1

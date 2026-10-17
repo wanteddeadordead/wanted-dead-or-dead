@@ -99,6 +99,7 @@ CallingCard.lua
 PageCard.lua
 PagePoster.lua
 WhatsNew.lua
+Tour.lua
 MapPins.lua
 MapPins.xml
 CapturesMap.lua

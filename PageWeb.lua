@@ -38,6 +38,7 @@ function private.BuildSite(container, width)
 	about:SetWordWrap(true)
 	AddLink(card, -80, "The site", SITE, width)
 	private.playerBox = AddLink(card, -132, "Your page", SITE.."/player/", width)
+	UI:Mark("yourpage", function() return private.playerBox end)
 end
 
 function private.BuildApp(container, width)

@@ -7045,13 +7045,13 @@ end)()
 	ns.db.whatsNewSeen, ns.freshInstall = nil, true
 	Fire("LOADING_SCREEN_DISABLED")
 	RunTimers()
-	check(N:IsShown() and f.title._text == "Welcome to Wanted" and ns.db.whatsNewSeen == "1.16.0", "a fresh install is welcomed")
+	check(not N:IsShown() and ns.Tour:IsShown() and WantedTourFrame.title._text == "Welcome to Wanted" and ns.db.whatsNewSeen == "1.16.0", "a fresh install gets the tour, not the note")
 	local prompted = false
 	local realPrompt = ns.PromptForApp
 	ns.PromptForApp = function() prompted = true end
-	f.ok:Click()
+	WantedTourFrame.skip:Click()
 	ns.PromptForApp = realPrompt
-	check(prompted, "then the app prompt")
+	check(prompted and not ns.Tour:IsShown(), "skipping it: the app prompt, as after the welcome")
 	ns.freshInstall, ns.VERSION = nil, realVersion
 	ns:RunCommand("new", "")
 	check(N:IsShown(), "/wanted new shows it again")
@@ -15940,6 +15940,42 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	turnOn._scripts.OnClick(turnOn)
 	check(not turnOn:IsShown() and web.rows[4].detail._text:find("45 yards", 1, true), "the button goes, the step is green")
 	check(cvars.nameplateShowEnemies == "1" and Setup:Steps()[4].state == "ok", "Turn on sets the enemy nameplates on")
+	-- The tour: /wanted tour opens the card on the first page; Next opens each stop's page behind it and borders the
+	-- part it talks about; the page is remembered when it's closed; a fight closes it and the end of the fight brings it
+	-- back; Finish on the last page ends it with the app prompt
+	do
+		local Tour, f = ns.Tour, nil
+		ns.db.tour = nil
+		ns:RunCommand("tour", "")
+		f = WantedTourFrame
+		check(Tour:IsShown() and f.counter._text == "First steps · 1 of "..#Tour.STOPS and ns.UI:IsShown("home"), "the tour opens on the Dashboard: "..tostring(f.counter._text))
+		check(Setup.cards.home and f.title._text == "Welcome to Wanted", "the first page welcomes")
+		f.next:Click()
+		check(f.counter._text:find("2 of", 1, true) and ns.UI:IsShown("home"), "the lights page stays on the Dashboard")
+		f.next:Click()
+		check(ns.UI:IsShown("enemies") and ns.NearbyWindow:IsShown(), "Enemies opens the page and the Nearby window")
+		f.next:Click()
+		check(ns.UI:IsShown("board") and f.title._text == "The Board", "the Board page")
+		f.back:Click()
+		check(ns.UI:IsShown("enemies") and f.counter._text:find("3 of", 1, true), "Back goes back")
+		f.close:Click()
+		check(not Tour:IsShown() and ns.db.tour.page == 3 and ns.db.tour.seen, "closed: the page is remembered")
+		ns:RunCommand("tour", "")
+		check(Tour:IsShown() and f.counter._text:find("3 of", 1, true), "/wanted tour continues where it was")
+		inCombat = true
+		Fire("PLAYER_REGEN_DISABLED")
+		check(not Tour:IsShown(), "a fight closes it")
+		inCombat = false
+		Fire("PLAYER_REGEN_ENABLED")
+		RunTimers()
+		check(Tour:IsShown() and f.counter._text:find("3 of", 1, true), "the end of the fight brings it back")
+		local prompted = false
+		local realPrompt = ns.PromptForApp
+		ns.PromptForApp = function() prompted = true end
+		for _ = 1, #Tour.STOPS do f.next:Click() end
+		ns.PromptForApp = realPrompt
+		check(not Tour:IsShown() and ns.db.tour.done and prompted, "Finish on the last page ends it with the app prompt")
+	end
 	-- Safety: the foot of the menu and /wanted safety open the statement with the website's Safety page to copy
 	local realDialog, shown = ns.Widgets.Dialog, nil
 	ns.Widgets.Dialog = function(_, options) shown = options end

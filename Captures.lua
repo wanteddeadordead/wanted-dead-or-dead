@@ -64,6 +64,9 @@ local SAME_FALL_SECONDS = 120
 -- Our side's players heard at a point count as there this long; we tell the channel at most this often
 local HEARD_SECONDS = 90
 local SEND_SECONDS = 60
+-- An enemy counts as defending a point only while the nameplates see them there, as a battleground's bar does: a few
+-- seconds of grace covers the scan, no more (90 s after, and nobody would ever take anything, 2026-10-16)
+local ENEMY_SEEN_SECONDS = 5
 local TOWER_RADIUS, BASE_RADIUS = 40, 50
 Captures.SLOT_SECONDS = SLOT_SECONDS
 Captures.MIN_PEOPLE = MIN_PEOPLE
@@ -613,7 +616,7 @@ function private.CountEnemies()
 	end
 	local now = GetTime()
 	Wanted.Enemies:EachNearby(function(entry)
-		if type(entry.lastSeen) == "number" and now - entry.lastSeen <= HEARD_SECONDS then
+		if type(entry.lastSeen) == "number" and now - entry.lastSeen <= ENEMY_SEEN_SECONDS then
 			local point = Captures:PointAt(entry.mapId, entry.x, entry.y)
 			if point then
 				private.enemiesAt[point.id] = (private.enemiesAt[point.id] or 0) + 1

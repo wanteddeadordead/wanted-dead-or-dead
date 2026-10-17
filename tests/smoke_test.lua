@@ -5104,7 +5104,7 @@ end)()
 	ns.UI:Show("settings")
 	local inviteBox
 	for _, f in ipairs(Mock.created) do
-		if f._text == "https://blizzard.com/invite/7mmzbzC47G" then inviteBox = f end
+		if f._text == "https://blizzard.com/invite/A33mYmik4b" then inviteBox = f end
 	end
 	check(inviteBox and inviteBox._scripts.OnEditFocusGained, "Settings has the community's invite link in a copy box")
 	ns.Bridge.clubId = 0
@@ -5116,7 +5116,7 @@ end)()
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	check(#SentTo(301) == 0, "no community bridges when we're not in it")
 	local outside = table.concat(ns.Bridge:CommunityReport(), "\n")
-	check(outside:find("not in the Wanted community", 1, true) and outside:find("https://blizzard.com/invite/7mmzbzC47G", 1, true), "/wanted community gives the invite link to a player not in it: "..outside)
+	check(outside:find("not in the Wanted community", 1, true) and outside:find("https://blizzard.com/invite/A33mYmik4b", 1, true), "/wanted community gives the invite link to a player not in it: "..outside)
 	clubSubscribed = { { clubId = "77", name = "Wanted", clubType = 0, memberCount = 6 } }
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "88", 1, 1)
 	check(#SentTo(301) == 0, "another community's events don't rescan")

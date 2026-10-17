@@ -412,6 +412,25 @@ function private.BuildRules(body, width)
 	return card
 end
 
+---Both sides on one layer: why to join the Wanted Battle.net group, with its invite to copy (Bridge.INVITE_URL).
+function private.BuildGroup(body, width)
+	local card = W:Card(body)
+	card:SetWidth(width)
+	card.label = W:SectionLabel(card, "Both sides, one layer")
+	card.label:SetPoint("TOPLEFT", PAD, -14)
+	card.text = Theme:Text(card, "body", Theme:Colorize("Forever runs each zone as several layers, and Horde and Alliance can't talk in game. "
+		.."The Wanted Battle.net group is the one place both sides share: it's where everyone sees which layer the fight is on, "
+		.."so hunters and prey land in the same copy of the zone. Members can see each other's BattleTag.", C.muted))
+	card.text:SetPoint("TOPLEFT", PAD, -34)
+	card.text:SetWidth(width - 2 * PAD)
+	card.text:SetWordWrap(true)
+	card.text:SetSpacing(3)
+	card.linkLabel, card.link = private.AddLink(card, "Join the Wanted Battle.net group", Wanted.Bridge.INVITE_URL, width)
+	card.linkLabel:SetPoint("TOPLEFT", card.text, "BOTTOMLEFT", 0, -12)
+	private.group = card
+	return card
+end
+
 ---The page: everything in a scroll frame, the cards stacked (private.Stack).
 function private.Build(container, width)
 	local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
@@ -428,6 +447,7 @@ function private.Build(container, width)
 		private.BuildResults(body, width - 30),
 		private.BuildFronts(body, width - 30),
 		private.BuildRules(body, width - 30),
+		private.BuildGroup(body, width - 30),
 	}
 	Captures:OnChange(function()
 		if UI:IsShown("siege") then
@@ -722,6 +742,11 @@ function private.RefreshRules()
 	card:SetHeight(height + 4 + 18 + 26 + PAD)
 end
 
+function private.RefreshGroup()
+	local card = private.group
+	card:SetHeight(34 + card.text:GetStringHeight() + 12 + 18 + 26 + PAD)
+end
+
 ---Stacks the cards top to bottom and sizes the scroll child to them.
 function private.Stack()
 	local y = 0
@@ -747,6 +772,7 @@ function private.Refresh()
 	private.RefreshResults()
 	private.RefreshFronts()
 	private.RefreshRules()
+	private.RefreshGroup()
 	private.Stack()
 end
 

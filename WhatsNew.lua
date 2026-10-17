@@ -14,6 +14,18 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.24.0",
+		note = "Siege nights are coming: a capture front across the zone, three lanes of towers and inhibitors between two "
+			.."Nexus, fought on one layer, with a HUD, painted pieces on the maps and a way to hop layers. The first public "
+			.."night isn't set yet, so all of it ships switched off and nothing else changes for you. Want a look before "
+			.."then? /wanted siege on, then /reload.",
+		lines = {
+			"Settings > Capture fronts turns the siege features on or off (off until the first public siege night).",
+			"With it on: the capture HUD under the main window, the pieces on the world map and minimap, rally leaders and layer hops.",
+			"Layers: Wanted reads yours from the creatures around you; /wanted shard says yours and the fight's, and Hop gets you there by a group invite from a Wanted player already on it.",
+		},
+	},
+	{
 		version = "1.23.0",
 		note = "A round of polish for the poker table from the first week of games: the table can be dressed up, the money "
 			.."rounds to the table's coin, and the host has a few more controls.",

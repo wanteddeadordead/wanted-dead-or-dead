@@ -571,6 +571,10 @@ function private.Refresh()
 	if not private.band then
 		return
 	end
+	local setupHeight = private.setup.Refresh()
+	private.content:ClearAllPoints()
+	private.content:SetPoint("TOPLEFT", 0, -(setupHeight + GAP))
+	private.content:SetPoint("BOTTOMRIGHT")
 	local data = Challenges:Get()
 	local shown = data ~= nil
 	private.empty:SetShown(not shown)
@@ -611,13 +615,21 @@ UI:RegisterPage("home", {
 	noHeader = true,
 	build = function(container, width)
 		private.hot = {}
-		private.BuildEmpty(container, width)
-		private.BuildBand(container, width)
-		private.BuildDaily(container)
-		private.BuildHot(container, width, 1)
-		private.BuildUpcoming(container, width)
-		private.BuildRaids(container, width)
-		private.BuildStrip(container, width)
+		-- The setup marks first (Setup); everything else in a frame that moves down under them
+		private.setup = Wanted.Setup:BuildCard(container, width, true, function() UI:Show("web") end)
+		private.setup:SetPoint("TOPLEFT")
+		W:AttachTooltip(private.setup, "Your setup", "What Wanted needs to work in full, and what's missing. Opens Website & app, where the addresses are.")
+		local content = CreateFrame("Frame", nil, container)
+		content:SetPoint("TOPLEFT")
+		content:SetPoint("BOTTOMRIGHT")
+		private.content = content
+		private.BuildEmpty(content, width)
+		private.BuildBand(content, width)
+		private.BuildDaily(content)
+		private.BuildHot(content, width, 1)
+		private.BuildUpcoming(content, width)
+		private.BuildRaids(content, width)
+		private.BuildStrip(content, width)
 	end,
 	refresh = private.Refresh,
 })

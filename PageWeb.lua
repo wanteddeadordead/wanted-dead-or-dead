@@ -89,15 +89,17 @@ function private.Refresh()
 	local text, color = private.AppState()
 	private.appStatus:SetText(text)
 	private.appStatus:SetTextColor(color[1], color[2], color[3])
-	-- Without the app, its card comes first: the red light at the top opens this page for the download link
+	-- The setup steps first (Setup), then, without the app, its card: the red light at the top opens this page for
+	-- the download link
+	local top = private.setup.Refresh() + 12
 	private.siteCard:ClearAllPoints()
 	private.appCard:ClearAllPoints()
 	if Wanted:HasApp() then
-		private.siteCard:SetPoint("TOPLEFT")
-		private.appCard:SetPoint("TOPLEFT", 0, -208)
+		private.siteCard:SetPoint("TOPLEFT", 0, -top)
+		private.appCard:SetPoint("TOPLEFT", 0, -top - 208)
 	else
-		private.appCard:SetPoint("TOPLEFT")
-		private.siteCard:SetPoint("TOPLEFT", 0, -238)
+		private.appCard:SetPoint("TOPLEFT", 0, -top)
+		private.siteCard:SetPoint("TOPLEFT", 0, -top - 238)
 	end
 	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
 	private.appPrompt:SetChecked(Wanted.db.settings.appPrompt)
@@ -181,6 +183,8 @@ UI:RegisterPage("web", {
 	tabLabel = "Website & app",
 	under = "card",
 	build = function(container, width)
+		private.setup = Wanted.Setup:BuildCard(container, width)
+		private.setup:SetPoint("TOPLEFT")
 		private.BuildSite(container, width)
 		private.BuildApp(container, width)
 	end,

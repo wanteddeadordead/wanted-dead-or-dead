@@ -189,6 +189,12 @@ function private.IsRealmLinkCandidate(game)
 	return type(game.realmName) == "string" and not private.IsOwnRealm(game.realmName)
 end
 
+---Whether this player is in the Wanted community (Setup).
+---@return boolean
+function Bridge:InCommunity()
+	return private.CommunityClub() ~= nil
+end
+
 ---The Wanted community's club id, if it is set and this player is in it.
 ---@return any? clubId
 function private.CommunityClub()

@@ -14111,7 +14111,7 @@ end)()
 	check(_G.WantedCaptureBar:IsShown() and _G.WantedCaptureBar._point[2] == UIWidgetTopCenterContainerFrame,
 		"the HUD hangs under the game's top-centre widgets")
 	local hud = _G.WantedCaptureBar
-	check(hud.alliance.text._text == "Towers: 6" and hud.horde.text._text == "Towers: 6", "each side's towers: "..tostring(hud.alliance.text._text))
+	check(hud.alliance.text._text == "Points: 6" and hud.horde.text._text == "Points: 6", "each side's points, towers and inhibitors: "..tostring(hud.alliance.text._text))
 	check(hud.alliance.icon._atlas == "alliance_tower-icon" and hud.horde.icon._atlas == "horde_tower-icon", "the widgets' tower icons")
 	local row = hud.rows[1].icons
 	local pieces = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\"

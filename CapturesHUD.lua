@@ -265,8 +265,8 @@ function CapturesHUD:Update()
 	if private.dirty then
 		private.dirty = false
 		local horde, alliance = private.Towers(front)
-		bar.alliance.text:SetText(format("Towers: %d", alliance))
-		bar.horde.text:SetText(format("Towers: %d", horde))
+		bar.alliance.text:SetText(format("Points: %d", alliance))
+		bar.horde.text:SetText(format("Points: %d", horde))
 		local winner = Captures:Winner(front)
 		local wins = Captures:FrontWins(front)
 		bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner)

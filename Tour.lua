@@ -1,6 +1,6 @@
 -- Wanted: the tours. "First steps" for a fresh install, in place of a welcome note, at the first login out of combat;
 -- /wanted tour brings it back any time. Other addons register their own set (the poker addon's, the first time the
--- Poker page opens: /wanted tour poker). Each remembers the page it was closed on. A card beside the main
+-- Poker page opens: /wanted poker tour). Each remembers the page it was closed on. A card beside the main
 -- window, one stop a page: a heading, a short paragraph, Back / Next / Skip. The real page opens in the window behind
 -- the card, and the part the page talks about gets a pulsing amber border (UI:Mark). Never in combat: it closes itself
 -- when a fight starts and comes back after. After the last page, or Skip, the app prompt as the welcome gave it.
@@ -311,7 +311,7 @@ Wanted:OnCombatEnd(function()
 	end
 end)
 
-Wanted:RegisterCommand("tour", "First steps, a tour of Wanted page by page: /wanted tour; the poker table's: /wanted tour poker", function(args)
+Wanted:RegisterCommand("tour", "First steps, a tour of Wanted page by page: /wanted tour; the poker table's: /wanted poker tour", function(args)
 	local name = strtrim(args or "")
 	Tour:Start(name ~= "" and name or "first")
 end)

@@ -809,10 +809,12 @@ function Page:OnEnable()
 			private.Refresh()
 		end
 	end)
-	Wanted:RegisterCommand("poker", "Opens the Poker page: host a table or sit at one. 'poker probe' checks tables work where you stand.", function(args)
+	Wanted:RegisterCommand("poker", "Opens the Poker page: host a table or sit at one. 'poker tour' shows how it works, 'poker invite <name>' brings in a friend, 'poker probe' checks tables work where you stand.", function(args)
 		local word, rest = strmatch(strtrim(args or ""), "^(%S*)%s*(.-)$")
 		if word == "probe" then
 			Net:Probe()
+		elseif word == "tour" and Wanted.Tour then
+			Wanted.Tour:Start("poker")
 		elseif word == "invite" then
 			local ok, why = Net:Invite(rest)
 			if ok then
@@ -856,7 +858,7 @@ UI:RegisterPage("poker", {
 	end,
 })
 
--- The poker tour (Wanted.Tour): the first time the Poker page opens, and /wanted tour poker
+-- The poker tour (Wanted.Tour): the first time the Poker page opens, and /wanted poker tour
 UI:Mark("pokerhost", function() return private.form end)
 -- The steps' breadcrumb, not a control on one step: the form may be on any step (2026-10-17: the stakes control's
 -- border sat over the review text on step 4)
@@ -883,7 +885,7 @@ if Wanted.Tour then
 				.."A friend who can't see your table (one on another realm name, or without the Wanted app): host a table for people, not practice, and type their name in Invite a player on your table card, or /wanted poker invite <name>. Your table reaches them by whisper." },
 		{ title = "Gold and settlement", page = "poker", mark = "pokerviews",
 			text = "A gold table is cash on the table: your buy-in goes to the host by mail before you play, stacks come back when you leave, and Settlement keeps the books (Pay, Mark paid). A silver game rounds every bet to whole silver.\n\n"
-				.."Wanted is meant to be fun; cheating, griefing or bullying at a table gets you banned from the system. /wanted tour poker brings this back." },
+				.."Wanted is meant to be fun; cheating, griefing or bullying at a table gets you banned from the system. /wanted poker tour brings this back." },
 	})
 end
 

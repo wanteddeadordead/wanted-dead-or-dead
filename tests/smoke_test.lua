@@ -15999,8 +15999,8 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		f.next:Click()
 		check(f.title._text == "The table" and ns.UI:MarkFrame("pokerbar") ~= nil and ns.UI:MarkFrame("pokerlog") ~= nil, "the table page marks the bar and the log")
 		f.close:Click()
-		ns:RunCommand("tour", "poker")
-		check(Tour:IsShown() and f.counter._text == "Poker · 3 of 5", "/wanted tour poker continues where it was: "..tostring(f.counter._text))
+		ns:RunCommand("poker", "tour")
+		check(Tour:IsShown() and f.counter._text == "Poker · 3 of 5", "/wanted poker tour continues where it was: "..tostring(f.counter._text))
 		local prompted = false
 		local realPrompt = ns.PromptForApp
 		ns.PromptForApp = function() prompted = true end

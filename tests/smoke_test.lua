@@ -14321,6 +14321,9 @@ end)()
 	-- n of our side at a point for so many ticks (heard players lapse after 90 s, so they're heard again each tick)
 	local function Attack(id, n, ticks) for _ = 1, ticks do Peers(id, n) Sample() end end
 	local function Enemy(x, y) enemies[#enemies + 1] = { mapId = 1424, x = x, y = y, lastSeen = clock } end
+	-- The enemies registered stay in sight: each sample sees them again (an enemy counts only while seen)
+	local sampleAt = Sample
+	local function Sample(n) for _ = 1, n or 1 do for _, e in ipairs(enemies) do e.lastSeen = clock + 30 end sampleAt() end end
 	local P = function(id) return C:Get(id) end
 	local bar = _G.WantedCaptureBar
 	check(C:Settings().siegeCall == true, "the siege call is on by default")

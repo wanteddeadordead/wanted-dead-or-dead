@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-10-16
+
+- The What's new window for 1.24.0: siege nights wait behind Settings > Capture fronts (or `/wanted siege on`), and how to take a look before the first public night.
+
 ## [1.24.0] - 2026-10-16
 
 - Siege nights ship switched off: capture fronts, the HUD and map pieces, rally leaders and layer hops wait for

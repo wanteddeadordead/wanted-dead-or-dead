@@ -163,12 +163,11 @@ function private.Build()
 			icon:SetSize(LANE_ICON, LANE_ICON)
 			icon:SetPoint("LEFT", last, "RIGHT", i == 1 and 3 or 0, 0)
 			r.icons[i] = icon
-			-- A white X with a dark edge over a point its home side lost: the lane reads at a glance (the pieces alone
-			-- don't at this size, and a red X over a red piece vanished, 2026-10-16)
+			-- An X in its taker's colour, with a dark edge, over a point its home side lost: the piece keeps its home
+			-- side's colour, so a blue tower under a red X is an Alliance tower the Horde took (2026-10-16)
 			local mark = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 			mark:SetPoint("CENTER", icon, "CENTER", 0, 1)
 			mark:SetText("X")
-			mark:SetTextColor(1, 1, 1)
 			mark:SetShadowColor(0, 0, 0, 1)
 			mark:SetShadowOffset(1, -1)
 			mark:Hide()
@@ -279,6 +278,10 @@ function CapturesHUD:Update()
 				local point = Captures:Get(p.id)
 				local lost = Wanted.CapturesMap:SetIcon(r.icons[i], point)
 				r.marks[i]:SetShown(lost)
+				if lost then
+					local c = Wanted.CapturesMap.COLORS[Captures:Holder(p.id)] or { 1, 1, 1 }
+					r.marks[i]:SetTextColor(c[1], c[2], c[3])
+				end
 			end
 		end
 	end

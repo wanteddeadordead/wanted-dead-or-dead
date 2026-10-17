@@ -14570,14 +14570,28 @@ end)()
 	warned = {}
 	for _ = 1, 11 do
 		clock = clock + 300
-		C:Siege().nexusAt = clock -- Nexus progress keeps coming
+		C:Siege().progressAt = clock -- progress keeps coming
 		C:SiegeTick(clock)
 		check(C:Phase() == "round", "progress holds the last round open")
 	end
 	clock = clock + 300
-	C:Siege().nexusAt = clock
+	C:Siege().progressAt = clock
 	C:SiegeTick(clock)
 	check(C:Phase() == "over" and #warned == 0, "an hour after the window it's over, and quiet outside the zone")
+	-- The site's rule: no progress in the window's last quarter hour ends the last round when the window closes
+	now = clock
+	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now + 60, round = { n = 1, start = now - 3 * 3600, truceUntil = 0, last = true }, wins = { h = 0, a = 0 } }, nil)
+	C:Siege().progressAt = now - 20 * 60
+	C:SiegeTick(now)
+	check(C:Phase() == "round" and C:LastRoundEnd() == now + 60, "a quiet window's last round ends with the window: "..tostring(C:LastRoundEnd() and C:LastRoundEnd() - now))
+	clock = now + 60
+	C:SiegeTick(clock)
+	check(C:Phase() == "over", "and is over at once when it closes")
+	-- Progress five minutes before the end holds it ten minutes past the window
+	now = clock
+	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now, round = { n = 1, start = now - 3 * 3600, truceUntil = 0, last = true }, wins = { h = 0, a = 0 } }, nil)
+	C:Siege().progressAt = now - 300
+	check(C:LastRoundEnd() == now + 600, "progress at 9:55 ends it at 10:10")
 	mapId = 1424
 	clock = clock + 1 -- a new reading of where we are
 	-- The catch-up at login: a truce in progress, nothing already past announced again; a siege that ended

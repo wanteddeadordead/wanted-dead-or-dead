@@ -14198,6 +14198,10 @@ end)()
 	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
 	check(lostTower and lostTower.icon._texture == "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\tower-a", "a Horde tower the Alliance took shows the Alliance's painted tower: "..tostring(lostTower and lostTower.icon._texture))
 	check(lostTower and lostTower.icon._alpha == 0.55, "and faded, as a point its home side lost: "..tostring(lostTower and lostTower.icon._alpha))
+	check(lostTower and lostTower.cross._shown ~= false and lostTower.cross._text == "X", "with a red X over it: destroyed")
+	local keptTower
+	for _, b in ipairs(buttons) do if b.point.id == "hb-top-2" then keptTower = b end end
+	check(keptTower and keptTower.cross._shown == false, "a tower its home side holds has no X")
 	-- Nobody is taking anything: no piece flashes (a false compared with nil once made every piece flash, 2026-10-16)
 	local flashing = 0
 	for _, b in ipairs(buttons) do if b.flash and b.flash._playing then flashing = flashing + 1 end end

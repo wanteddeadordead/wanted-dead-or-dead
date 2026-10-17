@@ -821,5 +821,45 @@ UI:RegisterPage("poker", {
 		private.list = list
 		private.Refresh()
 	end,
-	refresh = private.Refresh,
+	refresh = function()
+		private.Refresh()
+		private.MaybeTour()
+	end,
 })
+
+-- The poker tour (Wanted.Tour): the first time the Poker page opens, and /wanted tour poker
+UI:Mark("pokerhost", function() return private.form end)
+UI:Mark("pokerstakes", function() return private.stakes end)
+UI:Mark("pokergo", function() return private.go end)
+UI:Mark("pokertables", function() return private.list end)
+UI:Mark("pokerseat", function() return private.seat end)
+UI:Mark("pokerviews", function() return private.views end)
+if Wanted.Tour then
+	Wanted.Tour:Register("poker", {
+		label = "Poker",
+		{ title = "The Wanted table", page = "poker", mark = "pokerhost",
+			text = "Texas hold'em with the players of your faction, from inside the game. Tables play for chips (play money), for gold (real coin, buy-ins by mail), or in practice against computer players.\n\n"
+				.."Every deal is shuffled by everyone at the table and checked by every seat after each hand, so nobody can rig it, the host included." },
+		{ title = "Host a table", page = "poker", mark = { "pokerstakes", "pokergo" },
+			text = "Three steps: the game (a cash game or a tournament), the stakes (People or Practice; Chips or Gold), then the seats, the turn time, the blinds, the buy-in, a title and a password if you want one. Then Host table.\n\n"
+				.."Host a Practice table now to go on with the tour: it opens the table window with computer players in the other seats.",
+			wait = function() return Poker.PokerTable:IsShown() end, waitText = "Host a table first" },
+		{ title = "The table", mark = { "pokerbar", "pokerlog" },
+			text = "Your seat is at the bottom; the dealer button moves each hand; the pot and the community cards sit in the middle. On your turn the bar lights up: Fold, Check or Call, Raise (the presets and the slider set the amount), All-in. Sit out skips hands; Rebuy tops up your stack.\n\n"
+				.."The log on the right keeps every hand. The X hides the window and the table goes on; Leave gives up your seat and your chips come back to you." },
+		{ title = "Joining a table", page = "poker", mark = { "pokertables", "pokerseat" },
+			text = "Open tables lists every table on your faction's channel; click one to sit, with the password if the host set one, and the host lets you in. Your table card above has Open table, Start (a tournament), Leave and Hand off (the host passes the table to another seat).\n\n"
+				.."A player on another realm name sees your table only through a realm link; if a friend can't see it, ask them for the first line of /wanted sync." },
+		{ title = "Gold and settlement", page = "poker", mark = "pokerviews",
+			text = "A gold table is cash on the table: your buy-in goes to the host by mail before you play, stacks come back when you leave, and Settlement keeps the books (Pay, Mark paid). A silver game rounds every bet to whole silver.\n\n"
+				.."Wanted is meant to be fun; cheating, griefing or bullying at a table gets you banned from the system. /wanted tour poker brings this back." },
+	})
+end
+
+---The poker tour, the first time the Poker page is seen, unless another tour is up.
+function private.MaybeTour()
+	local Tour = Wanted.Tour
+	if Tour and not Tour:Seen("poker") and not Tour:IsShown() then
+		Tour:Start("poker")
+	end
+end

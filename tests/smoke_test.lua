@@ -449,6 +449,7 @@ Fire("ADDON_LOADED", "WantedDeadOrDead")
 -- Siege nights are shipped off; the suite runs them on (the toggle itself is checked below)
 assert(ns.db.settings.siege == false and not ns:SiegeOn(), "siege nights are off by default")
 ns.db.settings.siege = true
+ns.db.tour = { poker = { seen = true, done = true } } -- the poker tour starts itself on the first Poker page; its own block tests that
 -- The poker addon depends on the base: its files load after the base's ADDON_LOADED, into its own namespace
 WantedPokerTestNS = {} -- global: the main chunk is at its limit of locals
 for line in io.lines(ADDON.."Poker/WantedDeadOrDead_Poker.toc") do
@@ -15975,6 +15976,38 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		for _ = 1, #Tour.STOPS do f.next:Click() end
 		ns.PromptForApp = realPrompt
 		check(not Tour:IsShown() and ns.db.tour.done and prompted, "Finish on the last page ends it with the app prompt")
+	end
+	-- The poker tour: the first Poker page opens it; Next waits for a table to be hosted; the table's bar and log are
+	-- marked once it is; /wanted tour poker comes back where it was; Finish ends it without the app prompt
+	do
+		local Tour, f = ns.Tour, WantedTourFrame
+		local P = WantedPokerTestNS
+		ns.db.tour.poker = nil
+		if P.PokerTable:IsShown() then P.PokerTable:Hide() end
+		ns.UI:Show("poker")
+		check(Tour:IsShown() and f.counter._text == "Poker · 1 of 5" and f.title._text == "The Wanted table", "the first Poker page starts the poker tour: "..tostring(f.counter._text))
+		f.next:Click()
+		local waitTick = tickers[#tickers] -- the tour looking again for the table window, once a second
+		check(f.title._text == "Host a table" and not f.next:IsEnabled() and f.next:GetText() == "Host a table first", "Next waits for a table: "..tostring(f.next:GetText()))
+		check(P.PokerNet:HostTable({ sb = 5, bb = 10, buyMin = 200, buyMax = 1000, maxSeats = 4 }, 1000), "a table is hosted")
+		P.PokerTable:Show()
+		waitTick()
+		check(f.next:IsEnabled() and f.next:GetText() == "Next", "the table opened: Next goes on, got "..tostring(f.next:GetText()))
+		f.next:Click()
+		check(f.title._text == "The table" and ns.UI:MarkFrame("pokerbar") ~= nil and ns.UI:MarkFrame("pokerlog") ~= nil, "the table page marks the bar and the log")
+		f.close:Click()
+		ns:RunCommand("tour", "poker")
+		check(Tour:IsShown() and f.counter._text == "Poker · 3 of 5", "/wanted tour poker continues where it was: "..tostring(f.counter._text))
+		local prompted = false
+		local realPrompt = ns.PromptForApp
+		ns.PromptForApp = function() prompted = true end
+		f.next:Click()
+		f.next:Click()
+		f.next:Click()
+		ns.PromptForApp = realPrompt
+		check(not Tour:IsShown() and ns.db.tour.poker.done and not prompted, "Finish ends the poker tour, no app prompt")
+		P.PokerNet:Leave()
+		P.PokerTable:Hide()
 	end
 	-- Safety: the foot of the menu and /wanted safety open the statement with the website's Safety page to copy
 	local realDialog, shown = ns.Widgets.Dialog, nil

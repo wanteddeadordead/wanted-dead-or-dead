@@ -194,7 +194,8 @@ function private.Mark(names)
 	local shown = 0
 	for i, name in ipairs(names) do
 		local target = UI:MarkFrame(name)
-		if target then
+		-- Only what's on screen: a frame on a hidden tab or page has a place but nothing to see there
+		if target and (not target.IsVisible or target:IsVisible()) then
 			local glow = private.glows[i]
 			if not glow then
 				glow = CreateFrame("Frame", nil, UIParent)

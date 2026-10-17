@@ -494,19 +494,29 @@ end
 -- hasn't been built
 local marks = {}
 
----Names a frame for the tour: pages register the parts worth pointing at.
+local reveals = {}
+
+---Names a frame for the tour: pages register the parts worth pointing at. reveal, if given, brings the frame into
+---view first (a page's tab it sits on).
 ---@param name string
 ---@param get fun(): table?
-function UI:Mark(name, get)
-	marks[name] = get
+---@param reveal fun()?
+function UI:Mark(name, get, reveal)
+	marks[name], reveals[name] = get, reveal
 end
 
----The frame a mark names, if it exists now.
+---The frame a mark names, brought into view, if it exists now.
 ---@param name string
 ---@return table?
 function UI:MarkFrame(name)
 	local get = marks[name]
-	return get and get() or nil
+	if not get then
+		return nil
+	end
+	if reveals[name] then
+		reveals[name]()
+	end
+	return get()
 end
 
 UI:Mark("app", function() return private.appStatus end)

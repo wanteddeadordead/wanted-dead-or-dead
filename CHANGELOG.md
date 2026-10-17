@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The last round of a siege ends as the website ends it: a quarter hour after the last progress at any point of the front, not before the window closes and an hour after it at the latest. The HUD says how long overtime has left ("ends in 4:10 unless a point moves"); it used to say overtime for at least a quarter hour after the site had called the siege over.
 - A capture fronts button on the world map itself, top right under the game's own buttons: click to hide or show the fronts (the checkbox in the map's filter menu was easy to miss, and some clients have no filter menu).
 - Players without the Wanted app on another realm name get bridged too: a hello on the channel names a few of its sender's live links on other realm names, and every Wanted player who hears it greets them like the app's directory, so the realm link forms through their own realm's peers. Bounties, kills, sightings and poker tables cross without anyone needing the app.
 

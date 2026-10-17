@@ -709,8 +709,8 @@ function private.Tick(now)
 			private.progress[point.id] = progress
 			if p.net > 0 then
 				progress.n = progress.n + p.net
-				if not point.lane and private.siege then
-					private.siege.nexusAt = now
+				if private.siege and point.front == private.siege.front then
+					private.siege.progressAt = now
 				end
 				if progress.n >= p.cost then
 					private.Taken(point, p.side, now)
@@ -882,8 +882,8 @@ end
 ---The catch-up's siege, checked and in the addon's terms, or nil: { front, start, end, round = { n, start, truceUntil,
 ---begun }, wins = { Horde, Alliance }, nexusCost = { [Nexus id] = samples }, next = { front, start, end }, layer (the
 ---site's pick of the layer the siege is fought on, nil before it's picked) and layerSince (when it was picked) }, with
----what this client adds: called and opened (announced already), over, nexusAt (the last Nexus progress, for the last
----round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), the
+---what this client adds: called and opened (announced already), over, progressAt (the last progress at any point of
+---the front, for the last round's end), touched (fronts whose inhibitors changed since login: the site's Nexus costs no longer hold), the
 ---fall that started the current truce (fell, fellAt) and the rounds this client saw end, { n, side, point, at }
 ---(rounds: the catch-up carries only the wins). Nothing that happened before login is announced.
 function private.ReadSiege(raw, now)
@@ -894,7 +894,7 @@ function private.ReadSiege(raw, now)
 	if not front or type(raw.start) ~= "number" or type(raw["end"]) ~= "number" or raw["end"] <= raw.start then
 		return nil
 	end
-	local s = { front = front, start = raw.start, ["end"] = raw["end"], wins = { Horde = 0, Alliance = 0 }, nexusCost = {}, touched = {}, nexusAt = now, rounds = {} }
+	local s = { front = front, start = raw.start, ["end"] = raw["end"], wins = { Horde = 0, Alliance = 0 }, nexusCost = {}, touched = {}, progressAt = now, rounds = {} }
 	local wins = type(raw.wins) == "table" and raw.wins or {}
 	s.wins.Horde = type(wins.h) == "number" and wins.h or 0
 	s.wins.Alliance = type(wins.a) == "number" and wins.a or 0
@@ -1081,13 +1081,25 @@ function Captures:SiegeTick(now)
 		r.begun = true
 		private.SiegeNews("round", r.n)
 	end
-	if r and r.begun and now >= s["end"] then
-		local quietSince = max(s.nexusAt, s["end"], r.truceUntil)
-		if now >= s["end"] + OVERTIME_SECONDS or now - quietSince >= IDLE_SECONDS then
-			s.over = true
-			private.SiegeNews("over")
-		end
+	if r and r.begun and now >= s["end"] and now >= Captures:LastRoundEnd() then
+		s.over = true
+		private.SiegeNews("over")
 	end
+end
+
+---When the round being played ends once the window has closed, as the site decides it: IDLE_SECONDS after the last
+---progress at any point of the front (or the round's start), but not before the window's end, and OVERTIME_SECONDS
+---after it at the latest. With no progress in the last quarter hour of the window, that's the window's end itself
+---(2026-10-16: the site ended round 2 at 22:00 while the HUD said overtime past 22:15).
+---@return number? server time, nil without a siege round
+function Captures:LastRoundEnd()
+	local s = private.siege
+	local r = s and s.round
+	if not r then
+		return nil
+	end
+	local quiet = max(s.progressAt or 0, r.start or s.start, r.truceUntil or 0)
+	return min(max(s["end"], quiet + IDLE_SECONDS), s["end"] + OVERTIME_SECONDS)
 end
 
 ---A Nexus fell at a server time: the attacking side wins the round, the front goes back to level and a truce starts;

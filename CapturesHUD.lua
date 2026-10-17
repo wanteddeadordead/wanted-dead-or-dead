@@ -394,10 +394,15 @@ function private.SiegeLine()
 	elseif phase == "over" then
 		return format("Siege over · %s", score)
 	end
-	-- A round runs until a Nexus falls or the window closes: the window's clock, then overtime (a round still moving
-	-- past the window plays out, up to an hour)
-	local left = s["end"] - GetServerTime()
-	return format("Round %d · %s · %s", s.round and s.round.n or 1, score, left > 0 and private.Clock(left).." left" or "overtime")
+	-- A round runs until a Nexus falls or the window closes: the window's clock, then overtime while a point still
+	-- moves, ending a quarter hour after the last progress (Captures:LastRoundEnd, as the site has it)
+	local now = GetServerTime()
+	local left = s["end"] - now
+	if left > 0 then
+		return format("Round %d · %s · %s left", s.round and s.round.n or 1, score, private.Clock(left))
+	end
+	local ends = Captures:LastRoundEnd() or now
+	return format("Round %d · %s · overtime, ends in %s unless a point moves", s.round and s.round.n or 1, score, private.Clock(max(0, ends - now)))
 end
 
 ---How many of a front's towers and inhibitors each side holds: horde, alliance.

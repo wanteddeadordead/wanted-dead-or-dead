@@ -522,7 +522,21 @@ function private.Count(pointId, now)
 	end
 	entry.c = min(entry.c + 1, MAX_SAMPLES)
 	entry.l = Wanted.Shard:Current() or entry.l
+	private.WriteLive(entry)
 	return entry
+end
+
+---The sample, at once, on the game's log file (Logs\General.log, written within seconds): the Wanted app reads it
+---there and passes it to the site within a minute, where the saved data reaches the app only at a /reload or logout.
+---One line: "WANTEDP1 <account mark> <point> <slot> <count> <side> <layer or -> <GUID> <name>" (the name last: it has
+---spaces).
+function private.WriteLive(entry)
+	local mark = Wanted.db.accountMark
+	if not (C_Log and C_Log.LogMessage) or type(mark) ~= "string" or not strmatch(mark, "^%w+$") then
+		return
+	end
+	local layer = type(entry.l) == "string" and strmatch(entry.l, "^[%w%-]+$") and entry.l or "-"
+	C_Log.LogMessage(format("WANTEDP1 %s %s %d %d %s %s %s %s", mark, entry.p, entry.s, entry.c, entry.f, layer, entry.g, entry.n))
 end
 
 ---Drops entries older than KEEP_SECONDS or malformed, then the oldest past MAX_ENTRIES.

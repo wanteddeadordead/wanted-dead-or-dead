@@ -14079,6 +14079,8 @@ end)()
 		"the Horde attacks the Alliance's tower first")
 	check(C:CanAttack("Alliance", P("hb-mid-2")) and not C:CanAttack("Horde", P("hb-alliance")), "and the Alliance the Horde's; no Nexus yet")
 	db.presence = {}
+	local logged = {}
+	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
 	local printedBefore = #ns:CapturePrints(function() end)
 	local function Sample() clock = clock + 30 return ns:CapturePrints(function() C:Sample() end) end
 	local lines = Sample()
@@ -14087,6 +14089,11 @@ end)()
 	local key = "hb-mid-2:"..slot..":Player-1-ME"
 	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].g == "Player-1-ME" and db.presence[key].n == ns.Store:GetOrigin() and db.presence[key].f == "Horde",
 		"a sample is counted for this character, point and slot")
+	-- and written to the game's log at once, for the app to read live
+	local live = logged[#logged]
+	check(live == ("WANTEDP1 %s hb-mid-2 %d 1 Horde %s Player-1-ME %s"):format(ns.db.accountMark, slot, db.presence[key].l or "-", ns.Store:GetOrigin()),
+		"the sample goes to the game's log as one line: "..tostring(live))
+	C_Log = nil
 	check(#told == 1 and told[1].p == "hb-mid-2" and told[1].s == slot and told[1].c == 1, "our side is told")
 	Sample()
 	check(#told == 1, "at most once a minute")

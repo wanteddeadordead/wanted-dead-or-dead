@@ -167,6 +167,8 @@ function private.Wait(stop)
 			if Check() and private.waitTicker then
 				private.waitTicker:Cancel()
 				private.waitTicker = nil
+				-- What was waited for appeared (the table window): border afresh, so nothing gone stays marked
+				private.Mark(stop.mark)
 			end
 		end)
 	end
@@ -199,11 +201,14 @@ function private.Mark(names)
 			local glow = private.glows[i]
 			if not glow then
 				glow = CreateFrame("Frame", nil, UIParent)
-				glow:SetFrameStrata("DIALOG")
-				glow:SetFrameLevel(50)
 				Theme:Border(glow, C.amber)
 				private.glows[i] = glow
 			end
+			-- A child of what it borders (a text's frame for a text), so it hides with it and sits on its layer: a
+			-- free border stayed where the host form had been, over the table window (2026-10-17)
+			local holder = target.GetStringWidth and target:GetParent() or target
+			glow:SetParent(holder)
+			glow:SetFrameLevel(holder:GetFrameLevel() + 20)
 			glow:ClearAllPoints()
 			glow:SetPoint("TOPLEFT", target, "TOPLEFT", -GLOW_PAD, GLOW_PAD)
 			glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", GLOW_PAD, -GLOW_PAD)

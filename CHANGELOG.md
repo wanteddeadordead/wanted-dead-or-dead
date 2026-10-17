@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The tour's amber borders belong to what they outline: one hides with its part of the window, and none draws over another window (they stayed where the poker host form had been after hosting).
 - The poker tour's hosting page borders the host form's steps and Host table, whatever step the form is on.
 - The tour's Settings page opens the Sharing and display tab, where the Battle.net group's invite is, before bordering it; the tour never borders something that isn't on screen.
 - Invite a player to your poker table by name (the box on your table card, or `/wanted poker invite <name>`): your table's ad goes to them by whisper at every repeat, wherever they are, and their addon lists it and tells them in chat. A friend on another realm name, or without the Wanted app, never saw your table in Open tables before.

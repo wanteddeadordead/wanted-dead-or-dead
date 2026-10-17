@@ -161,11 +161,14 @@ function private.Build()
 			icon:SetSize(LANE_ICON, LANE_ICON)
 			icon:SetPoint("LEFT", last, "RIGHT", i == 1 and 3 or 0, 0)
 			r.icons[i] = icon
-			-- An X over a point its home side lost, in its taker's colour: the lane reads at a glance (the pieces
-			-- alone don't at this size, 2026-10-16)
-			local mark = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			-- A white X with a dark edge over a point its home side lost: the lane reads at a glance (the pieces alone
+			-- don't at this size, and a red X over a red piece vanished, 2026-10-16)
+			local mark = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 			mark:SetPoint("CENTER", icon, "CENTER", 0, 1)
 			mark:SetText("X")
+			mark:SetTextColor(1, 1, 1)
+			mark:SetShadowColor(0, 0, 0, 1)
+			mark:SetShadowOffset(1, -1)
 			mark:Hide()
 			r.marks[i] = mark
 			last = icon
@@ -274,14 +277,7 @@ function CapturesHUD:Update()
 			for i, p in ipairs(lane.points) do
 				local point = Captures:Get(p.id)
 				local lost = Wanted.CapturesMap:SetIcon(r.icons[i], point)
-				local mark = r.marks[i]
-				if lost then
-					local c = Wanted.CapturesMap.COLORS[Captures:Holder(p.id)] or { 1, 1, 1 }
-					mark:SetTextColor(c[1], c[2], c[3])
-					mark:Show()
-				else
-					mark:Hide()
-				end
+				r.marks[i]:SetShown(lost)
 			end
 		end
 	end

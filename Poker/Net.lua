@@ -16,7 +16,11 @@ local private = {
 	listeners = {},
 	refusedAt = nil, -- GetTime() when the game last refused a table message
 	probeAt = nil, -- GetTime() a probe whisper to ourselves went out
+	invited = {}, -- name -> true: players the open table's ad also goes to by whisper (Net:Invite), wherever they are
+	invitedSeen = {}, -- table id -> true: an invitation already told here
 }
+-- Players invited to one table at most (each gets the ad by whisper at every repeat)
+local MAX_INVITED = 10
 
 local function Now()
 	return GetTime()
@@ -144,6 +148,58 @@ end
 
 local function Advertise(ad)
 	Wanted.Sync:BroadcastPlugin(Protocol.AD_TAG, ad)
+	-- Invited players hear it by whisper too: one on another realm name, with no realm link (no Wanted app, so no
+	-- directory names him), never hears the channel (2026-10-17: a friend on PvP 1 never saw a PvP 2 table)
+	local whispered = nil
+	for name in pairs(private.invited) do
+		if not whispered then
+			whispered = {}
+			for k, v in pairs(ad) do whispered[k] = v end
+			whispered.inv = 1
+		end
+		Wanted.Sync:SendPlugin(Protocol.AD_TAG, whispered, name)
+	end
+end
+
+---Invites a player to the table this character hosts, by name, wherever they are: the table's ad goes to them by
+---whisper now and at every repeat while it's open, and a realm link is offered so the rest of the sync follows.
+---Their addon lists the table and says in chat who invited them.
+---@param name string the character's name, as a whisper takes it
+---@return boolean ok
+---@return string? why not
+function Net:Invite(name)
+	name = strtrim(tostring(name or ""))
+	if name ~= "" then
+		name = strupper(strsub(name, 1, 1))..strsub(name, 2)
+	end
+	local host = private.host
+	if not Protocol:IsName(name) then
+		return false, "type the character's name"
+	elseif name == Net:Me() then
+		return false, "that's you"
+	elseif not host or not host.open or host.closing then
+		return false, "host a table first"
+	elseif not host.ad then
+		return false, "a practice table has no other players"
+	end
+	local n = 0
+	for _ in pairs(private.invited) do n = n + 1 end
+	if not private.invited[name] and n >= MAX_INVITED then
+		return false, ("%d players are invited already"):format(MAX_INVITED)
+	end
+	private.invited[name] = true
+	Wanted.Sync:Greet(name)
+	host:Advertise()
+	return true
+end
+
+---The players invited to the open table.
+---@return string[]
+function Net:Invited()
+	local list = {}
+	for name in pairs(private.invited) do list[#list + 1] = name end
+	table.sort(list)
+	return list
 end
 
 ---Repeats the open table's ad for a player who just arrived, a moment after their hello and at most every
@@ -230,6 +286,11 @@ function private.OnAd(ad, sender)
 	else
 		ad.heard = Now()
 		private.tables[ad.id] = ad
+		-- An invitation by name (Net:Invite): said once a table
+		if ad.inv and not private.invitedSeen[ad.id] and host ~= Net:Me() then
+			private.invitedSeen[ad.id] = true
+			Wanted:Print("Poker: %s invites you to %s. Open the Poker page to sit: /wanted poker", host, ad.n and ("\"%s\""):format(ad.n) or "their table")
+		end
 		-- Our remembered table, advertised by whoever hosts it now: sit back down
 		local seat = Poker.db.seat
 		if type(seat) == "table" and seat.id == ad.id and host ~= Net:Me() and (not private.player or private.player.left or (not private.player.state and private.player.host ~= host)) then
@@ -347,6 +408,7 @@ function Net:HostTable(cfg, buyin, password)
 		return false, reason
 	end
 	private.host = host
+	wipe(private.invited)
 	private.player = NewPlayer()
 	private.player:Join(host.name, host.id, buyin, not practice and password or nil)
 	if practice then

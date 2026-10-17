@@ -458,6 +458,24 @@ function private.BuildSeatCard(parent, width)
 	private.handoffButton = W:Button(card, "Hand off", "secondary", 90, 26, private.Handoff)
 	private.handoffButton:SetPoint("RIGHT", private.leaveButton, "LEFT", -6, 0)
 	private.handoffButton:Hide()
+	-- Invite by name: a player on another realm name, or without the app, may never hear the channel's ad
+	private.inviteBox = W:Input(card, 160, "Invite a player")
+	private.inviteBox:SetPoint("BOTTOMLEFT", 14, 12)
+	local function Invite()
+		local name = private.inviteBox:GetText()
+		local ok, why = Net:Invite(name)
+		if ok then
+			private.inviteBox:SetText("")
+			private.inviteBox:ClearFocus()
+			UI:Toast(("%s is invited: your table's ad goes to them by whisper."):format(strupper(strsub(strtrim(name), 1, 1))..strsub(strtrim(name), 2)), C.green)
+		else
+			UI:Toast("Can't invite: "..why..".", C.red)
+		end
+	end
+	private.inviteBox:SetScript("OnEnterPressed", Invite)
+	private.inviteButton = W:Button(card, "Invite", "secondary", 70, 26, Invite)
+	private.inviteButton:SetPoint("LEFT", private.inviteBox, "RIGHT", 6, 0)
+	W:AttachTooltip(private.inviteButton, "Invite a player", "Sends your table to a character by name, wherever they are: a friend on another realm name, or one without the Wanted app, may never see it in Open tables otherwise. Also /wanted poker invite <name>.")
 	W:AttachTooltip(private.handoffButton, "Hand off the table", "The next seat hosts from here and you keep your chair, so you can leave without ending the game. Chips tables only: a gold table stays with the host who holds the money.")
 	return card
 end
@@ -692,6 +710,9 @@ function private.Refresh()
 			private.startButton:Hide()
 		end
 		private.leaveButton:SetText(hosting and "Close table" or "Leave")
+		local canInvite = hosting and (st.cfg.bots or 0) == 0
+		private.inviteBox:SetShown(canInvite)
+		private.inviteButton:SetShown(canInvite)
 		local canHand = hosting and st.cfg.bots == 0 and st.cfg.stakes ~= "gold" and n >= 2 and st.phase ~= "closed" and st.phase ~= "finished"
 		private.handoffButton:SetShown(canHand)
 		if hosting and st.handingTo then
@@ -789,8 +810,16 @@ function Page:OnEnable()
 		end
 	end)
 	Wanted:RegisterCommand("poker", "Opens the Poker page: host a table or sit at one. 'poker probe' checks tables work where you stand.", function(args)
-		if strtrim(args or "") == "probe" then
+		local word, rest = strmatch(strtrim(args or ""), "^(%S*)%s*(.-)$")
+		if word == "probe" then
 			Net:Probe()
+		elseif word == "invite" then
+			local ok, why = Net:Invite(rest)
+			if ok then
+				Wanted:Print("Poker: %s is invited; your table's ad goes to them by whisper, wherever they are.", strupper(strsub(rest, 1, 1))..strsub(rest, 2))
+			else
+				Wanted:Print("Poker: can't invite: %s. /wanted poker invite <name>", why)
+			end
 		else
 			UI:Show("poker")
 		end

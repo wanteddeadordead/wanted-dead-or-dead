@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-10-17
+
 - The poker tour says how to bring in a friend who can't see your table: Invite a player, on a table for people.
 - The tour's amber borders belong to what they outline: one hides with its part of the window, and none draws over another window (they stayed where the poker host form had been after hosting).
 - The poker tour's hosting page borders the host form's steps and Host table, whatever step the form is on.

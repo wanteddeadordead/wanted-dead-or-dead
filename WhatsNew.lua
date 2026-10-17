@@ -14,6 +14,19 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.27.0",
+		note = "New to Wanted, or want a refresher? First steps walks you through it page by page: each stop opens the real "
+			.."page and borders the part it talks about. Poker has its own tour, and you can now invite a friend to your table "
+			.."by name, even one on another realm name or without the Wanted app.",
+		lines = {
+			"First steps: /wanted tour, any time. A new install gets it at the first login.",
+			"The poker tour: the first time you open Poker, or /wanted poker tour.",
+			"Invite a player by name from your table card, or /wanted poker invite <name>: your table reaches them by whisper.",
+			"Safety, at the foot of the menu: Wanted takes online bullying seriously. Misuse, griefing or bullying gets you banned.",
+			"The setup card on the Dashboard shows what Wanted still needs from you, with the fix under each red mark.",
+		},
+	},
+	{
 		version = "1.26.0",
 		note = "The Battle.net group is now a data link between the two sides, not a chat. Horde and Alliance can't talk "
 			.."in game, so through the group's members the addons on both sides trade one thing as hidden game data: how many "

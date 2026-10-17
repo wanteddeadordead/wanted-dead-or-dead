@@ -492,15 +492,19 @@ function Captures:Sample()
 	private.Changed()
 end
 
----Between samples: notes the point the player is in now, so the bar and the map follow their steps at once; the
----sample's count (and the blocking reason) still comes every SAMPLE_SECONDS.
+---Between samples: notes the point the player is in now, and why their presence wouldn't count there, so the bar
+---and the map follow their steps at once (2026-10-17: "stealthed" stayed up to 30 s after unstealthing); the
+---sample's count still comes every SAMPLE_SECONDS.
 function Captures:Watch()
 	local _, x, y, mapId = Wanted.Recorder:GetPosition()
 	local point = Captures:PointAt(mapId, x, y)
-	if point ~= private.current then
-		private.current = point
-		if not point then
-			private.mine, private.blocked = nil, nil
+	local blocked = point and Captures:Blocked() or nil
+	if point ~= private.current or blocked ~= private.blocked then
+		private.current, private.blocked = point, blocked
+		if not point or blocked then
+			private.mine = nil
+		elseif not private.mine or private.mine.p ~= point.id then
+			private.mine = { p = point.id, at = GetTime() }
 		end
 		private.Changed()
 	end

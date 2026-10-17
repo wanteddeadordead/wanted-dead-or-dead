@@ -54,7 +54,7 @@ local CAPTURE_ART = { frame = "worldstate-capturebar-frame-factions", left = "wo
 	spark = "worldstate-capturebar-spark-factions", line = "worldstate-capturebar-frame-separater" }
 -- The world-state widgets' faction tower icons (the IconAndText widget's texture kit icons)
 local TOWER_ATLAS = { Alliance = "alliance_tower-icon", Horde = "horde_tower-icon" }
-local LANE_ICON = 14
+local LANE_ICON = 18
 
 
 
@@ -148,7 +148,7 @@ function private.Build()
 	bar.rows = {}
 	local previous
 	for lane = 1, 3 do
-		local r = { icons = {} }
+		local r = { icons = {}, marks = {} }
 		r.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		if previous then
 			r.label:SetPoint("LEFT", previous, "RIGHT", 8, 0)
@@ -161,6 +161,13 @@ function private.Build()
 			icon:SetSize(LANE_ICON, LANE_ICON)
 			icon:SetPoint("LEFT", last, "RIGHT", i == 1 and 3 or 0, 0)
 			r.icons[i] = icon
+			-- An X over a point its home side lost, in its taker's colour: the lane reads at a glance (the pieces
+			-- alone don't at this size, 2026-10-16)
+			local mark = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			mark:SetPoint("CENTER", icon, "CENTER", 0, 1)
+			mark:SetText("X")
+			mark:Hide()
+			r.marks[i] = mark
 			last = icon
 		end
 		previous = last
@@ -265,7 +272,16 @@ function CapturesHUD:Update()
 			local r = bar.rows[row]
 			r.label:SetText(lane.name)
 			for i, p in ipairs(lane.points) do
-				Wanted.CapturesMap:SetIcon(r.icons[i], Captures:Get(p.id))
+				local point = Captures:Get(p.id)
+				local lost = Wanted.CapturesMap:SetIcon(r.icons[i], point)
+				local mark = r.marks[i]
+				if lost then
+					local c = Wanted.CapturesMap.COLORS[Captures:Holder(p.id)] or { 1, 1, 1 }
+					mark:SetTextColor(c[1], c[2], c[3])
+					mark:Show()
+				else
+					mark:Hide()
+				end
 			end
 		end
 	end

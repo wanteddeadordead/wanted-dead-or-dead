@@ -419,8 +419,10 @@ function private.BuildGroup(body, width)
 	card.label = W:SectionLabel(card, "Both sides, one layer")
 	card.label:SetPoint("TOPLEFT", PAD, -14)
 	card.text = Theme:Text(card, "body", Theme:Colorize("Forever runs each zone as several layers, and Horde and Alliance can't talk in game. "
-		.."The Wanted Battle.net group is the one place both sides share: say there which layer the fight is on, and "
-		.."the other side can come to it, so hunters and prey land in the same copy of the zone. Members can see each other's BattleTag.", C.muted))
+		.."The Wanted Battle.net group is a data link, not a chat: through its members, your addon passes where your side is "
+		.."fighting, by layer, to the other side's addons as hidden game data, and takes theirs, so both factions reckon the "
+		.."same fight layer and hunters and prey land in the same copy of the zone. Nothing to type there. Members can see "
+		.."each other's BattleTag.", C.muted))
 	card.text:SetPoint("TOPLEFT", PAD, -34)
 	card.text:SetWidth(width - 2 * PAD)
 	card.text:SetWordWrap(true)

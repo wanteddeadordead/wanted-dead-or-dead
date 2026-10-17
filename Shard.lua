@@ -811,7 +811,7 @@ function Shard:Hop()
 	end
 	local host = private.NextHost(target, {})
 	if not host then
-		return format("No one on %s can invite you yet. The Wanted Battle.net group (Siege page) is where both sides find each other.", Shard:LayerText(target))
+		return format("No one on %s can invite you yet.", Shard:LayerText(target))
 	end
 	if not Wanted.Sync:SendHop(host, { a = 1 }) then
 		return format("%s couldn't be asked (not in the sync channel, or whispers are blocked here).", host)

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-10-16
+
 - Your setup, step by step: a line of five marks at the top of the Dashboard (addon up to date, the Wanted app running, in the Wanted Battle.net group, enemy nameplates on, the siege features), green or red, with what to do under each red one; the Website & app page has every step with its address to copy or a button to turn it on, and `/wanted setup` prints them.
 - The Wanted Battle.net group's new invite (blizzard.com/invite/A33mYmik4b) in Settings, and why to join on the Siege page: Horde and Alliance can't talk in game, and the group is where both sides see which layer the fight is on. A hop with nobody to invite you says so too.
 

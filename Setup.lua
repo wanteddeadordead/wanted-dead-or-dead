@@ -1,8 +1,9 @@
--- Wanted: the setup checklist. The five steps a player needs for Wanted to work in full, each with a green check or a
+-- Wanted: the setup checklist. The four steps a player needs for Wanted to work in full, each with a green check or a
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
--- group joined, enemy nameplates on (Wanted sees enemies through them), and the siege features (off until their
--- first public night). The Dashboard shows one line of five marks with a fix line under each red one (click for the
--- Website & app page); the Website & app page shows every step with its address to copy; /wanted setup prints them.
+-- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle like the siege features
+-- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks with a fix line under each red
+-- one (click for the Website & app page); the Website & app page shows every step with its address to copy;
+-- /wanted setup prints them.
 
 local _, Wanted = ...
 local Theme = Wanted.Theme
@@ -59,14 +60,10 @@ function Setup:Steps()
 		detail = on and "Wanted sees enemies through them, out to 45 yards." or "Wanted sees enemies through their nameplates; with them off, only what you target or mouse over.",
 		fix = (not on) and "Press V, or Interface > Names > Enemy Players." or nil,
 		cvar = (not on) and "nameplateShowEnemies" or nil }
-	local siege = Wanted:SiegeOn()
-	steps[5] = { key = "siege", title = "Siege features", short = "Siege features", state = siege and "ok" or "off",
-		detail = siege and "On: capture fronts, the HUD, map pieces, rally leaders and layer hops."
-			or "Off until the first public siege night. /wanted siege on and a /reload to try them." }
 	return steps
 end
 
----Whether nothing is red or amber (an "off" step is fine).
+---Whether nothing is red or amber.
 ---@param steps table[]?
 ---@return boolean
 function Setup:AllSet(steps)
@@ -92,7 +89,7 @@ function Setup:BuildCard(parent, width, brief, onClick)
 	card.label = W:SectionLabel(card, "Your setup")
 	card.label:SetPoint("TOPLEFT", PAD, -14)
 	card.rows = {}
-	for i = 1, 5 do
+	for i = 1, 4 do
 		local row = {}
 		row.icon = card:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(ICON, ICON)

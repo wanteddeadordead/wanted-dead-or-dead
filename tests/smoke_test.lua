@@ -15885,8 +15885,8 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	local steps = Setup:Steps()
 	local by = {}
 	for _, step in ipairs(steps) do by[step.key] = step end
-	check(#steps == 5 and by.addon.state == "ok" and by.app.state == "bad" and by.group.state == "bad" and by.nameplates.state == "bad" and by.siege.state == "off",
-		"nothing set up: the app, the group and the plates red, the siege off, the addon ok")
+	check(#steps == 4 and by.addon.state == "ok" and by.app.state == "bad" and by.group.state == "bad" and by.nameplates.state == "bad" and by.siege == nil,
+		"nothing set up: the app, the group and the plates red, the addon ok; the siege toggle is no setup step")
 	check(by.app.url == "https://wanteddeadordead.com/app" and by.group.url == ns.Bridge.INVITE_URL and by.nameplates.cvar == "nameplateShowEnemies" and by.app.fix and by.group.fix and by.nameplates.fix,
 		"each red step says how to fix it and where")
 	check(not Setup:AllSet(steps), "not all set")
@@ -15915,9 +15915,8 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	C_Club = { GetSubscribedClubs = function() return { { clubId = "23053871", name = "Wanted", clubType = 0 } } end, GetClubMembers = function() return {} end }
 	ns.Bridge.clubId = "23053871"
 	check(Setup:Steps()[3].state == "ok", "in the group: green")
-	check(Setup:AllSet(), "all set with the siege still off")
+	check(Setup:AllSet(), "all set")
 	ns.db.settings.siege = true
-	check(Setup:Steps()[5].state == "ok", "the siege features on: green")
 	ns.newerVersion = "9.9.9"
 	local addon = Setup:Steps()[1]
 	check(addon.state == "bad" and addon.url == "https://wanteddeadordead.com/addon" and addon.detail:find("9.9.9", 1, true), "a newer version out: the addon step red, with the site's addon page")
@@ -15938,7 +15937,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	check(cvars.nameplateShowEnemies == "1" and Setup:Steps()[4].state == "ok", "Turn on sets the enemy nameplates on")
 	-- /wanted setup prints the steps
 	ns:RunCommand("setup", "")
-	check(#printed >= 6 and printed[#printed - 5]:find("Your setup", 1, true) and printed[#printed - 2]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed]:find("[ok] Siege features", 1, true), "/wanted setup prints each step with its mark")
+	check(#printed >= 5 and printed[#printed - 4]:find("Your setup", 1, true) and printed[#printed - 1]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed]:find("[ok] Enemy nameplates on", 1, true), "/wanted setup prints each step with its mark")
 	-- Put back
 	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId, ns.db.settings.siege = saved.info, saved.newer, saved.club, saved.siege
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print

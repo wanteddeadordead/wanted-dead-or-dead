@@ -16006,6 +16006,34 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		f.next:Click()
 		ns.PromptForApp = realPrompt
 		check(not Tour:IsShown() and ns.db.tour.poker.done and not prompted, "Finish ends the poker tour, no app prompt")
+		-- Invite by name: the ad goes to the invited player by whisper (marked inv), and a realm link is offered; the
+		-- invited side lists the table and is told once in chat
+		addonSent = {}
+		check(P.PokerNet:Invite("far friend") and P.PokerNet:Invited()[1] == "Far friend", "invited by name, capitalised")
+		local whisperedAd, greeted
+		for _, m in ipairs(addonSent) do
+			if m.chatType == "WHISPER" and m.target == "Far friend" then
+				local tag, payload = m.text:match("^(%u):%w+:%d+/%d+:(.*)$")
+				local t = payload and ns.Sync:Decode(payload)
+				if tag == "T" and type(t) == "table" and t.inv == 1 and t.h == ns.Store:GetOrigin() then whisperedAd = t end
+				if tag == "H" then greeted = true end
+			end
+		end
+		check(whisperedAd ~= nil and greeted, "the table's ad by whisper, and a realm link greeting")
+		check(not P.PokerNet:Invite(ns.Store:GetOrigin()) and not P.PokerNet:Invite(""), "not yourself, not nobody")
+		local said = {}
+		local realPrint = ns.Print
+		ns.Print = function(_, fmt, ...) said[#said + 1] = select("#", ...) > 0 and string.format(fmt, ...) or tostring(fmt) end
+		local invAd = { id = "Remote Host#inv1", h = "Remote Host", n = "Far Den", s = 1, m = 6, sb = 5, bb = 10, lo = 200, hi = 1000, inv = 1, v = "0.1.0-dev" }
+		for i = 1, 2 do
+			Fire("CHAT_MSG_ADDON", "WNTD", "T:inv"..i..":1/1:"..ns.Sync:Encode(invAd), "WHISPER", "Remote Host")
+		end
+		ns.Print = realPrint
+		local told = 0
+		for _, line in ipairs(said) do if line:find("Remote Host invites you to \"Far Den\"", 1, true) then told = told + 1 end end
+		local listed = false
+		for _, t in ipairs(P.PokerNet:Tables()) do listed = listed or t.id == "Remote Host#inv1" end
+		check(listed and told == 1, "an invitation lists the table and is told once, got "..told)
 		P.PokerNet:Leave()
 		P.PokerTable:Hide()
 	end

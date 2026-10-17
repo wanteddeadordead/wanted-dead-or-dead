@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Invite a player to your poker table by name (the box on your table card, or `/wanted poker invite <name>`): your table's ad goes to them by whisper at every repeat, wherever they are, and their addon lists it and tells them in chat. A friend on another realm name, or without the Wanted app, never saw your table in Open tables before.
 - The poker tour, the first time the Poker page opens and as `/wanted tour poker`: the Wanted table, hosting one (it waits for you to host a practice table), the table window with its action bar and log bordered, joining a table, gold and settlement.
 - First steps, a tour of Wanted for a fresh install in place of the welcome note, and `/wanted tour` any time: eleven pages beside the window, each opening the real page behind it with the part it talks about bordered in amber (the setup card, the lights, Post bounty, your page's address, the group invite); Back, Next, Skip; it remembers the page it was closed on, closes itself in a fight and comes back after. New file: restart the client after updating.
 - Safety, at the foot of the menu and as `/wanted safety`: Wanted takes online bullying seriously and no one should feel unsafe because of the addon; misuse, griefing or bullying gets you banned; what to do, and the website's Safety page to copy (wanteddeadordead.com/safety: what the addon shares and never does, and where to find help).

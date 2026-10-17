@@ -816,6 +816,8 @@ check(ownKill.victimClass == "ROGUE" and ownKill.victimRace == "Human" and ownKi
 check(ownKill.killerClass == "WARRIOR" and ownKill.killerRace == "Orc" and ownKill.killerLevel == 10 and ownKill.killerFaction == "Horde",
 	"the kill names our own class, race, level and faction")
 check(ownKill.killerGroup == 1, "a kill made alone has a group of 1")
+check(ownKill.nearE >= 1 and ownKill.nearF == 1 and type(ownKill.nearEC) == "number" and type(ownKill.plates) == "string",
+	"a kill's census counts the enemies in view and us, got "..tostring(ownKill.nearE).."/"..tostring(ownKill.nearF))
 Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Stabby Mcstab dies, honorable kill Rank: Private")
 local kills = 0
 for record in ns.Store:Iterator("kill") do if record.data.victim == "Player-9-ENEMY" then kills = kills + 1 end end
@@ -827,6 +829,7 @@ for record in ns.Store:Iterator("kill") do if record.data.victimName == "Never S
 check(unseen and unseen.victimFaction == "Alliance" and unseen.victimClass == nil and unseen.killerClass == "WARRIOR",
 	"an honor kill of someone never seen still names their faction and ours, and guesses nothing else")
 check(unseen.killerGroup == 3, "a kill in a party of three has a group of 3")
+check(type(unseen.nearE) == "number" and unseen.nearF >= 1, "an honor kill carries a census too")
 groupSize = 0
 -- They kill us: the one enemy targeting us gets the loss
 ns.Enemies:SetIgnored("Player-9-ENEMY", "Stabby Mcstab", false)
@@ -870,6 +873,7 @@ local seenDeath
 for record in ns.Store:Iterator("death") do seenDeath = record.data end
 check(seenDeath.victimClass == "ROGUE" and seenDeath.victimLevel == 19 and seenDeath.victimFaction == "Alliance" and seenDeath.killerClass == nil,
 	"a witnessed death names the victim's class, level and faction")
+check(type(seenDeath.nearE) == "number" and seenDeath.nearF >= 1, "a witnessed death carries a census of who was around")
 -- A party member's kill is a witnessed death naming the killer
 Fire("PARTY_KILL", "Player-2-FRIEND", "Player-9-ENEMY")
 local witnessed = false
@@ -879,6 +883,7 @@ check(witnessed, "party kill recorded as a witnessed death")
 check(partyDeath.victimClass == "ROGUE" and partyDeath.killerFaction == "Horde" and partyDeath.killerClass == nil,
 	"a party member's kill names the victim and our faction for the killer, no guessed class")
 check(partyDeath.killerGroup == nil, "only our own kills carry a group size")
+check(type(partyDeath.nearF) == "number", "a party member's kill carries a census")
 -- A sighting shared by another user
 ns.Enemies:OnSharedSighting({ g = "Player-9-OTHER", n = "Sneaky Pete", c = "MAGE", l = 20, z = "The Barrens", m = 10, x = 50, y = 40 }, "Some Friend")
 check(ns.Store:GetPlayer("Player-9-OTHER").name == "Sneaky Pete", "shared sighting stored")

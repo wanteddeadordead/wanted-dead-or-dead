@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Kill and death records note who was around when they happened: how many enemy players were in view, how many of them were close or in the fight, and how many of your own side. The website uses it to learn how much numbers decide fights, without counting from the kills themselves.
+
 ## [1.27.1] - 2026-10-17
 
 - On a capture point, "stealthed", "mounted" and the other reasons your presence doesn't count clear the moment they stop (the game's stealth, mount, form, away and death events), and within 3 seconds at worst, instead of up to 30.

@@ -36,6 +36,8 @@ local PRUNE_SECONDS = 60
 local PVP_CONTEXT_SECONDS = 20
 -- Our own death record names the killer the death recap gave within this long (it's read 0.5 to 2 seconds after)
 local OWN_KILLER_SECONDS = 15
+-- A player seen this recently counts as there for a kill's census of who was around
+local CENSUS_SECONDS = 10
 -- Each side's races (the client's race file names), for players of ours we only know by GUID. Skyborne is on
 -- both sides under different names ("High Order Skyborne" is the Alliance's), learned as units are seen
 -- (private.skyborne), so it isn't listed here.
@@ -401,6 +403,52 @@ function private.AddOwnTraits(data)
 	return data
 end
 
+---Adds a census of who was around to a kill or death record, made when it happened: enemy players in view in the
+---last CENSUS_SECONDS (nearE), those of them close or in the fight (nearEC), and our side (nearF): us, group members
+---in range and others of ours seen. The site fits how numbers win fights from it, so the count never comes from the
+---kills themselves. plates says which nameplates were on ("e" enemy, "f" friendly), as the counts depend on them.
+---@param data table
+---@return table data
+function private.AddCensus(data)
+	local now = GetTime()
+	local enemies, close = 0, 0
+	if Wanted.Enemies and Wanted.Enemies.EachNearby then
+		Wanted.Enemies:EachNearby(function(entry)
+			if type(entry.lastSeen) == "number" and now - entry.lastSeen <= CENSUS_SECONDS then
+				enemies = enemies + 1
+				if (type(entry.closeAt) == "number" and now - entry.closeAt <= CENSUS_SECONDS)
+					or (type(entry.fightAt) == "number" and now - entry.fightAt <= CENSUS_SECONDS) then
+					close = close + 1
+				end
+			end
+		end)
+	end
+	local ours = { [private.playerGUID or "player"] = true }
+	local members = private.Readable(GetNumGroupMembers and GetNumGroupMembers()) or 0
+	local raid = IsInRaid and IsInRaid()
+	for i = 1, raid and members or members - 1 do
+		local unit = (raid and "raid" or "party")..i
+		local guid = private.Readable(UnitGUID(unit))
+		local inRange = UnitInRange and private.Readable((UnitInRange(unit)))
+		if guid and inRange then
+			ours[guid] = true
+		end
+	end
+	for guid, friend in pairs(private.friendly) do
+		if type(friend.t) == "number" and now - friend.t <= CENSUS_SECONDS then
+			ours[guid] = true
+		end
+	end
+	local count = 0
+	for _ in pairs(ours) do
+		count = count + 1
+	end
+	data.nearE, data.nearEC, data.nearF = enemies, close, count
+	local show = GetCVarBool and function(name) return private.Readable(GetCVarBool(name)) end or function() return nil end
+	data.plates = (show("nameplateShowEnemies") and "e" or "")..(show("nameplateShowFriends") and "f" or "")
+	return data
+end
+
 function private.InOpenWorld()
 	return not IsInInstance()
 end
@@ -662,7 +710,7 @@ function private.RecordDeath(guid, name)
 		data.killerFaction = data.killerFaction or (private.playerFaction == "Horde" and "Alliance" or "Horde")
 		Wanted:Log("Recorder: our death, killed by %s", tostring(data.killerName))
 	end
-	Store:NewRecord("death", data)
+	Store:NewRecord("death", private.AddCensus(data))
 	return deathId
 end
 
@@ -706,7 +754,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 		Wanted:Log("Recorder: party kill by you of %s in %s", name, zone)
 		private.recentOwnKill[targetGUID] = GetTime()
 		tinsert(private.ownKillTimes, GetTime())
-		Store:NewRecord("kill", private.AddOwnTraits(private.AddTraits({
+		Store:NewRecord("kill", private.AddCensus(private.AddOwnTraits(private.AddTraits({
 			killer = private.playerGUID,
 			killerName = Store:GetOrigin(),
 			killerGuild = Recorder:GetUnitGuild("player"),
@@ -718,7 +766,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 			mapId = mapId, -- names the zone the same in every language (the site reads it)
 			x = x,
 			y = y,
-		}, "victim", targetGUID)))
+		}, "victim", targetGUID))))
 		if Wanted.Enemies then
 			Wanted.Enemies:NoteWin(targetGUID)
 		end
@@ -743,7 +791,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 		}, "victim", targetGUID), "killer", attackerGUID)
 		-- A party member is on our side
 		data.killerFaction = data.killerFaction or private.playerFaction
-		Store:NewRecord("death", data)
+		Store:NewRecord("death", private.AddCensus(data))
 	end
 end
 
@@ -800,7 +848,7 @@ function private.HandleHonorGain(text)
 	if guid then
 		Store:UpdatePlayer(guid, { name = victimName })
 	end
-	Store:NewRecord("kill", private.AddOwnTraits(private.AddTraits({
+	Store:NewRecord("kill", private.AddCensus(private.AddOwnTraits(private.AddTraits({
 		killer = private.playerGUID,
 		killerName = Store:GetOrigin(),
 		killerGuild = Recorder:GetUnitGuild("player"),
@@ -813,7 +861,7 @@ function private.HandleHonorGain(text)
 		x = x,
 		y = y,
 		honor = true,
-	}, "victim", guid)))
+	}, "victim", guid))))
 end
 
 

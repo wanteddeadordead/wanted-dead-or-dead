@@ -309,11 +309,11 @@ function CapturesHUD:Update()
 		bar.hopButton:SetText(button or "Hop")
 		-- Centred on its own ("You're on the siege's layer"); left of the middle when its button sits beside it
 		bar.hop:ClearAllPoints()
-		bar.hop:SetPoint("TOP", button and -26 or 0, -80)
+		bar.hop:SetPoint("TOP", button and -26 or 0, -(ROW_TOP + 3 * ROW_STEP + 22))
 	end
 	bar.hop:SetShown(hop ~= nil)
 	bar.hopButton:SetShown(button ~= nil)
-	bar:SetHeight(hop and 100 or 80)
+	bar:SetHeight(hop and 132 or 112)
 	private.UpdateCapture(bar.capture)
 	bar:Show()
 end

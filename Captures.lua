@@ -217,6 +217,17 @@ function Captures:OnEnable()
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Captures sample", function() Captures:Sample() end))
 	C_Timer.NewTicker(WATCH_SECONDS, Wanted:Timed("Captures watch", function() Captures:Watch() end))
 	C_Timer.NewTicker(SIEGE_TICK_SECONDS, Wanted:Timed("Captures siege", function() Captures:SiegeTick() end))
+	-- Stealth, a mount, a form, away or death changing: looked at at once, and again a moment later (the game can
+	-- answer IsStealthed from the old state inside the event), so the bar shows it as soon as it's so
+	private.stateFrame = private.stateFrame or CreateFrame("Frame")
+	for _, event in ipairs({ "UPDATE_STEALTH", "PLAYER_MOUNT_DISPLAY_CHANGED", "UPDATE_SHAPESHIFT_FORM", "PLAYER_FLAGS_CHANGED",
+		"PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }) do
+		pcall(private.stateFrame.RegisterEvent, private.stateFrame, event)
+	end
+	private.stateFrame:SetScript("OnEvent", function()
+		Captures:Watch()
+		C_Timer.After(0.2, function() Captures:Watch() end)
+	end)
 end
 
 ---The capture settings: { map, minimap, bar, alerts, autoTrack, siegeCall }.

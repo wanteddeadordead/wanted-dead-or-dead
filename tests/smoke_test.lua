@@ -14109,6 +14109,8 @@ end)()
 	C:Watch()
 	check(C:BlockedReason() == "Mounted", "and comes back as fast")
 	mounted = false
+	Fire("PLAYER_MOUNT_DISPLAY_CHANGED")
+	check(C:BlockedReason() == nil, "the game's mount event clears it at once")
 	form = 3 -- Travel Form
 	Sample()
 	check(C:BlockedReason() == "In travel form", "a travel form doesn't count either")

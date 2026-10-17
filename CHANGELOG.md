@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-10-17
+
 - The group is described as what it is now, a data link and not a chat, on the Siege page, in Settings, in the setup checklist and in What's new; a hop with nobody to invite you no longer points at it (invites come from your own side).
 - The Battle.net group is a data link between the two sides, not a chat: every two minutes your addon passes where your side's Wanted players are, by zone and layer, to the other side's addons through the group's members as hidden game data, and takes theirs (a bridge of your side passes them on to your channel), so both factions reckon the same fight layer and Hop takes everyone to the same place. Bounty warnings crossed the same way already.
 

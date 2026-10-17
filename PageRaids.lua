@@ -342,8 +342,8 @@ function private.ConfirmAnnounce()
 		confirmLabel = "Post",
 		cancelLabel = "Cancel",
 		onConfirm = function(text, target)
-			local why = Raids:Announce(text, target)
-			UI:Toast(why or "Posted in "..(labels[target] or "chat")..".", why and C.red or C.green)
+			local why, ready = Raids:Announce(text, target)
+			UI:Toast(why or (ready and "In your chat box: press Enter to post it in "..(labels[target] or "chat").."." or "Posted in "..(labels[target] or "chat").."."), why and C.red or C.green)
 		end,
 	})
 end

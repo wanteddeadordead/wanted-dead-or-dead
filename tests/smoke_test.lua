@@ -7046,10 +7046,12 @@ end)()
 	check(raid and R:Mine() == raid and raid.where == "Durotar" and raid.title == "Southshore cffff0000raid" and raid.startAt == clock, "formed now, in our zone, escapes taken out")
 	check(#ads == 1 and ads[1].l == me and ads[1].m == 20 and ads[1].f == "Horde" and ads[1].ml == 25 and not ads[1].c, "its ad goes out")
 	check(select(2, R:Create({ title = "Another", size = 10 })) ~= nil, "one raid at a time")
-	-- Announce: a line in a public channel, at most once a minute
-	chatSent = {}
-	check(R:Announce() == nil and chatSent[1] and chatSent[1]:find("^CHANNEL: Forming a world PvP raid: Southshore") and chatSent[1]:find('Whisper me "inv"', 1, true),
-		"announced in chat: "..tostring(chatSent[1]))
+	-- Announce: a line for a public channel goes into the chat box in that channel for the player's Enter (the client
+	-- refuses an addon's post there), at most once a minute
+	chatSent, typed = {}, nil
+	local why, ready = R:Announce()
+	check(why == nil and ready == "ready" and #chatSent == 0 and typed and typed:find("^/%d+ Forming a world PvP raid: Southshore") and typed:find('Whisper me "inv"', 1, true),
+		"the announcement is put in the chat box for the channel: "..tostring(typed))
 	check(R:Announce() == "You announced it less than a minute ago.", "not again at once")
 	-- Joining goes through one invite queue: invited (other realm names too); four at most while we're alone; a party
 	-- that would overflow becomes a raid, and the rest go once it is one; never past full; whoever joins leaves the line
@@ -7640,13 +7642,13 @@ end)()
 		if fs._text == "Edit" and fs._parent._shown then fs._parent:Click() end
 	end
 	check(shows("Save changes") and shows("EDIT YOUR RAID"), "Edit opens the form on the raid")
-	chatSent = {}
+	chatSent, typed = {}, nil
 	clock = clock + 61
 	dialog.onConfirm("Barrens raid at the Crossroads |cffff0000now,\nwhisper inv")
-	check(chatSent[1] == "CHANNEL: Barrens raid at the Crossroads cffff0000now, whisper inv", "Post sends what's in the box, on one line: "..tostring(chatSent[1]))
+	check(#chatSent == 0 and typed and typed:find("^/%d+ Barrens raid at the Crossroads cffff0000now, whisper inv$"), "Post puts what's in the box, on one line, in the chat box for the channel: "..tostring(typed))
 	clock = clock + 61
 	dialog.onConfirm("To the guild", "guild")
-	check(chatSent[2] == "GUILD: To the guild", "or wherever was picked: "..tostring(chatSent[2]))
+	check(chatSent[1] == "GUILD: To the guild", "or wherever was picked, guild chat posted outright: "..tostring(chatSent[1]))
 	clock = clock + 61
 	check(R:Announce("Nowhere", 42) == "Pick where to post it.", "never a channel we're not in")
 	GetChannelList, IsInGuild = realList, realGuild

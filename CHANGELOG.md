@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-10-17
+
 - The "Your version is outdated" notice was said again every time a player on a newer patch of the required version was heard; now once, and at each login while the client is behind.
 
 ## [1.25.0] - 2026-10-16

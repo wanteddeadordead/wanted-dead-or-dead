@@ -292,7 +292,13 @@ function private.BuildSharing(panel, width)
 	local invite = W:CopyBox(card, width - 416, Wanted.Bridge.INVITE_URL)
 	invite:SetPoint("TOPLEFT", 400, -86)
 	private.invite = invite
-	UI:Mark("invite", function() return private.invite end)
+	-- The invite sits on Sharing and display: the tour opens that tab before bordering it (2026-10-17: it bordered an
+	-- empty spot of the Alerts tab)
+	UI:Mark("invite", function() return private.invite end, function()
+		if private.tabs and private.view ~= "sharing" then
+			private.tabs:Select("sharing")
+		end
+	end)
 	local note = Theme:Text(card, "tiny", "Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild).")
 	note:SetPoint("TOPLEFT", 16, -118)
 
@@ -574,6 +580,7 @@ UI:RegisterPage("settings", {
 		end, 121)
 		tabs:SetPoint("TOPLEFT")
 		tabs:Select("alerts", true)
+		private.tabs = tabs
 		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "ranks", "emotes" }) do
 			local panel = CreateFrame("Frame", nil, container)
 			panel:SetPoint("TOPLEFT", 0, -40)

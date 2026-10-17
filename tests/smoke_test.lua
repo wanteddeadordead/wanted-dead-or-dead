@@ -15957,6 +15957,9 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		check(ns.UI:IsShown("enemies") and ns.NearbyWindow:IsShown(), "Enemies opens the page and the Nearby window")
 		f.next:Click()
 		check(ns.UI:IsShown("board") and f.title._text == "The Board", "the Board page")
+		-- The settings stop opens the tab its invite box sits on
+		local invite = ns.UI:MarkFrame("invite")
+		check(invite and invite:IsVisible(), "the invite mark opens Sharing and display, so the box it borders is on screen")
 		f.back:Click()
 		check(ns.UI:IsShown("enemies") and f.counter._text:find("3 of", 1, true), "Back goes back")
 		f.close:Click()

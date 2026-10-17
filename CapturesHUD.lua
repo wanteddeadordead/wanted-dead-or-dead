@@ -125,36 +125,38 @@ function private.Side(parent, side)
 	s:SetSize(100, 24)
 	s.icon = s:CreateTexture(nil, "BACKGROUND")
 	s.icon:SetSize(42, 42)
-	s.icon:SetPoint("TOPLEFT")
+	s.icon:SetPoint("LEFT")
 	s.text = s:CreateFontString(nil, "BACKGROUND", "GameFontNormalSmall")
 	s.text:SetJustifyH("LEFT")
 	-- The widget's own offsets: its icon doesn't fill its tile
-	s.text:SetPoint("TOPLEFT", s.icon, "TOPRIGHT", -12, -6)
+	s.text:SetPoint("LEFT", s.icon, "RIGHT", -12, 0)
 	return s
 end
 
----Makes the HUD: the top widget (both sides, the lane row) and the capture bar.
+-- The widget's rows: the title, then the three lanes one under another (each its four points, Horde end to
+-- Alliance end), the two sides' Nexus and tower count beside them, centred on the middle lane, then the siege line
+local ROW_TOP, ROW_STEP, ROWS_X = 22, 22, 118
+
+---Makes the HUD: the top widget (both sides, the lane rows) and the capture bar.
 function private.Build()
 	local bar = CreateFrame("Frame", "WantedCaptureBar", UIParent)
-	bar:SetSize(260, 80)
+	bar:SetSize(330, 112)
 	bar:SetFrameStrata("LOW")
-	bar.alliance = private.Side(bar, "Alliance")
-	bar.alliance:SetPoint("TOPLEFT", 10, 0)
+	local middle = -(ROW_TOP + ROW_STEP + LANE_ICON / 2)
 	bar.horde = private.Side(bar, "Horde")
-	bar.horde:SetPoint("TOPLEFT", 140, 0)
+	bar.horde:SetPoint("LEFT", bar, "TOPLEFT", 6, middle)
+	bar.alliance = private.Side(bar, "Alliance")
+	bar.alliance:SetPoint("RIGHT", bar, "TOPRIGHT", -6, middle)
 	bar.count = bar.alliance.text -- the first side's text, for the tests' and screen readers' sake
 	bar.title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	bar.title:SetPoint("TOP", 0, -30)
+	bar.title:SetPoint("TOP", 0, -4)
 	bar.rows = {}
-	local previous
 	for lane = 1, 3 do
 		local r = { icons = {}, marks = {} }
 		r.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		if previous then
-			r.label:SetPoint("LEFT", previous, "RIGHT", 8, 0)
-		else
-			r.label:SetPoint("TOPLEFT", 4, -46)
-		end
+		r.label:SetPoint("TOPLEFT", ROWS_X, -(ROW_TOP + (lane - 1) * ROW_STEP + 3))
+		r.label:SetWidth(28)
+		r.label:SetJustifyH("RIGHT")
 		local last = r.label
 		for i = 1, 4 do
 			local icon = bar:CreateTexture(nil, "ARTWORK")
@@ -173,12 +175,11 @@ function private.Build()
 			r.marks[i] = mark
 			last = icon
 		end
-		previous = last
 		bar.rows[lane] = r
 	end
-	-- Tonight's siege, under the lane row
+	-- Tonight's siege, under the lane rows
 	bar.siege = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	bar.siege:SetPoint("TOP", 0, -64)
+	bar.siege:SetPoint("TOP", 0, -(ROW_TOP + 3 * ROW_STEP + 4))
 	bar.capture = private.BuildCapture()
 	private.bar = bar
 	return bar

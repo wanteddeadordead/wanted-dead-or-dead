@@ -567,6 +567,10 @@ marked `live`.
 the client's file names (`ROGUE`, `Scourge`), level is the last one seen, faction is `Horde` or `Alliance`. Any
 of them can be missing, and records from before 1.1.0 have none. The recording player's own `kill` records
 also carry `killerGroup`: how many were in their group, 1 when alone (a raid counts everyone in it).
+From 1.27.2 `kill` and `death` records also carry a census of who was around when they were made: `nearE`
+(enemy players in view in the last 10 seconds), `nearEC` (those of them within about 28 yards or in the fight),
+`nearF` (the recording player's side: themselves, group members in range, others of theirs seen) and `plates`
+(`e`, `f`, `ef` or empty: which nameplates the client showed). Additive and optional: older records have none.
 
 `death` records name an enemy player, or (from 1.1.2) a player of the recording client's own faction,
 themselves included, who died with an enemy player in view in the last 20 seconds. `victimFaction` tells them

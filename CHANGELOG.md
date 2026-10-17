@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The "Your version is outdated" notice was said again every time a player on a newer patch of the required version was heard; now once, and at each login while the client is behind.
+
 ## [1.25.0] - 2026-10-16
 
 - Your setup, step by step: a line of five marks at the top of the Dashboard (addon up to date, the Wanted app running, in the Wanted Battle.net group, enemy nameplates on, the siege features), green or red, with what to do under each red one; the Website & app page has every step with its address to copy or a button to turn it on, and `/wanted setup` prints them.

@@ -1114,6 +1114,13 @@ check(ns:GetRequiredUpdate() == "0.3.1", "a newer version on the network require
 	local before = #printed
 	check(ns:RemindUpdate() and Told(before), "each login repeats the update notice while this client is behind")
 end)()
+-- One player on a newer patch of the locked version: the votes still land on the version required, so the lock
+-- stays and the notice isn't said again (2026-10-17: it was repeated at every peer heard)
+;(function()
+	local before = #printed
+	ns:NoteVersion("0.3.2", "Voter A")
+	check(ns:GetRequiredUpdate() == "0.3.1" and #printed == before, "one player on a newer patch: the lock and the notice stay put, got "..tostring(ns:GetRequiredUpdate()).." and "..(#printed - before).." lines")
+end)()
 addonSent = {}
 clock = clock + 61
 ns:RunCommand("post", "1g Stabby Mcstab")

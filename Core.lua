@@ -702,6 +702,12 @@ function Wanted:NoteVersion(version, sender)
 	if votes < VERSION_VOTES then
 		return
 	end
+	if required and not Wanted:IsNewerVersion(text, required.version) then
+		-- The vote still lands on the version already required (a newer patch heard from one player doesn't move
+		-- it): no new lock, no repeat of the notice (2026-10-17: it was said again at every peer)
+		required.seen, required.votes = GetServerTime(), votes
+		return
+	end
 	Wanted.db.requiredVersion = { version = text, seen = GetServerTime(), votes = votes }
 	Wanted:Log("!! Version: %s is newer than ours; shared features wait for the update", text)
 	Wanted.newerVersion = text

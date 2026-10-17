@@ -880,7 +880,7 @@ if Wanted.Tour then
 				.."The log on the right keeps every hand. The X hides the window and the table goes on; Leave gives up your seat and your chips come back to you." },
 		{ title = "Joining a table", page = "poker", mark = { "pokertables", "pokerseat" },
 			text = "Open tables lists every table on your faction's channel; click one to sit, with the password if the host set one, and the host lets you in. Your table card above has Open table, Start (a tournament), Leave and Hand off (the host passes the table to another seat).\n\n"
-				.."A player on another realm name sees your table only through a realm link; if a friend can't see it, ask them for the first line of /wanted sync." },
+				.."A friend who can't see your table (one on another realm name, or without the Wanted app): host a table for people, not practice, and type their name in Invite a player on your table card, or /wanted poker invite <name>. Your table reaches them by whisper." },
 		{ title = "Gold and settlement", page = "poker", mark = "pokerviews",
 			text = "A gold table is cash on the table: your buy-in goes to the host by mail before you play, stacks come back when you leave, and Settlement keeps the books (Pay, Mark paid). A silver game rounds every bet to whole silver.\n\n"
 				.."Wanted is meant to be fun; cheating, griefing or bullying at a table gets you banned from the system. /wanted tour poker brings this back." },

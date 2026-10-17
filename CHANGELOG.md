@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The poker tour says how to bring in a friend who can't see your table: Invite a player, on a table for people.
 - The tour's amber borders belong to what they outline: one hides with its part of the window, and none draws over another window (they stayed where the poker host form had been after hosting).
 - The poker tour's hosting page borders the host form's steps and Host table, whatever step the form is on.
 - The tour's Settings page opens the Sharing and display tab, where the Battle.net group's invite is, before bordering it; the tour never borders something that isn't on screen.

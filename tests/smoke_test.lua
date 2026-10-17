@@ -2270,6 +2270,21 @@ do
 	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
 	ns.Catchup:Import()
 	check(ns.Sync:GetDirectory().names == 5, "no names from an older app keeps the list")
+	-- A hello on the channel names a few of our live links on other realm names (fl), and a name heard so in a peer's
+	-- hello is greeted like the app's directory: a player without the app is bridged through his own realm's peers
+	ClearSent()
+	ns:RunCommand("synctest", "")
+	local hello
+	for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "H" then hello = m.tbl end end
+	check(hello and type(hello.fl) == "table" and hello.fl[1].n == "Dir Two" and hello.fl[1].r == "Dir Realm", "our hello names our live far-realm link")
+	ClearSent()
+	clock = clock + 1000
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, fl = { { n = "Far Learned", r = "Learned Realm" }, { n = "Same Realmer", r = "Realm" }, { n = "Bad|cff", r = "X" } } }),
+		"CHANNEL", "Chan Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
+	RunFrames()
+	ns.Sync:GreetDirectory()
+	check(#Sent("WHISPER", "Far Learned") == 1 and Sent("WHISPER", "Far Learned")[1].tag == "H", "a far-realm name from a peer's hello is greeted")
+	check(#Sent("WHISPER", "Same Realmer") == 0 and #Sent("WHISPER", "Bad|cff") == 0, "our own realm and junk aren't")
 end
 -- A bounty carries what its poster knew about the target, so a client that never saw them (another realm, or
 -- offline at the time) still has their class, level, guild and where they were last seen, by the poster;

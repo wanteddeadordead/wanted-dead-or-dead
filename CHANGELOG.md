@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Players without the Wanted app on another realm name get bridged too: a hello on the channel names a few of its sender's live links on other realm names, and every Wanted player who hears it greets them like the app's directory, so the realm link forms through their own realm's peers. Bounties, kills, sightings and poker tables cross without anyone needing the app.
+
 ## [1.27.0] - 2026-10-17
 
 - The poker tour says how to bring in a friend who can't see your table: Invite a player, on a table for people.

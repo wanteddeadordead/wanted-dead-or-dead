@@ -14103,6 +14103,12 @@ end)()
 	Sample()
 	check(C:BlockedReason() == "Mounted", "mounted: presence doesn't count")
 	mounted = false
+	C:Watch()
+	check(C:BlockedReason() == nil, "dismounted: the reason clears at the next look (3 s), not the next sample")
+	mounted = true
+	C:Watch()
+	check(C:BlockedReason() == "Mounted", "and comes back as fast")
+	mounted = false
 	form = 3 -- Travel Form
 	Sample()
 	check(C:BlockedReason() == "In travel form", "a travel form doesn't count either")

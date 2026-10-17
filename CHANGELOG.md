@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- On a capture point, "stealthed", "mounted" and the other reasons your presence doesn't count clear within 3 seconds of no longer holding, instead of up to 30.
 - The site's daily snapshot, a small data addon beside Wanted (WantedDeadOrDead_Data): without the Wanted app you now see today's challenges and hot zones, the calendar, badges, medals and calling-card looks, other players' PvP ranks, the siege and the fronts, and players on other realm names to link with. With the app nothing changes: its fresher data wins, unless it hasn't run for six hours. New folder: restart the client after updating.
 - Capture point presence reaches the website live: each 30-second sample at a point is also written to the game's log file, where the Wanted app (0.2.56 or newer) reads it within a minute. Before, the site learned who stood on a point only after a /reload or logout, so its siege and "current layer" ran behind the game.
 - The last round of a siege ends as the website ends it: a quarter hour after the last progress at any point of the front, not before the window closes and an hour after it at the latest. The HUD says how long overtime has left ("ends in 4:10 unless a point moves"); it used to say overtime for at least a quarter hour after the site had called the siege over.

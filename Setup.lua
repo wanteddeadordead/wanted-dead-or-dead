@@ -50,7 +50,7 @@ function Setup:Steps()
 	end
 	local inGroup = Wanted.Bridge ~= nil and Wanted.Bridge:InCommunity()
 	steps[3] = { key = "group", title = "In the Wanted Battle.net group", state = inGroup and "ok" or "bad",
-		detail = inGroup and "Both sides, one layer." or "Horde and Alliance can't talk in game; the group is where both sides see which layer the fight is on.",
+		detail = inGroup and "Both sides, one layer." or "Horde and Alliance can't talk in game; the group is where both sides can tell each other which layer the fight is on.",
 		fix = (not inGroup) and "Join it (members can see each other's BattleTag):" or nil,
 		url = (not inGroup) and Wanted.Bridge and Wanted.Bridge.INVITE_URL or nil }
 	local plates = GetCVar and GetCVar("nameplateShowEnemies")

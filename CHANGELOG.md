@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Battle.net group is described as it is: the place both sides share, where you say which layer the fight is on and the other side can come to it; nothing shows the layer there by itself yet.
+
 ## [1.25.1] - 2026-10-17
 
 - The "Your version is outdated" notice was said again every time a player on a newer patch of the required version was heard; now once, and at each login while the client is behind.

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-10-17
+
+- Window themes, one for each poker felt: Stormwind, Orgrimmar, Elwynn Forest, Durotar, Stranglethorn Vale, Winterspring, Tanaris, Undercity, Ironforge and Darnassus. The felt fills the window behind see-through panels, and each theme brings its own colours. Your side's capital is the default; pick another in Settings, on the new Theme tab (the felt changes at once, its colours after a reload).
+- A new look in the style of EllesmereUI: the selected menu entry carries an accent bar and a fading glow, tabs are words with an accent underline, buttons have a fine white edge that brightens under the mouse, and sliders and scroll bars are thin bars with a square thumb. The brand is set in the Rye western face.
+- The window is larger, the size of EllesmereUI's, so the Settings tabs and the capture fronts card fit inside it.
+- The poker table's felt follows the window theme: choose it in Settings, Theme (the table's Felt button opens it).
+- Kill proof sits beside the display options, and class icons moved to the Theme tab.
+
 ## [1.27.2] - 2026-10-17
 
 - Kills, deaths and assists reach the website within a minute with the Wanted app running: each new record is also written to the game's log file, where the app reads it, as it already did for capture point presence. Before, they waited for a /reload or logout.

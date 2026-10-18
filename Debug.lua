@@ -742,3 +742,82 @@ Wanted:RegisterCommand("demo", "Development builds: made-up challenges on Home a
 	Wanted:Print("Demo challenges on: made up. Nothing saved. /wanted demo again to turn them off.")
 	Wanted.UI:Show("home")
 end)
+
+
+
+-- ============================================================================
+-- Who runs Wanted (development builds only)
+-- ============================================================================
+
+-- The maintainer's statistics view, 2026-10-17: "I want to be able to visually see who has it". Players this client
+-- has heard on the Wanted channels, either side (the addon's version book, kept 14 days), get the wax seal by their
+-- nameplate and a line in their tooltip. Identity only, of players already in view: no position goes anywhere, and
+-- released builds have none of it (this file is left out of them).
+local MARK_SIZE = 16
+
+---The version book's entry for a unit, or nil.
+local function Heard(unit)
+	if not unit or not UnitIsPlayer(unit) then
+		return nil
+	end
+	local name = UnitName(unit)
+	if not name or (issecretvalue and issecretvalue(name)) then
+		return nil
+	end
+	local book = Wanted.db and Wanted.db.addonVersions
+	return book and book[name]
+end
+
+local marks = {}
+---The unit's nameplate, or nil: the game keeps some plates from addons, and asking for one then fails.
+local function PlateOf(unit)
+	if not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
+		return nil
+	end
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+	return ok and plate or nil
+end
+
+local function Mark(unit)
+	local plate = PlateOf(unit)
+	if not plate then
+		return
+	end
+	local mark = marks[plate]
+	if not mark then
+		mark = plate:CreateTexture(nil, "OVERLAY")
+		mark:SetSize(MARK_SIZE, MARK_SIZE)
+		mark:SetPoint("RIGHT", plate, "LEFT", 6, 0)
+		mark:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
+		marks[plate] = mark
+	end
+	mark:SetShown(Heard(unit) ~= nil)
+end
+
+local plates = CreateFrame("Frame")
+plates:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+plates:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+plates:SetScript("OnEvent", function(_, event, unit)
+	if event == "NAME_PLATE_UNIT_ADDED" then
+		Mark(unit)
+	else
+		local plate = PlateOf(unit)
+		if plate and marks[plate] then
+			marks[plate]:Hide()
+		end
+	end
+end)
+
+if TooltipDataProcessor and Enum and Enum.TooltipDataType and TooltipUtil and TooltipUtil.GetDisplayedUnit then
+	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
+		if tooltip ~= GameTooltip then
+			return
+		end
+		local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)
+		local entry = Heard(unit)
+		if entry then
+			local ago = Wanted.Theme and Wanted.Theme:Ago(GetServerTime() - (entry.t or 0)) or ""
+			tooltip:AddLine(format("|TInterface\\AddOns\\%s\\Media\\seal:14:14|t Wanted %s, heard %s", Wanted.FOLDER, tostring(entry.v), ago), 0.85, 0.72, 0.45)
+		end
+	end)
+end

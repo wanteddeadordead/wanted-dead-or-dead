@@ -816,6 +816,23 @@ check(ownKill.victimClass == "ROGUE" and ownKill.victimRace == "Human" and ownKi
 check(ownKill.killerClass == "WARRIOR" and ownKill.killerRace == "Orc" and ownKill.killerLevel == 10 and ownKill.killerFaction == "Horde",
 	"the kill names our own class, race, level and faction")
 check(ownKill.killerGroup == 1, "a kill made alone has a group of 1")
+do
+	-- A new kill also goes to the game's log at once, for the app to pass on live
+	local logged = {}
+	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
+	local rec = ns.Store:NewRecord("kill", { victim = "Player-9-LIVE", victimName = "Live One", zone = "The Barrens", x = 52.6, y = 27.6, honor = true })
+	C_Log = nil
+	local line = logged[#logged] or ""
+	check(line:sub(1, 9) == "WANTEDR1 " and line:find(" k=kill&i="..rec.id:gsub("[^%w%-%._~:]", function(c) return ("%%%02X"):format(c:byte()) end), 1, true)
+		and line:find("&h="..rec.hash, 1, true) and line:find("&d.victimName=sLive%20One", 1, true) and line:find("&d.x=n52.6", 1, true)
+		and line:find("&d.honor=btrue", 1, true) and not line:find(" ", 11 + #ns.db.accountMark, true),
+		"a kill record goes to the game's log as one escaped line: "..line)
+	local deaths = #logged
+	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
+	ns.Store:NewRecord("notice", { text = "hello" })
+	C_Log = nil
+	check(#logged == deaths, "other kinds of record stay off the log")
+end
 check(ownKill.nearE >= 1 and ownKill.nearF == 1 and type(ownKill.nearEC) == "number" and type(ownKill.plates) == "string",
 	"a kill's census counts the enemies in view and us, got "..tostring(ownKill.nearE).."/"..tostring(ownKill.nearF))
 Fire("CHAT_MSG_COMBAT_HONOR_GAIN", "Stabby Mcstab dies, honorable kill Rank: Private")

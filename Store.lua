@@ -847,7 +847,38 @@ function private.Create(kind, data, t)
 	Wanted.db.records[record.id] = record
 	private.AddToIndex(record)
 	private.Notify(record, true)
+	private.WriteLive(record)
 	return record
+end
+
+-- Kinds of record also written to the game's log the moment they're made: the Wanted app reads them there and passes
+-- them to the site within a minute, where the saved data reaches it only at a /reload or logout
+local LIVE_KINDS = { kill = true, death = true, assist = true }
+
+---A value for the live log line: anything but letters, digits and -._~: as %XX, so the line has no spaces or "&".
+local function LiveEscape(s)
+	return (gsub(s, "[^%w%-%._~:]", function(c) return format("%%%02X", c:byte()) end))
+end
+
+---A new kill, death or assist record of ours, at once, on the game's log file (Logs\General.log). One line:
+---"WANTEDR1 <account mark> k=<kind>&i=<id>&o=<origin>&s=<seq>&p=<prev>&t=<t>&h=<hash>&d.<key>=<s|n|b><value>...",
+---values escaped (LiveEscape) and numbers as the hash writes them (tostring), so the site checks the same hash.
+---@param record table
+function private.WriteLive(record)
+	local mark = Wanted.db.accountMark
+	if not LIVE_KINDS[record.kind] or not (C_Log and C_Log.LogMessage) or type(mark) ~= "string" or not strmatch(mark, "^%w+$") then
+		return
+	end
+	local parts = { "k="..LiveEscape(record.kind), "i="..LiveEscape(record.id), "o="..LiveEscape(record.origin),
+		"s="..tostring(record.seq), "p="..LiveEscape(record.prev or ""), "t="..tostring(record.t), "h="..LiveEscape(record.hash) }
+	for key, value in pairs(record.data) do
+		local kind = type(value)
+		local code = kind == "string" and "s" or kind == "number" and "n" or kind == "boolean" and "b" or nil
+		if code then
+			tinsert(parts, "d."..LiveEscape(key).."="..code..LiveEscape(tostring(value)))
+		end
+	end
+	C_Log.LogMessage("WANTEDR1 "..mark.." "..table.concat(parts, "&"))
 end
 
 ---This character's records waiting to be signed, oldest first: { kind, data, t } each, or nil when none wait. Saved, so

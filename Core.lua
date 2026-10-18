@@ -525,6 +525,15 @@ function Wanted:IsNewerVersion(a, b)
 	return false
 end
 
+---This build's version as shown in the window: one "v", and a daily data build (v1.27.3-data.20261018) as its code
+---version, since only the site's snapshot changed.
+---@param version any
+---@return string
+function Wanted:VersionLabel(version)
+	local text = gsub(gsub(tostring(version or "?"), "^v", ""), "%-data%.%d+$", "")
+	return "v"..text
+end
+
 ---Formats a parsed version back into text, so nothing a peer sent is shown as is.
 function private.VersionText(parsed)
 	local text = format("%d.%d.%d", parsed[1], parsed[2], parsed[3])

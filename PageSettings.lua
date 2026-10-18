@@ -377,7 +377,7 @@ function private.BuildLook(panel, width)
 		swatch.name:SetPoint("TOP", swatch, "BOTTOM", 0, -5)
 		swatch.key = theme.key
 		swatch:SetScript("OnClick", function()
-			Wanted.db.settings.theme = theme.key
+			Theme:Choose(theme.key)
 			UI:PreviewTheme(theme.key)
 			private.RefreshLook()
 		end)
@@ -438,7 +438,7 @@ function private.RefreshLook()
 	local applied = Theme.current and Theme.current.key
 	local pending = applied ~= chosen
 	private.lookNote:SetText(pending and format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(chosen).name)
-		or "Your side's capital is the default until you pick one. The felts are Dead Man's Hand Poker's tables.")
+		or "Your side's capital is the default until you pick one. The poker table's felt follows the theme.")
 	private.lookReload:SetShown(pending)
 end
 
@@ -675,3 +675,11 @@ UI:RegisterPage("settings", {
 	end,
 	refresh = private.Refresh,
 })
+
+---Opens Settings on its Theme tab (the poker table's Felt button).
+function UI:ShowThemeSettings()
+	UI:Show("settings")
+	if private.tabs then
+		private.tabs:Select("look")
+	end
+end

@@ -13852,15 +13852,17 @@ end)()
 	local function OnScreenNow(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):find(text, 1, true) then return true end end return false end
 	TableUI:ToggleSettings()
 	check(OnScreenNow("Table settings") and OnScreenNow("Pot won") and OnScreenNow("Ten seconds") and OnScreenNow("Four-colour deck"), "the settings panel lists every sound and the other choices")
-	-- The felt: the plain green by default; a painted one is a texture over it, chosen from the settings and kept
+	-- The felt is the window theme's (Wanted's Settings, Theme): the theme chooses it, the table follows
 	local felt = TableUI:GetParts().felt
-	check(TableUI:Felt() == "stranglethorn" and OnScreenNow("Felt") and OnScreenNow("Stranglethorn Vale") and felt.art:IsShown(), "Stranglethorn Vale's felt by default, named in the settings")
-	TableUI:SetFelt("green")
-	check(TableUI:Felt() == "green" and not felt.art:IsShown() and not felt.shade:IsShown() and OnScreenNow("Classic green"), "the classic green is the plain felt, nothing drawn over it")
+	local default = ns.Theme:Chosen()
+	check(TableUI:Felt() == default.key and OnScreenNow("Felt") and OnScreenNow(default.name) and felt.art:IsShown(), "the window theme's felt by default, named in the settings: "..TableUI:Felt())
 	TableUI:SetFelt("stormwind")
-	check(TableUI:Felt() == "stormwind" and felt.art:IsShown() and felt.shade:IsShown() and felt.art._texture == "Interface\\AddOns\\WantedDeadOrDead_Poker\\Media\\felt-stormwind" and OnScreenNow("Stormwind") and WantedPokerDB.options.felt == "stormwind", "Stormwind's felt is drawn over the green and remembered: "..tostring(felt.art._texture))
+	check(TableUI:Felt() == "stormwind" and ns.db.settings.theme == "stormwind" and felt.art:IsShown() and felt.art._texture == "Interface\\AddOns\\WantedDeadOrDead_Poker\\Media\\felt-stormwind" and OnScreenNow("Stormwind"),
+		"choosing a felt chooses the window theme, and the table draws it: "..tostring(felt.art._texture))
+	ns.Theme:Choose("undercity")
+	check(TableUI:Felt() == "undercity" and felt.art._texture:find("felt-undercity", 1, true) ~= nil and OnScreenNow("Undercity"), "a theme chosen in Settings redraws the table's felt at once")
 	TableUI:SetFelt("no such felt")
-	check(TableUI:Felt() == "stranglethorn" and felt.art:IsShown(), "a felt that isn't one falls back to Stranglethorn Vale")
+	check(TableUI:Felt() == default.key, "a felt that isn't one falls back to the side's default theme")
 	check(#TableUI.FELTS == 11, "eleven felts: the green and ten painted")
 	-- Background brightness, per felt: the glass over the painting is the rest of it
 	TableUI:SetFelt("durotar")

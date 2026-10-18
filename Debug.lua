@@ -792,14 +792,25 @@ local function Mark(unit)
 	if not plate then
 		return
 	end
+	-- On what a nameplate addon draws there (ElvUI and Plater: plate.unitFrame; the game: plate.UnitFrame), at the
+	-- right end of its health bar: the left has the auras (2026-10-17: EllesmereUI's plates hid it there)
+	local function Frame(x) return type(x) == "table" and x.GetObjectType and x or nil end
+	local host = Frame(plate.unitFrame) or Frame(plate.UnitFrame) or plate
+	local bar = Frame(host.Health) or Frame(host.healthBar) or host
 	local mark = marks[plate]
 	if not mark then
-		mark = plate:CreateTexture(nil, "OVERLAY")
+		mark = CreateFrame("Frame", nil, plate)
 		mark:SetSize(MARK_SIZE, MARK_SIZE)
-		mark:SetPoint("RIGHT", plate, "LEFT", 6, 0)
-		mark:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
+		mark.art = mark:CreateTexture(nil, "OVERLAY")
+		mark.art:SetAllPoints()
+		mark.art:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
 		marks[plate] = mark
 	end
+	mark:SetParent(host)
+	mark:SetFrameStrata(host:GetFrameStrata())
+	mark:SetFrameLevel(host:GetFrameLevel() + 20)
+	mark:ClearAllPoints()
+	mark:SetPoint("LEFT", bar, "RIGHT", 4, 0)
 	mark:SetShown(Heard(unit) ~= nil)
 end
 
@@ -808,7 +819,8 @@ plates:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 plates:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 plates:SetScript("OnEvent", function(_, event, unit)
 	if event == "NAME_PLATE_UNIT_ADDED" then
-		Mark(unit)
+		-- A moment later: a nameplate addon makes its frame on the same event
+		C_Timer.After(0, function() Mark(unit) end)
 	else
 		local plate = PlateOf(unit)
 		if plate and marks[plate] then

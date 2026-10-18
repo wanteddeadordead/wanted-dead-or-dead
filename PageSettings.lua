@@ -310,32 +310,21 @@ function private.BuildSharing(panel, width)
 	end)
 	private.minimap:SetPoint("TOPLEFT", 16, -62)
 	private.Toggle(display, function() return Wanted.db.settings end, "showTools", "Show the Tools page", "Network details, test data and the debug log. Handy when reporting a problem; off by default.", 16, -86)
-	-- The window's theme: one per poker felt. The felt changes at once; the colours with a /reload
-	local themeLabel = Theme:Text(display, "small", "Window theme", C.muted)
-	themeLabel:SetPoint("TOPLEFT", 440, -40)
-	local themeChoices = {}
-	for _, theme in ipairs(Theme.THEMES) do
-		tinsert(themeChoices, { key = theme.key, label = theme.name })
-	end
-	private.theme = W:Choice(display, 180, themeChoices, function(key)
-		Wanted.db.settings.theme = key
-		UI:PreviewTheme(key)
-		Wanted:Print("Window theme: %s. Reload to apply its colours.", Theme:Get(key).name)
-	end)
-	private.theme:SetPoint("TOPLEFT", 440, -58)
-	private.theme:SetChoice(Theme:Get(Wanted.db.settings.theme).key)
-	W:AttachTooltip(private.theme, "Window theme", "The window in the style of a poker felt: its art behind the pages and its colours. Your side's capital until you pick one.")
-	local reload = W:Button(display, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
-	reload:SetPoint("LEFT", private.theme, "RIGHT", 10, 0)
 	private.Toggle(display, function() return Wanted.db.settings end, "sigBackground", "Check signatures in the background", "Bounties, claims and payments are signed by the players who make them. Wanted checks the ones you hold, one a second, never in a fight. Off: only the ones a page shows or reads.", 16, -110)
-	local proof = private.Card(panel, -328, 120, "Kill proof", width)
-	private.Toggle(proof, function() return Wanted.db.settings end, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.", 16, -38)
-	local proofText = Theme:Text(proof, "small", format("If a kill is disputed, post the screenshot in %s on the Forever PvP Discord (click the link, Ctrl+C):", Wanted.Proof.DISCORD_CHANNEL), C.muted)
-	proofText:SetPoint("TOPLEFT", 16, -66)
-	local link = W:CopyBox(proof, 360, Wanted.Proof.DISCORD_URL)
-	link:SetPoint("TOPLEFT", 16, -84)
+	-- Kill proof shares the Display card, on its right (the class icons moved to the Theme tab), so the capture
+	-- fronts fit in the window under it
+	local proofTitle = Theme:Text(display, "tiny", "KILL PROOF")
+	proofTitle:SetPoint("TOPLEFT", 360, -20)
+	private.Toggle(display, function() return Wanted.db.settings end, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.", 360, -38)
+	local proofText = Theme:Text(display, "tiny", format("If a kill is disputed, post the screenshot in %s on the Forever PvP Discord (click the link, Ctrl+C):", Wanted.Proof.DISCORD_CHANNEL), C.muted)
+	proofText:SetPoint("TOPLEFT", 360, -64)
+	proofText:SetWidth(width - 360 - 16)
+	proofText:SetJustifyH("LEFT")
+	proofText:SetWordWrap(true)
+	local link = W:CopyBox(display, width - 360 - 16, Wanted.Proof.DISCORD_URL)
+	link:SetPoint("TOPLEFT", 360, -100)
 
-	local captures = private.Card(panel, -460, 174, "Capture fronts", width)
+	local captures = private.Card(panel, -328, 174, "Capture fronts", width)
 	private.Toggle(captures, function() return Wanted.db.settings end, "siege", "Siege nights on this client (then /reload)", "Capture fronts, the HUD and map pieces, rally leaders and layer hops. Off until their first public siege night; a /reload applies the change.", 16, -134, function(checked)
 		Wanted:Print("Siege nights %s. Type /reload to apply it.", checked and "on" or "off")
 	end)
@@ -350,13 +339,60 @@ function private.BuildSharing(panel, width)
 	private.Toggle(captures, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group or the rally you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later unless you lead the rally.", 16, -110)
 	private.Toggle(captures, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.", 440, -110)
 
-	local iconLabel = Theme:Text(display, "small", "Class icons")
-	iconLabel:SetPoint("TOPLEFT", 360, -20)
+
+end
+
+
+
+
+-- The window's look: the theme, one per poker felt (EllesmereUI's style over the felt), and the class icons
+local SWATCH_COLUMNS, SWATCH_GAP = 5, 12
+function private.BuildLook(panel, width)
+	local card = private.Card(panel, 0, 262, "Window theme", width)
+	local swatchWidth = floor((width - 32 - (SWATCH_COLUMNS - 1) * SWATCH_GAP) / SWATCH_COLUMNS)
+	local swatchHeight = floor(swatchWidth * 0.58)
+	private.swatches = {}
+	for i, theme in ipairs(Theme.THEMES) do
+		local swatch = CreateFrame("Button", nil, card)
+		swatch:SetSize(swatchWidth, swatchHeight)
+		local column, row = (i - 1) % SWATCH_COLUMNS, floor((i - 1) / SWATCH_COLUMNS)
+		swatch:SetPoint("TOPLEFT", 16 + column * (swatchWidth + SWATCH_GAP), -38 - row * (swatchHeight + 30))
+		swatch.art = swatch:CreateTexture(nil, "BACKGROUND")
+		swatch.art:SetPoint("TOPLEFT", 1, -1)
+		swatch.art:SetPoint("BOTTOMRIGHT", -1, 1)
+		swatch.art:SetTexture(Theme:FeltFile(theme))
+		local light = min(1, theme.shade * 1.6)
+		swatch.art:SetVertexColor(light, light, light, 1)
+		swatch.stripe = swatch:CreateTexture(nil, "ARTWORK")
+		swatch.stripe:SetPoint("BOTTOMLEFT", 1, 1)
+		swatch.stripe:SetPoint("BOTTOMRIGHT", -1, 1)
+		swatch.stripe:SetHeight(4)
+		swatch.stripe:SetColorTexture(theme.accent[1], theme.accent[2], theme.accent[3], 1)
+		Theme:Border(swatch, C.border)
+		swatch.name = Theme:Text(card, "small", theme.name, C.muted)
+		swatch.name:SetPoint("TOP", swatch, "BOTTOM", 0, -5)
+		swatch.key = theme.key
+		swatch:SetScript("OnClick", function()
+			Wanted.db.settings.theme = theme.key
+			UI:PreviewTheme(theme.key)
+			private.RefreshLook()
+		end)
+		swatch:SetScript("OnEnter", function(self) Theme:SetBorderColor(self, C.borderLight) end)
+		swatch:SetScript("OnLeave", function() private.RefreshLook() end)
+		tinsert(private.swatches, swatch)
+	end
+	private.lookNote = Theme:Text(card, "tiny", "", C.muted)
+	private.lookNote:SetPoint("BOTTOMLEFT", 16, 16)
+	local reload = W:Button(card, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
+	reload:SetPoint("BOTTOMRIGHT", -16, 10)
+	private.lookReload = reload
+
+	card = private.Card(panel, -274, 130, "Class icons", width)
 	local previous = nil
 	for _, style in ipairs(Theme.ICON_STYLES) do
 		-- Styles marked hidden aren't offered: they look the same as Crest here
 		if not style.hidden then
-		local button = W:Button(display, "", "secondary", 58, 58, function()
+		local button = W:Button(card, "", "secondary", 58, 58, function()
 			Wanted.db.settings.iconStyle = style.key
 			private.Refresh()
 			UI:Refresh()
@@ -365,7 +401,7 @@ function private.BuildSharing(panel, width)
 		if previous then
 			button:SetPoint("LEFT", previous, "RIGHT", 6, 0)
 		else
-			button:SetPoint("TOPLEFT", 360, -40)
+			button:SetPoint("TOPLEFT", 16, -40)
 		end
 		button.icons = {}
 		for i, class in ipairs({ "WARRIOR", "MAGE", "ROGUE", "PRIEST" }) do
@@ -385,6 +421,22 @@ function private.BuildSharing(panel, width)
 	end
 end
 
+---Borders the chosen theme and says whether a /reload is needed for its colours.
+function private.RefreshLook()
+	if not private.swatches then
+		return
+	end
+	local chosen = Theme:Get(Wanted.db.settings.theme).key
+	for _, swatch in ipairs(private.swatches) do
+		Theme:SetBorderColor(swatch, swatch.key == chosen and C.accent or C.border)
+		swatch.name:SetTextColor(unpack(swatch.key == chosen and C.white or C.muted))
+	end
+	local applied = Theme.current and Theme.current.key
+	local pending = applied ~= chosen
+	private.lookNote:SetText(pending and format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(chosen).name)
+		or "Your side's capital is the default until you pick one. The felts are Dead Man's Hand Poker's tables.")
+	private.lookReload:SetShown(pending)
+end
 
 
 function private.BuildStreaks(panel, width)
@@ -571,6 +623,7 @@ function private.Refresh()
 		end
 		button:SetStyle(button.styleKey == (Wanted.db.settings.iconStyle or "crest") and "selected" or "secondary")
 	end
+	private.RefreshLook()
 	for key, panel in pairs(private.panels) do
 		panel:SetShown(key == private.view)
 	end
@@ -591,6 +644,7 @@ UI:RegisterPage("settings", {
 			{ key = "streaks", label = "Kill streaks" },
 			{ key = "ranks", label = "Ranks" },
 			{ key = "emotes", label = "Emotes" },
+			{ key = "look", label = "Theme" },
 		}, function(key)
 			private.view = key
 			private.Refresh()
@@ -598,7 +652,7 @@ UI:RegisterPage("settings", {
 		tabs:SetPoint("TOPLEFT")
 		tabs:Select("alerts", true)
 		private.tabs = tabs
-		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "ranks", "emotes" }) do
+		for _, key in ipairs({ "alerts", "nearby", "sharing", "streaks", "ranks", "emotes", "look" }) do
 			local panel = CreateFrame("Frame", nil, container)
 			panel:SetPoint("TOPLEFT", 0, -40)
 			panel:SetSize(width, height - 40)
@@ -613,6 +667,7 @@ UI:RegisterPage("settings", {
 		private.BuildStreaks(private.panels.streaks, width)
 		private.BuildRanks(private.panels.ranks, width)
 		private.BuildEmotes(private.panels.emotes, width)
+		private.BuildLook(private.panels.look, width)
 	end,
 	refresh = private.Refresh,
 })

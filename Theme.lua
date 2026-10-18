@@ -41,16 +41,16 @@ Theme.C = C
 -- base: the felt's own colour; accent: buttons, tabs, section labels, the selected menu entry; shade: how much the
 -- felt is darkened (a pale felt more).
 local THEMES = {
-	{ key = "stormwind", name = "Stormwind", base = { 0.149, 0.204, 0.255 }, accent = { 0.83, 0.69, 0.36 }, shade = 0.38 },
-	{ key = "orgrimmar", name = "Orgrimmar", base = { 0.282, 0.118, 0.114 }, accent = { 0.86, 0.33, 0.25 }, shade = 0.42 },
-	{ key = "elwynn", name = "Elwynn Forest", base = { 0.188, 0.341, 0.204 }, accent = { 0.82, 0.62, 0.27 }, shade = 0.36 },
-	{ key = "durotar", name = "Durotar", base = { 0.565, 0.216, 0.122 }, accent = { 0.9, 0.5, 0.25 }, shade = 0.3 },
-	{ key = "stranglethorn", name = "Stranglethorn Vale", base = { 0.227, 0.325, 0.204 }, accent = { 0.36, 0.74, 0.55 }, shade = 0.38 },
-	{ key = "winterspring", name = "Winterspring", base = { 0.4, 0.5, 0.58 }, accent = { 0.58, 0.8, 0.94 }, shade = 0.2 },
-	{ key = "tanaris", name = "Tanaris", base = { 0.5, 0.39, 0.22 }, accent = { 0.9, 0.72, 0.38 }, shade = 0.24 },
-	{ key = "undercity", name = "Undercity", base = { 0.24, 0.2, 0.27 }, accent = { 0.58, 0.82, 0.32 }, shade = 0.4 },
-	{ key = "ironforge", name = "Ironforge", base = { 0.243, 0.224, 0.231 }, accent = { 0.96, 0.5, 0.18 }, shade = 0.46 },
-	{ key = "darnassus", name = "Darnassus", base = { 0.224, 0.169, 0.275 }, accent = { 0.78, 0.76, 0.92 }, shade = 0.42 },
+	{ key = "stormwind", name = "Stormwind", base = { 0.149, 0.204, 0.255 }, accent = { 0.83, 0.69, 0.36 }, shade = 0.29 },
+	{ key = "orgrimmar", name = "Orgrimmar", base = { 0.282, 0.118, 0.114 }, accent = { 0.86, 0.33, 0.25 }, shade = 0.32 },
+	{ key = "elwynn", name = "Elwynn Forest", base = { 0.188, 0.341, 0.204 }, accent = { 0.82, 0.62, 0.27 }, shade = 0.27 },
+	{ key = "durotar", name = "Durotar", base = { 0.565, 0.216, 0.122 }, accent = { 0.9, 0.5, 0.25 }, shade = 0.22 },
+	{ key = "stranglethorn", name = "Stranglethorn Vale", base = { 0.227, 0.325, 0.204 }, accent = { 0.36, 0.74, 0.55 }, shade = 0.29 },
+	{ key = "winterspring", name = "Winterspring", base = { 0.4, 0.5, 0.58 }, accent = { 0.58, 0.8, 0.94 }, shade = 0.15 },
+	{ key = "tanaris", name = "Tanaris", base = { 0.5, 0.39, 0.22 }, accent = { 0.9, 0.72, 0.38 }, shade = 0.18 },
+	{ key = "undercity", name = "Undercity", base = { 0.24, 0.2, 0.27 }, accent = { 0.58, 0.82, 0.32 }, shade = 0.3 },
+	{ key = "ironforge", name = "Ironforge", base = { 0.243, 0.224, 0.231 }, accent = { 0.96, 0.5, 0.18 }, shade = 0.35 },
+	{ key = "darnassus", name = "Darnassus", base = { 0.224, 0.169, 0.275 }, accent = { 0.78, 0.76, 0.92 }, shade = 0.32 },
 }
 Theme.THEMES = THEMES
 

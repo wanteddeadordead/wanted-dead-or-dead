@@ -957,6 +957,25 @@ ns.db.settings.detect.tab = "nearby"
 ns.NearbyWindow:Refresh()
 check(#ns.Enemies:GetNearby() >= 40, "raid all on Nearby")
 check(#ns.Enemies:GetLastHour() >= 40, "raid all on Last hour, got "..#ns.Enemies:GetLastHour())
+-- The Nearby sort: one raider steps within 28 yards, a moment later another is seen again
+do
+clock = clock + 2
+enemyUnits.nameplate6.close = true
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate6")
+clock = clock + 2
+Fire("NAME_PLATE_UNIT_ADDED", "nameplate9")
+local nearest, seen = ns.Enemies:GetNearby("nearest"), ns.Enemies:GetNearby("seen")
+check(nearest[1].guid == "Player-9-RAID05" and nearest[1].close, "Nearest puts whoever's within 28 yards first: "..tostring(nearest[1].name))
+local ordered = true
+for i = 2, #seen do ordered = ordered and (seen[i - 1].goneFor or math.huge) <= (seen[i].goneFor or math.huge) end
+check(seen[1].guid == "Player-9-RAID08" and ordered, "Last seen puts the most recently seen first, in order: "..tostring(seen[1].name))
+check(ns.Enemies:GetNearby()[1].guid == ns.Enemies:GetNearby("threat")[1].guid, "Threat stays the default order")
+ns.db.settings.nearby.sort = "nearest"
+ns.NearbyWindow:Refresh()
+check(ns.db.settings.nearby.sort == "nearest", "the window's order is remembered")
+ns.db.settings.nearby.sort = "threat"
+enemyUnits.nameplate6.close = nil
+end
 for i = 1, 40 do enemyUnits["nameplate"..(i + 1)] = nil end
 -- Hotspots: the raid makes Durotar the busiest; three of one guild in the Barrens name that guild
 for i = 1, 3 do

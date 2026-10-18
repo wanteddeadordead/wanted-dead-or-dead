@@ -87,6 +87,7 @@ local DEFAULTS = {
 			fade = true, -- shade enemies out of sight
 			pvp = true, -- your own PvP status under the tabs
 			opacity = 1,
+			sort = "threat", -- "threat" (Kill on Sight and bounties, then who's fighting), "nearest" or "seen"
 		},
 		detect = {
 			enabled = true,

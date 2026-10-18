@@ -22,7 +22,7 @@ local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22
 local HEADER_HEIGHT = 58
 local FOOTER_HEIGHT = 30
-local NAV_HEIGHT = 30
+local NAV_HEIGHT = 34
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
 -- The menu is one short list (Siege, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
@@ -264,11 +264,32 @@ function private.Create()
 		local nav = CreateFrame("Button", nil, sidebar)
 		nav:SetSize(SIDEBAR_WIDTH - 1, NAV_HEIGHT)
 		nav.bg = Theme:Fill(nav, C.transparent)
+		-- EllesmereUI's menu entry: shown, a 3px accent bar, the accent fading from 15% across the row and grey lines
+		-- fading out along its top and bottom; under the mouse, a faint white fade and a white bar at 25%
 		nav.bar = nav:CreateTexture(nil, "ARTWORK")
 		nav.bar:SetPoint("TOPLEFT")
 		nav.bar:SetPoint("BOTTOMLEFT")
 		nav.bar:SetWidth(3)
 		nav.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		nav.edges = {}
+		for _, edge in ipairs({ "TOP", "BOTTOM" }) do
+			local line = nav:CreateTexture(nil, "BORDER")
+			line:SetPoint(edge.."LEFT")
+			line:SetPoint(edge.."RIGHT")
+			line:SetHeight(1)
+			line:SetColorTexture(0.7, 0.7, 0.7, 0.5)
+			if line.SetGradient and CreateColor then
+				line:SetGradient("HORIZONTAL", CreateColor(0.7, 0.7, 0.7, 0.5), CreateColor(0.7, 0.7, 0.7, 0))
+			end
+			line:Hide()
+			tinsert(nav.edges, line)
+		end
+		nav.hoverBar = nav:CreateTexture(nil, "ARTWORK")
+		nav.hoverBar:SetPoint("TOPLEFT")
+		nav.hoverBar:SetPoint("BOTTOMLEFT")
+		nav.hoverBar:SetWidth(3)
+		nav.hoverBar:SetColorTexture(0.85, 0.95, 0.9, 0.25)
+		nav.hoverBar:Hide()
 		nav.label = Theme:Text(nav, "body", def.menuLabel or def.title)
 		nav.label:SetSpacing(0)
 		nav.label:SetPoint("LEFT", 22, 0)
@@ -278,15 +299,19 @@ function private.Create()
 		nav:SetScript("OnClick", function() UI:Show(def.tabs and def.tabs[1] or def.key) end)
 		nav:SetScript("OnEnter", function(self)
 			if (private.owner or private.current) ~= self.key then
-				self.bg:SetColorTexture(1, 1, 1, 0.035)
+				self.bg:SetColorTexture(1, 1, 1, 0.03)
 				if self.bg.SetGradient and CreateColor then
-					self.bg:SetGradient("HORIZONTAL", CreateColor(1, 1, 1, 0.05), CreateColor(1, 1, 1, 0.01))
+					self.bg:SetGradient("HORIZONTAL", CreateColor(0.85, 0.95, 0.9, 0.03), CreateColor(0.85, 0.95, 0.9, 0))
 				end
+				self.hoverBar:Show()
+				self.label:SetTextColor(C.text[1], C.text[2], C.text[3])
 			end
 		end)
 		nav:SetScript("OnLeave", function(self)
+			self.hoverBar:Hide()
 			if (private.owner or private.current) ~= self.key then
 				self.bg:SetColorTexture(0, 0, 0, 0)
+				self.label:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 			end
 		end)
 		private.navButtons[def.key] = nav
@@ -704,6 +729,9 @@ function UI:Refresh(allBadges)
 		local nav = private.navButtons[page.key]
 		local selected = page.key == owner
 		nav.bar:SetShown(selected)
+		for _, line in ipairs(nav.edges) do
+			line:SetShown(selected)
+		end
 		-- EllesmereUI's selected entry: the accent bar, and the accent fading out to the right
 		nav.bg:SetColorTexture(1, 1, 1, selected and 1 or 0)
 		if selected and nav.bg.SetGradient and CreateColor then

@@ -7816,6 +7816,26 @@ end)()
 	A.BadgesOf, CC.UnlockedIds = realBadges, realPieces
 	ns.UI:GetFrame():Hide()
 end)()
+-- Dev builds: the seal's nameplate slot, read off EllesmereUI's profile (its defaults behind what was saved)
+;(function()
+	local D = ns.Debug
+	if not D or not D.EllesmereSlots then
+		return
+	end
+	local fakeNS = { db = { profile = { buffSlot = "none", classificationHideRare = true, classificationHideQuest = true } },
+		defaults = { debuffSlot = "top", buffSlot = "left", ccSlot = "right", raidMarkerPos = "topright",
+			classificationSlot = "topleft", factionSlot = "none", debuffIncludeCC = false, classificationIncludeFaction = false } }
+	local used = D:EllesmereSlots(D:EllesmereProfile(fakeNS))
+	check(used.top == "Debuffs" and used.right == "Crowd Control" and used.topright == "Raid Marker", "Ellesmere's defaults count as used: "..tostring(used.top))
+	check(used.left == nil and used.topleft == nil, "a slot set to none, and Rare/Quest with both halves hidden, are free")
+	check(D:SealSlot("auto", used) == "topleft", "auto takes the first free slot in order: "..D:SealSlot("auto", used))
+	check(D:SealSlot("bottom", used) == "bottom", "a chosen slot is kept, even one in use")
+	fakeNS.defaults.debuffIncludeCC = true
+	check(D:EllesmereSlots(D:EllesmereProfile(fakeNS)).right == nil, "CC sharing the debuffs' slot leaves its own free")
+	check(D:SealSlot("auto", D:EllesmereSlots(nil)) == "right", "without EllesmereUI the seal keeps its old place")
+	local full = { right = 1, topright = 1, topleft = 1, left = 1, top = 1, bottom = 1 }
+	check(D:SealSlot("auto", full) == "right" and D:SealSlot("nonsense", {}) == "right", "every slot full, or a bad choice: right")
+end)()
 -- The menu: six entries, each page a tab of one, every old page key still opening its page on the right tab; a menu
 -- entry's badge adds up its tabs'
 ;(function()
@@ -7823,7 +7843,7 @@ end)()
 	UI:Show("home")
 	local labels = {}
 	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
-	check(table.concat(labels, ", ") == "Siege, Dashboard, Bounties, Enemies, Raids, Poker, Progress, You", "the menu entries, Siege first and Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
+	check(table.concat(labels, ", ") == "Siege, Dashboard, Bounties, Enemies, Raids, Poker, Progress, You"..(ns.DEV and ", Dev tools" or ""), "the menu entries, Siege first and Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
 	local function selected()
 		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
 	end

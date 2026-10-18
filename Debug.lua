@@ -787,16 +787,109 @@ local function PlateOf(unit)
 	return ok and plate or nil
 end
 
+-- Where the seal sits: the slots of EllesmereUI's nameplates (its Core Positions), so it can take one EllesmereUI
+-- leaves empty (the maintainer, 2026-10-18: "add the wanted seals to this list ... outside of ellesmere"). Its list
+-- can't take another addon's element, so the choice is ours, on the Dev tools page. "auto" takes the first free
+-- slot in this order; other nameplate addons get the same places around their health bar.
+local SEAL_SLOTS = { "right", "topright", "topleft", "left", "top", "bottom" }
+local SLOT_LABELS = { auto = "Auto", right = "Right", topright = "Top Right", topleft = "Top Left", left = "Left",
+	top = "Top", bottom = "Bottom" }
+-- Around the health bar, for plates other than EllesmereUI's: { point, relative point, x, y }
+local SLOT_POINTS = {
+	right = { "LEFT", "RIGHT", 4, 0 },
+	left = { "RIGHT", "LEFT", -4, 0 },
+	top = { "BOTTOM", "TOP", 0, 4 },
+	topleft = { "BOTTOMLEFT", "TOPLEFT", 0, 4 },
+	topright = { "BOTTOMRIGHT", "TOPRIGHT", 0, 4 },
+	bottom = { "TOP", "BOTTOM", 0, -4 },
+}
+
+---EllesmereUI's nameplates namespace (global since its 9.x: plates, friendlyPlates, db, defaults), or nil.
+local function Ellesmere()
+	local ns = _G.EllesmereNameplates_NS
+	return type(ns) == "table" and ns or nil
+end
+
+---EllesmereUI's nameplate profile with its defaults behind it (it saves only what was changed), or nil.
+function Debug:EllesmereProfile(ns)
+	local profile = ns and type(ns.db) == "table" and ns.db.profile
+	if type(profile) ~= "table" then
+		return nil
+	end
+	local defaults = type(ns.defaults) == "table" and ns.defaults or {}
+	return setmetatable({}, { __index = function(_, key)
+		local value = profile[key]
+		if value == nil then
+			value = defaults[key]
+		end
+		return value
+	end })
+end
+
+---The slots EllesmereUI's nameplates fill, read from its profile as its options page does: { [slot] = what }. CC in
+---the debuffs' slot and Faction in the Rare/Quest slot share those; Rare/Quest with both halves hidden is gone.
+---@param profile table?
+---@return table
+function Debug:EllesmereSlots(profile)
+	local used = {}
+	if not profile then
+		return used
+	end
+	local function Use(slot, what)
+		if type(slot) == "string" and slot ~= "none" and not used[slot] then
+			used[slot] = what
+		end
+	end
+	Use(profile.debuffSlot, "Debuffs")
+	Use(profile.buffSlot, "Buffs")
+	if not profile.debuffIncludeCC then
+		Use(profile.ccSlot, "Crowd Control")
+	end
+	Use(profile.raidMarkerPos, "Raid Marker")
+	if not (profile.classificationHideRare and profile.classificationHideQuest) then
+		Use(profile.classificationSlot, "Rare/Quest Indicator")
+	end
+	if not profile.classificationIncludeFaction then
+		Use(profile.factionSlot, "Faction")
+	end
+	return used
+end
+
+---The slot the seal takes: the one chosen, or with "auto" the first free one (right, its old place, when all are full).
+---@param choice string? "auto" or a slot
+---@param used table the slots taken, from EllesmereSlots
+---@return string
+function Debug:SealSlot(choice, used)
+	if SLOT_POINTS[choice] then
+		return choice
+	end
+	for _, slot in ipairs(SEAL_SLOTS) do
+		if not used[slot] then
+			return slot
+		end
+	end
+	return "right"
+end
+
+---The choice saved on the Dev tools page: "auto" or a slot.
+local function SealChoice()
+	local dev = Wanted.db and Wanted.db.settings.dev
+	return dev and dev.sealSlot or "auto"
+end
+
 local function Mark(unit)
 	local plate = PlateOf(unit)
 	if not plate then
 		return
 	end
-	-- On what a nameplate addon draws there (ElvUI and Plater: plate.unitFrame; the game: plate.UnitFrame), at the
-	-- right end of its health bar: the left has the auras (2026-10-17: EllesmereUI's plates hid it there)
+	-- On what a nameplate addon draws there (EllesmereUI: its own plate, kept by unit; ElvUI and Plater:
+	-- plate.unitFrame; the game: plate.UnitFrame), by its health bar
 	local function Frame(x) return type(x) == "table" and x.GetObjectType and x or nil end
-	local host = Frame(plate.unitFrame) or Frame(plate.UnitFrame) or plate
-	local bar = Frame(host.Health) or Frame(host.healthBar) or host
+	local ns = Ellesmere()
+	local eui = ns and (type(ns.plates) == "table" and Frame(ns.plates[unit])
+		or type(ns.friendlyPlates) == "table" and Frame(ns.friendlyPlates[unit])) or nil
+	local host = eui or Frame(plate.unitFrame) or Frame(plate.UnitFrame) or plate
+	local bar = Frame(host.health) or Frame(host.Health) or Frame(host.healthBar) or host
 	local mark = marks[plate]
 	if not mark then
 		mark = CreateFrame("Frame", nil, plate)
@@ -809,9 +902,27 @@ local function Mark(unit)
 	mark:SetParent(host)
 	mark:SetFrameStrata(host:GetFrameStrata())
 	mark:SetFrameLevel(host:GetFrameLevel() + 20)
+	mark.unit = unit
+	local slot = Debug:SealSlot(SealChoice(), Debug:EllesmereSlots(Debug:EllesmereProfile(ns)))
 	mark:ClearAllPoints()
-	mark:SetPoint("LEFT", bar, "RIGHT", 4, 0)
+	-- On EllesmereUI's plate exactly where its own icon in that slot would sit; else around the health bar
+	local placed = eui and type(ns.PositionAuraSlot) == "function"
+		and pcall(ns.PositionAuraSlot, { mark }, 1, slot, eui, MARK_SIZE, MARK_SIZE, 0, 0, 0) and mark:GetNumPoints() > 0
+	if not placed then
+		local at = SLOT_POINTS[slot]
+		mark:ClearAllPoints()
+		mark:SetPoint(at[1], bar, at[2], at[3], at[4])
+	end
 	mark:SetShown(Heard(unit) ~= nil)
+end
+
+---Places every seal shown again (the slot changed).
+local function MarkAll()
+	for _, mark in pairs(marks) do
+		if mark:IsShown() and mark.unit then
+			Mark(mark.unit)
+		end
+	end
 end
 
 local plates = CreateFrame("Frame")
@@ -828,6 +939,63 @@ plates:SetScript("OnEvent", function(_, event, unit)
 		end
 	end
 end)
+
+-- The Dev tools page: in the window's menu of development builds only (this file is left out of releases)
+function Debug:OnEnable()
+	local UI, W, Theme = Wanted.UI, Wanted.Widgets, Wanted.Theme
+	if not (Wanted.DEV and UI and W and Theme) then
+		return
+	end
+	local C = Theme.C
+	local page = {}
+	---The slot menu: each slot says what EllesmereUI keeps there, and Auto which one it takes.
+	local function Choices()
+		local used = Debug:EllesmereSlots(Debug:EllesmereProfile(Ellesmere()))
+		local list = { { key = "auto", label = "Auto: "..SLOT_LABELS[Debug:SealSlot("auto", used)] } }
+		for _, slot in ipairs(SEAL_SLOTS) do
+			tinsert(list, { key = slot, label = SLOT_LABELS[slot]..(used[slot] and " (EllesmereUI: "..used[slot]..")" or "") })
+		end
+		return list
+	end
+	function page.Refresh()
+		if page.choice then
+			page.choice:SetChoices(Choices())
+			page.choice:SetChoice(SealChoice())
+		end
+		if page.note then
+			page.note:SetText(Ellesmere() and "EllesmereUI's nameplates found: Auto takes the first slot its Core Positions leave empty."
+				or "No EllesmereUI nameplates: the seal sits around your nameplates' health bar.")
+		end
+	end
+	UI:RegisterPage("devtools", {
+		group = "You",
+		title = "Dev tools",
+		subtitle = "Development builds only: none of this is in a release.",
+		hidden = function() return not Wanted.DEV end,
+		order = 99,
+		build = function(container, width)
+			local card = W:Card(container)
+			card:SetPoint("TOPLEFT")
+			card:SetPoint("TOPRIGHT")
+			card:SetHeight(110)
+			W:SectionLabel(card, "Wanted seal on nameplates"):SetPoint("TOPLEFT", 14, -10)
+			local label = Theme:Text(card, "body", "Slot")
+			label:SetPoint("TOPLEFT", 14, -42)
+			page.choice = W:Choice(card, 300, Choices(), function(key)
+				Wanted.db.settings.dev = Wanted.db.settings.dev or {}
+				Wanted.db.settings.dev.sealSlot = key
+				MarkAll()
+				page.Refresh()
+			end)
+			page.choice:SetPoint("LEFT", label, "RIGHT", 12, 0)
+			page.note = Theme:Text(card, "small", "", C.muted)
+			page.note:SetPoint("TOPLEFT", 14, -76)
+			page.note:SetWidth(width - 28)
+			page.Refresh()
+		end,
+		refresh = page.Refresh,
+	})
+end
 
 if TooltipDataProcessor and Enum and Enum.TooltipDataType and TooltipUtil and TooltipUtil.GetDisplayedUnit then
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)

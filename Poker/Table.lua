@@ -414,14 +414,12 @@ local FELTS = { { "green", "Classic green" }, { "stormwind", "Stormwind" }, { "o
 	{ "undercity", "Undercity" }, { "ironforge", "Ironforge" }, { "darnassus", "Darnassus" } }
 TableUI.FELTS = FELTS
 
----The felt chosen: a key from FELTS (Stranglethorn Vale by default).
+---The felt: the window theme's (Wanted's Settings, Theme), the maintainer's call 2026-10-17: the theme chooses the
+---felt, not the other way around.
 ---@return string
 function TableUI:Felt()
-	local key = Options().felt or "stranglethorn"
-	for _, felt in ipairs(FELTS) do
-		if felt[1] == key then return key end
-	end
-	return "stranglethorn"
+	local Theme = Poker.Wanted and Poker.Wanted.Theme
+	return Theme and Theme.Chosen and Theme:Chosen().key or "stranglethorn"
 end
 
 ---A felt's name as shown.
@@ -450,12 +448,20 @@ function private.ApplyFelt()
 	end
 end
 
----Chooses a felt and draws it.
+---Chooses a felt (the window theme of that felt) and draws it.
 ---@param key string
 function TableUI:SetFelt(key)
-	Options().felt = key
-	private.ApplyFelt()
-	private.RefreshSettings()
+	Poker.Wanted.Theme:Choose(key)
+end
+
+-- The theme chosen in Wanted's Settings redraws the felt at once
+if Poker.Wanted and Poker.Wanted.Theme and Poker.Wanted.Theme.OnChosen then
+	Poker.Wanted.Theme:OnChosen(function()
+		private.ApplyFelt()
+		if private.RefreshSettings then
+			private.RefreshSettings()
+		end
+	end)
 end
 
 ---How bright a painted felt shows, in percent, kept per felt: the dark glass over it is the rest. 50 by default.
@@ -590,19 +596,14 @@ function private.BuildSettings()
 	-- The felt: the plain green or one of the painted ones
 	local feltLabel = Theme:Text(panel, "small", "Felt", C.muted)
 	feltLabel:SetPoint("TOPLEFT", 30, y - 65)
-	panel.felt = W:Button(panel, "", "secondary", 150, 22, function(self)
-		local current = TableUI:Felt()
-		local items = {}
-		for _, felt in ipairs(FELTS) do
-			local key = felt[1]
-			tinsert(items, { text = felt[2], color = key == current and C.accent or nil, onClick = function() TableUI:SetFelt(key) end })
-		end
-		W:Menu(items, self)
+	panel.felt = W:Button(panel, "", "secondary", 150, 22, function()
+		-- The felt is the window theme's: chosen in Wanted's Settings, Theme
+		Poker.Wanted.UI:ShowThemeSettings()
 	end)
 	panel.felt:SetPoint("TOPLEFT", 120, y - 60)
 	panel.felt.label:SetWidth(132)
 	panel.felt.label:SetWordWrap(false)
-	W:AttachTooltip(panel.felt, "Felt", "The cloth on the table: the plain green, or a painted one from around Azeroth.")
+	W:AttachTooltip(panel.felt, "Felt", "The window theme's felt. Click to choose the theme in Wanted's Settings: the table follows it.")
 	-- How bright the painted felt shows, per felt
 	panel.brightness = W:Slider(panel, "Background brightness", 200, 10, 100, 5, function(v) return v.."%" end, function(v)
 		TableUI:SetBrightness(TableUI:Felt(), v)

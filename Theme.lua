@@ -102,6 +102,31 @@ function Theme:Apply(key)
 	return theme
 end
 
+-- What follows the theme chosen (Dead Man's Hand Poker's table felt)
+local chosenListeners = {}
+
+---Calls fn(key) whenever a theme is chosen.
+---@param fn function
+function Theme:OnChosen(fn)
+	tinsert(chosenListeners, fn)
+end
+
+---Chooses the window theme (Settings, Theme): saved, and passed on to what follows it. Its colours apply at the next
+---/reload; the window's felt and the poker table's change at once.
+---@param key string
+function Theme:Choose(key)
+	Wanted.db.settings.theme = Theme:Get(key).key
+	for _, fn in ipairs(chosenListeners) do
+		pcall(fn, Wanted.db.settings.theme)
+	end
+end
+
+---The theme chosen: the saved one, or the default for the player's side.
+---@return table
+function Theme:Chosen()
+	return Theme:Get(Wanted.db and Wanted.db.settings.theme)
+end
+
 ---The theme's felt as a file path (it ships with Dead Man's Hand Poker, Wanted's own second folder).
 ---@param theme table?
 function Theme:FeltFile(theme)

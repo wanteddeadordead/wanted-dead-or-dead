@@ -16,7 +16,8 @@ local private = {
 }
 -- The development note under the title bar adds its height to the window, so pages keep their size
 local NOTE_HEIGHT = 24
-local WIDTH, HEIGHT = 960, 640 + NOTE_HEIGHT
+-- EllesmereUI's window size: 1300 by 946 screen pixels, which is 1090 by 795 at the usual UI scale (2026-10-17)
+local WIDTH, HEIGHT = 1090, 771 + NOTE_HEIGHT
 local TITLE_HEIGHT = 48
 local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22

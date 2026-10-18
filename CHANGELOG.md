@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-10-17
+
 - Kills, deaths and assists reach the website within a minute with the Wanted app running: each new record is also written to the game's log file, where the app reads it, as it already did for capture point presence. Before, they waited for a /reload or logout.
 - Kill and death records note who was around when they happened: how many enemy players were in view, how many of them were close or in the fight, and how many of your own side. The website uses it to learn how much numbers decide fights, without counting from the kills themselves.
 

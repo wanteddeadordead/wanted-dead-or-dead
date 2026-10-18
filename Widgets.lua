@@ -9,11 +9,16 @@ local C = Theme.C
 
 local STYLES = {
 	primary = { bg = C.accent, hover = C.accentHover, border = C.accent, text = C.white },
-	secondary = { bg = C.panelAlt, hover = { 0.15, 0.155, 0.185, 1 }, border = C.border, text = C.text },
+	-- EllesmereUI's buttons: a dark see-through fill, a white border at 30% that brightens to 45% under the mouse
+	secondary = { bg = { 0.09, 0.08, 0.07, 0.6 }, hover = { 0.13, 0.12, 0.11, 0.7 }, border = { 1, 1, 1, 0.3 }, hoverBorder = { 1, 1, 1, 0.45 },
+		text = { 0.86, 0.86, 0.88 }, hoverText = C.white },
 	ghost = { bg = C.transparent, hover = C.hover, border = C.transparent, text = C.muted, hoverText = C.text },
 	success = { bg = { 0.2, 0.46, 0.27, 1 }, hover = { 0.25, 0.56, 0.33, 1 }, border = { 0.28, 0.6, 0.36, 1 }, text = C.white },
 	danger = { bg = C.transparent, hover = C.redDim, border = C.red, text = C.red },
 	selected = { bg = C.accentDim, hover = C.accentDim, border = C.accent, text = C.white },
+	-- Tabs: words with an accent line under the one shown, as EllesmereUI draws them
+	tab = { bg = C.transparent, hover = C.transparent, border = C.transparent, text = C.muted, hoverText = C.text },
+	tabSelected = { bg = C.transparent, hover = C.transparent, border = C.transparent, text = C.white },
 	chip = { bg = C.transparent, hover = C.hover, border = C.border, text = C.muted, hoverText = C.text },
 }
 
@@ -55,7 +60,7 @@ local function RefreshButton(button)
 		bg = style.bg[4] == 0 and style.bg or C.panelAlt
 	end
 	Theme:SetBg(button, bg)
-	Theme:SetBorderColor(button, enabled and style.border or C.border)
+	Theme:SetBorderColor(button, enabled and (button.hovered and style.hoverBorder or style.border) or C.border)
 	local text = (enabled and button.hovered and style.hoverText) or style.text
 	if not enabled then
 		-- Dimmed but still readable
@@ -298,9 +303,15 @@ function W:Segmented(parent, items, onSelect, width)
 	control.buttons = {}
 	local x = 0
 	for _, item in ipairs(items) do
-		local button = W:Button(control, item.label, "secondary", width or 110, 26)
+		local button = W:Button(control, item.label, "tab", width or 110, 26)
 		button:SetPoint("LEFT", x, 0)
 		button.key = item.key
+		button.underline = button:CreateTexture(nil, "ARTWORK")
+		button.underline:SetPoint("BOTTOMLEFT", 8, 0)
+		button.underline:SetPoint("BOTTOMRIGHT", -8, 0)
+		button.underline:SetHeight(2)
+		button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		button.underline:Hide()
 		button:SetScript("OnClick", function()
 			control:Select(item.key)
 		end)
@@ -346,8 +357,10 @@ function W:Segmented(parent, items, onSelect, width)
 		-- whole outline shows (its left edge was drawn under the button before it)
 		local level = self:GetFrameLevel()
 		for _, button in ipairs(self.buttons) do
-			button:SetStyle(button.key == key and "selected" or "secondary")
+			button:SetStyle(button.key == key and "tabSelected" or "tab")
 			button:SetFrameLevel(level + (button.key == key and 2 or 1))
+			button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+			button.underline:SetShown(button.key == key)
 		end
 		if not silent and onSelect then
 			onSelect(key)
@@ -619,7 +632,7 @@ local function CreateDialog()
 	frame:SetSize(400, 170)
 	frame:SetFrameStrata("FULLSCREEN_DIALOG")
 	frame:SetFrameLevel(blocker:GetFrameLevel() + 5)
-	Theme:Skin(frame, C.panel, C.borderLight)
+	Theme:Skin(frame, C.panelSolid, C.borderLight)
 	frame.bar = frame:CreateTexture(nil, "ARTWORK")
 	frame.bar:SetPoint("TOPLEFT", 1, -1)
 	frame.bar:SetPoint("TOPRIGHT", -1, -1)
@@ -887,7 +900,7 @@ local function CreateMenu()
 	frame:SetFrameStrata("TOOLTIP")
 	frame:SetClampedToScreen(true)
 	frame:EnableMouse(true)
-	Theme:Skin(frame, C.panel, C.borderLight)
+	Theme:Skin(frame, C.panelSolid, C.borderLight)
 	frame.items = {}
 	frame:Hide()
 	-- Close on any click outside it

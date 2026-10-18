@@ -755,7 +755,8 @@ end)
 -- released builds have none of it (this file is left out of them).
 local MARK_SIZE = 16
 
----The version book's entry for a unit, or nil.
+---What this client knows of a unit running Wanted: { v = version heard, t = when } from the version book, or
+---{ app = true, t = app last seen, f = side } from the site's list (an admin's app, app 0.2.58); nil when neither.
 local function Heard(unit)
 	if not unit or not UnitIsPlayer(unit) then
 		return nil
@@ -765,7 +766,15 @@ local function Heard(unit)
 		return nil
 	end
 	local book = Wanted.db and Wanted.db.addonVersions
-	return book and book[name]
+	local heard = book and book[name]
+	local site = Wanted.appWantedUsers and Wanted.appWantedUsers[name]
+	if heard then
+		return { v = heard.v, t = heard.t, app = type(site) == "table" }
+	end
+	if type(site) == "table" then
+		return { app = true, t = tonumber(site.t) or 0 }
+	end
+	return nil
 end
 
 local marks = {}
@@ -817,7 +826,11 @@ if TooltipDataProcessor and Enum and Enum.TooltipDataType and TooltipUtil and To
 		local entry = Heard(unit)
 		if entry then
 			local ago = Wanted.Theme and Wanted.Theme:Ago(GetServerTime() - (entry.t or 0)) or ""
-			tooltip:AddLine(format("|TInterface\\AddOns\\%s\\Media\\seal:14:14|t Wanted %s, heard %s", Wanted.FOLDER, tostring(entry.v), ago), 0.85, 0.72, 0.45)
+			local what = entry.v and format("Wanted %s, heard %s", tostring(entry.v), ago) or format("Wanted app user, app seen %s", ago)
+			if entry.v and entry.app then
+				what = what..", app user"
+			end
+			tooltip:AddLine(format("|TInterface\\AddOns\\%s\\Media\\seal:14:14|t %s", Wanted.FOLDER, what), 0.85, 0.72, 0.45)
 		end
 	end)
 end

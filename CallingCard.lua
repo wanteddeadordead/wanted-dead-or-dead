@@ -174,6 +174,48 @@ function CallingCard:TakeMine(cards)
 	end
 end
 
+---A card from the site made safe to draw: { background, border, plate, emblem, stats = { 3 ids } } of pieces the
+---catalogue knows (no emblem for an unknown one), or nil when a background, border or plate is missing or unknown.
+---@param card table?
+---@return table?
+function CallingCard:CleanCard(card)
+	private.Parts()
+	if type(card) ~= "table" then
+		return nil
+	end
+	local picked = {}
+	for i = 1, 3 do
+		local id = type(card.stats) == "table" and card.stats[i]
+		picked[i] = STAT_LABELS[id] and id or DEFAULT_STATS[i]
+	end
+	local clean = {
+		background = private.Known(card.background, "background") and card.background,
+		border = private.Known(card.border, "border") and card.border,
+		plate = private.Known(card.plate, "plate") and card.plate,
+		emblem = private.Known(card.emblem, "emblem") and card.emblem or NO_EMBLEM,
+		stats = picked,
+	}
+	return clean.background and clean.border and clean.plate and clean or nil
+end
+
+---Another player's designed card, as their victims see it: the card and three { label, value }, or nil when they
+---haven't designed one (the site's cosmetics, Achievements:CosmeticsOf).
+---@param name string?
+---@return table? card, table? stats
+function CallingCard:CardOf(name)
+	local looks = Wanted.Achievements:CosmeticsOf(name)
+	local card = looks.card
+	if not card then
+		return nil, nil
+	end
+	local stats = {}
+	for i = 1, 3 do
+		local id = card.stats[i]
+		stats[i] = { STAT_LABELS[id] or id, looks.values and looks.values[i] or "-" }
+	end
+	return card, stats
+end
+
 -- Each part's art, width over height, for drawing it whole (the toasts)
 local PART_ASPECT = { emblem = 1, plate = 540 / 200, border = 1040 / 400, background = 3 }
 

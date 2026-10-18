@@ -67,9 +67,18 @@ function private.Create()
 	f.stamp = Theme:Text(f, "tiny", "", C.red)
 	f.stamp:SetPoint("TOPRIGHT", -36, -16)
 
+	-- The killer's calling card, when they designed one (the site's, app 0.2.58): their banner under the heading, the
+	-- rest of the card moved down under it (the body)
+	f.banner = Wanted.CallingCard:Banner(f, WIDTH - 28)
+	f.banner:SetPoint("TOP", 0, -34)
+	f.banner:Hide()
+	f.body = CreateFrame("Frame", nil, f)
+	f.body:SetPoint("TOPLEFT")
+	f.body:SetPoint("TOPRIGHT")
+	f.body:SetHeight(1)
 	f.icon = f:CreateTexture(nil, "ARTWORK")
 	f.icon:SetSize(28, 28)
-	f.icon:SetPoint("TOPLEFT", 14, -34)
+	f.icon:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -34)
 	f.name = Theme:Text(f, "title", "")
 	f.name:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 8, 2)
 	f.name:SetPoint("RIGHT", -14, 0)
@@ -78,7 +87,7 @@ function private.Create()
 	f.who:SetPoint("RIGHT", -14, 0)
 
 	f.sure = Theme:Text(f, "small", "", C.amber)
-	f.sure:SetPoint("TOPLEFT", 14, -74)
+	f.sure:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -74)
 	f.sure:SetPoint("RIGHT", -14, 0)
 	f.record = Theme:Text(f, "body", "")
 	f.record:SetPoint("RIGHT", -14, 0)
@@ -149,28 +158,42 @@ function private.Fill(guid, how)
 	f.record:SetPoint("RIGHT", -14, 0)
 	if how == "recap" then
 		f.sure:Hide()
-		f.record:SetPoint("TOPLEFT", 14, -76)
+		f.record:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -76)
 		f:SetHeight(HEIGHT)
 	elseif how == "pet" then
 		-- Certain, so not a warning: said in the card's quiet colour
 		f.sure:SetText("Their pet landed the killing blow")
 		f.sure:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
 		f.sure:Show()
-		f.record:SetPoint("TOPLEFT", 14, -94)
+		f.record:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -94)
 		f:SetHeight(HEIGHT_UNSURE)
 	elseif how == "pet guess" then
 		f.sure:SetText("Probably "..d.name..": a pet landed the killing blow, and they had you targeted")
 		f.sure:SetTextColor(C.amber[1], C.amber[2], C.amber[3])
 		f.sure:Show()
-		f.record:SetPoint("TOPLEFT", 14, -94)
+		f.record:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -94)
 		f:SetHeight(HEIGHT_UNSURE)
 	else
 		f.sure:SetText("Probably "..d.name..": the death recap didn't say, but they had you targeted")
 		f.sure:SetTextColor(C.amber[1], C.amber[2], C.amber[3])
 		f.sure:Show()
-		f.record:SetPoint("TOPLEFT", 14, -94)
+		f.record:SetPoint("TOPLEFT", f.body, "TOPLEFT", 14, -94)
 		f:SetHeight(HEIGHT_UNSURE)
 	end
+	-- Their calling card above the rest, when they designed one
+	local card, cardStats = Wanted.CallingCard:CardOf(d.name)
+	local bannerHeight = 0
+	if card then
+		Wanted.CallingCard:Draw(f.banner, card, d.name, cardStats)
+		f.banner:Show()
+		bannerHeight = f.banner:GetHeight() + 4
+	else
+		f.banner:Hide()
+	end
+	f.body:ClearAllPoints()
+	f.body:SetPoint("TOPLEFT", 0, -bannerHeight)
+	f.body:SetPoint("TOPRIGHT", 0, -bannerHeight)
+	f:SetHeight(f:GetHeight() + bannerHeight)
 	f.record:SetText(format("They've won %d, you've won %d", d.losses, d.wins))
 	local status = {}
 	if d.bounty > 0 then

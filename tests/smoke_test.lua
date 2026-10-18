@@ -6433,6 +6433,18 @@ end)()
 	card:ShowFor("Player-9-COSMETIC")
 	check(f.name._text:find("|T", 1, true) and f.name._text:find("Stabby Mcstab", 1, true), "the death card's name carries the emblem: "..tostring(f.name._text))
 	check(f.stamp._text == "FOUNDING HUNTER", "and the stamp")
+	check(not f.banner:IsShown(), "no banner for a killer who never designed a card")
+	-- A killer who designed a calling card: their whole card on the death card, the rest under it
+	local plain = f:GetHeight()
+	A:TakeCosmetics({ ["stabby mcstab"] = { e = "witness-emblem", f = "gold",
+		c = { p = "starter-plate", b = "starter-border", g = "starter-bg", e = "killer-emblem", s = { "kills", "hks", "nope" } }, v = { "42", "7", "1" } },
+		["fake card"] = { c = { p = "made-up", b = "starter-border", g = "starter-bg" } } })
+	check(A:CosmeticsOf("Stabby Mcstab").card and A:CosmeticsOf("Stabby Mcstab").card.plate == "starter-plate" and next(A:CosmeticsOf("Fake Card")) == nil,
+		"a designed card is kept; one with a piece the catalogue doesn't know is dropped")
+	card:ShowFor("Player-9-COSMETIC")
+	check(f.banner:IsShown() and f.banner.plate._texture:find("starter-plate", 1, true) and f.banner.name._text:find("Stabby Mcstab", 1, true)
+		and f:GetHeight() > plain, "the death card shows the killer's calling card on top: "..tostring(f.banner.plate._texture))
+	check(f.banner.stats[1].value._text == "42", "with their stats' values")
 	A:TakeCosmetics(nil)
 	card:ShowFor("Player-9-COSMETIC")
 	check(f.stamp._text == "" and not f.name._text:find("|T", 1, true), "none once the cosmetics are gone")

@@ -464,8 +464,18 @@ function Achievements:TakeCosmetics(looks)
 				signature = type(c.s) == "string" and CELLS[c.s] and c.s or nil,
 				frame = type(c.f) == "string" and Achievements.FRAME_COLORS[c.f] and c.f or nil,
 				stamp = private.Text(c.t, 40),
+				-- The calling card they designed (app 0.2.58), for their victims' death cards, and its stats' values
+				card = c.c and Wanted.CallingCard and Wanted.CallingCard:CleanCard({ background = c.c.g, border = c.c.b,
+					plate = c.c.p, emblem = c.c.e, stats = c.c.s }) or nil,
 			}
-			if kept.emblem or kept.signature or kept.frame or kept.stamp then
+			if kept.card then
+				local values = {}
+				for i = 1, 3 do
+					values[i] = type(c.v) == "table" and private.Text(c.v[i], 16) or nil
+				end
+				kept.values = values
+			end
+			if kept.emblem or kept.signature or kept.frame or kept.stamp or kept.card then
 				private.cosmetics[strlower(name)] = kept
 				holders = holders + 1
 			end

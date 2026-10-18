@@ -110,6 +110,8 @@ end
 -- ============================================================================
 
 function private.Create()
+	-- The theme first: everything below takes its colours
+	local theme = Theme:Apply(Wanted.db.settings.theme)
 	local frame = CreateFrame("Frame", "WantedFrame", UIParent)
 	frame:SetSize(WIDTH, HEIGHT)
 	frame:SetFrameStrata("HIGH")
@@ -118,6 +120,31 @@ function private.Create()
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	Theme:Skin(frame, C.bg, C.borderLight)
+	-- The theme's felt under everything, darkened, with its emblem showing through the see-through panels; a shadow
+	-- along the top and bottom edges
+	frame.felt = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
+	frame.felt:SetPoint("TOPLEFT", 1, -1)
+	frame.felt:SetPoint("BOTTOMRIGHT", -1, 1)
+	frame.felt:SetTexture(Theme:FeltFile(theme))
+	frame.felt:SetVertexColor(theme.shade, theme.shade, theme.shade, 1)
+	for _, edge in ipairs({ "TOP", "BOTTOM" }) do
+		local shadow = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+		shadow:SetPoint(edge.."LEFT", 1, edge == "TOP" and -1 or 1)
+		shadow:SetPoint(edge.."RIGHT", -1, edge == "TOP" and -1 or 1)
+		shadow:SetHeight(140)
+		shadow:SetColorTexture(1, 1, 1, 1)
+		if shadow.SetGradient and CreateColor then
+			local dark, clear = CreateColor(0, 0, 0, 0.55), CreateColor(0, 0, 0, 0)
+			if edge == "TOP" then
+				shadow:SetGradient("VERTICAL", clear, dark)
+			else
+				shadow:SetGradient("VERTICAL", dark, clear)
+			end
+		else
+			shadow:Hide()
+		end
+	end
+	private.theme = theme
 	local saved = Wanted.db.settings.window
 	if saved and saved.point then
 		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)
@@ -153,15 +180,14 @@ function private.Create()
 		local point, _, _, x, y = frame:GetPoint(1)
 		Wanted.db.settings.window = { point = point, x = x, y = y }
 	end)
-	local titleLine = Theme:Line(titleBar)
-	titleLine:SetPoint("BOTTOMLEFT")
-	titleLine:SetPoint("BOTTOMRIGHT")
+
 	-- The wax seal, as on the website
 	local mark = titleBar:CreateTexture(nil, "ARTWORK")
 	mark:SetSize(32, 32)
 	mark:SetPoint("LEFT", 12, 0)
 	mark:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
-	local brand = Theme:Text(titleBar, "brand", "WANTED: "..Theme:Colorize("DEAD OR...", C.muted).." "..Theme:Colorize("DEAD", C.accent))
+	local brand = titleBar:CreateFontString(nil, "ARTWORK", "WantedFontDisplay")
+	brand:SetText(Theme:Colorize("WANTED:", C.accent).." "..Theme:Colorize("DEAD OR...", C.text).." "..Theme:Colorize("DEAD", C.red))
 	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
 	local anchor = brand
 	if Wanted.BETA then
@@ -210,7 +236,7 @@ function private.Create()
 	note:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT")
 	note:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT")
 	note:SetHeight(NOTE_HEIGHT)
-	Theme:Fill(note, { C.amber[1] * 0.22, C.amber[2] * 0.22, C.amber[3] * 0.22, 1 })
+	Theme:Fill(note, { C.amber[1] * 0.22, C.amber[2] * 0.22, C.amber[3] * 0.22, 0.7 })
 	local noteText = Theme:Text(note, "small", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", C.amber)
 	noteText:SetPoint("LEFT", 14, 0)
 	noteText:SetPoint("RIGHT", -14, 0)
@@ -244,6 +270,7 @@ function private.Create()
 		nav.bar:SetWidth(3)
 		nav.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 		nav.label = Theme:Text(nav, "body", def.menuLabel or def.title)
+		nav.label:SetSpacing(0)
 		nav.label:SetPoint("LEFT", 22, 0)
 		nav.badge = W:Pill(nav)
 		nav.badge:SetPoint("RIGHT", -14, 0)
@@ -252,6 +279,9 @@ function private.Create()
 		nav:SetScript("OnEnter", function(self)
 			if (private.owner or private.current) ~= self.key then
 				self.bg:SetColorTexture(1, 1, 1, 0.035)
+				if self.bg.SetGradient and CreateColor then
+					self.bg:SetGradient("HORIZONTAL", CreateColor(1, 1, 1, 0.05), CreateColor(1, 1, 1, 0.01))
+				end
 			end
 		end)
 		nav:SetScript("OnLeave", function(self)
@@ -296,7 +326,7 @@ function private.Create()
 	private.title = Theme:Text(content, "title", "")
 	private.title:SetPoint("TOPLEFT", 0, 0)
 	private.subtitle = Theme:Text(content, "small", "")
-	private.subtitle:SetPoint("TOPLEFT", 0, -26)
+	private.subtitle:SetPoint("TOPLEFT", 0, -30)
 	private.subtitle:SetPoint("RIGHT", 0, 0)
 	private.subtitle:SetWordWrap(false)
 	-- Tabs for pages that share a menu entry: along the top of the header, in place of the title (the tab says which
@@ -674,7 +704,13 @@ function UI:Refresh(allBadges)
 		local nav = private.navButtons[page.key]
 		local selected = page.key == owner
 		nav.bar:SetShown(selected)
-		nav.bg:SetColorTexture(1, 1, 1, selected and 0.06 or 0)
+		-- EllesmereUI's selected entry: the accent bar, and the accent fading out to the right
+		nav.bg:SetColorTexture(1, 1, 1, selected and 1 or 0)
+		if selected and nav.bg.SetGradient and CreateColor then
+			nav.bg:SetGradient("HORIZONTAL", CreateColor(C.accent[1], C.accent[2], C.accent[3], 0.16), CreateColor(C.accent[1], C.accent[2], C.accent[3], 0))
+		elseif selected then
+			nav.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.1)
+		end
 		nav.label:SetTextColor(unpack(selected and C.white or C.muted))
 		local badge, color = nil, nil
 		if page.badge then
@@ -798,3 +834,15 @@ end)
 Wanted:RegisterCommand("hotspots", "Opens the Hotspots page: where enemy players are right now.", function()
 	UI:Show("hotspots")
 end)
+
+---Shows a theme's felt behind the window at once, before the /reload that applies its colours (Settings).
+---@param key string
+function UI:PreviewTheme(key)
+	local frame = private.frame
+	if not frame then
+		return
+	end
+	local theme = Theme:Get(key)
+	frame.felt:SetTexture(Theme:FeltFile(theme))
+	frame.felt:SetVertexColor(theme.shade, theme.shade, theme.shade, 1)
+end

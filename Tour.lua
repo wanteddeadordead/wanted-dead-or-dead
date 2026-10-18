@@ -241,7 +241,7 @@ function private.Create()
 		f:SetScript("OnDragStart", function(self) self:StartMoving() end)
 		f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 	end
-	Theme:Skin(f, C.panel, C.borderLight)
+	Theme:Skin(f, C.panelSolid, C.borderLight)
 	f.counter = Theme:Text(f, "small", "", C.muted)
 	f.counter:SetPoint("TOPLEFT", PAD, -16)
 	f.title = Theme:Text(f, "title", "", C.gold)

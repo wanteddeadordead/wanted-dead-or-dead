@@ -310,6 +310,23 @@ function private.BuildSharing(panel, width)
 	end)
 	private.minimap:SetPoint("TOPLEFT", 16, -62)
 	private.Toggle(display, function() return Wanted.db.settings end, "showTools", "Show the Tools page", "Network details, test data and the debug log. Handy when reporting a problem; off by default.", 16, -86)
+	-- The window's theme: one per poker felt. The felt changes at once; the colours with a /reload
+	local themeLabel = Theme:Text(display, "small", "Window theme", C.muted)
+	themeLabel:SetPoint("TOPLEFT", 440, -40)
+	local themeChoices = {}
+	for _, theme in ipairs(Theme.THEMES) do
+		tinsert(themeChoices, { key = theme.key, label = theme.name })
+	end
+	private.theme = W:Choice(display, 180, themeChoices, function(key)
+		Wanted.db.settings.theme = key
+		UI:PreviewTheme(key)
+		Wanted:Print("Window theme: %s. Reload to apply its colours.", Theme:Get(key).name)
+	end)
+	private.theme:SetPoint("TOPLEFT", 440, -58)
+	private.theme:SetChoice(Theme:Get(Wanted.db.settings.theme).key)
+	W:AttachTooltip(private.theme, "Window theme", "The window in the style of a poker felt: its art behind the pages and its colours. Your side's capital until you pick one.")
+	local reload = W:Button(display, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
+	reload:SetPoint("LEFT", private.theme, "RIGHT", 10, 0)
 	private.Toggle(display, function() return Wanted.db.settings end, "sigBackground", "Check signatures in the background", "Bounties, claims and payments are signed by the players who make them. Wanted checks the ones you hold, one a second, never in a fight. Off: only the ones a page shows or reads.", 16, -110)
 	local proof = private.Card(panel, -328, 120, "Kill proof", width)
 	private.Toggle(proof, function() return Wanted.db.settings end, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.", 16, -38)

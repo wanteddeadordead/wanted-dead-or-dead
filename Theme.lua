@@ -11,6 +11,8 @@ local C = {
 	sidebar = { 0.059, 0.063, 0.078, 1 },
 	panel = { 0.086, 0.09, 0.11, 1 },
 	panelAlt = { 0.114, 0.118, 0.141, 1 },
+	-- A panel for a window of its own over the game world (dialogs, menus): never see-through, as the themes make panel
+	panelSolid = { 0.086, 0.09, 0.11, 1 },
 	input = { 0.035, 0.039, 0.047, 1 },
 	hover = { 1, 1, 1, 0.05 },
 	rowAlt = { 1, 1, 1, 0.018 },
@@ -33,6 +35,79 @@ local C = {
 	transparent = { 0, 0, 0, 0 },
 }
 Theme.C = C
+
+-- The window themes, one per poker felt: the felt (Poker\Media\felt-<key>) under the whole window, darkened, panels
+-- tinted from its colour, and an accent from its art. Red stays for danger and for "DEAD" in the brand in every theme.
+-- base: the felt's own colour; accent: buttons, tabs, section labels, the selected menu entry; shade: how much the
+-- felt is darkened (a pale felt more).
+local THEMES = {
+	{ key = "stormwind", name = "Stormwind", base = { 0.149, 0.204, 0.255 }, accent = { 0.83, 0.69, 0.36 }, shade = 0.38 },
+	{ key = "orgrimmar", name = "Orgrimmar", base = { 0.282, 0.118, 0.114 }, accent = { 0.86, 0.33, 0.25 }, shade = 0.42 },
+	{ key = "elwynn", name = "Elwynn Forest", base = { 0.188, 0.341, 0.204 }, accent = { 0.82, 0.62, 0.27 }, shade = 0.36 },
+	{ key = "durotar", name = "Durotar", base = { 0.565, 0.216, 0.122 }, accent = { 0.9, 0.5, 0.25 }, shade = 0.3 },
+	{ key = "stranglethorn", name = "Stranglethorn Vale", base = { 0.227, 0.325, 0.204 }, accent = { 0.36, 0.74, 0.55 }, shade = 0.38 },
+	{ key = "winterspring", name = "Winterspring", base = { 0.4, 0.5, 0.58 }, accent = { 0.58, 0.8, 0.94 }, shade = 0.2 },
+	{ key = "tanaris", name = "Tanaris", base = { 0.5, 0.39, 0.22 }, accent = { 0.9, 0.72, 0.38 }, shade = 0.24 },
+	{ key = "undercity", name = "Undercity", base = { 0.24, 0.2, 0.27 }, accent = { 0.58, 0.82, 0.32 }, shade = 0.4 },
+	{ key = "ironforge", name = "Ironforge", base = { 0.243, 0.224, 0.231 }, accent = { 0.96, 0.5, 0.18 }, shade = 0.46 },
+	{ key = "darnassus", name = "Darnassus", base = { 0.224, 0.169, 0.275 }, accent = { 0.78, 0.76, 0.92 }, shade = 0.42 },
+}
+Theme.THEMES = THEMES
+
+---A colour of the theme's base, darkened to a share of black (0..1), with an alpha.
+local function Tint(base, share, alpha)
+	return { 0.035 + base[1] * share, 0.035 + base[2] * share, 0.04 + base[3] * share, alpha or 1 }
+end
+
+---Sets a palette entry's values in place, so everything holding the table (the button styles) sees the change.
+local function Put(name, color)
+	local entry = C[name]
+	for i = 1, 4 do
+		entry[i] = color[i] or (i == 4 and 1 or nil)
+	end
+end
+
+---The theme for a key, or the default for the player's side (Orgrimmar for the Horde, Stormwind for the Alliance).
+---@param key string?
+---@return table
+function Theme:Get(key)
+	for _, theme in ipairs(THEMES) do
+		if theme.key == key then
+			return theme
+		end
+	end
+	local side = UnitFactionGroup and UnitFactionGroup("player")
+	return side == "Horde" and THEMES[2] or THEMES[1]
+end
+
+---Applies a theme to the palette: call before any window is drawn (a window drawn already keeps its colours until a
+---/reload). Panels are see-through over the felt, as the theme's art is meant to show.
+---@param key string?
+function Theme:Apply(key)
+	local theme = Theme:Get(key)
+	Theme.current = theme
+	local b, a = theme.base, theme.accent
+	Put("bg", Tint(b, 0.12))
+	Put("titleBar", Tint(b, 0.08, 0))
+	Put("sidebar", Tint(b, 0.1, 0.78))
+	Put("panel", Tint(b, 0.16, 0.74))
+	Put("panelAlt", Tint(b, 0.26, 0.82))
+	Put("panelSolid", Tint(b, 0.16, 0.97))
+	Put("input", Tint(b, 0.06, 0.9))
+	Put("border", { 0.16 + b[1] * 0.25, 0.16 + b[2] * 0.25, 0.17 + b[3] * 0.25, 0.9 })
+	Put("borderLight", { 0.26 + b[1] * 0.3, 0.26 + b[2] * 0.3, 0.27 + b[3] * 0.3, 1 })
+	Put("accent", { a[1], a[2], a[3], 1 })
+	Put("accentHover", { min(1, a[1] * 1.12 + 0.04), min(1, a[2] * 1.12 + 0.04), min(1, a[3] * 1.12 + 0.04), 1 })
+	Put("accentDim", { a[1], a[2], a[3], 0.2 })
+	return theme
+end
+
+---The theme's felt as a file path (it ships with Dead Man's Hand Poker, Wanted's own second folder).
+---@param theme table?
+function Theme:FeltFile(theme)
+	theme = theme or Theme.current or Theme:Get()
+	return "Interface\\AddOns\\"..Wanted.FOLDER.."_Poker\\Media\\felt-"..theme.key
+end
 
 -- One file per alphabet, as the client's own fonts do, so a Cyrillic, Korean or Chinese name renders
 -- instead of turning into boxes
@@ -72,7 +147,7 @@ local function MakeFont(name, size, color, flags)
 end
 Theme.Fonts = {
 	brand = MakeFont("WantedFontBrand", 17, C.text),
-	title = MakeFont("WantedFontTitle", 18, C.text),
+	title = MakeFont("WantedFontTitle", 22, C.text),
 	heading = MakeFont("WantedFontHeading", 13, C.text),
 	body = MakeFont("WantedFontBody", 12, C.text),
 	small = MakeFont("WantedFontSmall", 11, C.muted),
@@ -80,6 +155,15 @@ Theme.Fonts = {
 	money = MakeFont("WantedFontMoney", 14, C.gold),
 	stat = MakeFont("WantedFontStat", 20, C.text),
 }
+-- The brand's own face, Rye (Media\Rye.ttf, SIL Open Font License): Latin only, so only for the fixed brand words
+do
+	local display = CreateFont("WantedFontDisplay")
+	display:SetFont("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\Rye.ttf", 19, "")
+	display:SetShadowOffset(1, -1)
+	display:SetShadowColor(0, 0, 0, 0.9)
+	display:SetTextColor(C.text[1], C.text[2], C.text[3])
+	Theme.Fonts.display = display
+end
 
 ---A solid colour texture covering a frame.
 function Theme:Fill(frame, color, layer)

@@ -80,17 +80,33 @@ function Methods:SetText(t)
 	if self._fs then self._fs._text = t end
 end
 function Methods:GetText() return self._text end
--- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
--- character (12pt: about 6.7 pixels), colour codes and textures taking none
+-- Text width as the game draws it in the interface font, Inter: each printable ASCII character's advance in ems, from
+-- Inter SemiBold (Media\fonts\Inter-SemiBold.ttf; Medium is a little narrower), space to "~". Any other character
+-- (Cyrillic, accents) counts as 0.65 em, an inline texture as 1.12 em, colour codes as nothing.
 function Methods:SetFont(_, size, flags) self._size, self._flags = size, flags end
 function Methods:Clear() self._cleared = (self._cleared or 0) + 1 end
 function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } end
 do
+	local INTER = { 0.252, 0.321, 0.523, 0.644, 0.65, 1.004, 0.663, 0.326, 0.373, 0.373, 0.54, 0.673, 0.319, 0.465, 0.319,
+		0.379, 0.66, 0.423, 0.623, 0.636, 0.666, 0.612, 0.64, 0.576, 0.64, 0.64, 0.319, 0.329, 0.673, 0.673, 0.673, 0.543,
+		0.999, 0.728, 0.659, 0.737, 0.722, 0.605, 0.588, 0.749, 0.746, 0.277, 0.58, 0.703, 0.565, 0.922, 0.759, 0.769,
+		0.645, 0.773, 0.652, 0.65, 0.66, 0.736, 0.728, 1.02, 0.72, 0.713, 0.652, 0.373, 0.379, 0.373, 0.481, 0.469, 0.351,
+		0.574, 0.624, 0.583, 0.624, 0.591, 0.389, 0.625, 0.612, 0.262, 0.262, 0.569, 0.262, 0.9, 0.612, 0.609, 0.624,
+		0.624, 0.397, 0.549, 0.353, 0.612, 0.587, 0.839, 0.569, 0.588, 0.566, 0.455, 0.359, 0.455, 0.673 }
 	local function TextWidth(fs)
-		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
+		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 		local size = type(fs._font) == "table" and fs._font._size or fs._size
 		-- Another addon's font, size unknown: 6 pixels a character
-		return #text * (size and size * 0.56 or 6)
+		if not size then
+			return #text:gsub("|T.-|t", "  ") * 6
+		end
+		local ems = 0
+		text = text:gsub("|T.-|t", function() ems = ems + 1.12 return "" end)
+		for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+			local byte = char:byte()
+			ems = ems + (#char == 1 and byte >= 32 and byte <= 126 and INTER[byte - 31] or (#char > 1 and 0.65 or 0))
+		end
+		return ems * size
 	end
 	function Methods:GetStringWidth() return TextWidth(self) end
 	function Methods:GetUnboundedStringWidth() return TextWidth(self) end
@@ -6557,15 +6573,22 @@ end)()
 	check(dialogFrame.cancel._point[1] == "BOTTOMRIGHT" and dialogFrame.cancel._point[3] == "BOTTOM" and dialogFrame.confirm._point[1] == "BOTTOMLEFT"
 		and dialogFrame.confirm._point[3] == "BOTTOM", "with Cancel and OK either side of its centre")
 	dialogFrame.cancel:Click()
-	-- Fonts: Barlow Semi Condensed for Latin, the client's Friz Quadrata for Cyrillic
+	-- Fonts: Inter for Latin and Cyrillic in the font's weight, the client's fonts for Korean and Chinese
 	local members
 	CreateFontFamily = function(_, list) members = list return CreateFont() end
 	ns.Theme:MakeFont("WantedTestFont", 12, nil, nil, "semibold")
 	CreateFontFamily = nil
 	local files = {}
 	for _, m in ipairs(members) do files[m.alphabet] = m.file end
-	check(files.roman:find("Media\\fonts\\BarlowSemiCondensed%-SemiBold%.ttf$") and files.russian == "Fonts\\FRIZQT___CYR.TTF",
-		"the font family: Barlow for Latin, Friz Quadrata for Cyrillic: "..tostring(files.roman))
+	check(files.roman:find("Media\\fonts\\Inter%-SemiBold%.ttf$") and files.russian == files.roman,
+		"the font family: Inter SemiBold for Latin and Cyrillic: "..tostring(files.roman).." / "..tostring(files.russian))
+	check(files.korean == "Fonts\\2002.TTF" and files.simplifiedchinese == "Fonts\\ARKai_T.ttf" and files.traditionalchinese == "Fonts\\blei00d.TTF",
+		"and the client's fonts for Korean and Chinese")
+	for _, name in ipairs({ "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-OFL.txt" }) do
+		local f = io.open(ADDON.."Media/fonts/"..name, "rb")
+		check(f, "the font ships: Media/fonts/"..name)
+		if f then f:close() end
+	end
 end)()
 -- The new widgets: switch, setting row, cog, multiselect, scroll area and step bar. Everything that carries a tooltip is a
 -- Button, so the controller's smart navigation reaches it and its FocusEnter (OnEnter) shows the tip.
@@ -6679,6 +6702,8 @@ end)()
 	check(went == nil, "a step to come doesn't")
 	bar:Set(3, nil, { [2] = true })
 	check(d[2].mark._texture:find("cross$") and d[2].ring._vertexColor[1] == C.red[1] and bar.lines[2]._color[4] == 0.12, "a failed step is a red ring with a cross")
+	bar:Set(2, nil, { [2] = true }, { [3] = true, [4] = true })
+	check(d[2].mark._texture:find("cross$") and d[3].mark._shown and d[3].mark._texture:find("tick$") and d[4]._w == 18, "a checklist: steps after the current one can be done too")
 end)()
 -- Settings in rows: switches for on/off, multiselects for where things show, cogs for the finer settings
 ;(function()

@@ -216,13 +216,14 @@ function Theme:FeltFile(theme)
 end
 
 -- One file per alphabet, as the client's own fonts do, so a Cyrillic, Korean or Chinese name renders
--- instead of turning into boxes. Latin is Barlow Semi Condensed (Media\fonts, SIL Open Font License), in two weights;
--- it has no Cyrillic, so Russian takes the client's own Friz Quadrata.
-local BARLOW = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\fonts\\BarlowSemiCondensed-"
-local ROMAN = { medium = BARLOW.."Medium.ttf", semibold = BARLOW.."SemiBold.ttf" }
+-- instead of turning into boxes. Latin and Cyrillic are Inter (Media\fonts, SIL Open Font License), in two weights;
+-- Korean and Chinese take the client's own fonts.
+local INTER = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\fonts\\Inter-"
+local ROMAN = { medium = INTER.."Medium.ttf", semibold = INTER.."SemiBold.ttf" }
+-- true: the member takes Inter in the font's weight
 local FONT_FILES = {
-	{ "roman", ROMAN.medium },
-	{ "russian", "Fonts\\FRIZQT___CYR.TTF" },
+	{ "roman", true },
+	{ "russian", true },
 	{ "korean", "Fonts\\2002.TTF" },
 	{ "simplifiedchinese", "Fonts\\ARKai_T.ttf" },
 	{ "traditionalchinese", "Fonts\\blei00d.TTF" },
@@ -236,7 +237,7 @@ function Theme:MakeFont(name, size, color, flags, weight)
 	if CreateFontFamily then
 		local members = {}
 		for _, entry in ipairs(FONT_FILES) do
-			tinsert(members, { alphabet = entry[1], file = entry[1] == "roman" and roman or entry[2], height = size, flags = flags or "" })
+			tinsert(members, { alphabet = entry[1], file = entry[2] == true and roman or entry[2], height = size, flags = flags or "" })
 		end
 		local ok, family = pcall(CreateFontFamily, name, members)
 		font = ok and family or nil

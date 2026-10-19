@@ -4,7 +4,7 @@
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
 - Every control in EllesmereUI's style: checkboxes, dropdowns with a chevron and the current choice marked in their menu, segmented controls with rounded ends, darker text fields, section headers with a rule, centred dialogs, and a value box beside each slider where you can type a number. Borders are a faint white that sits on any felt, and greyed-out buttons fade further.
-- The interface text is set in Barlow Semi Condensed, a condensed face close to EllesmereUI's; Russian names keep the game's own font. New font files: restart the client after updating.
+- The interface text is set in Inter, a clear screen face with tall lowercase letters, Russian names included. New font files: restart the client after updating.
 - The beta notice under the title bar is now the tooltip of a BETA tag beside the brand, so pages get its room back.
 - Settings in EllesmereUI's rows: one option per row with a switch, its help on the label, and a scroll bar when a tab runs long. What the Nearby window shows in each row, where ranks show and where capture fronts show are each one dropdown of checkboxes; the TARGETED warning, the streak callout and the rank labels keep their finer settings behind a cog.
 - Larger text: nothing is smaller than 12, and body text and labels are 13.

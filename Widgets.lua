@@ -1461,3 +1461,438 @@ function W:Suggest(box, source)
 		end
 	end)
 end
+
+
+
+-- ============================================================================
+-- Switch, setting row, cog, multiselect, scroll area
+-- ============================================================================
+
+-- EllesmereUI's switch: a square track, grey off and the accent on, with a knob that snaps to the side it's on
+local SWITCH_OFF, SWITCH_KNOB_OFF = { 0.267, 0.267, 0.267, 0.65 }, { 1, 1, 1, 0.5 }
+
+---An on/off switch for a setting on a row: SetChecked(on) without calling onChange, GetChecked().
+---@param onChange fun(checked: boolean)?
+---@return table switch a Button
+function W:Switch(parent, onChange)
+	local switch = CreateFrame("Button", nil, parent)
+	switch:SetSize(40, 20)
+	switch.track = Theme:Fill(switch, SWITCH_OFF)
+	switch.knob = switch:CreateTexture(nil, "ARTWORK")
+	switch.knob:SetSize(16, 16)
+	function switch:SetChecked(on)
+		self.checked = on and true or false
+		local track, knob = self.checked and { C.accent[1], C.accent[2], C.accent[3], 0.75 } or SWITCH_OFF, self.checked and C.white or SWITCH_KNOB_OFF
+		self.track:SetColorTexture(track[1], track[2], track[3], track[4])
+		self.knob:SetColorTexture(knob[1], knob[2], knob[3], knob[4] or 1)
+		self.knob:ClearAllPoints()
+		self.knob:SetPoint(self.checked and "RIGHT" or "LEFT", self.checked and -2 or 2, 0)
+	end
+	function switch:GetChecked()
+		return self.checked
+	end
+	switch:SetScript("OnClick", function(self)
+		self:SetChecked(not self.checked)
+		if onChange then
+			onChange(self.checked)
+		end
+	end)
+	switch.showsTooltip = true
+	switch:SetScript("OnEnter", ShowTooltip)
+	switch:SetScript("OnLeave", HideTooltip)
+	switch:SetChecked(false)
+	return switch
+end
+
+local ROW_HEIGHT = 44
+
+---EllesmereUI's setting row: one option, its label on the left and its control 20 px from the right, shaded in turn
+---with the rows before it under the same parent. The label's tooltip is the option's help.
+---@param control table? placed on the row (row.control)
+---@param tip string? the help, shown over the label with the label as its title
+---@return table row
+function W:Row(parent, width, label, control, tip)
+	local row = CreateFrame("Frame", nil, parent)
+	row:SetSize(width, ROW_HEIGHT)
+	parent.rowCount = (parent.rowCount or 0) + 1
+	row.shade = Theme:Fill(row, { 0, 0, 0, parent.rowCount % 2 == 1 and 0.1 or 0.2 })
+	row.label = Theme:Text(row, "heading", label)
+	row.label:SetPoint("LEFT", 20, 0)
+	row.control = control
+	if control then
+		control:SetParent(row)
+		control:ClearAllPoints()
+		control:SetPoint("RIGHT", -20, 0)
+		-- A long label stops short of the control, cut with an ellipsis
+		row.label:SetPoint("RIGHT", control, "LEFT", -16, 0)
+	end
+	if tip then
+		W:Explain(row.label, label, tip)
+	end
+	return row
+end
+
+-- The cog's popup and the multiselect's list: EllesmereUI's popup box
+local POPUP_FILL = { 0.077, 0.068, 0.058, 0.95 }
+local popupCount = 0
+
+---A frame over everything, at the scale of what opened it, closed by a click outside it (or on its opener), Escape,
+---or its opener going out of sight.
+local function Popup(opener, fill, border)
+	popupCount = popupCount + 1
+	local name = "WantedPopup"..popupCount
+	local popup = CreateFrame("Frame", name, UIParent)
+	popup:SetFrameStrata("FULLSCREEN_DIALOG")
+	popup:SetClampedToScreen(true)
+	popup:EnableMouse(true)
+	Theme:Skin(popup, fill, border)
+	popup:Hide()
+	popup:RegisterEvent("GLOBAL_MOUSE_DOWN")
+	popup:SetScript("OnEvent", function(self)
+		-- A menu opened from inside it (a dropdown in a cog's popup) counts as inside
+		local menuOver = _G.WantedMenu and _G.WantedMenu:IsShown() and _G.WantedMenu:IsMouseOver()
+		if self:IsShown() and not self:IsMouseOver() and not opener:IsMouseOver() and not menuOver then
+			self:Hide()
+		end
+	end)
+	if UISpecialFrames then
+		tinsert(UISpecialFrames, name)
+	end
+	opener:HookScript("OnHide", function() popup:Hide() end)
+	function popup:Open()
+		self:SetScale(opener:GetEffectiveScale() / UIParent:GetEffectiveScale())
+		self:Show()
+		self:Raise()
+	end
+	return popup
+end
+
+-- EllesmereUI's cog: faint, brighter under the mouse or while its popup is open, fainter still when disabled
+local COG_SIZE, COG_POPUP_WIDTH = 20, 300
+
+---A cog left of a row's control, opening a popup of the option's finer settings under it.
+---@param row table a W:Row with a control
+---@param title string the popup's title
+---@param build fun(popup: table, width: number): number fills the popup on its first opening (its title takes the top
+---36 px, 14 px padding on each side) and returns its height
+---@return table cog a Button
+function W:Cog(row, title, build)
+	local cog = CreateFrame("Button", nil, row)
+	cog:SetSize(COG_SIZE, COG_SIZE)
+	cog:SetPoint("RIGHT", row.control, "LEFT", -10, 0)
+	if row.control then
+		row.label:SetPoint("RIGHT", cog, "LEFT", -16, 0)
+	end
+	cog.icon = cog:CreateTexture(nil, "ARTWORK")
+	cog.icon:SetAllPoints()
+	cog.icon:SetTexture(MEDIA.."cog")
+	local function Light()
+		local alpha = not cog:IsEnabled() and 0.15 or ((cog.hovered or (cog.popup and cog.popup:IsShown())) and 0.7 or 0.4)
+		cog.icon:SetVertexColor(1, 1, 1, alpha)
+	end
+	cog:SetScript("OnClick", function(self)
+		if self.popup and self.popup:IsShown() then
+			self.popup:Hide()
+			return
+		end
+		if not self.popup then
+			local popup = Popup(self, POPUP_FILL, C.borderLight)
+			popup.title = Theme:Text(popup, "labelSmall", strupper(title))
+			popup.title:SetTextColor(1, 1, 1, 0.7)
+			popup.title:SetPoint("TOPLEFT", 14, -14)
+			popup:SetWidth(COG_POPUP_WIDTH)
+			popup:SetHeight(build(popup, COG_POPUP_WIDTH))
+			popup:HookScript("OnHide", Light)
+			self.popup = popup
+		end
+		self.popup:ClearAllPoints()
+		self.popup:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, -4)
+		self.popup:Open()
+		Light()
+	end)
+	cog:SetMotionScriptsWhileDisabled(true)
+	cog:SetScript("OnEnter", function(self)
+		self.hovered = true
+		Light()
+		ShowTooltip(self)
+	end)
+	cog:SetScript("OnLeave", function(self)
+		self.hovered = false
+		Light()
+		HideTooltip()
+	end)
+	cog.showsTooltip = true
+	cog:SetScript("OnEnable", Light)
+	cog:SetScript("OnDisable", Light)
+	W:Explain(cog, title)
+	Light()
+	return cog
+end
+
+-- EllesmereUI's multiselect boxes: a little lighter than the field, with a grey edge
+local MULTI_BOX, MULTI_EDGE = { 0.114, 0.106, 0.099, 1 }, { 0.4, 0.4, 0.4, 0.6 }
+local MULTI_ROW = 28
+
+---A field showing the options that are on, opening a list of checkboxes (EllesmereUI's look). The list stays open
+---while options are ticked; Escape or a click outside closes it.
+---@param options table[] { key, label, note?, locked?, tip? = { title, body } } in display order
+---@param onChange fun(key: any, checked: boolean, selected: table<any, boolean>)
+---@param placeholder string? shown when nothing is on (default "None")
+---@return table field with SetSelected(selected) (no onChange), GetSelected() -> table<key, boolean>, SetOptions(options)
+function W:MultiSelect(parent, width, options, onChange, placeholder)
+	local field = W:Choice(parent, width, {}, function() end)
+	local selected = {}
+	local list = Popup(field, C.fieldHover, C.fieldBorder)
+	list:SetWidth(width)
+	list.rows = {}
+	local function Summary()
+		local on, all = {}, true
+		for _, option in ipairs(options) do
+			if selected[option.key] then
+				tinsert(on, option.label)
+			else
+				all = false
+			end
+		end
+		field:SetText(#on == 0 and (placeholder or "None") or (all and #options > 1 and "All") or table.concat(on, ", "))
+	end
+	local function Paint(row)
+		local option = row.option
+		row.check:SetShown(selected[option.key] == true)
+		row:SetAlpha(option.locked and 0.45 or 1)
+	end
+	local function Build()
+		for _, row in ipairs(list.rows) do
+			row:Hide()
+		end
+		for i, option in ipairs(options) do
+			local row = list.rows[i]
+			if not row then
+				row = CreateFrame("Button", nil, list)
+				row:SetHeight(MULTI_ROW)
+				row.highlight = Theme:Fill(row, C.transparent)
+				row.box = CreateFrame("Frame", nil, row)
+				row.box:SetSize(16, 16)
+				row.box:SetPoint("LEFT", 10, 0)
+				Theme:Skin(row.box, MULTI_BOX, MULTI_EDGE)
+				row.check = row.box:CreateTexture(nil, "ARTWORK")
+				row.check:SetPoint("TOPLEFT", 2, -2)
+				row.check:SetPoint("BOTTOMRIGHT", -2, 2)
+				row.check:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+				row.label = Theme:Text(row, "body", "")
+				row.label:SetPoint("LEFT", row.box, "RIGHT", 8, 0)
+				row.note = Theme:Text(row, "tiny", "", C.faint)
+				row.note:SetPoint("RIGHT", -10, 0)
+				row.note:SetJustifyH("RIGHT")
+				row:SetScript("OnClick", function(self)
+					if self.option.locked then
+						return
+					end
+					local key = self.option.key
+					selected[key] = not selected[key] or nil
+					Paint(self)
+					Summary()
+					onChange(key, selected[key] == true, selected)
+				end)
+				row:HookScript("OnEnter", function(self) self.highlight:SetColorTexture(1, 1, 1, 0.08) end)
+				row:HookScript("OnLeave", function(self) self.highlight:SetColorTexture(0, 0, 0, 0) end)
+				list.rows[i] = row
+			end
+			row.option = option
+			row:ClearAllPoints()
+			row:SetPoint("TOPLEFT", 1, -4 - (i - 1) * MULTI_ROW)
+			row:SetPoint("TOPRIGHT", -1, -4 - (i - 1) * MULTI_ROW)
+			row.label:SetText(option.label)
+			row.note:SetText(option.note or "")
+			-- Beside the list, so it doesn't cover the options above
+			W:Explain(row, option.tip and option.tip[1], option.tip and option.tip[2], "ANCHOR_RIGHT")
+			Paint(row)
+			row:Show()
+		end
+		list:SetHeight(#options * MULTI_ROW + 8)
+	end
+	field:SetScript("OnClick", function(self)
+		if list:IsShown() then
+			list:Hide()
+			return
+		end
+		list:ClearAllPoints()
+		list:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+		list:Open()
+	end)
+	function field:SetSelected(set)
+		selected = {}
+		for key, on in pairs(set or {}) do
+			selected[key] = on and true or nil
+		end
+		for _, row in ipairs(list.rows) do
+			if row:IsShown() then
+				Paint(row)
+			end
+		end
+		Summary()
+	end
+	function field:GetSelected()
+		local copy = {}
+		for key in pairs(selected) do
+			copy[key] = true
+		end
+		return copy
+	end
+	function field:SetOptions(list2)
+		options = list2
+		Build()
+		Summary()
+	end
+	field.list = list
+	Build()
+	Summary()
+	return field
+end
+
+---A scrolling area for a page longer than its room: the mouse wheel scrolls it, with a thin bar like the lists'.
+---Put things on scroll.content (width less 12 for the bar), then Fit(height) to the height they take.
+---@return table scroll a ScrollFrame with .content and Fit(contentHeight)
+function W:Scroll(parent, width, height)
+	local scroll = CreateFrame("ScrollFrame", nil, parent)
+	scroll:SetSize(width, height)
+	local content = CreateFrame("Frame", nil, scroll)
+	content:SetSize(width - 12, 1)
+	scroll:SetScrollChild(content)
+	scroll.content = content
+	scroll.track = scroll:CreateTexture(nil, "BORDER")
+	scroll.track:SetPoint("TOPRIGHT", -2, 0)
+	scroll.track:SetPoint("BOTTOMRIGHT", -2, 0)
+	scroll.track:SetWidth(4)
+	scroll.track:SetColorTexture(1, 1, 1, 0.02)
+	scroll.thumb = scroll:CreateTexture(nil, "ARTWORK")
+	scroll.thumb:SetWidth(4)
+	scroll.thumb:SetColorTexture(1, 1, 1, 0.27)
+	local function Room()
+		return max((content.fitHeight or 0) - height, 0)
+	end
+	local function Place(offset)
+		offset = max(0, min(offset, Room()))
+		scroll:SetVerticalScroll(offset)
+		local room = Room()
+		scroll.track:SetShown(room > 0)
+		scroll.thumb:SetShown(room > 0)
+		if room > 0 then
+			local thumbHeight = max(height * height / content.fitHeight, 24)
+			scroll.thumb:SetHeight(thumbHeight)
+			scroll.thumb:ClearAllPoints()
+			scroll.thumb:SetPoint("TOPRIGHT", -2, -(offset / room) * (height - thumbHeight))
+		end
+	end
+	scroll:EnableMouseWheel(true)
+	scroll:SetScript("OnMouseWheel", function(self, delta)
+		Place(self:GetVerticalScroll() - delta * 44)
+	end)
+	function scroll:Fit(contentHeight)
+		content.fitHeight = contentHeight
+		content:SetHeight(contentHeight)
+		Place(self:GetVerticalScroll())
+	end
+	scroll:Fit(0)
+	return scroll
+end
+
+
+
+-- ============================================================================
+-- Step bar
+-- ============================================================================
+
+-- The guild-war step bar: dots on a 2 px line, a label and a faint sub-line under each
+local STEP_BAR_HEIGHT, STEP_DOT, STEP_DOT_SMALL, STEP_LINE_Y = 64, 18, 14, -12
+
+---The guild-war step bar: the steps of a flow on a line, done ones ticked green, the current one ringed.
+---@param steps (string|table)[] the labels in order, or { label, tip } with the step's rule for its dot's tooltip
+---@param onStep fun(index: number)? when given, a done step is a button that goes back to it
+---@return table bar with Set(current, notes?, failed?): current is 1..#steps (#steps + 1 = all done), notes the
+---sub-lines, failed a set of step indexes drawn as a red ring with a cross (a stopped flow: disputed, failed)
+function W:StepBar(parent, width, steps, onStep)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetSize(width, STEP_BAR_HEIGHT)
+	bar.dots, bar.lines = {}, {}
+	local titles, tips = {}, {} -- each step's label and rule, for its dot's tooltip
+	local count = #steps
+	local spacing = width / count
+	for i, step in ipairs(steps) do
+		local label, tip = type(step) == "table" and step[1] or step, type(step) == "table" and step[2] or nil
+		local x = spacing * (i - 0.5)
+		if i < count then
+			local line = bar:CreateTexture(nil, "BACKGROUND")
+			line:SetHeight(2)
+			line:SetPoint("LEFT", bar, "TOPLEFT", x, STEP_LINE_Y)
+			line:SetWidth(spacing)
+			bar.lines[i] = line
+		end
+		local dot = CreateFrame("Button", nil, bar)
+		dot:SetPoint("CENTER", bar, "TOPLEFT", x, STEP_LINE_Y)
+		dot.fill = dot:CreateTexture(nil, "BORDER")
+		dot.fill:SetAllPoints()
+		dot.fill:SetTexture(MEDIA.."disc")
+		dot.ring = dot:CreateTexture(nil, "ARTWORK")
+		dot.ring:SetAllPoints()
+		dot.mark = dot:CreateTexture(nil, "OVERLAY")
+		dot.mark:SetPoint("CENTER")
+		dot.mark:SetSize(12, 12)
+		dot.number = Theme:Text(dot, "tiny", tostring(i))
+		dot.number:SetPoint("CENTER", 0, 0)
+		dot.label = Theme:Text(bar, "body", label)
+		dot.label:SetPoint("TOP", bar, "TOPLEFT", x, STEP_LINE_Y - 16)
+		dot.sub = Theme:Text(bar, "tiny", "", C.faint)
+		dot.sub:SetPoint("TOP", dot.label, "BOTTOM", 0, -3)
+		dot.index, titles[i], tips[i] = i, label, tip
+		dot:SetScript("OnClick", function(self)
+			if onStep and self.done then
+				onStep(self.index)
+			end
+		end)
+		bar.dots[i] = dot
+	end
+	local function Tint(texture, color, alpha)
+		texture:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
+	end
+	function bar:Set(current, notes, failed)
+		for i, dot in ipairs(self.dots) do
+			local state = (failed and failed[i]) and "failed" or (i < current and "done") or (i == current and "current") or "todo"
+			local small = state == "todo"
+			dot:SetSize(small and STEP_DOT_SMALL or STEP_DOT, small and STEP_DOT_SMALL or STEP_DOT)
+			dot.done = state == "done"
+			dot.ring:SetTexture(MEDIA..(state == "current" and "ring-bold" or "ring"))
+			dot.mark:SetShown(state == "done" or state == "failed")
+			dot.mark:SetTexture(MEDIA..(state == "failed" and "cross" or "tick"))
+			dot.number:SetShown(state == "current" or state == "todo")
+			if state == "done" then
+				Tint(dot.ring, C.green) Tint(dot.fill, C.green, 0.18) Tint(dot.mark, C.green)
+			elseif state == "failed" then
+				Tint(dot.ring, C.red) Tint(dot.fill, C.red, 0.18) Tint(dot.mark, C.red)
+			elseif state == "current" then
+				Tint(dot.ring, C.accent) Tint(dot.fill, C.accent, 0.2)
+				dot.number:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+			else
+				Tint(dot.ring, C.borderLight) Tint(dot.fill, C.input)
+				dot.number:SetTextColor(C.faint[1], C.faint[2], C.faint[3])
+			end
+			local text = state == "current" and C.white or (state == "done" and C.text) or (state == "failed" and C.red) or C.faint
+			dot.label:SetTextColor(text[1], text[2], text[3])
+			local note = notes and notes[i] or ""
+			dot.sub:SetText(note)
+			-- The dot explains its step: its rule, and where it stands
+			local body = tips[i]
+			if note ~= "" then
+				body = body and (body.."\n\n"..note) or note
+			end
+			W:Explain(dot, titles[i], body)
+			if self.lines[i] then
+				local green = i < current and not (failed and failed[i])
+				local color = green and C.green or { 1, 1, 1, 0.12 }
+				self.lines[i]:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+			end
+		end
+	end
+	bar:Set(1)
+	return bar
+end

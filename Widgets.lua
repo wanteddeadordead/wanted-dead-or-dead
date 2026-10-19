@@ -1809,8 +1809,9 @@ local STEP_BAR_HEIGHT, STEP_DOT, STEP_DOT_SMALL, STEP_LINE_Y = 64, 18, 14, -12
 ---The guild-war step bar: the steps of a flow on a line, done ones ticked green, the current one ringed.
 ---@param steps (string|table)[] the labels in order, or { label, tip } with the step's rule for its dot's tooltip
 ---@param onStep fun(index: number)? when given, a done step is a button that goes back to it
----@return table bar with Set(current, notes?, failed?): current is 1..#steps (#steps + 1 = all done), notes the
----sub-lines, failed a set of step indexes drawn as a red ring with a cross (a stopped flow: disputed, failed)
+---@return table bar with Set(current, notes?, failed?, done?): current is 1..#steps (#steps + 1 = all done), notes the
+---sub-lines, failed a set of step indexes drawn as a red ring with a cross (a stopped flow: disputed, failed), done a
+---set of steps after the current one that are done too (a checklist, where steps aren't done in order)
 function W:StepBar(parent, width, steps, onStep)
 	local bar = CreateFrame("Frame", nil, parent)
 	bar:SetSize(width, STEP_BAR_HEIGHT)
@@ -1855,9 +1856,9 @@ function W:StepBar(parent, width, steps, onStep)
 	local function Tint(texture, color, alpha)
 		texture:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
 	end
-	function bar:Set(current, notes, failed)
+	function bar:Set(current, notes, failed, done)
 		for i, dot in ipairs(self.dots) do
-			local state = (failed and failed[i]) and "failed" or (i < current and "done") or (i == current and "current") or "todo"
+			local state = (failed and failed[i]) and "failed" or ((i < current or (done and done[i])) and "done") or (i == current and "current") or "todo"
 			local small = state == "todo"
 			dot:SetSize(small and STEP_DOT_SMALL or STEP_DOT, small and STEP_DOT_SMALL or STEP_DOT)
 			dot.done = state == "done"
@@ -1887,7 +1888,7 @@ function W:StepBar(parent, width, steps, onStep)
 			end
 			W:Explain(dot, titles[i], body)
 			if self.lines[i] then
-				local green = i < current and not (failed and failed[i])
+				local green = (i < current or (done and done[i])) and not (failed and failed[i])
 				local color = green and C.green or { 1, 1, 1, 0.12 }
 				self.lines[i]:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
 			end

@@ -5693,8 +5693,13 @@ end)()
 	layout.badge, layout.number = true, true
 	ns.Ranks:Update()
 	check(label._shown, "both back")
-	-- From the Settings page: the X offset slider moves the plate already shown
+	-- From the Settings page: the X offset slider, in the nameplate row's cog popup, moves the plate already shown
 	ns.UI:Show("settings")
+	local plateCog
+	for _, f in ipairs(Mock.created) do if f._kind == "Button" and rawget(f, "icon") and rawget(f, "tooltipTitle") == "Rank on nameplates" then plateCog = f end end
+	check(plateCog and not rawget(plateCog, "popup"), "the nameplate row has a cog, its popup not built until opened")
+	plateCog:Click()
+	check(plateCog.popup and plateCog.popup._shown, "the cog opens its popup")
 	local xSlider
 	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "X offset" and not xSlider then xSlider = fs._parent end end
 	xSlider.slider._scripts.OnValueChanged(xSlider.slider, 12)
@@ -6560,6 +6565,36 @@ end)()
 	check(went == nil, "a step to come doesn't")
 	bar:Set(3, nil, { [2] = true })
 	check(d[2].mark._texture:find("cross$") and d[2].ring._vertexColor[1] == C.red[1] and bar.lines[2]._color[4] == 0.12, "a failed step is a red ring with a cross")
+end)()
+-- Settings in rows: switches for on/off, multiselects for where things show, cogs for the finer settings
+;(function()
+	ns.UI:Show("settings")
+	local function Find(test) for _, f in ipairs(Mock.created) do if test(f) then return f end end end
+	local function RowOf(label) return Find(function(f) return rawget(f, "label") and rawget(f, "control") and f.label._text == label end) end
+	local nearby = RowOf("Show in each row")
+	check(nearby and nearby.control.list and #nearby.control.list.rows == 13, "Nearby's 13 row items are one multiselect")
+	local show = ns.db.settings.nearby
+	local guild = show.guild
+	nearby.control:Click()
+	for _, row in ipairs(nearby.control.list.rows) do if row.option.key == "guild" then row:Click() end end
+	check(show.guild == not guild, "ticking an item changes the setting")
+	show.guild = guild
+	local ranks = RowOf("Also show ranks in")
+	check(ranks and #ranks.control.list.rows == 4, "ranks' other places are a multiselect")
+	local fronts = RowOf("Show capture fronts on")
+	check(fronts and #fronts.control.list.rows == 3, "capture fronts' places are a multiselect")
+	local targeted = RowOf("Show a TARGETED warning")
+	check(targeted and targeted.control.GetChecked and Find(function(f) return rawget(f, "icon") and rawget(f, "tooltipTitle") == "The TARGETED warning" end), "the TARGETED warning is a switch with a cog")
+	local callout = RowOf("Show a callout for streaks and multi-kills")
+	check(callout and Find(function(f) return rawget(f, "icon") and rawget(f, "tooltipTitle") == "Streak callout" end), "the streak callout is a switch with a cog")
+	local detect = ns.db.settings.detect
+	local sound = RowOf("Alert sounds")
+	local was = detect.sound
+	sound.control:Click()
+	check(detect.sound == not was, "an on/off setting is a switch on its row")
+	detect.sound = was
+	ns.UI:Refresh()
+	check(sound.control:GetChecked() == (was and true or false), "and follows the setting")
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

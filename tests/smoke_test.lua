@@ -18039,6 +18039,49 @@ end
 	asked.onConfirm()
 	check(G:Pending("withdraw", "hb-1") and OnScreen("Sent; waiting for the site") and not Button("Accept"), "confirmed: asked of the site")
 	ns.db.warActions = {}
+	-- The roster: picked, said I'm in (one can't be picked, with why), standby; an officer adds, takes off, fills and saves
+	AtStep("roster", function(war)
+		war.time = { start = evening + 3600, accepted = true }
+		war.battle = { prep = evening + 2700, start = evening + 3600, stop = evening + 5400 }
+		war.roster = { lockAt = evening + 3600, rival = 36,
+			players = { { name = "Grimtusk", class = "ROGUE", rank = "Officer" }, { name = "Vorgath", class = "WARRIOR", rank = "Guild Master" },
+				{ name = "Ragnok", class = "HUNTER", ally = "Bloodfang Raiders" }, { name = "Morkhal", class = "MAGE", rank = "Member", app = false } },
+			signups = { { name = "Velanna", class = "PRIEST", rank = "Member" }, { name = "Zulkara", class = "DRUID", rank = "Member", why = "joined Sat: counts from Tue 3:10 PM" },
+				{ name = "Thokk", class = "SHAMAN", rank = "Member" } },
+			standby = { { name = "Durgash", class = "WARRIOR" } }, me = { ["in"] = false } }
+	end)
+	check(OnScreen("ROSTER · 4 OF 40 · REVENANT 36 OF 40") and OnScreen("<Bloodfang Raiders>") and OnScreen("! app not seen") and OnScreen("SAID I'M IN, NOT PICKED (3)")
+		and OnScreen("joined Sat: counts from Tue 3:10 PM") and OnScreen("STANDBY · 1") and OnScreen("36 places open"), "the roster, the sign-ups with why one can't be picked, standby")
+	local adds = {}
+	for _, f in ipairs(Mock.created) do
+		local l = rawget(f, "label")
+		if type(l) == "table" and l._text == "Add" and f._shown and f._parent and f._parent._shown and rawget(f._parent, "who") then adds[f._parent.who] = f end
+	end
+	check(adds.Velanna and adds.Thokk and not adds.Zulkara, "Add on those who can be picked")
+	adds.Velanna._scripts.OnClick(adds.Velanna)
+	check(OnScreen("ROSTER · 5 OF 40") and OnScreen("Not saved yet"), "added: not saved yet")
+	Button("Fill from sign-ups")._scripts.OnClick(Button("Fill from sign-ups"))
+	check(OnScreen("ROSTER · 6 OF 40") and OnScreen("SAID I'M IN, NOT PICKED (1)"), "fill from sign-ups skips who can't be picked")
+	Button("Save roster")._scripts.OnClick(Button("Save roster"))
+	local saved = G:Pending("roster", "hb-1")
+	check(saved and #saved.data.names == 6 and saved.data.names[5] == "Velanna" and saved.data.names[6] == "Thokk" and saved.data.standby[1] == "Durgash",
+		"Save asks the site with the roster and standby")
+	local switch
+	for _, f in ipairs(Mock.created) do
+		local card = rawget(f, "_parent")
+		local roster = card and rawget(card, "_parent")
+		if rawget(f, "checked") ~= nil and rawget(f, "knob") and roster and rawget(roster, "signupLabel") then
+			local on, p = f._shown, f._parent
+			while on and p do on, p = p._shown, p._parent end
+			if on then switch = f end
+		end
+	end
+	check(switch ~= nil, "I'm in: a switch")
+	do
+		switch._scripts.OnClick(switch)
+		check(G:Pending("in", "hb-1") and G:Pending("in", "hb-1").data.on == true, "I'm in asks the site")
+	end
+	ns.db.warActions = {}
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

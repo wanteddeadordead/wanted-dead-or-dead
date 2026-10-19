@@ -132,7 +132,7 @@ function private.Refresh()
 	tiles.purse.value:SetText(purse and private.Count(purse.marks) or "0")
 	local cap = purse and tonumber(purse.cap) or GuildWars.DAILY_CAP
 	tiles.today.value:SetText((purse and private.Count(purse.today) or "0").." / "..private.Count(cap))
-	tiles.today.note:SetText(purse and type(purse.resets) == "number" and ("cap resets "..GuildWars:Clock(purse.resets)) or "")
+	tiles.today.note:SetText(purse and type(purse.resets) == "number" and ("resets "..GuildWars:Clock(purse.resets)) or "")
 	for _, key in ipairs({ "treasury", "tax" }) do
 		tiles[key]:SetShown(inGuild)
 	end

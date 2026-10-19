@@ -11,7 +11,7 @@ local private = { filter = "all", heldOnly = false }
 local ROW_HEIGHT = 44
 local HEADER = 30
 -- Columns: x from the row's left
-local COLUMNS = { zone = 16, held = 210, since = 420, protected = 520, next = 650 }
+local COLUMNS = { zone = 16, held = 200, since = 390, protected = 480, next = 590 }
 local CONTINENTS = { all = true, ["Eastern Kingdoms"] = true, Kalimdor = true }
 local TAG_TIPS = {
 	war = { "War", "A guild war: one guild attacks the zone's holder, 40 a side. Only the rosters take points." },
@@ -71,7 +71,9 @@ function private.CreateRow(row)
 	row.next = Theme:Text(row, "small", "")
 	row.next:SetPoint("LEFT", row.tag, "RIGHT", 6, 0)
 	row.next:SetPoint("RIGHT", -12, 0)
-	row.next:SetWordWrap(false)
+	-- A war's line ("EMPIRE attacks, time not set") may take a second line
+	row.next:SetWordWrap(true)
+	row.next:SetJustifyH("LEFT")
 end
 
 function private.UpdateRow(row, zone)

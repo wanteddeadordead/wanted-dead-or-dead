@@ -245,7 +245,7 @@ function private.Create()
 	sideLine:SetPoint("TOPRIGHT")
 	sideLine:SetPoint("BOTTOMRIGHT")
 	sideLine:SetWidth(1)
-	sideLine:SetColorTexture(C.border[1], C.border[2], C.border[3], 1)
+	sideLine:SetColorTexture(C.border[1], C.border[2], C.border[3], C.border[4])
 	private.navButtons = {}
 	private.groupLabels = {}
 	for _, group in ipairs(GROUPS) do
@@ -355,7 +355,7 @@ function private.Create()
 				local page = private.pageByKey[key]
 				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key })
 			end
-			local bar = W:Segmented(content, items, function(key) UI:Show(key) end, 110)
+			local bar = W:Tabs(content, items, function(key) UI:Show(key) end, 110)
 			bar:SetPoint("TOPLEFT", 0, 0)
 			bar:Hide()
 			private.tabBars[def.key] = bar

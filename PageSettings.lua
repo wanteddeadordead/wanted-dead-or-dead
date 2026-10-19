@@ -641,7 +641,7 @@ UI:RegisterPage("settings", {
 	under = "card",
 	tabLabel = "Settings",
 	build = function(container, width, height)
-		local tabs = W:Segmented(container, {
+		local tabs = W:Tabs(container, {
 			{ key = "alerts", label = "Alerts" },
 			{ key = "nearby", label = "Nearby window" },
 			{ key = "sharing", label = "Sharing and display" },

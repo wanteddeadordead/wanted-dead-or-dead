@@ -61,7 +61,7 @@ UI:RegisterPage("hunts", {
 		private.earnedTile:SetPoint("LEFT", private.huntingTile, "RIGHT", 12, 0)
 		private.earnedTile:SetWidth(tileWidth)
 
-		local segment = W:Segmented(container, {
+		local segment = W:Tabs(container, {
 			{ key = "hunting", label = "Hunting now" },
 			{ key = "claims", label = "Your claims" },
 			{ key = "history", label = "History" },

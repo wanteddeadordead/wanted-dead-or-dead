@@ -102,27 +102,30 @@ function private.Refresh()
 		chased = chased + (item.starred and 1 or 0)
 	end
 	private.summary:SetText(format("%s: %d items%s", className or "Your class", #items, chased > 0 and format(", %d chased", chased) or ""))
+	private.vendorGlyph:ClearAllPoints()
+	private.vendorGlyph:SetPoint("LEFT", private.summary, "LEFT", private.summary:GetStringWidth() + 8, 0)
 	local have = BlizzRank:Honor()
 	local standing = { "Honor "..(have and private.Count(have) or "?") }
 	for _, mark in ipairs(BlizzRank.MARKS) do
 		tinsert(standing, mark.short.." "..BlizzRank:MarkCount(mark.id))
 	end
 	private.standing:SetText(table.concat(standing, "   "))
-	local line = UnitFactionGroup("player") == "Alliance" and _G.PVP_RANK_REWARDS_VENDOR_ALLIANCE or _G.PVP_RANK_REWARDS_VENDOR_HORDE
-	line = type(line) == "string" and (gsub(line, "|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) or "Rewards are sold at the rank vendors."
-	private.list:SetItems(items, "No gear seen yet.", "Open the rank vendors once and Wanted remembers their gear. "..line)
+	private.list:SetItems(items, "No gear seen yet.", "Visit a rank vendor once and Wanted remembers their gear.")
 end
 
 UI:RegisterPage("gear", {
 	title = "Gear",
 	under = "challenges",
-	subtitle = "The rank vendors' PvP gear for your class: what it costs and what you still need. Click an item to chase it.",
 	order = 7.1,
 	tabLabel = "Gear",
 	build = function(container, width, height)
 		private.rowWidth = width - 12 -- the list keeps 12 for its scroll bar
 		private.summary = Theme:Text(container, "heading", "")
 		private.summary:SetPoint("TOPLEFT", 0, -6)
+		-- Where the rank vendors are, in the game's own words, beside the summary
+		local line = UnitFactionGroup("player") == "Alliance" and _G.PVP_RANK_REWARDS_VENDOR_ALLIANCE or _G.PVP_RANK_REWARDS_VENDOR_HORDE
+		private.vendorGlyph = W:InfoGlyph(container, "Rank vendors", type(line) == "string" and (gsub(line, "|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+			or "Rewards are sold at the rank vendors.")
 		private.standing = Theme:Text(container, "small", "")
 		private.standing:SetPoint("TOPRIGHT", 0, -8)
 		private.standing:SetJustifyH("RIGHT")

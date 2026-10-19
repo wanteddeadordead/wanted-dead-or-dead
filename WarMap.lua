@@ -132,7 +132,7 @@ end
 
 ---The guild's war in a zone, from its draw to a day after the result, or nil.
 function private.WarIn(zone)
-	for _, war in ipairs(GuildWars:Wars()) do
+	for _, war in ipairs(GuildWars:LiveWars()) do
 		if war.zone == zone.name and war.step ~= "declare" and war.state ~= "withdrawn" and not (type(war.result) == "table" and (war.result.void or war.result.cancelled)) then
 			return war
 		end

@@ -451,6 +451,20 @@ function private.Result(w, attacker, defender)
 	return result
 end
 
+---A live war of another guild's in the campaign (the catch-up's warLive, by war id with its zone): only what anyone in
+---its zone sees, for the HUD, the map and the census. The holders from owners; the attackers, the other faction.
+function private.Other(id, live, owners)
+	local owner = type(owners[live.zone]) == "table" and owners[live.zone] or nil
+	local defender = owner and { guild = owner.guild, faction = owner.faction } or {}
+	local attackFaction = OTHER[defender.faction]
+	-- endsAt is the end of the phase: prep ends at the start, the battle 30 minutes later
+	local start = type(live.endsAt) == "number" and (live.phase == "prep" and live.endsAt or live.endsAt - BATTLE) or nil
+	local war = { id = id, warId = tonumber(id), zone = live.zone, role = "watch", step = "battle", state = live.phase, other = true,
+		attacker = { faction = attackFaction }, defender = defender, roster = {} }
+	war.battle = private.Battle({ start = start, zone = live.zone }, live, defender.faction)
+	return war
+end
+
 ---A war of the guild's, at its step.
 function private.War(w, raw, guild, myGuid)
 	local key = private.Id(w.id)
@@ -507,6 +521,20 @@ function GuildWars.View(raw, at)
 			if type(w) == "table" and type(w.id) == "number" and type(w.zone) == "string" then
 				tinsert(view.wars, (private.War(w, raw, guild, myGuid)))
 			end
+		end
+	end
+	-- Every other live war of the campaign, for anyone in its zone
+	view.others = {}
+	local listed = {}
+	for _, war in ipairs(view.wars) do
+		if war.id then
+			listed[war.id] = true
+		end
+	end
+	local owners = type(raw.owners) == "table" and raw.owners or {}
+	for id, live in pairs(type(raw.warLive) == "table" and raw.warLive or {}) do
+		if type(id) == "string" and not listed[id] and type(live) == "table" and type(live.zone) == "string" and tonumber(id) then
+			tinsert(view.others, private.Other(id, live, owners))
 		end
 	end
 	view.zones = private.Zones(raw, view.wars, now)

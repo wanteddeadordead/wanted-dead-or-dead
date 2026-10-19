@@ -42,7 +42,8 @@ local DEFAULT_PAGE = "siege"
 ---(one of GROUPS), noHeader (the page takes the header's room too),
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
----out of the menu itself), tabLabel (its tab's label), menuLabel (its menu entry's label, when not its title)
+---out of the menu itself), tabLabel (its tab's label), tabTip = { title, body } (its tab's tooltip: what the page is, now
+---that pages have no subtitle), menuLabel (its menu entry's label, when not its title)
 ---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
 ---that count, in blue, unless it has its own.
 function UI:RegisterPage(key, def)
@@ -355,7 +356,7 @@ function private.Create()
 			local items = {}
 			for _, key in ipairs(def.tabs) do
 				local page = private.pageByKey[key]
-				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key })
+				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key, tip = page and page.tabTip })
 			end
 			local bar = W:Tabs(content, items, function(key) UI:Show(key) end, 110)
 			bar:SetPoint("TOPLEFT", 0, 0)

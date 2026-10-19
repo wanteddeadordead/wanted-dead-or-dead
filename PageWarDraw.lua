@@ -21,7 +21,7 @@ GuildWars.PANELS.draw = {
 	build = function(panel, width)
 		local card = W:Card(panel)
 		card:SetPoint("TOPLEFT")
-		card:SetSize(width, 60 + ROWS * 34 + 40)
+		card:SetSize(width, 60 + ROWS * 40 + 40)
 		panel.label = W:SectionLabel(card, "")
 		panel.label:SetPoint("TOPLEFT", COLUMNS.guild, -14)
 		for key, text in pairs({ influence = "Influence", stake = "Stake", chance = "Chance", result = "Result" }) do
@@ -30,8 +30,8 @@ GuildWars.PANELS.draw = {
 		panel.rows = {}
 		for i = 1, ROWS do
 			local row = CreateFrame("Frame", nil, card)
-			row:SetSize(width - 32, 32)
-			row:SetPoint("TOPLEFT", 0, -34 - (i - 1) * 34)
+			row:SetSize(width - 32, 38)
+			row:SetPoint("TOPLEFT", 0, -34 - (i - 1) * 40)
 			row.crest = row:CreateTexture(nil, "ARTWORK")
 			row.crest:SetSize(22, 22)
 			row.crest:SetPoint("LEFT", COLUMNS.guild, 0)
@@ -48,7 +48,7 @@ GuildWars.PANELS.draw = {
 			row.chance = Theme:Text(row, "body", "", C.text)
 			row.chance:SetPoint("LEFT", COLUMNS.chance, 0)
 			row.result = W:Pill(row)
-			row.result:SetPoint("LEFT", COLUMNS.result, 4)
+			row.result:SetPoint("LEFT", COLUMNS.result, 6)
 			row.sub = Theme:Text(row, "tiny", "")
 			row.sub:SetPoint("TOPLEFT", row.result, "BOTTOMLEFT", 0, -1)
 			panel.rows[i] = row
@@ -93,7 +93,7 @@ GuildWars.PANELS.draw = {
 				row.sub:SetText(decided and (drawn and "held" or "back") or "")
 				W:Explain(row.result, drawn and "Drawn" or "Not drawn", drawn and format("The site drew at %s, weighted by influence and stake. Your stake is held until the war ends.\n\nNext: %s picks the time%s; then you accept or withdraw.",
 					type(dr.at) == "number" and GuildWars:Clock(dr.at) or "8:00 PM", holder, deadline and (" by "..date("%a ", deadline)..GuildWars:Clock(deadline)) or "")
-					or format("%s is back in the treasury.", tostring(tonumber(entry.stake) or 0)))
+					or format("%s is back in the treasury.", tostring(tonumber(entry.stake) or 0)), "ANCHOR_RIGHT")
 			end
 		end
 		panel.seed:SetText(type(dr.seed) == "string" and ("Seed  "..Theme:Colorize(dr.seed, C.text)) or "")

@@ -131,12 +131,13 @@ function private.RefreshDefend(panel, war, ctx)
 				Theme:SetBg(cell, closed and C.redDim or mine and { GOLD[1], GOLD[2], GOLD[3], 0.18 } or { 0, 0, 0, 0.25 })
 				Theme:SetBorderColor(cell, mine and { GOLD[1], GOLD[2], GOLD[3], 1 } or closed and { C.red[1], C.red[2], C.red[3], 0.45 } or C.border)
 				local label = date("%a ", start)..GuildWars:Clock(start)
+				-- Under the cell, so it doesn't cover the hours and the race marks
 				if closed then
-					W:Explain(cell, "Closed: "..label, closed.." A guild's two wars in a day must be at least 1 hour apart.")
+					W:Explain(cell, "Closed: "..label, closed.." A guild's two wars in a day must be at least 1 hour apart.", "ANCHOR_BOTTOM")
 				elseif race then
-					W:Explain(cell, label, format("Tonight's race in %s: open, but your players may be racing.", race.zone or "?"))
+					W:Explain(cell, label, format("Tonight's race in %s: open, but your players may be racing.", race.zone or "?"), "ANCHOR_BOTTOM")
 				else
-					W:Explain(cell, label, format("Prep from %s, battle %s to %s.", GuildWars:Clock(start - PREP), GuildWars:Clock(start), GuildWars:Clock(start + BATTLE)))
+					W:Explain(cell, label, format("Prep from %s, battle %s to %s.", GuildWars:Clock(start - PREP), GuildWars:Clock(start), GuildWars:Clock(start + BATTLE)), "ANCHOR_BOTTOM")
 				end
 			end
 		end

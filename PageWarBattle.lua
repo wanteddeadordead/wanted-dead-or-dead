@@ -139,7 +139,7 @@ GuildWars.PANELS.battle = {
 		end
 		-- The buttons
 		local y = -LANES_HEIGHT - GAP - 96 - GAP
-		panel.rally = W:Button(panel, "Go to the rally", "primary", 140, 30, function()
+		panel.rally = W:Button(panel, "Go to the rally", "primary", 130, 30, function()
 			if panel.state.record then
 				GuildWars:GoToRally(panel.state.record)
 			end

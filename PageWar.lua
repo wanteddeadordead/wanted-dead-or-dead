@@ -77,7 +77,8 @@ function private.Headline(war, now)
 		return format("%s declared on %s", ours.guild or "?", short), dr.at, "to the draw"
 	elseif step == "time" then
 		if type(t.start) == "number" then
-			return format("%s attacks %s", attacker, short), t.start, "the war's time"
+			-- More than a day off, the countdown shows the day and time; within a day, the time left
+			return format("%s attacks %s", attacker, short), t.start, t.start - now >= 86400 and "the war's time" or "until the war"
 		end
 		return format("%s attacks %s", attacker, short), t.deadline, war.role == "defend" and "left to choose" or format("for %s to pick", theirs.guild or "the holders")
 	elseif step == "roster" then
@@ -121,7 +122,7 @@ function private.Notes(war)
 		At(dr.at),
 		type(t.start) == "number" and (date("%a ", t.start)..GuildWars:Clock(t.start)) or At(t.deadline, "by "),
 		type(ro.count) == "number" and format("%d of %d", ro.count, GuildWars.MAX_ROSTER) or At(ro.lockAt, "locks at "),
-		war.step == "battle" and "now" or (type(b.start) == "number" and type(b.stop) == "number" and (GuildWars:Clock(b.start).." to "..GuildWars:Clock(b.stop))) or "",
+		war.step == "battle" and "now" or (type(b.start) == "number" and type(b.stop) == "number" and (gsub(GuildWars:Clock(b.start), " [AP]M$", "").." to "..GuildWars:Clock(b.stop))) or "",
 		r.won == true and "won" or r.won == false and "lost" or "",
 	}
 end

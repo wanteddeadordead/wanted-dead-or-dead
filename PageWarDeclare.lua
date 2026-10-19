@@ -37,7 +37,7 @@ function private.Checks(war, ctx)
 			"Members count from their own signed presence, 72 hours after joining the guild." },
 		{ ctx.officer, ctx.officer and ("You're a war officer of "..guild) or ("You're not a war officer of "..guild), ctx.officer and "Officer" or "",
 			officerTip },
-		{ type(d.officerInCommunity) == "string", "Officer in the Wanted Battle.net community"..Theme:Colorize(" (proposed)", C.amber),
+		{ type(d.officerInCommunity) == "string", "Officer in the Battle.net group"..Theme:Colorize(" (proposed)", C.amber),
 			type(d.officerInCommunity) == "string" and d.officerInCommunity or "none yet",
 			"So the other side's officers can be told at once. Proposed until the cross-faction test passes." },
 		{ not protected, short..(protected and " is protected" or " isn't protected"),

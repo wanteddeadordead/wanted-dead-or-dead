@@ -267,7 +267,8 @@ GuildWars.PANELS.roster = {
 				row.who = p.name
 				row.name:SetText(private.Name(p))
 				row:SetAlpha(p.why and 0.6 or 1)
-				row.why:SetText((p.ally and ("<"..p.ally.."> · ") or (p.rank and (p.rank.." · ") or ""))..(p.why and Theme:Colorize(p.why, C.red) or ""))
+				local who = p.ally and ("<"..p.ally..">") or p.rank or ""
+				row.why:SetText(who..(p.why and ((who ~= "" and " · " or "")..Theme:Colorize(p.why, C.red)) or ""))
 				if p.why then
 					W:Explain(row.why, p.name, p.why)
 				end

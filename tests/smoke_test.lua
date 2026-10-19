@@ -18002,6 +18002,43 @@ end
 		"not drawn: the stake back, and Back to Tonight")
 	AtStep("draw", function(war) war.draw = { at = clock + 600, declarers = { { guild = "EMPIRE", share = 0.41, stake = 400 } } } end)
 	check(OnScreen("Only EMPIRE declared: no draw needed."), "a single declarer: no draw needed")
+	-- Time, the defenders: two evenings of half-hour starts, one closed by our other war, the races marked; an
+	-- officer picks one and sets it
+	local evening = clock - clock % 86400 + 86400 + 22 * 3600
+	AtStep("time", function(war)
+		war.role = "defend"
+		war.attacker, war.defender = { guild = "Revenant", faction = "Alliance", crest = "raven-black" }, { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }
+		war.time = { deadline = clock + 40000, evenings = { evening, evening + 86400 }, defaultStart = evening + 86400 + 7200,
+			closed = { { start = evening + 3 * 1800, reason = "Revenant attacks Wetlands then." } }, races = { { start = evening + 2 * 1800, stop = evening + 2 * 1800 + 2700, zone = "Arathi Highlands" } } }
+	end)
+	local cells = {}
+	for _, f in ipairs(Mock.created) do if rawget(f, "start") and rawget(f, "tick") and f._shown then cells[f.start] = f end end
+	check(OnScreen("Revenant attacks Hillsbrad") and OnScreen("left to choose") and OnScreen("Not picked yet") and not cells[evening + 3 * 1800].open,
+		"the defenders' grid: the closed start can't be picked")
+	local closedTip = (rawget(cells[evening + 3 * 1800], "explainHit") or cells[evening + 3 * 1800]).tooltipText
+	check(closedTip:find("Revenant attacks Wetlands then.", 1, true) and closedTip:find("at least 1 hour apart", 1, true), "a closed start says why")
+	cells[evening + 2 * 1800]._scripts.OnClick(cells[evening + 2 * 1800])
+	local setLabel = "Set "..os.date("%a ", evening + 3600)..ns.GuildWars:Clock(evening + 3600)
+	local set = Button(setLabel)
+	check(set and set:IsEnabled() and OnScreen(ns.GuildWars:Clock(evening + 3600 - 900)), "picking a start: the war's time and prep, and Set <time>: "..setLabel)
+	set._scripts.OnClick(set)
+	check(G:Pending("time", "hb-1") and G:Pending("time", "hb-1").data.start == evening + 3600, "Set asks the site")
+	ns.db.warActions = {}
+	-- Time, the attackers: the time set, accept or withdraw (with a confirm)
+	AtStep("time", function(war)
+		war.time = { start = evening + 3600, setAt = clock - 600, deadline = clock + 40000, races = { { start = evening + 3600, zone = "Hillsbrad Foothills" } } }
+	end)
+	check(OnScreen("REVENANT SET THE TIME AT") and OnScreen("Answer by") == nil and OnScreen("ANSWER BY") and OnScreen("No other EMPIRE war that day") and OnScreen("Same time as the")
+		and Button("Accept") and Button("Withdraw"), "the attackers: the time set, clashes, accept or withdraw")
+	local asked
+	local realDialog = ns.Widgets.Dialog
+	ns.Widgets.Dialog = function(_, o) asked = o end
+	Button("Withdraw")._scripts.OnClick(Button("Withdraw"))
+	ns.Widgets.Dialog = realDialog
+	check(asked and asked.text:find("stake of 400 goes back to the treasury and Revenant keeps Hillsbrad", 1, true) and G:Pending("withdraw", "hb-1") == nil, "Withdraw asks first")
+	asked.onConfirm()
+	check(G:Pending("withdraw", "hb-1") and OnScreen("Sent; waiting for the site") and not Button("Accept"), "confirmed: asked of the site")
+	ns.db.warActions = {}
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

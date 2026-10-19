@@ -448,6 +448,7 @@ end
 -- Segmented control
 -- ============================================================================
 
+---@param items table[] { key, label, tip? = { title, body } }
 function W:Segmented(parent, items, onSelect, width)
 	local control = CreateFrame("Frame", nil, parent)
 	control:SetHeight(26)
@@ -465,6 +466,9 @@ function W:Segmented(parent, items, onSelect, width)
 		button:SetScript("OnClick", function()
 			control:Select(item.key)
 		end)
+		if item.tip then
+			W:Explain(button, item.tip[1], item.tip[2])
+		end
 		tinsert(control.buttons, button)
 		x = x + (width or 110) - 1
 	end
@@ -708,9 +712,9 @@ function W:List(parent, rowHeight, numRows, createRow, updateRow)
 	list.empty = Theme:Text(list, "body", "", C.faint)
 	list.empty:SetPoint("CENTER", 0, 10)
 	list.empty:SetJustifyH("CENTER")
-	list.emptyHint = Theme:Text(list, "small", "", C.faint)
-	list.emptyHint:SetPoint("TOP", list.empty, "BOTTOM", 0, -6)
-	list.emptyHint:SetJustifyH("CENTER")
+	-- How to fill it, on hover: an (i) after the empty text
+	list.emptyGlyph = W:InfoGlyph(list, "")
+	list.emptyGlyph:SetPoint("LEFT", list.empty, "RIGHT", 6, 0)
 	list:EnableMouseWheel(true)
 	list:SetScript("OnMouseWheel", function(self, delta)
 		local maxOffset = max(#self.items - self.numRows, 0)
@@ -738,7 +742,11 @@ function W:List(parent, rowHeight, numRows, createRow, updateRow)
 		local total = #self.items
 		local empty = total == 0
 		self.empty:SetText(empty and (self.emptyText or "Nothing here yet.") or "")
-		self.emptyHint:SetText(empty and (self.emptyHintText or "") or "")
+		local hint = empty and self.emptyHintText ~= nil and self.emptyHintText ~= ""
+		W:Explain(self.emptyGlyph, self.empty:GetText(), hint and self.emptyHintText or nil)
+		self.emptyGlyph:SetShown(hint)
+		-- The text and its glyph centred together
+		self.empty:SetPoint("CENTER", hint and -10 or 0, 10)
 		if total > self.numRows then
 			local trackHeight = self:GetHeight()
 			local thumbHeight = max(trackHeight * self.numRows / total, 24)
@@ -1066,7 +1074,7 @@ local function CreateMenu()
 end
 
 ---Shows a menu under the frame that opened it, or at the cursor.
----@param items table[] { text, color?, onClick?, header?, disabled? } or "-" for a divider
+---@param items table[] { text, color?, onClick?, header?, disabled?, tip? = { title, body } } or "-" for a divider
 ---@param anchor table? the button that opened it
 function W:Menu(items, anchor)
 	menu = menu or CreateMenu()
@@ -1087,13 +1095,16 @@ function W:Menu(items, anchor)
 			item.line = Theme:Line(item)
 			item.line:SetPoint("LEFT", 8, 0)
 			item.line:SetPoint("RIGHT", -8, 0)
+			item.showsTooltip = true
 			item:SetScript("OnEnter", function(self)
 				if self.def and self.def.onClick and not self.def.disabled then
 					self.highlight:SetColorTexture(1, 1, 1, 0.07)
 				end
+				ShowTooltip(self)
 			end)
 			item:SetScript("OnLeave", function(self)
 				self.highlight:SetColorTexture(0, 0, 0, 0)
+				HideTooltip()
 			end)
 			item:SetScript("OnClick", function(self)
 				local d = self.def
@@ -1105,6 +1116,9 @@ function W:Menu(items, anchor)
 			menu.items[index] = item
 		end
 		item.def = def ~= "-" and def or nil
+		-- Beside the menu, so it doesn't cover the items above
+		local itemTip = def ~= "-" and def.tip
+		W:Explain(item, itemTip and itemTip[1], itemTip and itemTip[2], "ANCHOR_RIGHT")
 		item:ClearAllPoints()
 		item:SetPoint("TOPLEFT", 1, y)
 		item:SetPoint("TOPRIGHT", -1, y)

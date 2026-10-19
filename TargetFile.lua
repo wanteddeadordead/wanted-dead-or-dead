@@ -17,6 +17,7 @@ local private = {}
 local WIDTH, HEIGHT = 780, 540
 local ROW_HEIGHT = 20
 local LEFT_WIDTH = 340
+local WHERE_WIDTH = 170 -- the most a sighting's place takes; who saw it has the rest of the row, cut short if long
 
 
 
@@ -114,10 +115,14 @@ function private.Create()
 		row.when:SetPoint("LEFT", 6, 0)
 		row.where = Theme:Text(row, "small", "", C.text)
 		row.where:SetPoint("LEFT", 96, 0)
-		row.where:SetWidth(200)
+		row.where:SetWidth(WHERE_WIDTH)
 		row.where:SetWordWrap(false)
+		-- Who saw it: after the place, to the row's end, a long name cut short instead of running over the place
 		row.by = Theme:Text(row, "tiny", "", C.faint)
+		row.by:SetPoint("LEFT", row.where, "RIGHT", 10, 0)
 		row.by:SetPoint("RIGHT", -8, 0)
+		row.by:SetJustifyH("RIGHT")
+		row.by:SetWordWrap(false)
 	end, function(row, entry)
 		row.when:SetText(date("%b %d %H:%M", entry.t))
 		local where = entry.zone or "?"
@@ -128,6 +133,7 @@ function private.Create()
 			where = Theme:ClassName(entry.name, entry.class).."  "..where
 		end
 		row.where:SetText(where)
+		row.where:SetWidth(min(ceil(row.where:GetUnboundedStringWidth()), WHERE_WIDTH))
 		row.by:SetText(entry.by and ("by "..entry.by) or "by you")
 	end)
 	list:SetPoint("TOPLEFT", 40 + LEFT_WIDTH - 6, -listTop)

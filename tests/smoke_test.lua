@@ -1588,6 +1588,20 @@ ns:RunCommand("file", "Wanted Walter")
 local guildBounty2 = ns.Store:InsertTest("bounty", "Maribel Stonehollow", { guild = "Road Campers", targetFaction = "Alliance", amount = 20000 }, clock)
 ns.TargetFile:ShowBounty(ns.Model:GetBountyInfo(guildBounty2))
 check(ns.db.tracks[trackedGuid][1].name == nil, "the guild file doesn't write into the saved history")
+-- Every sighting: the place at most 170 wide, who saw it after it to the row's end, never over it
+do
+	local rows = 0
+	for _, fs in ipairs(Mock.fontStrings) do
+		local row = fs._parent
+		if tostring(fs._text):find("^by ") and type(row) == "table" and rawget(row, "where") and rawget(row, "by") == fs then
+			rows = rows + 1
+			local where = row.where
+			check(where._w <= 170 and where._w <= math.ceil(where:GetUnboundedStringWidth()), "a sighting's place takes its text's width, 170 at most: "..where._w)
+			check(fs._wrap == false and fs._leftAnchored and fs._rightAnchored, "and is cut short at the row's end")
+		end
+	end
+	check(rows > 0, "the file lists sightings")
+end
 ns:RunCommand("file", "Nobody Here")
 clock = clockBeforeTracks
 -- Report a bug from the foot of the menu

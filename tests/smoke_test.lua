@@ -18322,6 +18322,20 @@ end
 	clock = clock + 900
 	ns.WarAlerts:Tick()
 	check(announced[#announced] == "The battle for Hillsbrad has begun", "and the battle's start")
+	-- On the roster in the war's zone: the census of players on neither roster by faction, and at a war point the enemies seen
+	local realPlates, realIsPlayer, realGUID, realFaction, realLogC = C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log
+	local plateUnits = { nameplate1 = { "Player-2-0A", "Alliance" }, nameplate2 = { "Player-2-0B", "Alliance" }, nameplate3 = { "Player-1-002", "Horde" }, nameplate4 = { ME, "Horde" } }
+	C_NamePlate = { GetNamePlates = function() local t = {} for u in pairs(plateUnits) do t[#t + 1] = { namePlateUnitToken = u } end return t end }
+	UnitIsPlayer = function(u) if plateUnits[u] then return true end return realIsPlayer(u) end
+	UnitGUID = function(u) if plateUnits[u] then return plateUnits[u][1] end return realGUID(u) end
+	UnitFactionGroup = function(u) if plateUnits[u] then return plateUnits[u][2] end return realFaction(u) end
+	local sights = {}
+	C_Log = { LogMessage = function(t) if t:find("^WANTEDC1 ") then sights[#sights + 1] = t end end }
+	ns.GuildWars:Sight()
+	check(sights[1] == format("WANTEDC1 %s census 7 %s %d 1 2 -", ns.db.accountMark, ME, clock), "the census: one Horde and two Alliance on neither roster: "..tostring(sights[1]))
+	check(sights[2] and sights[2]:sub(1, #format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock)) == format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock) and sights[2]:find("Player-2-0A", 1, true)
+		and sights[2]:find("Player-2-0B", 1, true) and not sights[2]:find("Player-1-002", 1, true), "at the Mid tower: the enemies seen there: "..tostring(sights[2]))
+	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC
 	AtStep(function(war)
 		war.state, war.start = "over", clock - 2400
 		war.result = { winner = "att", towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, protectedUntil = clock + 3 * 86400 }

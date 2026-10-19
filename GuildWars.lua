@@ -25,6 +25,8 @@ local MAX_DEPTH, MAX_ITEMS, MAX_TEXT = 8, 200, 120
 -- The game's rank permission that lets a rank invite to the guild (Blizzard_GuildControlUI.xml, InviteCheckbox id 5)
 local INVITE_FLAG = 5
 local MAX_ACTIONS = 50
+-- A roster member's census and witness lines, every this many seconds in the war's zone (the war contract's 4.1, 4.3)
+local SIGHT_SECONDS = 30
 GuildWars.MAX_ROSTER = 40
 GuildWars.DAILY_CAP = 150
 
@@ -45,6 +47,7 @@ function GuildWars:OnEnable()
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 	frame:SetScript("OnEvent", function() GuildWars:ReportRoster() end)
+	C_Timer.NewTicker(SIGHT_SECONDS, Wanted:Timed("War census", function() GuildWars:Sight() end))
 end
 
 ---A value from the catch-up as this client may show it: strings as plain text (no escape sequences or control
@@ -839,4 +842,63 @@ end
 ---@return string texture
 function GuildWars:KeepFile(state, d, a)
 	return MEDIA..(state == "fallen" and ("nexus-keep-fallen-to-"..a) or state == "open" and ("nexus-keep-open-"..d) or ("nexus-keep-sealed-"..d))
+end
+
+
+
+-- ============================================================================
+-- The war census and witnesses (the war contract's 4.3 and 4.1)
+-- ============================================================================
+
+---Every SIGHT_SECONDS while this player is on the roster of a war in its zone (prep or battle), what its nameplates
+---see, for the app: a census line, the players of each faction who aren't on our roster (the outnumbered bonus is
+---worked out from many members' counts), and at a war point a witness line, the enemy players seen there (the site
+---keeps those on the enemy roster).
+---"WANTEDC1 <mark> census <war> <GUID> <time> <horde> <alliance> <layer or ->",
+---"WANTEDC1 <mark> witness <war> <GUID> <time> <point> <layer or -> <GUIDs seen, or ->".
+function GuildWars:Sight()
+	local now = GetServerTime()
+	local war, zone, x, y, mapId = GuildWars:Here(now)
+	local mark, me = Wanted.db.accountMark, UnitGUID("player")
+	if not war or type(war.warId) ~= "number" or not GuildWars:OnRoster(war) or not (C_Log and C_Log.LogMessage)
+		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) then
+		return
+	end
+	local ours = {}
+	for _, key in ipairs({ "players", "standby" }) do
+		for _, p in ipairs(List(war.roster and war.roster[key])) do
+			if p.guid then
+				ours[p.guid] = true
+			end
+		end
+	end
+	local side = UnitFactionGroup("player")
+	local counts, enemies, seen = { Horde = 0, Alliance = 0 }, {}, {}
+	local ok, plates = false, nil
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		ok, plates = pcall(C_NamePlate.GetNamePlates)
+	end
+	for _, plate in ipairs(ok and type(plates) == "table" and plates or {}) do
+		local unit = plate.namePlateUnitToken
+		local isPlayer = type(unit) == "string" and UnitIsPlayer(unit)
+		local guid = isPlayer and UnitGUID(unit)
+		local faction = guid and UnitFactionGroup(unit)
+		if type(guid) == "string" and not secret(guid) and not secret(faction) and counts[faction] and strfind(guid, "^Player%-") and not seen[guid] then
+			seen[guid] = true
+			if not ours[guid] then
+				counts[faction] = counts[faction] + 1
+			end
+			if faction ~= side and #enemies < 2 * GuildWars.MAX_ROSTER then
+				tinsert(enemies, guid)
+			end
+		end
+	end
+	local layer = Wanted.Shard and Wanted.Shard:Current()
+	layer = type(layer) == "string" and strmatch(layer, "^[%w%-]+$") and layer or "-"
+	local id = format("%d", war.warId)
+	C_Log.LogMessage(format("WANTEDC1 %s census %s %s %d %d %d %s", mark, id, me, now, counts.Horde, counts.Alliance, layer))
+	local point = GuildWars:PointAt(war, zone, x, y, mapId)
+	if point and point.role ~= "rally" then
+		C_Log.LogMessage(format("WANTEDC1 %s witness %s %s %d %s %s %s", mark, id, me, now, point.id, layer, #enemies > 0 and table.concat(enemies, ",") or "-"))
+	end
 end

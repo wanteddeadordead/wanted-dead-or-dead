@@ -26,15 +26,19 @@ local MIN_BOUNTY = 1000
 function private.BuildPostCard(parent, width)
 	local card = W:Card(parent)
 	card:SetPoint("TOPLEFT")
-	card:SetSize(width, 124)
+	card:SetSize(width, 102)
 	local label = W:SectionLabel(card, "Post a bounty")
 	label:SetPoint("TOPLEFT", 16, -14)
+	-- The addon's core rule, behind an (i) beside the form that acts on it
+	local rule = W:InfoGlyph(card, "How bounties work", "Bounties on enemy players. Kill the target and the claim files itself; the poster pays by mail.")
+	rule:SetPoint("LEFT", label, "RIGHT", 6, 0)
 	private.preview = Theme:Text(card, "small", "")
 	private.preview:SetPoint("TOPRIGHT", -16, -13)
 	private.preview:SetJustifyH("RIGHT")
 
 	private.targetBox = W:Input(card, 210, "Player name", private.OnFormChanged)
 	private.targetBox:SetPoint("TOPLEFT", 16, -34)
+	W:Explain(private.targetBox, "Player name", "Target an enemy, or type the name of one you've seen.")
 	local useTarget = W:Button(card, "Use my target", "secondary", 116, 26, function()
 		if not Wanted:InInstance() and UnitExists("target") and UnitIsPlayer("target") then
 			private.targetBox:SetValue(GetUnitName("target", true))
@@ -68,9 +72,10 @@ function private.BuildPostCard(parent, width)
 	private.guildToggle = W:Toggle(card, "Their whole guild", private.OnFormChanged)
 	private.guildToggle:SetPoint("LEFT", previous, "RIGHT", 24, 0)
 	W:AttachTooltip(private.guildToggle, "Their whole guild", "Put the bounty on the player's guild: the first kill of any one member claims it, once.")
+	-- The going rate, or what you already have on them, at the right of the quick row
 	private.rate = Theme:Text(card, "tiny", "")
-	private.rate:SetPoint("TOPLEFT", 16, -100)
-	private.rate:SetPoint("RIGHT", card, "RIGHT", -16, 0)
+	private.rate:SetPoint("TOPRIGHT", -16, -78)
+	private.rate:SetJustifyH("RIGHT")
 	return card
 end
 
@@ -95,18 +100,17 @@ function private.OnFormChanged()
 	local player = guid and Store:GetPlayer(guid)
 	local guild = private.GetFormGuild(player)
 	local text = strtrim(private.targetBox:GetText() or "")
+	-- A problem with the name is a short state, its reason on hover
+	local problem, reason
 	if text == "" then
-		private.preview:SetText("Target an enemy, or type the name of one you've seen.")
-		private.preview:SetTextColor(unpack(C.faint))
+		private.preview:SetText("")
 	elseif not guid then
-		private.preview:SetText(why and "Several players have been called that by other Wanted users. Target them to be sure." or "Not seen yet. Target them or mouse over them once.")
-		private.preview:SetTextColor(unpack(C.amber))
+		problem = why and "Several players with that name" or "Not seen yet"
+		reason = why and "Several players have been called that by other Wanted users. Target them to be sure." or "Target them or mouse over them once."
 	elseif player and player.faction and player.faction == UnitFactionGroup("player") then
-		private.preview:SetText(name.." is on your side. Bounties are for the other faction.")
-		private.preview:SetTextColor(unpack(C.amber))
+		problem, reason = name.." is on your side", "Bounties are for the other faction."
 	elseif private.guildToggle.checked and not guild then
-		private.preview:SetText(name.." isn't in a guild, as far as Wanted has seen.")
-		private.preview:SetTextColor(unpack(C.amber))
+		problem, reason = "No guild seen", name.." isn't in a guild, as far as Wanted has seen."
 	elseif guild then
 		private.preview:SetText(Theme:Colorize("<"..guild..">", C.amber)..Theme:Colorize(format("  any member, %d seen so far", #Model:GetGuildMembers(guild)), C.muted))
 	else
@@ -114,7 +118,17 @@ function private.OnFormChanged()
 		local guildText = player and player.guild and ("  <"..player.guild..">") or ""
 		private.preview:SetText(Theme:ClassName(name, player and player.class)..Theme:Colorize(format("  level %s %s%s%s", player and player.level and (player.level > 0 and player.level or "??") or "?", Theme:ClassLabel(player and player.class), guildText, seen), C.muted))
 	end
-	private.rate:SetText(player and Model:GetGoingRate(player.level, amount) or "")
+	if problem then
+		private.preview:SetText(problem)
+	end
+	private.preview:SetTextColor(unpack(problem and C.amber or C.muted))
+	W:Explain(private.preview, problem, reason)
+	local rate, rateDetail
+	if player then
+		rate, rateDetail = Model:GetGoingRate(player.level, amount)
+	end
+	private.rate:SetText(rate or "")
+	W:Explain(private.rate, rate and "Going rate", rateDetail)
 	-- A target you already have a bounty on gets a raise instead of a second bounty
 	local existing = nil
 	if guild then
@@ -124,7 +138,8 @@ function private.OnFormChanged()
 	end
 	private.postButton:SetText(existing and "Add to bounty" or "Post bounty")
 	if existing then
-		private.rate:SetText(format("You already have %s on them; this adds to it.", Theme:Money(Bounties:GetAmount(existing))))
+		private.rate:SetText("On them now: "..Theme:Money(Bounties:GetAmount(existing)))
+		W:Explain(private.rate, "Your bounty on them", "Posting adds to it.")
 	end
 	local minimum = existing and 1 or MIN_BOUNTY
 	local canPost = guid and amount and amount >= minimum and not (player and player.faction == UnitFactionGroup("player")) and not (private.guildToggle.checked and not guild)
@@ -135,7 +150,7 @@ function private.Post()
 	local guid, name = private.ResolveForm()
 	local amount = Bounties:ParseMoney(private.amountBox:GetText())
 	if not guid then
-		UI:Toast("Pick a player you've seen: target them, or mouse over them once.", C.amber)
+		UI:Toast("Pick a player you've seen.", C.amber)
 		return
 	elseif not amount or (amount < MIN_BOUNTY and not Bounties:GetMyOpen(guid)) then
 		UI:Toast("A bounty is at least "..Bounties:FormatMoney(MIN_BOUNTY)..".", C.amber)
@@ -182,7 +197,7 @@ function private.Post()
 			private.targetBox:SetValue("")
 			private.amountBox:SetValue("")
 			private.OnFormChanged()
-			UI:Toast(format("Posted %s on %s. Bounty hunters running Wanted will see it.", Bounties:FormatMoney(amount), guild and ("<"..guild..">") or name), C.green)
+			UI:Toast(format("Posted %s on %s.", Bounties:FormatMoney(amount), guild and ("<"..guild..">") or name), C.green)
 			UI:Refresh()
 		end,
 	})
@@ -206,7 +221,7 @@ end
 
 function private.BuildFilters(parent, width)
 	local bar = CreateFrame("Frame", nil, parent)
-	bar:SetPoint("TOPLEFT", 0, -138)
+	bar:SetPoint("TOPLEFT", 0, -114)
 	bar:SetSize(width, 26)
 	private.search = W:Input(bar, 180, "Search by name", function() private.RefreshList() end)
 	private.search:SetPoint("LEFT")
@@ -226,6 +241,7 @@ function private.BuildFilters(parent, width)
 		private.RefreshList()
 	end)
 	private.passedToggle:SetPoint("LEFT", private.zoneToggle, "RIGHT", 16, 0)
+	W:Explain(private.passedToggle, "Show passed", "Bounties you passed on show again.")
 	private.sortButton = W:Button(bar, "", "secondary", 160, 24, function(self)
 		local items = { { text = "Sort by", header = true } }
 		for _, key in ipairs(Model.BOARD_SORTS) do
@@ -271,7 +287,7 @@ function private.RefreshList()
 		end
 	end
 	private.count:SetText(#items == 0 and "" or format("%d bount%s  -  %s open", #items, #items == 1 and "y" or "ies", Theme:Money(total)))
-	private.list:SetItems(items, "No bounties on the board.", "Post one above, or clear the filters.")
+	private.list:SetItems(items, "No bounties on the board.")
 end
 
 
@@ -283,7 +299,6 @@ end
 UI:RegisterPage("board", {
 	group = "World PvP",
 	title = "Board",
-	subtitle = "Bounties on enemy players. Kill the target and the claim files itself; the poster pays by mail.",
 	order = 1,
 	menuLabel = "Bounties",
 	tabLabel = "Board",
@@ -301,7 +316,7 @@ UI:RegisterPage("board", {
 	build = function(container, width, height)
 		private.BuildPostCard(container, width)
 		private.BuildFilters(container, width)
-		local listTop = 188
+		local listTop = 164
 		local numRows = floor((height - listTop) / Rows.HEIGHT)
 		local list = W:List(container, Rows.HEIGHT, numRows, function(row) Rows:Create(row) end, function(row, info) Rows:UpdateBounty(row, info) end)
 		list:SetPoint("TOPLEFT", 0, -listTop)

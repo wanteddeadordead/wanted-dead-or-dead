@@ -72,6 +72,10 @@ end
 ---Fills a row for a bounty.
 function Rows:UpdateBounty(row, info)
 	row.info = info
+	-- A row that showed a claim (Your hunts) drops the claim's tooltip
+	if row.tooltipTitle then
+		Rows:ExplainClaim(row)
+	end
 	local player = info.player
 	row.money:SetText(Theme:Money(info.amount))
 	if info.guild then
@@ -129,16 +133,8 @@ function Rows:UpdateClaim(row, item)
 	tinsert(parts, "killed "..Theme:Ago(GetServerTime() - item.t))
 	row.detail:SetText(table.concat(parts, "  -  "))
 	row.pill:Set(item.label, item.color)
-	local hints = {
-		Paid = "The gold arrived.",
-		Confirmed = "The poster agreed. Payment is on its way.",
-		Witnessed = "Another player saw it. Waiting for the poster.",
-		Unverified = "Nobody else saw it. Waiting for the poster.",
-		Disputed = "The poster says it didn't happen.",
-		Overdue = "Confirmed over 2 days ago and still unpaid.",
-		Beaten = "Another bounty hunter got the kill first.",
-	}
-	row.seen:SetText(hints[item.label] or "")
+	row.seen:SetText("")
+	Rows:ExplainClaim(row, item)
 	for _, button in ipairs(row.buttons) do
 		button:Hide()
 	end
@@ -149,6 +145,25 @@ end
 -- ============================================================================
 -- Tooltip
 -- ============================================================================
+
+-- What each claim state means, for the claim row's tooltip
+local CLAIM_HINTS = {
+	Paid = "The gold arrived.",
+	Confirmed = "The poster agreed. Payment is on its way.",
+	Witnessed = "Another player saw it. Waiting for the poster.",
+	Unverified = "Nobody else saw it. Waiting for the poster.",
+	Disputed = "The poster says it didn't happen.",
+	Overdue = "Confirmed over 2 days ago and still unpaid.",
+	Beaten = "Another bounty hunter got the kill first.",
+}
+
+---A claim row explains its state on hover (a bounty row shows the bounty tooltip instead: see UpdateBounty).
+---@param row table
+---@param item table? a claim item, or nil for a row now showing a bounty
+function Rows:ExplainClaim(row, item)
+	local hint = item and CLAIM_HINTS[item.label]
+	W:Explain(row, hint and item.label, hint, "ANCHOR_RIGHT")
+end
 
 ---A tooltip line saying a record is signed, or its signature is bad (1.19.0), or that it doesn't count yet or at all
 ---(1.19.3: not checked yet, or unsigned in a keyed player's name), when that's known.
@@ -241,6 +256,9 @@ local function Killed(info, name)
 	return name
 end
 
+-- The death page's address in a dialog: what it holds and how to copy it
+local DEATH_PAGE_TIP = { "The death's page", "Every record of this death on wanteddeadordead.com, from both factions, including who the victim's own record says killed them. Click the address, Ctrl+C, and paste it into a browser." }
+
 function Rows:DoAction(action, info)
 	local W = Wanted.Widgets
 	local name = Theme:ClassName(info.targetName, info.player and info.player.class)
@@ -280,7 +298,7 @@ function Rows:DoAction(action, info)
 	elseif action == "hunt" then
 		local ok, err = Bounties:Hunt(info.bounty)
 		if ok then
-			Done(format("You're hunting %s. The bounty is locked for 24 hours; renew it under Your hunts.", info.targetName))
+			Done(format("You're hunting %s for 24 hours.", info.targetName))
 		else
 			Done("Couldn't start the hunt: "..tostring(err)..".", C.red)
 		end
@@ -303,10 +321,10 @@ function Rows:DoAction(action, info)
 		local caution = #warnings > 0 and ("\n\n"..Theme:Colorize("Before you pay: "..table.concat(warnings, " "), C.amber)) or ""
 		W:Dialog({
 			title = "Confirm the kill",
-			text = format("You agree %s killed %s, and you owe them %s.%s%s\n\nEvery record of this death, from both factions, including who the victim's own record says killed them (click the address, Ctrl+C, paste into a browser):",
+			text = format("You agree %s killed %s, and you owe them %s.%s%s\n\nEvery record of this death:",
 				info.hunter, killed, Theme:Money(info.amount), caution,
 				Wanted.Proof:Get(info.claim.id) and format("\n\n%s has a screenshot of the kill.", info.hunter) or ""),
-			input = { value = Bounties:DeathPageURL(info.claim) },
+			input = { value = Bounties:DeathPageURL(info.claim), tip = DEATH_PAGE_TIP },
 			confirmLabel = "Confirm",
 			confirmStyle = "success",
 			onConfirm = function()
@@ -317,9 +335,8 @@ function Rows:DoAction(action, info)
 	elseif action == "deathpage" and info.claim then
 		W:Dialog({
 			title = "The death's page",
-			text = format("Every record of %s's death, from both factions, including who the victim's own record says killed them (click the address, Ctrl+C, paste into a browser):",
-				Killed(info, name)),
-			input = { value = Bounties:DeathPageURL(info.claim) },
+			text = format("Every record of %s's death:", Killed(info, name)),
+			input = { value = Bounties:DeathPageURL(info.claim), tip = DEATH_PAGE_TIP },
 			confirmLabel = "Close",
 		})
 	elseif action == "dispute" then
@@ -346,7 +363,7 @@ function Rows:DoAction(action, info)
 		else
 			W:Dialog({
 				title = "Pay "..info.hunter,
-				text = format("Open any mailbox, then press Pay again. Wanted fills in a mail with %s for %s; you check it and press Send.", Theme:Money(info.amount), info.hunter),
+				text = "Open a mailbox, then press Pay again.",
 				confirmLabel = "OK",
 			})
 		end

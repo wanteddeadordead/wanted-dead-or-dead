@@ -335,6 +335,7 @@ function private.Create()
 		Nearby:Refresh()
 	end)
 	clear:SetPoint("RIGHT", private.mute, "LEFT", -2, 0)
+	private.clear = clear
 	-- The order of the list: Threat, Nearest, Last seen, a click steps to the next, remembered
 	private.sort = W:Button(header, "", "ghost", 62, 22, function()
 		local _, next = private.Sorts()
@@ -715,6 +716,7 @@ function Nearby:Refresh()
 	if private.sort then
 		private.sort:SetText((private.Sorts()).label)
 		private.sort:SetShown(view == "nearby")
+		private.title:SetPoint("RIGHT", view == "nearby" and private.sort or private.clear, "LEFT", -4, 0)
 	end
 	local t0 = Wanted.DEV and debugprofilestop()
 	local items = private.GetItems(view)
@@ -727,7 +729,9 @@ function Nearby:Refresh()
 		end
 	end
 	-- Just the count: "(2 in sight)" didn't fit beside the buttons, and shaded rows already show who's gone
-	private.title:SetText(format("%s  %s", label, Theme:Colorize(tostring(#items), C.muted)))
+	-- Beside the Sort button the Nearby tab's title is the count alone (the tab under it says Nearby)
+	local count = Theme:Colorize(tostring(#items), C.muted)
+	private.title:SetText(view == "nearby" and count or format("%s  %s", label, count))
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)

@@ -983,6 +983,13 @@ function Enemies:GetNearby(order)
 		end
 		return rank
 	end
+	-- Newest detection first, then by GUID, so rows seen in the same moment keep their places between refreshes
+	local function Newer(a, b)
+		if (a.firstSeen or 0) ~= (b.firstSeen or 0) then
+			return (a.firstSeen or 0) > (b.firstSeen or 0)
+		end
+		return a.guid < b.guid
+	end
 	local function Near(d)
 		return d.close and 1 or (d.visible and 2 or (d.inSight and 3 or 4))
 	end
@@ -991,7 +998,7 @@ function Enemies:GetNearby(order)
 			if (a.goneFor or math.huge) ~= (b.goneFor or math.huge) then
 				return (a.goneFor or math.huge) < (b.goneFor or math.huge)
 			end
-			return (a.firstSeen or 0) > (b.firstSeen or 0)
+			return Newer(a, b)
 		end)
 	elseif order == "nearest" then
 		sort(list, function(a, b)
@@ -1002,7 +1009,7 @@ function Enemies:GetNearby(order)
 			if (a.goneFor or math.huge) ~= (b.goneFor or math.huge) then
 				return (a.goneFor or math.huge) < (b.goneFor or math.huge)
 			end
-			return (a.firstSeen or 0) > (b.firstSeen or 0)
+			return Newer(a, b)
 		end)
 	else
 		sort(list, function(a, b)
@@ -1010,7 +1017,7 @@ function Enemies:GetNearby(order)
 			if ai ~= bi then
 				return ai < bi
 			end
-			return (a.firstSeen or 0) > (b.firstSeen or 0)
+			return Newer(a, b)
 		end)
 	end
 	return list

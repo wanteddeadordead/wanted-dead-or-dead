@@ -970,6 +970,15 @@ local ordered = true
 for i = 2, #seen do ordered = ordered and (seen[i - 1].goneFor or math.huge) <= (seen[i].goneFor or math.huge) end
 check(seen[1].guid == "Player-9-RAID08" and ordered, "Last seen puts the most recently seen first, in order: "..tostring(seen[1].name))
 check(ns.Enemies:GetNearby()[1].guid == ns.Enemies:GetNearby("threat")[1].guid, "Threat stays the default order")
+local tied, broken = 0, false
+for i = 2, #seen do
+	local a, b = seen[i - 1], seen[i]
+	if a.firstSeen == b.firstSeen and (a.goneFor or math.huge) == (b.goneFor or math.huge) then
+		tied = tied + 1
+		broken = broken or a.guid > b.guid
+	end
+end
+check(tied > 0 and not broken, "rows seen in the same moment keep a fixed order, by GUID: "..tied.." tied")
 ns.db.settings.nearby.sort = "nearest"
 ns.NearbyWindow:Refresh()
 check(ns.db.settings.nearby.sort == "nearest", "the window's order is remembered")

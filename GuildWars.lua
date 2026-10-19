@@ -938,8 +938,9 @@ function GuildWars:LookActive()
 end
 
 ---Every SIGHT_SECONDS in the zone of a war of the guild's (prep or battle), roster or not, what this player's nameplates
----see, for the app: a census line, the players of each faction in view who aren't on our roster and were seen moving
----or fighting in the last 5 minutes (the outnumbered bonus is worked out from many such counts); and standing at a war
+---see, for the app, on the war's layer: a census line, the players of each faction in view seen moving or fighting in
+---the last 5 minutes, rosters included (the site takes the rosters off, and works the outnumbered bonus out from the
+---counts of apps on neither roster); and standing at a war
 ---point, witness lines: every player seen there, either side, roster or not (the site keeps who it needs).
 ---"WANTEDC1 <mark> census <war> <GUID> <time> <horde> <alliance> <layer or ->",
 ---"WANTEDC1 <mark> witness <war> <GUID> <time> <point> <layer or -> <GUIDs seen, or ->", as many lines as it takes.
@@ -951,26 +952,24 @@ function GuildWars:Sight()
 		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) then
 		return
 	end
-	GuildWars:LookActive()
-	local ours = {}
-	for _, key in ipairs({ "players", "standby" }) do
-		for _, p in ipairs(List(war.roster and war.roster[key])) do
-			if p.guid then
-				ours[p.guid] = true
-			end
-		end
+	local layer = Wanted.Shard and Wanted.Shard:Current()
+	layer = type(layer) == "string" and strmatch(layer, "^[%w%-]+$") and layer or "-"
+	-- Only on the war's layer, once the site has fixed it
+	local warLayer = type(war.battle) == "table" and war.battle.layer or nil
+	if type(warLayer) == "string" and layer ~= "-" and layer ~= warLayer then
+		return
 	end
+	GuildWars:LookActive()
+	-- Both rosters counted too: the site takes off the roster members it counted at the points
 	local counts, seen, active = { Horde = 0, Alliance = 0 }, {}, private.active or {}
 	for _, p in ipairs(private.Plates()) do
-		if not ours[p.guid] and active[p.guid] then
+		if active[p.guid] then
 			counts[p.faction] = counts[p.faction] + 1
 		end
 		if #seen < 2 * GuildWars.MAX_ROSTER then
 			tinsert(seen, p.guid)
 		end
 	end
-	local layer = Wanted.Shard and Wanted.Shard:Current()
-	layer = type(layer) == "string" and strmatch(layer, "^[%w%-]+$") and layer or "-"
 	local id = format("%d", war.warId)
 	C_Log.LogMessage(format("WANTEDC1 %s census %s %s %d %d %d %s", mark, id, me, now, counts.Horde, counts.Alliance, layer))
 	local point = GuildWars:PointAt(war, zone, x, y, mapId)

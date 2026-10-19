@@ -11,7 +11,8 @@ local C = Theme.C
 local Races = Wanted.Races
 local private = { rows = {}, guildRows = {}, points = {} }
 local LEFT_WIDTH, GAP = 290, 14
-local ROW_HEIGHT = 80
+local ROW_HEIGHT = 104 -- a zone name and its sub-line can each take two lines (Stonetalon Mountains, "Horde won · Alliance may declare")
+local GUILDS_TOP = -242 -- under the points, whose names can take two lines (east of Dabyrie's Farmstead)
 local MAX_ROWS = 4
 local MAX_GUILDS = 6
 local MEDIA = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\"
@@ -104,13 +105,16 @@ function private.BuildTimeline(container, height)
 		row.zone = Theme:Text(row, "body", "", C.text)
 		row.zone:SetPoint("TOPLEFT", 96, -12)
 		row.zone:SetWidth(LEFT_WIDTH - 96 - 86)
-		row.zone:SetWordWrap(false)
+		-- Long names wrap to a second line rather than be cut short; the score and sub-line follow under them
+		row.zone:SetWordWrap(true)
+		row.zone:SetMaxLines(2)
 		row.score = Theme:Text(row, "small", "")
-		row.score:SetPoint("TOPLEFT", 96, -32)
+		row.score:SetPoint("TOPLEFT", row.zone, "BOTTOMLEFT", 0, -4)
 		row.sub = Theme:Text(row, "tiny", "")
-		row.sub:SetPoint("TOPLEFT", 96, -50)
+		row.sub:SetPoint("TOPLEFT", row.score, "BOTTOMLEFT", 0, -4)
 		row.sub:SetWidth(LEFT_WIDTH - 96 - 12)
-		row.sub:SetWordWrap(false)
+		row.sub:SetWordWrap(true)
+		row.sub:SetMaxLines(2)
 		row.state = W:Pill(row)
 		row.state:SetPoint("TOPRIGHT", -12, -10)
 		row:SetScript("OnClick", function(self)
@@ -176,7 +180,7 @@ function private.BuildRace(container, width, height)
 	local column = floor(inner / 3)
 	for i = 1, 3 do
 		local p = CreateFrame("Frame", nil, card)
-		p:SetSize(column - 8, 36)
+		p:SetSize(column - 8, 52)
 		p:SetPoint("TOPLEFT", 14 + (i - 1) * column, -148)
 		p.dot = p:CreateTexture(nil, "ARTWORK")
 		p.dot:SetSize(12, 12)
@@ -185,18 +189,22 @@ function private.BuildRace(container, width, height)
 		p.name = Theme:Text(p, "body", "", C.text)
 		p.name:SetPoint("TOPLEFT", 18, 0)
 		p.name:SetWidth(column - 30)
-		p.name:SetWordWrap(false)
+		-- A long point name wraps to a second line, its holder under it
+		p.name:SetWordWrap(true)
+		p.name:SetMaxLines(2)
 		p.holder = Theme:Text(p, "tiny", "")
-		p.holder:SetPoint("TOPLEFT", 18, -18)
+		p.holder:SetPoint("TOPLEFT", p.name, "BOTTOMLEFT", 0, -4)
+		p.holder:SetWidth(column - 30)
+		p.holder:SetWordWrap(false)
 		private.points[i] = p
 	end
 	-- Our side's guilds, then the other side's in one line
 	private.guildsLabel = W:SectionLabel(card, "", inner)
-	private.guildsLabel:SetPoint("TOPLEFT", 14, -200)
+	private.guildsLabel:SetPoint("TOPLEFT", 14, GUILDS_TOP + 26)
 	for i = 1, MAX_GUILDS do
 		local g = CreateFrame("Frame", nil, card)
 		g:SetSize(inner, 22)
-		g:SetPoint("TOPLEFT", 14, -226 - (i - 1) * 24)
+		g:SetPoint("TOPLEFT", 14, GUILDS_TOP - (i - 1) * 24)
 		g.name = Theme:Text(g, "body", "", C.text)
 		g.name:SetPoint("LEFT")
 		g.name:SetWidth(inner - 260)
@@ -340,7 +348,7 @@ function private.RefreshRace(now, race)
 			p.dot:SetVertexColor(color[1], color[2], color[3], 1)
 			p.name:SetText(point.name)
 			local here = phase == "live" and Races:HereNow(point) or 0
-			p.holder:SetText(Theme:Colorize(point.holder or "Nobody yet", color)..(point.bonus and Theme:Colorize(" · the +20% point", C.gold) or "")
+			p.holder:SetText(Theme:Colorize(point.holder or "Nobody yet", color)..(point.bonus and Theme:Colorize(" · +20%", C.gold) or "")
 				..(here > 0 and Theme:Colorize(format(" · %d of yours here", here), C.green) or ""))
 			W:Explain(p, point.name, (point.holder and ("Held by the "..point.holder.." as the site last counted it.") or "Nobody has held it yet.")
 				..(point.bonus and "\n\nThe middle point: a minute here counts +20%." or ""))
@@ -368,7 +376,7 @@ function private.RefreshRace(now, race)
 			W:Explain(g, name, format("%d kills, %d minutes on the points.", guild.kills, guild.minutes))
 		end
 	end
-	local y = -226 - min(#ours, MAX_GUILDS) * 24 - 14
+	local y = GUILDS_TOP - min(#ours, MAX_GUILDS) * 24 - 14
 	private.othersLabel:ClearAllPoints()
 	private.othersLabel:SetPoint("TOPLEFT", 14, y)
 	private.othersLabel:SetText(strupper(other))

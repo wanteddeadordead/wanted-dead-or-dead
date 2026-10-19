@@ -113,6 +113,7 @@ do
 end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
+function Methods:SetMaxLines(n) self._maxLines = n end
 function Methods:SetTexture(t) self._texture = t end
 function Methods:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 function Methods:GetFontObject() return self._font end
@@ -17669,6 +17670,26 @@ print("wanted smoke: setup checks pass")
 	local before, toldBefore = #logged, #told
 	R:Sample()
 	check(#logged == before and #told == toldBefore, "and no samples, and nothing told")
+	-- The longest real names (racezones.json): Stonetalon Mountains, east of Dabyrie's Farmstead, Ironband's Excavation Site.
+	-- The page wraps them to two lines.
+	local long = { n = 1, zone = "Stonetalon Mountains", mapID = 1442, start = clock - 60, ["end"] = clock + 2600, state = "live", horde = 1342, alliance = 1,
+		winner = "Horde", mayDeclare = "Alliance",
+		points = {
+			{ id = "st-r1", name = "east of Dabyrie's Farmstead", x = 30, y = 30, r = 40, weight = 1 },
+			{ id = "st-r2", name = "Ironband's Excavation Site", x = 50, y = 50, r = 40, weight = 1.2, bonus = true },
+			{ id = "st-r3", name = "Circle of East Binding", x = 70, y = 70, r = 40, weight = 1 } } }
+	R:Take({ battlegroup = "na", ruleset = "pvp", tonight = { long } })
+	ns.UI:Show("guildwars")
+	local function Fits(fs, lines)
+		return fs and fs:GetStringWidth() <= fs._w * lines and (lines == 1 or (fs._wrap and fs._maxLines == lines))
+	end
+	local zoneLine, pointLines = nil, {}
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "Stonetalon Mountains" and fs._wrap then zoneLine = fs end
+		for _, p in ipairs(long.points) do if fs._text == p.name and fs._parent and fs._parent._parent == fs._parent._parent and fs._wrap then pointLines[p.name] = fs end end
+	end
+	check(Fits(zoneLine, 2), "the timeline's zone name wraps to two lines instead of being cut: "..tostring(zoneLine and zoneLine:GetStringWidth()).." in "..tostring(zoneLine and zoneLine._w))
+	check(Fits(pointLines["east of Dabyrie's Farmstead"], 2) and Fits(pointLines["Ironband's Excavation Site"], 2), "the race card's point names wrap to two lines")
 	-- Put back
 	R:Take(nil)
 	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence

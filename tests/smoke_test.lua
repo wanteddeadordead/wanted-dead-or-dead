@@ -18266,6 +18266,30 @@ end
 	warButton._scripts.OnClick(warButton)
 	check(ns.db.settings.warMap == true, "and shows it")
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
+	-- Live between catch-ups: our side's clients say where they stand each tick, and the capture rule runs here
+	local tick = math.floor(clock / 30)
+	for i = 1, 3 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1 }, "Peer"..i) end
+	ns.WarLive:OnPeer({ w = 8, t = tick, p = "hb-mid-a-tower", e = 0 }, "Other")
+	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 500 }, "Liar")
+	clock = clock + 30
+	ns.WarLive:Step()
+	local mid = G:War(1).battle.lanes[2].tower
+	check(mid.state == "taking" and mid.progress == 13 and mid.pct == 59, "three of ours against one: the Mid tower 11 -> 13 of 22: "..tostring(mid.progress))
+	tick = math.floor(clock / 30)
+	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0 }, "Peer"..i) end
+	clock = clock + 30
+	ns.WarLive:Step()
+	check(G:War(1).battle.lanes[2].tower.progress == 19 and G:War(1).battle.turnout.attacker == 6, "six unopposed: 6 a tick (the cap), our turnout from who's heard")
+	tick = math.floor(clock / 30)
+	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0 }, "Peer"..i) end
+	clock = clock + 30
+	ns.WarLive:Step()
+	check(G:War(1).battle.lanes[2].tower.state == "taken", "and taken at its cost")
+	tick = math.floor(clock / 30)
+	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-bot-a-inhibitor", e = 0 }, "Peer"..i) end
+	clock = clock + 30
+	ns.WarLive:Step()
+	check(G:War(1).battle.lanes[3].inhibitor.state == nil and G:War(1).battle.keep.state == "open", "an inhibitor behind a standing tower can't be taken; the keep stays open (Top's inhibitor fell)")
 	AtStep(function(war, s)
 		war.state, war.start, war.answer = "prep", clock + 600, "accept"
 		s.warLive = { ["7"] = { phase = "prep", endsAt = clock + 600, points = {}, turnout = { att = 20, def = 18 } } }

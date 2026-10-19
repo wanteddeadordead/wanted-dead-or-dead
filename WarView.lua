@@ -335,11 +335,11 @@ function private.Point(p)
 	if type(p) ~= "table" then
 		return {}
 	elseif p.holder == "att" then
-		return { state = "taken" }
+		return { state = "taken", progress = p.cost, cost = p.cost }
 	elseif (tonumber(p.progress) or 0) > 0 and (tonumber(p.cost) or 0) > 0 then
-		return { state = "taking", pct = floor(p.progress / p.cost * 100) }
+		return { state = "taking", pct = floor(p.progress / p.cost * 100), progress = p.progress, cost = p.cost }
 	end
-	return {}
+	return { progress = 0, cost = tonumber(p.cost) }
 end
 
 ---The lanes and the keep from the war's points: the defenders' half (OPEN-3), each lane's tower then inhibitor

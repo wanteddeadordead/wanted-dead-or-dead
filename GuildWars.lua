@@ -141,6 +141,11 @@ function GuildWars:On()
 	return private.state ~= nil
 end
 
+---Says the wars changed (WarLive's provisional state moved on): the screens, the HUD and the map redraw.
+function GuildWars:Touch()
+	private.Changed()
+end
+
 ---Calls func() when the wars change.
 function GuildWars:OnChange(func)
 	tinsert(private.listeners, func)

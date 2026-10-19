@@ -126,5 +126,6 @@ RacesHUD.lua
 WarHUD.lua
 WarBanner.lua
 WarAlerts.lua
+WarLive.lua
 Minimap.lua
 OptionsPanel.lua

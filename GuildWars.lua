@@ -25,8 +25,11 @@ local MAX_DEPTH, MAX_ITEMS, MAX_TEXT = 8, 200, 120
 -- The game's rank permission that lets a rank invite to the guild (Blizzard_GuildControlUI.xml, InviteCheckbox id 5)
 local INVITE_FLAG = 5
 local MAX_ACTIONS = 50
--- A roster member's census and witness lines, every this many seconds in the war's zone (the war contract's 4.1, 4.3)
+-- The census and witness lines, every this many seconds in a war's zone (the war contract's 4.1, 4.3); a player counts
+-- in the census only when seen moving or fighting this recently (AFK alts parked in the zone don't make a crowd: the
+-- engine's WarCensusActive), and who's active is looked at this often
 local SIGHT_SECONDS = 30
+local ACTIVE_SECONDS, ACTIVE_LOOK = 5 * 60, 5
 GuildWars.MAX_ROSTER = 40
 GuildWars.DAILY_CAP = 150
 
@@ -46,6 +49,7 @@ function GuildWars:OnEnable()
 	frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 	frame:SetScript("OnEvent", function() GuildWars:ReportRoster() end)
 	C_Timer.NewTicker(SIGHT_SECONDS, Wanted:Timed("War census", function() GuildWars:Sight() end))
+	C_Timer.NewTicker(ACTIVE_LOOK, Wanted:Timed("War census activity", function() GuildWars:LookActive() end))
 end
 
 ---A value from the catch-up as this client may show it: strings as plain text (no escape sequences or control
@@ -889,20 +893,65 @@ end
 -- The war census and witnesses (the war contract's 4.3 and 4.1)
 -- ============================================================================
 
----Every SIGHT_SECONDS while this player is on the roster of a war in its zone (prep or battle), what its nameplates
----see, for the app: a census line, the players of each faction who aren't on our roster (the outnumbered bonus is
----worked out from many members' counts), and at a war point a witness line, the enemy players seen there (the site
----keeps those on the enemy roster).
+---The players on nameplates now: { unit, guid, faction }, each once, never this player.
+function private.Plates()
+	local out, seen, me = {}, {}, UnitGUID("player")
+	local ok, plates = false, nil
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		ok, plates = pcall(C_NamePlate.GetNamePlates)
+	end
+	for _, plate in ipairs(ok and type(plates) == "table" and plates or {}) do
+		local unit = plate.namePlateUnitToken
+		local guid = type(unit) == "string" and UnitIsPlayer(unit) and UnitGUID(unit)
+		local faction = guid and UnitFactionGroup(unit)
+		if type(guid) == "string" and not secret(guid) and not secret(faction) and (faction == "Horde" or faction == "Alliance")
+			and strfind(guid, "^Player%-") and guid ~= me and not seen[guid] then
+			seen[guid] = true
+			tinsert(out, { unit = unit, guid = guid, faction = faction })
+		end
+	end
+	return out
+end
+
+---Notes who on the nameplates is moving or fighting, and not AFK, every ACTIVE_LOOK seconds in a war's zone.
+function GuildWars:LookActive()
+	local now = GetServerTime()
+	if not GuildWars:Here(now) then
+		return
+	end
+	private.active = private.active or {}
+	for _, p in ipairs(private.Plates()) do
+		local afk = UnitIsAFK and UnitIsAFK(p.unit)
+		local speed = GetUnitSpeed and GetUnitSpeed(p.unit)
+		local fighting = UnitAffectingCombat and UnitAffectingCombat(p.unit)
+		if afk == true and not secret(afk) then
+			private.active[p.guid] = nil
+		elseif (type(speed) == "number" and not secret(speed) and speed > 0) or (fighting == true and not secret(fighting)) then
+			private.active[p.guid] = now
+		end
+	end
+	for guid, at in pairs(private.active) do
+		if now - at > ACTIVE_SECONDS then
+			private.active[guid] = nil
+		end
+	end
+end
+
+---Every SIGHT_SECONDS in the zone of a war of the guild's (prep or battle), roster or not, what this player's nameplates
+---see, for the app: a census line, the players of each faction in view who aren't on our roster and were seen moving
+---or fighting in the last 5 minutes (the outnumbered bonus is worked out from many such counts); and standing at a war
+---point, witness lines: every player seen there, either side, roster or not (the site keeps who it needs).
 ---"WANTEDC1 <mark> census <war> <GUID> <time> <horde> <alliance> <layer or ->",
----"WANTEDC1 <mark> witness <war> <GUID> <time> <point> <layer or -> <GUIDs seen, or ->".
+---"WANTEDC1 <mark> witness <war> <GUID> <time> <point> <layer or -> <GUIDs seen, or ->", as many lines as it takes.
 function GuildWars:Sight()
 	local now = GetServerTime()
 	local war, zone, x, y, mapId = GuildWars:Here(now)
 	local mark, me = Wanted.db.accountMark, UnitGUID("player")
-	if not war or type(war.warId) ~= "number" or not GuildWars:OnRoster(war) or not (C_Log and C_Log.LogMessage)
+	if not war or type(war.warId) ~= "number" or not (C_Log and C_Log.LogMessage)
 		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) then
 		return
 	end
+	GuildWars:LookActive()
 	local ours = {}
 	for _, key in ipairs({ "players", "standby" }) do
 		for _, p in ipairs(List(war.roster and war.roster[key])) do
@@ -911,25 +960,13 @@ function GuildWars:Sight()
 			end
 		end
 	end
-	local side = UnitFactionGroup("player")
-	local counts, enemies, seen = { Horde = 0, Alliance = 0 }, {}, {}
-	local ok, plates = false, nil
-	if C_NamePlate and C_NamePlate.GetNamePlates then
-		ok, plates = pcall(C_NamePlate.GetNamePlates)
-	end
-	for _, plate in ipairs(ok and type(plates) == "table" and plates or {}) do
-		local unit = plate.namePlateUnitToken
-		local isPlayer = type(unit) == "string" and UnitIsPlayer(unit)
-		local guid = isPlayer and UnitGUID(unit)
-		local faction = guid and UnitFactionGroup(unit)
-		if type(guid) == "string" and not secret(guid) and not secret(faction) and counts[faction] and strfind(guid, "^Player%-") and not seen[guid] then
-			seen[guid] = true
-			if not ours[guid] then
-				counts[faction] = counts[faction] + 1
-			end
-			if faction ~= side and #enemies < 2 * GuildWars.MAX_ROSTER then
-				tinsert(enemies, guid)
-			end
+	local counts, seen, active = { Horde = 0, Alliance = 0 }, {}, private.active or {}
+	for _, p in ipairs(private.Plates()) do
+		if not ours[p.guid] and active[p.guid] then
+			counts[p.faction] = counts[p.faction] + 1
+		end
+		if #seen < 2 * GuildWars.MAX_ROSTER then
+			tinsert(seen, p.guid)
 		end
 	end
 	local layer = Wanted.Shard and Wanted.Shard:Current()
@@ -941,15 +978,15 @@ function GuildWars:Sight()
 		-- As many lines as the sightings take, each under MAX_LINE (the app adds them up)
 		local head = format("WANTEDC1 %s witness %s %s %d %s %s ", mark, id, me, now, point.id, layer)
 		local chunk = {}
-		for i, guid in ipairs(enemies) do
+		for i, guid in ipairs(seen) do
 			tinsert(chunk, guid)
-			local nextGuid = enemies[i + 1]
+			local nextGuid = seen[i + 1]
 			if not nextGuid or #head + #table.concat(chunk, ",") + 1 + #nextGuid > MAX_LINE then
 				C_Log.LogMessage(head..table.concat(chunk, ","))
 				chunk = {}
 			end
 		end
-		if #enemies == 0 then
+		if #seen == 0 then
 			C_Log.LogMessage(head.."-")
 		end
 	end

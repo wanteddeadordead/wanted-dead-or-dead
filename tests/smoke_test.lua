@@ -18432,27 +18432,55 @@ end
 	clock = clock + 900
 	ns.WarAlerts:Tick()
 	check(announced[#announced] == "The battle for Hillsbrad has begun", "and the battle's start")
-	-- On the roster in the war's zone: the census of players on neither roster by faction, and at a war point the enemies seen
+	-- In the war's zone: the census of players on neither roster by faction, only those seen moving or fighting in the
+	-- last 5 minutes; at a war point, everyone seen there
 	local realPlates, realIsPlayer, realGUID, realFaction, realLogC = C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log
+	local realSpeed, realCombat, realAFK = GetUnitSpeed, UnitAffectingCombat, UnitIsAFK
 	local plateUnits = { nameplate1 = { "Player-2-0A", "Alliance" }, nameplate2 = { "Player-2-0B", "Alliance" }, nameplate3 = { "Player-1-002", "Horde" }, nameplate4 = { ME, "Horde" } }
+	local speeds, fighting, afk = { nameplate1 = 7 }, { nameplate3 = true }, {}
 	C_NamePlate = { GetNamePlates = function() local t = {} for u in pairs(plateUnits) do t[#t + 1] = { namePlateUnitToken = u } end return t end }
 	UnitIsPlayer = function(u) if plateUnits[u] then return true end return realIsPlayer(u) end
 	UnitGUID = function(u) if plateUnits[u] then return plateUnits[u][1] end return realGUID(u) end
 	UnitFactionGroup = function(u) if plateUnits[u] then return plateUnits[u][2] end return realFaction(u) end
+	GetUnitSpeed = function(u) return speeds[u] or 0 end
+	UnitAffectingCombat = function(u) return fighting[u] == true end
+	UnitIsAFK = function(u) return afk[u] == true end
 	local sights = {}
 	C_Log = { LogMessage = function(t) if t:find("^WANTEDC1 ") then sights[#sights + 1] = t end end }
 	ns.GuildWars:Sight()
-	check(sights[1] == format("WANTEDC1 %s census 7 %s %d 1 2 -", ns.db.accountMark, ME, clock), "the census: one Horde and two Alliance on neither roster: "..tostring(sights[1]))
-	check(sights[2] and sights[2]:sub(1, #format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock)) == format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock) and sights[2]:find("Player-2-0A", 1, true)
-		and sights[2]:find("Player-2-0B", 1, true) and not sights[2]:find("Player-1-002", 1, true), "at the Mid tower: the enemies seen there: "..tostring(sights[2]))
+	check(sights[1] == format("WANTEDC1 %s census 7 %s %d 1 1 -", ns.db.accountMark, ME, clock),
+		"the census: one Horde fighting and one Alliance moving; the one standing still isn't counted: "..tostring(sights[1]))
+	local witnessHead = format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock)
+	check(sights[2] and sights[2]:sub(1, #witnessHead) == witnessHead and sights[2]:find("Player-2-0A", 1, true) and sights[2]:find("Player-2-0B", 1, true)
+		and sights[2]:find("Player-1-002", 1, true) and not sights[2]:find(ME..",", 1, true), "at the Mid tower: everyone seen there, either side: "..tostring(sights[2]))
+	-- Gone AFK: out of the census at once; still: out after 5 minutes
+	afk.nameplate1 = true
+	speeds.nameplate1 = 0
+	fighting.nameplate3 = nil
+	ns.GuildWars:LookActive()
+	sights = {}
+	ns.GuildWars:Sight()
+	check(sights[1]:sub(-6) == " 1 0 -", "AFK: not counted: "..sights[1])
+	local savedClock = clock
+	clock = clock + 301
+	sights = {}
+	ns.GuildWars:Sight()
+	check(sights[1]:sub(-6) == " 0 0 -", "nobody moving or fighting for 5 minutes: nobody counted: "..sights[1])
+	clock = savedClock
+	GetUnitSpeed, UnitAffectingCombat, UnitIsAFK = realSpeed, realCombat, realAFK
+	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC
 	-- And our presence there for the site, on the presence line (WANTEDP1) with the war's point id
 	local presence = {}
 	C_Log = { LogMessage = function(t) if t:find("^WANTEDP1 ") then presence[#presence + 1] = t end end }
 	local realBlocked = ns.Captures.Blocked
 	ns.Captures.Blocked = function() return nil end
 	ns.WarLive:Step()
+	ns.WarLive:Step()
+	check(#presence == 1, "once a tick")
+	clock = clock + 30
+	ns.WarLive:Step()
 	ns.Captures.Blocked = realBlocked
-	check(presence[1] and presence[1]:find(" hb-mid-a-tower ", 1, true), "presence on the war's point for the site: "..tostring(presence[1]))
+	check(presence[1] and presence[1]:find(" hb-mid-a-tower ", 1, true) and #presence == 2, "presence on the war's point for the site, at once each tick: "..tostring(presence[1]))
 	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC
 	AtStep(function(war)
 		war.state, war.start = "over", clock - 2400

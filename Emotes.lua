@@ -173,7 +173,6 @@ function Emotes:SetButtonEmote(button, def)
 	button.def = def
 	button:SetText(def and def[2] or "")
 	button:SetAttribute("macrotext1", def and def[3] or "")
-	W:AttachTooltip(button, def and def[2] or "", def and (def[3].." at your target, or on its own with nothing targeted.") or "")
 end
 
 Emotes.BUTTON_HEIGHT = BUTTON_HEIGHT
@@ -192,7 +191,6 @@ Emotes.BUTTON_HEIGHT = BUTTON_HEIGHT
 function Emotes:CreateMoreButton(parent, width)
 	local flyout = private.GetFlyout(parent)
 	local button = W:Button(parent, "...", "chip", width, BUTTON_HEIGHT, nil, "SecureHandlerClickTemplate")
-	W:AttachTooltip(button, "All emotes", "Every emote you haven't hidden, grouped. Opens mid-fight too. Choose favourites in Settings > Emotes.")
 	button:SetFrameRef("flyout", flyout)
 	button:SetAttribute("_onclick", [=[
 		local flyout = self:GetFrameRef("flyout")
@@ -311,7 +309,7 @@ function Emotes:MaybeTip()
 	settings.tipShown = true
 	W:Dialog({
 		title = "Emote buttons",
-		text = "The buttons at the bottom of the Nearby window /lol, /flex, /doom and more at your target, even mid-fight. The ... button opens every emote.\n\nChoose your favourites, or turn them all off, in Settings > Emotes.",
+		text = "The buttons at the bottom of the Nearby window send /lol, /flex, /doom and more at your target, even mid-fight. The ... button opens every emote.\n\nChoose your favourites, or turn them all off, in Settings > Emotes.",
 		cancelLabel = "Turn off",
 		confirmLabel = "Keep them",
 		onCancel = function()

@@ -209,7 +209,13 @@ function private.GearText(gear)
 	end
 	local score = Duels:GearScore(gear)
 	if not score then
-		return "Gear: loading item levels..."
+		local total, loaded = 0, 0
+		for _, item in pairs(type(gear.items) == "table" and gear.items or {}) do
+			if type(item) == "string" then
+				total, loaded = total + 1, loaded + (Duels:ItemLevel(item) and 1 or 0)
+			end
+		end
+		return total > 0 and format("Gear: item levels of %d of %d items so far", loaded, total) or nil
 	end
 	local counts = {}
 	for q = 5, 2, -1 do
@@ -262,18 +268,32 @@ function private.EmptySlotTexture(slot)
 	return 136516 -- the plain empty slot
 end
 
----One slot of the paper doll: the item's icon in a border of its quality, its level, the game's tooltip on hover.
+-- The character window's own art for a slot: the item button's frame, the quality border it tints, its highlight
+local SLOT_FRAME = "Interface\\Buttons\\UI-Quickslot2"
+local SLOT_QUALITY = "Interface\\Common\\WhiteIconFrame"
+local SLOT_HIGHLIGHT = "Interface\\Buttons\\ButtonHilight-Square"
+-- Weapons tried on the model in their hand
+local HAND_SLOTS = { [16] = "MAINHANDSLOT", [17] = "SECONDARYHANDSLOT" }
+local ITEM_WAIT = 10 -- seconds to wait on items the game hasn't loaded before giving up on their levels
+
+---One slot of the paper doll, as the character window draws it: the item's icon in the game's slot frame, a
+---border in its quality's colour, its level, and the game's item tooltip on hover.
 function private.CreateDollSlot(panel, slot)
 	local button = CreateFrame("Button", nil, panel)
 	button:SetSize(SLOT_SIZE, SLOT_SIZE)
 	button.slot = slot
-	button.icon = button:CreateTexture(nil, "ARTWORK")
+	button.icon = button:CreateTexture(nil, "BORDER")
 	button.icon:SetAllPoints()
+	button.frame = button:CreateTexture(nil, "ARTWORK")
+	button.frame:SetTexture(SLOT_FRAME)
+	button.frame:SetSize(SLOT_SIZE * 64 / 37, SLOT_SIZE * 64 / 37)
+	button.frame:SetPoint("CENTER", 0, -1)
 	button.border = button:CreateTexture(nil, "OVERLAY")
-	button.border:SetPoint("TOPLEFT", -2, 2)
-	button.border:SetPoint("BOTTOMRIGHT", 2, -2)
-	button.border:SetColorTexture(1, 1, 1, 0)
-	button.level = Theme:Text(button, "tiny", "")
+	button.border:SetTexture(SLOT_QUALITY)
+	button.border:SetAllPoints()
+	button.border:Hide()
+	button:SetHighlightTexture(SLOT_HIGHLIGHT, "ADD")
+	button.level = Theme:Text(button, "tiny", "", C.white, "OVERLAY")
 	button.level:SetPoint("BOTTOMRIGHT", -2, 2)
 	button:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -289,8 +309,9 @@ function private.CreateDollSlot(panel, slot)
 	return button
 end
 
----The gear panel: a paper doll laid out like the character window, for you or for them (a toggle), with the
----average item level and the count by quality in the middle where the character would stand.
+---The gear panel: a paper doll laid out like the character window, for you or for them (a toggle). In the middle,
+---the game's dressing-room model wears the items; it's your own character (the game draws only a unit it can see,
+---and they're gone by now), in their gear. Item levels fill in as the game loads the items.
 function private.BuildGearPanel(card, width)
 	-- Scrolls inside the card when the card is shorter than the doll
 	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
@@ -300,7 +321,7 @@ function private.BuildGearPanel(card, width)
 	frame:Hide()
 	local dollHeight = #DOLL_LEFT * (SLOT_SIZE + SLOT_GAP)
 	local panel = CreateFrame("Frame", nil, frame)
-	panel:SetSize(width - 30, 40 + dollHeight + SLOT_SIZE + 20)
+	panel:SetSize(width - 30, 40 + dollHeight + SLOT_SIZE + 60)
 	frame:SetScrollChild(panel)
 	panel.frame = frame
 	panel.back = W:Button(panel, "Back to the fight", "secondary", 140, 22, function() private.HideGear() end)
@@ -329,12 +350,57 @@ function private.BuildGearPanel(card, width)
 		b:SetPoint("TOPLEFT", bottomLeft + (i - 1) * (SLOT_SIZE + SLOT_GAP), top - dollHeight - 6)
 		panel.slots[slot] = b
 	end
+	-- The dressing-room model between the two columns, where the character stands in the character window
+	local ok, model = pcall(CreateFrame, "DressUpModel", nil, panel)
+	if ok and model then
+		model:SetPoint("TOPLEFT", left + SLOT_SIZE + 12, top)
+		model:SetSize(dollWidth - 2 * SLOT_SIZE - 24, dollHeight - SLOT_GAP)
+		panel.model = model
+	end
 	panel.summary = Theme:Text(panel, "body", "")
-	panel.summary:SetPoint("TOP", panel, "TOPLEFT", left + dollWidth / 2, top - dollHeight / 2 + 30)
-	panel.summary:SetWidth(dollWidth - 2 * SLOT_SIZE - 30)
+	panel.summary:SetPoint("TOP", panel, "TOPLEFT", left + dollWidth / 2, top - dollHeight - SLOT_SIZE - 16)
+	panel.summary:SetWidth(dollWidth)
 	panel.summary:SetJustifyH("CENTER")
 	panel.summary:SetWordWrap(true)
+	-- Items the game loads while the card is up: the doll's levels, quality and model, or the card's gear line, fill in
+	-- (a burst of items is one redraw)
+	local watch = CreateFrame("Frame", nil, card)
+	watch:SetScript("OnEvent", function()
+		if private.itemsQueued then
+			return
+		end
+		private.itemsQueued = true
+		C_Timer.After(0.2, function()
+			private.itemsQueued = nil
+			if frame:IsShown() then
+				private.FillDoll()
+			elseif card:IsShown() and private.cardDuel then
+				private.ShowCard(private.cardDuel)
+			end
+		end)
+	end)
+	card:HookScript("OnShow", function() watch:RegisterEvent("GET_ITEM_INFO_RECEIVED") end)
+	card:HookScript("OnHide", function() watch:UnregisterEvent("GET_ITEM_INFO_RECEIVED") end)
+	if card:IsShown() then
+		watch:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+	end
+	card.itemWatch = watch
 	card.gearPanel = panel
+end
+
+---Dresses the model in a side's items: undressed first, then each item tried on (weapons in their hand).
+function private.DressModel(model, items)
+	if not model then
+		return
+	end
+	pcall(model.SetUnit, model, "player")
+	pcall(model.Undress, model)
+	for slot, item in pairs(items) do
+		if type(item) == "string" then
+			local link = C_Item and C_Item.GetItemInfo and select(2, C_Item.GetItemInfo(item)) or item
+			pcall(model.TryOn, model, link, HAND_SLOTS[slot])
+		end
+	end
 end
 
 ---Fills the paper doll with one side's recorded gear.
@@ -348,15 +414,17 @@ function private.FillDoll()
 	local side = type(duel[key]) == "table" and duel[key] or {}
 	local gear = side.gear
 	local items = type(gear) == "table" and type(gear.items) == "table" and gear.items or {}
+	local total, loaded = 0, 0
 	for slot, button in pairs(panel.slots) do
-		local item = items[slot]
+		local item = type(items[slot]) == "string" and items[slot] or nil
 		button.item = item
 		local level, quality
 		if item then
+			total = total + 1
 			level, quality = Duels:ItemLevel(item)
+			loaded = loaded + (level and 1 or 0)
 			local icon = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(tonumber(strmatch(item, "^item:(%d+)")) or 0)
 			button.icon:SetTexture(icon or 134400)
-			button.icon:SetDesaturated(false)
 		else
 			button.icon:SetTexture(private.EmptySlotTexture(slot))
 		end
@@ -364,9 +432,18 @@ function private.FillDoll()
 		if quality and C_Item and C_Item.GetItemQualityColor then
 			r, g, b = C_Item.GetItemQualityColor(quality)
 		end
-		button.border:SetColorTexture(r, g, b, item and quality and quality >= 2 and 0.6 or 0)
-		button.border:SetDrawLayer("BACKGROUND")
+		button.border:SetVertexColor(r, g, b)
+		button.border:SetShown(item and quality and quality >= 2 and true or false)
 		button.level:SetText(level and tostring(level) or "")
+	end
+	-- Dressed again only when the side or its loaded items changed, so the model doesn't flicker each refresh
+	local dressKey = key..":"..tostring(gear)..":"..loaded
+	if panel.dressed ~= dressKey then
+		panel.dressed = dressKey
+		private.DressModel(panel.model, items)
+	end
+	if private.dollSide ~= key..tostring(gear) then
+		private.dollSide, private.dollSince = key..tostring(gear), GetTime()
 	end
 	local score = Duels:GearScore(gear)
 	local who = key == "me" and "You" or Duels:Describe(Duels:Side(duel, "them"))
@@ -382,13 +459,25 @@ function private.FillDoll()
 		if #counts > 0 then
 			lines[#lines + 1] = table.concat(counts, ", ")
 		end
-	elseif next(items) then
-		lines[#lines + 1] = "Loading item levels..."
+	elseif total > 0 and GetTime() - private.dollSince < ITEM_WAIT then
+		lines[#lines + 1] = format("Item level: loading (%d of %d)", loaded, total)
+	elseif total > 0 then
+		lines[#lines + 1] = format("Item level unknown: the game didn't load %d of %d items", total - loaded, total)
 	else
 		lines[#lines + 1] = key == "me" and "Not recorded for this duel" or "Not seen (the addon couldn't inspect them)"
 	end
 	panel.summary:SetText(table.concat(lines, "\n"))
 	panel.sideToggle:Select(key, true)
+	-- Still loading: look again once the wait is over, so the line never stays on loading
+	if not score and total > loaded and GetTime() - private.dollSince < ITEM_WAIT and not private.dollRecheck then
+		private.dollRecheck = true
+		C_Timer.After(ITEM_WAIT, function()
+			private.dollRecheck = nil
+			if panel.frame:IsShown() then
+				private.FillDoll()
+			end
+		end)
+	end
 end
 
 function private.ShowGear()

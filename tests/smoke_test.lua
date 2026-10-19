@@ -12798,6 +12798,34 @@ end)()
 	youButton:Click()
 	doll = DollItems()
 	check(doll[1] == "item:103::::" and doll[16] == false, "the toggle shows your own gear")
+	-- The dressing-room model between the columns wears the side's items, weapons in their hand
+	local model
+	for _, f in ipairs(Mock.created) do if f._kind == "DressUpModel" then model = f end end
+	check(model, "a dressing-room model in the doll")
+	local tried, undressed = {}, 0
+	model.TryOn = function(_, link, hand) tried[link] = hand or true end
+	model.Undress = function() undressed = undressed + 1 end
+	local themButton
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Them" and fs._parent and rawget(fs._parent, "key") == "them" then themButton = fs._parent end end
+	themButton:Click()
+	check(undressed == 1 and tried["item:100::::"] == true and tried["item:102::::"] == "MAINHANDSLOT", "it's undressed, then tries on their items, the axe in the main hand")
+	-- Items still loading: counted as they come, then the level once the game has them all; never loading for good
+	loaded = false
+	themButton:Click()
+	check(OnScreen("Item level: loading (0 of 3)"), "while the game loads the items, the doll counts them")
+	loaded = true
+	Fire("GET_ITEM_INFO_RECEIVED", 100, true)
+	RunTimers()
+	check(OnScreen("Item level 7.1"), "the item level fills in when the items arrive")
+	local wasClock = clock
+	loaded = false
+	youButton:Click()
+	themButton:Click()
+	clock = clock + 11
+	RunTimers()
+	check(OnScreen("Item level unknown: the game didn't load 3 of 3 items") and not OnScreen("Item level: loading (0 of 3)"), "and after 10 seconds it stops saying loading")
+	clock = wasClock
+	loaded = true
 	C_Item = savedItem
 	duel.me.gear, duel.them.gear = nil, nil
 	ns.UI:Show("duels")

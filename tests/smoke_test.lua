@@ -17761,6 +17761,123 @@ print("wanted smoke: setup checks pass")
 	ns.Sync.BroadcastPlugin = real.Broadcast
 end)()
 print("wanted smoke: race checks pass")
+-- Guild wars: a sample of what the site's catch-up says (the approved design's shapes, until the war contract), and
+-- a guild in the game with its ranks (the invite right on Officer and Veteran) and members
+local function GuildWarsSample(now)
+	return {
+		at = now - 600,
+		zones = {
+			{ zone = "Hillsbrad Foothills", holder = { guild = "Revenant", faction = "Alliance", crest = "raven-black" }, since = now - 3 * 86400,
+				next = { kind = "war", text = "EMPIRE attacks, time not set" } },
+			{ zone = "Alterac Mountains", holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, since = now - 4 * 86400,
+				next = { kind = "race", at = now + 86400 } },
+			{ zone = "Ashenvale", holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, since = now - 86400,
+				protectedUntil = now + 2 * 86400, next = { kind = "race", at = now + 1800 } },
+			{ zone = "Desolace", holder = { guild = "Tea Party", faction = "Alliance", crest = "no-such-crest" }, since = now - 5 * 86400,
+				next = { kind = "war", at = now + 3600, text = "Immortal Forever" } },
+			{ zone = "Arathi Highlands", next = { kind = "race", at = now - 600 } },
+			{ zone = "|cffff0000The Barrens|r", next = { kind = "race", at = now + 2 * 86400 } },
+		},
+		guild = { name = "EMPIRE", treasury = 2140, staked = 400, tax = 10, taxBy = "Vorgath", taxAt = now - 6 * 86400 },
+	}
+end
+
+local function GuildWarsGame()
+	local real = { GuildControlGetNumRanks = GuildControlGetNumRanks, GuildControlGetRankName = GuildControlGetRankName, C_GuildInfo = C_GuildInfo,
+		GetNumGuildMembers = GetNumGuildMembers, GetGuildRosterInfo = GetGuildRosterInfo, IsGuildLeader = IsGuildLeader, UnitName = UnitName }
+	local ranks = { "Guild Master", "Officer", "Veteran", "Member", "Recruit", "Alt" }
+	local members = {
+		{ "Vorgath-Realm", 0, "WARRIOR" }, { "Grimtusk-Realm", 1, "ROGUE" }, { "Sylvexa-Realm", 1, "PRIEST" }, { "Ex Madness-Realm", 2, "HUNTER" },
+		{ "Gidhon Wins-Realm", 2, "MAGE" }, { "Strix Primal-Realm", 3, "HUNTER" }, { "Test Player-Realm", 3, "WARRIOR" }, { "Newbie-Realm", 4, "MAGE" },
+	}
+	GuildControlGetNumRanks = function() return #ranks end
+	GuildControlGetRankName = function(i) return ranks[i] end
+	C_GuildInfo = { GuildControlGetRankFlags = function(order) return { [5] = order == 2 or order == 3 } end, GuildRoster = function() end }
+	GetNumGuildMembers = function() return #members end
+	GetGuildRosterInfo = function(i) local m = members[i] return m[1], ranks[m[2] + 1], m[2], 60, m[3], "Orgrimmar", "", "", true, 0, m[3] end
+	local leader = false
+	IsGuildLeader = function() return leader end
+	return {
+		SetLeader = function(on) leader = on end,
+		Restore = function()
+			GuildControlGetNumRanks, GuildControlGetRankName, C_GuildInfo = real.GuildControlGetNumRanks, real.GuildControlGetRankName, real.C_GuildInfo
+			GetNumGuildMembers, GetGuildRosterInfo, IsGuildLeader, UnitName = real.GetNumGuildMembers, real.GetGuildRosterInfo, real.IsGuildLeader, real.UnitName
+		end,
+	}
+end
+
+-- Guild wars' data: the catch-up cleaned (plain text, finite numbers, bounded); on and off; war officers by rank and
+-- by person; the player's asks kept until the site answers; the Zones tab
+;(function()
+	local G = ns.GuildWars
+	check(not G:On() and #G:Zones() == 0 and G:Guild() == nil, "no wars in the catch-up: off")
+	G:Take({ zones = { { zone = "x", since = 0 / 0, holder = { guild = string.rep("a", 500) } } }, bad = function() end, deep = { { { { { { { "too deep" } } } } } } } })
+	local zone = G:Zones()[1]
+	check(G:On() and zone.since == nil and #zone.holder.guild == 120 and G:Wars()[1] == nil, "cleaned: no NaN, long text cut, nothing but data")
+	G:Take(nil)
+	check(not G:On(), "and off again")
+	-- War officers: the guild master, the ranks that can invite, plus and minus by name
+	local game = GuildWarsGame()
+	G:Take(GuildWarsSample(clock))
+	local ranks = G:Ranks()
+	check(#ranks == 6 and ranks[1].name == "Guild Master" and ranks[1].invite and ranks[2].invite and ranks[3].invite and not ranks[4].invite
+		and ranks[2].members == 2 and ranks[4].members == 2, "the guild's ranks from the game, with the invite right and members")
+	local setting, default = G:OfficerSetting()
+	check(default and setting.ranks[0] and setting.ranks[1] and setting.ranks[2] and not setting.ranks[3], "never saved: the guild master and the ranks that can invite")
+	local names = {}
+	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
+	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Gidhon Wins", "officers by default, guild master first: "..table.concat(names, ","))
+	local sample = GuildWarsSample(clock)
+	sample.guild.officers = { ranks = { 1, 2 }, add = { "Strix Primal" }, out = { "Gidhon Wins", "Vorgath" }, savedAt = clock - 86400, savedBy = "Vorgath" }
+	G:Take(sample)
+	names = {}
+	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
+	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Strix Primal" and not select(2, G:OfficerSetting()),
+		"saved: plus Strix Primal, minus Gidhon Wins; the guild master can't be left out: "..table.concat(names, ","))
+	check(not G:AmOfficer(), "this player (a Member) isn't one")
+	-- Asks: kept until the site answers, the same ask replaced
+	ns.db.warActions = {}
+	G:Act("tax", nil, { percent = 12 })
+	G:Act("tax", nil, { percent = 15 })
+	check(#ns.db.warActions == 1 and G:Pending("tax").data.percent == 15, "an ask kept, the same ask again replacing it")
+	G:Act("declare", "hb-1", { stake = 400 })
+	G:Take(GuildWarsSample(clock))
+	check(G:Pending("declare", "hb-1") == nil and G:Pending("tax") ~= nil, "a war the site no longer lists: its asks drop")
+	-- The Zones tab
+	ns.UI:Show("warzones")
+	check(ns.UI:IsShown("warzones"), "Guild Wars opens on Zones")
+	local function Rows()
+		local out = {}
+		for _, f in ipairs(Mock.created) do
+			local zoneText = rawget(f, "zone")
+			if type(zoneText) == "table" and rawget(f, "unowned") and rawget(f, "item") and f._shown then out[#out + 1] = f end
+		end
+		return out
+	end
+	local rows = Rows()
+	local byZone = {}
+	for _, row in ipairs(rows) do byZone[row.zone._text] = row end
+	local hb, desolace, arathi = byZone["Hillsbrad Foothills"], byZone["Desolace"], byZone["Arathi Highlands"]
+	check(#rows == 6 and hb and hb.guild._text == "Revenant" and hb.crest._texture:find("crest%-raven%-black$") and hb.tag.text._text == "WAR",
+		"Zones: a row a zone, its holder with its crest, and what's next: "..#rows.." "..tostring(hb and hb.guild._text).." "..tostring(hb and hb.crest._texture).." "..tostring(hb and hb.tag.text._text))
+	check(desolace.crest._texture:find("Alliance%-Logo") and desolace.next._text:find("Immortal Forever", 1, true), "a crest we have no art for: the side's emblem")
+	check(arathi.unowned:IsShown() and arathi.next._text:find("live now", 1, true), "an unowned zone with a race on")
+	check(byZone["cffff0000The Barrensr"] ~= nil, "escape codes stripped from names")
+	local ash = byZone["Ashenvale"]
+	local ashTip = (rawget(ash, "explainHit") or ash).tooltipText
+	check(ash.protected._text:find("^until") and ashTip:find("Protected until", 1, true) and ashTip:find("Click to open its map", 1, true), "protection, and the whole story on hover")
+	-- Filters
+	for _, f in ipairs(Mock.created) do
+		local l = rawget(f, "label")
+		if type(l) == "table" and l._text == "Only zones someone holds" and f._scripts.OnClick then f._scripts.OnClick(f) end
+	end
+	check(#Rows() == 4, "only zones someone holds: "..#Rows())
+	game.Restore()
+	G:Take(nil)
+	ns.db.warActions = {}
+	ns.UI:GetFrame():Hide()
+end)()
+print("wanted smoke: guild wars checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

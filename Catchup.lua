@@ -109,6 +109,8 @@ function private.TakePublic(src, fromSnapshot)
 	Wanted.Captures:TakeSiege(src.siege, src.frontWins)
 	-- Tonight's influence races and tomorrow's zones (guild wars), when the site runs them: Siege steps aside then
 	Wanted.Races:Take(src.races)
+	-- Guild wars: the zones' holders, this guild's wars, War Marks and the war officers (the war contract)
+	Wanted.GuildWars:Take(src.wars)
 	if fromSnapshot then
 		Wanted.Achievements:CheckNew()
 	end
@@ -131,6 +133,7 @@ function Catchup:Import()
 			Wanted.Captures:Take(nil)
 			Wanted.Captures:TakeSiege(nil, nil)
 			Wanted.Races:Take(nil)
+			Wanted.GuildWars:Take(nil)
 		end
 		return
 	end

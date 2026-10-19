@@ -446,9 +446,10 @@ UI:RegisterPage("guildwars", {
 	title = "Guild Wars",
 	menuLabel = "Guild Wars",
 	tabLabel = "Tonight",
-	tabs = { "guildwars" },
+	tabs = { "guildwars", "warzones" },
 	order = -2,
-	hidden = function() return not Races:On() end,
+	-- Where the site runs races or guild wars (the catch-up names them)
+	hidden = function() return not (Races:On() or Wanted.GuildWars:On()) end,
 	-- LIVE while a race is run
 	badge = function()
 		if Races:Live() then

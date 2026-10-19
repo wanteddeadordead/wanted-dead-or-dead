@@ -43,7 +43,7 @@ local DEFAULT_PAGE = "siege"
 ---(one of GROUPS), noHeader (the page takes the header's room too),
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
----out of the menu itself), tabLabel (its tab's label), tabTip = { title, body } (its tab's tooltip: what the page is, now
+---out of the menu itself), tabLabel (its tab's label, or a function returning it for a tab named by what it shows), tabTip = { title, body } (its tab's tooltip: what the page is, now
 ---that pages have no subtitle), menuLabel (its menu entry's label, when not its title), atFoot (its menu entry at the
 ---foot of the menu, above Safety, rather than in the list)
 ---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
@@ -370,7 +370,8 @@ function private.Create()
 			local items = {}
 			for _, key in ipairs(def.tabs) do
 				local page = private.pageByKey[key]
-				tinsert(items, { key = key, label = page and (page.tabLabel or page.title) or key, tip = page and page.tabTip })
+				local label = page and (page.tabLabel or page.title) or key
+				tinsert(items, { key = key, label = type(label) == "function" and (label() or "") or label, tip = page and page.tabTip })
 			end
 			local bar = W:Tabs(content, items, function(key) UI:Show(key) end, 110)
 			bar:SetPoint("TOPLEFT", 0, 0)
@@ -707,10 +708,21 @@ function UI:Refresh(allBadges)
 	for key, bar in pairs(private.tabBars) do
 		bar:SetShown(key == owner)
 		if key == owner then
-			-- A tab whose page is switched off (Tools) isn't shown
+			-- A tab whose page is switched off (Tools, a war that's over) isn't shown, and the tabs after it close up; a
+			-- tab named by what it shows (a war, by its zone) is named afresh
+			local x = 0
 			for _, button in ipairs(bar.buttons) do
 				local page = private.pageByKey[button.key]
-				button:SetShown(not (page and page.hidden and page.hidden()))
+				local shown = not (page and page.hidden and page.hidden())
+				button:SetShown(shown)
+				if shown then
+					if page and type(page.tabLabel) == "function" then
+						button:SetText(page.tabLabel() or "")
+					end
+					button:ClearAllPoints()
+					button:SetPoint("LEFT", x, 0)
+					x = x + button:GetWidth() - 1
+				end
 			end
 			if bar.selected ~= private.current then
 				bar:Select(private.current, true)

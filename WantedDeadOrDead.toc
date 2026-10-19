@@ -43,6 +43,8 @@ Challenges.lua
 BlizzRank.lua
 Captures.lua
 Races.lua
+WarZones.lua
+GuildWars.lua
 Achievements.lua
 HonorScout.lua
 Duels.lua
@@ -77,6 +79,7 @@ NearbyWindow.lua
 PageHome.lua
 PageSiege.lua
 PageGuildWars.lua
+PageWarZones.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua

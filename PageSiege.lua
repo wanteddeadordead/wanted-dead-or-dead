@@ -791,7 +791,7 @@ end
 UI:RegisterPage("siege", {
 	title = "Siege",
 	-- Influence races replace it where the site runs them (Races)
-	hidden = function() return not Wanted:SiegeOn() or Wanted.Races:On() end,
+	hidden = function() return not Wanted:SiegeOn() or Wanted.Races:On() or Wanted.GuildWars:On() end,
 	subtitle = private.Subtitle,
 	order = -1,
 	build = private.Build,

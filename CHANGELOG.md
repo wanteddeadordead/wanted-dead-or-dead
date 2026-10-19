@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
+- You: no subtitles under the tabs. Website & app, Calling card and Tools keep each card's explanation behind an (i) by its label. Long labels are short (Login reminder), with the rest on hover. The calling card and its editor say Sample card or Needs the Wanted app to save, with the steps on hover. The app reminder tells Mac users where to find the app.
 
 ## [1.27.3] - 2026-10-17
 

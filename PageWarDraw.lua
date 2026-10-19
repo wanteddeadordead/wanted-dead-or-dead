@@ -122,7 +122,9 @@ GuildWars.PANELS.draw = {
 		elseif dr.drawn then
 			panel.message:SetText(format("%s attacks %s. %s picks the time.", ctx.ours.guild or "?", GuildWars:Short(war.zone), holder))
 		else
-			panel.message:SetText(format("Not drawn: %s is back in your treasury.", mine and ("the stake of "..tostring(tonumber(mine.stake) or 0)) or "your stake"))
+			local stake = tonumber(dr.refunded) or mine and tonumber(mine.stake)
+			panel.message:SetText(format(dr.dropped and "Dropped at the draw (a check no longer passed): %s is back in your treasury." or "Not drawn: %s is back in your treasury.",
+				stake and ("the stake of "..stake) or "your stake"))
 		end
 		local notDrawn = decided and not dr.drawn
 		panel.allies:SetShown(notDrawn and winner ~= nil)

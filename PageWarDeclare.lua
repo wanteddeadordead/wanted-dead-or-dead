@@ -20,7 +20,7 @@ end
 
 ---The checklist: { ok, text, value, tip } for each condition, from the war's declare record.
 -- The checklist's lines as the site judged them (the catch-up's checks), and the refusal codes that fail each
-local CHECK_KEYS = { "share", "members", "officer", "community", "protected", nil }
+local CHECK_KEYS = { "share", "members", "officer", "community", "zoneOpen", nil }
 local REFUSED_LINE = { under_share = 1, under_members = 2, not_officer = 3, not_member = 3, protected = 5, war_on_zone = 5, window_closed = 6 }
 
 function private.Checks(war, ctx)
@@ -165,7 +165,9 @@ GuildWars.PANELS.declare = {
 		for i, line in ipairs(panel.checks) do
 			local check = checks[i]
 			all = all and (check[1] or i == 4)
-			line.mark:SetText(Theme:Colorize(check[1] and "✓" or "✗", check[1] and C.green or C.red))
+			-- The Battle.net group's line is shown, not enforced, while it's proposed (the contract's OPEN-6): information,
+			-- not a tick
+			line.mark:SetText(i == 4 and Theme:Colorize("i", C.blue) or Theme:Colorize(check[1] and "✓" or "✗", check[1] and C.green or C.red))
 			line.text:SetText(check[2])
 			line.value:SetText(check[3])
 			W:Explain(line, gsub(check[2], "|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""), check[4])

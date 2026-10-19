@@ -149,7 +149,8 @@ GuildWars.PANELS.result = {
 		panel.keepLine:SetText(fell and ("fell"..(type(keep.at) == "number" and (" at "..GuildWars:Clock(keep.at)) or "")) or "held")
 		local turnout = type(r.turnout) == "table" and r.turnout or {}
 		panel.summary:SetText(format("%d / %d v %d / %d%s", tonumber(turnout.attacker) or 0, GuildWars.MAX_ROSTER, tonumber(turnout.defender) or 0, GuildWars.MAX_ROSTER,
-			tonumber(r.towers) and format(" · towers %d · inhibitors %d", r.towers, tonumber(r.inhibitors) or 0) or ""))
+			type(r.kills) == "table" and format(" · kills %d v %d", tonumber(r.kills.attacker) or 0, tonumber(r.kills.defender) or 0)
+				or tonumber(r.towers) and format(" · towers %d · inhibitors %d", r.towers, tonumber(r.inhibitors) or 0) or ""))
 		-- The zone now
 		local holder = type(r.holder) == "table" and r.holder or {}
 		panel.zoneLabel:SetText(strupper(GuildWars:Short(war.zone).." now"))

@@ -17773,7 +17773,7 @@ local function GuildWarsSample(now)
 		guilds = { ["42"] = { name = "EMPIRE", faction = "Horde", membersWithApp = 23, treasury = 2140, tax = 10,
 			officers = { ranks = { 0, 1, 2 }, default = true, now = {} } } },
 		declare = { { battlegroup = "na", ruleset = "pvp", raceStart = now - 3600, zone = "Hillsbrad Foothills", closesAt = now + 522, minStake = 300, maxStake = 600,
-			guild = 42, share = 0.41, checks = { share = true, members = true, officer = false, community = false, protected = true, treasury = true },
+			guild = 42, share = 0.41, influence = 527, sideInfluence = 1285, checks = { share = true, members = true, officer = false, community = false, zoneOpen = true, treasury = true },
 			declared = { { guild = "Bloodfang Raiders", stake = 300, influence = 270 } } } },
 		owners = {
 			["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", since = now - 3 * 86400 },
@@ -18052,6 +18052,21 @@ end
 	ns.UI:Refresh()
 	check(OnScreen("Under 10% of the side's influence.") and Button("Declare war · stake 300") and not Button("Declare war · stake 300"):IsEnabled(),
 		"refused: why, and the checklist's line it failed")
+	-- After the window, how our declaration came out: not drawn (the stake back) shows the Draw; drawn, the war's own tab
+	local after = GuildWarsSample(clock)
+	after.declare[1].closesAt = clock - 600
+	after.declare[1].declared[2] = { guild = "EMPIRE", stake = 400, influence = 527 }
+	after.declare[1].mine = { stake = 400, state = "not_drawn", drawn = false, refunded = 400 }
+	G:Take(after)
+	ns.UI:Refresh()
+	check(G:War(1).step == "draw" and OnScreen("Not drawn: the stake of 400 is back in your treasury.") and OnScreen("Back to Tonight"), "not drawn: the Draw, the stake back")
+	after.declare[1].mine = { stake = 400, state = "drawn", drawn = true, war = 7 }
+	G:Take(after)
+	check(G:War(1) == nil, "drawn: no declare tab (the war has its own)")
+	after.declare[1].mine = { stake = 400, state = "dropped", drawn = false, refunded = 400 }
+	G:Take(after)
+	ns.UI:Refresh()
+	check(OnScreen("Dropped at the draw (a check no longer passed): the stake of 400 is back in your treasury."), "dropped at the draw: says so")
 	ns.db.warActions = {}
 	-- A war at each step: the site's war (id 7, Hillsbrad, EMPIRE attacking Revenant), changed by fill
 	local function AtStep(fill)
@@ -18306,6 +18321,15 @@ end
 	check(OnScreen("EMPIRE took Hillsbrad") and OnScreen("WON") and OnScreen("NOW EMPIRE'S") and OnScreen("held") and OnScreen("fell at")
 		and OnScreen("31 / 40 v 24 / 40 · towers 3 · inhibitors 1") and OnScreen("Held by <EMPIRE>") and OnScreen("Protected until") and OnScreen("400 returned")
 		and OnScreen("+200") and OnScreen("for you"), "the result, won: the war, the zone now, the War Marks")
+	-- The site's own count of the lanes, the kills and the ledger, when it sends them
+	AtStep(function(war)
+		war.state, war.start, war.answer = "over", clock - 2400, "accept"
+		war.result = { winner = "att", keepAt = clock - 600, towers = 1, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, marks = 50, protectedUntil = clock + 3 * 86400,
+			keep = { point = "hb-base-a", at = clock - 600, by = { "Grimtusk" } }, kills = { att = 41, def = 37 },
+			lanes = { { lane = "bot", tower = { point = "hb-bot-a-tower", at = clock - 1500 }, inhibitor = { point = "hb-bot-a-inhibitor", at = clock - 1000 } } },
+			ledger = { { at = clock - 600, from = "escrow", to = "EMPIRE treasury", amount = 400, kind = "stake_return" }, { at = clock - 600, from = "world", to = "EMPIRE treasury", amount = 200, kind = "earn_guild" } } }
+	end)
+	check(OnScreen("31 / 40 v 24 / 40 · kills 41 v 37") and OnScreen("+600") and OnScreen("taken "..ns.GuildWars:Clock(clock - 1500):gsub(" [AP]M$", "")), "the site's lanes, kills and ledger")
 	AtStep(function(war)
 		war.state, war.start = "over", clock - 2400
 		war.result = { winner = "def", towers = 1, inhibitors = 0, turnoutAtt = 20, turnoutDef = 30, protectedUntil = clock + 3 * 86400 }

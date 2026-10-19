@@ -12,7 +12,8 @@ local private = { sources = {}, week = {}, recent = {} }
 local GAP = 12
 local SOURCE_ROWS, WEEK_ROWS = 7, 5
 local RECENT_ROW = 22
-local SHOP = "https://wanteddeadordead.com/shop"
+-- Your War Marks on the site: the purse, today by source and the history from the ledger (the war contract's 8)
+local MARKS_PAGE = "https://wanteddeadordead.com/marks"
 local TODAY_TIP = "Earned only from play the site verifies, up to 150 a day. The guild tax comes out of each."
 local TAX_TIP = "The share of each member's War Marks that goes to the guild's treasury, for its stakes. Leaders only: the guild master sets it."
 
@@ -250,11 +251,11 @@ UI:RegisterPage("warmarks", {
 		recent:SetSize(width, recentHeight)
 		private.BuildRecent(recent, width, recentHeight)
 		private.recentCard = recent
-		local shop = W:Button(container, "Open the shop", "secondary", 120, 28, function()
-			W:Dialog({ title = "The War Marks shop", input = { value = SHOP }, confirmLabel = "Close" })
+		local shop = W:Button(container, "Open on the site", "secondary", 140, 28, function()
+			W:Dialog({ title = "Your War Marks on the site", input = { value = MARKS_PAGE }, confirmLabel = "Close" })
 		end)
 		shop:SetPoint("BOTTOMRIGHT", 0, 4)
-		W:Explain(shop, "Open the shop", "Titles, calling-card parts, crest frames, banners and flags, on the site. War Marks are never sold.")
+		W:Explain(shop, "Open on the site", "Your purse, today by source and every movement, on wanteddeadordead.com. Copy the address. War Marks are never sold.")
 		GuildWars:OnChange(function()
 			if container:IsVisible() then
 				private.Refresh()

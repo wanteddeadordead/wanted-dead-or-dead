@@ -90,7 +90,12 @@ function private.Guild(raw, myGuid)
 	info = type(info) == "table" and info or {}
 	local guild = { id = me.id, name = info.name or me.name, faction = info.faction or me.faction, treasury = info.treasury,
 		tax = info.tax, membersWithApp = info.membersWithApp, officers = info.officers, rankNames = info.rankNames,
-		rankInvite = info.rankInvite, me = me, staked = 0 }
+		rankInvite = info.rankInvite, me = me, staked = 0, taxBy = info.taxSetBy, taxAt = info.taxSetAt }
+	-- The treasury's last 7 days, from the ledger
+	local week = type(info.week) == "table" and info.week or nil
+	if week then
+		guild.week = { { text = "In", n = tonumber(week["in"]) or 0 }, { text = "Out", n = -(tonumber(week.out) or 0) }, { text = "Guild tax", n = tonumber(week.tax) or 0 } }
+	end
 	-- The stakes the treasury holds: the guild's declarations and its attacks not yet over
 	for _, war in ipairs(List(raw.wars)) do
 		if type(war) == "table" and war.attacker == guild.name and (war.state == "awaiting_time" or war.state == "awaiting_answer"
@@ -212,35 +217,50 @@ function private.Declare(open, guild, owners)
 	local ours = { guild = guild.name, faction = guild.faction }
 	local race = private.Race(open.zone, open.raceStart)
 	local share = tonumber(open.share)
-	-- The others' influence as a share of the side's, as ours is: the race's total, else ours worked back
-	local total = race and tonumber(race[guild.faction == "Alliance" and "alliance" or "horde"]) or nil
-	local declared, mine = {}, nil
+	-- The others' influence as a share of the side's, as ours is: the site's total, else tonight's race's, else ours
+	-- worked back
+	local total = tonumber(open.sideInfluence) or race and tonumber(race[guild.faction == "Alliance" and "alliance" or "horde"]) or nil
+	local declared = {}
 	for _, d in ipairs(List(open.declared)) do
-		if type(d) == "table" then
-			if d.guild == guild.name then
-				mine = { stake = d.stake }
-				total = total or (share and share > 0 and tonumber(d.influence) and d.influence / share) or nil
-			end
+		if type(d) == "table" and d.guild == guild.name and not total then
+			total = share and share > 0 and tonumber(d.influence) and d.influence / share or nil
 		end
 	end
+	local weights = 0
 	for _, d in ipairs(List(open.declared)) do
 		if type(d) == "table" then
-			tinsert(declared, { guild = d.guild, faction = guild.faction, stake = d.stake,
-				share = (d.guild == guild.name and share) or (total and total > 0 and (tonumber(d.influence) or 0) / total) or 0 })
+			local entry = { guild = d.guild, faction = guild.faction, stake = d.stake,
+				share = (d.guild == guild.name and share) or (total and total > 0 and (tonumber(d.influence) or 0) / total) or 0 }
+			weights = weights + entry.share * (tonumber(d.stake) or 0)
+			tinsert(declared, entry)
 		end
 	end
-	return {
+	for _, entry in ipairs(declared) do
+		entry.chance = weights > 0 and entry.share * (tonumber(entry.stake) or 0) / weights or 0
+	end
+	-- Ours, for 24 hours after the window: declared (waiting for the draw), drawn (the war has its own entry), not
+	-- drawn or dropped (a check failed at the draw), with the stake refunded
+	local mine = type(open.mine) == "table" and open.mine or nil
+	local view = {
 		id = format("race:%s:%s:%s", tostring(open.battlegroup), tostring(open.ruleset), private.Id(open.raceStart) or "?"),
 		zone = open.zone, role = "attack", step = "declare",
 		race = { battlegroup = open.battlegroup, ruleset = open.ruleset, start = open.raceStart, at = race and race.stop or open.raceStart },
 		attacker = ours, defender = owner and { guild = owner.guild, faction = owner.faction } or {},
 		declare = { closesAt = open.closesAt, share = share, minStake = open.minStake, maxStake = open.maxStake,
 			treasury = guild.treasury, members = guild.membersWithApp, checks = type(open.checks) == "table" and open.checks or nil,
-			protectedUntil = owner and owner.protectedUntil, seedCommit = open.seedCommit, declared = declared, mine = mine,
-			influence = total and share and floor(total * share + 0.5) or nil, sideInfluence = total and floor(total + 0.5) or nil },
+			protectedUntil = owner and owner.protectedUntil, seedCommit = open.seedCommit, declared = declared,
+			mine = mine and tonumber(mine.stake) and { stake = mine.stake } or nil,
+			influence = tonumber(open.influence) or total and share and floor(total * share + 0.5) or nil, sideInfluence = total and floor(total + 0.5) or nil },
 		-- The site draws when declaring closes
-		draw = { at = open.closesAt },
+		draw = { at = open.closesAt, declarers = declared },
 	}
+	if mine and mine.state and mine.state ~= "declared" or (mine and type(open.closesAt) == "number" and GetServerTime() >= open.closesAt) then
+		view.step = "draw"
+		if mine.state == "not_drawn" or mine.state == "dropped" then
+			view.draw.drawn, view.draw.dropped, view.draw.refunded = false, mine.state == "dropped", mine.refunded
+		end
+	end
+	return view, mine
 end
 
 ---The draw: each declaration's share of the influence, stake and chance (its weight of the whole).
@@ -398,15 +418,44 @@ function private.Result(w, attacker, defender, last)
 		protectedUntil = r.protectedUntil, final = r.final,
 		holder = attackWon and attacker or defender.guild and defender or nil,
 		marks = { stake = stake, stakeBack = w.side == "attack" and attackWon, stakeWon = w.side == "defend" and not attackWon, purse = r.marks } }
-	-- The treasury's movement from the war (section 5.1): an attack won earns, a failed one loses its stake; a defence
-	-- held earns and takes the attackers' stake
-	if w.side == "attack" then
+	if type(r.kills) == "table" then
+		result.kills = { attacker = r.kills.att, defender = r.kills.def }
+	end
+	result.log = type(r.log) == "table" and r.log or nil
+	-- The treasury's movement from the war: the ledger's lines to and from our treasury, else section 5.1's rules (an
+	-- attack won earns, a failed one loses its stake; a defence held earns and takes the attackers' stake)
+	local ours = (w.side == "attack" and w.attacker or w.defender) or "?"
+	local ledger, moved = type(r.ledger) == "table" and r.ledger or nil, 0
+	for _, line in ipairs(ledger or {}) do
+		if type(line) == "table" then
+			local amount = tonumber(line.amount) or 0
+			moved = moved + (line.to == ours.." treasury" and amount or 0) - (line.from == ours.." treasury" and amount or 0)
+		end
+	end
+	if ledger then
+		result.marks.treasury = moved
+	elseif w.side == "attack" then
 		result.marks.treasury = attackWon and ATTACK_WON or -stake
 	else
 		result.marks.treasury = attackWon and 0 or DEFENCE_HELD + stake
 	end
-	if type(last) == "table" then
+	-- Each lane as the site counted it, else as this client last saw it live
+	if type(r.lanes) == "table" then
+		result.lanes = {}
+		for _, lane in ipairs(r.lanes) do
+			if type(lane) == "table" and type(lane.lane) == "string" then
+				local function Taken(p)
+					return type(p) == "table" and { state = "taken", at = p.at, by = p.by } or {}
+				end
+				tinsert(result.lanes, { id = lane.lane, tower = Taken(lane.tower), inhibitor = Taken(lane.inhibitor) })
+			end
+		end
+	elseif type(last) == "table" then
 		result.lanes = private.Lanes(w.zone, defender.faction, last.points, false)
+	end
+	if type(r.keep) == "table" then
+		result.keep.at = r.keep.at or result.keep.at
+		result.keep.by = r.keep.by
 	end
 	return result
 end
@@ -460,7 +509,11 @@ function GuildWars.View(raw, at, last)
 		local owners = type(raw.owners) == "table" and raw.owners or {}
 		for _, open in ipairs(List(raw.declare)) do
 			if type(open) == "table" and open.guild == guild.id and type(open.zone) == "string" then
-				tinsert(view.wars, private.Declare(open, guild, owners))
+				local war, mine = private.Declare(open, guild, owners)
+				-- Drawn: the war's own entry takes over
+				if not (mine and (mine.drawn == true or mine.state == "drawn")) then
+					tinsert(view.wars, war)
+				end
 			end
 		end
 		for _, w in ipairs(List(raw.wars)) do

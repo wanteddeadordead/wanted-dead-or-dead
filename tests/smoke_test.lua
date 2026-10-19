@@ -13533,7 +13533,7 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Settlement (2)" then switch = f end end
 	check(switch, "the Settlement view counts what's open")
 	switch._scripts.OnClick(switch)
-	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid") and OnScreen("Received 5g from Bob") and OnScreen("the host dropped"), "the lines show in gold and silver: the overdue one marked, the receipt, the claim")
+	check(OnScreen("Stiff owes you 5g") and OnScreen("OVERDUE") and OnScreen("Paid") and OnScreen("Received 5g from Bob") and OnScreen("host dropped"), "the lines show in gold and silver: the overdue one marked, the receipt, the claim")
 	-- Amounts typed and shown
 	check(Protocol:Money(25000, "gold") == "2g 50s" and Protocol:Money(100000, "gold") == "10g" and Protocol:Money(5, "gold") == "5c" and Protocol:Money(10005, "gold") == "1g 5c" and Protocol:Money(0, "gold") == "0c" and Protocol:Money(250, "chips") == "250", "copper shows as gold, silver and copper")
 	check(Protocol:ParseAmount("2g 50s", "gold") == 25000 and Protocol:ParseAmount("10g", "gold") == 100000 and Protocol:ParseAmount("75s", "gold") == 7500 and Protocol:ParseAmount("2.5", "gold") == 25000 and Protocol:ParseAmount("5c", "gold") == 5
@@ -13927,11 +13927,22 @@ end)()
 	P.PokerPage:GoToStep(2)
 	check(OnScreen("Levels every") and Button("Next"), "a tournament's fields: the stack and the levels")
 	P.PokerPage:GoToStep(4)
-	check(Button("Host table") and OnScreen("A TOURNAMENT"), "the review names the tournament")
+	check(Button("Host table") and OnScreen("Tournament  ·  for chips") and OnScreen("Free") and OnScreen("1500  ·  levels every"), "the review names the tournament, a row a choice")
+	local gameTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Tournament" and rawget(f, "explainedText") and f.explainedText._shown then gameTip = f.tooltipText end
+	end
+	check(gameTip and gameTip:find("plays until one player has them all", 1, true) and gameTip:find("Free entry; the chips are play money", 1, true),
+		"the tournament's rules and its free entry are the Game row's tooltip")
 	Button("Host table")._scripts.OnClick(Button("Host table"))
 	local host = Net:HostedTable()
 	check(host and host.cfg.kind == "tournament" and host.cfg.entry == 0 and host.seats[1].stack == 1500, "a free chips tournament, stacks of 1500")
-	check(TableUI:IsShown() and OnScreen("Registering: 1 of 6 entered"), "the window says it's registering")
+	check(TableUI:IsShown() and OnScreen("Registering: 1 of 6"), "the window says it's registering")
+	local regTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Registering: 1 of 6" then regTip = f.tooltipText end
+	end
+	check(regTip and regTip:find("The host starts the tournament.", 1, true), "who starts it is on hover")
 	local parts = TableUI:GetParts()
 	check(parts.start:IsShown(), "the host has a Start button")
 	local id = host.id
@@ -13942,7 +13953,7 @@ end)()
 		Fire("CHAT_MSG_ADDON", "WNTD", "P:tb"..n..":1/1:"..ns.Sync:Encode(tbl), "WHISPER", "Bob-Realm")
 	end
 	FromBob({ k = "join", b = 0 })
-	check(host.seats[2] and host.seats[2].name == "Bob-Realm" and OnScreen("Registering: 2 of 6 entered"), "Bob enters")
+	check(host.seats[2] and host.seats[2].name == "Bob-Realm" and OnScreen("Registering: 2 of 6"), "Bob enters")
 	parts.start._scripts.OnClick(parts.start)
 	check(host.startedAt and Net:State().started, "started from the window")
 	clock = clock + 1
@@ -14183,7 +14194,11 @@ end)()
 	lockdownNext = 10
 	netHost:Beat()
 	check(Net:Blocked(), "the game refused the beat to Cal: the table is blocked")
-	check(OnScreen("The game is refusing table messages"), "the window says so")
+	local pausedTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Paused: table messages blocked here" then pausedTip = f.tooltipText end
+	end
+	check(OnScreen("Paused: table messages blocked here") and pausedTip and pausedTip:find("boss fight or a PvP match", 1, true), "the window says so, and why on hover")
 	lockdownNext = nil
 	clock = clock + 1
 	netHost:Beat()
@@ -14211,14 +14226,45 @@ end)()
 	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
 	ns.UI:Show("poker")
 	P.PokerPage:GoToStep(4)
-	check(OnScreen("HOST A TABLE") and (OnScreen("A CASH GAME") or OnScreen("A TOURNAMENT")) and OnScreen("THE DEAL:"), "the form, with the guide to the table being set up")
+	-- The tooltip of what's on screen with that title: it and every frame it sits in shown
+	local function Tip(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and (not rawget(f, "explainedText") or f.explainedText._shown) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return f.tooltipText end
+			end
+		end
+	end
+	check(OnScreen("HOST A TABLE") and (OnScreen("Cash game  ·") or OnScreen("Tournament  ·")) and OnScreen("Who sees it") and Tip("The deal"),
+		"the form, with the review of the table being set up and the deal behind an (i)")
+	check(not OnScreen("THE DEAL:") and not OnScreen("SEATS "), "no numbered paragraphs (they numbered the seats line wrongly)")
+	check(Tip("The deal"):find("the deck is shuffled from all of them", 1, true), "the (i) explains the deal")
 	P.PokerPage:GoToStep(2)
 	local practice = Button("Practice")
 	check(practice, "Practice among the stakes")
 	WantedPokerDB.host.kind = "cash"
 	WantedPokerDB.host.seats = 3
 	practice._scripts.OnClick(practice)
-	check(OnScreen("PLAY MONEY: the other seats are computer players") and OnScreen("You and 2 computer players"), "picking Practice rewrites the guide")
+	check(Tip("Practice") and Tip("Practice"):find("Computer players fill the other seats", 1, true), "Practice explains itself on hover")
+	P.PokerPage:GoToStep(4)
+	check(OnScreen("Cash game  ·  practice, play money") and OnScreen("You and 2 computer players") and Tip("Cash game"):find("Play money: the other seats are computer players", 1, true),
+		"picking Practice rewrites the review, and the Game row's tooltip says what play money is")
+	check(not OnScreen("You hold the money") and not OnScreen("Your client deals"), "no gold lines at a practice table")
+	-- A gold cash game: the host's two must-see lines
+	WantedPokerDB.host.stakes = "gold"
+	P.PokerPage:GoToStep(2)
+	local goldButton = Button("Gold")
+	goldButton._scripts.OnClick(goldButton)
+	P.PokerPage:GoToStep(4)
+	check(OnScreen("Cash game  ·  for gold") and OnScreen("You hold the money: you owe each player their stack when they leave (Settlement).")
+		and OnScreen("Your client deals: play for gold only with people you trust.") and Tip("Cash on the table"):find("goes to you first", 1, true),
+		"a gold game: the money rules on hover, the host's debt and the deal's trust on screen")
+	P.PokerPage:GoToStep(2)
+	practice._scripts.OnClick(practice)
+	WantedPokerDB.host.seats = 3
+	WantedPokerDB.host.stakes = "practice"
+	P.PokerPage:GoToStep(4)
 	addonSent = {}
 	TableUI:Log("a line from the last table")
 	P.PokerPage:GoToStep(4)

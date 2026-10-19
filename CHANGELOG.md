@@ -10,6 +10,7 @@
 - Larger text: nothing is smaller than 12, and body text and labels are 13.
 - A UI size setting, 80% to 150%, in Settings, Theme: it sizes the window with its popups and menus, keeps the window on screen, and is saved for the whole account. The Nearby window, the TARGETED warning and the capture bar each have their own size in their own settings (the Nearby window's applies after combat if you're in one).
 - Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
+- Poker: hosting a table explains each choice on hover (Cash game, Tournament, People, Practice, Chips, Gold, the password) in place of the notes under them. The review is a short row per choice, each with its rules on hover. Its step numbers no longer repeat. A gold table's host still sees the two lines that matter: you hold the money, and your client deals. The table window's status line and settings are shorter, with the rest on hover.
 
 ## [1.27.4] - 2026-10-18
 

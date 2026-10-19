@@ -15,6 +15,7 @@ local ROW_HEIGHT = 104 -- a zone name and its sub-line can each take two lines (
 local GUILDS_TOP = -242 -- under the points, whose names can take two lines (east of Dabyrie's Farmstead)
 local MAX_ROWS = 4
 local MAX_GUILDS = 6
+local GUILD_ROW, GUILD_GAP = 30, 24 -- each side's guild list: a row of name and influence over its share bar
 local MEDIA = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\"
 local SIDE_COLORS = { Horde = { 0.82, 0.24, 0.2 }, Alliance = { 0.24, 0.48, 0.92 } }
 local TONIGHT_TIP = "Every night: three races, 45 minutes each. Zones are picked the evening before."
@@ -198,33 +199,40 @@ function private.BuildRace(container, width, height)
 		p.holder:SetWordWrap(false)
 		private.points[i] = p
 	end
-	-- Our side's guilds, then the other side's in one line
-	private.guildsLabel = W:SectionLabel(card, "", inner)
-	private.guildsLabel:SetPoint("TOPLEFT", 14, GUILDS_TOP + 26)
-	for i = 1, MAX_GUILDS do
-		local g = CreateFrame("Frame", nil, card)
-		g:SetSize(inner, 22)
-		g:SetPoint("TOPLEFT", 14, GUILDS_TOP - (i - 1) * 24)
-		g.name = Theme:Text(g, "body", "", C.text)
-		g.name:SetPoint("LEFT")
-		g.name:SetWidth(inner - 260)
-		g.name:SetWordWrap(false)
-		g.influence = Theme:Text(g, "small", "", C.text)
-		g.influence:SetPoint("RIGHT", -200, 0)
-		g.influence:SetJustifyH("RIGHT")
-		g.track = g:CreateTexture(nil, "BACKGROUND")
-		g.track:SetPoint("RIGHT", -40, 0)
-		g.track:SetSize(150, 4)
-		g.track:SetColorTexture(1, 1, 1, 0.06)
-		g.fill = g:CreateTexture(nil, "ARTWORK")
-		g.fill:SetPoint("LEFT", g.track, "LEFT")
-		g.fill:SetHeight(4)
-		private.guildRows[i] = g
+	-- Each side's guilds, side by side: Horde on the left, Alliance on the right, each with its share of its side
+	local half = floor((inner - GUILD_GAP) / 2)
+	private.guildLabels = {}
+	for i, side in ipairs({ "Horde", "Alliance" }) do
+		local x = 14 + (i - 1) * (half + GUILD_GAP)
+		local label = W:SectionLabel(card, side.." guilds", half)
+		label:SetPoint("TOPLEFT", x, GUILDS_TOP + 26)
+		label:SetTextColor(SIDE_COLORS[side][1], SIDE_COLORS[side][2], SIDE_COLORS[side][3])
+		private.guildLabels[side] = label
+		private.guildRows[side] = {}
+		for n = 1, MAX_GUILDS do
+			local g = CreateFrame("Frame", nil, card)
+			g:SetSize(half, GUILD_ROW - 4)
+			g:SetPoint("TOPLEFT", x, GUILDS_TOP - (n - 1) * GUILD_ROW)
+			g.influence = Theme:Text(g, "small", "", C.text)
+			g.influence:SetPoint("TOPRIGHT")
+			g.influence:SetJustifyH("RIGHT")
+			g.name = Theme:Text(g, "body", "", C.text)
+			g.name:SetPoint("TOPLEFT")
+			g.name:SetPoint("RIGHT", g.influence, "LEFT", -8, 0)
+			g.name:SetWordWrap(false)
+			g.track = g:CreateTexture(nil, "BACKGROUND")
+			g.track:SetPoint("BOTTOMLEFT")
+			g.track:SetPoint("BOTTOMRIGHT")
+			g.track:SetHeight(4)
+			g.track:SetColorTexture(1, 1, 1, 0.06)
+			g.fill = g:CreateTexture(nil, "ARTWORK")
+			g.fill:SetPoint("LEFT", g.track, "LEFT")
+			g.fill:SetHeight(4)
+			g.fill:SetColorTexture(SIDE_COLORS[side][1], SIDE_COLORS[side][2], SIDE_COLORS[side][3], 1)
+			g.width = half
+			private.guildRows[side][n] = g
+		end
 	end
-	private.othersLabel = W:SectionLabel(card, "", inner)
-	private.others = Theme:Text(card, "small", "", C.text)
-	private.others:SetWidth(inner)
-	private.others:SetWordWrap(false)
 	private.asOf = Theme:Text(card, "tiny", "")
 	private.asOf:SetPoint("BOTTOMLEFT", 14, 14)
 	-- The site's live numbers: the game can't open a browser, so the address to copy
@@ -354,42 +362,27 @@ function private.RefreshRace(now, race)
 				..(point.bonus and "\n\nThe middle point: a minute here counts +20%." or ""))
 		end
 	end
-	-- Guilds: ours by influence, with each one's share of our side's; the other side's on one line
-	local side = UnitFactionGroup("player") == "Alliance" and "Alliance" or "Horde"
-	local other = side == "Horde" and "Alliance" or "Horde"
-	local ours, theirs = Races:Guilds(race, side), Races:Guilds(race, other)
-	local sideTotal = side == "Horde" and race.horde or race.alliance -- the guilds' shares are of the site's count
-	private.guildsLabel:SetText(strupper(side.." guilds"))
-	private.guildsLabel:SetShown(#ours > 0)
+	-- Guilds: each side's by influence, with each one's share of its side's (the site's count); yours marked
 	local myGuild = GetGuildInfo and GetGuildInfo("player")
-	for i, g in ipairs(private.guildRows) do
-		local guild = ours[i]
-		g:SetShown(guild ~= nil)
-		if guild then
-			local name = guild.name ~= "" and guild.name or "No guild"
-			g.name:SetText(name..(guild.name == myGuild and Theme:Colorize("  you", C.muted) or ""))
-			local share = sideTotal > 0 and guild.influence / sideTotal or 0
-			g.influence:SetText(private.Count(guild.influence)..Theme:Colorize(format("  %d%%", floor(share * 100 + 0.5)), C.muted))
-			g.fill:SetWidth(max(150 * min(share, 1), 1))
-			local color = SIDE_COLORS[side]
-			g.fill:SetColorTexture(color[1], color[2], color[3], 1)
-			W:Explain(g, name, format("%d kills, %d minutes on the points.", guild.kills, guild.minutes))
+	local mySide = UnitFactionGroup("player")
+	for _, side in ipairs({ "Horde", "Alliance" }) do
+		local guilds = Races:Guilds(race, side)
+		local sideTotal = side == "Horde" and race.horde or race.alliance
+		private.guildLabels[side]:SetShown(#guilds > 0)
+		for i, g in ipairs(private.guildRows[side]) do
+			local guild = guilds[i]
+			g:SetShown(guild ~= nil)
+			if guild then
+				local name = guild.name ~= "" and guild.name or "No guild"
+				local yours = side == mySide and myGuild and guild.name == myGuild
+				g.name:SetText(name..(yours and Theme:Colorize("  you", C.muted) or ""))
+				local share = sideTotal > 0 and guild.influence / sideTotal or 0
+				g.influence:SetText(private.Count(guild.influence)..Theme:Colorize(format("  %d%%", floor(share * 100 + 0.5)), C.muted))
+				g.fill:SetWidth(max(g.width * min(share, 1), 1))
+				W:Explain(g, name, format("%d kills, %d minutes on the points.", guild.kills, guild.minutes))
+			end
 		end
 	end
-	local y = GUILDS_TOP - min(#ours, MAX_GUILDS) * 24 - 14
-	private.othersLabel:ClearAllPoints()
-	private.othersLabel:SetPoint("TOPLEFT", 14, y)
-	private.othersLabel:SetText(strupper(other))
-	private.others:ClearAllPoints()
-	private.others:SetPoint("TOPLEFT", 14, y - 22)
-	local parts = {}
-	for i, g in ipairs(theirs) do
-		if i <= 3 then
-			tinsert(parts, (g.name ~= "" and g.name or "No guild")..Theme:Colorize(" "..private.Count(g.influence), C.muted))
-		end
-	end
-	private.othersLabel:SetShown(#theirs > 0)
-	private.others:SetText(table.concat(parts, "   "))
 	-- When the site counted it
 	private.asOf:SetText(race.final and "Final" or race.at and ("Counted as of "..private.Clock(race.at)) or "")
 	W:Explain(private.asOf, race.final and "Final" or "Provisional", race.final and "The site's result." or AS_OF_TIP)

@@ -17682,6 +17682,35 @@ print("wanted smoke: setup checks pass")
 	local before, toldBefore = #logged, #told
 	R:Sample()
 	check(#logged == before and #told == toldBefore, "and no samples, and nothing told")
+	-- Both sides' guilds as the same list, side by side: Horde left in red, Alliance right in blue, yours marked
+	R:Take(src)
+	local realGuild = GetGuildInfo
+	GetGuildInfo = function() return "EMPIRE" end
+	ns.UI:Show("guildwars")
+	-- Hillsbrad picked on the timeline (its guilds are the site's)
+	for _, f in ipairs(Mock.created) do
+		local r = rawget(f, "race")
+		if type(r) == "table" and r.zone == "Hillsbrad Foothills" and f._scripts.OnClick then f:Click() end
+	end
+	local lists = {}
+	for _, f in ipairs(Mock.created) do
+		local name, fill = rawget(f, "name"), rawget(f, "fill")
+		if type(name) == "table" and type(fill) == "table" and f._shown and f._parent and f._parent._shown and type(name._text) == "string" then
+			lists[#lists + 1] = f
+		end
+	end
+	local byName = {}
+	for _, g in ipairs(lists) do byName[(g.name._text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))] = g end
+	local empire, small, revenant = byName["EMPIRE  you"], byName["Small"], byName["Revenant"]
+	check(empire and small and revenant, "both sides' guilds as rows with bars: "..table.concat((function() local t = {} for k in pairs(byName) do t[#t + 1] = k end return t end)(), ", "))
+	check(empire._point[2] == revenant._point[2] - 0 or empire._point[2] < revenant._point[2], "Horde on the left, Alliance on the right")
+	check(empire.fill._color[1] > 0.8 and revenant.fill._color[3] > 0.8, "Horde's bars red, Alliance's blue")
+	check(empire.influence._text:find("271", 1, true) and revenant.influence._text:find("210", 1, true) and revenant.influence._text:find("%", 1, true), "each with its influence and share")
+	-- In the card at the default size: the last row stays above the card's foot line
+	local card = empire._parent
+	local sixth = empire._point[3] - 5 * 30 - empire._h -- the foot of a side's sixth row (EMPIRE is the first)
+	check(sixth > -(card._h - 40), "six rows a side fit above the card's foot line: "..sixth.." in a card "..tostring(card._h).." high")
+	GetGuildInfo = realGuild
 	-- The longest real names (racezones.json): Stonetalon Mountains, east of Dabyrie's Farmstead, Ironband's Excavation Site.
 	-- The page wraps them to two lines; the HUD has the points one under another, each the frame's width.
 	local long = { n = 1, zone = "Stonetalon Mountains", mapID = 1442, start = clock - 60, ["end"] = clock + 2600, state = "live", horde = 1342, alliance = 1,

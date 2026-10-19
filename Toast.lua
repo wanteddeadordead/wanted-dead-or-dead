@@ -10,7 +10,8 @@ local private = { queue = {}, frames = {}, ready = false, loading = false }
 
 local MAX_SHOWN = 3
 local SHOW_SECONDS, FADE_IN_SECONDS, FADE_OUT_SECONDS = 6, 0.3, 1
-local WIDTH, HEIGHT, GAP, TOP = 360, 76, 6, -190
+-- Tall enough for a detail on two lines (a war's deadline or instruction is never cut)
+local WIDTH, HEIGHT, GAP, TOP = 360, 90, 6, -190
 local ART_HEIGHT, ART_MAX_WIDTH = 60, 120
 local MORE_NAMES = 3 -- names listed on the "more" toast
 local SETTLE_SECONDS = 3 -- after a loading screen, before the first toast
@@ -193,6 +194,10 @@ function private.NewFrame(index)
 	frame.name:SetPoint("TOPLEFT", frame.kind, "BOTTOMLEFT", 0, -3)
 	frame.detail = Theme:Text(frame, "small", "")
 	frame.detail:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -4)
+	frame.detail:SetWordWrap(true)
+	if frame.detail.SetMaxLines then
+		frame.detail:SetMaxLines(2)
+	end
 	frame:SetScript("OnClick", function(self)
 		self:Hide()
 		if self.toast.onClick then

@@ -18368,6 +18368,17 @@ end
 	end)
 	check(G:Badge(G:War(1)) == "LOST", "a day after the result: LOST")
 	check(OnScreen("Revenant held Hillsbrad") and OnScreen("LOST") and OnScreen("400 lost to Revenant") and OnScreen("Held by <Revenant>"), "lost: the stake to the holders")
+	-- The longest real zone with a badge: its tab refits to its label, and the tabs after it move along
+	AtStep(function(war) war.zone, war.state, war.start, war.answer = "Stranglethorn Vale", "scheduled", clock + 42 * 60 + 900 - 30, "accept" end)
+	local tab, nextTab
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "key") == "war1" and rawget(f, "label") and f._shown then tab = f end
+		if rawget(f, "key") == "warmarks" and rawget(f, "label") and f._shown then nextTab = f end
+	end
+	local labelWidth = tab and tab.label:GetStringWidth() or 0
+	check(tab and tab.label._text:find("^Stranglethorn ") and tab.label._text:find("42m", 1, true) and tab:GetWidth() >= labelWidth + 24,
+		"a long zone and its badge fit the tab: "..tostring(tab and tab.label._text).." "..tostring(tab and tab:GetWidth()).." for "..labelWidth)
+	check(nextTab and nextTab._point[2] == tab._point[2] + tab:GetWidth() - 1, "the next tab moves along")
 	AtStep(function(war) war.state, war.start = "over", clock - 2400 end)
 	check(OnScreen("The site is counting"), "not counted yet")
 	AtStep(function(war) war.state, war.start = "void", clock - 2400 end)

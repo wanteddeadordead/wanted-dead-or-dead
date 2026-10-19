@@ -718,6 +718,12 @@ function UI:Refresh(allBadges)
 				if shown then
 					if page and type(page.tabLabel) == "function" then
 						button:SetText(page.tabLabel() or "")
+						-- Refitted to its label (a long zone and a badge), never narrower than it was built
+						private.builtWidths = private.builtWidths or setmetatable({}, { __mode = "k" })
+						private.builtWidths[button] = private.builtWidths[button] or tonumber(button:GetWidth()) or 0
+						if button.label then
+							button:SetWidth(max(private.builtWidths[button], ceil(button.label:GetStringWidth()) + 24))
+						end
 					end
 					button:ClearAllPoints()
 					button:SetPoint("LEFT", x, 0)

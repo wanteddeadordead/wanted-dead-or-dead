@@ -18309,30 +18309,34 @@ end
 	warButton._scripts.OnClick(warButton)
 	check(ns.db.settings.warMap == true, "and shows it")
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
-	-- Live between catch-ups: our side's clients say where they stand each tick, and the capture rule runs here
+	-- Live between catch-ups: our side's clients say where they stand each tick; the capture rule runs here as an
+	-- estimate marked live, never who holds a point
 	local tick = math.floor(clock / 30)
 	for i = 1, 3 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1 }, "Peer"..i) end
 	ns.WarLive:OnPeer({ w = 8, t = tick, p = "hb-mid-a-tower", e = 0 }, "Other")
 	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 500 }, "Liar")
 	clock = clock + 30
 	ns.WarLive:Step()
-	local mid = G:War(1).battle.lanes[2].tower
-	check(mid.state == "taking" and mid.progress == 13 and mid.pct == 59, "three of ours against one: the Mid tower 11 -> 13 of 22: "..tostring(mid.progress))
+	local battle = G:War(1).battle
+	check(battle.estimate["hb-mid-a-tower"] == 59 and battle.lanes[2].tower.pct == 50 and battle.lanes[2].tower.state == "taking",
+		"three of ours against one: the Mid tower estimated 11 -> 13 of 22 (59%), the site's 50% kept: "..tostring(battle.estimate["hb-mid-a-tower"]))
+	ns.WarHUD:Update()
+	check(hud.lanes[2].pct._text:find("59%", 1, true) and hud.lanes[2].pct._text:find("live", 1, true) and hud.attacker.count._text:find("3 live", 1, true),
+		"the HUD marks the estimate and our members heard as live: "..hud.lanes[2].pct._text)
+	for _ = 1, 2 do
+		tick = math.floor(clock / 30)
+		for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0 }, "Peer"..i) end
+		clock = clock + 30
+		ns.WarLive:Step()
+	end
+	battle = G:War(1).battle
+	check(battle.estimate["hb-mid-a-tower"] == 100 and battle.lanes[2].tower.state == "taking" and battle.liveTurnout == 6,
+		"six unopposed, 6 a tick (the cap): estimated 100%, but only the site says it's taken")
 	tick = math.floor(clock / 30)
-	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0 }, "Peer"..i) end
+	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-inhibitor", e = 0 }, "Peer"..i) end
 	clock = clock + 30
 	ns.WarLive:Step()
-	check(G:War(1).battle.lanes[2].tower.progress == 19 and G:War(1).battle.turnout.attacker == 6, "six unopposed: 6 a tick (the cap), our turnout from who's heard")
-	tick = math.floor(clock / 30)
-	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0 }, "Peer"..i) end
-	clock = clock + 30
-	ns.WarLive:Step()
-	check(G:War(1).battle.lanes[2].tower.state == "taken", "and taken at its cost")
-	tick = math.floor(clock / 30)
-	for i = 1, 6 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-bot-a-inhibitor", e = 0 }, "Peer"..i) end
-	clock = clock + 30
-	ns.WarLive:Step()
-	check(G:War(1).battle.lanes[3].inhibitor.state == nil and G:War(1).battle.keep.state == "open", "an inhibitor behind a standing tower can't be taken; the keep stays open (Top's inhibitor fell)")
+	check(G:War(1).battle.estimate["hb-mid-a-inhibitor"] == nil, "an inhibitor behind a tower the site hasn't seen fall: no estimate")
 	AtStep(function(war, s)
 		war.state, war.start, war.answer = "prep", clock + 600, "accept"
 		s.warLive = { ["7"] = { phase = "prep", endsAt = clock + 600, points = {}, turnout = { att = 20, def = 18 } } }

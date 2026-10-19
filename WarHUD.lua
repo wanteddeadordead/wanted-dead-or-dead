@@ -164,6 +164,18 @@ function private.Place(f)
 	end
 end
 
+---A point's capture: the site's percent, or the live estimate (WarLive) marked live when it's further on; nil for
+---none or a point taken.
+---@return string?
+function private.Pct(state, estimate)
+	if state.state == "taken" then
+		return nil
+	elseif estimate and estimate > (state.pct or 0) then
+		return format("%d%%", estimate)..Theme:Colorize(" live", C.green)
+	end
+	return state.state == "taking" and format("%d%%", state.pct or 0) or nil
+end
+
 ---"12:40": minutes and seconds.
 function private.Clock(seconds)
 	seconds = max(floor(seconds), 0)
@@ -198,7 +210,11 @@ function WarHUD:Update()
 		local color = GuildWars.SIDE_COLORS[guild.faction] or C.text
 		side.name:SetTextColor(color[1], color[2], color[3])
 		local bonus = tonumber(mult[key])
+		-- Our side's members heard in game, marked live, when it isn't what the site last said
+		local ourKey = war.role == "attack" and "attacker" or "defender"
+		local live = key == ourKey and tonumber(b.liveTurnout) or nil
 		side.count:SetText(format("%d / %d", tonumber(turnout[key]) or 0, GuildWars.MAX_ROSTER)
+			..(live and live ~= tonumber(turnout[key]) and Theme:Colorize(format(" · %d live", live), C.green) or "")
 			..(bonus and bonus > 1.005 and Theme:Colorize(format("  ×%.2f", bonus), C.gold) or ""))
 		W:Explain(side.count, "Roster players here", "Roster players here / 40."..(bonus and bonus > 1.005
 			and format("\n\nOutnumbered: fewer of them here than of the other side's friends and roster, so their roster counts ×%.2f at points (at most ×1.44).", bonus) or ""), "ANCHOR_BOTTOM")
@@ -209,6 +225,12 @@ function WarHUD:Update()
 	for _, lane in ipairs(type(b.lanes) == "table" and b.lanes or {}) do
 		lanes[lane.id] = lane
 	end
+	-- Each point's id, for the live estimates (WarLive)
+	local ids = {}
+	for _, p in ipairs(GuildWars:Points(war, zone)) do
+		ids[(p.lane or "")..p.role] = p.id
+	end
+	local estimate = type(b.estimate) == "table" and b.estimate or {}
 	for _, row in ipairs(f.lanes) do
 		local lane = lanes[row.id] or {}
 		row.tower:SetTexture(GuildWars:SealFile(lane.tower, "tower", d, a))
@@ -216,8 +238,8 @@ function WarHUD:Update()
 		row.tower:SetDesaturated(prep)
 		row.inhibitor:SetDesaturated(prep)
 		local tower, inhib = type(lane.tower) == "table" and lane.tower or {}, type(lane.inhibitor) == "table" and lane.inhibitor or {}
-		row.pct:SetText(not prep and tower.state == "taking" and format("%d%%", tower.pct or 0) or "")
-		row.inhibPct:SetText(not prep and inhib.state == "taking" and format("%d%%", inhib.pct or 0) or "")
+		row.pct:SetText(not prep and private.Pct(tower, estimate[ids[row.id.."tower"]]) or "")
+		row.inhibPct:SetText(not prep and private.Pct(inhib, estimate[ids[row.id.."inhibitor"]]) or "")
 	end
 	local keep = type(b.keep) == "table" and b.keep.state or "sealed"
 	f.keep:SetTexture(GuildWars:KeepFile(keep, d, a))

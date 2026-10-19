@@ -482,7 +482,9 @@ function private.DrawWar(war, zone, place, now)
 				local s = type(state) == "table" and state or {}
 				spec.lines = { { p.name, C.muted }, { s.state == "taken" and ("Taken by "..(attacker.guild or "the attackers"))
 					or s.state == "taking" and format("Being taken: %d%%", s.pct or 0) or format("Standing (%s)", defender.guild or "the holders"), s.state and C.gold or C.text } }
-				spec.label = not prep and s.state == "taking" and format("%d%%", s.pct or 0) or nil
+				local estimate = type(war.battle) == "table" and type(war.battle.estimate) == "table" and war.battle.estimate[p.id]
+				spec.label = not prep and s.state ~= "taken" and (estimate and estimate > (s.pct or 0) and format("%d%% live", estimate)
+					or s.state == "taking" and format("%d%%", s.pct or 0)) or nil
 			end
 			private.Piece(spec)
 		end

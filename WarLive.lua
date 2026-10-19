@@ -1,11 +1,11 @@
--- Wanted: a war's live state in game, between catch-ups. The catch-up is read at login only, so during a war each
+-- Wanted: a war's live estimates in game, between catch-ups. The catch-up is read at login only, so during a war each
 -- roster member's client says every 30-second tick, to the others of its side (Sync plugin G), which war point it
 -- stands on and how many enemy players are near it; each client then runs the capture rule (the war contract's 4.2)
--- over the ticks itself: at each open point, net = min(6, attackers − defenders), progress kept, a point taken once its
--- progress reaches its cost; a lane's inhibitor opens when its tower falls, the keep when any inhibitor does. Our
--- side's count is the members who said they're there; the other side's (whose clients can't reach ours) is the most
--- enemies one of them saw near it, friends included. Provisional: the site counts the result from everyone's records.
--- It starts from the catch-up's warLive when there is one, and writes into the war's battle (lanes, keep, our turnout).
+-- over the ticks as an estimate: at each point open by the site's count, net = min(6, attackers − defenders), progress
+-- kept. Our side's count is the members who said they're there; the other side's (whose clients can't reach ours) is
+-- the most enemies one of them saw near it, friends included. Estimates only, shown marked "live" (as the races' live
+-- numbers): the site judges, so who holds a point, what's open and the result come only from the catch-up. Written
+-- into the war's battle as estimate (point id -> percent) and liveTurnout (our side's members heard).
 
 local _, Wanted = ...
 local WarLive = Wanted:NewModule("WarLive")
@@ -15,11 +15,12 @@ local TAG = "G"
 local TICK = 30
 local NET_CAP = 6
 local MAX_PEERS, MAX_ENEMIES = 80, 40
--- The capture costs when the site hasn't given them (4.2): round(3.8 × N^0.47), the keep 2.2 × that; N the larger
--- roster, at least 5
+-- The capture costs when the site hasn't given them (4.2, amended 2026-10-19): round(3.8 × N^0.47), the keep 4 × that;
+-- N the turnout (here the rosters' sizes), at least 5
+local KEEP_TIMES = 4
 local function Cost(n, keep)
 	local base = floor(3.8 * max(n, 5) ^ 0.47 + 0.5)
-	return keep and floor(2.2 * base + 0.5) or base
+	return keep and KEEP_TIMES * base or base
 end
 
 function WarLive:OnEnable()
@@ -84,7 +85,7 @@ function private.Take(war, sender, sample)
 	end
 end
 
----The war's provisional points, from the catch-up's when it has them: id -> { progress, cost, taken }.
+---The war's points as the site last counted them: id -> { point, progress (the estimate, from the site's), cost, taken }.
 function private.Start(war, zone)
 	local roster = war.roster or {}
 	local n = max(roster.count or 0, tonumber(roster.rival) or 0)
@@ -103,7 +104,7 @@ function private.Start(war, zone)
 	return points
 end
 
----Applies the ticks from the last one applied to the one before now, then writes the state into the war's battle.
+---Applies the ticks from the last one applied to the one before now, then writes the estimates into the war's battle.
 function private.Advance(war, zone, first, now)
 	local state = private.state[war.warId]
 	if not state then
@@ -127,9 +128,8 @@ function private.Advance(war, zone, first, now)
 			if p and not p.taken and private.Open(state.points, p.point) then
 				local attackers, defenders = attack and at.ours or at.theirs, attack and at.theirs or at.ours
 				local net = min(NET_CAP, attackers - defenders)
-				if net > 0 then
+				if net > 0 and p.progress < p.cost then
 					p.progress = min(p.progress + net, p.cost)
-					p.taken = p.progress >= p.cost
 					changed = true
 				end
 			end
@@ -142,8 +142,8 @@ function private.Advance(war, zone, first, now)
 	end
 end
 
----Whether a point can be attacked now: a tower always; an inhibitor once its lane's tower fell; the keep once any
----inhibitor did.
+---Whether a point can be attacked now, by the site's count: a tower always; an inhibitor once its lane's tower fell;
+---the keep once any inhibitor did.
 function private.Open(points, point)
 	if point.role == "tower" then
 		return true
@@ -157,33 +157,16 @@ function private.Open(points, point)
 	return false
 end
 
----The provisional state into the war's battle as the screens read it: lanes, keep, our side's turnout.
+---The estimates into the war's battle: each point's percent where it's past the site's, and our side's members heard
+---this tick or the last.
 function private.Write(war, state, now)
 	local b = war.battle
-	local lanes, keep, anyInhib = {}, "sealed", false
-	for _, p in pairs(state.points) do
-		local point = p.point
-		local entry = p.taken and { state = "taken", progress = p.cost, cost = p.cost }
-			or p.progress > 0 and { state = "taking", pct = floor(p.progress / p.cost * 100), progress = p.progress, cost = p.cost }
-			or { progress = 0, cost = p.cost }
-		if point.lane then
-			lanes[point.lane] = lanes[point.lane] or { id = point.lane }
-			lanes[point.lane][point.role] = entry
-			anyInhib = anyInhib or (point.role == "inhibitor" and p.taken)
-		elseif p.taken then
-			keep = "fallen"
+	b.estimate = {}
+	for id, p in pairs(state.points) do
+		if not p.taken and p.progress > 0 then
+			b.estimate[id] = floor(p.progress / p.cost * 100)
 		end
 	end
-	if keep ~= "fallen" and anyInhib then
-		keep = "open"
-	end
-	b.lanes = {}
-	for _, id in ipairs({ "top", "mid", "bot" }) do
-		tinsert(b.lanes, lanes[id] or { id = id })
-	end
-	b.keep = { state = keep }
-	b.live = true
-	-- Our side's roster members heard this tick or the last
 	local seen = {}
 	for t = now - 1, now do
 		for sender in pairs(private.samples[t] or {}) do
@@ -194,8 +177,5 @@ function private.Write(war, state, now)
 	for _ in pairs(seen) do
 		ours = ours + 1
 	end
-	b.turnout = b.turnout or {}
-	if ours > 0 then
-		b.turnout[war.role == "attack" and "attacker" or "defender"] = ours
-	end
+	b.liveTurnout = ours > 0 and ours or nil
 end

@@ -7,6 +7,7 @@
 - The interface text is set in Barlow Semi Condensed, a condensed face close to EllesmereUI's; Russian names keep the game's own font. New font files: restart the client after updating.
 - The beta notice under the title bar is now the tooltip of a BETA tag beside the brand, so pages get its room back.
 - Settings in EllesmereUI's rows: one option per row with a switch, its help on the label, and a scroll bar when a tab runs long. What the Nearby window shows in each row, where ranks show and where capture fronts show are each one dropdown of checkboxes; the TARGETED warning, the streak callout and the rank labels keep their finer settings behind a cog.
+- Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
 
 ## [1.27.3] - 2026-10-17
 

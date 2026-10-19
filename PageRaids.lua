@@ -11,17 +11,7 @@ local Raids = Wanted.Raids
 local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false, day = 0 }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 140
-local FORM_HEIGHT = 288 -- the form, with how it works under it
-local HOW_IT_WORKS = table.concat({
-	"HOW IT WORKS",
-	"1.  Name your raid, say where and when (in your time or server time), and click Form raid. Every Wanted player of your faction sees it, on every realm, in their own time.",
-	"2.  Now: anyone who clicks Join is invited straight away.",
-	"3.  Later: players mark Interested or Going. Hover any raid to see who; invite or whisper them all from your raid's card.",
-	"4.  From 15 minutes before, Form raid now starts it, and Send invites invites everyone signed up. Either way they get a popup to join.",
-	"5.  Edit or close it, and everyone signed up is told what changed. It's on their calendar and yours.",
-	"6.  Guild only: just your guildmates see it, until you open it to everyone from your raid's card.",
-	"7.  Announce posts it in chat for players without Wanted: they whisper you \"inv\" to be invited.",
-}, "\n")
+local FORM_HEIGHT = 144 -- how it works is in the tooltips of the controls it explains
 
 function private.CreateRow(row)
 	row.title = Theme:Text(row, "body", "")
@@ -58,6 +48,8 @@ function private.UpdateRow(row, raid)
 	local count = format("%d/%d", raid.members, raid.size)..(raid.signups > 0 and format(", %d going", raid.signups) or "")
 		..((raid.interested or 0) > 0 and format(", %d interested", raid.interested) or "")
 	row.sub:SetText(format("%s  -  %s  -  led by %s  -  level %d+", when, count, raid.leader, raid.minLevel))
+	-- Hovering it: who's going, asking its leader the first time
+	W:Explain(row, Raids:Title(raid), function() return private.RaidRoster(raid) end, "ANCHOR_RIGHT")
 	local planned = not started and raid.members < raid.size
 	row.going:SetShown(planned)
 	row.interested:SetShown(planned)
@@ -75,32 +67,25 @@ function private.UpdateRow(row, raid)
 	end
 end
 
----A tooltip listing who's going and who's interested (asking says the leader hasn't answered yet).
-function private.ShowRoster(owner, title, going, interested, more, asking)
-	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-	GameTooltip:SetText(title, 1, 1, 1)
-	if asking then
-		GameTooltip:AddLine("Asking the leader who's going...", C.muted[1], C.muted[2], C.muted[3], true)
-	else
-		local function Add(label, names, color)
-			GameTooltip:AddLine(format("%s (%d)", label, #names), color[1], color[2], color[3])
-			GameTooltip:AddLine(#names > 0 and table.concat(names, ", ") or "Nobody yet", C.text[1], C.text[2], C.text[3], true)
-		end
-		Add("Going", going, C.green)
-		Add("Interested", interested, C.gold)
-		if more and more > 0 then
-			GameTooltip:AddLine(format("and %d more", more), C.muted[1], C.muted[2], C.muted[3])
-		end
+---A tooltip's body listing who's going and who's interested.
+function private.Roster(going, interested, more)
+	local function Add(label, names, color)
+		return Theme:Colorize(format("%s (%d)", label, #names), color).."\n"..(#names > 0 and table.concat(names, ", ") or "Nobody yet")
 	end
-	GameTooltip:Show()
+	local body = Add("Going", going, C.green).."\n\n"..Add("Interested", interested, C.gold)
+	if more and more > 0 then
+		body = body.."\n"..Theme:Colorize(format("and %d more", more), C.muted)
+	end
+	return body
 end
 
----Hovering another player's raid: who's going, asking its leader the first time.
-function private.ShowRaidRoster(row, raid)
-	private.hovered = { row = row, raid = raid }
+---Another player's raid: who's going, asking its leader the first time (until they answer, says so).
+function private.RaidRoster(raid)
 	local roster = Raids:Roster(raid.id)
-	private.ShowRoster(row, Raids:Title(raid), roster and roster.going or {}, roster and roster.interested or {}, roster and roster.more,
-		roster == nil)
+	if not roster then
+		return "Asking the leader who's going..."
+	end
+	return private.Roster(roster.going or {}, roster.interested or {}, roster.more)
 end
 
 ---The form, or the raid we lead.
@@ -119,6 +104,11 @@ function private.RefreshCard()
 	if formShown then
 		private.formLabel:SetText(private.editing and "EDIT YOUR RAID" or "FORM A RAID")
 		private.go:SetText(private.editing and "Save changes" or "Form raid")
+		if private.editing then
+			W:Explain(private.go, "Save changes", "Everyone signed up is told what changed.")
+		else
+			W:Explain(private.go, "Form raid", "Every Wanted player of your faction sees it, on every realm, in their own time.")
+		end
 		private.cancelEdit:SetShown(private.editing)
 		private.timeBox:SetShown(private.later)
 		private.zoneChoice:SetShown(private.later)
@@ -142,6 +132,9 @@ function private.RefreshCard()
 		tinsert(names, "Interested: "..table.concat(interested, ", "))
 	end
 	private.leadNames:SetText(table.concat(names, "   "))
+	W:Explain(private.signups, "Signed up for "..Raids:Title(mine), function()
+		return private.Roster(Raids:SignUps(Raids:Mine() or mine))
+	end, "ANCHOR_RIGHT")
 	private.openButton:SetShown(mine.exclusive == true)
 	-- In someone else's group without assist: invites wait until we can send them
 	private.cantInvite:SetShown(not Raids:CanInvite())
@@ -225,7 +218,7 @@ function private.Form()
 			return
 		end
 		private.editing = false
-		UI:Toast("Raid changed. Everyone signed up sees what changed.", C.green)
+		UI:Toast("Raid changed.", C.green)
 		private.Refresh()
 		return
 	end
@@ -234,11 +227,11 @@ function private.Form()
 		UI:Toast(why, C.red)
 		return
 	end
-	UI:Toast("Raid formed. Wanted players of your faction can see it now.", C.green)
+	UI:Toast("Raid formed.", C.green)
 	private.Refresh()
 end
 
-function private.BuildForm(parent, width)
+function private.BuildForm(parent)
 	local form = W:Card(parent)
 	form:SetPoint("TOPLEFT")
 	form:SetPoint("TOPRIGHT")
@@ -254,7 +247,11 @@ function private.BuildForm(parent, width)
 	W:Suggest(private.whereBox, function() return Raids:Zones() end)
 	private.levelBox = W:Input(form, 90, "Min. level")
 	private.levelBox:SetPoint("LEFT", private.whereBox, "RIGHT", 8, 0)
-	local when = W:Segmented(form, { { key = "now", label = "Now" }, { key = "later", label = "Later" } }, function(key)
+	local when = W:Segmented(form, {
+		{ key = "now", label = "Now", tip = { "Now", "Anyone who clicks Join is invited straight away." } },
+		{ key = "later", label = "Later", tip = { "Later", "Players mark Interested or Going, and it's on their calendar and yours. "
+			.."Invite or whisper them all from your raid's card." } },
+	}, function(key)
 		private.later = key == "later"
 		private.RefreshCard()
 	end, 70)
@@ -276,14 +273,10 @@ function private.BuildForm(parent, width)
 	end)
 	private.zoneChoice:SetChoice(false)
 	private.zoneChoice:SetPoint("LEFT", private.timeBox, "RIGHT", 6, 0)
-	private.zoneChoice:HookScript("OnEnter", function(self)
+	W:Explain(private.zoneChoice, "Which clock the time is in", function()
 		local now = GetServerTime()
-		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText("Which clock the time is in", 1, 1, 1)
-		GameTooltip:AddLine(format("Your time now: %s %s. Server time now: %s.", date("%H:%M", now), Raids:ZoneName(), date("%H:%M", now + Raids:ServerOffset())),
-			C.muted[1], C.muted[2], C.muted[3], true)
-		GameTooltip:AddLine("Everyone sees the raid in their own time, with the server's beside it.", C.muted[1], C.muted[2], C.muted[3], true)
-		GameTooltip:Show()
+		return format("Your time now: %s %s. Server time now: %s.\n\nEveryone sees the raid in their own time, with the server's beside it.",
+			date("%H:%M", now), Raids:ZoneName(), date("%H:%M", now + Raids:ServerOffset()))
 	end)
 	local size = W:Choice(form, 90, { { key = 10, label = "10" }, { key = 20, label = "20" }, { key = 40, label = "40" } }, function(key)
 		private.size = key
@@ -300,10 +293,10 @@ function private.BuildForm(parent, width)
 		private.exclusive = checked
 	end)
 	exclusive:SetPoint("LEFT", guild, "RIGHT", 12, 0)
-	exclusive.tooltipTitle, exclusive.tooltipText = "Guild only", "Only your guildmates with Wanted see it, Announce posts in guild "
-		.."chat, and only guildmates are invited. Open it to everyone later from your raid's card."
+	W:Explain(exclusive, "Guild only", "Only your guildmates with Wanted see it, Announce posts in guild chat, and only guildmates "
+		.."are invited. Open it to everyone later from your raid's card.")
 	private.exclusiveToggle = exclusive
-	guild.tooltipTitle, guild.tooltipText = "Guild raid", "Shows the raid with your guild's name: The Duskwood Takeover with <Your Guild>."
+	W:Explain(guild, "Guild raid", "Shows the raid with your guild's name: The Duskwood Takeover with <Your Guild>.")
 	local go = W:Button(form, "Form raid", "primary", 120, 26, private.Form)
 	go:SetPoint("TOPRIGHT", -14, -74)
 	private.go = go
@@ -312,11 +305,6 @@ function private.BuildForm(parent, width)
 		private.Refresh()
 	end)
 	private.cancelEdit:SetPoint("TOPRIGHT", -14, -10)
-	local how = Theme:Text(form, "small", HOW_IT_WORKS, C.muted)
-	how:SetPoint("TOPLEFT", 14, -144)
-	how:SetWidth(width - 28)
-	how:SetWordWrap(true)
-	how:SetSpacing(3)
 	return form
 end
 
@@ -334,8 +322,8 @@ function private.ConfirmAnnounce()
 	end
 	W:Dialog({
 		title = "Announce your raid",
-		text = guildOnly and "Pick where it goes, and change the line if you like. The raid is guild only: only guildmates who whisper you \"inv\" are invited until you open it to everyone."
-			or "Pick where it goes, and change the line if you like. Anyone who whispers you \"inv\" is invited.",
+		text = guildOnly and "The raid is guild only: only guildmates who whisper you \"inv\" are invited until you open it to everyone."
+			or "Anyone who whispers you \"inv\" is invited.",
 		choice = { label = "Post in", items = targets, selected = labels[Raids:AnnounceTarget()] and Raids:AnnounceTarget() or targets[1].key },
 		input = { value = Raids:AnnounceText() or "", multiline = true },
 		width = 520,
@@ -364,7 +352,7 @@ function private.ConfirmWhisper()
 	end
 	W:Dialog({
 		title = "Whisper your sign-ups",
-		text = format("This goes to the %d who signed up (%s). Change it if you like:", #names, table.concat(names, ", ")),
+		text = format("This goes to the %d who signed up (%s).", #names, table.concat(names, ", ")),
 		input = { value = Raids:WhisperText() or "", multiline = true },
 		width = 520,
 		confirmLabel = "Send",
@@ -397,13 +385,15 @@ function private.ConfirmInvite()
 		cancelLabel = "Cancel",
 		onConfirm = function()
 			local why = Raids:InviteSignUps()
-			UI:Toast(why or "Inviting your sign-ups. Your group becomes a raid as they join.", why and C.red or C.green)
+			UI:Toast(why or "Inviting your sign-ups.", why and C.red or C.green)
 		end,
 	})
 end
 
 function private.BuildLead(parent, width)
 	local lead = W:Card(parent)
+	-- TODO(ui-pass PR 3): a compact W:StepBar here (Formed > Sign-ups > Starting > Started, sub-lines the time,
+	-- "12 going", "invites sent") in place of the Forming / Starts part of leadSub, once the widget exists
 	lead:SetPoint("TOPLEFT")
 	lead:SetPoint("TOPRIGHT")
 	lead:SetHeight(CARD_HEIGHT)
@@ -418,26 +408,17 @@ function private.BuildLead(parent, width)
 	private.leadNames:SetPoint("TOPLEFT", 14, -76)
 	private.leadNames:SetWidth(width - 28)
 	private.leadNames:SetWordWrap(false)
-	private.cantInvite = Theme:Text(lead, "small", "You can't invite: you're in a group without being its leader or an assistant. Invites wait until you are.", C.red)
+	private.cantInvite = Theme:Text(lead, "small", "Can't invite: you're not the group's leader or an assistant", C.red)
 	private.cantInvite:SetPoint("TOPLEFT", 14, -94)
 	private.cantInvite:SetWidth(width - 28)
 	private.cantInvite:SetWordWrap(false)
 	private.cantInvite:Hide()
-	-- Hovering the sign-ups: everyone, going and interested
+	W:Explain(private.cantInvite, "Can't invite", "You're in a group without being its leader or an assistant. Invites wait until you are.")
+	-- Hovering the sign-ups: everyone, going and interested (the tooltip is set with the raid, in RefreshCard)
 	local signups = CreateFrame("Frame", nil, lead)
 	signups:SetPoint("TOPLEFT", private.leadSub, "TOPLEFT")
 	signups:SetPoint("BOTTOMRIGHT", private.leadNames, "BOTTOMRIGHT")
-	signups:EnableMouse(true)
-	signups:SetScript("OnEnter", function(self)
-		local mine = Raids:Mine()
-		if mine then
-			local going, interested = Raids:SignUps(mine)
-			private.ShowRoster(self, "Signed up for "..Raids:Title(mine), going, interested)
-		end
-	end)
-	signups:SetScript("OnLeave", function()
-		GameTooltip:Hide()
-	end)
+	private.signups = signups
 	local announce = W:Button(lead, "Announce", "secondary", 100, 26, private.ConfirmAnnounce)
 	announce:SetPoint("BOTTOMLEFT", 14, 10)
 	W:AttachTooltip(announce, "Announce in chat", "Posts the raid in Looking for Group (or the zone's General) for players without Wanted. Anyone who whispers you \"inv\" is invited.")
@@ -445,6 +426,7 @@ function private.BuildLead(parent, width)
 		Raids:Close()
 		private.Refresh()
 	end)
+	W:Explain(close, "Close raid", "Ends it for everyone signed up; they're told.")
 	local invite = W:Button(lead, "Invite sign-ups", "secondary", 130, 26, private.ConfirmInvite)
 	invite:SetPoint("LEFT", announce, "RIGHT", 8, 0)
 	W:AttachTooltip(invite, "Invite sign-ups", "Sends a group invite to everyone going or interested. Your group becomes a raid as they join.")
@@ -458,18 +440,19 @@ function private.BuildLead(parent, width)
 	-- A guild-only raid: open it to everyone once the guild has filled what it will
 	private.openButton = W:Button(lead, "Open to everyone", "primary", 140, 26, function()
 		Raids:OpenToEveryone()
-		UI:Toast("Your raid is open to everyone: every Wanted player of your faction sees it now.", C.green)
+		UI:Toast("Your raid is open to everyone.", C.green)
 		private.Refresh()
 	end)
 	private.openButton:SetPoint("TOPRIGHT", -14, -44)
 	-- From 15 minutes before a planned raid: form it now, inviting the sign-ups if ticked
 	private.formNow = W:Button(lead, "Form raid now", "primary", 130, 26, function()
 		Raids:FormNow(private.sendInvites.checked)
-		UI:Toast(private.sendInvites.checked and "Raid formed: your sign-ups are being invited." or "Raid formed: your sign-ups get a popup to join.", C.green)
+		UI:Toast("Raid formed.", C.green)
 		private.Refresh()
 	end)
 	private.formNow:SetPoint("TOPRIGHT", -14, -10)
-	W:AttachTooltip(private.formNow, "Form raid now", "Starts your raid now: everyone signed up gets a popup to join. With Send invites ticked, they're invited too.")
+	W:AttachTooltip(private.formNow, "Form raid now", "From 15 minutes before the start. Starts your raid now: everyone signed up gets a popup to join. "
+		.."With Send invites ticked, they're invited too.")
 	private.sendInvites = W:Toggle(lead, "Send invites")
 	private.sendInvites:SetChecked(true)
 	private.sendInvites:SetPoint("RIGHT", private.formNow, "LEFT", -10, 0)
@@ -480,7 +463,6 @@ end
 UI:RegisterPage("raids", {
 	group = "World PvP",
 	title = "Raids",
-	subtitle = "Form a world PvP raid, or join one: everyone with Wanted on your faction sees it, and the leader invites you.",
 	order = 3,
 	-- Raids not looked at yet
 	badge = function()
@@ -488,16 +470,18 @@ UI:RegisterPage("raids", {
 		return unseen > 0 and unseen or nil, C.blue
 	end,
 	build = function(container, width, height)
-		private.form = private.BuildForm(container, width)
+		private.form = private.BuildForm(container)
 		private.lead = private.BuildLead(container, width)
 		local listTop = FORM_HEIGHT + 12
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
-		list.onEnter = private.ShowRaidRoster
-		-- The leader's answer came while the raid is hovered: show it
+		list.onEnter = function(row, raid)
+			private.hovered = { row = row, raid = raid }
+		end
+		-- The leader's answer came while the raid is hovered: show it (explaining it again redraws the tooltip)
 		Raids:OnRosterUpdate(function(id)
 			local h = private.hovered
 			if h and h.raid.id == id and h.row.item == h.raid and h.row:IsMouseOver() then
-				private.ShowRaidRoster(h.row, h.raid)
+				W:Explain(h.row, Raids:Title(h.raid), function() return private.RaidRoster(h.raid) end, "ANCHOR_RIGHT")
 			end
 		end)
 		list.onClick = function(raid)
@@ -506,7 +490,7 @@ UI:RegisterPage("raids", {
 				return
 			end
 			local why = Raids:Join(raid.id)
-			UI:Toast(why or "Asked to join: the leader invites you.", why and C.red or C.green)
+			UI:Toast(why or "Asked to join.", why and C.red or C.green)
 			private.Refresh()
 		end
 		private.list = list

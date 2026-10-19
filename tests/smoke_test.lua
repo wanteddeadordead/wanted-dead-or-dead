@@ -8077,7 +8077,33 @@ end)()
 			end
 		end
 	end
-	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("Guild only") and shows("HOW IT WORKS"), "the Raids page: the form, how it works, and the raid with Join")
+	check(shows("Click to join") and shows("FORM A RAID") and shows("Crossroads") and shows("Guild raid") and shows("Guild only"), "the Raids page: the form and the raid with Join")
+	-- How it works is in the tooltips of what it explains, not on the page
+	check(not shows("HOW IT WORKS") and not shows("Every Wanted player of your faction"), "no how-it-works text on the page")
+	local function TipOf(label)
+		for _, fs in ipairs(Mock.fontStrings) do
+			local b = fs._parent
+			if fs._text == label and b and b._shown and b._parent and b._parent._shown and rawget(b, "tooltipText") then return b end
+		end
+	end
+	local function Says(label, text)
+		local b = TipOf(label)
+		local body = b and b.tooltipText
+		body = type(body) == "function" and body() or body
+		return type(body) == "string" and body:find(text, 1, true) ~= nil
+	end
+	check(Says("Form raid", "on every realm, in their own time"), "Form raid's tooltip: who sees it")
+	check(Says("Now", "invited straight away") and Says("Later", "Interested or Going") and Says("Later", "calendar"), "Now and Later explain themselves")
+	check(Says("Guild only", "Open it to everyone later") and Says("Guild raid", "with your guild's name"), "the guild toggles keep their tooltips")
+	-- No subtitle: the page starts under a shorter header (its line goes to the list)
+	local formCard
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "FORM A RAID" then formCard = fs._parent end
+	end
+	local page = formCard and formCard._parent
+	check(page and page._point and page._point[1] == "TOPLEFT" and page._point[3] == -38, "the Raids page sits under a header without a subtitle line: "
+		..tostring(page and page._point and page._point[3]))
+	check(formCard._h == 144, "the form closes up without how it works: "..tostring(formCard._h))
 	check(shows("Planned push") and shows("Interested") and shows("Going"), "a planned raid: Interested and Going")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Interested" and fs._parent._shown and fs._parent._parent._shown then fs._parent:Click() end
@@ -8086,11 +8112,17 @@ end)()
 	-- Hovering a raid asks its leader who's going (and the tooltip shows without an error)
 	addonSent = {}
 	for _, fs in ipairs(Mock.fontStrings) do
-		if fs._text and type(fs._text) == "string" and fs._text:find("^Planned push") and fs._parent._shown then fs._parent:GetScript("OnEnter")(fs._parent) end
+		if fs._text and type(fs._text) == "string" and fs._text:find("^Planned push") and fs._parent._shown and rawget(fs._parent, "item") then
+			fs._parent:GetScript("OnEnter")(fs._parent)
+		end
 	end
 	local asked = false
 	for _, m in ipairs(addonSent) do asked = asked or (m.text:find("^W:") and m.target == "Lead Er-Realm") end
 	check(asked, "hovering a raid asks its leader who's going")
+	local tip = _G.WantedTooltip
+	check(tip and tip:IsShown() and tip.title._text:find("^Planned push") and tip.body._text == "Asking the leader who's going...",
+		"in our tooltip, saying it's asking until the leader answers: "..tostring(tip and tip.body._text))
+	GameTooltip:Hide()
 	-- Typing in Where suggests zones under it; Tab takes the first
 	local where
 	for _, fs in ipairs(Mock.fontStrings) do
@@ -8124,6 +8156,23 @@ end)()
 		and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"), "Announce shows the line and where it goes, any channel we're in but Wanted's: "..table.concat(choices, ","))
 	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
 	check(shows("Whisper sign-ups") and shows("Invite sign-ups") and shows("Edit") and not shows("Form raid now"), "the leader's card: Invite and Whisper sign-ups, Edit; a raid already started has no Form raid now")
+	check(Says("Close raid", "they're told") and Says("Edit", "Everyone signed up is told"), "Close raid and Edit say everyone signed up is told")
+	local formNowTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Form raid now" then formNowTip = f.tooltipText end
+	end
+	check(formNowTip and formNowTip:find("From 15 minutes before the start", 1, true), "Form raid now says when it comes")
+	local cantTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Can't invite" and rawget(f, "explainedText") then cantTip = f end
+	end
+	check(cantTip and cantTip.explainedText._text == "Can't invite: you're not the group's leader or an assistant" and cantTip.tooltipText:find("Invites wait until you are", 1, true),
+		"the can't-invite line is short, with the rest on hover")
+	local signedUp
+	for _, f in ipairs(Mock.created) do
+		if type(rawget(f, "tooltipTitle")) == "string" and f.tooltipTitle:find("^Signed up for Barrens raid") then signedUp = f end
+	end
+	check(signedUp and signedUp._clicks == nil and signedUp.tooltipText():find("Going (0)", 1, true), "hovering the sign-ups lists them, in our tooltip")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Edit" and fs._parent._shown then fs._parent:Click() end
 	end

@@ -20,6 +20,7 @@ local TITLE_HEIGHT = 48
 local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22
 local HEADER_HEIGHT = 58
+local BARE_HEADER = 38 -- a page with its title or tabs but no subtitle: the subtitle's line goes back to the page
 local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 34
 local GROUP_HEIGHT = 26
@@ -55,6 +56,11 @@ function UI:RegisterPage(key, def)
 	tinsert(private.pages, def)
 	private.pageByKey[key] = def
 	sort(private.pages, function(a, b) return a.order < b.order end)
+end
+
+---How much of the content's top a page's header takes.
+function private.HeaderHeight(def)
+	return def.noHeader and 0 or def.subtitle and HEADER_HEIGHT or BARE_HEADER
 end
 
 ---The size a page has to lay itself out in.
@@ -361,11 +367,13 @@ function private.Create()
 	local pageWidth, pageHeight = UI:GetPageSize()
 	for _, def in ipairs(private.pages) do
 		local container = CreateFrame("Frame", nil, content)
-		local width, height = UI:GetPageSize(def.noHeader)
+		local width, height = UI:GetPageSize(true)
+		local header = private.HeaderHeight(def)
+		height = height - header
 		local owner = def.under and private.pageByKey[def.under] or def
 		-- Without a header, a page's tabs sit along its top (Home | Calendar)
 		local tabRow = def.noHeader and owner.tabs and TAB_ROW or 0
-		container:SetPoint("TOPLEFT", 0, def.noHeader and -tabRow or -HEADER_HEIGHT)
+		container:SetPoint("TOPLEFT", 0, def.noHeader and -tabRow or -header)
 		container:SetSize(width, height - tabRow)
 		container:Hide()
 		def.container = container
@@ -398,6 +406,11 @@ function private.UpdateCover()
 	local required = Wanted:GetRequiredUpdate()
 	local cover = private.updateCover
 	cover:SetShown(required ~= nil and SHARED_PAGES[private.current] or false)
+	-- Over the page, under its header
+	local header = private.HeaderHeight(private.pageByKey[private.current])
+	local width, height = UI:GetPageSize(true)
+	cover:SetPoint("TOPLEFT", 0, -header)
+	cover:SetSize(width, height - header)
 	if required then
 		cover.text:SetText(format("Other players are on Wanted %s and you have %s. Bounties, claims, payments and sharing are paused until you update from CurseForge, then /reload.\n\nThe Nearby window, alerts, Enemies, Hotspots, Activity and the map keep working.", required, tostring(Wanted.VERSION)))
 	end

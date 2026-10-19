@@ -24,6 +24,9 @@ local ICONS = {
 	off = "Interface\\RaidFrame\\ReadyCheck-Waiting",
 }
 local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
+-- The full card's step bar: each step's name, and what a dot's state reads under it
+local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates" }
+local BAR_NOTES = { bad = "Not yet", warn = "Nearly" }
 local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "off" }
 
 ---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar? }.
@@ -89,6 +92,15 @@ function Setup:BuildCard(parent, width, brief, onClick)
 	card.label = W:SectionLabel(card, "Your setup")
 	card.label:SetPoint("TOPLEFT", PAD, -14)
 	card.rows = {}
+	-- The Website & app page: the steps on the guild-war step bar, the first unset one's fix under it
+	if not brief then
+		card.bar = W:StepBar(card, width - 2 * PAD, BAR_STEPS)
+		card.bar:SetPoint("TOPLEFT", PAD, -34)
+		card.fix = Theme:Text(card, "small", "", C.text)
+		card.fix:SetJustifyH("LEFT")
+		card.fix:SetWordWrap(true)
+		card.fix:SetWidth(width - 2 * PAD)
+	end
 	for i = 1, 4 do
 		local row = {}
 		row.icon = card:CreateTexture(nil, "ARTWORK")
@@ -153,44 +165,52 @@ function private.Layout(card, width, brief)
 		card:SetHeight(-y + PAD - 8)
 		return card:GetHeight()
 	end
+	-- The step bar: steps set ticked, red ones crossed, the first one not set ringed; each dot's tooltip its detail and fix
+	local current, failed, done, notes = #steps + 1, {}, {}, {}
 	for i, step in ipairs(steps) do
+		if step.state ~= "ok" and current > #steps then
+			current = i
+		end
+		failed[i] = step.state == "bad" or nil
+		done[i] = step.state == "ok" or nil
+		notes[i] = BAR_NOTES[step.state] or ""
+	end
+	card.bar:Set(current, notes, failed, done)
+	for i, step in ipairs(steps) do
+		W:Explain(card.bar.dots[i], step.title, step.fix and step.detail.."\n\n"..step.fix or step.detail)
 		local row = card.rows[i]
 		row.name:Hide()
 		row.hit:Hide()
-		row.icon:ClearAllPoints()
-		row.icon:SetPoint("TOPLEFT", PAD, y)
-		row.icon:SetTexture(ICONS[step.state])
-		row.icon:SetAlpha(step.state == "off" and 0.5 or 1)
-		row.title:SetText(step.title)
-		row.title:ClearAllPoints()
-		row.title:SetPoint("TOPLEFT", PAD + ICON + 8, y - 1)
-		row.title:Show()
-		y = y - 18
-		row.detail:SetText(step.fix and step.detail.." "..step.fix or step.detail)
-		row.detail:ClearAllPoints()
-		row.detail:SetPoint("TOPLEFT", PAD + ICON + 8, y)
-		row.detail:SetWidth(width - 2 * PAD - ICON - 8)
-		row.detail:Show()
-		y = y - row.detail:GetStringHeight() - 4
+		row.icon:Hide()
+		row.title:Hide()
+		row.detail:Hide()
+		row.box:Hide()
+		row.button:Hide()
+	end
+	y = y - 64 - 6
+	-- What to do about the first step not set, with its address to copy or the button that sets it
+	local step = steps[current]
+	card.fix:SetShown(step ~= nil)
+	if step then
+		local row = card.rows[current]
+		card.fix:SetText(step.title..": "..(step.fix or step.detail))
+		card.fix:ClearAllPoints()
+		card.fix:SetPoint("TOPLEFT", PAD, y)
+		y = y - card.fix:GetStringHeight() - 6
 		row.cvar = step.cvar
 		if step.url then
 			row.box:SetText(step.url)
 			row.box:ClearAllPoints()
-			row.box:SetPoint("TOPLEFT", PAD + ICON + 8, y)
+			row.box:SetPoint("TOPLEFT", PAD, y)
 			row.box:Show()
-			y = y - 26 - 4
-		else
-			row.box:Hide()
+			y = y - 28 - 4
 		end
 		if step.cvar then
 			row.button:ClearAllPoints()
-			row.button:SetPoint("TOPLEFT", PAD + ICON + 8, y)
+			row.button:SetPoint("TOPLEFT", PAD, y)
 			row.button:Show()
 			y = y - 22 - 4
-		else
-			row.button:Hide()
 		end
-		y = y - 8
 	end
 	card:SetHeight(-y + PAD - 8)
 	return card:GetHeight()

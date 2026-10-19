@@ -140,9 +140,12 @@ function Theme:FeltFile(theme)
 end
 
 -- One file per alphabet, as the client's own fonts do, so a Cyrillic, Korean or Chinese name renders
--- instead of turning into boxes
+-- instead of turning into boxes. Latin is Barlow Semi Condensed (Media\fonts, SIL Open Font License), in two weights;
+-- it has no Cyrillic, so Russian takes the client's own Friz Quadrata.
+local BARLOW = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\fonts\\BarlowSemiCondensed-"
+local ROMAN = { medium = BARLOW.."Medium.ttf", semibold = BARLOW.."SemiBold.ttf" }
 local FONT_FILES = {
-	{ "roman", "Fonts\\FRIZQT__.TTF" },
+	{ "roman", ROMAN.medium },
 	{ "russian", "Fonts\\FRIZQT___CYR.TTF" },
 	{ "korean", "Fonts\\2002.TTF" },
 	{ "simplifiedchinese", "Fonts\\ARKai_T.ttf" },
@@ -150,19 +153,21 @@ local FONT_FILES = {
 }
 
 ---A font covering every alphabet the client ships, at a size and with optional flags ("OUTLINE").
-function Theme:MakeFont(name, size, color, flags)
+---@param weight string? "semibold" for titles, labels and buttons; Medium otherwise
+function Theme:MakeFont(name, size, color, flags, weight)
 	local font
+	local roman = ROMAN[weight] or ROMAN.medium
 	if CreateFontFamily then
 		local members = {}
 		for _, entry in ipairs(FONT_FILES) do
-			tinsert(members, { alphabet = entry[1], file = entry[2], height = size, flags = flags or "" })
+			tinsert(members, { alphabet = entry[1], file = entry[1] == "roman" and roman or entry[2], height = size, flags = flags or "" })
 		end
 		local ok, family = pcall(CreateFontFamily, name, members)
 		font = ok and family or nil
 	end
 	if not font then
 		font = CreateFont(name)
-		font:SetFont(FONT_FILES[1][2], size, flags or "")
+		font:SetFont(roman, size, flags or "")
 	end
 	font:SetShadowOffset(1, -1)
 	font:SetShadowColor(0, 0, 0, 0.85)
@@ -172,13 +177,17 @@ function Theme:MakeFont(name, size, color, flags)
 	return font
 end
 
-local function MakeFont(name, size, color, flags)
-	return Theme:MakeFont(name, size, color, flags)
+local function MakeFont(name, size, color, flags, weight)
+	return Theme:MakeFont(name, size, color, flags, weight)
 end
 Theme.Fonts = {
-	brand = MakeFont("WantedFontBrand", 17, C.text),
-	title = MakeFont("WantedFontTitle", 22, C.text),
-	heading = MakeFont("WantedFontHeading", 13, C.text),
+	brand = MakeFont("WantedFontBrand", 17, C.text, nil, "semibold"),
+	title = MakeFont("WantedFontTitle", 22, C.text, nil, "semibold"),
+	heading = MakeFont("WantedFontHeading", 13, C.text, nil, "semibold"),
+	-- Buttons, tabs, checkbox labels and section headers
+	label = MakeFont("WantedFontLabel", 12, C.text, nil, "semibold"),
+	labelSmall = MakeFont("WantedFontLabelSmall", 11, C.muted, nil, "semibold"),
+	dialogTitle = MakeFont("WantedFontDialogTitle", 16, C.white, nil, "semibold"),
 	body = MakeFont("WantedFontBody", 12, C.text),
 	small = MakeFont("WantedFontSmall", 11, C.muted),
 	tiny = MakeFont("WantedFontTiny", 10, C.faint),

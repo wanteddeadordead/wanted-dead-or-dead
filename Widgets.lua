@@ -1364,6 +1364,8 @@ function W:Menu(items, anchor)
 	menu:SetSize(width, -y + 4)
 	menu:ClearAllPoints()
 	menu:SetClampedToScreen(true)
+	-- At the size of what opened it (the window's UI size, Settings), as the cog popups are
+	menu:SetScale(anchor and anchor:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1)
 	if anchor then
 		menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
 	else

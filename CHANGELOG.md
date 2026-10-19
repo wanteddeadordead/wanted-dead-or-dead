@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Influence races: where wanteddeadordead.com runs them, a Guild Wars menu entry takes Siege's place. Its Tonight tab shows the evening's three races, the live one's influence by faction, its three points and who holds them, both sides' guilds, and tomorrow's zones. A race HUD shows in the race's zone while it runs, and standing on a race point counts your presence for the site, as on a capture point. Needs the Wanted app; new files: restart the client after updating.
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
 - Every control in EllesmereUI's style: checkboxes, dropdowns with a chevron and the current choice marked in their menu, segmented controls with rounded ends, darker text fields, section headers with a rule, centred dialogs, and a value box beside each slider where you can type a number. Borders are a faint white that sits on any felt, and greyed-out buttons fade further.
 - The interface text is set in Inter, a clear screen face with tall lowercase letters, Russian names included. New font files: restart the client after updating.

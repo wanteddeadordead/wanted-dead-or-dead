@@ -3008,6 +3008,13 @@ end)()
 		end
 	end
 	check(AppLight() == "App not running", "and the light says it isn't running, got "..tostring(AppLight()))
+	local appStep = ns.Setup:Steps()[2]
+	check(appStep.state == "warn" and appStep.fix:find("Applications on a Mac", 1, true), "how to start it, on Windows or a Mac: "..tostring(appStep.fix))
+	local lightTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "The Wanted app isn't running" then lightTip = f.tooltipText end
+	end
+	check(lightTip and lightTip:find("Applications on a Mac", 1, true), "and the light's tooltip says the same")
 	-- Running (seen within the half hour it writes): no popup; a development build counts the apps running
 	WantedAppInfo.seen = clock - 600
 	ns:PromptForApp()
@@ -5386,6 +5393,19 @@ end)()
 		and not Shown("Get the Wanted app to track challenges"), "an app catch-up without challenges: update the app")
 	ns.UI:Show("home")
 	check(Shown("Update the Wanted app to track challenges") and Shown("Update the app"), "Home says update the app too")
+	-- What to do is the button's tooltip; what the app adds is behind the (i): the panel is one line
+	local function ExplainedBy(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and f._shown then return f end
+		end
+	end
+	local updateButton, appGlyph = ExplainedBy("Update the app"), ExplainedBy("What the app adds")
+	check(updateButton and updateButton.tooltipText:find("Already updated it? Type /reload", 1, true) and not Shown(updateButton.tooltipText), "Home: how to update is the button's tooltip")
+	check(appGlyph and appGlyph.tooltipText:find("A daily challenge, three weekly ones", 1, true) and appGlyph.tooltipText:find("Works without the app", 1, true)
+		and not Shown("WORKS WITHOUT THE APP"), "and what the app adds, and what works without it, is behind the (i)")
+	local raidsLabel
+	for _, f in ipairs(Mock.fontStrings) do if f._text == "RAIDS" and f._parent and f._parent._point then raidsLabel = f end end
+	check(raidsLabel and raidsLabel._parent._point[3] > 0, "the raids and the strip close up under the short panel")
 	-- No catch-up for this account and no app version: get the app, on both pages
 	local appInfo = WantedAppInfo
 	WantedAppInfo = nil
@@ -5419,6 +5439,12 @@ end)()
 	-- The demo (development builds)
 	ns:RunCommand("demo", "")
 	check(Challenges:IsDemo() and Challenges:GetMine().week == 25, "the demo shows made-up challenges")
+	ns.UI:Show("home")
+	local demoTip = ExplainedBy("Demo challenges")
+	check(demoTip and demoTip.explainedText._text:find("Demo challenges|r$") and demoTip.tooltipText:find("/wanted demo again", 1, true),
+		"Home's footer: Demo challenges, how to turn them off on hover")
+	local band = ExplainedBy("Your PvP rank")
+	check(Shown("Season not started") and band.tooltipText():find("Ranks start with the PvP season", 1, true), "before a season: a label on the rank band, the why on hover")
 	ns.UI:Show("challenges")
 	ns:RunCommand("demo", "banner")
 	check(warned[#warned]:find("CHALLENGE DONE", 1, true), "the demo's banner")
@@ -7873,9 +7899,19 @@ end)()
 	R:Tick()
 	ns.UI:Show("home")
 	check(shows("No raids forming") and shows("RAIDS"), "Home: no raids, a card to form one")
+	-- A raid card's hints are its tooltip
+	local function RaidTips()
+		local tips = {}
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == "Raids" and type(rawget(f, "tooltipText")) == "function" and f._shown then tips[#tips + 1] = f.tooltipText() or "" end
+		end
+		return table.concat(tips, "\n")
+	end
+	check(not shows("Form or join one on the Raids page") and not shows("Open the Raids page") and RaidTips():find("Form one, and every Wanted player", 1, true),
+		"Home: no raid hints on the page, the empty card explains on hover")
 	R:OnAd(ad({ id = "Lead Er-Realm:home1", t = "Stonetalon push" }), "Lead Er-Realm")
 	ns.UI:Refresh(true)
-	check(shows("Stonetalon push") and shows("Click to join") and shows("FORMING"), "Home: a raid forming, with Join")
+	check(shows("Stonetalon push") and shows("Join|r") and shows("FORMING") and RaidTips():find("Click to join. The leader invites you.", 1, true), "Home: a raid forming, with Join, and on hover what a click does")
 	local before = #joins
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Stonetalon push" and fs._parent._shown then fs._parent:Click() end
@@ -15189,7 +15225,12 @@ end)()
 	ns.UI:Show("siege")
 	check(count("7 to 10 PM Eastern") == 7 and count("front picked the evening before") == 7 and count("Open the map") == 3, "no siege known: the site's window, every front to be picked")
 	ns.UI:Show("home")
-	check(shows("No siege picked yet") and (shows("Picked each evening the day before") or shows("Picked the evening before")), "the Dashboard says none is picked yet")
+	local upcomingTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Upcoming sieges" then upcomingTip = f.tooltipText end
+	end
+	check(shows("No siege picked yet") and not shows("Picked each evening") and upcomingTip and upcomingTip:find("picked the evening before", 1, true),
+		"the Dashboard says none is picked yet; when they're picked is on hover")
 	ns:RunCommand("demo", "")
 	ns.UI:GetFrame():Hide()
 	ns.Alerts.Warn, PlaySound = real.Warn, real.PlaySound
@@ -16114,8 +16155,14 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	local texts = Texts(home)
 	check(home and home:IsShown() and home.label._text == "Your setup", "the Dashboard's setup card says what's missing")
 	check(home.rows[3].name._text == "In the group" and home.rows[4].name._text == "Enemy plates", "the one-line card uses the short names, got "..tostring(home.rows[3].name._text))
-	check(texts:find("Wanted app running: ", 1, true) and texts:find("wanteddeadordead.com/app", 1, true) and texts:find("Enemy nameplates on: ", 1, true), "a fix line under each red step, with the address")
-	check(not texts:find("Addon up to date: ", 1, true) and home:GetHeight() > 60, "no fix line under a green step; the card has grown for the red ones")
+	-- Each mark explains its step on hover: the fix, with the address, for a red one
+	check(not texts:find("Get it, start it", 1, true) and not texts:find("Press V", 1, true) and home:GetHeight() <= 70, "no fix lines on the card: one line of marks")
+	local appTip, platesTip, addonTip = home.rows[2].hit.tooltipText, home.rows[4].hit.tooltipText, home.rows[1].hit.tooltipText
+	check(home.rows[2].hit:IsShown() and home.rows[2].hit.tooltipTitle == "Wanted app running" and appTip:find("Get it, start it, then /reload.", 1, true)
+		and appTip:find("wanteddeadordead.com/app", 1, true) and appTip:find("No Wanted app on this computer", 1, true), "the app's mark: its detail, then the fix with the address")
+	check(platesTip:find("Press V, or Interface > Names > Enemy Players.", 1, true), "the plates' mark: how to turn them on")
+	check(home.rows[2].hit._clicks == false, "a mark lets the click through to the card")
+	check(addonTip and not addonTip:find("\n\n", 1, true), "a green mark: its detail, no fix")
 	-- Fixed one by one
 	cvars.nameplateShowEnemies = "1"
 	check(Setup:Steps()[4].state == "ok", "plates on: green")

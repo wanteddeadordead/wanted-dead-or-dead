@@ -258,10 +258,10 @@ function Challenges:HasApp()
 	return private.appSeen == true or Wanted:AppVersion() ~= nil
 end
 
----The empty state's heading, line and button when there are no challenges: get the app, or update it when it's
----there but too old to bring them.
+---The empty state's heading, what to do and button when there are no challenges: get the app, or update it when
+---it's there but too old to bring them. What to do is the button's tooltip.
 ---@return string title
----@return string line
+---@return string tip
 ---@return string button
 function Challenges:EmptyText()
 	if Challenges:HasApp() then

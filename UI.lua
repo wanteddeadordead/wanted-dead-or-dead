@@ -807,7 +807,8 @@ function private.UpdateConnection()
 	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
 	if app and notRunning then
 		Set(private.appStatus, C.amber, "App not running", "The Wanted app isn't running",
-			"It last ran "..Theme:Ago(notRunning).." ago. Start it from the Start menu (Wanted Dead or Dead) so your kills reach the website.")
+			"It last ran "..Theme:Ago(notRunning).." ago. Start it (Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac) so "
+				.."your kills reach the website.")
 	elseif app then
 		-- Development builds also count the apps running across the network
 		local apps = Wanted.DEV and Wanted:AppsRunning()

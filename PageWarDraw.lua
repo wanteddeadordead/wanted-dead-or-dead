@@ -22,6 +22,7 @@ GuildWars.PANELS.draw = {
 		local card = W:Card(panel)
 		card:SetPoint("TOPLEFT")
 		card:SetSize(width, 60 + ROWS * 40 + 40)
+		panel.card = card
 		panel.label = W:SectionLabel(card, "")
 		panel.label:SetPoint("TOPLEFT", COLUMNS.guild, -14)
 		for key, text in pairs({ influence = "Influence", stake = "Stake", chance = "Chance", result = "Result" }) do
@@ -75,6 +76,8 @@ GuildWars.PANELS.draw = {
 		panel.war = war
 		local dr = type(war.draw) == "table" and war.draw or {}
 		local declarers = type(dr.declarers) == "table" and dr.declarers or {}
+		-- As tall as the declarations shown (a draw usually has two)
+		panel.card:SetHeight(60 + min(max(#declarers, 1), ROWS) * 40 + 40)
 		panel.label:SetText(strupper("The draw"..(type(dr.at) == "number" and (" · "..GuildWars:Clock(dr.at)) or "")))
 		local decided = dr.drawn ~= nil
 		local holder = ctx.theirs.guild or "the holders"
@@ -93,7 +96,7 @@ GuildWars.PANELS.draw = {
 				row.sub:SetText(decided and (drawn and "held" or "back") or "")
 				W:Explain(row.result, drawn and "Drawn" or "Not drawn", drawn and format("The site drew at %s, weighted by influence and stake. Your stake is held until the war ends.\n\nNext: %s picks the time%s; then you accept or withdraw.",
 					type(dr.at) == "number" and GuildWars:Clock(dr.at) or "8:00 PM", holder, deadline and (" by "..date("%a ", deadline)..GuildWars:Clock(deadline)) or "")
-					or format("%s is back in the treasury.", tostring(tonumber(entry.stake) or 0)), "ANCHOR_RIGHT")
+					or format("%s is back in the treasury.", tostring(tonumber(entry.stake) or 0)), "ANCHOR_BOTTOM")
 			end
 		end
 		panel.seed:SetText(type(dr.seed) == "string" and ("Seed  "..Theme:Colorize(dr.seed, C.text)) or "")

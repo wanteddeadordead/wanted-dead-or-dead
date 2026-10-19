@@ -6433,6 +6433,25 @@ end)()
 	card:ShowFor("Player-9-COSMETIC")
 	check(f.name._text:find("|T", 1, true) and f.name._text:find("Stabby Mcstab", 1, true), "the death card's name carries the emblem: "..tostring(f.name._text))
 	check(f.stamp._text == "FOUNDING HUNTER", "and the stamp")
+	check(not f.banner:IsShown(), "no banner for a killer who never designed a card")
+	-- A killer who designed a calling card: their whole card on the death card, the rest under it
+	local plain = f:GetHeight()
+	A:TakeCosmetics({ ["stabby mcstab"] = { e = "witness-emblem", f = "gold",
+		c = { p = "starter-plate", b = "starter-border", g = "starter-bg", e = "killer-emblem", s = { "kills", "hks", "nope" } }, v = { "42", "7", "1" } },
+		["fake card"] = { c = { p = "made-up", b = "starter-border", g = "starter-bg" } } })
+	check(A:CosmeticsOf("Stabby Mcstab").card and A:CosmeticsOf("Stabby Mcstab").card.plate == "starter-plate" and next(A:CosmeticsOf("Fake Card")) == nil,
+		"a designed card is kept; one with a piece the catalogue doesn't know is dropped")
+	card:ShowFor("Player-9-COSMETIC")
+	check(f.banner:IsShown() and f.banner.plate._texture:find("starter-plate", 1, true) and f.banner.name._text:find("Stabby Mcstab", 1, true)
+		and f:GetHeight() > plain, "the death card shows the killer's calling card on top: "..tostring(f.banner.plate._texture))
+	check(f.banner.stats[1].value._text == "42", "with their stats' values")
+	check(f.banner.stats[2].value._text == "-" and f.banner.stats[3].value._text == "-",
+		"a stat this version doesn't know shows no value, not the unknown stat's: "..tostring(f.banner.stats[2].value._text))
+	A:TakeCosmetics({ ["stabby mcstab"] = { c = { p = "starter-plate", b = "starter-border", g = "starter-bg", s = { "kills", "zone" } },
+		v = { 42, "Eastern Plaguelands" } }, ["odd card"] = { c = 5, e = "witness-emblem" } })
+	local values = A:CosmeticsOf("Stabby Mcstab").values
+	check(values and values[1] == "42" and values[2] == "Eastern Plaguelands", "a number value is shown, a zone whole: "..tostring(values and values[2]))
+	check(A:CosmeticsOf("Odd Card").emblem == "witness-emblem" and not A:CosmeticsOf("Odd Card").card, "a card that isn't a table is dropped, the rest kept")
 	A:TakeCosmetics(nil)
 	card:ShowFor("Player-9-COSMETIC")
 	check(f.stamp._text == "" and not f.name._text:find("|T", 1, true), "none once the cosmetics are gone")

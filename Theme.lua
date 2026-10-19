@@ -187,14 +187,14 @@ end
 Theme.Fonts = {
 	brand = MakeFont("WantedFontBrand", 17, C.text, nil, "semibold"),
 	title = MakeFont("WantedFontTitle", 22, C.text, nil, "semibold"),
-	heading = MakeFont("WantedFontHeading", 13, C.text, nil, "semibold"),
+	heading = MakeFont("WantedFontHeading", 14, C.text, nil, "semibold"),
 	-- Buttons, tabs, checkbox labels and section headers
-	label = MakeFont("WantedFontLabel", 12, C.text, nil, "semibold"),
-	labelSmall = MakeFont("WantedFontLabelSmall", 11, C.muted, nil, "semibold"),
+	label = MakeFont("WantedFontLabel", 13, C.text, nil, "semibold"),
+	labelSmall = MakeFont("WantedFontLabelSmall", 12, C.muted, nil, "semibold"),
 	dialogTitle = MakeFont("WantedFontDialogTitle", 16, C.white, nil, "semibold"),
-	body = MakeFont("WantedFontBody", 12, C.text),
-	small = MakeFont("WantedFontSmall", 11, C.muted),
-	tiny = MakeFont("WantedFontTiny", 10, C.faint),
+	body = MakeFont("WantedFontBody", 13, C.text),
+	small = MakeFont("WantedFontSmall", 12, C.muted),
+	tiny = MakeFont("WantedFontTiny", 12, C.faint),
 	money = MakeFont("WantedFontMoney", 14, C.gold),
 	stat = MakeFont("WantedFontStat", 20, C.text),
 }

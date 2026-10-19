@@ -18245,7 +18245,7 @@ end
 	C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
 	ns.WarMap:Refresh()
 	pieces = Pieces()
-	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].icon._texture:find("nexus%-keep%-sealed%-alliance$") and pieces["Ashenvale"]
+	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].icon._texture:find("nexus%-keep%-open%-alliance$") and pieces["Ashenvale"]
 		and pieces["Hillsbrad Foothills"].spec.lines[2][1]:find("Guild war now: EMPIRE attacks", 1, true) and pieces["Hillsbrad Foothills"].spec.lines[1][1]:find("Held by <Revenant> (Alliance) since", 1, true),
 		"the continent: the war's zone as a keep, held zones by emblem, who and what's on in the tooltip")
 	-- OpenMap's stitched map: the zone's pieces over its art
@@ -18298,24 +18298,24 @@ end
 	-- zone, the war's announcements
 	local toasts, realAdd, realWarn = {}, ns.Toast.Add, ns.Alerts.Warn
 	local announced = {}
-	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t.kind..": "..t.name end
+	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t.kind..": "..t.name..". "..(t.detail or "") end
 	ns.Alerts.Warn = function(_, text) announced[#announced + 1] = text end
 	local realAnnounce = WantedCaptureAnnounceFrame
 	WantedCaptureAnnounceFrame = nil
 	ns.db.warSeen = {}
 	AtStep(function() end)
-	check(toasts[#toasts] == "DRAWN: EMPIRE attacks Hillsbrad", "drawn: told: "..tostring(toasts[#toasts]))
+	check(toasts[#toasts] and toasts[#toasts]:find("^DRAWN: Hillsbrad%. EMPIRE attacks Hillsbrad; Revenant picks the time by"), "drawn: told: "..tostring(toasts[#toasts]))
 	local told = #toasts
 	ns.WarAlerts:Check()
 	check(#toasts == told, "once")
 	AtStep(function(war) war.state, war.start = "awaiting_answer", start end)
-	check(toasts[#toasts] and toasts[#toasts]:find("^TIME SET: Hillsbrad"), "the time set, to the attackers' officers: "..tostring(toasts[#toasts]))
+	check(toasts[#toasts] and toasts[#toasts]:find("^TIME SET: Hillsbrad%. .*set by Revenant%. Accept or withdraw"), "the time set, to the attackers' officers: "..tostring(toasts[#toasts]))
 	AtStep(function(war)
 		war.state, war.start, war.answer = "scheduled", clock + 1800, "accept"
 		war.roster = { { guid = ME, name = "Test Player", place = 1 } }
 	end)
 	ns.WarAlerts:Tick()
-	check(toasts[#toasts] == "WAR IN 1 HOUR: Hillsbrad Foothills, "..ns.GuildWars:Clock(clock + 1800), "an hour before, to the roster: "..tostring(toasts[#toasts]))
+	check(toasts[#toasts] == "WAR IN 1 HOUR: Hillsbrad. Battle at "..ns.GuildWars:Clock(clock + 1800)..", prep from "..ns.GuildWars:Clock(clock + 900)..". Go to the rally.", "an hour before, to the roster: "..tostring(toasts[#toasts]))
 	clock = clock + 1000
 	ns.WarAlerts:Tick()
 	check(announced[#announced] and announced[#announced]:find("Prep: the war on Hillsbrad starts at", 1, true), "in the zone: prep announced")
@@ -18340,7 +18340,7 @@ end
 		war.state, war.start = "over", clock - 2400
 		war.result = { winner = "att", towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, protectedUntil = clock + 3 * 86400 }
 	end)
-	check(toasts[#toasts] == "WAR WON: EMPIRE took Hillsbrad", "the result: "..tostring(toasts[#toasts]))
+	check(toasts[#toasts] and toasts[#toasts]:find("^WAR WON: Hillsbrad%. EMPIRE took Hillsbrad%. Protected until"), "the result: "..tostring(toasts[#toasts]))
 	ns.db.settings.warToasts = false
 	ns.db.warSeen = {}
 	told = #toasts

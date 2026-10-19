@@ -514,7 +514,9 @@ function private.ZoneIcon(zone, fx, fy, now)
 	local texture
 	if war and war.battle and war.battle.prep and now >= war.battle.prep and now < (war.battle.stop or 0) then
 		local d = SIDE[type(war.defender) == "table" and war.defender.faction] or "alliance"
-		texture = GuildWars.MEDIA.."nexus-keep-sealed-"..d
+		local a = SIDE[type(war.attacker) == "table" and war.attacker.faction] or "horde"
+		local _, keep = private.Lanes(war)
+		texture = GuildWars:KeepFile(keep, d, a)
 	elseif race and race.zone == zone.name then
 		texture = GuildWars.MEDIA.."race-contested"
 	elseif holder and holder.guild then

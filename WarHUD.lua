@@ -16,7 +16,7 @@ local private = {}
 local WIDTH, HEIGHT = 440, 132
 local LANES = { { "top", "Top" }, { "mid", "Mid" }, { "bot", "Bot" } }
 local STRIP_TOP, LANE_ROW = -66, 26
-local RALLY_X, TOWER_X, INHIB_X, KEEP_X = 26, 120, 270, 400
+local RALLY_X, TOWER_X, INHIB_X, KEEP_X = 70, 130, 270, 400
 local SIDE = { Horde = "horde", Alliance = "alliance" }
 local RED = { 0.9, 0.3, 0.25 }
 
@@ -110,15 +110,17 @@ function private.Build()
 		private.Line(f, INHIB_X + 10, y, KEEP_X - 17, middle)
 		local row = { id = lane[1] }
 		row.label = Theme:Text(f, "small", lane[2], C.muted)
-		row.label:SetPoint("RIGHT", f, "TOPLEFT", TOWER_X - 16, y)
+		-- Left of the rally, clear of the lanes' lines
+		row.label:SetPoint("RIGHT", f, "TOPLEFT", RALLY_X - 18, y)
 		row.tower = private.Seal(f, 20)
 		row.tower:SetPoint("CENTER", f, "TOPLEFT", TOWER_X, y)
 		row.inhibitor = private.Seal(f, 20)
 		row.inhibitor:SetPoint("CENTER", f, "TOPLEFT", INHIB_X, y)
 		row.pct = Theme:Text(f, "tiny", "", C.gold)
-		row.pct:SetPoint("LEFT", f, "TOPLEFT", TOWER_X + 14, y)
+		-- Above the line out of the seal, not on it
+		row.pct:SetPoint("BOTTOMLEFT", f, "TOPLEFT", TOWER_X + 12, y + 3)
 		row.inhibPct = Theme:Text(f, "tiny", "", C.gold)
-		row.inhibPct:SetPoint("LEFT", f, "TOPLEFT", INHIB_X + 14, y)
+		row.inhibPct:SetPoint("BOTTOMLEFT", f, "TOPLEFT", INHIB_X + 12, y + 3)
 		f.lanes[i] = row
 	end
 	-- Under the frame: the friends here, the point the player stands on, and why they don't count
@@ -143,7 +145,6 @@ function private.Build()
 	W:Explain(bar, "Capture", "Net count here (yours minus theirs, up to 6); progress is kept if you leave.", "ANCHOR_BOTTOM")
 	f.bar = bar
 	f.status = Theme:Text(f, "small", "", C.amber)
-	f.status:SetPoint("TOP", bar, "BOTTOM", 0, -6)
 	f:Hide()
 	private.frame = f
 	return f
@@ -237,6 +238,9 @@ function WarHUD:Update()
 		state = type(lane[point.role]) == "table" and lane[point.role] or {}
 	end
 	f.bar:SetShown(point ~= nil and point.role ~= "rally" and not prep)
+	-- Under the capture bar, or the friends when there's none
+	f.status:ClearAllPoints()
+	f.status:SetPoint("TOP", f.bar:IsShown() and f.bar or f.friends, "BOTTOM", 0, -6)
 	if point then
 		local label = point.lane and (strupper(strsub(point.lane, 1, 1))..strsub(point.lane, 2).." "..point.role) or point.role == "keep" and "The keep" or "The rally"
 		local pct = state and (state.state == "taken" and 100 or tonumber(state.pct)) or (point.role == "keep" and keep == "fallen" and 100) or 0

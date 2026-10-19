@@ -287,7 +287,12 @@ for index = 1, MAX_WARS do
 		-- Named by its zone
 		tabLabel = function()
 			local war = GuildWars:War(index)
-			return war and GuildWars:Short(war.zone) or "War"
+			if not war then
+				return "War"
+			end
+			-- Its badge on the tab too (tab buttons draw no badge of their own)
+			local badge, color = private.Badge(war, GetServerTime())
+			return GuildWars:Short(war.zone)..(badge and (" "..Theme:Colorize(badge, color)) or "")
 		end,
 		tabTip = { "A war of your guild's", "Members see this page without its buttons. It closes 24 hours after the result; the war stays in the guild's history on the site." },
 		under = "guildwars",

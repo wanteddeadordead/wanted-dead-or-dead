@@ -11,6 +11,7 @@ local Raids = Wanted.Raids
 local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false, day = 0 }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 140
+local WARNING_HEIGHT = 14 -- the "you can't invite" line, when it shows
 local FORM_HEIGHT = 288 -- the form, with how it works under it
 local HOW_IT_WORKS = table.concat({
 	"HOW IT WORKS",
@@ -144,7 +145,10 @@ function private.RefreshCard()
 	private.leadNames:SetText(table.concat(names, "   "))
 	private.openButton:SetShown(mine.exclusive == true)
 	-- In someone else's group without assist: invites wait until we can send them
-	private.cantInvite:SetShown(not Raids:CanInvite())
+	local cantInvite = not Raids:CanInvite()
+	private.cantInvite:SetShown(cantInvite)
+	-- The warning takes its own line above the buttons: the card grows by it
+	private.lead:SetHeight(CARD_HEIGHT + (cantInvite and WARNING_HEIGHT or 0))
 	local formNow = Raids:CanFormNow()
 	private.formNow:SetShown(formNow)
 	private.sendInvites:SetShown(formNow)

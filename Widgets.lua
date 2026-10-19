@@ -65,8 +65,13 @@ local function CreateTip()
 			self:Hide()
 		end
 	end)
-	-- Many OnLeave handlers, ours and the pages', hide GameTooltip: that hides this too
-	hooksecurefunc(GameTooltip, "Hide", function() frame:Hide() end)
+	-- Many OnLeave handlers, ours and the pages', hide GameTooltip: that hides this too, once the mouse has left what we
+	-- explain (the game and other addons hide GameTooltip at other times too: leaving a world object, on timers)
+	hooksecurefunc(GameTooltip, "Hide", function()
+		if not (frame.owner and frame.owner:IsMouseOver()) then
+			frame:Hide()
+		end
+	end)
 	return frame
 end
 
@@ -89,6 +94,8 @@ local function ShowTooltip(frame)
 	local hasBody = body ~= nil and body ~= ""
 	tip = tip or CreateTip()
 	tip.owner = frame
+	-- At its owner's scale (the poker table has its own)
+	tip:SetScale(frame:GetEffectiveScale() / UIParent:GetEffectiveScale())
 	tip.title:SetText(title)
 	tip.body:SetText(hasBody and body or "")
 	tip.body:SetShown(hasBody)
@@ -105,35 +112,50 @@ local function ShowTooltip(frame)
 	tip:Show()
 end
 
----A FontString can't take the mouse: a Button over its text does, and lets clicks through to what is under it.
-local function HitButton(text)
-	local parent = text:GetParent()
+---Runs a frame's script with every hook on it, as the game would (a plain GetScript misses HookScript's hooks).
+local function RunScript(frame, name)
+	if ExecuteFrameScript then
+		ExecuteFrameScript(frame, name)
+	else
+		local script = frame:GetScript(name)
+		if script then
+			script(frame)
+		end
+	end
+end
+
+---A Button that carries the tooltip for something that can't (a FontString) or that the controller can't reach (a
+---plain frame: smart navigation moves between Buttons): over it, letting clicks through to what is under it. Under
+---it, `forward` keeps its hover: its own OnEnter and OnLeave still run, and its GameTooltip gives way to ours.
+local function HitButton(region, parent, forward)
 	local hit = CreateFrame("Button", nil, parent)
 	hit:SetMouseClickEnabled(false)
 	hit:SetMouseMotionEnabled(true)
-	hit.explainedText = text
 	hit.showsTooltip = true
-	text.explainHit = hit
-	-- Inside a clickable row the text takes the mouse from the row: the row's own OnEnter and OnLeave still run, so it
-	-- stays lit, and its own GameTooltip gives way to the text's
-	local clickable = parent:IsObjectType("Button")
+	region.explainHit = hit
 	hit:SetScript("OnEnter", function(self)
-		local enter = clickable and parent:GetScript("OnEnter")
-		if enter then
-			enter(parent)
-			if GameTooltip:IsOwned(parent) then
+		if forward then
+			RunScript(forward, "OnEnter")
+			if GameTooltip:IsOwned(forward) then
 				GameTooltip:Hide()
 			end
 		end
 		ShowTooltip(self)
 	end)
 	hit:SetScript("OnLeave", function()
-		local leave = clickable and parent:GetScript("OnLeave")
-		if leave then
-			leave(parent)
+		if forward then
+			RunScript(forward, "OnLeave")
 		end
 		HideTooltip()
 	end)
+	return hit
+end
+
+---A Button over a FontString's text. Inside a clickable row, the row keeps its hover.
+local function TextHit(text)
+	local parent = text:GetParent()
+	local hit = HitButton(text, parent, parent:IsObjectType("Button") and parent or nil)
+	hit.explainedText = text
 	local function Fit()
 		local justify = text:GetJustifyH()
 		local point = (justify == "CENTER" or justify == "RIGHT") and justify or "LEFT"
@@ -146,16 +168,29 @@ local function HitButton(text)
 	return hit
 end
 
+---A Button over a plain frame (a pill, a stat tile, a HUD bar), so the controller reaches its tooltip.
+local function FrameHit(frame)
+	local parent = frame:GetParent()
+	local hit = HitButton(frame, frame, frame:GetScript("OnEnter") and frame or (parent and parent:IsObjectType("Button") and parent) or nil)
+	hit:SetAllPoints()
+	hit:SetFrameLevel(frame:GetFrameLevel() + 5)
+	return hit
+end
+
 ---Explains a frame on hover: our tooltip with a gold title and a light body. Call it again to change the text.
----@param frame table a widget, a plain frame or a FontString (a FontString gets a hit button sized to its text)
+---@param frame table a widget, a plain frame or a FontString (a FontString gets a hit button sized to its text, a plain
+---frame one over it, so the controller reaches it)
 ---@param title string
 ---@param body string|fun(): string?|nil a function is called on each hover, for text that follows the state
 ---@param anchor string? a GameTooltip anchor: ANCHOR_TOP (default), ANCHOR_BOTTOM, ANCHOR_LEFT or ANCHOR_RIGHT
 ---@return table owner the frame that shows the tooltip
 function W:Explain(frame, title, body, anchor)
 	local owner = frame
-	if frame.GetObjectType and frame:GetObjectType() == "FontString" then
-		owner = frame.explainHit or HitButton(frame)
+	local kind = frame.GetObjectType and frame:GetObjectType()
+	if kind == "FontString" then
+		owner = frame.explainHit or TextHit(frame)
+	elseif kind == "Frame" then
+		owner = frame.explainHit or FrameHit(frame)
 	end
 	owner.tooltipTitle, owner.tooltipText, owner.tooltipAnchor = title, body, anchor
 	-- Our widgets show it from their own OnEnter; anything else is hooked once, for motion only, so clicks still
@@ -172,7 +207,11 @@ function W:Explain(frame, title, body, anchor)
 	end
 	-- Called again while its tooltip shows: show the new text now
 	if tip and tip:IsShown() and tip.owner == owner then
-		ShowTooltip(owner)
+		if title then
+			ShowTooltip(owner)
+		else
+			HideTooltip()
+		end
 	end
 	return owner
 end
@@ -1260,6 +1299,47 @@ end
 
 local menu = nil
 
+-- While a menu or popup is open, Escape closes only it: our windows under it come off the game's list of windows Escape
+-- closes, which closes every one on it at once (CloseSpecialWindows), and go back once it has closed
+local escapeHolders, escapeHeld = {}, {} -- the menus and popups open, and the names taken off the list for them
+
+---Whether a name on the Escape list is one of our menus or popups, which stay on it.
+local function IsPopupName(name)
+	return name == "WantedMenu" or strmatch(name, "^WantedPopup%d+$") ~= nil
+end
+
+local function HoldEscape(popup)
+	local first = next(escapeHolders) == nil
+	escapeHolders[popup] = true
+	if not first or not UISpecialFrames then
+		return
+	end
+	for i = #UISpecialFrames, 1, -1 do
+		local name = UISpecialFrames[i]
+		if type(name) == "string" and strmatch(name, "^Wanted") and not IsPopupName(name) then
+			tremove(UISpecialFrames, i)
+			escapeHeld[name] = true
+		end
+	end
+end
+
+local function ReleaseEscape(popup)
+	escapeHolders[popup] = nil
+	if next(escapeHolders) ~= nil then
+		return
+	end
+	-- After the Escape that closed it has gone through the whole list
+	C_Timer.After(0, function()
+		if next(escapeHolders) ~= nil then
+			return
+		end
+		for name in pairs(escapeHeld) do
+			tinsert(UISpecialFrames, name)
+			escapeHeld[name] = nil
+		end
+	end)
+end
+
 -- EllesmereUI's dropdown menu: the field's colours, 28 px rows, grey headers with a rule under them
 local MENU_ROW, MENU_HEADER, MENU_DIVIDER = 28, 22, 9
 local MENU_HEADER_TEXT = { 0.5, 0.5, 0.5 }
@@ -1280,10 +1360,12 @@ local function CreateMenu()
 			self:Hide()
 		end
 	end)
-	-- And on Escape (the game's list of windows Escape closes)
+	-- And on Escape (the game's list of windows Escape closes), without the windows under it
 	if UISpecialFrames then
 		tinsert(UISpecialFrames, "WantedMenu")
 	end
+	frame:SetScript("OnShow", HoldEscape)
+	frame:SetScript("OnHide", ReleaseEscape)
 	return frame
 end
 
@@ -1364,6 +1446,17 @@ function W:Menu(items, anchor)
 	menu:SetSize(width, -y + 4)
 	menu:ClearAllPoints()
 	menu:SetClampedToScreen(true)
+	-- At the scale of what opened it, and gone with it (a dialog closing under its dropdown's menu)
+	menu:SetScale((anchor or UIParent):GetEffectiveScale() / UIParent:GetEffectiveScale())
+	menu.anchor = anchor
+	if anchor and not anchor.hidesMenu then
+		anchor.hidesMenu = true
+		anchor:HookScript("OnHide", function(self)
+			if menu and menu.anchor == self then
+				menu:Hide()
+			end
+		end)
+	end
 	if anchor then
 		menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
 	else
@@ -1558,6 +1651,8 @@ local function Popup(opener, fill, border)
 	if UISpecialFrames then
 		tinsert(UISpecialFrames, name)
 	end
+	popup:SetScript("OnShow", HoldEscape)
+	popup:SetScript("OnHide", ReleaseEscape)
 	opener:HookScript("OnHide", function() popup:Hide() end)
 	function popup:Open()
 		self:SetScale(opener:GetEffectiveScale() / UIParent:GetEffectiveScale())
@@ -1841,9 +1936,14 @@ function W:StepBar(parent, width, steps, onStep)
 		dot.mark:SetSize(12, 12)
 		dot.number = Theme:Text(dot, "tiny", tostring(i))
 		dot.number:SetPoint("CENTER", 0, 0)
+		-- Each step's label and sub-line keep to its share of the bar, cut short rather than run into the next
 		dot.caption = Theme:Text(bar, "body", label)
+		dot.caption:SetWidth(spacing - 6)
+		dot.caption:SetJustifyH("CENTER")
 		dot.caption:SetPoint("TOP", bar, "TOPLEFT", x, STEP_LINE_Y - 16)
 		dot.sub = Theme:Text(bar, "tiny", "", C.faint)
+		dot.sub:SetWidth(spacing - 6)
+		dot.sub:SetJustifyH("CENTER")
 		dot.sub:SetPoint("TOP", dot.caption, "BOTTOM", 0, -3)
 		dot.index, titles[i], tips[i] = i, label, tip
 		dot:SetScript("OnClick", function(self)

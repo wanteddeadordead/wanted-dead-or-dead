@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -6385,6 +6385,119 @@ end)()
 	for _, m in ipairs(members) do files[m.alphabet] = m.file end
 	check(files.roman:find("Media\\fonts\\BarlowSemiCondensed%-SemiBold%.ttf$") and files.russian == "Fonts\\FRIZQT___CYR.TTF",
 		"the font family: Barlow for Latin, Friz Quadrata for Cyrillic: "..tostring(files.roman))
+end)()
+-- The new widgets: switch, setting row, cog, multiselect, scroll area and step bar. Everything that carries a tooltip is a
+-- Button, so the controller's smart navigation reaches it and its FocusEnter (OnEnter) shows the tip.
+;(function()
+	local W, C = ns.Widgets, ns.Theme.C
+	local function Tip() return _G.WantedTooltip end
+	local function Focus(button)
+		check(button._kind == "Button", "a tooltip carrier is a Button, reachable by the controller")
+		button._scripts.OnEnter(button)
+		local shown = Tip():IsShown() and Tip().owner == button
+		button._scripts.OnLeave(button)
+		return shown
+	end
+	-- Switch
+	local changed
+	local switch = W:Switch(UIParent, function(on) changed = on end)
+	check(switch._w == 40 and switch._h == 20 and not switch:GetChecked(), "a switch is 40 by 20, off")
+	check(switch.knob._point[1] == "LEFT" and switch.track._color[4] == 0.65, "off: the knob at the left on a grey track")
+	switch:Click()
+	check(changed == true and switch:GetChecked() and switch.knob._point[1] == "RIGHT" and switch.track._color[1] == C.accent[1], "a click turns it on: knob right, accent track")
+	switch:SetChecked(false)
+	check(changed == true and not switch:GetChecked(), "SetChecked doesn't call back")
+	W:Explain(switch, "Sound", "Beeps.")
+	check(Focus(switch), "a switch explains itself under the controller")
+	-- Row: label left, control 20 px from the right, shades taking turns, the help on the label
+	local parent = CreateFrame("Frame", nil, UIParent)
+	local control = W:Switch(parent)
+	local row = W:Row(parent, 600, "Alert sounds", control, "Plays a beep.")
+	local row2 = W:Row(parent, 600, "Stealth alarm", W:Switch(parent))
+	check(row._h == 44 and row.control == control and control._parent == row and control._point[1] == "RIGHT" and control._point[2] == -20,
+		"a row is 44 high with its control 20 px from the right")
+	check(row.shade._color[4] == 0.1 and row2.shade._color[4] == 0.2, "rows under one parent take turns in shade")
+	local hit = row.label.explainHit
+	check(hit and hit.tooltipTitle == "Alert sounds" and hit.tooltipText == "Plays a beep.", "the row's help is on its label")
+	check(Focus(hit), "and the label's tip shows under the controller")
+	check(rawget(row2.label, "explainHit") == nil, "no help, no tip")
+	-- Cog: left of the control, its popup built on first opening
+	local built = 0
+	local cog = W:Cog(row, "Alert sound", function(popup, width)
+		built = built + 1
+		check(width == 300, "the popup is 300 wide")
+		return 120
+	end)
+	check(cog._point[1] == "RIGHT" and cog._point[2] == control and cog.icon._texture:find("Media\\cog$"), "the cog sits left of the control, drawn from our texture")
+	check(cog.icon._vertexColor[4] == 0.4 and built == 0, "faint at rest, nothing built yet")
+	cog:Click()
+	check(built == 1 and cog.popup._shown and cog.popup._h == 120 and cog.popup.title._text == "ALERT SOUND", "a click builds and opens the popup")
+	check(cog.icon._vertexColor[4] == 0.7, "brighter while it's open")
+	cog:Click()
+	check(not cog.popup._shown and built == 1, "a second click closes it, built once")
+	local inSpecial = false
+	for _, name in ipairs(UISpecialFrames) do if _G[name] == cog.popup then inSpecial = true end end
+	check(inSpecial, "Escape closes it")
+	cog:Disable()
+	cog._scripts.OnDisable(cog)
+	check(cog.icon._vertexColor[4] == 0.15, "fainter when disabled")
+	check(Focus(cog), "and a disabled cog still explains itself")
+	-- MultiSelect: the field lists what's on; the list stays open while ticking; locked options can't change
+	local calls = {}
+	local multi = W:MultiSelect(UIParent, 260, {
+		{ key = "map", label = "World map", tip = { "World map", "Fronts on the map." } },
+		{ key = "minimap", label = "Minimap", note = "tracking" },
+		{ key = "bar", label = "Capture bar", locked = true },
+	}, function(key, checked, selected) calls[#calls + 1] = { key, checked, selected } end, "Nowhere")
+	check(multi.label._text == "Nowhere", "nothing on: the placeholder")
+	multi:SetSelected({ map = true, minimap = true })
+	check(multi.label._text == "World map, Minimap" and #calls == 0, "SetSelected shows the ones on, without calling back")
+	multi:Click()
+	check(multi.list._shown, "a click opens the list")
+	local rows = multi.list.rows
+	check(#rows == 3 and rows[1].check._shown and not rows[3].check._shown and rows[2].note._text == "tracking", "one row a option, ticked ones filled, notes on the right")
+	check(rows[1].box._w == 16 and rows[1]._h == 28, "16 px boxes on 28 px rows")
+	rows[2]:Click()
+	check(#calls == 1 and calls[1][1] == "minimap" and calls[1][2] == false and multi.list._shown and multi.label._text == "World map", "unticking calls back and the list stays open")
+	rows[3]:Click()
+	check(#calls == 1 and rows[3]._alpha == 0.45, "a locked option can't be ticked and shows faint")
+	check(multi:GetSelected().map and not multi:GetSelected().minimap, "GetSelected reads what's on")
+	check(Focus(rows[1]), "an option's tip shows under the controller")
+	multi:SetOptions({ { key = "a", label = "A" }, { key = "b", label = "B" } })
+	multi:SetSelected({ a = true, b = true })
+	check(multi.label._text == "All", "every option on: All")
+	multi:Click()
+	check(not multi.list._shown, "a click on the field closes the list")
+	-- Scroll area: a bar only when the content is taller than the room, the wheel within it
+	local scroll = W:Scroll(UIParent, 400, 200)
+	scroll.SetVerticalScroll = function(self, v) self._vscroll = v end
+	scroll:Fit(150)
+	check(not scroll.thumb._shown, "content that fits: no bar")
+	scroll:Fit(600)
+	check(scroll.thumb._shown and scroll.content._w == 388, "taller content: a bar, and the content leaves room for it")
+	scroll._scripts.OnMouseWheel(scroll, -1)
+	check(scroll._vscroll == 44, "the wheel scrolls a row at a time: "..tostring(scroll._vscroll))
+	for _ = 1, 20 do scroll._scripts.OnMouseWheel(scroll, -1) end
+	check(scroll._vscroll == 400, "and stops at the end: "..tostring(scroll._vscroll))
+	-- Step bar: done ticked green, the current one ringed in the accent, failed a red cross, the rest small and faint
+	local went
+	local bar = W:StepBar(UIParent, 600, { "Claimed", { "Witnessed", "A second hunter saw it." }, "Confirmed", "Paid" }, function(i) went = i end)
+	check(bar._h == 64 and #bar.dots == 4 and #bar.lines == 3, "four dots on three lines, 64 high")
+	bar:Set(3, { "2m ago", "by Thane", "waiting" })
+	local d = bar.dots
+	check(d[1].mark._shown and d[1].mark._texture:find("tick$") and d[1].ring._vertexColor[2] == C.green[2], "a done step is ticked green")
+	check(d[3].ring._texture:find("ring%-bold$") and d[3].ring._vertexColor[1] == C.accent[1] and d[3].number._shown, "the current one ringed in the accent, numbered")
+	check(d[4]._w == 14 and d[3]._w == 18, "steps to come are smaller dots")
+	check(bar.lines[1]._color[2] == C.green[2] and bar.lines[3]._color[4] == 0.12, "the line is green behind done steps")
+	check(d[2].sub._text == "by Thane" and d[2].tooltipTitle == "Witnessed" and d[2].tooltipText == "A second hunter saw it.\n\nby Thane", "sub-lines, and each dot's tooltip its rule and note")
+	check(Focus(d[2]), "a dot explains its step under the controller")
+	d[1]:Click()
+	check(went == 1, "a done step goes back to it")
+	went = nil
+	d[4]:Click()
+	check(went == nil, "a step to come doesn't")
+	bar:Set(3, nil, { [2] = true })
+	check(d[2].mark._texture:find("cross$") and d[2].ring._vertexColor[1] == C.red[1] and bar.lines[2]._color[4] == 0.12, "a failed step is a red ring with a cross")
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

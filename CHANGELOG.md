@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.27.4] - 2026-10-18
+
+- When the player who killed you has designed a calling card on the website, your death card shows it: their background, border, plate, emblem and name, with three of their stats.
+- A Sort button at the top of the Nearby window steps through Threat (the usual order), Nearest and Last seen, and remembers your choice. On the Nearby tab the header shows just the count, so it fits beside the button.
+- The version in the menu shows one "v", without the daily data build's suffix.
+- On a raid card, the warning that you can't invite gets its own line above the buttons, and the card grows to fit it.
+
 ## [1.27.3] - 2026-10-17
 
 - Window themes, one for each poker felt: Stormwind, Orgrimmar, Elwynn Forest, Durotar, Stranglethorn Vale, Winterspring, Tanaris, Undercity, Ironforge and Darnassus. The felt fills the window behind see-through panels, and each theme brings its own colours. Your side's capital is the default; pick another in Settings, on the new Theme tab (the felt changes at once, its colours after a reload).

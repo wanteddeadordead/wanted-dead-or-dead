@@ -2996,7 +2996,7 @@ end)()
 	-- the light says so (1790270000 is the clock when the addon loaded)
 	WantedAppInfo = { running = "0.2.1", latest = "0.2.1", seen = 1790270000 - 5 * 3600, apps = 12 }
 	ns:PromptForApp()
-	check(lastDialog and lastDialog.title == "Is the Wanted app running?" and lastDialog.text:find("Start menu", 1, true),
+	check(lastDialog and lastDialog.title == "Is the Wanted app running?" and lastDialog.text:find("Start menu", 1, true) and lastDialog.text:find("Applications on a Mac", 1, true),
 		"an app that hasn't run for hours: the popup asks if it's running")
 	lastDialog = nil
 	ns.UI:Show("board")
@@ -5397,15 +5397,24 @@ end)()
 	check(Shown("Get the Wanted app to track challenges") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
 	-- Every page that needs the app says so: the calling card can't be saved without it (Home and Challenges already do)
 	ns.UI:Show("card")
-	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
-		"no app: the card page says saving needs the app")
+	local function Says(title, body)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and rawget(f, "tooltipText") == body and (not rawget(f, "explainedText") or f.explainedText._shown) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	check(Shown("Sample card. Needs the Wanted app.") and Says("Sample card", "Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
+		"no app: the card page says saving needs the app, how on hover")
 	ns.UI:Show("calendar")
 	check(Shown("Needs the Wanted app") and not Shown("Not known yet"), "no app: the calendar's season tile says it needs the app")
 	ns.UI:Show("hotspots")
 	check(Shown("Now = last 15 minutes. Counts only enemies a Wanted user has seen. Today's hot zones need the Wanted app."), "no app: the hotspots note says hot zones need the app")
 	ns.CallingCard:Show()
-	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
-		"no app: the calling-card window says saving needs the app")
+	check(Shown("Needs the Wanted app to save") and Says("Needs the Wanted app", "Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
+		"no app: the calling-card window says saving needs the app, how on hover")
 	WantedCallingCardFrame:Hide()
 	ns.UI:Show("challenges")
 	-- The app's version alone says it's there (an app that wrote no catch-up yet)
@@ -6269,6 +6278,34 @@ end)()
 	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
+end)()
+-- The You pages: no subtitles, and each card's explanation on hover (an (i) by its label, or the control's tooltip).
+-- Settings has its own block, on its rows
+;(function()
+	local function Tip(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and (not rawget(f, "explainedText") or f.explainedText._shown) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return type(f.tooltipText) == "function" and f.tooltipText() or f.tooltipText end
+			end
+		end
+	end
+	local function OnScreen(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	ns.UI:Show("web")
+	check(Tip("The website") and Tip("The website"):find("Wall of Shame", 1, true) and Tip("The desktop app"):find("Windows and Mac", 1, true),
+		"Website & app: what the site and the app do, behind an (i) each")
+	check(OnScreen("Login reminder") and Tip("Login reminder") == "Remind me at login when the app isn't set up.", "the login reminder is short, with the rest on hover")
+	ns.UI:Show("poster")
+	check(Tip("Open full size") and Tip("Open full size"):find("made-up amount", 1, true), "the poster's full-size button says what it does on hover")
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
@@ -7985,7 +8022,7 @@ end)()
 	end
 	ns.CallingCard:TakeMine(nil)
 	UI:Show("card")
-	check(shows("A sample card"), "the sample card before yours has come")
+	check(shows("Sample card"), "the sample card before yours has come")
 	local me = ns.Store:GetOrigin():match("^([^%-]+)")
 	ns.CallingCard:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "witness-emblem", background = "witness-bg", stats = { "kills", "honor", "rank" } },
 		unlocked = { "mat-silk", "witness-border", "witness-emblem", "witness-bg" }, stats = { kills = "42" } } })

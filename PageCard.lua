@@ -17,18 +17,24 @@ function private.Refresh()
 	local mine = CallingCard:MyCard()
 	if mine then
 		CallingCard:Draw(private.banner, mine.card, mine.name, mine.stats)
-		private.note:SetText(format("%d of %d pieces unlocked. Change your card any time; the Wanted app sends it to wanteddeadordead.com.", mine.unlocked, mine.total))
+		private.note:SetText(format("%d of %d pieces unlocked", mine.unlocked, mine.total))
+		W:Explain(private.note, nil)
 	else
 		local sample, stats = CallingCard:Sample()
 		CallingCard:Draw(private.banner, sample, UnitName("player") or "Your Name", stats)
-		private.note:SetText((not Wanted:HasApp() and Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up." or "A sample card. Yours shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts)."))
+		if not Wanted:HasApp() then
+			private.note:SetText("Sample card. Needs the Wanted app.")
+			W:Explain(private.note, "Sample card", Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up.")
+		else
+			private.note:SetText("Sample card")
+			W:Explain(private.note, "Sample card", "Yours shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts).")
+		end
 	end
 end
 
 UI:RegisterPage("card", {
 	group = "You",
 	title = "Calling card",
-	subtitle = "Your banner on wanteddeadordead.com and on the death card of anyone you kill: the art your badges unlock.",
 	order = 6,
 	menuLabel = "You",
 	tabLabel = "Calling card",
@@ -38,6 +44,8 @@ UI:RegisterPage("card", {
 	build = function(container, width)
 		private.banner = CallingCard:Banner(container, min(width, BANNER_WIDTH))
 		private.banner:SetPoint("TOPLEFT", 0, -4)
+		W:InfoGlyph(container, "Calling card", "Your banner on wanteddeadordead.com and on the death card of anyone you kill: the art your badges unlock.")
+			:SetPoint("TOPLEFT", private.banner, "TOPRIGHT", 8, 0)
 		private.note = Theme:Text(container, "small", "", C.muted)
 		private.note:SetPoint("TOPLEFT", private.banner, "BOTTOMLEFT", 0, -56)
 		private.note:SetWidth(min(width, BANNER_WIDTH))
@@ -46,7 +54,7 @@ UI:RegisterPage("card", {
 			CallingCard:Show()
 		end)
 		change:SetPoint("TOPLEFT", private.note, "BOTTOMLEFT", 0, -12)
-		W:AttachTooltip(change, "Change your card", "Step through the pieces you've unlocked, or try any combination. Also /wanted card.")
+		W:AttachTooltip(change, "Change your card", "Step through the pieces you've unlocked, or try any combination. Change it any time; the Wanted app sends it to wanteddeadordead.com. Also /wanted card.")
 		private.Refresh()
 	end,
 	refresh = private.Refresh,

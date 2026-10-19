@@ -81,6 +81,7 @@ PageSiege.lua
 PageGuildWars.lua
 PageWarZones.lua
 PageWarMarks.lua
+PageWarGuild.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua

@@ -17903,10 +17903,48 @@ end
 	slider.slider._scripts.OnValueChanged(slider.slider, 15, true)
 	check(ns.GuildWars:Pending("tax") and ns.GuildWars:Pending("tax").data.percent == 15 and OnScreen("Sent; waiting for the site"), "moving it asks the site, and says so")
 	game.SetLeader(false)
+	-- Guild: the war officers, read-only for members; the guild master ticks ranks and adds or leaves out by name
+	local realInGuild, realGuildInfo = IsInGuild, GetGuildInfo
+	IsInGuild, GetGuildInfo = function() return true end, function() return "EMPIRE" end
+	ns.db.warActions = {}
+	G:Take(GuildWarsSample(clock))
+	ns.UI:Show("warguild")
+	local function Button(text)
+		for _, f in ipairs(Mock.created) do
+			local l = rawget(f, "label")
+			if type(l) == "table" and l._text == text and f._scripts.OnClick then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return f end
+			end
+		end
+	end
+	check(ns.UI:IsShown("warguild") and OnScreen("WAR OFFICERS NOW · 5") and OnScreen("Default") and OnScreen("Set by the guild master") and not Button("Save"),
+		"Guild: the war officers by default, read-only for a member")
+	game.SetLeader(true)
+	ns.UI:Refresh()
+	check(Button("Save") and Button("Reset to default") and not OnScreen("Set by the guild master"), "the guild master gets the controls")
+	local box
+	for _, f in ipairs(Mock.created) do if f._kind == "EditBox" and rawget(f, "placeholder") and f.placeholder._text == "Member name" then box = f end end
+	box:SetText("Strix Primal-Realm")
+	Button("Add")._scripts.OnClick(Button("Add"))
+	box:SetText("Gidhon Wins")
+	Button("Leave out")._scripts.OnClick(Button("Leave out"))
+	check(OnScreen("+ Strix Primal") and OnScreen("- Gidhon Wins") and OnScreen("WAR OFFICERS NOW · 5") and OnScreen("Member +"), "added and left out by name, the list follows")
+	Button("Save")._scripts.OnClick(Button("Save"))
+	local saved = G:Pending("officers")
+	check(saved and table.concat(saved.data.add, ",") == "Strix Primal" and table.concat(saved.data.out, ",") == "Gidhon Wins" and #saved.data.ranks == 3
+		and OnScreen("Sent; waiting for the site"), "Save asks the site: ranks, added, left out")
+	local names = {}
+	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
+	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Strix Primal", "what was saved counts until the site answers: "..table.concat(names, ","))
+	IsInGuild, GetGuildInfo = realInGuild, realGuildInfo
+	game.SetLeader(false)
+	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)
 	noGuild.guild = nil
 	G:Take(noGuild)
-	ns.UI:Refresh()
+	ns.UI:Show("warmarks")
 	check(not OnScreen("EMPIRE TREASURY") and (OnScreen("1,262") or OnScreen("1262")), "no guild: no treasury or tax, the purse still")
 	game.Restore()
 	G:Take(nil)

@@ -211,7 +211,9 @@ end
 ---@return boolean default
 function GuildWars:OfficerSetting()
 	local guild = GuildWars:Guild()
-	local saved = guild and type(guild.officers) == "table" and guild.officers
+	-- What the guild master just saved counts until the site's answer comes in
+	local pending = GuildWars:Pending("officers")
+	local saved = pending and pending.data or guild and type(guild.officers) == "table" and guild.officers
 	local setting = { ranks = { [0] = true }, add = {}, out = {} }
 	if saved and type(saved.ranks) == "table" then
 		for _, index in ipairs(saved.ranks) do

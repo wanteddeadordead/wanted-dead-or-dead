@@ -623,6 +623,7 @@ local REFUSALS = {
 	ally_not_invited = "Their guild isn't invited",
 	not_same_faction = "Not of your faction.",
 	tax_range = "The tax is 0 to 25%.",
+	contested = "Two groups claim this guild: the site is waiting for its roster to agree.",
 	held = "Waiting for the guild's roster to agree.",
 	bad_request = "The site couldn't read the request.",
 	unavailable = "The site doesn't run guild wars yet.",

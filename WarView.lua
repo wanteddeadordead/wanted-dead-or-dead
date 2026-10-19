@@ -88,7 +88,9 @@ function private.Guild(raw, myGuid)
 	info = type(info) == "table" and info or {}
 	local guild = { id = me.id, name = info.name or me.name, faction = info.faction or me.faction, treasury = info.treasury,
 		tax = info.tax, membersWithApp = info.membersWithApp, officers = info.officers, rankNames = info.rankNames,
-		rankInvite = info.rankInvite, me = me, staked = 0, taxBy = info.taxSetBy, taxAt = info.taxSetAt }
+		rankInvite = info.rankInvite, me = me, staked = 0, taxBy = info.taxSetBy, taxAt = info.taxSetAt,
+		-- A tax set today takes effect at taxFrom (the next midnight US Eastern)
+		taxNext = info.taxNext, taxFrom = info.taxFrom }
 	-- The treasury's last 7 days, from the ledger
 	local week = type(info.week) == "table" and info.week or nil
 	if week then

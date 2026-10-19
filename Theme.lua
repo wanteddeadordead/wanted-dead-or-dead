@@ -208,6 +208,74 @@ do
 	Theme.Fonts.display = display
 end
 
+-- Sizes (Settings): the main window, the Nearby window and the HUDs each have one, in percent
+Theme.SIZE_LOW, Theme.SIZE_HIGH, Theme.SIZE_STEP = 80, 150, 5
+
+---A size setting as it applies: within 80% to 150%, on a 5% step; 100% for nothing or junk. Worked out in whole
+---percent, so 120% is 1.2 and not 1.2000000000000002.
+---@param scale any
+---@return number
+function Theme:ClampScale(scale)
+	scale = tonumber(scale)
+	if not scale or scale ~= scale then
+		return 1
+	end
+	local percent = floor(scale * 100 / Theme.SIZE_STEP + 0.5) * Theme.SIZE_STEP
+	return max(Theme.SIZE_LOW, min(Theme.SIZE_HIGH, percent)) / 100
+end
+
+---Where a frame's top left corner goes to be on screen, in the screen's units: moved in from the edges, and when the
+---frame is bigger than the screen, its top left (the title bar) on screen.
+---@return number left, number top
+function Theme:OnScreen(left, top, width, height, screenWidth, screenHeight)
+	left = max(0, min(left, screenWidth - width))
+	top = min(screenHeight, max(top, height))
+	return left, top
+end
+
+---Sizes a frame on UIParent from a size setting, keeping its centre where it was and the whole of it on screen.
+---Returns where it now is, { point, x, y } as the windows save it, or nil when it has no place on screen yet.
+---@param frame Frame
+---@param scale any a size setting (Theme:ClampScale)
+---@return table?
+function Theme:SetFrameScale(frame, scale)
+	scale = Theme:ClampScale(scale)
+	local old = frame:GetScale()
+	local left, top = frame:GetLeft(), frame:GetTop()
+	frame:SetScale(scale)
+	if type(left) ~= "number" or type(top) ~= "number" then
+		return nil
+	end
+	-- In UIParent's units: the frame's own are its scale times smaller
+	local width, height = frame:GetWidth(), frame:GetHeight()
+	local centreX, centreY = (left + width / 2) * old, (top - height / 2) * old
+	local screenWidth, screenHeight = UIParent:GetWidth(), UIParent:GetHeight()
+	left, top = Theme:OnScreen(centreX - width * scale / 2, centreY + height * scale / 2, width * scale, height * scale,
+		screenWidth, screenHeight)
+	local x, y = left / scale, (top - screenHeight) / scale
+	frame:ClearAllPoints()
+	frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+	return { point = "TOPLEFT", x = x, y = y }
+end
+
+---Sizes a frame from a size setting about its own anchor, which stays where it is on screen (a HUD that grows from
+---its centre keeps doing so). Returns its offsets in the new size, for a saved place.
+---@param frame Frame
+---@param scale any a size setting (Theme:ClampScale)
+---@return number? x, number? y
+function Theme:RescaleInPlace(frame, scale)
+	scale = Theme:ClampScale(scale)
+	local old = frame:GetScale()
+	local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+	frame:SetScale(scale)
+	if not point or type(x) ~= "number" or type(y) ~= "number" then
+		return nil
+	end
+	x, y = x * old / scale, y * old / scale
+	frame:SetPoint(point, relativeTo, relativePoint, x, y)
+	return x, y
+end
+
 ---A solid colour texture covering a frame.
 function Theme:Fill(frame, color, layer)
 	local texture = frame:CreateTexture(nil, layer or "BACKGROUND")

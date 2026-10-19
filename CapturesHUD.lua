@@ -238,6 +238,10 @@ end
 ---battleground's capture bar sits under the minimap; ours did too, and under a moved minimap or another addon's
 ---panels it was never seen: the maintainer stood in a point on 2026-10-16 with the bar shown and nothing on screen.)
 function private.Place(bar)
+	-- Its size (Settings, Capture fronts), the capture bar's with it
+	local scale = Wanted.Theme:ClampScale(Captures:Settings().scale)
+	bar:SetScale(scale)
+	bar.capture:SetScale(scale)
 	bar:ClearAllPoints()
 	if UIWidgetTopCenterContainerFrame then
 		bar:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
@@ -252,6 +256,15 @@ function private.Place(bar)
 	if announce and announce.ClearAllPoints and announce.SetPoint then
 		announce:ClearAllPoints()
 		announce:SetPoint("TOP", capture, "BOTTOM", 0, -30)
+	end
+end
+
+---Sizes the HUD and its capture bar (Settings), saved for the account.
+---@param scale number 0.8 to 1.5
+function CapturesHUD:SetScale(scale)
+	Captures:Settings().scale = Wanted.Theme:ClampScale(scale)
+	if private.bar then
+		private.Place(private.bar)
 	end
 end
 

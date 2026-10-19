@@ -18463,6 +18463,17 @@ end
 	sights = {}
 	ns.GuildWars:Sight()
 	check(sights[1]:sub(-6) == " 0 0 -", "nobody moving or fighting for 5 minutes: nobody counted: "..sights[1])
+	-- Only on the war's layer once it's fixed
+	local realLayer = ns.Shard.Current
+	G:War(1).battle.layer = "1-1424-3"
+	ns.Shard.Current = function() return "1-1424-9" end
+	sights = {}
+	ns.GuildWars:Sight()
+	check(#sights == 0, "another layer: no census or witness")
+	ns.Shard.Current = function() return "1-1424-3" end
+	ns.GuildWars:Sight()
+	check(sights[1] and sights[1]:sub(-9) == " 1424-3" or (sights[1] and sights[1]:find(" 1%-1424%-3$")), "the war's layer: written with it")
+	ns.Shard.Current, G:War(1).battle.layer = realLayer, nil
 	clock = savedClock
 	GetUnitSpeed, UnitAffectingCombat, UnitIsAFK = realSpeed, realCombat, realAFK
 	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC

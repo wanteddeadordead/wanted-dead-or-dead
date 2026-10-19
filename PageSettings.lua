@@ -467,18 +467,14 @@ function private.BuildLook(panel, width)
 		swatch.key = theme.key
 		swatch:SetScript("OnClick", function()
 			Theme:Choose(theme.key)
-			UI:PreviewTheme(theme.key)
 			private.RefreshLook()
 		end)
 		swatch:SetScript("OnEnter", function(self) Theme:SetBorderColor(self, C.borderLight) end)
 		swatch:SetScript("OnLeave", function() private.RefreshLook() end)
 		tinsert(private.swatches, swatch)
 	end
-	private.lookNote = Theme:Text(card, "tiny", "", C.muted)
-	private.lookNote:SetPoint("BOTTOMLEFT", 16, 16)
-	local reload = W:Button(card, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
-	reload:SetPoint("BOTTOMRIGHT", -16, 10)
-	private.lookReload = reload
+	local note = Theme:Text(card, "tiny", "Your side's capital is the default until you pick one. The poker table's felt follows the theme.", C.muted)
+	note:SetPoint("BOTTOMLEFT", 16, 16)
 
 	card = private.Card(panel, -274, 130, "Class icons", width)
 	local previous = nil
@@ -519,7 +515,7 @@ function private.BuildLook(panel, width)
 	size:SetPoint("TOPLEFT", 0, -36)
 end
 
----Borders the chosen theme and says whether a /reload is needed for its colours.
+---Borders the chosen theme.
 function private.RefreshLook()
 	if not private.swatches then
 		return
@@ -529,11 +525,6 @@ function private.RefreshLook()
 		Theme:SetBorderColor(swatch, swatch.key == chosen and C.accent or C.border)
 		swatch.name:SetTextColor(unpack(swatch.key == chosen and C.white or C.muted))
 	end
-	local applied = Theme.current and Theme.current.key
-	local pending = applied ~= chosen
-	private.lookNote:SetText(pending and format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(chosen).name)
-		or "Your side's capital is the default until you pick one. The poker table's felt follows the theme.")
-	private.lookReload:SetShown(pending)
 end
 
 

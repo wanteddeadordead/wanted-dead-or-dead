@@ -35,7 +35,7 @@ function private.Create()
 	f:EnableMouse(true)
 	Theme:Skin(f, C.panelSolid, C.borderLight)
 	local stripe = f:CreateTexture(nil, "ARTWORK")
-	stripe:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	Theme:Paint(stripe, C.accent, 1)
 	stripe:SetPoint("TOPLEFT", 1, -1)
 	stripe:SetPoint("TOPRIGHT", -1, -1)
 	stripe:SetHeight(3)
@@ -124,7 +124,7 @@ function private.Fill(guid, how)
 	local frame = looks.frame and Wanted.Achievements.FRAME_COLORS[looks.frame]
 	local edge, stripe = frame or C.borderLight, frame or C.accent
 	Theme:SetBorderColor(f, edge)
-	f.stripe:SetColorTexture(stripe[1], stripe[2], stripe[3], 1)
+	Theme:Paint(f.stripe, stripe, 1)
 	f.stamp:SetText(Wanted.Achievements:StampText(looks.stamp) or "")
 	local who = {}
 	if d.level or d.skull then

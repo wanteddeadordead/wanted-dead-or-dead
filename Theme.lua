@@ -31,6 +31,8 @@ local C = {
 	accent = { 0.8, 0.18, 0.16 },
 	accentHover = { 0.92, 0.26, 0.22 },
 	accentDim = { 0.8, 0.18, 0.16, 0.22 },
+	-- Text on an accent fill (the primary button): white, or near black on a light accent (Theme:Apply)
+	accentText = { 1, 1, 1 },
 	gold = { 1, 0.8, 0.32 },
 	green = { 0.36, 0.8, 0.46 },
 	greenDim = { 0.36, 0.8, 0.46, 0.18 },
@@ -91,8 +93,65 @@ function Theme:Get(key)
 	return side == "Horde" and THEMES[2] or THEMES[1]
 end
 
----Applies a theme to the palette: call before any window is drawn (a window drawn already keeps its colours until a
----/reload). Panels are see-through over the felt, as the theme's art is meant to show.
+-- What a theme changes, and what's drawn in it, so another theme re-tints everything at once (no /reload). Regions
+-- painted in one of these palette entries through Theme:Paint are kept (weakly), with the alpha they were given; a
+-- widget whose colours come from its state (a button, a switch) registers a repaint instead.
+local THEMED = {}
+for _, name in ipairs({ "bg", "titleBar", "sidebar", "panel", "panelAlt", "panelSolid", "input", "accent", "accentHover", "accentDim", "accentText" }) do
+	THEMED[C[name]] = true
+end
+local painted = setmetatable({}, { __mode = "k" }) -- region -> { color, alpha }
+local repaints = setmetatable({}, { __mode = "k" }) -- frame -> fn(frame)
+local appliedListeners = {}
+
+local function SetColor(region, color, alpha)
+	local a = alpha or color[4] or 1
+	if region:GetObjectType() == "FontString" then
+		region:SetTextColor(color[1], color[2], color[3], a)
+	else
+		region:SetColorTexture(color[1], color[2], color[3], a)
+	end
+end
+
+---Colours a texture (or a font string's text) from the palette; in a colour the theme sets, it follows the theme.
+---@param region Texture|FontString
+---@param color table a palette entry, or any colour
+---@param alpha number? instead of the colour's own
+function Theme:Paint(region, color, alpha)
+	SetColor(region, color, alpha)
+	painted[region] = THEMED[color] and { color, alpha } or nil
+end
+
+---Calls fn(frame) when a theme is applied, while the frame lives: for a widget that works its colours out from its
+---state.
+function Theme:OnRepaint(frame, fn)
+	repaints[frame] = fn
+end
+
+---Calls fn(theme) after a theme is applied, for what isn't a region or a widget (text with colour codes).
+function Theme:OnApplied(fn)
+	tinsert(appliedListeners, fn)
+end
+
+---The contrast ratio of two colours (WCAG): 1 to 21.
+function Theme:Contrast(a, b)
+	local function Luminance(color)
+		local sum = 0
+		for i, weight in ipairs({ 0.2126, 0.7152, 0.0722 }) do
+			local v = color[i]
+			v = v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4
+			sum = sum + weight * v
+		end
+		return sum
+	end
+	local la, lb = Luminance(a), Luminance(b)
+	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+end
+
+local ACCENT_TEXT_DARK = { 0.06, 0.05, 0.05 }
+
+---Applies a theme to the palette and re-tints everything drawn in its colours. Panels are see-through over the felt,
+---as the theme's art is meant to show.
 ---@param key string?
 function Theme:Apply(key)
 	local theme = Theme:Get(key)
@@ -108,6 +167,18 @@ function Theme:Apply(key)
 	Put("accent", { a[1], a[2], a[3], 1 })
 	Put("accentHover", { min(1, a[1] * 1.12 + 0.04), min(1, a[2] * 1.12 + 0.04), min(1, a[3] * 1.12 + 0.04), 1 })
 	Put("accentDim", { a[1], a[2], a[3], 0.2 })
+	-- White on the accent where it reads, near black on a light one (Darnassus, Winterspring, Tanaris)
+	local white = Theme:Contrast(C.white, a)
+	Put("accentText", white >= 4.5 and C.white or (Theme:Contrast(ACCENT_TEXT_DARK, a) > white and ACCENT_TEXT_DARK or C.white))
+	for region, entry in pairs(painted) do
+		SetColor(region, entry[1], entry[2])
+	end
+	for frame, fn in pairs(repaints) do
+		fn(frame)
+	end
+	for _, fn in ipairs(appliedListeners) do
+		fn(theme)
+	end
 	return theme
 end
 
@@ -120,11 +191,12 @@ function Theme:OnChosen(fn)
 	tinsert(chosenListeners, fn)
 end
 
----Chooses the window theme (Settings, Theme): saved, and passed on to what follows it. Its colours apply at the next
----/reload; the window's felt and the poker table's change at once.
+---Chooses the window theme (Settings, Theme): saved, applied at once, and passed on to what follows it (the window's
+---felt, the poker table's).
 ---@param key string
 function Theme:Choose(key)
 	Wanted.db.settings.theme = Theme:Get(key).key
+	Theme:Apply(Wanted.db.settings.theme)
 	for _, fn in ipairs(chosenListeners) do
 		pcall(fn, Wanted.db.settings.theme)
 	end
@@ -281,7 +353,7 @@ end
 function Theme:Fill(frame, color, layer)
 	local texture = frame:CreateTexture(nil, layer or "BACKGROUND")
 	texture:SetAllPoints()
-	texture:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+	Theme:Paint(texture, color)
 	return texture
 end
 
@@ -326,7 +398,7 @@ end
 
 function Theme:SetBorderColor(frame, color)
 	for _, edge in ipairs(frame._edges or {}) do
-		edge:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+		Theme:Paint(edge, color)
 	end
 end
 
@@ -340,7 +412,7 @@ end
 
 function Theme:SetBg(frame, color)
 	if frame._bg then
-		frame._bg:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+		Theme:Paint(frame._bg, color)
 	end
 end
 
@@ -349,7 +421,7 @@ function Theme:Text(parent, font, text, color, layer)
 	local fs = parent:CreateFontString(nil, layer or "OVERLAY")
 	fs:SetFontObject(Theme.Fonts[font or "body"])
 	if color then
-		fs:SetTextColor(color[1], color[2], color[3])
+		Theme:Paint(fs, color, 1)
 	end
 	fs:SetText(text or "")
 	fs:SetJustifyH("LEFT")
@@ -392,8 +464,7 @@ end
 function Theme:Line(parent, color)
 	local line = parent:CreateTexture(nil, "BORDER")
 	line:SetHeight(1)
-	local c = color or C.border
-	line:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+	Theme:Paint(line, color or C.border)
 	return line
 end
 

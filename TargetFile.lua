@@ -59,7 +59,7 @@ function private.Create()
 	bar:SetPoint("TOPLEFT", 1, -1)
 	bar:SetPoint("TOPRIGHT", -1, -1)
 	bar:SetHeight(3)
-	bar:SetColorTexture(C.red[1], C.red[2], C.red[3], 1)
+	Theme:Paint(bar, C.accent, 1)
 	local close = W:Button(frame, "X", "ghost", 28, 28, function() frame:Hide() end)
 	close:SetPoint("TOPRIGHT", -8, -8)
 

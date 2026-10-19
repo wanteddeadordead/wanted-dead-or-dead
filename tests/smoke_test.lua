@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true, color = true, shown = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -6265,6 +6265,73 @@ end)()
 	ns.db.settings.uiScale, ns.db.settings.window = savedScale, savedWindow
 	frame:SetScale(Theme:ClampScale(savedScale))
 	UIParent._w, UIParent._h = realW, realH
+end)()
+-- Themes apply live: choosing one re-tints what's drawn in its colours, with no /reload; text on the accent reads
+;(function()
+	local Theme, W, C = ns.Theme, ns.Widgets, ns.Theme.C
+	local savedTheme = ns.db.settings.theme
+	local function Near(color, want, what)
+		check(math.abs(color[1] - want[1]) < 1e-6 and math.abs(color[2] - want[2]) < 1e-6 and math.abs(color[3] - want[3]) < 1e-6,
+			what..": "..table.concat({ color[1], color[2], color[3] }, ", "))
+	end
+	ns.UI:Show("settings")
+	Theme:Choose("stormwind")
+	local primary = W:Button(UIParent, "Post", "primary", 80, 24)
+	local switch = W:Switch(UIParent)
+	switch:SetChecked(true)
+	local tabs = W:Tabs(UIParent, { { key = "a", label = "One" }, { key = "b", label = "Two" } }, nil, 80)
+	tabs:Select("a", true)
+	local slider = W:Slider(UIParent, "Size", 200, 0, 10, 1, tostring)
+	local panel = W:Card(UIParent)
+	local danger = W:Button(UIParent, "Delete", "danger", 80, 24)
+	local bar = W:StepBar(UIParent, 300, { { title = "One" }, { title = "Two" } })
+	Theme:Choose("undercity")
+	local green = Theme:Get("undercity").accent
+	check(ns.db.settings.theme == "undercity" and Theme.current.key == "undercity", "Undercity is chosen and applied")
+	Near(primary._bg._color, green, "choosing Undercity makes the primary button green")
+	Near(primary._edges[1]._color, green, "and its border")
+	Near(switch.track._color, green, "a switch that's on")
+	Near(tabs.buttons[1].underline._color, green, "the shown tab's underline")
+	Near(slider.thumb._color, green, "the slider's thumb")
+	Near(panel._bg._color, C.panel, "a card's panel takes the theme's tint")
+	check(panel._bg._color[4] == C.panel[4], "with the panel's own see-through")
+	Near(danger._edges[1]._color, C.red, "the danger button stays red")
+	Near(bar.dots[1].ring._vertexColor, green, "the step bar's current step")
+	Near(primary.label._textColor, C.accentText, "the primary button's text is the accent's text colour")
+	local brand
+	for _, fs in ipairs(Mock.fontStrings) do
+		if tostring(fs._text):find("DEAD OR", 1, true) and fs._parent and fs._parent ~= UIParent then brand = fs end
+	end
+	check(brand and brand._text:find(Theme:Hex(green), 1, true), "the brand's WANTED: takes the accent at once")
+	for _, fs in ipairs(Mock.fontStrings) do
+		check(fs._text ~= "Reload to apply", "no Reload to apply button: themes apply at once")
+	end
+	-- Text on the accent: at least 4.5:1 in every theme, dark on the light ones
+	for _, theme in ipairs(Theme.THEMES) do
+		Theme:Apply(theme.key)
+		local ratio = Theme:Contrast(C.accentText, theme.accent)
+		check(ratio >= 4.5, theme.name.."'s primary button text is readable: "..format("%.2f", ratio))
+		Near(primary.label._textColor, C.accentText, theme.name.."'s primary button repaints its text")
+	end
+	for _, key in ipairs({ "darnassus", "winterspring", "tanaris" }) do
+		Theme:Apply(key)
+		check(C.accentText[1] < 0.2, Theme:Get(key).name.." has a light accent: dark text on it")
+	end
+	check(math.abs(Theme:Contrast({ 1, 1, 1 }, { 0, 0, 0 }) - 21) < 1e-9, "white on black is 21:1")
+	Theme:Choose(savedTheme or "stormwind")
+	ns.db.settings.theme = savedTheme
+end)()
+-- The Calendar's legend: its lines at least 4 px apart beyond their text's size, so they don't touch
+;(function()
+	ns.UI:Show("calendar")
+	local wow, event
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "WoW Forever" and fs._point and fs._point[1] == "BOTTOMLEFT" then wow = fs end
+		if fs._text == "Event" and fs._point and fs._point[1] == "BOTTOMLEFT" then event = fs end
+	end
+	check(wow and event, "the Calendar legend is built")
+	local gap = wow._point[3] - event._point[3]
+	check(gap >= wow._font._size + 4, "legend lines "..gap.." apart for "..wow._font._size.." px text")
 end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width

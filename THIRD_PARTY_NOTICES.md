@@ -45,8 +45,8 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-The interface text uses **Barlow Semi Condensed** (Medium and SemiBold) by The Barlow Project Authors,
-`Media/fonts/`, under the SIL Open Font License 1.1 (full text in `Media/fonts/Barlow-OFL.txt`).
+The interface text uses **Inter** (Medium and SemiBold) by The Inter Project Authors (https://github.com/rsms/inter),
+`Media/fonts/`, under the SIL Open Font License 1.1 (full text in `Media/fonts/Inter-OFL.txt`).
 
 The wanted poster's lettering uses **Rye** by Sorkin Type Co, `Media/Rye.ttf`, under the SIL Open Font
 License 1.1 (full text in `Media/Rye-OFL.txt`).

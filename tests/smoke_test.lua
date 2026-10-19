@@ -5449,6 +5449,18 @@ end)()
 	check(TipOf("Challenge points") and TipOf("Challenge points"):find("make no rank", 1, true) and not Shown("Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's."),
 		"the score explains itself on hover")
 	check(TipOf("This week") == "Ends Sunday 11:59 PM ET." and Shown("4 days in a row"), "when the week ends is on hover")
+	-- Today's hot zones: a 2x pill beside each zone on its line, the ">" on the label's line, the tip under the card
+	local hotCard
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "TODAY'S HOT ZONES" then hotCard = fs._parent end
+	end
+	check(hotCard and hotCard.arrow._point[1] == "TOPRIGHT" and hotCard.arrow._point[2] == -16 and hotCard.arrow._point[3] == -14, "the hot zones card's > is on its label's line")
+	check(hotCard.tooltipAnchor == "ANCHOR_BOTTOM", "its tip opens under it, clear of the tabs")
+	for i, slot in ipairs(hotCard.zones) do
+		check(slot.double._shown and slot.double.text._text == "2x", "hot zone "..i.." has its 2x pill")
+		check(slot.enemies._point[3] - 12 >= -(112 - 8), "hot zone "..i.."'s line stays inside the card: "..slot.enemies._point[3])
+	end
+	check(TipOf("Kills count double"), "the pill says kills count double")
 
 	-- A later catch-up: the daily done is announced once (challenges have no ranks to announce)
 	local later = Sample({ t = clock })

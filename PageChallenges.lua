@@ -13,6 +13,7 @@ local GAP = 10
 local LEFT_WIDTH = 478
 local DAILY_WIDTH = 262
 local TOP_HEIGHT = 112
+local HOT_PILL_ROOM = 40 -- a hot zone's name stops short of its 2x pill
 local WEEK_TOP = -(TOP_HEIGHT + GAP)
 local WEEK_ROW = 40
 local WEEK_HEIGHT = 36 + 3 * WEEK_ROW
@@ -93,21 +94,30 @@ function private.BuildHot(container)
 	local card = W:CardButton(container, function() UI:Show("hotspots") end)
 	card:SetPoint("TOPLEFT", DAILY_WIDTH + GAP, 0)
 	card:SetSize(width, TOP_HEIGHT)
-	W:AttachTooltip(card, "Hotspots", "Where enemy players are right now.")
+	-- Under the card: above it, the tip covered the page's tabs
+	W:Explain(card, "Hotspots", "Where enemy players are right now. Click to open Hotspots.", "ANCHOR_BOTTOM")
 	local label = W:SectionLabel(card, "Today's hot zones")
 	label:SetPoint("TOPLEFT", 16, -14)
+	-- The card's ">" on the label's line, as the other cards' corner text sits
+	card.arrow:ClearAllPoints()
+	card.arrow:SetPoint("TOPRIGHT", -16, -14)
 	card.zones = {}
 	for i = 1, 2 do
+		local y = -36 - (i - 1) * 36
 		local zone = Theme:Text(card, "body", "")
-		zone:SetPoint("TOPLEFT", 16, -32 - (i - 1) * 34)
-		zone:SetWidth(width - 32)
-		zone.fitWidth = width - 32
+		zone:SetPoint("TOPLEFT", 16, y)
+		-- Room left for the 2x pill after it
+		zone:SetWidth(width - 32 - HOT_PILL_ROOM)
+		zone.fitWidth = width - 32 - HOT_PILL_ROOM
+		-- Kills count double in a hot zone: a pill on its line, where the amber line under the rows had no room
+		local double = W:Pill(card)
+		double:SetPoint("LEFT", zone, "LEFT", 0, 0)
+		W:Explain(double, "Kills count double", "Kills in today's hot zones count twice for challenges.")
+		double:Hide()
 		local enemies = Theme:Text(card, "tiny", "")
-		enemies:SetPoint("TOPLEFT", 16, -49 - (i - 1) * 34)
-		card.zones[i] = { zone = zone, enemies = enemies }
+		enemies:SetPoint("TOPLEFT", 16, y - 18)
+		card.zones[i] = { zone = zone, enemies = enemies, double = double }
 	end
-	card.double = Theme:Text(card, "tiny", "Kills count double", C.amber)
-	card.double:SetPoint("BOTTOMLEFT", 16, 10)
 	private.hot = card
 end
 
@@ -297,15 +307,18 @@ function private.RefreshHot(data)
 		local hot = not dayOver and data.hot[i]
 		if hot then
 			private.Fit(slot.zone, { hot.zone..(hot.band and Theme:Colorize("  "..hot.band, C.faint) or ""), hot.zone }, "small")
+			slot.double:Set("2x", C.amber)
+			slot.double:ClearAllPoints()
+			slot.double:SetPoint("LEFT", slot.zone, "LEFT", min(ceil(slot.zone:GetUnboundedStringWidth()), slot.zone.fitWidth) + 8, 0)
 			local group = byZone[strlower(hot.zone)]
 			local now = group and group.recent or 0
 			slot.enemies:SetText(now > 0 and Theme:Colorize(format("%d enem%s now", now, now == 1 and "y" or "ies"), C.red) or Theme:Colorize("No enemies seen there now", C.faint))
 		else
 			slot.zone:SetText(i == 1 and Theme:Colorize("None yet today", C.faint) or "")
 			slot.enemies:SetText("")
+			slot.double:Hide()
 		end
 	end
-	private.hot.double:SetShown(not dayOver and #data.hot > 0)
 end
 
 function private.RefreshWeek(data, mine)

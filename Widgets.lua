@@ -931,7 +931,7 @@ end
 
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), maxLetters
----(of a multiline box, default 255) }, over (a window to centre on, rather than the Wanted window or the screen), width
+---(of a multiline box, default 255), tip = { title, body } (the box's tooltip: how to copy what's in it) }, over (a window to centre on, rather than the Wanted window or the screen), width
 ---(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
@@ -1022,6 +1022,8 @@ function W:Dialog(options)
 	else
 		frame.input:Hide()
 	end
+	local inputTip = options.input and options.input.tip
+	W:Explain(frame.input, inputTip and inputTip[1], inputTip and inputTip[2])
 	local choice = options.choice
 	frame.choiceLabel:SetShown(choice ~= nil)
 	frame.choice:SetShown(choice ~= nil)

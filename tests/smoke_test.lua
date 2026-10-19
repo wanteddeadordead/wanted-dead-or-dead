@@ -18453,6 +18453,13 @@ end
 	local witnessHead = format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock)
 	check(sights[2] and sights[2]:sub(1, #witnessHead) == witnessHead and sights[2]:find("Player-2-0A", 1, true) and sights[2]:find("Player-2-0B", 1, true)
 		and sights[2]:find("Player-1-002", 1, true) and not sights[2]:find(ME..",", 1, true), "at the Mid tower: everyone seen there, either side: "..tostring(sights[2]))
+	-- At a point seeing nobody: still a witness line, empty (it disproves a forged presence there)
+	local savedPlates = plateUnits
+	plateUnits = {}
+	sights = {}
+	ns.GuildWars:Sight()
+	check(sights[2] == witnessHead.."-", "nobody seen at the point: an empty witness line: "..tostring(sights[2]))
+	plateUnits = savedPlates
 	-- Gone AFK: out of the census at once; still: out after 5 minutes
 	afk.nameplate1 = true
 	speeds.nameplate1 = 0

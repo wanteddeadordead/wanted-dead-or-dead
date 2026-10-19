@@ -18426,6 +18426,14 @@ end
 	check(sights[1] == format("WANTEDC1 %s census 7 %s %d 1 2 -", ns.db.accountMark, ME, clock), "the census: one Horde and two Alliance on neither roster: "..tostring(sights[1]))
 	check(sights[2] and sights[2]:sub(1, #format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock)) == format("WANTEDC1 %s witness 7 %s %d hb-mid-a-tower - ", ns.db.accountMark, ME, clock) and sights[2]:find("Player-2-0A", 1, true)
 		and sights[2]:find("Player-2-0B", 1, true) and not sights[2]:find("Player-1-002", 1, true), "at the Mid tower: the enemies seen there: "..tostring(sights[2]))
+	-- And our presence there for the site, on the presence line (WANTEDP1) with the war's point id
+	local presence = {}
+	C_Log = { LogMessage = function(t) if t:find("^WANTEDP1 ") then presence[#presence + 1] = t end end }
+	local realBlocked = ns.Captures.Blocked
+	ns.Captures.Blocked = function() return nil end
+	ns.WarLive:Step()
+	ns.Captures.Blocked = realBlocked
+	check(presence[1] and presence[1]:find(" hb-mid-a-tower ", 1, true), "presence on the war's point for the site: "..tostring(presence[1]))
 	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC
 	AtStep(function(war)
 		war.state, war.start = "over", clock - 2400

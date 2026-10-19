@@ -39,6 +39,11 @@ function WarLive:Step()
 	if GuildWars:OnRoster(war) and private.sent ~= slot then
 		private.sent = slot
 		local point = GuildWars:PointAt(war, zone, x, y, mapId)
+		-- Our presence for the site, on the same log line as a capture or race point's (WANTEDP1, the war's point id),
+		-- when it can count (not dead, mounted, stealthed...)
+		if point and not Wanted.Captures:Blocked() then
+			Wanted.Captures:CountRace(point.id, now)
+		end
 		local sample = { w = war.warId, t = slot, p = point and point.id or "", e = min(Wanted.Enemies:CountNearby(), MAX_ENEMIES) }
 		Wanted.Sync:BroadcastPlugin(TAG, sample)
 		private.Take(war, UnitName("player") or "?", sample)

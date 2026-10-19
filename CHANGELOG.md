@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
+- Dashboard: the setup card is one line of marks, with each step's fix in its mark's tooltip. Without the app, the challenges panel is one line (what the app adds is behind an (i), and how to get or update it is on the button), so the raids and the strip move up. The raid cards, hot zone, daily challenge, rank band and footer keep their hints in tooltips. The app's start-up hint now covers the Mac (Wanted, in Applications).
 
 ## [1.27.3] - 2026-10-17
 

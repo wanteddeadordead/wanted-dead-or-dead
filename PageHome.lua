@@ -19,6 +19,7 @@ local RAIDS_TOP = CARD_TOP - CARD_HEIGHT - 16
 local RAIDS_HEIGHT = 112
 local STRIP_TOP = RAIDS_TOP - 18 - RAIDS_HEIGHT - GAP
 local STRIP_HEIGHT = 68
+local EMPTY_HEIGHT = 74 -- the panel without the app's data: its title and button, what the app adds behind its (i)
 local DAILY_WIDTH = 262
 local STREAK_BOXES = 7
 local BigFont = Theme:MakeFont("WantedFontHomeBig", 30, C.faint)
@@ -78,7 +79,11 @@ function private.BuildBand(container, width)
 	local band = W:CardButton(container, function() UI:Show("rank") end)
 	band:SetPoint("TOPLEFT")
 	band:SetSize(width, BAND_HEIGHT)
-	W:AttachTooltip(band, "Your PvP rank", "Blizzard's PvP rank as the game tells it, and your challenge streak. Opens Rank & Gear.")
+	W:Explain(band, "Your PvP rank", function()
+		local body = "Blizzard's PvP rank as the game tells it, and your challenge streak. Opens Rank & Gear."
+		return band.beforeSeason and "Ranks start with the PvP season: honor from world PvP and battlegrounds climbs Blizzard's "
+			.."ladder.\n\n"..body or body
+	end)
 	band.badge = band:CreateTexture(nil, "ARTWORK")
 	band.badge:SetSize(40, 40)
 	band.badge:SetPoint("LEFT", 16, 0)
@@ -118,11 +123,10 @@ function private.BuildBand(container, width)
 		Theme:Skin(box, C.input, C.border)
 		band.boxes[i] = box
 	end
-	-- Before a season, or without a rank yet: one line in place of the points and bar
+	-- Before a season, or at the top: a label in place of the points and bar
 	band.note = Theme:Text(band, "small", "", C.muted)
 	band.note:SetPoint("TOPLEFT", 250, -26)
 	band.note:SetWidth(280)
-	band.note:SetWordWrap(true)
 	private.band = band
 end
 
@@ -155,6 +159,14 @@ function private.BuildDaily(container)
 	card.note = Theme:Text(card, "tiny", "")
 	card.note:SetPoint("TOPLEFT", 16, -104)
 	card.note:SetWidth(DAILY_WIDTH - 32)
+	W:Explain(card, "Daily challenge", function()
+		if Challenges:IsDayOver() then
+			return "Today's challenge comes with the app's next update (at login or /reload)."
+		elseif not Challenges:GetMine() then
+			return "Link this character in the Wanted app to track its progress."
+		end
+		return "Opens this week's challenges."
+	end)
 	private.daily = card
 end
 
@@ -163,7 +175,9 @@ function private.BuildHot(container, width, index)
 	local card = W:CardButton(container, function() UI:Show("hotspots") end)
 	card:SetPoint("TOPLEFT", DAILY_WIDTH + GAP + (index - 1) * (cardWidth + GAP), CARD_TOP)
 	card:SetSize(cardWidth, CARD_HEIGHT)
-	W:AttachTooltip(card, "Hotspots", "Where enemy players are right now.")
+	W:Explain(card, "Hotspots", function()
+		return card.big:IsShown() and "Kills here count double today.\n\nWhere enemy players are right now." or "Where enemy players are right now."
+	end)
 	card.edge = card:CreateTexture(nil, "ARTWORK")
 	card.edge:SetPoint("TOPLEFT", 1, -1)
 	card.edge:SetPoint("BOTTOMLEFT", 1, 1)
@@ -177,11 +191,8 @@ function private.BuildHot(container, width, index)
 	card.zone:SetPoint("TOPLEFT", 16, -44)
 	card.zone:SetWidth(cardWidth - 32)
 	card.zone.fitWidth = cardWidth - 32
-	card.double = Theme:Text(card, "small", "Kills here count double", C.amber)
-	card.double:SetPoint("TOPLEFT", 16, -72)
-	card.double:SetWidth(cardWidth - 32 - BIG_ROOM)
 	card.enemies = Theme:Text(card, "small", "")
-	card.enemies:SetPoint("TOPLEFT", 16, -92)
+	card.enemies:SetPoint("TOPLEFT", 16, -72)
 	card.enemies:SetWidth(cardWidth - 32 - BIG_ROOM)
 	card.enemies.fitWidth = cardWidth - 32 - BIG_ROOM
 	card.big = card:CreateFontString(nil, "ARTWORK")
@@ -198,7 +209,7 @@ function private.BuildUpcoming(container, width)
 	local card = W:CardButton(container, function() UI:Show("siege") end)
 	card:SetPoint("TOPLEFT", DAILY_WIDTH + GAP + cardWidth + GAP, CARD_TOP)
 	card:SetSize(cardWidth, CARD_HEIGHT)
-	W:AttachTooltip(card, "Upcoming sieges", "The next siege evenings and their fronts. Opens the Siege page.")
+	W:AttachTooltip(card, "Upcoming sieges", "The next siege evenings and their fronts, each picked the evening before. Opens the Siege page.")
 	card.label = W:SectionLabel(card, "Upcoming sieges")
 	card.label:SetPoint("TOPLEFT", 16, -14)
 	card.lines = {}
@@ -216,9 +227,6 @@ end
 function private.BuildRaids(container, width)
 	local label = W:SectionLabel(container, "Raids")
 	label:SetPoint("TOPLEFT", 0, RAIDS_TOP)
-	local note = Theme:Text(container, "tiny", "Form or join one on the Raids page", C.faint)
-	note:SetPoint("TOPRIGHT", 0, RAIDS_TOP)
-	note:SetJustifyH("RIGHT")
 	local cardWidth = floor((width - 2 * GAP) / 3)
 	private.raids = {}
 	for i = 1, 3 do
@@ -237,6 +245,7 @@ function private.BuildRaids(container, width)
 		card.text.fitWidth = cardWidth - 32
 		card.action = Theme:Text(card, "small", "")
 		card.action:SetPoint("BOTTOMLEFT", 16, 14)
+		W:Explain(card, "Raids", function() return card.tip end)
 		private.raids[i] = card
 	end
 end
@@ -248,7 +257,7 @@ function private.OnRaid(item)
 		return
 	end
 	local why = Wanted.Raids:Join(item.raid.id)
-	UI:Toast(why or (item.raid.startAt <= GetServerTime() and "Asked to join: the leader invites you." or "Going: you'll be asked to join when it starts."),
+	UI:Toast(why or (item.raid.startAt <= GetServerTime() and "Asked to join." or "Going."),
 		why and C.red or C.green)
 end
 
@@ -286,14 +295,18 @@ function private.RefreshRaids()
 			local count = item.mine and (IsInGroup() and max(1, GetNumGroupMembers()) or 1) or raid.members
 			local when = started and "now" or Raids:When(raid.startAt)
 			private.Fit(card.text, { format("%s, %s  %d/%d%s", raid.where, when, count, raid.size, item.mine and "" or ("  led by "..raid.leader)) }, "tiny", true)
-			card.action:SetText(Theme:Colorize((item.mine or joined) and "Open the Raids page" or raid.members >= raid.size and "Full"
-				or started and "Click to join" or "Click if you're going", (item.mine or joined) and C.muted or C.gold))
+			-- The one we lead or joined opens the Raids page; any other says what a click does
+			local full = not (item.mine or joined) and raid.members >= raid.size
+			card.action:SetText((item.mine or joined) and "" or Theme:Colorize(full and "Full" or started and "Join" or "Going?", full and C.muted or C.gold))
+			card.tip = (item.mine or joined or full) and "Opens the Raids page." or started and "Click to join. The leader invites you."
+				or "Click if you're going: you'll be asked to join when it starts."
 			card:Show()
 		elseif i == 1 then
 			card.kind:Set("NONE", C.muted)
 			card.name:SetText("No raids forming")
-			private.Fit(card.text, { "Form one, and every Wanted player of your faction sees it." }, "tiny", true)
-			card.action:SetText(Theme:Colorize("Open the Raids page", C.muted))
+			card.text:SetText("")
+			card.action:SetText("")
+			card.tip = "Form one, and every Wanted player of your faction sees it. Opens the Raids page."
 			card:Show()
 		else
 			card:Hide()
@@ -301,31 +314,22 @@ function private.RefreshRaids()
 	end
 end
 
----The panel in place of the challenges without the app's data: what the app adds, and what works without it.
+---The panel in place of the challenges without the app's data: get or update the app; what it adds, and what works
+---without it, behind an (i).
 function private.BuildEmpty(container, width)
 	local panel = W:Card(container)
 	panel:SetPoint("TOPLEFT")
-	panel:SetSize(width, RAIDS_TOP * -1 - GAP)
+	panel:SetSize(width, EMPTY_HEIGHT)
 	panel.title = Theme:Text(panel, "title", "")
-	panel.title:SetPoint("TOPLEFT", 24, -26)
-	panel.line = Theme:Text(panel, "body", "", C.amber)
-	panel.line:SetPoint("TOPLEFT", 24, -52)
-	panel.line:SetWidth(width - 48 - 150)
-	local about = Theme:Text(panel, "body", "A daily challenge, three weekly ones, hot zones where kills count double, and a challenge rank for each character that never resets. wanteddeadordead.com works them out from the kills the app sends, and the app brings them here.", C.muted)
-	about:SetPoint("TOPLEFT", 24, -78)
-	about:SetWidth(width - 48)
-	about:SetWordWrap(true)
-	about:SetSpacing(3)
-	local works = W:SectionLabel(panel, "Works without the app")
-	works:SetPoint("TOPLEFT", 24, -128)
-	local list = Theme:Text(panel, "body", "Bounties on the Board, your hunts and claims, the Nearby window and alerts, Hotspots and the map, Enemies, Leaderboards and Activity: all shared with other Wanted players in game.")
-	list:SetPoint("TOPLEFT", 24, -146)
-	list:SetWidth(width - 48)
-	list:SetWordWrap(true)
-	list:SetSpacing(3)
+	panel.title:SetPoint("LEFT", 24, 0)
+	panel.title:SetWidth(width - 48 - 140 - 40)
+	panel.title:SetWordWrap(false)
+	panel.glyph = W:InfoGlyph(panel, "What the app adds", "A daily challenge, three weekly ones and hot zones where kills count double, "
+		.."for a weekly score. wanteddeadordead.com works them out from the kills the app sends, and the app brings them here.\n\nWorks without the app: bounties on the Board, your hunts and claims, the "
+		.."Nearby window and alerts, Hotspots and the map, Enemies, Leaderboards and Activity, all shared with other Wanted "
+		.."players in game.")
 	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)
-	panel.button:SetPoint("TOPRIGHT", -24, -22)
-	W:AttachTooltip(panel.button, "Website & app", "Where to download the Wanted app for Windows or Mac.")
+	panel.button:SetPoint("RIGHT", -24, 0)
 	private.empty = panel
 end
 
@@ -401,8 +405,9 @@ function private.RefreshBand(data, mine)
 	elseif rank >= BlizzRank.MAX_RANK then
 		band.note:SetText(Theme:Colorize("The top rank", C.gold))
 	else
-		band.note:SetText("Ranks start with the PvP season: honor from world PvP and battlegrounds climbs Blizzard's ladder.")
+		band.note:SetText("Season not started")
 	end
+	band.beforeSeason = not climbing and rank < BlizzRank.MAX_RANK
 	-- The challenge streak needs the app
 	local streak = mine ~= nil
 	band.streakLabel:SetShown(streak)
@@ -431,7 +436,7 @@ function private.RefreshDaily(data, mine)
 		card.name:SetText(dayOver and "A new day" or "No challenge today")
 		card.name:SetTextColor(C.text[1], C.text[2], C.text[3])
 		card.points:Hide()
-		card.text:SetText(dayOver and "Today's challenge comes with the app's next update (at login or /reload)." or "")
+		card.text:SetText("")
 		card.resets:SetText("")
 		private.SetProgress(card.bar, card.progress, nil, nil)
 		card.note:SetText("")
@@ -445,7 +450,7 @@ function private.RefreshDaily(data, mine)
 	private.Fit(card.text, { daily.text or "" }, "tiny", true)
 	card.resets:SetText(data.dayEnds and ("resets in "..private.Duration(data.dayEnds - GetServerTime())) or "")
 	private.SetProgress(card.bar, card.progress, daily, mine and mine.daily)
-	card.note:SetText(mine and "" or "Link this character in the app to track it.")
+	card.note:SetText(mine and "" or Theme:Colorize("Not linked", C.amber))
 end
 
 function private.RefreshHot(data, byZone)
@@ -454,7 +459,6 @@ function private.RefreshHot(data, byZone)
 		local hot = not dayOver and data.hot[i]
 		card.tag:Set("HOT ZONE", C.red)
 		card.edge:SetShown(hot and true or false)
-		card.double:SetShown(hot and true or false)
 		card.big:SetShown(hot and true or false)
 		if hot then
 			private.Fit(card.zone, { hot.zone }, "heading")
@@ -484,7 +488,7 @@ function private.RefreshUpcoming()
 	local Captures = Wanted.Captures
 	if not Captures:Siege() then
 		card.lines[1]:SetText("No siege picked yet")
-		private.Fit(card.lines[2], { Theme:Colorize("Picked each evening the day before", C.muted), Theme:Colorize("Picked the evening before", C.muted) }, "tiny")
+		card.lines[2]:SetText("")
 		card.lines[3]:SetText("")
 		return
 	end
@@ -578,11 +582,16 @@ function private.Refresh()
 	local data = Challenges:Get()
 	local shown = data ~= nil
 	private.empty:SetShown(not shown)
+	-- The raids and the strip close up under the short panel
+	private.lower:SetPoint("TOPLEFT", 0, shown and 0 or -RAIDS_TOP - EMPTY_HEIGHT - GAP)
 	if not shown then
-		local title, line, button = Challenges:EmptyText()
-		private.empty.title:SetText(title)
-		private.empty.line:SetText(line)
-		private.empty.button:SetText(button)
+		local title, tip, button = Challenges:EmptyText()
+		local empty = private.empty
+		empty.title:SetText(title)
+		empty.glyph:ClearAllPoints()
+		empty.glyph:SetPoint("LEFT", empty.title, "LEFT", min(empty.title:GetStringWidth(), empty.title:GetWidth()) + 8, 0)
+		empty.button:SetText(button)
+		W:Explain(empty.button, button, tip)
 	end
 	private.band:SetShown(shown)
 	private.daily:SetShown(shown)
@@ -597,9 +606,11 @@ function private.Refresh()
 		private.RefreshHot(data, private.HotspotsByZone(Wanted.Hotspots:Get()))
 		private.RefreshUpcoming()
 		if Challenges:IsDemo() then
-			private.footer:SetText("Demo challenges, made up to show the page. /wanted demo again to turn them off.")
+			private.footer:SetText(Theme:Colorize("Demo challenges", C.amber))
+			W:Explain(private.footer, "Demo challenges", "Made up to show the page. /wanted demo again to turn them off.")
 		else
-			private.footer:SetText("Challenges and ranks come from wanteddeadordead.com through the app, updated "..Theme:Ago(GetServerTime() - data.t)..".")
+			private.footer:SetText("Updated "..Theme:Ago(GetServerTime() - data.t))
+			W:Explain(private.footer, "Challenges", "Challenges and ranks come from wanteddeadordead.com through the Wanted app.")
 		end
 	else
 		private.footer:SetText("")
@@ -628,8 +639,13 @@ UI:RegisterPage("home", {
 		private.BuildDaily(content)
 		private.BuildHot(content, width, 1)
 		private.BuildUpcoming(content, width)
-		private.BuildRaids(content, width)
-		private.BuildStrip(content, width)
+		-- The raids and the strip: where the challenges leave off, or under the short panel without them
+		local lower = CreateFrame("Frame", nil, content)
+		lower:SetPoint("TOPLEFT")
+		lower:SetSize(width, 1) -- only its top matters: the cards hang below it
+		private.lower = lower
+		private.BuildRaids(lower, width)
+		private.BuildStrip(lower, width)
 	end,
 	refresh = private.Refresh,
 })

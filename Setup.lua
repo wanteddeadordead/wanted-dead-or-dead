@@ -1,8 +1,8 @@
 -- Wanted: the setup checklist. The four steps a player needs for Wanted to work in full, each with a green check or a
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
 -- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle like the siege features
--- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks with a fix line under each red
--- one (click for the Website & app page); the Website & app page shows every step with its address to copy;
+-- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks, each with its detail and fix as
+-- its tooltip (click for the Website & app page); the Website & app page shows every step with its address to copy;
 -- /wanted setup prints them.
 
 local _, Wanted = ...
@@ -41,7 +41,7 @@ function Setup:Steps()
 	if app and notRunning then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "warn",
 			detail = format("Set up here (version %s), but it last ran %s ago.", app, Theme:Ago(notRunning)),
-			fix = "Start it from the Start menu: Wanted Dead or Dead." }
+			fix = "Start it: Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac." }
 	elseif app then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "ok", detail = format("Version %s.", app) }
 	else
@@ -76,7 +76,7 @@ function Setup:AllSet(steps)
 end
 
 ---A card of the steps. card.Refresh() lays it out for the current state and returns its height. brief: one line of
----the five marks with a short fix line under each red one (the Dashboard); otherwise every step with its detail,
+---the four marks, each explaining its step and fix on hover (the Dashboard); otherwise every step with its detail,
 ---and its address in a box to copy or a button to turn it on (the Website & app page).
 ---@param parent table
 ---@param width number
@@ -94,6 +94,10 @@ function Setup:BuildCard(parent, width, brief, onClick)
 		row.icon = card:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(ICON, ICON)
 		row.name = Theme:Text(card, "small", "")
+		-- The brief card's mark and name, explained on hover; clicks go through to the card
+		row.hit = CreateFrame("Button", nil, card)
+		row.hit:SetMouseClickEnabled(false)
+		row.hit:Hide()
 		row.title = Theme:Text(card, "body", "", C.text)
 		row.detail = Theme:Text(card, "small", "", C.muted)
 		row.detail:SetJustifyH("LEFT")
@@ -134,30 +138,25 @@ function private.Layout(card, width, brief)
 			row.name:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 			row.name:SetWidth(column - ICON - 8)
 			row.name:Show()
+			row.hit:ClearAllPoints()
+			row.hit:SetPoint("TOPLEFT", row.icon, "TOPLEFT")
+			row.hit:SetSize(ICON + 4 + row.name:GetStringWidth(), ICON)
+			row.hit:Show()
+			W:Explain(row.hit, step.title, step.fix and step.detail.."\n\n"
+				..Theme:Colorize(step.fix..(step.url and " "..step.url:gsub("^https://", "") or ""), C.gold) or step.detail)
 			row.title:Hide()
 			row.box:Hide()
 			row.button:Hide()
 			row.detail:Hide()
 		end
 		y = y - ICON - 8
-		-- Then a line per step that isn't set: what to do (the page the card opens has the addresses)
-		for i, step in ipairs(steps) do
-			local row = card.rows[i]
-			if step.fix then
-				row.detail:SetText(Theme:Colorize(step.title..": ", COLORS[step.state])..step.fix..(step.url and " "..step.url:gsub("^https://", "") or ""))
-				row.detail:ClearAllPoints()
-				row.detail:SetPoint("TOPLEFT", PAD, y)
-				row.detail:SetWidth(width - 2 * PAD)
-				row.detail:Show()
-				y = y - row.detail:GetStringHeight() - 4
-			end
-		end
 		card:SetHeight(-y + PAD - 8)
 		return card:GetHeight()
 	end
 	for i, step in ipairs(steps) do
 		local row = card.rows[i]
 		row.name:Hide()
+		row.hit:Hide()
 		row.icon:ClearAllPoints()
 		row.icon:SetPoint("TOPLEFT", PAD, y)
 		row.icon:SetTexture(ICONS[step.state])

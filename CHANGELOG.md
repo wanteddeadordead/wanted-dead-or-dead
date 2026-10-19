@@ -12,6 +12,7 @@
 - Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
 - Poker: hosting a table explains each choice on hover (Cash game, Tournament, People, Practice, Chips, Gold, the password) in place of the notes under them. The review is a short row per choice, each with its rules on hover. Its step numbers no longer repeat. A gold table's host still sees the two lines that matter: you hold the money, and your client deals. The table window's status line and settings are shorter, with the rest on hover.
 - You: no subtitles under the tabs. Website & app, Calling card and Tools keep each card's explanation behind an (i) by its label. Long labels are short (Login reminder), with the rest on hover. The calling card and its editor say Sample card or Needs the Wanted app to save, with the steps on hover. The app reminder tells Mac users where to find the app.
+- Dashboard: the setup card is one line of marks, with each step's fix in its mark's tooltip. Without the app, the challenges panel is one line (what the app adds is behind an (i), and how to get or update it is on the button), so the raids and the strip move up. The raid cards, hot zone, daily challenge, rank band and footer keep their hints in tooltips. The app's start-up hint now covers the Mac (Wanted, in Applications).
 
 ## [1.27.3] - 2026-10-17
 

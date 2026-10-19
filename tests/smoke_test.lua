@@ -6193,6 +6193,15 @@ end)()
 	Hover(button)
 	check(Tip():IsShown() and Tip().title._text == "Can't go", "a disabled button shows its tooltip")
 	Leave(button)
+	-- Explained again while its tooltip shows: the new text shows at once, not on the next hover
+	button:Enable()
+	W:Explain(button, "Roster", "Asking the leader.")
+	Hover(button)
+	W:Explain(button, "Roster", "Ann, Bob")
+	check(Tip():IsShown() and Tip().body._text == "Ann, Bob", "explaining again while shown redraws: "..tostring(Tip().body._text))
+	Leave(button)
+	W:Explain(button, "Roster", "Ann, Bob, Cy")
+	check(not Tip():IsShown(), "explaining again while hidden doesn't show it")
 	-- The body as a function, called on each hover
 	local calls = 0
 	W:Explain(button, "Count", function() calls = calls + 1 return "Hover "..calls end)

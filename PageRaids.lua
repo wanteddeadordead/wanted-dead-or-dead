@@ -11,6 +11,7 @@ local Raids = Wanted.Raids
 local private = { size = 40, later = false, guild = false, exclusive = false, editing = false, serverTime = false, day = 0 }
 local ROW_HEIGHT = 42
 local CARD_HEIGHT = 140
+local STEPS_WIDTH = 380 -- the step bar on Your raid
 local FORM_HEIGHT = 144 -- how it works is in the tooltips of the controls it explains
 
 function private.CreateRow(row)
@@ -122,8 +123,10 @@ function private.RefreshCard()
 	private.leadTitle:SetText(Raids:Title(mine)..Theme:Colorize("  "..mine.where, C.muted))
 	local going, interested = Raids:SignUps(mine)
 	local group = IsInGroup() and max(1, GetNumGroupMembers()) or 1
-	private.leadSub:SetText(format("%s  -  %d/%d in your group  -  %d going, %d interested", started and "Forming now" or ("Starts "..Raids:When(mine.startAt)),
-		group, mine.size, #going, #interested))
+	private.leadSub:SetText(format("%d/%d in your group  -  %d going, %d interested", group, mine.size, #going, #interested))
+	-- Formed, then sign-ups until 15 minutes before, then starting, then started
+	local step = started and 4 or (Raids:CanFormNow() and 3) or 2
+	private.steps:Set(step, { "", format("%d going", #going), Raids:When(mine.startAt), started and "Forming now" or "" })
 	local names = {}
 	if #going > 0 then
 		tinsert(names, "Going: "..table.concat(going, ", "))
@@ -392,8 +395,6 @@ end
 
 function private.BuildLead(parent, width)
 	local lead = W:Card(parent)
-	-- TODO(ui-pass PR 3): a compact W:StepBar here (Formed > Sign-ups > Starting > Started, sub-lines the time,
-	-- "12 going", "invites sent") in place of the Forming / Starts part of leadSub, once the widget exists
 	lead:SetPoint("TOPLEFT")
 	lead:SetPoint("TOPRIGHT")
 	lead:SetHeight(CARD_HEIGHT)
@@ -401,16 +402,25 @@ function private.BuildLead(parent, width)
 	private.leadTitle = Theme:Text(lead, "heading", "")
 	private.leadTitle:SetPoint("TOPLEFT", 14, -36)
 	private.leadTitle:SetWidth(420)
+	-- Where the raid stands, on the right: the guild-war step bar, its rule on each dot
+	private.steps = W:StepBar(lead, STEPS_WIDTH, {
+		{ "Formed", "Every Wanted player of your faction sees it, on every realm, in their own time." },
+		{ "Sign-ups", "Players sign up as Interested or Going, from the addon or by whispering you \"inv\"." },
+		{ "Starting", "From 15 minutes before the start: Form raid now gives everyone signed up a popup to join." },
+		{ "Started", "Everyone signed up is invited as your group becomes a raid." },
+	})
+	private.steps:SetPoint("TOPRIGHT", -14, -40)
+	local textWidth = width - 28 - STEPS_WIDTH - 20
 	private.leadSub = Theme:Text(lead, "small", "")
 	private.leadSub:SetPoint("TOPLEFT", 14, -58)
-	private.leadSub:SetWidth(width - 28)
+	private.leadSub:SetWidth(textWidth)
 	private.leadNames = Theme:Text(lead, "tiny", "", C.muted)
 	private.leadNames:SetPoint("TOPLEFT", 14, -76)
-	private.leadNames:SetWidth(width - 28)
+	private.leadNames:SetWidth(textWidth)
 	private.leadNames:SetWordWrap(false)
 	private.cantInvite = Theme:Text(lead, "small", "Can't invite: you're not the group's leader or an assistant", C.red)
 	private.cantInvite:SetPoint("TOPLEFT", 14, -94)
-	private.cantInvite:SetWidth(width - 28)
+	private.cantInvite:SetWidth(textWidth)
 	private.cantInvite:SetWordWrap(false)
 	private.cantInvite:Hide()
 	W:Explain(private.cantInvite, "Can't invite", "You're in a group without being its leader or an assistant. Invites wait until you are.")
@@ -443,7 +453,7 @@ function private.BuildLead(parent, width)
 		UI:Toast("Your raid is open to everyone.", C.green)
 		private.Refresh()
 	end)
-	private.openButton:SetPoint("TOPRIGHT", -14, -44)
+	private.openButton:SetPoint("BOTTOMRIGHT", -14, 10)
 	-- From 15 minutes before a planned raid: form it now, inviting the sign-ups if ticked
 	private.formNow = W:Button(lead, "Form raid now", "primary", 130, 26, function()
 		Raids:FormNow(private.sendInvites.checked)

@@ -29,16 +29,15 @@ function private.Refresh()
 	if showRecord then
 		private.record:Refresh()
 	elseif private.view == "posted" then
-		private.list:SetItems(Model:GetMyBounties(), "No live bounties.", "Post one from the Board. Finished ones are under History.")
+		private.list:SetItems(Model:GetMyBounties(), "No live bounties.")
 	else
-		private.list:SetItems(Model:GetMyHistory("poster"), "Nothing finished yet.", "Your paid, expired and withdrawn bounties end up here.")
+		private.list:SetItems(Model:GetMyHistory("poster"), "Nothing finished yet.")
 	end
 end
 
 UI:RegisterPage("mine", {
 	group = "World PvP",
 	title = "Your bounties",
-	subtitle = "The bounties you posted: what you owe, what's waiting on you, and your record as a poster.",
 	order = 2,
 	badge = function() return Model:GetActionCount() end,
 	under = "board",
@@ -57,7 +56,7 @@ UI:RegisterPage("mine", {
 
 		local segment = W:Segmented(container, {
 			{ key = "posted", label = "Your live bounties" },
-			{ key = "history", label = "History" },
+			{ key = "history", label = "History", tip = { "History", "Your paid, expired and withdrawn bounties end up here." } },
 			{ key = "record", label = "Your record" },
 		}, function(key)
 			private.view = key

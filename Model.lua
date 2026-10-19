@@ -520,7 +520,8 @@ end
 ---What bounties on players near a level have actually done.
 ---@param level number
 ---@param amount number? the amount being considered
----@return string?
+---@return string? label short, for the form: "Going rate: 50s" or "No going rate yet"
+---@return string? detail the breakdown behind it, for its tooltip
 function Model:GetGoingRate(level, amount)
 	if not level then
 		return nil
@@ -543,12 +544,13 @@ function Model:GetGoingRate(level, amount)
 	end
 	local band = format("Levels %d-%d", max(level - LEVEL_BAND, 1), level + LEVEL_BAND)
 	if #paid == 0 and expired == 0 then
-		return band..": no finished bounties yet, so no going rate."
+		return "No going rate yet", band..": no finished bounties yet, so no going rate."
 	end
 	sort(paid)
+	local typical = #paid > 0 and paid[floor((#paid + 1) / 2)] or nil
 	local text = band..": "
 	if #paid > 0 then
-		text = text..format("%d paid out, typically %s", #paid, Bounties:FormatMoney(paid[floor((#paid + 1) / 2)]))
+		text = text..format("%d paid out, typically %s", #paid, Bounties:FormatMoney(typical))
 	else
 		text = text.."none paid out yet"
 	end
@@ -558,7 +560,7 @@ function Model:GetGoingRate(level, amount)
 			text = text..format(", %d of them at or below this amount", under)
 		end
 	end
-	return text.."."
+	return typical and ("Going rate: "..Bounties:FormatMoney(typical)) or "No going rate yet", text.."."
 end
 
 

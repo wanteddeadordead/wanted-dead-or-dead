@@ -521,8 +521,8 @@ function Captures:Watch()
 	end
 end
 
----Adds a sample to the book for this character at a point. Returns the entry.
-function private.Count(pointId, now)
+---Adds a sample to the book for this character at a point (race: a race point, Races). Returns the entry.
+function private.Count(pointId, now, race)
 	local guid = UnitGUID("player")
 	if type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then
 		return nil
@@ -532,13 +532,22 @@ function private.Count(pointId, now)
 	local book = Wanted.db.presence
 	local entry = book[key]
 	if not entry then
-		entry = { g = guid, n = Wanted.Store:GetOrigin(), f = UnitFactionGroup("player"), p = pointId, s = slot, c = 0 }
+		entry = { g = guid, n = Wanted.Store:GetOrigin(), f = UnitFactionGroup("player"), p = pointId, s = slot, c = 0, r = race or nil }
 		book[key] = entry
 	end
 	entry.c = min(entry.c + 1, MAX_SAMPLES)
 	entry.l = Wanted.Shard:Current() or entry.l
 	private.WriteLive(entry)
 	return entry
+end
+
+---A sample on a race point (Races): in the same presence book and on the same log line as a capture point's, the
+---race point's id ("hb-r2") in the point's place. Returns the entry, or nil when this character can't be named.
+---@param pointId string
+---@param now number server time
+---@return table?
+function Captures:CountRace(pointId, now)
+	return private.Count(pointId, now, true)
 end
 
 ---The sample, at once, on the game's log file (Logs\General.log, written within seconds): the Wanted app reads it
@@ -560,7 +569,9 @@ function private.Prune(now)
 	local oldest = floor((now - KEEP_SECONDS) / SLOT_SECONDS)
 	local kept = {}
 	for key, entry in pairs(book) do
-		if type(entry) ~= "table" or type(entry.s) ~= "number" or entry.s < oldest or not byId[entry.p] or type(entry.c) ~= "number" then
+		-- A capture point's, or a race point's (Races: any well-formed id, the races being the site's to check)
+		local known = type(entry) == "table" and (byId[entry.p] or entry.r and type(entry.p) == "string" and strmatch(entry.p, "^[a-z0-9%-]+$"))
+		if type(entry) ~= "table" or type(entry.s) ~= "number" or entry.s < oldest or not known or type(entry.c) ~= "number" then
 			book[key] = nil
 		else
 			tinsert(kept, key)

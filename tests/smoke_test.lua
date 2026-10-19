@@ -16766,6 +16766,158 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns.UI:Show("home")
 end)()
 print("wanted smoke: setup checks pass")
+-- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
+-- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild
+-- Wars page in Siege's place; the HUD in the race's zone while it runs
+;(function()
+	local R, C, db = ns.Races, ns.Captures, ns.db
+	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, siege = db.settings.siege, presence = db.presence }
+	local mapId, px, py = 1424, 0.573, 0.37
+	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
+		GetMapInfo = function() return { mapType = 3 } end }
+	local mounted = false
+	IsMounted = function() return mounted end
+	local start = clock + 600
+	local hillsbrad = { n = 1, zone = "Hillsbrad Foothills", mapID = 1424, start = start, ["end"] = start + 2700, state = "upcoming", horde = 812, alliance = 780,
+		points = {
+			{ id = "hb-r1", name = "Hillsbrad Fields", x = 40, y = 45, r = 40, weight = 1 },
+			{ id = "hb-r2", name = "the crossroads", x = 57.3, y = 37, r = 50, weight = 1.2, bonus = true, holder = "A" },
+			{ id = "hb-r3", name = "Nethander Stead", x = 66, y = 60, r = 40, weight = 1, holder = "H" },
+		},
+		guilds = { { name = "Revenant", f = "A", influence = 210, kills = 9, minutes = 30 }, { name = "Small", f = "H", influence = 20, kills = 1, minutes = 2 },
+			{ name = "EMPIRE", f = "H", influence = 271, kills = 20, minutes = 18 } } }
+	local src = { battlegroup = "na", ruleset = "pvp", tonight = {
+		hillsbrad,
+		{ n = 2, zone = "Arathi Highlands", mapID = 1417, start = start + 3000, ["end"] = start + 5700,
+			points = { { id = "ah-r1", name = "Go'Shek Farm", x = 62, y = 52, r = 40, weight = 1 } } },
+		"junk",
+		{ zone = "No points", mapID = 1, start = 1, ["end"] = 2, points = {} },
+		{ n = 3, zone = "|cffff0000Ashenvale|r", mapID = 1440, start = start + 6000, ["end"] = start + 8700, points = {
+			{ id = "BAD ID", name = "x", x = 1, y = 1, r = 40, weight = 1 }, { id = "av-r1", name = "Astranaar", x = 150, y = 50, r = 40, weight = 1 },
+			{ id = "av-r2", name = "Raynewood", x = 50, y = 50, r = 40, weight = 1 } } } },
+		tomorrow = { { n = 1, zone = "Duskwood", start = start + 86400, ["end"] = start + 89100 }, { zone = 5 } } }
+	R:Take(src)
+	local tonight = R:Tonight()
+	check(R:On() and #tonight == 3 and tonight[1].zone == "Hillsbrad Foothills" and tonight[2].zone == "Arathi Highlands", "tonight's races read, by start; malformed ones left out")
+	check(tonight[3].zone == "cffff0000Ashenvaler" and #tonight[3].points == 1 and tonight[3].points[1].id == "av-r2", "escape codes dropped; bad points left out")
+	check(#R:Tomorrow() == 1 and R:Tomorrow()[1].zone == "Duskwood", "tomorrow's zones read")
+	local race = tonight[1]
+	check(race.points[2].bonus and race.points[2].holder == "Alliance" and race.points[3].holder == "Horde" and race.points[1].holder == nil, "points, the +20% one and their holders")
+	local horde = R:Guilds(race, "Horde")
+	check(#horde == 2 and horde[1].name == "EMPIRE" and R:Guilds(race, "Alliance")[1].name == "Revenant", "each side's guilds, by influence")
+	R:Take(nil)
+	check(not R:On() and #R:Tonight() == 0, "no races in the catch-up: off")
+	R:Take({ tonight = "x" })
+	check(not R:On(), "a malformed races table: off")
+	R:Take(src)
+	race = R:Tonight()[1]
+	-- The radius in yards: Hillsbrad is 3,200 yards wide (32 a percent) from the fronts' table when the game won't say
+	check(R:Live() == nil and R:Next().zone == "Hillsbrad Foothills", "before it starts: none live, Hillsbrad next")
+	check(R:PointAt(race, 1424, 57.3, 37).id == "hb-r2" and R:PointAt(race, 1424, 57.3 + 49 / 32, 37) and R:PointAt(race, 1424, 57.3 + 51 / 32, 37) == nil,
+		"a point's radius is in yards: 49 east in, 51 out")
+	check(R:PointAt(race, 1417, 57.3, 37) == nil, "not on another map")
+	C_Map.GetMapWorldSize = function() return 6400, 4266.6 end
+	check(R:PointAt(race, 1424, 57.3 + 49 / 32, 37) == nil, "the game's own map size, when it gives one")
+	C_Map.GetMapWorldSize = nil
+	-- Presence: a sample on the point, on the log line the app reads
+	db.presence = {}
+	local logged = {}
+	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
+	R:Sample()
+	check(#logged == 0 and next(db.presence) == nil, "no sample before the race starts")
+	clock = start + 60
+	check(R:Live() == race, "the race is live by the clock")
+	R:Sample()
+	local slot = math.floor(clock / C.SLOT_SECONDS)
+	local key = "hb-r2:"..slot..":Player-1-ME"
+	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].r == true, "a sample in the presence book, marked a race point's")
+	check(logged[1] == ("WANTEDP1 %s hb-r2 %d 1 Horde %s Player-1-ME %s"):format(db.accountMark, slot, db.presence[key].l or "-", ns.Store:GetOrigin()),
+		"and on the log as a capture point's line, the race point's id in the point's place: "..tostring(logged[1]))
+	check(R:Current() == race.points[2], "the HUD knows the point")
+	-- Outside every radius: nothing
+	px = 0.573 + 60 / 3200
+	clock = clock + 30
+	R:Sample()
+	check(#logged == 1 and R:Current() == nil, "outside the radius: no sample")
+	-- On it but mounted: nothing, and why
+	px, mounted = 0.573, true
+	clock = clock + 30
+	R:Sample()
+	local point, blocked = R:Current()
+	check(#logged == 1 and point == race.points[2] and blocked == "Mounted", "mounted on the point: no sample, and why")
+	mounted = false
+	clock = clock + 30
+	R:Sample()
+	check(#logged == 2 and db.presence[key].c == 2 and ({ R:Mine(race) })[2] == 1, "two samples: a minute on the points")
+	-- The race points' samples survive the book's tidy at login
+	C:OnLoad()
+	check(db.presence[key] ~= nil, "a race point's sample is kept in the book at login")
+	-- The Guild Wars page in Siege's place, with the race live
+	db.settings.siege = true
+	ns.UI:Show("siege")
+	check(ns.UI:IsShown("guildwars"), "with races on, Siege gives way to Guild Wars")
+	local function OnScreen(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if tostring(f._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	check(OnScreen("Hillsbrad Foothills") and OnScreen("Arathi Highlands") and OnScreen("LIVE") and OnScreen("Horde 812") and OnScreen("the crossroads")
+		and OnScreen("EMPIRE") and OnScreen("Revenant") and OnScreen("Duskwood"), "Tonight: the races, the live one's influence, its points, both sides' guilds and tomorrow")
+	check(not OnScreen("War Marks"), "no War Marks line until they exist")
+	-- The live numbers' address, to copy
+	local copied
+	local realDialog = ns.Widgets.Dialog
+	ns.Widgets.Dialog = function(_, o) copied = o end
+	for _, f in ipairs(Mock.created) do
+		local l = rawget(f, "label")
+		if type(l) == "table" and l._text == "Copy address" and f._scripts.OnClick then f._scripts.OnClick(f) end
+	end
+	ns.Widgets.Dialog = realDialog
+	check(copied and copied.input.value == "https://wanteddeadordead.com/races", "Copy address: the site's races page to copy")
+	ns.UI:GetFrame():Hide()
+	-- The HUD: in the race's zone while it runs, and only then
+	ns.RacesHUD:Update()
+	local hud = _G.WantedRaceHUD
+	check(hud and hud:IsShown() and hud.zone._text == "Hillsbrad Foothills" and hud.horde._text:find("Horde 812", 1, true) and hud.you._text:find("1 min", 1, true),
+		"the race HUD in the zone: the zone, the influence and your minutes")
+	check(hud.points[2].name._text:find("+20%", 1, true), "the middle point marked +20%")
+	-- The point the player stands on is coloured by who's here now; the site's holder stays in its tooltip
+	local realCount = ns.Enemies.CountNearby
+	ns.Enemies.CountNearby = function() return 0 end
+	clock = clock + 1
+	R:Sample()
+	ns.RacesHUD:Update()
+	local dot = hud.points[2].dot._vertexColor
+	check(R:Current() == race.points[2] and dot[1] > 0.8 and dot[3] < 0.3, "alone on the Alliance's point: shown as ours (Horde) by who's here")
+	-- (A frame's tooltip may sit on a hit button over it, explainHit)
+	local pointTip = (rawget(hud.points[2], "explainHit") or hud.points[2]).tooltipText
+	check(pointTip and pointTip:find("held by the Alliance", 1, true) and pointTip:find("Here now: 1 of your side, 0 enemies", 1, true),
+		"its tooltip keeps the site's holder and says who's here")
+	ns.Enemies.CountNearby = function() return 3 end
+	ns.RacesHUD:Update()
+	dot = hud.points[2].dot._vertexColor
+	check(dot[3] > 0.8, "three enemies nearby: shown as theirs")
+	check(hud.points[3].dot._vertexColor[1] > 0.8, "a point the player isn't on keeps the site's holder (Horde)")
+	ns.Enemies.CountNearby = realCount
+	mapId, clock = 1417, clock + 1 -- the position is read afresh each moment (Recorder)
+	ns.RacesHUD:Update()
+	check(not hud:IsShown(), "in another zone: no race HUD")
+	mapId = 1424
+	clock = race.stop + 1
+	ns.RacesHUD:Update()
+	check(not hud:IsShown(), "after the race: no race HUD")
+	local before = #logged
+	R:Sample()
+	check(#logged == before, "and no samples")
+	-- Put back
+	R:Take(nil)
+	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence
+end)()
+print("wanted smoke: race checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

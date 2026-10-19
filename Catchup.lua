@@ -107,6 +107,8 @@ function private.TakePublic(src, fromSnapshot)
 	Wanted.Captures:Take(src.points)
 	-- Tonight's siege and this week's siege wins per front (siege nights): the site's call overrides the client's
 	Wanted.Captures:TakeSiege(src.siege, src.frontWins)
+	-- Tonight's influence races and tomorrow's zones (guild wars), when the site runs them: Siege steps aside then
+	Wanted.Races:Take(src.races)
 	if fromSnapshot then
 		Wanted.Achievements:CheckNew()
 	end
@@ -128,6 +130,7 @@ function Catchup:Import()
 			Wanted.Challenges:Take(nil, true)
 			Wanted.Captures:Take(nil)
 			Wanted.Captures:TakeSiege(nil, nil)
+			Wanted.Races:Take(nil)
 		end
 		return
 	end

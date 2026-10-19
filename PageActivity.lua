@@ -65,16 +65,16 @@ end
 UI:RegisterPage("activity", {
 	group = "World PvP",
 	title = "Activity",
-	subtitle = "Kills, deaths and sightings (others' kept 3 days; wanteddeadordead.com has all). Click an enemy to post a bounty.",
+	tabTip = { "Activity", "Kills, deaths and sightings. Others' are kept 3 days; wanteddeadordead.com has all." },
 	order = 5,
 	under = "enemies",
 	tabLabel = "Activity",
 	build = function(container, width, height)
 		local filter = W:Segmented(container, {
 			{ key = "all", label = "Everything" },
-			{ key = "kill", label = "Kills" },
-			{ key = "death", label = "Deaths" },
-			{ key = "seen", label = "Sightings" },
+			{ key = "kill", label = "Kills", tip = { "Kills", "Your honorable kills, and other players' through sync." } },
+			{ key = "death", label = "Deaths", tip = { "Deaths", "Enemy players who die near you (in nameplate range)." } },
+			{ key = "seen", label = "Sightings", tip = { "Sightings", "Mouse over, target or come near an enemy player to record a sighting." } },
 		}, function(key)
 			private.kind = key ~= "all" and key or nil
 			private.Refresh()

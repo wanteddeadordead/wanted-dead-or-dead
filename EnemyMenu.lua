@@ -147,6 +147,9 @@ function EnemyMenu:CallForHelp(chatType)
 	return true
 end
 
+-- Local Defense can't be posted to by an addon: the line is typed into the chat box
+local LOCAL_DEFENSE_TIP = { "Local Defense", "The game won't let addons post there: the message is typed into your chat box. Press Enter to send." }
+
 ---The call-for-help menu: Local Defense, your raid or party, your guild.
 ---@param anchor table? the button that opened it
 function EnemyMenu:ShowHelpMenu(anchor)
@@ -154,7 +157,8 @@ function EnemyMenu:ShowHelpMenu(anchor)
 		{ text = "Call for help", header = true },
 	}
 	local localDefense = EnemyMenu:GetLocalDefenseChannel()
-	tinsert(items, { text = localDefense and format("Local Defense (/%d, press Enter)", localDefense) or "Local Defense (not here)", color = C.red, disabled = not localDefense, onClick = function() EnemyMenu:CallForHelp("CHANNEL") end })
+	tinsert(items, { text = localDefense and format("Local Defense (/%d)", localDefense) or "Local Defense (not here)", color = C.red, disabled = not localDefense,
+		tip = localDefense and LOCAL_DEFENSE_TIP or nil, onClick = function() EnemyMenu:CallForHelp("CHANNEL") end })
 	if IsInRaid and IsInRaid() then
 		tinsert(items, { text = "Your raid", onClick = function() EnemyMenu:CallForHelp("RAID") end })
 	elseif IsInGroup and IsInGroup() then
@@ -181,7 +185,7 @@ end
 function EnemyMenu:SetReason(d)
 	W:Dialog({
 		title = "Kill on Sight reason",
-		text = format("Why is %s on your Kill on Sight list? You'll see it in alerts and tooltips.", Theme:ClassName(d.name, d.class)),
+		text = format("Why is %s on your Kill on Sight list?", Theme:ClassName(d.name, d.class)),
 		input = { placeholder = "e.g. camps the Crossroads", value = d.reason or "" },
 		confirmLabel = "Save",
 		onConfirm = function(value)
@@ -270,7 +274,7 @@ function EnemyMenu:Show(d)
 	if canParty or canGuild or localDefense then
 		tinsert(items, "-")
 		if localDefense then
-			tinsert(items, { text = "Tell Local Defense (press Enter)", onClick = function() Announce("CHANNEL", d, localDefense) end })
+			tinsert(items, { text = "Tell Local Defense", tip = LOCAL_DEFENSE_TIP, onClick = function() Announce("CHANNEL", d, localDefense) end })
 		end
 		if canRaid then
 			tinsert(items, { text = "Tell your raid", onClick = function() Announce("RAID", d) end })

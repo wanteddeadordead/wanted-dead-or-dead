@@ -5402,7 +5402,19 @@ end)()
 	ns.UI:Show("calendar")
 	check(Shown("Needs the Wanted app") and not Shown("Not known yet"), "no app: the calendar's season tile says it needs the app")
 	ns.UI:Show("hotspots")
-	check(Shown("Now = last 15 minutes. Counts only enemies a Wanted user has seen. Today's hot zones need the Wanted app."), "no app: the hotspots note says hot zones need the app")
+	-- Hotspots: no note line; a zone's tooltip says hot zones need the app
+	check(not Shown("Now = last 15 minutes"), "no app: no note line on Hotspots")
+	local zoneRow
+	for _, f in ipairs(Mock.created) do
+		local item = rawget(f, "item")
+		if type(item) == "table" and item.zone and item.enemies and f._shown and f._parent and f._parent._shown then zoneRow = f end
+	end
+	local said, realAdd = {}, GameTooltip.AddLine
+	GameTooltip.AddLine = function(_, text) said[#said + 1] = text end
+	check(zoneRow, "a zone on Hotspots to hover")
+	zoneRow._scripts.OnEnter(zoneRow)
+	GameTooltip.AddLine = realAdd
+	check(table.concat(said, "|"):find("Today's hot zones need the Wanted app.", 1, true), "no app: a zone's tooltip says hot zones need the app")
 	ns.CallingCard:Show()
 	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
 		"no app: the calling-card window says saving needs the app")
@@ -6278,6 +6290,50 @@ end)()
 	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
+end)()
+-- Enemies and the Nearby window: the explanations moved off the pages into tooltips
+;(function()
+	local W = ns.Widgets
+	local function Shown(f) local on, p = f._shown, f._parent while on and p do on, p = p._shown, p._parent end return on end
+	local function OnScreen(text)
+		for _, fs in ipairs(Mock.fontStrings) do if type(fs._text) == "string" and fs._text:find(text, 1, true) and Shown(fs) then return fs end end
+	end
+	local function Tip(title)
+		for _, f in ipairs(Mock.created) do if rawget(f, "tooltipTitle") == title and Shown(f) then return f end end
+	end
+	local function Body(f) local body = f and f.tooltipText return type(body) == "function" and body() or body end
+	ns.UI:Show("hotspots")
+	check(not OnScreen("from what you and other Wanted users have seen") and not OnScreen("Now = last 15 minutes"), "Hotspots: no subtitle, no note")
+	check(OnScreen("busy now"), "the count is short: "..tostring(OnScreen("busy now") and OnScreen("busy now")._text))
+	check(Body(Tip("Now")) == "Enemies seen in the last 15 minutes by you or another Wanted user." and Body(Tip("Trend")) == "Compared with 5 minutes ago."
+		and Body(Tip("Deaths")) == "PvP deaths here in the last hour." and Body(Tip("Hour")) == "Enemies seen in the last hour.", "the column headers say what they count")
+	check(Body(Tip("Fight layer")):find("The copy of this zone the fight is on", 1, true), "the layer line says what a fight layer is")
+	check(Body(Tip("Activity")) == "Kills, deaths and sightings. Others' are kept 3 days; wanteddeadordead.com has all." and Body(Tip("Guild Kill on Sight")):find("^Your guild's own"),
+		"the Activity and Guild KoS tabs say what the pages are")
+	ns.UI:Show("enemies")
+	check(not OnScreen("Every enemy you've met"), "Enemies: no subtitle")
+	check(Body(Tip("Seen")) == "How many times Wanted has detected them." and Body(Tip("Ignored")) == "Ignored enemies never trigger alerts.", "the Seen header and the Ignored filter explain themselves")
+	ns.UI:Show("activity")
+	check(not OnScreen("Kills, deaths and sightings (others'"), "Activity: no subtitle")
+	check(Body(Tip("Kills")):find("honorable kills", 1, true) and Body(Tip("Sightings")):find("record a sighting", 1, true), "its filters say what they hold")
+	ns.UI:Show("guildkos")
+	check(not OnScreen("Your guild's own Kill on Sight list, shared"), "Guild KoS: no subtitle")
+	check(not OnScreen("Review: anyone adds") and not OnScreen("You can change these as an officer"), "no long mode or officer lines on screen")
+	-- Local Defense: the menu says where, the tooltip says how
+	local items
+	local realMenu = W.Menu
+	W.Menu = function(_, list) items = list end
+	ns.EnemyMenu:ShowHelpMenu()
+	W.Menu = realMenu
+	local ld
+	for _, item in ipairs(items) do if type(item) == "table" and item.text:find("^Local Defense") then ld = item end end
+	check(ld and not ld.text:find("press Enter", 1, true) and (ld.disabled or (ld.tip and ld.tip[2]:find("Press Enter to send", 1, true))), "Local Defense: no press Enter in the menu, it's on hover")
+	-- The Nearby window: short PvP states, the meaning on hover
+	check(not ns.NearbyWindow:GetPvPStatus():find(":", 1, true) or ns.NearbyWindow:GetPvPStatus():find("off in", 1, true), "the PvP strip is a short state: "..ns.NearbyWindow:GetPvPStatus())
+	local pvpTip
+	-- (Settings has a toggle of the same name: the strip's tooltip is the one about attacks)
+	for _, f in ipairs(Mock.created) do if rawget(f, "tooltipTitle") == "Your PvP status" and f.tooltipText:find("^Whether") then pvpTip = f.tooltipText end end
+	check(pvpTip and pvpTip:find("Sanctuary (no PvP here)", 1, true) and pvpTip:find("anyone can attack you", 1, true), "the PvP strip's tooltip says what each state means: "..tostring(pvpTip))
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
@@ -16032,7 +16088,7 @@ end)()
 	check(shows("The fight is on layer 575, yours isn't read yet"), "a new zone: its line at once")
 	Shard:TakeLayers(nil)
 	ns.UI:Refresh(true)
-	check(shows("No fight layer known in Hillsbrad Foothills yet.") and not shows("Hop", true), "nothing known: said, no Hop")
+	check(shows("Fight layer: unknown") and not shows("Hop", true), "nothing known: said, no Hop")
 	-- The Siege page's Tonight card: the siege's layer with Hop
 	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
 	ns.UI:Show("siege")

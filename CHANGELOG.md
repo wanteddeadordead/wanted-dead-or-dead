@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Enemies, Hotspots, Guild KoS, Activity and the Nearby window: no subtitles or note lines. Column headers, filters and tabs explain themselves on hover; Hotspots reads "3 busy now" and "Fight layer: unknown"; Guild KoS shows the guild and its mode in a word, with who may change the list on hover and an amber (i) when the game hides rank permissions. The Nearby window's PvP strip says "PvP ON", "Free-for-all PvP" or "Sanctuary", with the meaning on hover, and Local Defense in the menus loses "(press Enter)" to its tooltip.
+
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
 
 ## [1.27.3] - 2026-10-17

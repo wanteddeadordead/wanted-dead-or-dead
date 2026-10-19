@@ -147,7 +147,7 @@ function private.MaybeQuietTip()
 	settings.quietTipShown = true
 	W:Dialog({
 		title = "Quiet mode",
-		text = "Wanted warns you about every enemy player it sees, flagged or not.\n\nOnly want warnings while you're PvP flagged? Quiet mode keeps alerts and the Nearby window silent until you can be attacked. Change it any time in Settings > Alerts > Only when I can be attacked.",
+		text = "Only warn you while you're PvP flagged? Quiet mode keeps alerts and this window silent until you can be attacked. Settings > Alerts changes it later.",
 		cancelLabel = "Keep all",
 		confirmLabel = "Quiet mode",
 		onConfirm = function()
@@ -365,7 +365,7 @@ function private.Create()
 	pvp.text = Theme:Text(pvp, "small", "")
 	pvp.text:SetPoint("LEFT", pvp.dot, "RIGHT", 7, 0)
 	pvp:EnableMouse(true)
-	W:AttachTooltip(pvp, "Your PvP status", "Whether enemy players can attack you. When the flag is wearing off, how long until it's gone. Hide it in Settings > Nearby window.")
+	W:AttachTooltip(pvp, "Your PvP status", "Whether enemy players can attack you: PvP ON, or Free-for-all (anyone can attack you), or a Sanctuary (no PvP here). When the flag is wearing off, how long until it's gone. Hide it in Settings > Nearby window.")
 	local elapsed = PVP_UPDATE_SECONDS
 	pvp:SetScript("OnUpdate", function(_, delta)
 		elapsed = elapsed + delta
@@ -509,15 +509,15 @@ end
 ---@return boolean? flagged
 function Nearby:GetPvPStatus()
 	if UnitIsPVPSanctuary and Readable(UnitIsPVPSanctuary("player")) then
-		return "Sanctuary: no PvP here", C.blue, false
+		return "Sanctuary", C.blue, false
 	elseif UnitIsPVPFreeForAll and Readable(UnitIsPVPFreeForAll("player")) then
-		return "Free-for-all PvP: anyone can attack you", C.red, true
+		return "Free-for-all PvP", C.red, true
 	elseif Readable(UnitIsPVP("player")) then
 		if IsPVPTimerRunning and Readable(IsPVPTimerRunning()) then
 			local seconds = floor((Readable(GetPVPTimer()) or 0) / 1000)
 			return format("PvP ON, off in %d:%02d", floor(seconds / 60), seconds % 60), C.amber, true
 		end
-		return "PvP ON: enemy players can attack you", C.red, true
+		return "PvP ON", C.red, true
 	end
 	return "PvP off", C.faint, false
 end
@@ -912,8 +912,8 @@ function private.FooterText(items, capacity)
 	if #line > 0 then
 		tinsert(lines, table.concat(line, "  "))
 	end
-	local scroll = InCombatLockdown() and "Scroll after combat." or "Wheel to scroll."
-	return format("%d-%d of %d. %s\n%s", first, last, #items, scroll, table.concat(lines, "\n"))
+	local scroll = InCombatLockdown() and " Scroll after combat." or ""
+	return format("%d-%d of %d.%s\n%s", first, last, #items, scroll, table.concat(lines, "\n"))
 end
 
 function private.Draw(row, info)

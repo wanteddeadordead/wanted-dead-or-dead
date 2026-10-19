@@ -18284,6 +18284,46 @@ end
 	check(OnScreen("Void: no war") and OnScreen("The stake is back; the war is rescheduled."), "void: no war, the stake back")
 	ns.WarHUD:Update()
 	check(not hud:IsShown(), "no war on here: no HUD")
+	-- Notifications: each war's news told once, as a toast and a chat line; by the clock the hour's reminder and, in the
+	-- zone, the war's announcements
+	local toasts, realAdd, realWarn = {}, ns.Toast.Add, ns.Alerts.Warn
+	local announced = {}
+	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t.kind..": "..t.name end
+	ns.Alerts.Warn = function(_, text) announced[#announced + 1] = text end
+	local realAnnounce = WantedCaptureAnnounceFrame
+	WantedCaptureAnnounceFrame = nil
+	ns.db.warSeen = {}
+	AtStep(function() end)
+	check(toasts[#toasts] == "DRAWN: EMPIRE attacks Hillsbrad", "drawn: told: "..tostring(toasts[#toasts]))
+	local told = #toasts
+	ns.WarAlerts:Check()
+	check(#toasts == told, "once")
+	AtStep(function(war) war.state, war.start = "awaiting_answer", start end)
+	check(toasts[#toasts] and toasts[#toasts]:find("^TIME SET: Hillsbrad"), "the time set, to the attackers' officers: "..tostring(toasts[#toasts]))
+	AtStep(function(war)
+		war.state, war.start, war.answer = "scheduled", clock + 1800, "accept"
+		war.roster = { { guid = ME, name = "Test Player", place = 1 } }
+	end)
+	ns.WarAlerts:Tick()
+	check(toasts[#toasts] == "WAR IN 1 HOUR: Hillsbrad Foothills, "..ns.GuildWars:Clock(clock + 1800), "an hour before, to the roster: "..tostring(toasts[#toasts]))
+	clock = clock + 1000
+	ns.WarAlerts:Tick()
+	check(announced[#announced] and announced[#announced]:find("Prep: the war on Hillsbrad starts at", 1, true), "in the zone: prep announced")
+	clock = clock + 900
+	ns.WarAlerts:Tick()
+	check(announced[#announced] == "The battle for Hillsbrad has begun", "and the battle's start")
+	AtStep(function(war)
+		war.state, war.start = "over", clock - 2400
+		war.result = { winner = "att", towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, protectedUntil = clock + 3 * 86400 }
+	end)
+	check(toasts[#toasts] == "WAR WON: EMPIRE took Hillsbrad", "the result: "..tostring(toasts[#toasts]))
+	ns.db.settings.warToasts = false
+	ns.db.warSeen = {}
+	told = #toasts
+	AtStep(function() end)
+	check(#toasts == told, "notifications off: none")
+	ns.db.settings.warToasts = nil
+	ns.Toast.Add, ns.Alerts.Warn, WantedCaptureAnnounceFrame = realAdd, realWarn, realAnnounce
 	C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition = realBest, realPos
 	clock = warClock
 	UnitName, WantedAppInfo = realName, realInfo

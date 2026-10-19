@@ -9,6 +9,7 @@
 - Settings in EllesmereUI's rows: one option per row with a switch, its help on the label, and a scroll bar when a tab runs long. What the Nearby window shows in each row, where ranks show and where capture fronts show are each one dropdown of checkboxes; the TARGETED warning, the streak callout and the rank labels keep their finer settings behind a cog.
 - Larger text: nothing is smaller than 12, and body text and labels are 13.
 - A UI size setting, 80% to 150%, in Settings, Theme: it sizes the window with its popups and menus, keeps the window on screen, and is saved for the whole account. The Nearby window, the TARGETED warning and the capture bar each have their own size in their own settings (the Nearby window's applies after combat if you're in one).
+- Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
 
 ## [1.27.4] - 2026-10-18
 

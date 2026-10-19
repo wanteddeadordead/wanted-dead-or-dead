@@ -149,6 +149,7 @@ function CreateFrame(kind, name, parent, template)
 end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:GetObjectType() return self._kind end
+function Methods:IsObjectType(kind) return self._kind == kind end
 -- Mouse settings, so tests can see what a frame takes
 function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
@@ -6308,6 +6309,34 @@ end)()
 	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
+end)()
+-- Text explained inside a clickable row keeps the row's hover
+;(function()
+	local W = ns.Widgets
+	local function Tip() return _G.WantedTooltip end
+	-- Text explained inside a clickable row: the row keeps its hover, and its own tooltip gives way to the text's
+	local row = CreateFrame("Button", nil, UIParent)
+	local lit, rowTip = false, false
+	row:SetScript("OnEnter", function() lit = true rowTip = true end)
+	row:SetScript("OnLeave", function() lit = false end)
+	local realHide, realOwned = GameTooltip.Hide, GameTooltip.IsOwned
+	GameTooltip.IsOwned = function(_, frame) return rowTip and frame == row end
+	GameTooltip.Hide = function(self) rowTip = false return realHide(self) end
+	local hit = W:Explain(ns.Theme:Text(row, "body", "Seen 5m ago"), "Last seen", "Where and when.")
+	hit._scripts.OnEnter(hit)
+	check(lit, "hovering text in a row keeps the row lit")
+	check(not rowTip and Tip():IsShown() and Tip().owner == hit, "and shows the text's tooltip in place of the row's")
+	hit._scripts.OnLeave(hit)
+	check(not lit and not Tip():IsShown(), "leaving the text leaves the row")
+	GameTooltip.Hide, GameTooltip.IsOwned = realHide, realOwned
+	-- Text on a plain frame forwards nothing
+	local plain = CreateFrame("Frame", nil, UIParent)
+	local entered = false
+	plain:SetScript("OnEnter", function() entered = true end)
+	local plainHit = W:Explain(ns.Theme:Text(plain, "body", "Note"), "Note", "x")
+	plainHit._scripts.OnEnter(plainHit)
+	check(not entered, "text on a frame that isn't clickable doesn't call its OnEnter")
+	plainHit._scripts.OnLeave(plainHit)
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

@@ -104,10 +104,33 @@ end
 
 ---A FontString can't take the mouse: a Button over its text does, and lets clicks through to what is under it.
 local function HitButton(text)
-	local hit = CreateFrame("Button", nil, text:GetParent())
+	local parent = text:GetParent()
+	local hit = CreateFrame("Button", nil, parent)
 	hit:SetMouseClickEnabled(false)
+	hit:SetMouseMotionEnabled(true)
 	hit.explainedText = text
+	hit.showsTooltip = true
 	text.explainHit = hit
+	-- Inside a clickable row the text takes the mouse from the row: the row's own OnEnter and OnLeave still run, so it
+	-- stays lit, and its own GameTooltip gives way to the text's
+	local clickable = parent:IsObjectType("Button")
+	hit:SetScript("OnEnter", function(self)
+		local enter = clickable and parent:GetScript("OnEnter")
+		if enter then
+			enter(parent)
+			if GameTooltip:IsOwned(parent) then
+				GameTooltip:Hide()
+			end
+		end
+		ShowTooltip(self)
+	end)
+	hit:SetScript("OnLeave", function()
+		local leave = clickable and parent:GetScript("OnLeave")
+		if leave then
+			leave(parent)
+		end
+		HideTooltip()
+	end)
 	local function Fit()
 		local justify = text:GetJustifyH()
 		local point = (justify == "CENTER" or justify == "RIGHT") and justify or "LEFT"

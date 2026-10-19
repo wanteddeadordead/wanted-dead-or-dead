@@ -6286,6 +6286,29 @@ end)()
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
 end)()
+-- Emotes carry no tooltips (the maintainer: "the emotes don't need tooltips"): the Nearby row's buttons, its "..."
+-- and the Settings chips. The chip colours' (i) on the Settings header stays
+;(function()
+	local W = ns.Widgets
+	local button = W:Button(UIParent, "", "chip", 60, 22)
+	ns.Emotes:SetButtonEmote(button, ns.Emotes.LIST[1])
+	check(rawget(button, "tooltipTitle") == nil and rawget(button, "tooltipText") == nil, "a Nearby emote button has no tooltip")
+	local more = ns.Emotes:CreateMoreButton(UIParent, 30)
+	check(rawget(more, "tooltipTitle") == nil, "the ... button has no tooltip")
+	ns.UI:Show("settings")
+	local emoteKeys = {}
+	for _, def in ipairs(ns.Emotes.LIST) do emoteKeys[def[1]] = true end
+	local chips = 0
+	for _, f in ipairs(Mock.created) do
+		local key = rawget(f, "key")
+		if type(key) == "string" and emoteKeys[key] and rawget(f, "label") then
+			chips = chips + 1
+			check(rawget(f, "tooltipTitle") == nil, "the emote chip "..key.." has no tooltip")
+		end
+	end
+	check(chips > 0, "the Settings emote chips were found")
+	ns.UI:GetFrame():Hide()
+end)()
 -- The bug report window: what Send does is its tooltip; only a report that will wait says so on screen
 ;(function()
 	ns.Report:Show()

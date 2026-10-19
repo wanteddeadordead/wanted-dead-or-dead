@@ -163,17 +163,6 @@ function private.Place(f)
 	end
 end
 
----A lane point's seal: taken (the attackers' tower, the inhibitor broken by them), being taken, or standing.
-function private.PointTexture(point, role, d, a)
-	point = type(point) == "table" and point or {}
-	if point.state == "taken" then
-		return GuildWars.MEDIA..(role == "tower" and ("tower-"..a) or ("inhib-broken-by-"..a))
-	elseif point.state == "taking" and role == "tower" then
-		return GuildWars.MEDIA.."tower-contested"
-	end
-	return GuildWars.MEDIA..(role == "tower" and ("tower-"..d) or ("inhib-"..d))
-end
-
 ---"12:40": minutes and seconds.
 function private.Clock(seconds)
 	seconds = max(floor(seconds), 0)
@@ -221,8 +210,8 @@ function WarHUD:Update()
 	end
 	for _, row in ipairs(f.lanes) do
 		local lane = lanes[row.id] or {}
-		row.tower:SetTexture(private.PointTexture(lane.tower, "tower", d, a))
-		row.inhibitor:SetTexture(private.PointTexture(lane.inhibitor, "inhibitor", d, a))
+		row.tower:SetTexture(GuildWars:SealFile(lane.tower, "tower", d, a))
+		row.inhibitor:SetTexture(GuildWars:SealFile(lane.inhibitor, "inhibitor", d, a))
 		row.tower:SetDesaturated(prep)
 		row.inhibitor:SetDesaturated(prep)
 		local tower, inhib = type(lane.tower) == "table" and lane.tower or {}, type(lane.inhibitor) == "table" and lane.inhibitor or {}
@@ -230,7 +219,7 @@ function WarHUD:Update()
 		row.inhibPct:SetText(not prep and inhib.state == "taking" and format("%d%%", inhib.pct or 0) or "")
 	end
 	local keep = type(b.keep) == "table" and b.keep.state or "sealed"
-	f.keep:SetTexture(GuildWars.MEDIA..(keep == "fallen" and ("nexus-keep-fallen-to-"..a) or keep == "open" and ("nexus-keep-open-"..d) or ("nexus-keep-sealed-"..d)))
+	f.keep:SetTexture(GuildWars:KeepFile(keep, d, a))
 	f.keep:SetDesaturated(prep)
 	W:Explain(f.keepHit, "The keep", keep == "open" and "Open: one inhibitor down. Take it to win." or keep == "fallen" and "Taken: the attackers won."
 		or "Sealed until an inhibitor falls.", "ANCHOR_BOTTOM")

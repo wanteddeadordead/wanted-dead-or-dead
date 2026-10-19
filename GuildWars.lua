@@ -819,3 +819,24 @@ function GuildWars:OnRoster(war)
 	end
 	return false
 end
+
+---A lane point's seal: taken (the attackers' tower, the inhibitor broken by them), being taken (a tower contested), or
+---standing (the defenders'). d and a: the defenders' and attackers' sides, "horde" or "alliance".
+---@param point table? { state ("taken", "taking" or nil), pct }
+---@param role string "tower" or "inhibitor"
+---@return string texture
+function GuildWars:SealFile(point, role, d, a)
+	local state = type(point) == "table" and point.state or nil
+	if state == "taken" then
+		return MEDIA..(role == "tower" and ("tower-"..a) or ("inhib-broken-by-"..a))
+	elseif state == "taking" and role == "tower" then
+		return MEDIA.."tower-contested"
+	end
+	return MEDIA..(role == "tower" and ("tower-"..d) or ("inhib-"..d))
+end
+
+---The keep's seal: "sealed", "open" (the defenders', ringed) or "fallen" (to the attackers).
+---@return string texture
+function GuildWars:KeepFile(state, d, a)
+	return MEDIA..(state == "fallen" and ("nexus-keep-fallen-to-"..a) or state == "open" and ("nexus-keep-open-"..d) or ("nexus-keep-sealed-"..d))
+end

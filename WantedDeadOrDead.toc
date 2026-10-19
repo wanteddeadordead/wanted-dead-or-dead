@@ -119,6 +119,7 @@ Tour.lua
 MapPins.lua
 MapPins.xml
 CapturesMap.lua
+WarMap.lua
 CapturesHUD.lua
 CapturesHUD.xml
 RacesHUD.lua

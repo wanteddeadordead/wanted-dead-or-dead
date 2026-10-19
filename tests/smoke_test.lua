@@ -18187,6 +18187,68 @@ end
 	ns.WarHUD:Update()
 	check(not hud:IsShown(), "Hide the HUD hides it")
 	ns.db.settings.warHud = nil
+	-- The map: the war on its zone's map (the rally, the lanes' seals, the keep ringed while it's open) and a plate
+	local canvas = NewMock()
+	canvas._w, canvas._h = 1002, 668
+	local realCanvas, realMapId, realShown, realInfoMap, realRect = WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap
+	WorldMapFrame.GetCanvas = function() return canvas end
+	WorldMapFrame.GetMapID = function() return 1424 end
+	WorldMapFrame.IsShown = function() return true end
+	local function Pieces()
+		local out, n = {}, 0
+		for _, f in ipairs(Mock.created) do
+			local spec = rawget(f, "spec")
+			if type(spec) == "table" and f._shown then out[spec.title] = f n = n + 1 end
+		end
+		return out, n
+	end
+	ns.WarMap:Refresh()
+	local pieces, n = Pieces()
+	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"].icon._texture:find("nexus%-keep%-open%-alliance$")
+		and pieces["EMPIRE's rally point"].icon._texture:find("rally%-horde$") and pieces["Mid tower"].label._text == "50%"
+		and pieces["Top inhibitor"].icon._texture:find("inhib%-broken%-by%-horde$"), "the war on its zone's map: the rally, six seals and the keep: "..n)
+	local plate
+	for _, f in ipairs(Mock.created) do if rawget(f, "holder") and rawget(f, "lanes") and rawget(f, "crest") and f._shown and rawget(f, "now") then plate = f end end
+	check(plate and plate.holder._text == "Held by <Revenant>" and plate.now._text:find("EMPIRE attacks · 18:19 left", 1, true) and plate.lanes._text == "Top down · Mid 50% · keep open",
+		"the plate: the holder, the war's clock and the lanes: "..tostring(plate and plate.lanes._text))
+	local realSet, realPoint, set = C_Map.SetUserWaypoint, UiMapPoint, nil
+	C_Map.SetUserWaypoint = function(p) set = p return true end
+	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
+	pieces["Mid tower"]._scripts.OnClick(pieces["Mid tower"])
+	check(set and set.uiMapID == 1424 and math.abs(set.position.x - 0.525) < 0.001, "clicking a seal sets a waypoint on it")
+	C_Map.SetUserWaypoint, UiMapPoint = realSet, realPoint
+	-- A race's flags on its zone's map while it runs
+	WorldMapFrame.GetMapID = function() return 1417 end
+	ns.WarMap:Refresh()
+	pieces, n = Pieces()
+	check(n == 1 and pieces["a point"] and pieces["a point"].icon._texture:find("race%-neutral$") and plate.now._text:find("RACE", 1, true), "a race: its flags, and the plate says so")
+	-- The continent: an icon a zone (a keep where the war is on, the holders' emblems)
+	WorldMapFrame.GetMapID = function() return 1415 end
+	C_Map.GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return realInfoMap(id) end
+	C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
+	ns.WarMap:Refresh()
+	pieces = Pieces()
+	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].icon._texture:find("nexus%-keep%-sealed%-alliance$") and pieces["Ashenvale"]
+		and pieces["Hillsbrad Foothills"].spec.lines[2][1]:find("Guild war now: EMPIRE attacks", 1, true) and pieces["Hillsbrad Foothills"].spec.lines[1][1]:find("Held by <Revenant> (Alliance) since", 1, true),
+		"the continent: the war's zone as a keep, held zones by emblem, who and what's on in the tooltip")
+	-- OpenMap's stitched map: the zone's pieces over its art
+	OpenMapAPI = { major = 1, IsStitched = function() return true end, GetView = function() return 0.5, 0.5, 6 end, ArtTopLevel = function() return 5000 end,
+		WorldFromMap = function(m, x, y) if m == 1424 then return x, y end end, MapFromWorld = function(_, u, v) return u, v end }
+	ns.WarMap:Refresh()
+	pieces, n = Pieces()
+	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"]:GetParent()._level == 5001, "stitched: the war's pieces, above the stitched art")
+	OpenMapAPI = nil
+	-- The map's button turns it off and on
+	local warButton
+	for _, f in ipairs(Mock.created) do
+		local icon = rawget(f, "icon")
+		if type(icon) == "table" and tostring(rawget(icon, "_texture")):find("nexus%-keep%-sealed") and f._scripts and f._scripts.OnClick and not rawget(f, "spec") then warButton = f end
+	end
+	warButton._scripts.OnClick(warButton)
+	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map's Guild wars button hides it")
+	warButton._scripts.OnClick(warButton)
+	check(ns.db.settings.warMap == true, "and shows it")
+	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
 	AtStep(function(war, s)
 		war.state, war.start, war.answer = "prep", clock + 600, "accept"
 		s.warLive = { ["7"] = { phase = "prep", endsAt = clock + 600, points = {}, turnout = { att = 20, def = 18 } } }

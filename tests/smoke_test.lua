@@ -17778,7 +17778,12 @@ local function GuildWarsSample(now)
 			{ zone = "Arathi Highlands", next = { kind = "race", at = now - 600 } },
 			{ zone = "|cffff0000The Barrens|r", next = { kind = "race", at = now + 2 * 86400 } },
 		},
-		guild = { name = "EMPIRE", treasury = 2140, staked = 400, tax = 10, taxBy = "Vorgath", taxAt = now - 6 * 86400 },
+		guild = { name = "EMPIRE", treasury = 2140, staked = 400, tax = 10, taxBy = "Vorgath", taxAt = now - 6 * 86400,
+			week = { { text = "Ashenvale held, 7 days", n = 140 }, { text = "Stake on Hillsbrad (held)", n = -400 } } },
+		purse = { marks = 1262, today = 47, cap = 150, resets = now + 6 * 3600,
+			sources = { { label = "Races: present", n = 10, max = 10 }, { label = "Races: kills", n = 8, max = 30 }, { label = "Wars", n = 0, max = 50 } },
+			recent = { { t = now - 1200, text = "Arathi race so far: 6 kills, 9 min on a point", purse = 14, treasury = 1 },
+				{ t = now - 2000, text = "Hillsbrad war declared: stake held", treasury = -400 } } },
 	}
 end
 
@@ -17872,6 +17877,37 @@ end
 		if type(l) == "table" and l._text == "Only zones someone holds" and f._scripts.OnClick then f._scripts.OnClick(f) end
 	end
 	check(#Rows() == 4, "only zones someone holds: "..#Rows())
+	-- War Marks: the purse, today by source against the cap, the treasury and its tax (the guild master's), recent
+	local function OnScreen(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if tostring(f._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return f end
+			end
+		end
+	end
+	ns.db.warActions = {}
+	ns.UI:Show("warmarks")
+	-- (Thousands are the game's BreakUpLargeNumbers, which the suite doesn't have)
+	check((OnScreen("1,262") or OnScreen("1262")) and OnScreen("47 / 150") and OnScreen("EMPIRE TREASURY") and OnScreen("400 held as a stake") and OnScreen("10%"), "War Marks: the tiles")
+	check(OnScreen("TODAY · 47 OF 150") and OnScreen("Races: kills") and OnScreen("8 / 30") and OnScreen("Ashenvale held, 7 days") and OnScreen("-400"),
+		"today by source, and the treasury's week")
+	check(OnScreen("Arathi race so far: 6 kills, 9 min on a point") and OnScreen("+14"), "recent movements, purse and treasury")
+	local slider
+	for _, f in ipairs(Mock.created) do if rawget(f, "slider") and rawget(f, "box") and f._shown and f._parent and f._parent._shown and rawget(f._parent, "taxLabel") then slider = f end end
+	check(slider and slider._alpha == 0.6, "the tax slider: only the guild master moves it")
+	game.SetLeader(true)
+	ns.UI:Refresh()
+	check(slider._alpha == 1, "the guild master can")
+	slider.slider._scripts.OnValueChanged(slider.slider, 15, true)
+	check(ns.GuildWars:Pending("tax") and ns.GuildWars:Pending("tax").data.percent == 15 and OnScreen("Sent; waiting for the site"), "moving it asks the site, and says so")
+	game.SetLeader(false)
+	local noGuild = GuildWarsSample(clock)
+	noGuild.guild = nil
+	G:Take(noGuild)
+	ns.UI:Refresh()
+	check(not OnScreen("EMPIRE TREASURY") and (OnScreen("1,262") or OnScreen("1262")), "no guild: no treasury or tax, the purse still")
 	game.Restore()
 	G:Take(nil)
 	ns.db.warActions = {}

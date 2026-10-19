@@ -80,6 +80,7 @@ PageHome.lua
 PageSiege.lua
 PageGuildWars.lua
 PageWarZones.lua
+PageWarMarks.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua

@@ -16759,7 +16759,10 @@ print("wanted smoke: setup checks pass")
 -- Wars page in Siege's place; the HUD in the race's zone while it runs
 ;(function()
 	local R, C, db = ns.Races, ns.Captures, ns.db
-	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, siege = db.settings.siege, presence = db.presence }
+	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, siege = db.settings.siege, presence = db.presence, Broadcast = ns.Sync.BroadcastPlugin }
+	-- What we tell our side, live (Races' live numbers)
+	local told = {}
+	ns.Sync.BroadcastPlugin = function(_, tag, t) told[#told + 1] = { tag = tag, t = t, at = clock } return true end
 	local mapId, px, py = 1424, 0.573, 0.37
 	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
 		GetMapInfo = function() return { mapType = 3 } end }
@@ -16810,7 +16813,8 @@ print("wanted smoke: setup checks pass")
 	-- Presence: a sample on the point, on the log line the app reads
 	db.presence = {}
 	local logged = {}
-	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
+	-- (Development builds log their own chatter there too: only the presence lines)
+	C_Log = { LogMessage = function(text) if text:find("^WANTEDP1 ") then logged[#logged + 1] = text end end }
 	R:Sample()
 	check(#logged == 0 and next(db.presence) == nil, "no sample before the race starts")
 	clock = start + 60
@@ -16837,6 +16841,34 @@ print("wanted smoke: setup checks pass")
 	clock = clock + 30
 	R:Sample()
 	check(#logged == 2 and db.presence[key].c == 2 and ({ R:Mine(race) })[2] == 1, "two samples: a minute on the points")
+	-- Live numbers: our side is told what we counted, at most once a minute, only in the race's zone while it runs
+	check(#told >= 1 and told[1].tag == "K" and told[1].t.z == "Hillsbrad Foothills" and told[1].t.s == race.start and told[1].t.n == 1
+		and told[1].t.w == 1.2 and told[1].t.p == "hb-r2" and told[1].t.k == 0, "our side is told our count: zone, race, samples, weighted, point")
+	for i = 2, #told do
+		check(told[i].at - told[i - 1].at >= 60, "at most once a minute")
+	end
+	check(R:LiveSide(race) == nil and R:SideInfluence(race, "Horde") == 812, "nobody else heard: the catch-up's number stands")
+	-- What others of our side say
+	local most = (race.stop - race.start) / R.SAMPLE_SECONDS
+	for _, bad in ipairs({ "x", { z = "Arathi Highlands", s = race.start, k = 1, n = 1, w = 1 }, { z = race.zone, s = race.start + 1, k = 1, n = 1, w = 1 },
+		{ z = race.zone, s = race.start, k = 101, n = 1, w = 1 }, { z = race.zone, s = race.start, k = 1, n = most + 1, w = 1 },
+		{ z = race.zone, s = race.start, k = 1, n = 2, w = 5 }, { z = race.zone, s = race.start, k = "1", n = 1, w = 1 } }) do
+		R:OnPeer(bad, "Bad Sender")
+	end
+	check(R:LiveSide(race) == nil, "malformed, out-of-race or impossible counts are ignored")
+	R:OnPeer({ z = race.zone, s = race.start, k = 100, n = 90, w = 108, p = "hb-r3" }, "Big Hitter")
+	local live = R:LiveSide(race)
+	local mine = db.raceWeight["Hillsbrad Foothills:"..race.start] * 0.5 * 4
+	check(live and live.players == 2 and live.kills == 100 and live.minutes == 46 and live.influence == math.floor(1000 + 108 * 0.5 * 4 + mine + 0.5),
+		"our side's live estimate, worked out as the site does: "..tostring(live and live.influence))
+	local horde, isLive = R:SideInfluence(race, "Horde")
+	check(isLive and horde == live.influence and R:SideInfluence(race, "Alliance") == 780, "over the catch-up's: ours shown live; theirs stays the site's")
+	check(R:HereNow(race.points[3]) == 1 and R:HereNow(race.points[1]) == 0, "who of our side is on which point now")
+	R:OnPeer({ z = race.zone, s = race.start, k = 1, n = 2, w = 2 }, "Big Hitter")
+	check(R:LiveSide(race).kills == 1 and R:HereNow(race.points[3]) == 0, "a player's latest word replaces their last")
+	R:OnPeer({ z = race.zone, s = race.start, k = 100, n = 90, w = 108, p = "hb-r3" }, "Big Hitter")
+	clock = clock + 151
+	check(R:HereNow(race.points[3]) == 0, "not heard from lately: not counted as on the point")
 	-- The race points' samples survive the book's tidy at login
 	C:OnLoad()
 	check(db.presence[key] ~= nil, "a race point's sample is kept in the book at login")
@@ -16853,7 +16885,7 @@ print("wanted smoke: setup checks pass")
 			end
 		end
 	end
-	check(OnScreen("Hillsbrad Foothills") and OnScreen("Arathi Highlands") and OnScreen("LIVE") and OnScreen("Horde 812") and OnScreen("the crossroads")
+	check(OnScreen("Hillsbrad Foothills") and OnScreen("Arathi Highlands") and OnScreen("LIVE") and OnScreen("Horde "..horde) and OnScreen("live") and OnScreen("the crossroads")
 		and OnScreen("EMPIRE") and OnScreen("Revenant") and OnScreen("Duskwood"), "Tonight: the races, the live one's influence, its points, both sides' guilds and tomorrow")
 	check(not OnScreen("War Marks"), "no War Marks line until they exist")
 	-- The live numbers' address, to copy
@@ -16870,7 +16902,8 @@ print("wanted smoke: setup checks pass")
 	-- The HUD: in the race's zone while it runs, and only then
 	ns.RacesHUD:Update()
 	local hud = _G.WantedRaceHUD
-	check(hud and hud:IsShown() and hud.zone._text == "Hillsbrad Foothills" and hud.horde._text:find("Horde 812", 1, true) and hud.you._text:find("1 min", 1, true),
+	check(hud and hud:IsShown() and hud.zone._text == "Hillsbrad Foothills" and hud.horde._text:find("Horde "..horde.."|r", 1, true) and hud.horde._text:find("live", 1, true)
+		and hud.you._text:find("1 min", 1, true),
 		"the race HUD in the zone: the zone, the influence and your minutes")
 	check(hud.points[2].name._text:find("+20%", 1, true), "the middle point marked +20%")
 	-- The point the player stands on is coloured by who's here now; the site's holder stays in its tooltip
@@ -16898,12 +16931,13 @@ print("wanted smoke: setup checks pass")
 	clock = race.stop + 1
 	ns.RacesHUD:Update()
 	check(not hud:IsShown(), "after the race: no race HUD")
-	local before = #logged
+	local before, toldBefore = #logged, #told
 	R:Sample()
-	check(#logged == before, "and no samples")
+	check(#logged == before and #told == toldBefore, "and no samples, and nothing told")
 	-- Put back
 	R:Take(nil)
 	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence
+	ns.Sync.BroadcastPlugin = real.Broadcast
 end)()
 print("wanted smoke: race checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

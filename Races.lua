@@ -6,6 +6,11 @@
 -- races (with their points and influence as the site last counted them) and tomorrow's zones in its catch-up, read at
 -- every login. While a race is run the addon counts the player's presence on its points every 30 seconds, in the
 -- same presence book and on the same log line as a capture point's (Captures:CountRace), for the app to send on.
+--
+-- Live numbers: once a minute during a race, in its zone, each client tells its own side on WantedNet what it counted
+-- for its player (kills, samples on the points, the point it's on). Each client adds up what its side's players said
+-- into a provisional estimate of its side's influence, worked out as the site does (a kill 10, a minute on a point 4
+-- times its weight), shown as live over the catch-up's number; without any, the catch-up's number stands.
 
 local _, Wanted = ...
 local Races = Wanted:NewModule("Races")
@@ -14,12 +19,23 @@ local private = {
 	listeners = {},
 	current = nil, -- the race point the player stood on at the last look, or nil
 	blocked = nil, -- why the player's presence didn't count there, or nil
+	peers = {}, -- sender -> { key, k = kills, n = samples, w = weighted samples, p = point id or nil, at = GetTime() }
+	sentAt = nil, -- when we last told our side
 }
 local SAMPLE_SECONDS = 30
 local MAX_RACES, MAX_GUILDS = 6, 20
 local STATES = { upcoming = true, live = true, counting = true, final = true }
 local SIDES = { H = "Horde", A = "Alliance" }
 Races.SAMPLE_SECONDS = SAMPLE_SECONDS
+-- Live numbers on WantedNet: { z = zone, s = race start, k = kills, n = samples, w = weighted samples, p = point id },
+-- from the player they're about, at most once a minute each, only in a race's zone while it's run. Older versions
+-- ignore the tag.
+local LIVE_TAG = "K"
+local SEND_SECONDS = 60
+local HERE_SECONDS = 150 -- a peer said they're on a point this recently: still there
+local MAX_PEERS = 200
+-- The site's worth of a kill and of a minute on a point (server stats/raceinfluence.go: KillInfluence, HoldPerMinute)
+local KILL_INFLUENCE, HOLD_PER_MINUTE = 10, 4
 
 
 
@@ -30,10 +46,13 @@ Races.SAMPLE_SECONDS = SAMPLE_SECONDS
 function Races:OnLoad()
 	-- Samples counted per race this client saw, for the HUD's minutes: "<zone>:<start>" -> samples
 	Wanted.db.raceSamples = type(Wanted.db.raceSamples) == "table" and Wanted.db.raceSamples or {}
+	-- The same, each sample counted at its point's weight (the middle one 1.2), for the live numbers
+	Wanted.db.raceWeight = type(Wanted.db.raceWeight) == "table" and Wanted.db.raceWeight or {}
 end
 
 function Races:OnEnable()
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Races sample", function() Races:Sample() end))
+	Wanted.Sync:RegisterPlugin(LIVE_TAG, function(tbl, sender) Races:OnPeer(tbl, sender) end, { priority = 3 })
 end
 
 
@@ -136,9 +155,11 @@ function Races:Take(src)
 	for _, race in ipairs(private.state and private.state.tonight or {}) do
 		keep[private.Key(race)] = true
 	end
-	for key in pairs(Wanted.db.raceSamples or {}) do
-		if not keep[key] then
-			Wanted.db.raceSamples[key] = nil
+	for _, book in ipairs({ Wanted.db.raceSamples or {}, Wanted.db.raceWeight or {} }) do
+		for key in pairs(book) do
+			if not keep[key] then
+				book[key] = nil
+			end
 		end
 	end
 	private.Changed()
@@ -335,9 +356,125 @@ function Races:Sample(now)
 			if not blocked and Wanted.Captures:CountRace(point.id, now) then
 				local key = private.Key(race)
 				Wanted.db.raceSamples[key] = (Wanted.db.raceSamples[key] or 0) + 1
+				Wanted.db.raceWeight[key] = (Wanted.db.raceWeight[key] or 0) + point.weight
 			end
+		end
+		local _, _, _, mapId = Wanted.Recorder:GetPosition()
+		if mapId == race.mapId then
+			private.Tell(race, point)
 		end
 	end
 	private.current, private.blocked = point, blocked
 	private.Changed()
+end
+
+
+
+-- ============================================================================
+-- Live numbers from our side
+-- ============================================================================
+
+---Tells our side what this client counted for its player in the race, at most once a minute.
+function private.Tell(race, point)
+	local now = GetTime()
+	if private.sentAt and now - private.sentAt < SEND_SECONDS then
+		return
+	end
+	local kills = Races:Mine(race)
+	local key = private.Key(race)
+	private.sentAt = now
+	Wanted.Sync:BroadcastPlugin(LIVE_TAG, { z = race.zone, s = race.start, k = kills, n = Wanted.db.raceSamples[key] or 0,
+		w = floor((Wanted.db.raceWeight[key] or 0) * 10 + 0.5) / 10, p = point and point.id or nil })
+end
+
+---What a player of our side said they counted in a race being run now: kept by sender, the latest only.
+---@param tbl table
+---@param sender string
+function Races:OnPeer(tbl, sender)
+	if type(tbl) ~= "table" or type(sender) ~= "string" or sender == "" then
+		return
+	end
+	local race = Races:Live()
+	if not race or tbl.z ~= race.zone or tbl.s ~= race.start then
+		return
+	end
+	local k, n, w = private.Number(tbl.k), private.Number(tbl.n), private.Number(tbl.w)
+	local most = ceil((race.stop - race.start) / SAMPLE_SECONDS)
+	if not (k and n and w) or k < 0 or n < 0 or w < 0 or k > 100 or n > most or w > n * 2 then
+		return
+	end
+	local point
+	for _, p in ipairs(race.points) do
+		if p.id == tbl.p then
+			point = p
+		end
+	end
+	if not private.peers[sender] then
+		local count = 0
+		for _ in pairs(private.peers) do
+			count = count + 1
+		end
+		if count >= MAX_PEERS then
+			return
+		end
+	end
+	private.peers[sender] = { key = private.Key(race), k = floor(k), n = floor(n), w = w, p = point and point.id, at = GetTime() }
+	private.Changed()
+end
+
+---Our side's live numbers for a race, from what its players said and this client's own count: nil when no other
+---player of our side has said anything (the catch-up's number stands then).
+---@param race table
+---@return table? { influence, players, kills, minutes }
+function Races:LiveSide(race)
+	local key = private.Key(race)
+	local kills, minutes = Races:Mine(race)
+	local live = { players = 1, kills = kills, minutes = minutes,
+		influence = kills * KILL_INFLUENCE + (Wanted.db.raceWeight[key] or 0) * SAMPLE_SECONDS / 60 * HOLD_PER_MINUTE }
+	local heard = false
+	for _, peer in pairs(private.peers) do
+		if peer.key == key then
+			heard = true
+			live.players = live.players + 1
+			live.kills = live.kills + peer.k
+			live.minutes = live.minutes + floor(peer.n * SAMPLE_SECONDS / 60)
+			live.influence = live.influence + peer.k * KILL_INFLUENCE + peer.w * SAMPLE_SECONDS / 60 * HOLD_PER_MINUTE
+		end
+	end
+	if not heard then
+		return nil
+	end
+	live.influence = floor(live.influence + 0.5)
+	return live
+end
+
+---How many players of our side are on a race point now, by what they said lately (and this client's own place).
+---@param point table
+---@return number
+function Races:HereNow(point)
+	local key, now = private.Key(point.race), GetTime()
+	local n = private.current == point and 1 or 0
+	for _, peer in pairs(private.peers) do
+		if peer.key == key and peer.p == point.id and now - peer.at <= HERE_SECONDS then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+---Our side's influence to show for a race: the live estimate when it's more than the catch-up's (the catch-up's has
+---what the site counted before the app last synced), else the catch-up's. Second: whether it's the live one.
+---@param race table
+---@return number influence
+---@return boolean live
+function Races:SideInfluence(race, side)
+	local counted = side == "Horde" and race.horde or race.alliance
+	if side ~= UnitFactionGroup("player") or Races:Phase(race) ~= "live" then
+		return counted, false
+	end
+	local live = Races:LiveSide(race)
+	if live and live.influence > counted then
+		return live.influence, true
+	end
+	return counted, false
 end

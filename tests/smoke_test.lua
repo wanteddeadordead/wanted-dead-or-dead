@@ -18469,7 +18469,7 @@ end
 	-- A bystander: another guild's live war in the zone (warLive gives every live war of the campaign, with its zone)
 	local bystander = GuildWarsSample(clock)
 	bystander.declare = nil
-	bystander.warLive = { ["9"] = { zone = "Hillsbrad Foothills", phase = "battle", endsAt = clock + 1200, points = {}, turnout = { att = 12, def = 15 } } }
+	bystander.warLive = { ["9"] = { zone = "Hillsbrad Foothills", start = clock - 600, phase = "battle", endsAt = clock + 1200, points = {}, turnout = { att = 12, def = 15 } } }
 	G:Take(bystander)
 	sights = {}
 	ns.GuildWars:Sight()
@@ -18477,6 +18477,7 @@ end
 	check(G:War(1) == nil and G:Here() and G:Here().warId == 9 and sights[1] and sights[1]:find(" census 9 ", 1, true) and hud:IsShown()
 		and hud.defender.name._text == "Revenant" and hud.attacker.name._text == "Horde" and hud.status._text == "You can fight; you don't count",
 		"a bystander: no war tab, but the HUD, and census lines under that war's id: "..tostring(sights[1]))
+	check(G:Here().battle.start == clock - 600 and hud.clock._text == "20:00", "its clock from the war's start: "..tostring(hud.clock._text))
 	AtStep(function(war) war.state, war.start, war.answer = "battle", clock - 300, "accept" war.roster = { { guid = ME, name = "Test Player", place = 1 } } end)
 	-- Only on the war's layer once it's fixed
 	local realLayer = ns.Shard.Current

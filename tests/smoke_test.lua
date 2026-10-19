@@ -2963,14 +2963,14 @@ end)()
 	ns.db.enemyStats = saved
 end)()
 ;(function()
-	-- The window says Wanted is under heavy development through the Forever beta
+	-- The window says Wanted is under heavy development through the Forever beta: in the BETA tag's tooltip
 	ns.UI:Show("board")
 	local found = false
 	for _, f in ipairs(Mock.created) do
 		local text = rawget(f, "text")
-		if type(text) == "table" and tostring(text._text):find("heavy development through the WoW Forever beta", 1, true) then found = true end
+		if type(text) == "table" and text._text == "BETA" and tostring(rawget(f, "tooltipText")):find("heavy development through the WoW Forever beta", 1, true) then found = true end
 	end
-	check(found, "the window shows the development note")
+	check(found, "the BETA tag explains the development note")
 end)()
 ;(function()
 	-- At login, without the app, a popup offers it (like TSM's); "Don't remind me" stops it for good

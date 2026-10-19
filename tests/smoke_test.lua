@@ -16615,12 +16615,23 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	cvars.nameplateShowEnemies = "0"
 	ns.UI:Show("web")
 	local web = Setup.cards.web
-	local web = Setup.cards.web
-	check(web and web.rows[3].box:IsShown() and web.rows[3].box._text == ns.Bridge.INVITE_URL, "Website & app has the group's invite to copy under its step")
+	-- The steps on the step bar: set ones ticked, red ones crossed; the first not set has its fix and address under it
+	local dots = web.bar.dots
+	check(dots[1].mark._texture:find("tick$") and dots[2].mark._texture:find("tick$") and dots[3].mark._texture:find("cross$") and dots[4].mark._texture:find("cross$"),
+		"Website & app: the steps on the step bar, the set ones ticked, the missing ones crossed")
+	check(dots[3].tooltipTitle == "In the Wanted Battle.net group" and dots[3].tooltipText:find("Join it", 1, true) and dots[4].tooltipText:find("Press V", 1, true),
+		"each dot's tooltip is its detail and fix")
+	check(web.rows[3].box:IsShown() and web.rows[3].box._text == ns.Bridge.INVITE_URL and web.fix._text:find("^In the Wanted Battle.net group: Join it"),
+		"the first one not set: its fix, and the group's invite to copy, under the bar")
 	local turnOn = web.rows[4].button
-	check(turnOn:IsShown() and turnOn._scripts.OnClick, "and a Turn on button under the nameplates step")
+	check(not turnOn:IsShown(), "the next one waits its turn")
+	ns.Bridge.clubId = "23053871"
+	ns.UI:Refresh(true)
+	web.Refresh()
+	check(turnOn:IsShown() and turnOn._scripts.OnClick and not web.rows[3].box:IsShown() and dots[3].mark._texture:find("tick$"), "in the group: the nameplates step, with Turn on")
 	turnOn._scripts.OnClick(turnOn)
-	check(not turnOn:IsShown() and web.rows[4].detail._text:find("45 yards", 1, true), "the button goes, the step is green")
+	check(not turnOn:IsShown() and not web.fix:IsShown() and dots[4].mark._texture:find("tick$"), "the button goes, the step is ticked")
+	ns.Bridge.clubId = 0
 	check(cvars.nameplateShowEnemies == "1" and Setup:Steps()[4].state == "ok", "Turn on sets the enemy nameplates on")
 	-- The tour: /wanted tour opens the card on the first page; Next opens each stop's page behind it and borders the
 	-- part it talks about; the page is remembered when it's closed; a fight closes it and the end of the fight brings it

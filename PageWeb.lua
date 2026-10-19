@@ -190,8 +190,6 @@ UI:RegisterPage("web", {
 		body:SetSize(width - 30, 1)
 		scroll:SetScrollChild(body)
 		private.body = body
-		-- TODO(ui-pass PR 3): the setup steps as a W:StepBar (Addon up to date > Wanted app running > In the group >
-		-- Enemy nameplates), each step's detail and fix its dot's tooltip, the copy box and Turn on under the bar
 		private.setup = Wanted.Setup:BuildCard(body, width - 30)
 		private.setup:SetPoint("TOPLEFT")
 		private.BuildSite(body, width - 30)

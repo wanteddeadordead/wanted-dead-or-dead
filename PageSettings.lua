@@ -690,7 +690,6 @@ function private.BuildEmotes(column)
 				end)
 				chip.key = def[1]
 				chip:SetPoint("TOPLEFT", 16 + col * (EMOTE_CHIP_WIDTH + 4), y)
-				W:AttachTooltip(chip, def[2], def[3].." at your target.")
 				tinsert(private.emoteChips, chip)
 				col = col + 1
 				if col == EMOTE_COLUMNS then

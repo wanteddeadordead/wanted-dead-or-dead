@@ -324,9 +324,8 @@ function private.BuildEmpty(container, width)
 	panel.title:SetPoint("LEFT", 24, 0)
 	panel.title:SetWidth(width - 48 - 140 - 40)
 	panel.title:SetWordWrap(false)
-	panel.glyph = W:InfoGlyph(panel, "What the app adds", "A daily challenge, three weekly ones, hot zones where kills count double, "
-		.."and a challenge rank for each character that never resets. wanteddeadordead.com works them out from the kills the "
-		.."app sends, and the app brings them here.\n\nWorks without the app: bounties on the Board, your hunts and claims, the "
+	panel.glyph = W:InfoGlyph(panel, "What the app adds", "A daily challenge, three weekly ones and hot zones where kills count double, "
+		.."for a weekly score. wanteddeadordead.com works them out from the kills the app sends, and the app brings them here.\n\nWorks without the app: bounties on the Board, your hunts and claims, the "
 		.."Nearby window and alerts, Hotspots and the map, Enemies, Leaderboards and Activity, all shared with other Wanted "
 		.."players in game.")
 	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)

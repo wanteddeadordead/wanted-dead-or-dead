@@ -18478,6 +18478,14 @@ end
 		and hud.defender.name._text == "Revenant" and hud.attacker.name._text == "Horde" and hud.status._text == "You can fight; you don't count",
 		"a bystander: no war tab, but the HUD, and census lines under that war's id: "..tostring(sights[1]))
 	check(G:Here().battle.start == clock - 600 and hud.clock._text == "20:00", "its clock from the war's start: "..tostring(hud.clock._text))
+	-- And a bystander's presence on that war's point, so their census and sightings count
+	local bpresence, realLogB, realBlockedB = {}, C_Log, ns.Captures.Blocked
+	C_Log = { LogMessage = function(t) if t:find("^WANTEDP1 ") then bpresence[#bpresence + 1] = t end end }
+	ns.Captures.Blocked = function() return nil end
+	clock = clock + 30
+	ns.WarLive:Step()
+	check(bpresence[1] and bpresence[1]:find(" hb-mid-a-tower ", 1, true), "a bystander's presence on the war's point: "..tostring(bpresence[1]))
+	C_Log, ns.Captures.Blocked = realLogB, realBlockedB
 	AtStep(function(war) war.state, war.start, war.answer = "battle", clock - 300, "accept" war.roster = { { guid = ME, name = "Test Player", place = 1 } } end)
 	-- Only on the war's layer once it's fixed
 	local realLayer = ns.Shard.Current

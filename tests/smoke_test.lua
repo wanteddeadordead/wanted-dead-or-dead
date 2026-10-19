@@ -6437,6 +6437,18 @@ end)()
 	Theme:Choose(savedTheme or "stormwind")
 	ns.db.settings.theme = savedTheme
 end)()
+-- The Calendar's legend: its lines at least 4 px apart beyond their text's size, so they don't touch
+;(function()
+	ns.UI:Show("calendar")
+	local wow, event
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "WoW Forever" and fs._point and fs._point[1] == "BOTTOMLEFT" then wow = fs end
+		if fs._text == "Event" and fs._point and fs._point[1] == "BOTTOMLEFT" then event = fs end
+	end
+	check(wow and event, "the Calendar legend is built")
+	local gap = wow._point[3] - event._point[3]
+	check(gap >= wow._font._size + 4, "legend lines "..gap.." apart for "..wow._font._size.." px text")
+end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
 -- 0, or never set) aren't measured here.

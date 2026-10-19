@@ -307,8 +307,8 @@ UI:RegisterPage("calendar", {
 		}
 		for i, item in ipairs(legend) do
 			local key = Theme:Text(side, "tiny", item[1], KIND_COLORS[item[2]])
-			-- At the foot, 12 apart: seven lines stay clear of Coming up full (10 rows)
-			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 12)
+			-- At the foot, 16 apart (12 px text): seven lines stay clear of Coming up full (10 rows)
+			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 16)
 			if item[2] == "pvpholiday" then
 				private.bgLegend = key
 			end

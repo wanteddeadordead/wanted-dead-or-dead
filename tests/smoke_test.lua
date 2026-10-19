@@ -47,9 +47,9 @@ local function NewMock(kind)
 	return setmetatable({ _scripts = {}, _shown = true, _text = "", _enabled = true, _w = 100, _h = 20, _kind = kind }, Mock)
 end
 Mock.created = {} -- every frame made, so tests can find one by its fields
--- Fields the tooltip helper reads before any are set: nil until then, as on a real frame
+-- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -80,17 +80,33 @@ function Methods:SetText(t)
 	if self._fs then self._fs._text = t end
 end
 function Methods:GetText() return self._text end
--- Text width as the game's font draws it, near enough: Friz Quadrata averages a little over half its size per
--- character (12pt: about 6.7 pixels), colour codes and textures taking none
+-- Text width as the game draws it in the interface font, Inter: each printable ASCII character's advance in ems, from
+-- Inter SemiBold (Media\fonts\Inter-SemiBold.ttf; Medium is a little narrower), space to "~". Any other character
+-- (Cyrillic, accents) counts as 0.65 em, an inline texture as 1.12 em, colour codes as nothing.
 function Methods:SetFont(_, size, flags) self._size, self._flags = size, flags end
 function Methods:Clear() self._cleared = (self._cleared or 0) + 1 end
 function Methods:SetShadowColor(r, g, b, a) self._shadowColor = { r, g, b, a } end
 do
+	local INTER = { 0.252, 0.321, 0.523, 0.644, 0.65, 1.004, 0.663, 0.326, 0.373, 0.373, 0.54, 0.673, 0.319, 0.465, 0.319,
+		0.379, 0.66, 0.423, 0.623, 0.636, 0.666, 0.612, 0.64, 0.576, 0.64, 0.64, 0.319, 0.329, 0.673, 0.673, 0.673, 0.543,
+		0.999, 0.728, 0.659, 0.737, 0.722, 0.605, 0.588, 0.749, 0.746, 0.277, 0.58, 0.703, 0.565, 0.922, 0.759, 0.769,
+		0.645, 0.773, 0.652, 0.65, 0.66, 0.736, 0.728, 1.02, 0.72, 0.713, 0.652, 0.373, 0.379, 0.373, 0.481, 0.469, 0.351,
+		0.574, 0.624, 0.583, 0.624, 0.591, 0.389, 0.625, 0.612, 0.262, 0.262, 0.569, 0.262, 0.9, 0.612, 0.609, 0.624,
+		0.624, 0.397, 0.549, 0.353, 0.612, 0.587, 0.839, 0.569, 0.588, 0.566, 0.455, 0.359, 0.455, 0.673 }
 	local function TextWidth(fs)
-		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "  ")
+		local text = tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 		local size = type(fs._font) == "table" and fs._font._size or fs._size
 		-- Another addon's font, size unknown: 6 pixels a character
-		return #text * (size and size * 0.56 or 6)
+		if not size then
+			return #text:gsub("|T.-|t", "  ") * 6
+		end
+		local ems = 0
+		text = text:gsub("|T.-|t", function() ems = ems + 1.12 return "" end)
+		for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+			local byte = char:byte()
+			ems = ems + (#char == 1 and byte >= 32 and byte <= 126 and INTER[byte - 31] or (#char > 1 and 0.65 or 0))
+		end
+		return ems * size
 	end
 	function Methods:GetStringWidth() return TextWidth(self) end
 	function Methods:GetUnboundedStringWidth() return TextWidth(self) end
@@ -98,7 +114,7 @@ end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
 function Methods:SetTexture(t) self._texture = t end
-function Methods:SetTextColor(r, g, b) self._textColor = { r, g, b } end
+function Methods:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 function Methods:GetFontObject() return self._font end
 function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
@@ -149,11 +165,13 @@ function CreateFrame(kind, name, parent, template)
 end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:GetObjectType() return self._kind end
+function Methods:IsObjectType(kind) return self._kind == kind end
 -- Mouse settings, so tests can see what a frame takes
 function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
 function Methods:SetMotionScriptsWhileDisabled(v) self._motionWhileDisabled = v end
 function Methods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a } end
+function Methods:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
 function Methods:SetPoint(point, ...)
@@ -2932,14 +2950,14 @@ end)()
 	ns.db.enemyStats = saved
 end)()
 ;(function()
-	-- The window says Wanted is under heavy development through the Forever beta
+	-- The window says Wanted is under heavy development through the Forever beta: in the BETA tag's tooltip
 	ns.UI:Show("board")
 	local found = false
 	for _, f in ipairs(Mock.created) do
 		local text = rawget(f, "text")
-		if type(text) == "table" and tostring(text._text):find("heavy development through the WoW Forever beta", 1, true) then found = true end
+		if type(text) == "table" and text._text == "BETA" and tostring(rawget(f, "tooltipText")):find("heavy development through the WoW Forever beta", 1, true) then found = true end
 	end
-	check(found, "the window shows the development note")
+	check(found, "the BETA tag explains the development note")
 end)()
 ;(function()
 	-- At login, without the app, a popup offers it (like TSM's); "Don't remind me" stops it for good
@@ -6278,6 +6296,127 @@ end)()
 	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
+end)()
+-- Text explained inside a clickable row keeps the row's hover
+;(function()
+	local W = ns.Widgets
+	local function Tip() return _G.WantedTooltip end
+	-- Text explained inside a clickable row: the row keeps its hover, and its own tooltip gives way to the text's
+	local row = CreateFrame("Button", nil, UIParent)
+	local lit, rowTip = false, false
+	row:SetScript("OnEnter", function() lit = true rowTip = true end)
+	row:SetScript("OnLeave", function() lit = false end)
+	local realHide, realOwned = GameTooltip.Hide, GameTooltip.IsOwned
+	GameTooltip.IsOwned = function(_, frame) return rowTip and frame == row end
+	GameTooltip.Hide = function(self) rowTip = false return realHide(self) end
+	local hit = W:Explain(ns.Theme:Text(row, "body", "Seen 5m ago"), "Last seen", "Where and when.")
+	hit._scripts.OnEnter(hit)
+	check(lit, "hovering text in a row keeps the row lit")
+	check(not rowTip and Tip():IsShown() and Tip().owner == hit, "and shows the text's tooltip in place of the row's")
+	hit._scripts.OnLeave(hit)
+	check(not lit and not Tip():IsShown(), "leaving the text leaves the row")
+	GameTooltip.Hide, GameTooltip.IsOwned = realHide, realOwned
+	-- Text on a plain frame forwards nothing
+	local plain = CreateFrame("Frame", nil, UIParent)
+	local entered = false
+	plain:SetScript("OnEnter", function() entered = true end)
+	local plainHit = W:Explain(ns.Theme:Text(plain, "body", "Note"), "Note", "x")
+	plainHit._scripts.OnEnter(plainHit)
+	check(not entered, "text on a frame that isn't clickable doesn't call its OnEnter")
+	plainHit._scripts.OnLeave(plainHit)
+end)()
+-- EllesmereUI's look on the widgets: segmented cells with round ends, page tabs, the
+-- dropdown and its menu, the slider's value box, the checkbox, the dialog and the fonts
+;(function()
+	local W, C = ns.Widgets, ns.Theme.C
+	-- Segmented: 28 px cells, round ends on the outer cells only, the chosen one in the accent
+	local control = W:Segmented(UIParent, { { key = "a", label = "Low" }, { key = "b", label = "Mid" }, { key = "c", label = "High" } }, nil, 80)
+	local first, middle, last = control.buttons[1], control.buttons[2], control.buttons[3]
+	check(control._h == 28 and first._h == 28, "segmented cells are 28 px high")
+	check(#first.caps == 2 and first.caps[1]._point[1] == "LEFT" and #last.caps == 2 and last.caps[1]._point[1] == "RIGHT" and middle.caps == nil,
+		"the end cells have round caps on their outer sides, the middle none")
+	check(first.caps[1]._texture:find("cap%-fill$") and first.caps[2]._texture:find("cap%-ring$"), "drawn from our own cap textures")
+	check(first._edges[3]._shown == false and first._edges[4]._shown ~= false, "the square edge gives way to the cap")
+	control:Select("b", true)
+	check(middle.label._textColor[1] == C.accent[1] and first.label._textColor[1] == 1, "the chosen cell's text is in the accent, the others white")
+	local single = W:Segmented(UIParent, { { key = "only", label = "Only" } }, nil, 80)
+	check(#single.buttons[1].caps == 4, "a single cell is round at both ends")
+	-- Page tabs keep the underline and stay square
+	local tabs = W:Tabs(UIParent, { { key = "a", label = "One" }, { key = "b", label = "Two" } }, nil, 80)
+	tabs:Select("b", true)
+	check(tabs.buttons[2].underline._shown and not tabs.buttons[1].underline._shown and tabs.buttons[1].caps == nil, "tabs underline the one shown, without caps")
+	-- The dropdown: the value without a "v", a chevron, and a menu at least as wide with the current choice in the accent
+	local picked
+	local choice = W:Choice(UIParent, 200, { { key = 1, label = "First" }, { key = 2, label = "Second" } }, function(key) picked = key end)
+	choice:SetChoice(2)
+	check(choice._h == 28 and choice.label._text == "Second" and choice.chevron._texture:find("chevron$"), "a dropdown shows its value and our chevron")
+	choice:Click()
+	local menu = _G.WantedMenu
+	check(menu and menu._w >= 200, "its menu is at least as wide as the field: "..tostring(menu and menu._w))
+	local second
+	for _, item in ipairs(menu.items) do if rawget(item, "def") and item.def.text == "Second" then second = item end end
+	check(second and second.label._textColor[1] == C.accent[1] and second.rest == 0.04 and second._h == 28, "the current choice is marked, rows 28 px")
+	local inSpecial = false
+	for _, name in ipairs(UISpecialFrames) do if name == "WantedMenu" then inSpecial = true end end
+	check(inSpecial, "Escape closes the menu")
+	second:Click()
+	check(picked == 2, "choosing from it calls back")
+	-- The slider's value box: a typed number is kept in range and on a step, Escape puts the value back
+	local got
+	local slider = W:Slider(UIParent, "Size", 200, 10, 100, 5, function(v) return v.."%" end, function(v) got = v end)
+	local s = slider.slider
+	s.SetValue = function(self, v) self._value = v self._scripts.OnValueChanged(self, v) end
+	s.GetValue = function(self) return self._value or 10 end
+	slider:SetValue(50)
+	check(slider.box._text == "50%" and got == nil, "SetValue shows the value in the box without calling back")
+	slider.box:SetText("73")
+	slider.box._scripts.OnEnterPressed(slider.box)
+	check(got == 75 and slider.box._text == "75%", "a typed number snaps to the step and applies: "..tostring(got))
+	slider.box:SetText("500")
+	slider.box._scripts.OnEnterPressed(slider.box)
+	check(got == 100, "and stays in range: "..tostring(got))
+	slider.box:SetText("abc")
+	slider.box._scripts.OnEscapePressed(slider.box)
+	check(slider.box._text == "100%", "Escape puts the value back")
+	-- The checkbox: an 18 px box, its edge brighter when checked
+	local toggle = W:Toggle(UIParent, "Sound", nil)
+	check(toggle.box._w == 18, "the checkbox is 18 px")
+	check(toggle.box._edges[1]._color[4] == 0.05, "its edge faint unchecked")
+	toggle:SetChecked(true)
+	check(toggle.box._edges[1]._color[4] == 0.15 and toggle.check._shown and toggle.label._textColor[4] == 1, "brighter when checked, filled, its label white")
+	-- A disabled button fades to 30% white
+	local button = W:Button(UIParent, "Go", "primary", 80, 26)
+	button:Disable()
+	button._scripts.OnDisable(button)
+	check(button.label._textColor[1] == 1 and button.label._textColor[4] == 0.3 and button._edges[1]._color[4] == 0.12,
+		"a disabled button's text at 30% white, its edge at 12%")
+	-- Section headers: 41% white, a line under them when given a width
+	local header = W:SectionLabel(UIParent, "Alerts", 300)
+	check(header._text == "ALERTS" and header._textColor[4] == 0.41 and header.rule and header.rule._w == 300, "a section header with its rule")
+	check(rawget(W:SectionLabel(UIParent, "Plain"), "rule") == nil, "and none without a width")
+	-- The dialog: 390 wide, its buttons side by side about its centre
+	W:Dialog({ title = "Sure?", text = "It can't be undone." })
+	local dialogFrame = _G.WantedDialog.frame
+	check(dialogFrame._w == 390, "a dialog is 390 wide: "..tostring(dialogFrame._w))
+	check(dialogFrame.cancel._point[1] == "BOTTOMRIGHT" and dialogFrame.cancel._point[3] == "BOTTOM" and dialogFrame.confirm._point[1] == "BOTTOMLEFT"
+		and dialogFrame.confirm._point[3] == "BOTTOM", "with Cancel and OK either side of its centre")
+	dialogFrame.cancel:Click()
+	-- Fonts: Inter for Latin and Cyrillic in the font's weight, the client's fonts for Korean and Chinese
+	local members
+	CreateFontFamily = function(_, list) members = list return CreateFont() end
+	ns.Theme:MakeFont("WantedTestFont", 12, nil, nil, "semibold")
+	CreateFontFamily = nil
+	local files = {}
+	for _, m in ipairs(members) do files[m.alphabet] = m.file end
+	check(files.roman:find("Media\\fonts\\Inter%-SemiBold%.ttf$") and files.russian == files.roman,
+		"the font family: Inter SemiBold for Latin and Cyrillic: "..tostring(files.roman).." / "..tostring(files.russian))
+	check(files.korean == "Fonts\\2002.TTF" and files.simplifiedchinese == "Fonts\\ARKai_T.ttf" and files.traditionalchinese == "Fonts\\blei00d.TTF",
+		"and the client's fonts for Korean and Chinese")
+	for _, name in ipairs({ "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-OFL.txt" }) do
+		local f = io.open(ADDON.."Media/fonts/"..name, "rb")
+		check(f, "the font ships: Media/fonts/"..name)
+		if f then f:close() end
+	end
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

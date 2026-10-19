@@ -34,7 +34,7 @@ function private.BuildNetwork(container, width)
 	local bug = W:Button(card, "Report a bug", "primary", 120, 26, function() Wanted.Report:Show() end)
 	bug:SetPoint("BOTTOMRIGHT", -16, 12)
 	W:AttachTooltip(bug, "Report a bug", "Sends a report to the developers through the Wanted app. Also /wanted bug.")
-	local idea = W:Button(card, "Suggest a feature", "ghost", 120, 26, function() Wanted.Report:AskAboutIdea() end)
+	local idea = W:Button(card, "Suggest a feature", "ghost", 130, 26, function() Wanted.Report:AskAboutIdea() end)
 	idea:SetPoint("RIGHT", bug, "LEFT", -6, 0)
 	W:AttachTooltip(idea, "Suggest a feature", "Tells the developers what Wanted should do, through the Wanted app. Also /wanted idea.")
 

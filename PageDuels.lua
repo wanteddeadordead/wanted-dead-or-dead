@@ -874,7 +874,7 @@ UI:RegisterPage("duels", {
 		private.lastTile:SetPoint("LEFT", private.facedTile, "RIGHT", 12, 0)
 		private.lastTile:SetWidth(tileWidth)
 
-		local segment = W:Segmented(container, {
+		local segment = W:Tabs(container, {
 			{ key = "matchups", label = "Matchups" },
 			{ key = "builds", label = "Your builds" },
 		}, function(key)

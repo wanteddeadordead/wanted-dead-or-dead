@@ -183,7 +183,7 @@ UI:RegisterPage("guildkos", {
 		end)
 		private.addGuild:SetPoint("LEFT", private.guildInput, "RIGHT", 8, 0)
 
-		local segment = W:Segmented(container, {
+		local segment = W:Tabs(container, {
 			{ key = "approved", label = "On the list" },
 			{ key = "pending", label = "Waiting" },
 		}, function(key)

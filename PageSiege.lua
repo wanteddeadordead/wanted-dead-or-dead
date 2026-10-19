@@ -257,7 +257,7 @@ function private.BuildTonight(body, width)
 	card.line:SetPoint("TOPLEFT", middleX, top - 22)
 	card.line:SetWidth(width - PAD - middleX)
 	card.line:SetWordWrap(true)
-	card.waypoint = W:Button(card, "Set waypoint", "chip", 90, 20, function() private.TrackRally() end)
+	card.waypoint = W:Button(card, "Set waypoint", "chip", 96, 20, function() private.TrackRally() end)
 	card.waypoint:SetPoint("TOPLEFT", middleX, top - 44)
 	W:AttachTooltip(card.waypoint, "Set waypoint", "Puts the game's map waypoint where the rally leader stands.")
 	-- The siege's layer and whether we're on it (Shard), with Hop; Stay while a hop's group is held
@@ -276,9 +276,9 @@ function private.BuildTonight(body, width)
 	card.buttonsTop = -top + 3 * LANE_PITCH + 10
 	card.map = W:Button(card, "Open the map", "secondary", 96, 24, function() private.OpenMap(Captures:Siege().front) end)
 	W:AttachTooltip(card.map, "Open the map", "The front's zone map: its lanes, who holds each point, and a waypoint on any of them.")
-	card.front = W:Button(card, "Go to the front", "primary", 110, 24, function() private.GoTo(Captures:Siege().front) end)
+	card.front = W:Button(card, "Go to the front", "primary", 116, 24, function() private.GoTo(Captures:Siege().front) end)
 	W:AttachTooltip(card.front, "Go to the front", "A waypoint on the nearest point of the front your side can attack.")
-	card.rally = W:Button(card, "Lead the rally", "secondary", 100, 24, function() private.LeadRally() end)
+	card.rally = W:Button(card, "Lead the rally", "secondary", 108, 24, function() private.LeadRally() end)
 	W:AttachTooltip(card.rally, "Lead the rally", "As your group's leader, mark yourself the rally leader here: your side sees you on the map and in Nearby.")
 	private.tonight = card
 	return card

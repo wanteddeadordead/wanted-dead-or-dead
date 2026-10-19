@@ -114,7 +114,7 @@ UI:RegisterPage("hunters", {
 	under = "challenges",
 	tabLabel = "Leaderboards",
 	build = function(container, width, height)
-		local view = W:Segmented(container, {
+		local view = W:Tabs(container, {
 			{ key = "hunters", label = "Bounty hunters" },
 			{ key = "posters", label = "Posters" },
 			{ key = "guilds", label = "Guilds" },

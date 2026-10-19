@@ -16,8 +16,14 @@ local C = {
 	input = { 0.035, 0.039, 0.047, 1 },
 	hover = { 1, 1, 1, 0.05 },
 	rowAlt = { 1, 1, 1, 0.018 },
-	border = { 0.176, 0.184, 0.216, 1 },
-	borderLight = { 0.26, 0.27, 0.31, 1 },
+	-- EllesmereUI's borders: white at a low alpha, so they sit on any felt
+	border = { 1, 1, 1, 0.07 },
+	borderLight = { 1, 1, 1, 0.15 },
+	-- EllesmereUI's fields (inputs, dropdowns, menus): a warm near-black, and a brighter edge under the mouse
+	field = { 0.103, 0.095, 0.088, 0.9 },
+	fieldHover = { 0.103, 0.095, 0.088, 0.98 },
+	fieldBorder = { 1, 1, 1, 0.2 },
+	fieldBorderHover = { 1, 1, 1, 0.3 },
 	text = { 0.925, 0.925, 0.945 },
 	muted = { 0.6, 0.62, 0.68 },
 	faint = { 0.4, 0.42, 0.47 },
@@ -99,8 +105,6 @@ function Theme:Apply(key)
 	Put("panelAlt", Tint(b, 0.26, 0.82))
 	Put("panelSolid", Tint(b, 0.16, 0.97))
 	Put("input", Tint(b, 0.06, 0.9))
-	Put("border", { 0.16 + b[1] * 0.25, 0.16 + b[2] * 0.25, 0.17 + b[3] * 0.25, 0.9 })
-	Put("borderLight", { 0.26 + b[1] * 0.3, 0.26 + b[2] * 0.3, 0.27 + b[3] * 0.3, 1 })
 	Put("accent", { a[1], a[2], a[3], 1 })
 	Put("accentHover", { min(1, a[1] * 1.12 + 0.04), min(1, a[2] * 1.12 + 0.04), min(1, a[3] * 1.12 + 0.04), 1 })
 	Put("accentDim", { a[1], a[2], a[3], 0.2 })
@@ -140,29 +144,35 @@ function Theme:FeltFile(theme)
 end
 
 -- One file per alphabet, as the client's own fonts do, so a Cyrillic, Korean or Chinese name renders
--- instead of turning into boxes
+-- instead of turning into boxes. Latin and Cyrillic are Inter (Media\fonts, SIL Open Font License), in two weights;
+-- Korean and Chinese take the client's own fonts.
+local INTER = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\fonts\\Inter-"
+local ROMAN = { medium = INTER.."Medium.ttf", semibold = INTER.."SemiBold.ttf" }
+-- true: the member takes Inter in the font's weight
 local FONT_FILES = {
-	{ "roman", "Fonts\\FRIZQT__.TTF" },
-	{ "russian", "Fonts\\FRIZQT___CYR.TTF" },
+	{ "roman", true },
+	{ "russian", true },
 	{ "korean", "Fonts\\2002.TTF" },
 	{ "simplifiedchinese", "Fonts\\ARKai_T.ttf" },
 	{ "traditionalchinese", "Fonts\\blei00d.TTF" },
 }
 
 ---A font covering every alphabet the client ships, at a size and with optional flags ("OUTLINE").
-function Theme:MakeFont(name, size, color, flags)
+---@param weight string? "semibold" for titles, labels and buttons; Medium otherwise
+function Theme:MakeFont(name, size, color, flags, weight)
 	local font
+	local roman = ROMAN[weight] or ROMAN.medium
 	if CreateFontFamily then
 		local members = {}
 		for _, entry in ipairs(FONT_FILES) do
-			tinsert(members, { alphabet = entry[1], file = entry[2], height = size, flags = flags or "" })
+			tinsert(members, { alphabet = entry[1], file = entry[2] == true and roman or entry[2], height = size, flags = flags or "" })
 		end
 		local ok, family = pcall(CreateFontFamily, name, members)
 		font = ok and family or nil
 	end
 	if not font then
 		font = CreateFont(name)
-		font:SetFont(FONT_FILES[1][2], size, flags or "")
+		font:SetFont(roman, size, flags or "")
 	end
 	font:SetShadowOffset(1, -1)
 	font:SetShadowColor(0, 0, 0, 0.85)
@@ -172,16 +182,20 @@ function Theme:MakeFont(name, size, color, flags)
 	return font
 end
 
-local function MakeFont(name, size, color, flags)
-	return Theme:MakeFont(name, size, color, flags)
+local function MakeFont(name, size, color, flags, weight)
+	return Theme:MakeFont(name, size, color, flags, weight)
 end
 Theme.Fonts = {
-	brand = MakeFont("WantedFontBrand", 17, C.text),
-	title = MakeFont("WantedFontTitle", 22, C.text),
-	heading = MakeFont("WantedFontHeading", 13, C.text),
-	body = MakeFont("WantedFontBody", 12, C.text),
-	small = MakeFont("WantedFontSmall", 11, C.muted),
-	tiny = MakeFont("WantedFontTiny", 10, C.faint),
+	brand = MakeFont("WantedFontBrand", 17, C.text, nil, "semibold"),
+	title = MakeFont("WantedFontTitle", 22, C.text, nil, "semibold"),
+	heading = MakeFont("WantedFontHeading", 14, C.text, nil, "semibold"),
+	-- Buttons, tabs, checkbox labels and section headers
+	label = MakeFont("WantedFontLabel", 13, C.text, nil, "semibold"),
+	labelSmall = MakeFont("WantedFontLabelSmall", 12, C.muted, nil, "semibold"),
+	dialogTitle = MakeFont("WantedFontDialogTitle", 16, C.white, nil, "semibold"),
+	body = MakeFont("WantedFontBody", 13, C.text),
+	small = MakeFont("WantedFontSmall", 12, C.muted),
+	tiny = MakeFont("WantedFontTiny", 12, C.faint),
 	money = MakeFont("WantedFontMoney", 14, C.gold),
 	stat = MakeFont("WantedFontStat", 20, C.text),
 }

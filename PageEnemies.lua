@@ -214,7 +214,7 @@ UI:RegisterPage("enemies", {
 		nearby:SetPoint("TOPRIGHT", 0, -TOP)
 		W:AttachTooltip(nearby, "Nearby window", "The small list of enemies around you. Also right-click the minimap button, or /wanted nearby.")
 		-- Only when Spy or True Spy is installed with players Wanted doesn't have (KoSImport)
-		private.import = W:Button(container, "Import Kill on Sight", "secondary", 170, 26, function()
+		private.import = W:Button(container, "Import Kill on Sight", "secondary", 190, 26, function()
 			Wanted.KoSImport:Run()
 			private.Refresh()
 		end)

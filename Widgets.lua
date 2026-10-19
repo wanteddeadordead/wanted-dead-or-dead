@@ -20,6 +20,9 @@ local STYLES = {
 	tab = { bg = C.transparent, hover = C.transparent, border = C.transparent, text = C.muted, hoverText = C.text },
 	tabSelected = { bg = C.transparent, hover = C.transparent, border = C.transparent, text = C.white },
 	chip = { bg = C.transparent, hover = C.hover, border = C.border, text = C.muted, hoverText = C.text },
+	-- EllesmereUI's dropdown field: a warm near-black, its value at 62% white
+	field = { bg = C.field, hover = C.fieldHover, border = C.fieldBorder, hoverBorder = C.fieldBorderHover, text = { 1, 1, 1, 0.62 },
+		hoverText = { 1, 1, 1, 0.75 } },
 }
 
 
@@ -104,10 +107,33 @@ end
 
 ---A FontString can't take the mouse: a Button over its text does, and lets clicks through to what is under it.
 local function HitButton(text)
-	local hit = CreateFrame("Button", nil, text:GetParent())
+	local parent = text:GetParent()
+	local hit = CreateFrame("Button", nil, parent)
 	hit:SetMouseClickEnabled(false)
+	hit:SetMouseMotionEnabled(true)
 	hit.explainedText = text
+	hit.showsTooltip = true
 	text.explainHit = hit
+	-- Inside a clickable row the text takes the mouse from the row: the row's own OnEnter and OnLeave still run, so it
+	-- stays lit, and its own GameTooltip gives way to the text's
+	local clickable = parent:IsObjectType("Button")
+	hit:SetScript("OnEnter", function(self)
+		local enter = clickable and parent:GetScript("OnEnter")
+		if enter then
+			enter(parent)
+			if GameTooltip:IsOwned(parent) then
+				GameTooltip:Hide()
+			end
+		end
+		ShowTooltip(self)
+	end)
+	hit:SetScript("OnLeave", function()
+		local leave = clickable and parent:GetScript("OnLeave")
+		if leave then
+			leave(parent)
+		end
+		HideTooltip()
+	end)
 	local function Fit()
 		local justify = text:GetJustifyH()
 		local point = (justify == "CENTER" or justify == "RIGHT") and justify or "LEFT"
@@ -193,7 +219,14 @@ end
 -- Button
 -- ============================================================================
 
+-- A disabled button: EllesmereUI's faded text and edge
+local DISABLED_TEXT, DISABLED_BORDER = { 1, 1, 1, 0.3 }, { 1, 1, 1, 0.12 }
+
 local function RefreshButton(button)
+	-- A segment paints itself (W:Segmented)
+	if button.paint then
+		return button:paint()
+	end
 	local style = button.style
 	local enabled = button:IsEnabled()
 	local bg = (enabled and button.hovered) and style.hover or style.bg
@@ -202,13 +235,12 @@ local function RefreshButton(button)
 		bg = style.bg[4] == 0 and style.bg or C.panelAlt
 	end
 	Theme:SetBg(button, bg)
-	Theme:SetBorderColor(button, enabled and (button.hovered and style.hoverBorder or style.border) or C.border)
+	Theme:SetBorderColor(button, enabled and (button.hovered and style.hoverBorder or style.border) or DISABLED_BORDER)
 	local text = (enabled and button.hovered and style.hoverText) or style.text
 	if not enabled then
-		-- Dimmed but still readable
-		text = C.muted
+		text = DISABLED_TEXT
 	end
-	button.label:SetTextColor(text[1], text[2], text[3])
+	button.label:SetTextColor(text[1], text[2], text[3], text[4] or 1)
 end
 
 ---@param template string? e.g. "SecureActionButtonTemplate" for a button that runs a macro
@@ -217,7 +249,7 @@ function W:Button(parent, text, style, width, height, onClick, template, name)
 	local button = CreateFrame("Button", name, parent, template)
 	button:SetSize(width or 96, height or 26)
 	Theme:Skin(button, C.transparent, C.transparent)
-	button.label = Theme:Text(button, "body", text)
+	button.label = Theme:Text(button, "label", text)
 	button.label:SetJustifyH("CENTER")
 	button.label:SetPoint("CENTER")
 	button:SetFontString(button.label)
@@ -255,14 +287,18 @@ end
 -- Input
 -- ============================================================================
 
+-- EllesmereUI's text field: typed text at 85% white, the placeholder at 35%
+local FIELD_TEXT, FIELD_PLACEHOLDER = { 1, 1, 1, 0.85 }, { 1, 1, 1, 0.35 }
+
 ---A box holding text to copy (a link): click it and it selects all, typing puts the text back.
 function W:CopyBox(parent, width, text)
 	local box = CreateFrame("EditBox", nil, parent)
-	box:SetSize(width, 26)
+	box:SetSize(width, 28)
 	box:SetAutoFocus(false)
 	box:SetFontObject(Theme.Fonts.small)
-	box:SetTextInsets(9, 9, 0, 0)
-	Theme:Skin(box, C.input, C.border)
+	box:SetTextColor(FIELD_TEXT[1], FIELD_TEXT[2], FIELD_TEXT[3], FIELD_TEXT[4])
+	box:SetTextInsets(10, 10, 0, 0)
+	Theme:Skin(box, C.field, C.fieldBorder)
 	box:SetText(text)
 	box:SetCursorPosition(0)
 	box:SetScript("OnEscapePressed", box.ClearFocus)
@@ -278,14 +314,16 @@ end
 
 function W:Input(parent, width, placeholder, onChange)
 	local box = CreateFrame("EditBox", nil, parent)
-	box:SetSize(width, 26)
+	box:SetSize(width, 28)
 	box:SetAutoFocus(false)
 	box:SetFontObject(Theme.Fonts.body)
-	box:SetTextInsets(9, 9, 0, 0)
+	box:SetTextColor(FIELD_TEXT[1], FIELD_TEXT[2], FIELD_TEXT[3], FIELD_TEXT[4])
+	box:SetTextInsets(10, 10, 0, 0)
 	box:SetMaxLetters(48)
-	Theme:Skin(box, C.input, C.border)
-	box.placeholder = Theme:Text(box, "body", placeholder, C.faint)
-	box.placeholder:SetPoint("LEFT", 9, 0)
+	Theme:Skin(box, C.field, C.fieldBorder)
+	box.placeholder = Theme:Text(box, "body", placeholder)
+	box.placeholder:SetTextColor(FIELD_PLACEHOLDER[1], FIELD_PLACEHOLDER[2], FIELD_PLACEHOLDER[3], FIELD_PLACEHOLDER[4])
+	box.placeholder:SetPoint("LEFT", 10, 0)
 	local function UpdatePlaceholder()
 		-- Shown until something is typed, focused or not: a dialog focuses its box straight away
 		box.placeholder:SetShown(box:GetText() == "")
@@ -295,7 +333,7 @@ function W:Input(parent, width, placeholder, onChange)
 		UpdatePlaceholder()
 	end)
 	box:SetScript("OnEditFocusLost", function(self)
-		Theme:SetBorderColor(self, C.border)
+		Theme:SetBorderColor(self, C.fieldBorder)
 		UpdatePlaceholder()
 	end)
 	box:SetScript("OnTextChanged", function(self, userInput)
@@ -325,24 +363,34 @@ end
 -- Toggle
 -- ============================================================================
 
+-- EllesmereUI's checkbox: an 18 px box, its edge brighter when checked and under the mouse, the accent filling it
+local CHECK_FILL = { 0.112, 0.105, 0.098, 1 }
+local CHECK_EDGE, CHECK_EDGE_ON, CHECK_EDGE_HOVER = { 1, 1, 1, 0.05 }, { 1, 1, 1, 0.15 }, { 1, 1, 1, 0.25 }
+local CHECK_LABEL = { 1, 1, 1, 0.8 }
+
 function W:Toggle(parent, text, onChange)
 	local toggle = CreateFrame("Button", nil, parent)
 	toggle:SetHeight(20)
 	toggle.box = CreateFrame("Frame", nil, toggle)
-	toggle.box:SetSize(15, 15)
+	toggle.box:SetSize(18, 18)
 	toggle.box:SetPoint("LEFT")
-	Theme:Skin(toggle.box, C.input, C.borderLight)
+	Theme:Skin(toggle.box, CHECK_FILL, CHECK_EDGE)
 	toggle.check = toggle.box:CreateTexture(nil, "ARTWORK")
-	toggle.check:SetPoint("TOPLEFT", 3, -3)
-	toggle.check:SetPoint("BOTTOMRIGHT", -3, 3)
+	toggle.check:SetPoint("TOPLEFT", 2, -2)
+	toggle.check:SetPoint("BOTTOMRIGHT", -2, 2)
 	toggle.check:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
-	toggle.label = Theme:Text(toggle, "small", text, C.muted)
-	toggle.label:SetPoint("LEFT", toggle.box, "RIGHT", 7, 0)
-	toggle:SetWidth(15 + 7 + toggle.label:GetStringWidth() + 4)
+	toggle.label = Theme:Text(toggle, "label", text)
+	toggle.label:SetPoint("LEFT", toggle.box, "RIGHT", 8, 0)
+	toggle:SetWidth(18 + 8 + toggle.label:GetStringWidth() + 4)
+	local function Edge(self)
+		Theme:SetBorderColor(self.box, self.hovered and CHECK_EDGE_HOVER or (self.checked and CHECK_EDGE_ON or CHECK_EDGE))
+	end
 	function toggle:SetChecked(checked)
 		self.checked = checked and true or false
 		self.check:SetShown(self.checked)
-		self.label:SetTextColor(unpack(self.checked and C.text or C.muted))
+		local color = self.checked and C.white or CHECK_LABEL
+		self.label:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+		Edge(self)
 	end
 	toggle:SetScript("OnClick", function(self)
 		self:SetChecked(not self.checked)
@@ -352,11 +400,13 @@ function W:Toggle(parent, text, onChange)
 	end)
 	toggle.showsTooltip = true
 	toggle:SetScript("OnEnter", function(self)
-		Theme:SetBorderColor(self.box, C.accent)
+		self.hovered = true
+		Edge(self)
 		ShowTooltip(self)
 	end)
 	toggle:SetScript("OnLeave", function(self)
-		Theme:SetBorderColor(self.box, C.borderLight)
+		self.hovered = false
+		Edge(self)
 		GameTooltip:Hide()
 	end)
 	toggle:SetChecked(false)
@@ -365,20 +415,30 @@ end
 
 
 
----A horizontal slider with its label and value above it: SetValue(value) without calling onChange.
+---A horizontal slider with its label above it and its value in a box at its right, where a number can be typed (Enter
+---applies it, Escape puts the value back): SetValue(value) without calling onChange.
 ---@param format fun(value: number): string the value as shown
 function W:Slider(parent, label, width, low, high, step, format, onChange)
 	local holder = CreateFrame("Frame", nil, parent)
 	holder:SetSize(width, 34)
 	holder.label = Theme:Text(holder, "small", label, C.muted)
 	holder.label:SetPoint("TOPLEFT")
-	holder.value = Theme:Text(holder, "small", "", C.text)
-	holder.value:SetPoint("TOPRIGHT")
-	holder.value:SetJustifyH("RIGHT")
+	-- EllesmereUI's value box: 40 by 26, 16 px after the track, centred on it
+	local box = CreateFrame("EditBox", nil, holder)
+	box:SetSize(40, 26)
+	box:SetPoint("BOTTOMRIGHT")
+	box:SetAutoFocus(false)
+	box:SetFontObject(Theme.Fonts.small)
+	box:SetTextColor(FIELD_TEXT[1], FIELD_TEXT[2], FIELD_TEXT[3], FIELD_TEXT[4])
+	box:SetJustifyH("CENTER")
+	box:SetMaxLetters(8)
+	Theme:Skin(box, { 0.03, 0.023, 0.018, 0.25 }, C.border)
+	holder.box = box
+	holder.value = box
 	local slider = CreateFrame("Slider", nil, holder)
 	slider:SetOrientation("HORIZONTAL")
-	slider:SetPoint("BOTTOMLEFT")
-	slider:SetSize(width, 12)
+	slider:SetPoint("BOTTOMLEFT", 0, 7)
+	slider:SetSize(width - 40 - 16, 12)
 	slider:SetMinMaxValues(low, high)
 	slider:SetValueStep(step)
 	slider:SetObeyStepOnDrag(true)
@@ -403,24 +463,57 @@ function W:Slider(parent, label, width, low, high, step, format, onChange)
 	function holder:SetValue(value)
 		self.quiet = true
 		self.slider:SetValue(value)
-		self.value:SetText(format(value))
+		self.box:SetText(format(value))
 		self.quiet = false
 	end
 	slider:SetScript("OnValueChanged", function(_, value)
 		-- Steps as the slider shows them, without float dust
 		value = floor(value / step + 0.5) * step
-		holder.value:SetText(format(value))
+		box:SetText(format(value))
 		if not holder.quiet and onChange then
 			onChange(value)
 		end
 	end)
+	-- A typed number: kept within the range, on a step; anything else puts the value back
+	local function Revert()
+		box:SetText(format(floor(slider:GetValue() / step + 0.5) * step))
+	end
+	box:SetScript("OnEnterPressed", function(self)
+		local typed = tonumber(strmatch(self:GetText() or "", "%-?[%d%.]+") or "")
+		self:ClearFocus()
+		if not typed then
+			Revert()
+			return
+		end
+		slider:SetValue(max(low, min(high, floor(typed / step + 0.5) * step)))
+		Revert()
+	end)
+	box:SetScript("OnEscapePressed", function(self)
+		self:ClearFocus()
+		Revert()
+	end)
+	box:SetScript("OnEditFocusLost", Revert)
+	box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
 	return holder
 end
 
----A button that shows the current choice and opens a menu of the others: SetChoice(key) shows one.
+---EllesmereUI's dropdown: a field showing the current choice with a chevron, opening a menu of all of them with the
+---current one in the accent. SetChoice(key) shows one.
 ---@param choices table[] { key, label }
 function W:Choice(parent, width, choices, onSelect)
-	local button = W:Button(parent, "", "secondary", width, 24)
+	local button = W:Button(parent, "", "field", width, 28)
+	button.label:SetFontObject(Theme.Fonts.body)
+	button.label:ClearAllPoints()
+	button.label:SetPoint("LEFT", 10, 0)
+	button.label:SetPoint("RIGHT", -26, 0)
+	button.label:SetJustifyH("LEFT")
+	button.chevron = button:CreateTexture(nil, "ARTWORK")
+	button.chevron:SetSize(12, 12)
+	button.chevron:SetPoint("RIGHT", -9, 0)
+	button.chevron:SetTexture(MEDIA.."chevron")
+	button.chevron:SetVertexColor(1, 1, 1, 0.5)
+	button:HookScript("OnEnter", function(self) self.chevron:SetVertexColor(1, 1, 1, 0.75) end)
+	button:HookScript("OnLeave", function(self) self.chevron:SetVertexColor(1, 1, 1, 0.5) end)
 	---Changes what can be chosen.
 	function button:SetChoices(list)
 		choices = list
@@ -429,14 +522,14 @@ function W:Choice(parent, width, choices, onSelect)
 		self.key = key
 		for _, choice in ipairs(choices) do
 			if choice.key == key then
-				self:SetText(choice.label.."  v")
+				self:SetText(choice.label)
 			end
 		end
 	end
 	button:SetScript("OnClick", function(self)
 		local items = {}
 		for _, choice in ipairs(choices) do
-			tinsert(items, { text = choice.label, onClick = function()
+			tinsert(items, { text = choice.label, selected = choice.key == self.key, onClick = function()
 				self:SetChoice(choice.key)
 				onSelect(choice.key)
 			end })
@@ -452,21 +545,89 @@ end
 -- Segmented control
 -- ============================================================================
 
----@param items table[] { key, label, tip? = { title, body } }
-function W:Segmented(parent, items, onSelect, width)
+-- EllesmereUI's segmented control: 28 px cells with a grey edge, the chosen one in the accent (edge, text and a 5%
+-- wash), lighter under the mouse; the end cells round off
+local SEGMENT_HEIGHT = 28
+local SEGMENT_FILL, SEGMENT_EDGE = { 0.125, 0.125, 0.137, 0.95 }, { 0.467, 0.471, 0.482, 0.5 }
+local SEGMENT_TEXT, SEGMENT_HOVER_TEXT = { 1, 1, 1, 0.6 }, { 1, 1, 1, 0.8 }
+
+---Paints a cell for its state (it's a W:Button whose refresh lands here).
+local function PaintSegment(button)
+	local hovered = button.hovered and button:IsEnabled()
+	local wash, lift, f, a = button.selected and 0.05 or 0, hovered and 0.04 or 0, SEGMENT_FILL, C.accent
+	local r, g, b = f[1] + (a[1] - f[1]) * wash + lift, f[2] + (a[2] - f[2]) * wash + lift, f[3] + (a[3] - f[3]) * wash + lift
+	button._bg:SetColorTexture(r, g, b, f[4])
+	local edge = button.selected and C.accent or SEGMENT_EDGE
+	Theme:SetBorderColor(button, edge)
+	local text = button.selected and C.accent or (hovered and SEGMENT_HOVER_TEXT or SEGMENT_TEXT)
+	button.label:SetTextColor(text[1], text[2], text[3], text[4] or 1)
+	for _, cap in ipairs(button.caps or {}) do
+		if cap.isFill then
+			cap:SetVertexColor(r, g, b, f[4])
+		else
+			cap:SetVertexColor(edge[1], edge[2], edge[3], edge[4] or 1)
+		end
+	end
+end
+
+---Rounds a cell's outer ends: a half-disc of fill and a half-ring of edge (our Media\cap-fill and cap-ring, mirrored
+---for the right) where the square corners were.
+local function RoundEnds(button, left, right)
+	local radius = SEGMENT_HEIGHT / 2
+	local l, r = left and radius or 0, right and radius or 0
+	local top, bottom, leftEdge, rightEdge = unpack(button._edges)
+	button._bg:ClearAllPoints()
+	button._bg:SetPoint("TOPLEFT", l, 0)
+	button._bg:SetPoint("BOTTOMRIGHT", -r, 0)
+	top:ClearAllPoints()
+	top:SetPoint("TOPLEFT", l, 0)
+	top:SetPoint("TOPRIGHT", -r, 0)
+	bottom:ClearAllPoints()
+	bottom:SetPoint("BOTTOMLEFT", l, 0)
+	bottom:SetPoint("BOTTOMRIGHT", -r, 0)
+	leftEdge:SetShown(not left)
+	rightEdge:SetShown(not right)
+	button.caps = {}
+	local function Cap(side)
+		for _, file in ipairs({ "cap-fill", "cap-ring" }) do
+			local cap = button:CreateTexture(nil, file == "cap-fill" and "BACKGROUND" or "BORDER")
+			cap:SetTexture(MEDIA..file)
+			cap:SetSize(radius, SEGMENT_HEIGHT)
+			cap:SetPoint(side)
+			if side == "RIGHT" then
+				cap:SetTexCoord(1, 0, 0, 1)
+			end
+			cap.isFill = file == "cap-fill"
+			tinsert(button.caps, cap)
+		end
+	end
+	if left then
+		Cap("LEFT")
+	end
+	if right then
+		Cap("RIGHT")
+	end
+end
+
+local function Segments(parent, items, onSelect, width, tabs)
+	local height = tabs and 26 or SEGMENT_HEIGHT
 	local control = CreateFrame("Frame", nil, parent)
-	control:SetHeight(26)
+	control:SetHeight(height)
 	control.buttons = {}
 	local x = 0
 	for _, item in ipairs(items) do
-		local button = W:Button(control, item.label, "tab", width or 110, 26)
+		local button = W:Button(control, item.label, "tab", width or 110, height)
 		button:SetPoint("LEFT", x, 0)
 		button.key = item.key
-		button.underline = button:CreateTexture(nil, "ARTWORK")
-		button.underline:SetPoint("BOTTOM", 0, 0)
-		button.underline:SetHeight(2)
-		button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
-		button.underline:Hide()
+		if tabs then
+			button.underline = button:CreateTexture(nil, "ARTWORK")
+			button.underline:SetPoint("BOTTOM", 0, 0)
+			button.underline:SetHeight(2)
+			button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+			button.underline:Hide()
+		else
+			button.paint = PaintSegment
+		end
 		button:SetScript("OnClick", function()
 			control:Select(item.key)
 		end)
@@ -494,7 +655,7 @@ function W:Segmented(parent, items, onSelect, width)
 	if tooLong then
 		if total + MIN_PADDING * count > room then
 			for _, button in ipairs(control.buttons) do
-				button.label:SetFontObject(Theme.Fonts.small)
+				button.label:SetFontObject(Theme.Fonts.labelSmall)
 			end
 			widths, total = Labels()
 		end
@@ -509,23 +670,51 @@ function W:Segmented(parent, items, onSelect, width)
 		end
 	end
 	control:SetWidth(x + 1)
+	if not tabs and count > 0 then
+		RoundEnds(control.buttons[1], true, count == 1)
+		if count > 1 then
+			RoundEnds(control.buttons[count], false, true)
+		end
+	end
 	function control:Select(key, silent)
 		self.selected = key
 		-- The buttons overlap by a pixel so their borders join: the selected one sits above its neighbours, so its
 		-- whole outline shows (its left edge was drawn under the button before it)
 		local level = self:GetFrameLevel()
 		for _, button in ipairs(self.buttons) do
-			button:SetStyle(button.key == key and "tabSelected" or "tab")
 			button:SetFrameLevel(level + (button.key == key and 2 or 1))
-			button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
-			button.underline:SetWidth(min(button:GetWidth(), button.label:GetStringWidth() + 14))
-			button.underline:SetShown(button.key == key)
+			if tabs then
+				button:SetStyle(button.key == key and "tabSelected" or "tab")
+				button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+				button.underline:SetWidth(min(button:GetWidth(), button.label:GetStringWidth() + 14))
+				button.underline:SetShown(button.key == key)
+			else
+				button.selected = button.key == key
+				PaintSegment(button)
+			end
 		end
 		if not silent and onSelect then
 			onSelect(key)
 		end
 	end
+	if not tabs then
+		for _, button in ipairs(control.buttons) do
+			PaintSegment(button)
+		end
+	end
 	return control
+end
+
+---EllesmereUI's segmented control, for a choice between a few options: Select(key, silent) picks one.
+---@param items table[] { key, label, tip? = { title, body } }
+function W:Segmented(parent, items, onSelect, width)
+	return Segments(parent, items, onSelect, width, false)
+end
+
+---Tabs between the views of a page: words with an accent line under the one shown. Select(key, silent) as Segmented.
+---@param items table[] { key, label, tip? = { title, body } }
+function W:Tabs(parent, items, onSelect, width)
+	return Segments(parent, items, onSelect, width, true)
 end
 
 
@@ -652,8 +841,17 @@ function W:StatTile(parent, label, accent)
 	return tile
 end
 
-function W:SectionLabel(parent, text)
-	return Theme:Text(parent, "tiny", strupper(text))
+---A section header: small capitals at 41% white, with a faint line under it when given a width.
+---@param width number?
+function W:SectionLabel(parent, text, width)
+	local label = Theme:Text(parent, "labelSmall", strupper(text))
+	label:SetTextColor(1, 1, 1, 0.41)
+	if width then
+		label.rule = Theme:Line(parent, { 1, 1, 1, 0.06 })
+		label.rule:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -5)
+		label.rule:SetWidth(width)
+	end
+	return label
 end
 
 
@@ -776,6 +974,8 @@ end
 
 local dialog = nil
 local AREA_HEIGHT = 74 -- a multiline dialog box: about four lines
+local DIALOG_WIDTH = 390
+local FIELD_Y = 62 -- the input's foot: above the error line, which sits over the buttons
 local hookedHosts = {} -- windows whose closing closes the dialog over them
 local waiting = {} -- { options, host } dialogs asked for while another was up: shown in turn, so none loses its answer
 local waitingForCombat = false -- the next waits for the fight to end
@@ -789,30 +989,31 @@ local function CreateDialog()
 	blocker:EnableMouse(true)
 	blocker:EnableMouseWheel(true)
 	blocker:SetScript("OnMouseWheel", function() end)
-	blocker._bg = Theme:Fill(blocker, { 0, 0, 0, 0.55 })
+	blocker._bg = Theme:Fill(blocker, { 0, 0, 0, 0.25 })
 	blocker:Hide()
 
 	local frame = CreateFrame("Frame", nil, blocker)
-	frame:SetSize(400, 170)
+	-- EllesmereUI's popup: a warm dark box, its title and message centred, the buttons side by side at its foot
+	frame:SetSize(DIALOG_WIDTH, 170)
 	frame:SetFrameStrata("FULLSCREEN_DIALOG")
 	frame:SetFrameLevel(blocker:GetFrameLevel() + 5)
-	Theme:Skin(frame, C.panelSolid, C.borderLight)
-	frame.bar = frame:CreateTexture(nil, "ARTWORK")
-	frame.bar:SetPoint("TOPLEFT", 1, -1)
-	frame.bar:SetPoint("TOPRIGHT", -1, -1)
-	frame.bar:SetHeight(3)
-	frame.title = Theme:Text(frame, "heading", "")
+	Theme:Skin(frame, { 0.077, 0.068, 0.058, 1 }, C.borderLight)
+	frame.title = Theme:Text(frame, "dialogTitle", "")
 	frame.title:SetPoint("TOPLEFT", 20, -20)
-	frame.message = Theme:Text(frame, "body", "", C.muted)
-	frame.message:SetPoint("TOPLEFT", 20, -44)
-	frame.message:SetPoint("TOPRIGHT", -20, -44)
+	frame.title:SetPoint("TOPRIGHT", -20, -20)
+	frame.title:SetJustifyH("CENTER")
+	frame.message = Theme:Text(frame, "body", "")
+	frame.message:SetTextColor(1, 1, 1, 0.53)
+	frame.message:SetPoint("TOPLEFT", 20, -46)
+	frame.message:SetPoint("TOPRIGHT", -20, -46)
 	frame.message:SetWordWrap(true)
+	frame.message:SetJustifyH("CENTER")
 	frame.message:SetJustifyV("TOP")
 	frame.input = W:Input(frame, 200, "")
-	frame.cancel = W:Button(frame, "Cancel", "ghost", 90, 28)
-	frame.cancel:SetPoint("BOTTOMRIGHT", -118, 16)
-	frame.confirm = W:Button(frame, "OK", "primary", 100, 28)
-	frame.confirm:SetPoint("BOTTOMRIGHT", -16, 16)
+	frame.cancel = W:Button(frame, "Cancel", "secondary", 100, 27)
+	frame.cancel:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -8, 16)
+	frame.confirm = W:Button(frame, "OK", "primary", 100, 27)
+	frame.confirm:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 8, 16)
 	-- Only the Cancel button is Cancel. Closed any other way (Escape, the game closing every window when control is
 	-- lost to a fear or a flight, the main window closing under it) it's dismissed with no answer: onClose, if any.
 	frame.cancel:SetScript("OnClick", function()
@@ -902,7 +1103,9 @@ local function CreateDialog()
 	end)
 	frame.choice:SetPoint("LEFT", frame.choiceLabel, "RIGHT", 10, 0)
 	frame.error = Theme:Text(frame, "small", "", C.red)
-	frame.error:SetPoint("BOTTOMLEFT", 20, 24)
+	frame.error:SetPoint("BOTTOMLEFT", 20, 48)
+	frame.error:SetPoint("BOTTOMRIGHT", -20, 48)
+	frame.error:SetJustifyH("CENTER")
 	-- Escape in the input closes it with no answer; keyboard capture on the blocker would be blocked in combat
 	frame.input:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
@@ -936,7 +1139,7 @@ end
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), maxLetters
 ---(of a multiline box, default 255) }, over (a window to centre on, rather than the Wanted window or the screen), width
----(of the dialog, default 400), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
+---(of the dialog, default 390), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
 ---Whether a dialog is up (one at a time).
@@ -991,33 +1194,31 @@ function W:Dialog(options)
 		frame:SetPoint("CENTER", options.over, "CENTER")
 	end
 	frame.options, frame.decided, dialog.host = options, false, host
-	local accent = options.confirmStyle == "danger" and C.red or C.accent
-	frame.bar:SetColorTexture(accent[1], accent[2], accent[3], 1)
 	frame.title:SetText(options.title or "")
 	frame.message:SetText(options.text or "")
 	frame.error:SetText("")
 	frame.confirm:SetText(options.confirmLabel or "OK")
 	frame.cancel:SetText(options.cancelLabel or "Cancel")
 	frame.confirm:SetStyle(options.confirmStyle == "danger" and "danger" or (options.confirmStyle or "primary"))
-	frame:SetWidth(options.width or 400)
+	frame:SetWidth(options.width or DIALOG_WIDTH)
 	frame.input:ClearAllPoints()
 	frame.areaBox:Hide()
 	local area = options.input and options.input.multiline
 	if area then
 		frame.input:Hide()
 		frame.areaBox:ClearAllPoints()
-		frame.areaBox:SetPoint("BOTTOMLEFT", 20, 56)
-		frame.areaBox:SetPoint("BOTTOMRIGHT", -20, 56)
+		frame.areaBox:SetPoint("BOTTOMLEFT", 20, FIELD_Y)
+		frame.areaBox:SetPoint("BOTTOMRIGHT", -20, FIELD_Y)
 		frame.areaBox:SetHeight(AREA_HEIGHT)
 		-- The dialog's width less its margins and the scroll bar's room
-		frame.area:SetWidth((options.width or 400) - 40 - 24)
+		frame.area:SetWidth((options.width or DIALOG_WIDTH) - 40 - 24)
 		frame.area:SetMaxLetters(options.input.maxLetters or 255)
 		-- At the top, whatever the last dialog's box was scrolled to
 		frame.areaScroll:SetVerticalScroll(0)
 		frame.area:SetText(options.input.value or "")
 		frame.areaBox:Show()
 	elseif options.input then
-		frame.input:SetPoint("BOTTOMLEFT", 20, 56)
+		frame.input:SetPoint("BOTTOMLEFT", 20, FIELD_Y)
 		frame.input.placeholder:SetText(options.input.placeholder or "")
 		-- Typed answers are held to 48 letters; a longer value to copy (a death page's address) fits whole
 		frame.input:SetMaxLetters(max(48, #(options.input.value or "")))
@@ -1031,7 +1232,7 @@ function W:Dialog(options)
 	frame.choice:SetShown(choice ~= nil)
 	if choice then
 		frame.choiceLabel:ClearAllPoints()
-		frame.choiceLabel:SetPoint("BOTTOMLEFT", 20, 56 + (area and AREA_HEIGHT or 26) + 16)
+		frame.choiceLabel:SetPoint("BOTTOMLEFT", 20, FIELD_Y + (area and AREA_HEIGHT or 28) + 16)
 		frame.choiceLabel:SetText(choice.label or "")
 		frame.choice:SetChoices(choice.items)
 		frame.choice:SetChoice(choice.selected)
@@ -1040,7 +1241,7 @@ function W:Dialog(options)
 	-- Tall enough for the whole message: title and top margin, the text, the choice and input if any, the buttons
 	local messageHeight = ceil(frame.message:GetStringHeight() or 0)
 	local inputRoom = (area and AREA_HEIGHT + 26 or options.input and 52 or 12) + (choice and 36 or 0)
-	frame:SetHeight(max(options.input and 190 or 150, 44 + messageHeight + inputRoom + 60))
+	frame:SetHeight(max(options.input and 196 or 150, 46 + messageHeight + inputRoom + 66))
 	dialog:Show()
 	-- In front of anything else full screen (the wanted poster)
 	dialog:Raise()
@@ -1059,12 +1260,17 @@ end
 
 local menu = nil
 
+-- EllesmereUI's dropdown menu: the field's colours, 28 px rows, grey headers with a rule under them
+local MENU_ROW, MENU_HEADER, MENU_DIVIDER = 28, 22, 9
+local MENU_HEADER_TEXT = { 0.5, 0.5, 0.5 }
+
 local function CreateMenu()
-	local frame = CreateFrame("Frame", nil, UIParent)
-	frame:SetFrameStrata("TOOLTIP")
+	local frame = CreateFrame("Frame", "WantedMenu", UIParent)
+	-- Over the dialogs, which can open one
+	frame:SetFrameStrata("FULLSCREEN_DIALOG")
 	frame:SetClampedToScreen(true)
 	frame:EnableMouse(true)
-	Theme:Skin(frame, C.panelSolid, C.borderLight)
+	Theme:Skin(frame, C.fieldHover, C.fieldBorder)
 	frame.items = {}
 	frame:Hide()
 	-- Close on any click outside it
@@ -1074,40 +1280,42 @@ local function CreateMenu()
 			self:Hide()
 		end
 	end)
+	-- And on Escape (the game's list of windows Escape closes)
+	if UISpecialFrames then
+		tinsert(UISpecialFrames, "WantedMenu")
+	end
 	return frame
 end
 
----Shows a menu under the frame that opened it, or at the cursor.
----@param items table[] { text, color?, onClick?, header?, disabled?, tip? = { title, body } } or "-" for a divider
+---Shows a menu under the frame that opened it (at least as wide), or at the cursor.
+---@param items table[] { text, color?, onClick?, header?, disabled?, selected? (the current choice: in the accent),
+---tip? = { title, body } } or "-" for a divider
 ---@param anchor table? the button that opened it
 function W:Menu(items, anchor)
 	menu = menu or CreateMenu()
 	for _, item in ipairs(menu.items) do
 		item:Hide()
 	end
-	local y, width = -6, 160
+	local y, width = -4, max(160, anchor and anchor:GetWidth() or 0)
 	local index = 0
 	for _, def in ipairs(items) do
 		index = index + 1
 		local item = menu.items[index]
 		if not item then
 			item = CreateFrame("Button", nil, menu)
-			item:SetHeight(22)
 			item.highlight = Theme:Fill(item, C.transparent)
 			item.label = Theme:Text(item, "body", "")
 			item.label:SetPoint("LEFT", 12, 0)
-			item.line = Theme:Line(item)
-			item.line:SetPoint("LEFT", 8, 0)
-			item.line:SetPoint("RIGHT", -8, 0)
+			item.line = Theme:Line(item, C.fieldBorder)
 			item.showsTooltip = true
 			item:SetScript("OnEnter", function(self)
 				if self.def and self.def.onClick and not self.def.disabled then
-					self.highlight:SetColorTexture(1, 1, 1, 0.07)
+					self.highlight:SetColorTexture(1, 1, 1, 0.08)
 				end
 				ShowTooltip(self)
 			end)
 			item:SetScript("OnLeave", function(self)
-				self.highlight:SetColorTexture(0, 0, 0, 0)
+				self.highlight:SetColorTexture(1, 1, 1, self.rest or 0)
 				HideTooltip()
 			end)
 			item:SetScript("OnClick", function(self)
@@ -1126,25 +1334,34 @@ function W:Menu(items, anchor)
 		item:ClearAllPoints()
 		item:SetPoint("TOPLEFT", 1, y)
 		item:SetPoint("TOPRIGHT", -1, y)
+		item.line:ClearAllPoints()
+		item.rest = 0
 		if def == "-" then
-			item:SetHeight(9)
+			item:SetHeight(MENU_DIVIDER)
 			item.label:SetText("")
+			item.line:SetPoint("LEFT", 8, 0)
+			item.line:SetPoint("RIGHT", -8, 0)
 			item.line:Show()
-			y = y - 9
+			y = y - MENU_DIVIDER
 		else
-			item:SetHeight(def.header and 24 or 22)
-			item.line:Hide()
-			item.label:SetFontObject(def.header and Theme.Fonts.heading or Theme.Fonts.body)
+			local height = def.header and MENU_HEADER or MENU_ROW
+			item:SetHeight(height)
+			-- A header has a rule under it
+			item.line:SetPoint("BOTTOMLEFT", 8, 1)
+			item.line:SetPoint("BOTTOMRIGHT", -8, 1)
+			item.line:SetShown(def.header == true)
+			item.label:SetFontObject(def.header and Theme.Fonts.labelSmall or Theme.Fonts.body)
 			item.label:SetText(def.text)
-			local color = def.disabled and C.faint or (def.color or (def.header and C.white or C.text))
+			local color = def.disabled and C.faint or (def.selected and C.accent) or def.color or (def.header and MENU_HEADER_TEXT or C.text)
 			item.label:SetTextColor(color[1], color[2], color[3])
+			item.rest = def.selected and 0.04 or 0
 			width = max(width, item.label:GetStringWidth() + 32)
-			y = y - (def.header and 24 or 22)
+			y = y - height
 		end
-		item.highlight:SetColorTexture(0, 0, 0, 0)
+		item.highlight:SetColorTexture(1, 1, 1, item.rest)
 		item:Show()
 	end
-	menu:SetSize(width, -y + 6)
+	menu:SetSize(width, -y + 4)
 	menu:ClearAllPoints()
 	menu:SetClampedToScreen(true)
 	if anchor then
@@ -1155,6 +1372,8 @@ function W:Menu(items, anchor)
 		menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, cy / scale)
 	end
 	menu:Show()
+	-- Above whatever else is up in its strata (a dialog raised itself on showing)
+	menu:Raise()
 end
 
 ---Hides the menu, if it's up.

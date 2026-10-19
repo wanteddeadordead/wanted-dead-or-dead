@@ -165,7 +165,7 @@ function private.BuildSounds(panel, width)
 		pick.label:SetWordWrap(false)
 		W:AttachTooltip(pick, kind[2], kind[3])
 		private.soundPicks[kind[1]] = pick
-		local hear = W:Button(card, "Hear it", "chip", 52, 22, function()
+		local hear = W:Button(card, "Hear it", "chip", 58, 22, function()
 			Wanted.Alerts:PlayRaw(kind[1])
 		end)
 		hear:SetPoint("LEFT", pick, "RIGHT", 6, 0)
@@ -641,7 +641,7 @@ UI:RegisterPage("settings", {
 	under = "card",
 	tabLabel = "Settings",
 	build = function(container, width, height)
-		local tabs = W:Segmented(container, {
+		local tabs = W:Tabs(container, {
 			{ key = "alerts", label = "Alerts" },
 			{ key = "nearby", label = "Nearby window" },
 			{ key = "sharing", label = "Sharing and display" },

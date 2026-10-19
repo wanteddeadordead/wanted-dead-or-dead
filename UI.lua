@@ -318,7 +318,7 @@ function private.Create()
 		private.navButtons[def.key] = nav
 	end
 	private.LayoutNav()
-	local version = Theme:Text(sidebar, "tiny", "v"..(Wanted.VERSION or "?").."   /wanted")
+	local version = Theme:Text(sidebar, "tiny", Wanted:VersionLabel(Wanted.VERSION).."   /wanted")
 	version:SetPoint("BOTTOMLEFT", 22, 14)
 	-- Report a bug and Suggest a feature stay in reach with the Tools page hidden, and off the title bar, which the
 	-- status lights fill: the foot of the menu, above the version

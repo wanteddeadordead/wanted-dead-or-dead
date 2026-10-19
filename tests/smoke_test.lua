@@ -1101,6 +1101,8 @@ check(ns:IsNewerVersion("0.1.0-beta.1", "0.1.0-alpha.3"), "beta is newer than al
 check(ns:IsNewerVersion("1.0.0", "0.9.9"), "major wins")
 check(not ns:IsNewerVersion("0.1.0-beta.1-dev", "0.1.0-beta.1"), "a dev build is not newer")
 check(not ns:IsNewerVersion("@project-version@", "0.1.0"), "an unpackaged version is ignored")
+check(ns:VersionLabel("v1.27.3") == "v1.27.3" and ns:VersionLabel("1.27.4-dev") == "v1.27.4-dev", "the version label has one v")
+check(ns:VersionLabel("v1.27.3-data.20261018") == "v1.27.3", "the version label leaves out the daily data build")
 -- Only the "-dev" builds deploy.sh stamps are development builds: a copy straight from GitHub has no test data
 -- commands or debug log either
 check(ns:IsDevVersion("1.2.6-dev") and not ns:IsDevVersion("@project-version@") and not ns:IsDevVersion("1.2.6"), "only -dev versions are development builds")

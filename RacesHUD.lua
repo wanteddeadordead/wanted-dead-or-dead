@@ -126,11 +126,14 @@ function RacesHUD:Update()
 	local left = max(race.stop - now, 0)
 	f.zone:SetText(race.zone)
 	f.left:SetText(format("%d:%02d", floor(left / 60), left % 60)..Theme:Colorize(" left", C.muted))
-	f.horde:SetText(Theme:Colorize("Horde "..race.horde, SIDE_COLORS.Horde))
-	f.alliance:SetText(Theme:Colorize("Alliance "..race.alliance, SIDE_COLORS.Alliance))
-	local total = race.horde + race.alliance
+	-- The site's numbers, or our side's live estimate when it's more (Races:SideInfluence)
+	local horde, hordeLive = Races:SideInfluence(race, "Horde")
+	local alliance, allianceLive = Races:SideInfluence(race, "Alliance")
+	f.horde:SetText(Theme:Colorize("Horde "..horde, SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize(" live", C.green) or ""))
+	f.alliance:SetText((allianceLive and Theme:Colorize("live ", C.green) or "")..Theme:Colorize("Alliance "..alliance, SIDE_COLORS.Alliance))
+	local total = horde + alliance
 	for _, side in ipairs({ "Horde", "Alliance" }) do
-		local n = side == "Horde" and race.horde or race.alliance
+		local n = side == "Horde" and horde or alliance
 		f.bar[side]:SetShown(total > 0)
 		f.bar[side]:SetWidth(total > 0 and max((WIDTH - 20) * n / total, 1) or 1)
 	end
@@ -145,6 +148,8 @@ function RacesHUD:Update()
 				local seen, friends, enemies = private.LocalHolder()
 				holder = seen or holder
 				now_ = format("\n\nHere now: %d of your side, %d enemies nearby.", friends, enemies)
+			elseif Races:HereNow(point) > 0 then
+				now_ = format("\n\nHere now: %d of your side's Wanted players.", Races:HereNow(point))
 			end
 			local color = SIDE_COLORS[holder] or C.faint
 			p.dot:SetVertexColor(color[1], color[2], color[3], 1)

@@ -17671,7 +17671,7 @@ print("wanted smoke: setup checks pass")
 	R:Sample()
 	check(#logged == before and #told == toldBefore, "and no samples, and nothing told")
 	-- The longest real names (racezones.json): Stonetalon Mountains, east of Dabyrie's Farmstead, Ironband's Excavation Site.
-	-- The page wraps them to two lines.
+	-- The page wraps them to two lines; the HUD has the points one under another, each the frame's width.
 	local long = { n = 1, zone = "Stonetalon Mountains", mapID = 1442, start = clock - 60, ["end"] = clock + 2600, state = "live", horde = 1342, alliance = 1,
 		winner = "Horde", mayDeclare = "Alliance",
 		points = {
@@ -17690,6 +17690,30 @@ print("wanted smoke: setup checks pass")
 	end
 	check(Fits(zoneLine, 2), "the timeline's zone name wraps to two lines instead of being cut: "..tostring(zoneLine and zoneLine:GetStringWidth()).." in "..tostring(zoneLine and zoneLine._w))
 	check(Fits(pointLines["east of Dabyrie's Farmstead"], 2) and Fits(pointLines["Ironband's Excavation Site"], 2), "the race card's point names wrap to two lines")
+	-- The HUD, in the race's zone
+	mapId, px, py = 1442, 0.3, 0.3 -- on the first point
+	C_Map.GetMapWorldSize = function() return 3200, 3200 end
+	local realBreak = BreakUpLargeNumbers
+	BreakUpLargeNumbers = function(n) local s = tostring(n) local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse() return (out:gsub("^,", "")) end
+	ns.UI:GetFrame():Hide()
+	clock = clock + 1
+	ns.RacesHUD:Update()
+	check(hud:IsShown() and hud.horde._text:find("Horde 1,342", 1, true), "the HUD's influence has thousands apart: "..tostring(hud.horde._text))
+	for i = 1, 3 do
+		local name = hud.points[i].name
+		check(name:GetStringWidth() <= name._w, "the HUD shows the whole point name: "..tostring(name._text).." "..name:GetStringWidth().." in "..name._w)
+	end
+	check(hud.points[1]._point[3] ~= hud.points[2]._point[3] and hud.you._point[3] < hud.points[3]._point[3], "the points one under another, You under them")
+	local realCount = ns.Enemies.CountNearby
+	ns.Enemies.CountNearby = function() return 1 end
+	R:Sample()
+	ns.RacesHUD:Update()
+	local tipOwner = rawget(hud.points[1], "explainHit") or hud.points[1]
+	check(tipOwner.tooltipText:find("1 enemy nearby", 1, true) and tipOwner.tooltipAnchor == "ANCHOR_RIGHT",
+		"one enemy is \"1 enemy\", and the point's tooltip opens beside it, off the You line: "..tostring(tipOwner.tooltipText))
+	ns.Enemies.CountNearby = realCount
+	BreakUpLargeNumbers = realBreak
+	C_Map.GetMapWorldSize = nil
 	-- Put back
 	R:Take(nil)
 	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence

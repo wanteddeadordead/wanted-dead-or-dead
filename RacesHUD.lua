@@ -10,7 +10,10 @@ local W = Wanted.Widgets
 local C = Theme.C
 local Races = Wanted.Races
 local private = {}
-local WIDTH, HEIGHT = 390, 100
+-- The points one under another, each the frame's width: the longest real names ("east of Dabyrie's Farmstead +20%")
+-- didn't fit a third of it
+local WIDTH, HEIGHT = 390, 136
+local POINT_TOP, POINT_ROW = -60, 18
 local UPDATE_SECONDS = 1
 -- Kills are read from the activity, which costs more than the clock: every few seconds
 local MINE_SECONDS = 5
@@ -59,23 +62,22 @@ function private.Build()
 	end
 	f.bar = bar
 	f.points = {}
-	local column = floor((WIDTH - 20) / 3)
 	for i = 1, 3 do
 		local p = CreateFrame("Frame", nil, f)
-		p:SetSize(column, 16)
-		p:SetPoint("TOPLEFT", 10 + (i - 1) * column, -60)
+		p:SetSize(WIDTH - 20, 16)
+		p:SetPoint("TOPLEFT", 10, POINT_TOP - (i - 1) * POINT_ROW)
 		p.dot = p:CreateTexture(nil, "ARTWORK")
 		p.dot:SetSize(10, 10)
 		p.dot:SetPoint("LEFT")
 		p.dot:SetTexture(MEDIA.."disc")
 		p.name = Theme:Text(p, "small", "", C.text)
 		p.name:SetPoint("LEFT", 14, 0)
-		p.name:SetWidth(column - 18)
+		p.name:SetWidth(WIDTH - 20 - 14)
 		p.name:SetWordWrap(false)
 		f.points[i] = p
 	end
 	f.you = Theme:Text(f, "small", "", C.text)
-	f.you:SetPoint("TOPLEFT", 10, -80)
+	f.you:SetPoint("TOPLEFT", 10, POINT_TOP - 3 * POINT_ROW - 4)
 	W:Explain(f.you, "You", "Your kills on the other faction here while the race runs, and your minutes on its points, as this client counted them.", "ANCHOR_BOTTOM")
 	-- Why the player's presence on a point doesn't count (Captures:Blocked), under the frame
 	f.blocked = Theme:Text(f, "small", "", C.amber)
@@ -83,6 +85,11 @@ function private.Build()
 	f:Hide()
 	private.frame = f
 	return f
+end
+
+---1,342: thousands apart, as the Guild Wars page shows them.
+function private.Count(n)
+	return BreakUpLargeNumbers and BreakUpLargeNumbers(n) or tostring(n)
 end
 
 ---Players of our side here with the player: themselves and the group members the game says are in range.
@@ -129,8 +136,8 @@ function RacesHUD:Update()
 	-- The site's numbers, or our side's live estimate when it's more (Races:SideInfluence)
 	local horde, hordeLive = Races:SideInfluence(race, "Horde")
 	local alliance, allianceLive = Races:SideInfluence(race, "Alliance")
-	f.horde:SetText(Theme:Colorize("Horde "..horde, SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize(" live", C.green) or ""))
-	f.alliance:SetText((allianceLive and Theme:Colorize("live ", C.green) or "")..Theme:Colorize("Alliance "..alliance, SIDE_COLORS.Alliance))
+	f.horde:SetText(Theme:Colorize("Horde "..private.Count(horde), SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize(" live", C.green) or ""))
+	f.alliance:SetText((allianceLive and Theme:Colorize("live ", C.green) or "")..Theme:Colorize("Alliance "..private.Count(alliance), SIDE_COLORS.Alliance))
 	local total = horde + alliance
 	for _, side in ipairs({ "Horde", "Alliance" }) do
 		local n = side == "Horde" and horde or alliance
@@ -147,7 +154,7 @@ function RacesHUD:Update()
 			if point == here then
 				local seen, friends, enemies = private.LocalHolder()
 				holder = seen or holder
-				now_ = format("\n\nHere now: %d of your side, %d enemies nearby.", friends, enemies)
+				now_ = format("\n\nHere now: %d of your side, %d %s nearby.", friends, enemies, enemies == 1 and "enemy" or "enemies")
 			elseif Races:HereNow(point) > 0 then
 				now_ = format("\n\nHere now: %d of your side's Wanted players.", Races:HereNow(point))
 			end
@@ -155,7 +162,7 @@ function RacesHUD:Update()
 			p.dot:SetVertexColor(color[1], color[2], color[3], 1)
 			p.name:SetText(point.name..(point.bonus and Theme:Colorize(" +20%", C.gold) or ""))
 			W:Explain(p, point.name, (point.holder and ("The site last counted it held by the "..point.holder..".") or "Nobody has held it yet.")
-				..(point.bonus and " The middle point: a minute here counts +20%." or "")..now_, "ANCHOR_BOTTOM")
+				..(point.bonus and " The middle point: a minute here counts +20%." or "")..now_, "ANCHOR_RIGHT")
 		end
 	end
 	if not private.mineAt or now - private.mineAt >= MINE_SECONDS or private.mineRace ~= race then

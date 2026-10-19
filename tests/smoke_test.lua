@@ -17896,17 +17896,45 @@ end
 	local realGuildName = GetGuildInfo
 	GetGuildInfo = function() return "EMPIRE", "Member", 3 end
 	C_Log = { LogMessage = function(text) if text:find("^WANTEDG1 ") then logged[#logged + 1] = text end end }
+	local realInGuildR = IsInGuild
+	IsInGuild = function() return true end
 	G:ReportRoster()
-	check(#logged == 1 and logged[1] == format("WANTEDG1 %s 1/1 reporter=Player-1-ME&at=%d&guild=EMPIRE&realm=1&leader=Player-1-001", ns.db.accountMark, clock)
-		.."&ranks=1Guild%20Master,1Officer,1Veteran,0Member,0Recruit,0Alt&members=Player-1-001.0,Player-1-002.1,Player-1-003.1,Player-1-004.2,Player-1-005.2,Player-1-006.3,Player-1-008.4,Player-1-ME.3",
-		"the roster report: the guild, its leader, its ranks with the invite right, every member's GUID and rank: "..tostring(logged[1]))
+	local head = format("WANTEDG1 %s reporter=Player-1-ME&at=%d", ns.db.accountMark, clock)
+	check(#logged == 2 and logged[1] == head.."&realm=1&guild=EMPIRE&leader=Player-1-001&ranks=1Guild%20Master,1Officer,1Veteran,0Member,0Recruit,0Alt"
+		.."&members=Player-1-001.0,Player-1-002.1,Player-1-003.1,Player-1-004.2&part=1/2"
+		and logged[2] == head.."&members=Player-1-005.2,Player-1-006.3,Player-1-008.4,Player-1-ME.3&part=2/2",
+		"the roster report: the guild, its leader, its ranks with the invite right, every member's GUID and rank, in parts under 255 bytes: "..tostring(logged[2]))
 	local realClock = clock
+	clock = clock + 300
+	G:ReportRoster()
+	check(#logged == 2, "read at most every 10 minutes")
+	clock = clock + 400
+	G:ReportRoster()
+	check(#logged == 4 and logged[3]:find("&at="..clock.."&", 1, true), "then each read, with its time (the app sends what changed)")
+	-- A big guild: in parts, each under 255 bytes, the members spread over them in order
+	local realRosterInfo, realCount = GetGuildRosterInfo, GetNumGuildMembers
+	GetNumGuildMembers = function() return 120 end
+	GetGuildRosterInfo = function(i)
+		local guid = i == 1 and "Player-1-001" or i == 2 and ME or format("Player-1-%04X", 4096 + i)
+		return "M"..i.."-Realm", "Rank", i == 1 and 0 or 3, 60, "Mage", "Orgrimmar", "", "", true, 0, "MAGE", 0, 0, false, false, 0, guid
+	end
 	clock = clock + 700
+	logged = {}
 	G:ReportRoster()
-	check(#logged == 1, "unchanged: not again")
-	clock = clock + 86400
+	local members, longest, n = {}, 0, #logged
+	for i, line in ipairs(logged) do
+		longest = math.max(longest, #line)
+		check(line:sub(-#format("&part=%d/%d", i, n)) == format("&part=%d/%d", i, n) and line:find("reporter=Player-1-ME&at="..clock, 1, true), "each part names its report and says which part it is")
+		for list in line:gmatch("members=([^&]*)") do for m in list:gmatch("[^,]+") do members[#members + 1] = m end end
+	end
+	check(n > 1 and longest < 255 and #members == 120, "a big guild in parts under 255 bytes: "..n.." parts, longest "..longest..", "..#members.." members")
+	GetGuildRosterInfo, GetNumGuildMembers = realRosterInfo, realCount
+	clock = clock + 700
+	logged = {}
+	IsInGuild = function() return false end
 	G:ReportRoster()
-	check(#logged == 2, "a day on: again")
+	check(logged[1] == format("WANTEDG1 %s reporter=Player-1-ME&at=%d&realm=1&guild=", ns.db.accountMark, clock), "out of a guild: just that: "..tostring(logged[1]))
+	IsInGuild = realInGuildR
 	clock = realClock
 	GetGuildInfo = realGuildName
 	C_Log = realLog

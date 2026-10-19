@@ -39,8 +39,6 @@ GuildWars.DAILY_CAP = 150
 function GuildWars:OnLoad()
 	-- What the player asked for, until the site says it happened: { id, kind, war, data, t, refused? }, newest last
 	Wanted.db.warActions = type(Wanted.db.warActions) == "table" and Wanted.db.warActions or {}
-	-- The last guild roster report of each of this account's characters: GUID -> { h = its hash, t }
-	Wanted.db.warRosterSent = type(Wanted.db.warRosterSent) == "table" and Wanted.db.warRosterSent or {}
 end
 
 function GuildWars:OnEnable()
@@ -513,11 +511,69 @@ function private.WriteAction(action)
 	if not fields or not (C_Log and C_Log.LogMessage) or type(mark) ~= "string" or not strmatch(mark, "^%w+$") then
 		return
 	end
-	local parts = { "id="..private.Value(action.id), "t="..format("%d", action.t), "guid="..private.Value(UnitGUID("player")) }
-	for _, field in ipairs(fields) do
-		tinsert(parts, field[1].."="..private.Value(field[2]))
+	local header = { { "id", action.id }, { "t", format("%d", action.t) }, { "guid", UnitGUID("player") } }
+	for _, line in ipairs(private.Lines(format("WANTEDA1 %s %s ", mark, action.kind), header, fields)) do
+		C_Log.LogMessage(line)
 	end
-	C_Log.LogMessage(format("WANTEDA1 %s %s %s", mark, action.kind, table.concat(parts, "&")))
+end
+
+-- The longest line written for the app (the game's log takes lines under 255 bytes)
+local MAX_LINE = 250
+
+---A line's fields as log lines for the app, each under MAX_LINE: "<prefix><header>&<fields>[&part=i/n]". The header
+---(what names the line) goes in every part, the other fields in whichever part they fit, a list's items (a table)
+---spread over the parts in order; "&part=i/n" on each when there's more than one.
+---@param prefix string
+---@param header table { { key, value } }
+---@param fields table { { key, value or list } }
+---@return string[]
+function private.Lines(prefix, header, fields)
+	local head = {}
+	for _, field in ipairs(header) do
+		tinsert(head, field[1].."="..private.Value(field[2]))
+	end
+	head = prefix..table.concat(head, "&")
+	local room = MAX_LINE - #head - 14
+	local parts, current, used = {}, {}, 0
+	local function Flush()
+		tinsert(parts, current)
+		current, used = {}, 0
+	end
+	local function Put(text)
+		if used + #text > room and #current > 0 then
+			Flush()
+		end
+		tinsert(current, text)
+		used = used + #text
+	end
+	for _, field in ipairs(fields) do
+		local key, value = field[1], field[2]
+		if type(value) == "table" then
+			local chunk, count = "&"..key.."=", 0
+			for _, item in ipairs(value) do
+				local text = (count > 0 and "," or "")..private.Value(item)
+				if used + #chunk + #text > room and (count > 0 or #current > 0) then
+					if count > 0 then
+						tinsert(current, chunk)
+					end
+					Flush()
+					chunk, count, text = "&"..key.."=", 0, private.Value(item)
+				end
+				chunk, count = chunk..text, count + 1
+			end
+			Put(chunk)
+		else
+			Put("&"..key.."="..private.Value(value))
+		end
+	end
+	if #current > 0 or #parts == 0 then
+		Flush()
+	end
+	local lines = {}
+	for i, part in ipairs(parts) do
+		tinsert(lines, head..table.concat(part)..(#parts > 1 and format("&part=%d/%d", i, #parts) or ""))
+	end
+	return lines
 end
 
 ---The player's last ask of a kind (for a war, or guild-wide), while the site hasn't answered it, or nil.
@@ -601,21 +657,12 @@ end
 -- The guild roster report (the war contract's 2.1)
 -- ============================================================================
 
--- The roster is read for a report at most this often, and reported again unchanged after a day (the site counts
--- reports of the last 7 days)
-local REPORT_SECONDS, REPORT_AGAIN, REPORT_PART = 600, 86400, 40
+-- The roster is read for a report at most this often; a report names at most this many ranks and members (the app's
+-- limits)
+local REPORT_SECONDS, REPORT_RANKS, REPORT_MEMBERS = 600, 10, 1000
 
 local function secret(value)
 	return issecretvalue and issecretvalue(value) or false
-end
-
----A short hash of a string (djb2), to tell a changed roster from the last one reported.
-function private.Hash(s)
-	local h = 5381
-	for i = 1, #s do
-		h = (h * 33 + s:byte(i)) % 4294967296
-	end
-	return format("%08x", h)
 end
 
 ---The guild's members with their GUIDs: the game's guild window's (GuildRank), else the roster's.
@@ -633,60 +680,60 @@ function private.RosterGuids()
 	return out
 end
 
----This character's view of its guild for the app, as WANTEDG1 lines, when it changed or a day after the last: the
----guild master, the ranks with the guild-invite right, every member's GUID and rank. The site works out membership,
----the leader and the ranks from many members' reports, never one. Only while the site runs guild wars.
+---This character's view of its guild for the app, as WANTEDG1 lines, at each read of the roster (at most every
+---REPORT_SECONDS): the guild master, the ranks with the guild-invite right, every member's GUID and rank; out of a
+---guild, just that. The app sends a read when it differs from the last it sent, or a day on; the site works out
+---membership, the leader and the ranks from many members' reports, never one. Only while the site runs guild wars.
+---"WANTEDG1 <mark> reporter=<GUID>&at=<time>&realm=<id>&guild=<name>&leader=<GUID>&ranks=<1|0><name>,..&members=<GUID>.<rank>,..[&part=i/n]"
 function GuildWars:ReportRoster()
 	local now = GetServerTime()
 	local mark, me = Wanted.db.accountMark, UnitGUID("player")
 	if not GuildWars:On() or now - (private.reportRead or 0) < REPORT_SECONDS or not (C_Log and C_Log.LogMessage)
-		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) or not GetGuildInfo then
+		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) or not (IsInGuild and GetGuildInfo) then
+		return
+	end
+	-- The realm is the GUID's, as the app checks it
+	local realm = tonumber(strmatch(me, "^Player%-(%d+)%-"))
+	local inGuild = IsInGuild()
+	if not realm or secret(inGuild) then
+		return
+	end
+	local header, prefix = { { "reporter", me }, { "at", format("%d", now) } }, format("WANTEDG1 %s ", mark)
+	if not inGuild then
+		private.reportRead = now
+		for _, line in ipairs(private.Lines(prefix, header, { { "realm", format("%d", realm) }, { "guild", "" } })) do
+			C_Log.LogMessage(line)
+		end
 		return
 	end
 	local ok, guild = pcall(GetGuildInfo, "player")
-	local realm = tonumber(strmatch(me, "^Player%-(%d+)%-"))
-	if not ok or type(guild) ~= "string" or guild == "" or secret(guild) or not realm then
+	if not ok or type(guild) ~= "string" or guild == "" or secret(guild) then
 		return
 	end
-	local members, ranks = private.RosterGuids(), GuildWars:Ranks()
-	local leader, list, rankList = nil, {}, {}
-	for _, member in ipairs(members) do
-		if member.ri == 0 then
-			leader = member.guid
+	local leader, list, rankList, mine = nil, {}, {}, false
+	for _, member in ipairs(private.RosterGuids()) do
+		if #list < REPORT_MEMBERS then
+			leader = member.ri == 0 and member.guid or leader
+			mine = mine or member.guid == me
+			tinsert(list, member.guid.."."..format("%d", member.ri))
 		end
-		tinsert(list, member.guid.."."..format("%d", member.ri))
 	end
-	for _, rank in ipairs(ranks) do
-		tinsert(rankList, (rank.invite and "1" or "0")..rank.name)
+	for _, rank in ipairs(GuildWars:Ranks()) do
+		if #rankList < REPORT_RANKS then
+			tinsert(rankList, (rank.invite and "1" or "0")..strsub(rank.name, 1, 32))
+		end
 	end
-	if not leader or #rankList == 0 then
+	-- The roster isn't loaded yet (it comes with GUILD_ROSTER_UPDATE)
+	if not leader or not mine or #rankList == 0 then
 		return
 	end
 	private.reportRead = now
 	sort(list)
-	local hash = private.Hash(table.concat({ guild, leader, table.concat(rankList, ","), table.concat(list, ",") }, "|"))
-	local last = Wanted.db.warRosterSent[me]
-	if type(last) == "table" and last.h == hash and now - (last.t or 0) < REPORT_AGAIN then
-		return
+	local fields = { { "realm", format("%d", realm) }, { "guild", guild }, { "leader", leader }, { "ranks", rankList }, { "members", list } }
+	for _, line in ipairs(private.Lines(prefix, header, fields)) do
+		C_Log.LogMessage(line)
 	end
-	local parts = ceil(#list / REPORT_PART)
-	for part = 1, parts do
-		local slice = {}
-		for i = (part - 1) * REPORT_PART + 1, min(part * REPORT_PART, #list) do
-			tinsert(slice, list[i])
-		end
-		local fields = { "reporter="..private.Value(me), "at="..format("%d", now) }
-		if part == 1 then
-			tinsert(fields, "guild="..private.Value(guild))
-			tinsert(fields, "realm="..format("%d", realm))
-			tinsert(fields, "leader="..private.Value(leader))
-			tinsert(fields, "ranks="..private.Value(rankList))
-		end
-		tinsert(fields, "members="..private.Value(slice))
-		C_Log.LogMessage(format("WANTEDG1 %s %d/%d %s", mark, part, parts, table.concat(fields, "&")))
-	end
-	Wanted.db.warRosterSent[me] = { h = hash, t = now }
-	Wanted:Log("Guild wars: reported <%s>'s roster, %d members", guild, #list)
+	Wanted:Log("Guild wars: read <%s>'s roster for the app, %d members", guild, #list)
 end
 
 
@@ -904,6 +951,19 @@ function GuildWars:Sight()
 	C_Log.LogMessage(format("WANTEDC1 %s census %s %s %d %d %d %s", mark, id, me, now, counts.Horde, counts.Alliance, layer))
 	local point = GuildWars:PointAt(war, zone, x, y, mapId)
 	if point and point.role ~= "rally" then
-		C_Log.LogMessage(format("WANTEDC1 %s witness %s %s %d %s %s %s", mark, id, me, now, point.id, layer, #enemies > 0 and table.concat(enemies, ",") or "-"))
+		-- As many lines as the sightings take, each under MAX_LINE (the app adds them up)
+		local head = format("WANTEDC1 %s witness %s %s %d %s %s ", mark, id, me, now, point.id, layer)
+		local chunk = {}
+		for i, guid in ipairs(enemies) do
+			tinsert(chunk, guid)
+			local nextGuid = enemies[i + 1]
+			if not nextGuid or #head + #table.concat(chunk, ",") + 1 + #nextGuid > MAX_LINE then
+				C_Log.LogMessage(head..table.concat(chunk, ","))
+				chunk = {}
+			end
+		end
+		if #enemies == 0 then
+			C_Log.LogMessage(head.."-")
+		end
 	end
 end

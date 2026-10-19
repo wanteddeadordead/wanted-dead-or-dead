@@ -58,6 +58,7 @@ function private.Card(parent, y, height, title, width)
 	card:SetSize(width, height)
 	local label = W:SectionLabel(card, title)
 	label:SetPoint("TOPLEFT", 16, -14)
+	card.label = label
 	return card
 end
 
@@ -75,11 +76,15 @@ function private.Column(panel, width, height)
 		scroll:Fit(-self.y)
 		return frame
 	end
-	function column:Section(title)
+	---A section's header; tip = { title, body } puts what the whole section is about behind an (i) after it.
+	function column:Section(title, tip)
 		if self.y ~= 0 then
 			self.y = self.y - 18
 		end
-		self:Add(W:SectionLabel(self.content, title, self.width), 22)
+		local label = self:Add(W:SectionLabel(self.content, title, self.width), 22)
+		if tip then
+			W:InfoGlyph(self.content, tip[1], tip[2]):SetPoint("LEFT", label, "LEFT", label:GetStringWidth() + 6, 0)
+		end
 	end
 	---A row: the option's label, its control on the right, its help on the label.
 	function column:Row(label, control, tip)
@@ -160,7 +165,7 @@ function private.BuildAlerts(column)
 		Detect().inSight = tonumber(key)
 		RefreshNearby()
 	end, 56)
-	column:Row("Out of view, still show as nearby for", private.inSight)
+	column:Row("Still nearby for", private.inSight, "After an enemy goes out of view, how long they still show as nearby.")
 	private.timeout = W:Segmented(content, {
 		{ key = "20", label = "20s" },
 		{ key = "30", label = "30s" },
@@ -169,7 +174,7 @@ function private.BuildAlerts(column)
 	}, function(key)
 		Detect().timeout = tonumber(key)
 	end, 56)
-	column:Row("Then shade them for, before they leave the list", private.timeout)
+	column:Row("Then shaded for", private.timeout, "How long a gone enemy stays shaded before leaving the list.")
 	local previews = {}
 	for _, preview in ipairs({ { "enemy", "Enemy" }, { "important", "Kill on Sight" }, { "stealth", "Stealth" } }) do
 		tinsert(previews, W:Button(content, preview[2], "chip", preview[1] == "important" and 100 or 70, 22, function()
@@ -178,7 +183,7 @@ function private.BuildAlerts(column)
 	end
 	column:Row("Hear them", ButtonGroup(content, previews))
 
-	column:Section("When an enemy targets you")
+	column:Section("When an enemy targets you", { "Targeted warning", "Needs enemy detection on. Works from nameplates, your target and focus: someone off screen can't be seen targeting you." })
 	local targeted = private.Switch(column, Detect, "targetWarn", "Show a TARGETED warning", "A warning in the middle of the screen naming whoever has you targeted.", function() Wanted.Alerts:UpdateTargetedHud() end)
 	W:Cog(targeted, "The TARGETED warning", function(popup)
 		private.Toggle(popup, Detect, "targetSound", "Play the targeted sound", "A rising double tone each time another enemy starts targeting you.", 14, -40)
@@ -194,7 +199,6 @@ function private.BuildAlerts(column)
 		private.moveHud:SetStyle(moving and "primary" or "secondary")
 	end)
 	column:Row("Where it shows", private.moveHud)
-	column:Note("Needs enemy detection on. Works from nameplates, your target and focus: someone off screen can't be seen targeting you.")
 
 	-- Each alert's sound, with a button to hear it
 	column:Section("Sounds")
@@ -206,14 +210,13 @@ function private.BuildAlerts(column)
 		-- A long SharedMedia name is cut short instead of running over the next button
 		pick.label:SetWidth(122)
 		pick.label:SetWordWrap(false)
-		W:AttachTooltip(pick, kind[2], kind[3])
+		W:AttachTooltip(pick, kind[2], kind[3].."\n\nAdd your own sounds with a SharedMedia addon.")
 		private.soundPicks[kind[1]] = pick
 		local hear = W:Button(content, "Hear it", "chip", 58, 22, function()
 			Wanted.Alerts:PlayRaw(kind[1])
 		end)
 		column:Row(kind[2], ButtonGroup(content, { pick, hear }))
 	end
-	column:Note("Add your own sounds with a SharedMedia addon.")
 end
 
 ---The sound choices for one alert kind, under its button. SharedMedia sounds get their own menu, a page at a time.
@@ -297,7 +300,7 @@ function private.BuildNearby(column)
 	local content = column.content
 	column:Section("Row layout")
 	private.layout = W:Segmented(content, {
-		{ key = "auto", label = "Automatic" },
+		{ key = "auto", label = "Automatic", tip = { "Automatic", "Two-line rows, and one-line rows once more than 8 enemies are around." } },
 		{ key = "normal", label = "Always normal" },
 		{ key = "compact", label = "Always compact" },
 	}, function(key)
@@ -305,7 +308,6 @@ function private.BuildNearby(column)
 		RefreshNearby()
 	end, 130)
 	column:Row("Row layout", private.layout)
-	column:Note("Automatic uses two-line rows, and one-line rows once more than 8 enemies are around.")
 	private.opacity = W:Segmented(content, {
 		{ key = "1", label = "Solid" },
 		{ key = "0.75", label = "75%" },
@@ -345,14 +347,15 @@ local FRONT_PLACES = {
 function private.BuildSharing(column)
 	local content = column.content
 	local function Root() return Wanted.db.settings end
-	column:Section("Sharing")
+	column:Section("Sharing", { "What Wanted sends to chat", "Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild)." })
 	private.Switch(column, Detect, "share", "Share the enemies I see", "Other players running Wanted on your faction see where you spotted enemies (on their map and in their alerts).")
 	private.Switch(column, Detect, "sharedAlerts", "Alert me when others see a KoS or bounty target", "Shows where another Wanted user spotted someone on your Kill on Sight list or with a bounty.")
 	private.Switch(column, Root, "bridge", "Carry bounty notices across factions", "Battle.net friends on the other faction who also run Wanted pass on the bounties each side posts on the other, as hidden game data, never chat. It's how you learn the price on your head.")
 	-- The Wanted community: its members carry bounty notices across too (Bridge)
 	local invite = W:CopyBox(content, 320, Wanted.Bridge.INVITE_URL)
-	column:Row("Wanted community", invite)
-	column:Note("Join to link your addon to the other faction's: bounty notices and the fight layer cross as data, never chat. Members can see each other's BattleTag.")
+	column:Row("Wanted community", invite, "Join to link your addon to the other faction's: bounty notices and the fight layer cross as data, never chat.")
+	-- Said before joining, not on hover: who can see what (a privacy fact)
+	column:Note("Members can see each other's BattleTag.")
 	private.invite = invite
 	-- The invite sits on Sharing and display: the tour opens that tab before bordering it (2026-10-17: it bordered an
 	-- empty spot of the Alerts tab)
@@ -361,7 +364,6 @@ function private.BuildSharing(column)
 			private.tabs:Select("sharing")
 		end
 	end)
-	column:Note("Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild).")
 
 	column:Section("Display")
 	private.Switch(column, Detect, "mapPins", "Show enemies on the world map", "Recent sightings, yours and shared, drawn on the world map for the last 30 minutes. Also in the map's own filter menu.", function() Wanted.MapPins:Refresh() end)
@@ -375,9 +377,10 @@ function private.BuildSharing(column)
 
 	column:Section("Kill proof")
 	private.Switch(column, Root, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.")
-	column:Note(format("If a kill is disputed, post the screenshot in %s on the Forever PvP Discord (click the link, Ctrl+C):", Wanted.Proof.DISCORD_CHANNEL))
+	column:Note("Disputed kill? Post the screenshot:")
 	column.y = column.y - 4
-	column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
+	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
+	W:Explain(proofLink, "Disputed kill", format("Post the screenshot in %s on the Forever PvP Discord. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_CHANNEL))
 
 	column:Section("Capture fronts")
 	local Settings = function() return Wanted.Captures:Settings() end
@@ -409,6 +412,8 @@ end
 local SWATCH_COLUMNS, SWATCH_GAP = 5, 12
 function private.BuildLook(panel, width)
 	local card = private.Card(panel, 0, 262, "Window theme", width)
+	W:InfoGlyph(card, "Window theme", "Your side's capital is the default until you pick one. The poker table's felt follows the theme.")
+		:SetPoint("LEFT", card.label, "RIGHT", 6, 0)
 	local swatchWidth = floor((width - 32 - (SWATCH_COLUMNS - 1) * SWATCH_GAP) / SWATCH_COLUMNS)
 	local swatchHeight = floor(swatchWidth * 0.58)
 	private.swatches = {}
@@ -441,10 +446,11 @@ function private.BuildLook(panel, width)
 		swatch:SetScript("OnLeave", function() private.RefreshLook() end)
 		tinsert(private.swatches, swatch)
 	end
-	private.lookNote = Theme:Text(card, "tiny", "", C.muted)
-	private.lookNote:SetPoint("BOTTOMLEFT", 16, 16)
 	local reload = W:Button(card, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
 	reload:SetPoint("BOTTOMRIGHT", -16, 10)
+	W:Explain(reload, "Reload to apply", function()
+		return format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(Wanted.db.settings.theme).name)
+	end)
 	private.lookReload = reload
 
 	card = private.Card(panel, -274, 130, "Class icons", width)
@@ -492,10 +498,7 @@ function private.RefreshLook()
 		swatch.name:SetTextColor(unpack(swatch.key == chosen and C.white or C.muted))
 	end
 	local applied = Theme.current and Theme.current.key
-	local pending = applied ~= chosen
-	private.lookNote:SetText(pending and format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(chosen).name)
-		or "Your side's capital is the default until you pick one. The poker table's felt follows the theme.")
-	private.lookReload:SetShown(pending)
+	private.lookReload:SetShown(applied ~= chosen)
 end
 
 
@@ -520,8 +523,7 @@ function private.BuildStreaks(column)
 	}, function(key)
 		StreakSettings().announce = key
 	end, 110)
-	column:Row("Announce streaks to", private.streakAnnounce)
-	column:Note("A line like \"Wanted: <you> is on a killing spree (3 kills)\", at most one every 10 seconds, only while you're in a party or guild. Never in public chat.")
+	column:Row("Announce streaks to", private.streakAnnounce, "A line like \"Wanted: <you> is on a killing spree (3 kills)\", at most one every 10 seconds, only while you're in a party or guild. Never in public chat.")
 end
 
 ---A slider bound to a layout table key (settings.ranks.plate or targetLabel); kept in step by Refresh.
@@ -565,16 +567,6 @@ local function LayoutControls(popup, width, getTable, choices, onAnchor)
 	return anchor, -210
 end
 
----A note at the foot of a cog popup; returns the popup's height.
-local function PopupNote(popup, width, y, text)
-	local note = Theme:Text(popup, "tiny", text)
-	note:SetPoint("TOPLEFT", 14, y)
-	note:SetWidth(width - 28)
-	note:SetJustifyH("LEFT")
-	note:SetWordWrap(true)
-	return -y + note:GetStringHeight() + 14
-end
-
 function private.BuildRanks(column)
 	local content = column.content
 	-- Players' Blizzard PvP ranks (Ranks), as Wanted players' addons read them from the game, and the honor scout
@@ -587,8 +579,9 @@ function private.BuildRanks(column)
 	for _, a in ipairs(Ranks.PLATE_ANCHORS) do tinsert(plateChoices, { key = a.key, label = a.label }) end
 	for _, a in ipairs(Ranks.TARGET_ANCHORS) do tinsert(targetChoices, { key = a.key, label = a.label }) end
 
-	column:Section("Blizzard PvP ranks of other players")
-	local plates = private.Switch(column, RankSettings, "nameplates", "Rank on nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.", Update)
+	column:Section("Blizzard PvP ranks of other players", { "Where ranks come from", "Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none." })
+	local plates = private.Switch(column, RankSettings, "nameplates", "Rank on nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.\n\n"
+		.."Changes show at once on the nameplates already up. Works with the game's nameplates, ElvUI and Plater.", Update)
 	W:Cog(plates, "Rank on nameplates", function(popup, width)
 		local y
 		private.plateAnchor, y = LayoutControls(popup, width, Plate, plateChoices)
@@ -596,14 +589,15 @@ function private.BuildRanks(column)
 		private.Toggle(popup, Plate, "badge", "Show badge", "The rank's badge, the game's PvP rank insignia.", 14, y, Update)
 		private.Toggle(popup, Plate, "number", "Show number", "The rank's number, after the badge.", 140, y, Update)
 		private.Refresh()
-		return PopupNote(popup, width, y - 32, "Changes show at once on the nameplates already up. Works with the game's nameplates, ElvUI and Plater.")
+		return -y + 34
 	end)
 	local target = private.Switch(column, RankSettings, "target", "Rank over the target frame", "The rank and its title over your target's frame.", Update)
 	W:Cog(target, "Rank at the target frame", function(popup, width)
 		local y
 		private.targetAnchor, y = LayoutControls(popup, width, Target, targetChoices)
+		W:AttachTooltip(private.targetAnchor, "Where", "Your target's frame, or ElvUI's when it's loaded.")
 		private.Refresh()
-		return PopupNote(popup, width, y, "Your target's frame, or ElvUI's when it's loaded.")
+		return -y + 4
 	end)
 	private.rankShow = W:MultiSelect(content, 260, Options(RANK_PLACES), function(key, checked)
 		RankSettings()[key] = checked
@@ -618,7 +612,6 @@ function private.BuildRanks(column)
 		private.Switch(column, Root, "signatureChat", "Emblems in chat", "The emblem a Wanted player picked on wanteddeadordead.com, before what they say in your chat windows.")
 	end
 	private.Switch(column, Root, "honorScout", "Read players' honorable kills", "When you target or mouse over a player, Wanted reads their lifetime honorable kills from the game (out of combat, a few seconds apart) for wanteddeadordead.com's Honorable Kills board.")
-	column:Note("Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none.")
 end
 
 
@@ -630,7 +623,8 @@ end
 
 function private.BuildEmotes(column)
 	local Emotes = Wanted.Emotes
-	column:Section("Emote buttons")
+	column:Section("Emote buttons", { "Emote buttons", "Click an emote to change it: "..Theme:Colorize("gold", C.accent).." = favourite (in the Nearby window, up to "
+		..Emotes.MAX_FAVOURITES.."), outlined = in the ... list, faint = hidden.\n\nChanges show in the Nearby window straight away, or after combat if you're in one." })
 	private.Switch(column, function() return Wanted.db.settings.emotes end, "enabled", "Show emote buttons in the Nearby window",
 		"Favourites along the bottom of the Nearby window and a ... button with the rest. Each emotes at your target, even mid-fight.", RefreshNearby)
 	-- The chips, under the row
@@ -639,10 +633,7 @@ function private.BuildEmotes(column)
 	private.emoteCount = Theme:Text(card, "small", "")
 	private.emoteCount:SetPoint("TOPRIGHT", -16, -12)
 	private.emoteCount:SetJustifyH("RIGHT")
-	local legend = Theme:Text(card, "tiny", "Click an emote to change it:  "..Theme:Colorize("gold", C.accent).." = favourite (in the Nearby window, up to "
-		..Emotes.MAX_FAVOURITES..")   outlined = in the ... list   faint = hidden")
-	legend:SetPoint("TOPLEFT", 16, -14)
-	local y = -38
+	local y = -14
 	for _, group in ipairs(Emotes.GROUPS) do
 		local heading = W:SectionLabel(card, group.label)
 		heading:SetPoint("TOPLEFT", 16, y)
@@ -672,9 +663,7 @@ function private.BuildEmotes(column)
 		end
 		y = y - (col > 0 and 26 or 0) - 6
 	end
-	local hint = Theme:Text(card, "tiny", "Changes show in the Nearby window straight away, or after combat if you're in one.")
-	hint:SetPoint("TOPLEFT", 16, y - 2)
-	card:SetHeight(-y + 20)
+	card:SetHeight(-y + 6)
 	column:Add(card)
 end
 

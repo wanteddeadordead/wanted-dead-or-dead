@@ -87,6 +87,7 @@ local DEFAULTS = {
 			fade = true, -- shade enemies out of sight
 			pvp = true, -- your own PvP status under the tabs
 			opacity = 1,
+			scale = 1, -- its size, 0.8 to 1.5 (Theme:ClampScale)
 		},
 		detect = {
 			enabled = true,
@@ -111,10 +112,12 @@ local DEFAULTS = {
 			targetHold = true, -- keep it up while targeted (otherwise a few seconds)
 			targetNames = true, -- list who in the warning (off: just TARGETED; the Nearby window shows who)
 			hudPos = nil,
+			hudScale = 1, -- the TARGETED warning's size, 0.8 to 1.5
 			window = nil,
 			tab = "nearby",
 		},
 		window = nil, -- { point, x, y }
+		uiScale = 1, -- the window's size, 0.8 to 1.5 (Settings, Theme); its popups and menus follow it
 		lastPage = nil, -- the window's page when last open (UI); Home when there's none
 	},
 	kos = {}, -- guid -> { name, reason, t }

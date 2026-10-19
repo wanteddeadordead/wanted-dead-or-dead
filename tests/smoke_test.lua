@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -6153,6 +6153,118 @@ end)()
 	ns.PvPCalendar:OnLoad()
 	RunFrames()
 	clock, ns.db.catchupT = realClock, realCatchupT
+end)()
+-- Sizes: the text's floor, the size settings' range, the windows kept on screen, and the Settings sliders saving
+;(function()
+	local Theme = ns.Theme
+	for key, least in pairs({ tiny = 12, small = 12, labelSmall = 12, body = 13, label = 13, heading = 14 }) do
+		check(Theme.Fonts[key]._size >= least, "the "..key.." font is at least "..least..": "..tostring(Theme.Fonts[key]._size))
+	end
+	for _, font in pairs(Theme.Fonts) do
+		check(font._size == nil or font._size >= 12, "no theme font under 12: "..tostring(font._size))
+	end
+	for given, want in pairs({ [0.5] = 0.8, [0.8] = 0.8, [1] = 1, [1.13] = 1.15, [1.5] = 1.5, [3] = 1.5, ["1.2"] = 1.2, ["junk"] = 1 }) do
+		check(math.abs(Theme:ClampScale(given) - want) < 1e-9, "size "..tostring(given).." applies as "..want..": "..Theme:ClampScale(given))
+	end
+	check(Theme:ClampScale(nil) == 1 and Theme:ClampScale(0 / 0) == 1, "no size or not a number is 100%")
+	local l, t = Theme:OnScreen(100, 700, 400, 300, 1000, 800)
+	check(l == 100 and t == 700, "a frame on screen stays put")
+	l, t = Theme:OnScreen(800, 900, 400, 300, 1000, 800)
+	check(l == 600 and t == 800, "off the right and the top: moved in: "..l..", "..t)
+	l, t = Theme:OnScreen(-50, 100, 400, 300, 1000, 800)
+	check(l == 0 and t == 300, "off the left and the bottom: moved in: "..l..", "..t)
+	l, t = Theme:OnScreen(300, 500, 1600, 1200, 1000, 800)
+	check(l == 0 and t == 800, "bigger than the screen: its top left on screen: "..l..", "..t)
+
+	-- The window, 1090 by 795 at 400 from the left of a 1920 by 900 screen, made 150%: too tall for the screen, so
+	-- its top goes to the screen's top; its centre stays across
+	local frame = ns.UI:GetFrame()
+	local savedScale, savedWindow = ns.db.settings.uiScale, ns.db.settings.window
+	local realW, realH = UIParent._w, UIParent._h
+	UIParent._w, UIParent._h = 1920, 900
+	frame:SetScale(1)
+	frame._w, frame._h = 1090, 795
+	frame.GetLeft = function(self) return self._scale == 1 and 400 or nil end
+	frame.GetTop = function(self) return self._scale == 1 and 847.5 or nil end
+	ns.UI:SetScale(1.5)
+	check(frame:GetScale() == 1.5 and ns.db.settings.uiScale == 1.5, "UI size 150% sizes the window and is saved")
+	local saved = ns.db.settings.window
+	check(saved and saved.point == "TOPLEFT" and math.abs(saved.y) < 1e-9, "a window taller than the screen goes to its top: "..tostring(saved and saved.y))
+	check(math.abs(saved.x * 1.5 - (945 - 1090 * 1.5 / 2)) < 1e-6, "and keeps its centre across: "..saved.x)
+	check(frame._point[1] == "TOPLEFT" and frame._point[2] == UIParent and frame._point[5] == saved.y, "the window is anchored where it was saved")
+	-- 80% from 100%, the window near the right edge: it shrinks about its centre and stays where it is
+	frame:SetScale(1)
+	frame.GetLeft = function() return 500 end
+	frame.GetTop = function() return 850 end
+	ns.UI:SetScale(0.8)
+	saved = ns.db.settings.window
+	check(math.abs(saved.x * 0.8 - (500 + 1090 * 0.1)) < 1e-6 and math.abs(saved.y * 0.8 - (850 - 795 * 0.1 - 900)) < 1e-6,
+		"a smaller window keeps its centre: "..saved.x..", "..saved.y)
+	ns.UI:SetScale(9)
+	check(ns.db.settings.uiScale == 1.5, "a size past 150% saves as 150%")
+	frame.GetLeft, frame.GetTop = nil, nil
+
+	-- The Settings slider: a typed size applies at once; a drag waits for the thumb to be let go
+	ns.UI:Show("settings")
+	local row
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "UI size" and rawget(fs._parent, "control") then row = fs._parent end
+	end
+	check(row and row.control.slider, "Settings, Theme has a UI size row with a slider")
+	local slider = row.control.slider
+	slider._scripts.OnValueChanged(slider, 120)
+	check(ns.db.settings.uiScale == 1.2 and frame:GetScale() == 1.2, "the slider at 120% sizes the window: "..ns.db.settings.uiScale)
+	check(row.control.box._text == "120%", "and its box reads 120%: "..row.control.box._text)
+	local dragging = true
+	slider.IsDraggingThumb = function() return dragging end
+	slider._scripts.OnValueChanged(slider, 90)
+	check(ns.db.settings.uiScale == 1.2, "mid-drag, nothing changes size yet")
+	row.control._scripts.OnUpdate(row.control)
+	check(ns.db.settings.uiScale == 1.2, "nor while the thumb is still held")
+	dragging = false
+	row.control._scripts.OnUpdate(row.control)
+	check(ns.db.settings.uiScale == 0.9 and frame:GetScale() == 0.9 and not row.control._scripts.OnUpdate, "let go: 90% applies, once")
+	slider.IsDraggingThumb = nil
+	ns.db.settings.uiScale = 1.25
+	ns.UI:Refresh(true)
+	check(row.control.box._text == "125%", "the slider shows the saved size: "..row.control.box._text)
+
+	-- The Nearby window: its own size, after combat if in one (its rows are secure buttons)
+	local nearby = _G.WantedNearbyFrame
+	nearby:SetScale(1)
+	inCombat = true
+	ns.NearbyWindow:SetScale(1.3)
+	check(ns.db.settings.nearby.scale == 1.3 and nearby:GetScale() == 1, "Nearby's size in combat is saved and waits")
+	inCombat = false
+	Fire("PLAYER_REGEN_ENABLED")
+	check(nearby:GetScale() == 1.3, "and applies after combat: "..nearby:GetScale())
+	ns.NearbyWindow:SetScale(1)
+	-- The TARGETED warning and the capture bar
+	ns.Alerts:SetHudScale(1.4)
+	check(ns.db.settings.detect.hudScale == 1.4 and _G.WantedTargetedHud:GetScale() == 1.4, "the warning's size applies and is saved")
+	ns.Alerts:SetHudScale(1)
+	ns.CapturesHUD:SetScale(0.85)
+	check(ns.Captures:Settings().scale == 0.85, "the capture bar's size is saved")
+	ns.CapturesHUD:SetScale(1)
+
+	-- Menus and cog popups open at the size of what opened them
+	local opener = ns.Widgets:Button(UIParent, "Open", "secondary", 80, 24)
+	opener.GetEffectiveScale = function() return 1.3 end
+	ns.Widgets:Menu({ { text = "One", onClick = function() end } }, opener)
+	check(math.abs(_G.WantedMenu:GetScale() - 1.3) < 1e-9, "a menu opened from a window at 130% is at 130%: "..tostring(_G.WantedMenu:GetScale()))
+	ns.Widgets:Menu({ { text = "One", onClick = function() end } })
+	check(_G.WantedMenu:GetScale() == 1, "a menu at the cursor is at the screen's size")
+	_G.WantedMenu:Hide()
+	local optionRow = ns.Widgets:Row(UIParent, 400, "Option", ns.Widgets:Switch(UIParent))
+	local cog = ns.Widgets:Cog(optionRow, "Option", function() return 60 end)
+	cog.GetEffectiveScale = function() return 1.3 end
+	cog:Click()
+	check(cog.popup and math.abs(cog.popup:GetScale() - 1.3) < 1e-9, "and so is a cog's popup")
+	cog.popup:Hide()
+
+	ns.db.settings.uiScale, ns.db.settings.window = savedScale, savedWindow
+	frame:SetScale(Theme:ClampScale(savedScale))
+	UIParent._w, UIParent._h = realW, realH
 end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width

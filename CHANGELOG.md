@@ -7,6 +7,8 @@
 - The interface text is set in Inter, a clear screen face with tall lowercase letters, Russian names included. New font files: restart the client after updating.
 - The beta notice under the title bar is now the tooltip of a BETA tag beside the brand, so pages get its room back.
 - Settings in EllesmereUI's rows: one option per row with a switch, its help on the label, and a scroll bar when a tab runs long. What the Nearby window shows in each row, where ranks show and where capture fronts show are each one dropdown of checkboxes; the TARGETED warning, the streak callout and the rank labels keep their finer settings behind a cog.
+- Larger text: nothing is smaller than 12, and body text and labels are 13.
+- A UI size setting, 80% to 150%, in Settings, Theme: it sizes the window with its popups and menus, keeps the window on screen, and is saved for the whole account. The Nearby window, the TARGETED warning and the capture bar each have their own size in their own settings (the Nearby window's applies after combat if you're in one).
 
 ## [1.27.3] - 2026-10-17
 

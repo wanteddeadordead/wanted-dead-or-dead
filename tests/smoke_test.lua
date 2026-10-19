@@ -18109,6 +18109,22 @@ end
 		war.battle = { prep = clock - 300, start = clock + 600, stop = clock + 2400 }
 	end)
 	check(OnScreen("Prep: the war starts soon") and OnScreen("Battle at") and OnScreen("THE LANES · PREP"), "prep: the lanes greyed, the battle's time")
+	-- The result: won, the lanes and keep as they ended, the zone now, the War Marks
+	AtStep("result", function(war)
+		war.result = { won = true, at = clock - 60, holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, protectedUntil = clock + 3 * 86400,
+			lanes = { { id = "top", tower = { state = "taken", at = clock - 1440 }, inhibitor = { state = "taken", at = clock - 1140 } }, { id = "mid", tower = { state = "taken", at = clock - 900 } } },
+			keep = { state = "fallen", at = clock - 360 }, turnout = { attacker = 31, defender = 24 }, kills = { attacker = 118, defender = 97 },
+			marks = { stake = 400, stakeBack = true, treasury = 200, purse = 50 } }
+	end)
+	check(OnScreen("EMPIRE took Hillsbrad") and OnScreen("WON") and OnScreen("NOW EMPIRE'S") and OnScreen("held") and OnScreen("fell at")
+		and OnScreen("31 / 40 v 24 / 40 · kills 118 v 97") and OnScreen("Held by <EMPIRE>") and OnScreen("Protected until") and OnScreen("400 returned")
+		and OnScreen("+200") and OnScreen("each on the roster"), "the result, won: the war, the zone now, the War Marks")
+	AtStep("result", function(war)
+		war.result = { won = false, holder = { guild = "Revenant", faction = "Alliance" }, marks = { stake = 400, treasury = 0 } }
+	end)
+	check(OnScreen("Revenant held Hillsbrad") and OnScreen("LOST") and OnScreen("400 lost to Revenant"), "lost: the stake to the holders")
+	AtStep("result", function(war) war.result = {} end)
+	check(OnScreen("The site is counting"), "not counted yet")
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

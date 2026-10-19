@@ -6772,6 +6772,65 @@ end)()
 	ns.UI:Refresh()
 	check(sound.control:GetChecked() == (was and true or false), "and follows the setting")
 end)()
+-- Bounties: the explanations moved off the Board, Your bounties and Your hunts into tooltips
+;(function()
+	local W, C = ns.Widgets, ns.Theme.C
+	local function Shown(f) local on, p = f._shown, f._parent while on and p do on, p = p._shown, p._parent end return on end
+	local function OnScreen(text)
+		for _, fs in ipairs(Mock.fontStrings) do if type(fs._text) == "string" and fs._text:find(text, 1, true) and Shown(fs) then return fs end end
+	end
+	local function Tip(title)
+		for _, f in ipairs(Mock.created) do if rawget(f, "tooltipTitle") == title and Shown(f) then return f end end
+	end
+	local function Body(f) local body = f and f.tooltipText return type(body) == "function" and body() or body end
+	ns.UI:Show("board")
+	check(not OnScreen("Kill the target and the claim files itself"), "the Board has no subtitle")
+	check(Body(Tip("How bounties work")) == "Bounties on enemy players. Kill the target and the claim files itself; the poster pays by mail.", "the core rule is behind an (i) by Post a bounty")
+	local nameBox
+	for _, fs in ipairs(Mock.fontStrings) do if fs._text == "Player name" and Shown(fs) then nameBox = fs._parent end end
+	check(nameBox and nameBox.tooltipText == "Target an enemy, or type the name of one you've seen.", "the name box says what to put in it")
+	check(not OnScreen("Target an enemy, or type the name"), "and the form doesn't say it on screen")
+	nameBox:SetText("Nobody Seenatall")
+	nameBox._scripts.OnTextChanged(nameBox, true)
+	local notSeen = OnScreen("Not seen yet")
+	check(notSeen and notSeen._text == "Not seen yet" and notSeen.explainHit and notSeen.explainHit.tooltipText == "Target them or mouse over them once.",
+		"an unknown name is a short state, with what to do on hover")
+	nameBox:SetText("")
+	nameBox._scripts.OnTextChanged(nameBox, true)
+	check(notSeen._text == "" and not notSeen.explainHit.tooltipTitle, "an empty box: no state and no tooltip: "..tostring(notSeen._text).." "..tostring(notSeen.explainHit.tooltipTitle))
+	-- The going rate: a short label, the breakdown behind it
+	local label, detail = ns.Model:GetGoingRate(22, 10000)
+	check((label == "No going rate yet" or label:find("^Going rate: ")) and detail:find("^Levels 17%-27: "), "the going rate is a label and a breakdown: "..tostring(label).." / "..tostring(detail))
+	check(not OnScreen("Post one above, or clear the filters"), "the empty board has no how-to line")
+	-- Your bounties and Your hunts: no subtitles; the empty lists' how-tos are on their tabs
+	ns.UI:Show("mine")
+	check(not OnScreen("The bounties you posted: what you owe"), "Your bounties has no subtitle")
+	check(Body(Tip("History")) == "Your paid, expired and withdrawn bounties end up here.", "Your bounties' History tab says what lands there")
+	ns.UI:Show("hunts")
+	check(not OnScreen("The bounties you're hunting, the claims"), "Your hunts has no subtitle")
+	check(Body(Tip("Hunting")):find("A hunt lasts 24 hours", 1, true) and Body(Tip("Your claims")) == "Kill a player with a bounty on them and the claim files itself."
+		and Body(Tip("History")) == "Your paid, beaten and disputed claims end up here.", "Your hunts' tabs say what lands in each")
+	check(not OnScreen("Press Hunt on a bounty on the Board"), "the empty hunts list has no how-to line")
+	-- A claim row: the state on its pill, what it means on hover; the row showing a bounty again drops it
+	local row = CreateFrame("Button", nil, UIParent)
+	ns.Rows:Create(row)
+	ns.Rows:UpdateClaim(row, { amount = 5000, targetName = "Sneaky Pete", bounty = { data = {} }, poster = "Kaelen", t = clock - 60, label = "Witnessed", color = C.amber })
+	check(row.seen._text == "" and row.tooltipTitle == "Witnessed" and row.tooltipText == "Another player saw it. Waiting for the poster.", "a claim row explains its state on hover, not on the row")
+	row._scripts.OnEnter(row)
+	check(_G.WantedTooltip:IsShown() and _G.WantedTooltip.body._text == "Another player saw it. Waiting for the poster.", "in our tooltip")
+	row._scripts.OnLeave(row)
+	-- The death page's address: how to copy it is on the box
+	local realURL = ns.Bounties.DeathPageURL
+	ns.Bounties.DeathPageURL = function() return "https://wanteddeadordead.com/death/x" end
+	local dialog = _G.WantedDialog
+	if dialog then dialog:Hide() end
+	ns.Rows:DoAction("deathpage", { targetName = "Sneaky Pete", hunter = "Kaelen", claim = { id = "c1", data = {} }, bounty = { data = {} } })
+	local frame = _G.WantedDialog.frame
+	check(frame.message._text:find("death:$") and not frame.message._text:find("Ctrl+C", 1, true), "the death page dialog is short: "..frame.message._text)
+	check(frame.input.tooltipTitle == "The death's page" and frame.input.tooltipText:find("Ctrl+C", 1, true), "how to copy the address is on its box")
+	frame.cancel:Click()
+	ns.Bounties.DeathPageURL = realURL
+end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
 ;(function()

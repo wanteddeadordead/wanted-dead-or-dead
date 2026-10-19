@@ -30,18 +30,17 @@ function private.Refresh()
 	if showRecord then
 		private.record:Refresh()
 	elseif private.view == "claims" then
-		private.list:SetItems(Model:GetMyActiveClaims(), "No claims in play.", "Kill a player with a bounty on them and the claim files itself.")
+		private.list:SetItems(Model:GetMyActiveClaims(), "No claims in play.")
 	elseif private.view == "history" then
-		private.list:SetItems(Model:GetMyHistory("hunter"), "Nothing finished yet.", "Your paid, beaten and disputed claims end up here.")
+		private.list:SetItems(Model:GetMyHistory("hunter"), "Nothing finished yet.")
 	else
-		private.list:SetItems(Model:GetMyHunts(), "You're not hunting anyone.", "Press Hunt on a bounty on the Board. A hunt lasts 24 hours; Renew starts it again.")
+		private.list:SetItems(Model:GetMyHunts(), "You're not hunting anyone.")
 	end
 end
 
 UI:RegisterPage("hunts", {
 	group = "World PvP",
 	title = "Your hunts",
-	subtitle = "The bounties you're hunting, the claims your kills made, and your record as a bounty hunter.",
 	order = 2.5,
 	badge = function()
 		local hunts = #Model:GetMyHunts()
@@ -62,9 +61,9 @@ UI:RegisterPage("hunts", {
 		private.earnedTile:SetWidth(tileWidth)
 
 		local segment = W:Tabs(container, {
-			{ key = "hunting", label = "Hunting now" },
-			{ key = "claims", label = "Your claims" },
-			{ key = "history", label = "History" },
+			{ key = "hunting", label = "Hunting now", tip = { "Hunting", "Press Hunt on a bounty on the Board. A hunt lasts 24 hours; Renew starts it again." } },
+			{ key = "claims", label = "Your claims", tip = { "Your claims", "Kill a player with a bounty on them and the claim files itself." } },
+			{ key = "history", label = "History", tip = { "History", "Your paid, beaten and disputed claims end up here." } },
 			{ key = "record", label = "Your record" },
 		}, function(key)
 			private.view = key

@@ -335,8 +335,17 @@ function private.Create()
 		Nearby:Refresh()
 	end)
 	clear:SetPoint("RIGHT", private.mute, "LEFT", -2, 0)
+	private.clear = clear
+	-- The order of the list: Threat, Nearest, Last seen, a click steps to the next, remembered
+	private.sort = W:Button(header, "", "ghost", 62, 22, function()
+		local _, next = private.Sorts()
+		private.Show().sort = next.key
+		Nearby:Refresh()
+	end)
+	private.sort:SetPoint("RIGHT", clear, "LEFT", -2, 0)
+	W:AttachTooltip(private.sort, "Sort", "Threat: Kill on Sight and bounties first, then who's fighting, then who's in sight. Nearest: within about 28 yards, then on screen, then in sight (the game gives addons no exact distance). Last seen: most recently seen first. Click for the next.")
 	-- The title stops at the buttons, whatever its length
-	private.title:SetPoint("RIGHT", clear, "LEFT", -4, 0)
+	private.title:SetPoint("RIGHT", private.sort, "LEFT", -4, 0)
 	private.title:SetJustifyH("LEFT")
 	private.title:SetWordWrap(false)
 	W:AttachTooltip(clear, "Clear", "Empty the Nearby list. Enemies still around come back on their next sighting.")
@@ -681,7 +690,21 @@ function private.GetItems(view)
 	elseif view == "ignore" then
 		return Enemies:GetIgnoreList()
 	end
-	return Enemies:GetNearby()
+	return Enemies:GetNearby(private.Show().sort)
+end
+
+-- The Nearby list's orders, as the header's Sort button steps through them
+local SORTS = { { key = "threat", label = "Threat" }, { key = "nearest", label = "Nearest" }, { key = "seen", label = "Last seen" } }
+
+---The order shown and the next one: { key, label } each.
+function private.Sorts()
+	local current = private.Show().sort or "threat"
+	for i, s in ipairs(SORTS) do
+		if s.key == current then
+			return s, SORTS[i % #SORTS + 1]
+		end
+	end
+	return SORTS[1], SORTS[2]
 end
 
 function Nearby:Refresh()
@@ -689,6 +712,12 @@ function Nearby:Refresh()
 		return
 	end
 	local view = private.Settings().tab or "nearby"
+	-- The Sort button says the order shown, on the Nearby tab only
+	if private.sort then
+		private.sort:SetText((private.Sorts()).label)
+		private.sort:SetShown(view == "nearby")
+		private.title:SetPoint("RIGHT", view == "nearby" and private.sort or private.clear, "LEFT", -4, 0)
+	end
 	local t0 = Wanted.DEV and debugprofilestop()
 	local items = private.GetItems(view)
 	local t1 = t0 and debugprofilestop()
@@ -700,7 +729,9 @@ function Nearby:Refresh()
 		end
 	end
 	-- Just the count: "(2 in sight)" didn't fit beside the buttons, and shaded rows already show who's gone
-	private.title:SetText(format("%s  %s", label, Theme:Colorize(tostring(#items), C.muted)))
+	-- Beside the Sort button the Nearby tab's title is the count alone (the tab under it says Nearby)
+	local count = Theme:Colorize(tostring(#items), C.muted)
+	private.title:SetText(view == "nearby" and count or format("%s  %s", label, count))
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)

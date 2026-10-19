@@ -38,6 +38,8 @@ local TOKEN_GRACE_SECONDS = 2
 -- What it was is guessed from who they are.
 local CLOSE_DISTANCE_INDEX = 4 -- CheckInteractDistance: within about 28 yards
 local CLOSE_FRESH_SECONDS = 1.5 -- "within 28 yards" from the last scan still counts this long
+-- The Nearby window's "Nearest" order counts an enemy as close for this long after a scan found them within 28 yards
+local NEAR_SECONDS = 10
 local VANISH_SETTLE_SECONDS = 0.2 -- nameplates that go together (loading screen, your own teleport) aren't stealth
 local MASS_REMOVAL = 3
 local STEALTH_REPEAT_SECONDS = 3 -- one alarm per stealth, however many signs of it arrive
@@ -864,6 +866,8 @@ function private.Fill(d, guid)
 	d.visible = entry and GetTime() - entry.lastSeen <= VISIBLE_SECONDS or false
 	d.inSight = entry and GetTime() - entry.lastSeen < private.InSightSeconds() or false
 	d.goneFor = entry and floor(GetTime() - entry.lastSeen) or nil
+	-- Close: within about 28 yards at a scan in the last NEAR_SECONDS (the game says so only out of combat)
+	d.close = entry and entry.closeAt and GetTime() - entry.closeAt <= NEAR_SECONDS or false
 	d.active = entry and ((entry.lastActive and GetTime() - entry.lastActive < ACTIVE_SECONDS) or (entry.targetingMe and GetTime() - entry.targetingMe < ACTIVE_SECONDS)) or false
 	d.stealthed = entry and entry.stealthed and GetTime() - entry.stealthed < 30
 	d.stealthKind = entry and entry.stealthKind
@@ -951,7 +955,12 @@ function Enemies:EachNearby(func)
 	end
 end
 
-function Enemies:GetNearby()
+---The Nearby window's list in an order: "threat" (the default: Kill on Sight and bounty targets first, then who's
+---acting, then who's in sight, then who's gone; newest detection first within each), "nearest" (close, then on
+---screen, then in sight, then gone; the game gives addons no distance, only these steps) or "seen" (most recently
+---seen first).
+---@param order string?
+function Enemies:GetNearby(order)
 	-- Asked for at every redraw of the Nearby window, several times a second in a fight: each enemy's description
 	-- is kept while they're on the list and filled again in place
 	local described = private.described
@@ -974,13 +983,43 @@ function Enemies:GetNearby()
 		end
 		return rank
 	end
-	sort(list, function(a, b)
-		local ai, bi = Rank(a), Rank(b)
-		if ai ~= bi then
-			return ai < bi
+	-- Newest detection first, then by GUID, so rows seen in the same moment keep their places between refreshes
+	local function Newer(a, b)
+		if (a.firstSeen or 0) ~= (b.firstSeen or 0) then
+			return (a.firstSeen or 0) > (b.firstSeen or 0)
 		end
-		return (a.firstSeen or 0) > (b.firstSeen or 0)
-	end)
+		return a.guid < b.guid
+	end
+	local function Near(d)
+		return d.close and 1 or (d.visible and 2 or (d.inSight and 3 or 4))
+	end
+	if order == "seen" then
+		sort(list, function(a, b)
+			if (a.goneFor or math.huge) ~= (b.goneFor or math.huge) then
+				return (a.goneFor or math.huge) < (b.goneFor or math.huge)
+			end
+			return Newer(a, b)
+		end)
+	elseif order == "nearest" then
+		sort(list, function(a, b)
+			local ai, bi = Near(a), Near(b)
+			if ai ~= bi then
+				return ai < bi
+			end
+			if (a.goneFor or math.huge) ~= (b.goneFor or math.huge) then
+				return (a.goneFor or math.huge) < (b.goneFor or math.huge)
+			end
+			return Newer(a, b)
+		end)
+	else
+		sort(list, function(a, b)
+			local ai, bi = Rank(a), Rank(b)
+			if ai ~= bi then
+				return ai < bi
+			end
+			return Newer(a, b)
+		end)
+	end
 	return list
 end
 

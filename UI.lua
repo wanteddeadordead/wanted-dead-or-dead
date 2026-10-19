@@ -449,9 +449,6 @@ function UI:Show(key)
 	if wasShown then
 		UI:Refresh(true)
 	end
-	if Wanted.Report then
-		Wanted.Report:MaybeWelcome()
-	end
 end
 
 ---The page to show for a key: Home when there is no such page, or it's switched off.

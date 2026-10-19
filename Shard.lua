@@ -661,8 +661,8 @@ function Shard:Target(zone, mapId)
 	return key, key and "fight" or nil
 end
 
----The Hop hint under an announcement.
-local HOP_HINT = "Hop to it: /wanted hop, or Hop in Nearby"
+---The Hop hint under an announcement: the command only (a warning has no tooltip); chat says it in full.
+local HOP_HINT = "/wanted hop"
 
 ---Says which layer tonight's siege is on, when it's picked or switches (the Siege call setting, wherever we are),
 ---once per pick.
@@ -675,7 +675,7 @@ function private.TellSiegeLayer()
 	private.siegeTold = key
 	if Captures:Settings().siegeCall then
 		Wanted.Alerts:Warn(format("The siege of %s is on %s", s.front.zone, Shard:LayerText(key)), HOP_HINT, Wanted.Theme.C.gold)
-		Wanted:Print("The siege of %s is on %s. %s.", s.front.zone, Shard:LayerText(key), HOP_HINT)
+		Wanted:Print("The siege of %s is on %s. Hop to it: /wanted hop, or Hop in Nearby.", s.front.zone, Shard:LayerText(key))
 	end
 	private.Changed()
 end

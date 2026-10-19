@@ -5981,8 +5981,8 @@ end)()
 	C_DeathRecap.GetRecapLink = function() return "|Hdeath:5252|h[Death]|h" end
 	Fire("PLAYER_DEAD")
 	RunTimers()
-	check(card:IsShown() and card:GetKiller() == "Player-9-HUNTER" and f.sure._text:find("Probably", 1, true) and f.sure._text:find("pet", 1, true),
-		"with the pet out of view, the one who had us targeted is probably the killer: "..tostring(f.sure._text))
+	check(card:IsShown() and card:GetKiller() == "Player-9-HUNTER" and f.sure._text == "Probably Bow Hunter" and f.sure.explainHit.tooltipText:find("pet", 1, true),
+		"with the pet out of view, the one who had us targeted is probably the killer, why on hover: "..tostring(f.sure._text))
 	Fire("PLAYER_ALIVE")
 	enemyUnits.nameplate46, enemyUnits.nameplate47 = nil, nil
 	UnitIsPlayer, C_NamePlate, UnitIsOwnerOrControllerOfUnit, C_DeathRecap = realIsPlayer, realNamePlate, realOwner, nil
@@ -6573,6 +6573,19 @@ end)()
 	Tab("look")
 	check(Tip("Window theme") and Tip("Window theme"):find("felt follows", 1, true), "the theme card's default behind an (i)")
 	Tab("alerts")
+end)()
+-- The bug report window: what Send does is its tooltip; only a report that will wait says so on screen
+;(function()
+	ns.Report:Show()
+	local sendTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Send to the developers" then sendTip = f.tooltipText end
+	end
+	check(sendTip and sendTip:find("with the recent log", 1, true), "Send explains itself on hover")
+	for _, f in ipairs(Mock.fontStrings) do
+		check(f._text ~= "Say what you were doing, and the exact red error text if the game showed one.", "no footer hint in the report window")
+	end
+	WantedBugReport:Hide()
 end)()
 -- Text explained inside a clickable row keeps the row's hover
 ;(function()
@@ -9463,18 +9476,13 @@ end)()
 	ns.UI:GetFrame():Hide()
 	RunTimers()
 	check(not W:IsDialogShown(), "a dialog waiting over a window that closed is dropped")
-	-- The beta welcome waits for a window opening with no dialog up
+	-- No beta welcome any more: the tour starts at the first login
 	local realBeta, realWelcomed = ns.BETA, ns.db.welcomed
 	ns.BETA, ns.db.welcomed = true, nil
-	origDialog(W, { title = "Busy", text = "x" })
-	ns.Report:MaybeWelcome()
+	ns.UI:Show("home")
 	RunTimers()
-	check(ns.db.welcomed == nil and frame.title._text == "Busy", "no welcome over another dialog")
-	frame.confirm:Click()
-	ns.Report:MaybeWelcome()
-	RunTimers()
-	check(ns.db.welcomed == ns.VERSION and frame.title._text == "Welcome, bounty hunter", "welcomed the next time")
-	frame.confirm:Click()
+	check(ns.Report.MaybeWelcome == nil and not (W:IsDialogShown() and frame.title._text == "Welcome, bounty hunter"), "no welcome dialog when the window opens")
+	ns.UI:GetFrame():Hide()
 	ns.BETA, ns.db.welcomed = realBeta, realWelcomed
 	lastDialog = nil
 end)()
@@ -15151,7 +15159,7 @@ end)()
 	mounted = true
 	Sample()
 	ns.CapturesHUD:Update()
-	check(bar.capture.text._text:find("Mounted, so you don't count here", 1, true), "the bar says why presence doesn't count: "..bar.capture.text._text)
+	check(bar.capture.text._text:find(": you don't count (mounted)", 1, true), "the bar says why presence doesn't count: "..bar.capture.text._text)
 	mounted = false
 	mapId = 1411
 	Sample()
@@ -15415,7 +15423,8 @@ end)()
 	check(p.side == "Horde" and p.attackers == 8 and p.defenders == 0 and p.net == 6 and p.cost == 40, "8 attack, 6 count: net "..p.net)
 	Sample()
 	p = C:Progress(P("hb-mid-3"))
-	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left (provisional)", 1, true),
+	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left", 1, true) and not bar.capture.text._text:find("provisional", 1, true)
+		and bar.capture.tooltipText:find("provisional", 1, true),
 		"a tick adds the net and the bar says how long at that pace: "..bar.capture.text._text)
 	Enemy(50.8, 35.1) Enemy(50.8, 35.1)
 	enemies[#enemies + 1] = { mapId = 1424, x = 50.8, y = 35.1, lastSeen = clock + 30 } -- a nameplate off at 50 yards: seen, not near
@@ -15436,7 +15445,7 @@ end)()
 	Sample()
 	p = C:Progress(P("hb-mid-3"))
 	check(p.side == "Alliance" and p.attackers == 3 and p.defenders == 1 and p.n == 2, "three enemies at our tower less us: net 2, got "..p.n)
-	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 1 of your side, 3 attacking, 9:30 left (provisional)", 1, true), "the bar reads the attack: "..bar.capture.text._text)
+	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 1 of your side, 3 attacking, 9:30 left", 1, true), "the bar reads the attack: "..bar.capture.text._text)
 	enemies = {}
 	Sample(3)
 	check(C:Progress(P("hb-mid-3")).n == 2, "progress stays a while with nobody attacking")
@@ -16701,7 +16710,7 @@ end)()
 	check(#warned == 0, "a siege without its layer picked: nothing to announce")
 	siege.layer, siege.layerSince = L(531), clock
 	C:TakeSiege(siege, nil)
-	check(#warned == 1 and warned[1] == "The siege of Hillsbrad Foothills is on layer 531 | Hop to it: /wanted hop, or Hop in Nearby", "the siege's layer picked is announced, with the Hop hint: "..tostring(warned[1]))
+	check(#warned == 1 and warned[1] == "The siege of Hillsbrad Foothills is on layer 531 | /wanted hop", "the siege's layer picked is announced, with the Hop hint: "..tostring(warned[1]))
 	C:TakeSiege(siege, nil)
 	check(#warned == 1, "the same pick again (another login) isn't")
 	local slot = math.floor(clock / C.SLOT_SECONDS)
@@ -16720,7 +16729,7 @@ end)()
 	Shard:TakeLayers({ [AH] = { active = L(541), since = clock } })
 	check(#warned == 0, "a fight layer in another zone: nothing")
 	Shard:TakeLayers({ [HB] = { active = L(541), since = clock } })
-	check(#warned == 1 and warned[1] == "Big fight on layer 541 | Hillsbrad Foothills. Hop to it: /wanted hop, or Hop in Nearby", "one in our zone is announced, with the Hop hint: "..tostring(warned[1]))
+	check(#warned == 1 and warned[1] == "Big fight on layer 541 | Hillsbrad Foothills. /wanted hop", "one in our zone is announced, with the Hop hint: "..tostring(warned[1]))
 	Shard:TakeLayers({ [HB] = { active = L(541), since = clock } })
 	check(#warned == 1, "the same layer again isn't")
 	Shard:TakeLayers({ [HB] = { active = L(543), since = clock } })

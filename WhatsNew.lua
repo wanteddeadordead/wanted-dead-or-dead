@@ -2,6 +2,8 @@
 -- version, at the first login out of combat once the loading screen has gone. A fresh install gets a welcome instead.
 -- /wanted new shows the newest notes again. Only major and minor releases (x.y.0) get an entry, never a patch (x.y.1),
 -- and the newest must match CHANGELOG.md's newest x.y.0 (the smoke test checks both).
+-- New entries: a note of at most two sentences (about 40 words), and lines of at most about 15 words, each with the
+-- command or the place in it. The how-it-works goes in tooltips and the tour, not here. Older entries stay as they are.
 
 local _, Wanted = ...
 local Theme, W = Wanted.Theme, Wanted.Widgets

@@ -1840,10 +1840,10 @@ function W:StepBar(parent, width, steps, onStep)
 		dot.mark:SetSize(12, 12)
 		dot.number = Theme:Text(dot, "tiny", tostring(i))
 		dot.number:SetPoint("CENTER", 0, 0)
-		dot.label = Theme:Text(bar, "body", label)
-		dot.label:SetPoint("TOP", bar, "TOPLEFT", x, STEP_LINE_Y - 16)
+		dot.caption = Theme:Text(bar, "body", label)
+		dot.caption:SetPoint("TOP", bar, "TOPLEFT", x, STEP_LINE_Y - 16)
 		dot.sub = Theme:Text(bar, "tiny", "", C.faint)
-		dot.sub:SetPoint("TOP", dot.label, "BOTTOM", 0, -3)
+		dot.sub:SetPoint("TOP", dot.caption, "BOTTOM", 0, -3)
 		dot.index, titles[i], tips[i] = i, label, tip
 		dot:SetScript("OnClick", function(self)
 			if onStep and self.done then
@@ -1877,7 +1877,7 @@ function W:StepBar(parent, width, steps, onStep)
 				dot.number:SetTextColor(C.faint[1], C.faint[2], C.faint[3])
 			end
 			local text = state == "current" and C.white or (state == "done" and C.text) or (state == "failed" and C.red) or C.faint
-			dot.label:SetTextColor(text[1], text[2], text[3])
+			dot.caption:SetTextColor(text[1], text[2], text[3])
 			local note = notes and notes[i] or ""
 			dot.sub:SetText(note)
 			-- The dot explains its step: its rule, and where it stands

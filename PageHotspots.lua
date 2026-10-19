@@ -12,13 +12,14 @@ local Hotspots = Wanted.Hotspots
 local private = {}
 local ROW_HEIGHT = 40
 local TOOLTIP_NAMES = 12
+-- tip: what a column counts, on its header
 local COLUMNS = {
 	{ label = "Zone", x = 16 },
-	{ label = "Now", x = 250 },
-	{ label = "Hour", x = 310 },
+	{ label = "Now", x = 250, tip = "Enemies seen in the last 15 minutes by you or another Wanted user." },
+	{ label = "Hour", x = 310, tip = "Enemies seen in the last hour." },
 	{ label = "Levels", x = 370 },
-	{ label = "Trend", x = 460 },
-	{ label = "Deaths", x = 540 },
+	{ label = "Trend", x = 460, tip = "Compared with 5 minutes ago." },
+	{ label = "Deaths", x = 540, tip = "PvP deaths here in the last hour." },
 	{ label = "Last seen", x = 610 },
 }
 local TRENDS = {
@@ -118,6 +119,10 @@ function private.ShowTooltip(row, group)
 	if group.deaths > 0 then
 		GameTooltip:AddLine(format("%d PvP death%s here in the last hour", group.deaths, group.deaths == 1 and "" or "s"), 0.93, 0.33, 0.31)
 	end
+	-- The HOT marks come down with the app's catch-up: without it the page can't show them
+	if not Wanted:HasApp() then
+		GameTooltip:AddLine("Today's hot zones need the Wanted app.", 0.6, 0.62, 0.68)
+	end
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine(group.mapId and "Click to open the map on this zone." or "No map for this zone yet.", 0.6, 0.62, 0.68)
 	GameTooltip:Show()
@@ -142,15 +147,12 @@ function private.Refresh()
 	end
 	private.mapToggle:SetChecked(Wanted.MapPins:IsShown())
 	private.risingToggle:SetChecked(Wanted.db.settings.detect.risingAlerts)
-	-- The HOT marks come down with the app's catch-up: without it the page can't show them
-	private.note:SetText("Now = last 15 minutes. Counts only enemies a Wanted user has seen."
-		..(Wanted:HasApp() and "" or " Today's hot zones need the Wanted app."))
 	local groups = Hotspots:Get()
 	local busy = private.CountBusy(groups)
-	private.count:SetText(format("%d zone%s with enemies in the last 15 minutes", busy, busy == 1 and "" or "s"))
+	private.count:SetText(format("%d busy now", busy))
 	local Shard = Wanted.Shard
 	local text, button = Shard:Line(Shard:Zone())
-	private.layer:SetText(text and Theme:Colorize(text, C.amber) or Theme:Colorize(format("No fight layer known in %s yet.", Shard:Zone()), C.faint))
+	private.layer:SetText(text and Theme:Colorize(text, C.amber) or Theme:Colorize("Fight layer: unknown", C.faint))
 	private.hop:SetText(button or "Hop")
 	private.hop:SetShown(button ~= nil)
 	private.list:SetItems(groups, "No enemies seen in the last hour.", "Zones fill in as you and other Wanted users spot enemy players.")
@@ -159,7 +161,6 @@ end
 UI:RegisterPage("hotspots", {
 	group = "World PvP",
 	title = "Hotspots",
-	subtitle = "Where enemy players are right now, from what you and other Wanted users have seen. Busiest first.",
 	order = 2.9,
 	-- Zones that have become busy since you last looked
 	news = { kind = "hotspots", ids = function()
@@ -187,11 +188,10 @@ UI:RegisterPage("hotspots", {
 		end)
 		private.risingToggle:SetPoint("RIGHT", private.mapToggle, "LEFT", -16, 0)
 		W:AttachTooltip(private.risingToggle, "Rising-zone alerts", "A warning like RISING FAST: The Barrens when many more enemies show up in a zone than 5 minutes before.")
-		private.note = Theme:Text(container, "tiny", "", C.faint)
-		private.note:SetPoint("TOPLEFT", 0, -18)
 		-- Your own zone's fight layer, with Hop when you're not on it (Shard); Stay while a hop's group is held
 		private.layer = Theme:Text(container, "small", "")
-		private.layer:SetPoint("TOPLEFT", 0, -36)
+		private.layer:SetPoint("TOPLEFT", 0, -20)
+		W:Explain(private.layer, "Fight layer", "The copy of this zone the fight is on, from the site or this client's own estimate.")
 		private.hop = W:Button(container, "Hop", "chip", 44, 16, function()
 			local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
 			if why then
@@ -203,8 +203,8 @@ UI:RegisterPage("hotspots", {
 		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight (or tonight's siege) is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 
 		local headerBar = CreateFrame("Frame", nil, container)
-		headerBar:SetPoint("TOPLEFT", 0, -52)
-		headerBar:SetPoint("TOPRIGHT", 0, -52)
+		headerBar:SetPoint("TOPLEFT", 0, -36)
+		headerBar:SetPoint("TOPRIGHT", 0, -36)
 		headerBar:SetHeight(24)
 		local line = Theme:Line(headerBar)
 		line:SetPoint("BOTTOMLEFT")
@@ -212,9 +212,12 @@ UI:RegisterPage("hotspots", {
 		for _, col in ipairs(COLUMNS) do
 			local label = W:SectionLabel(headerBar, col.label)
 			label:SetPoint("LEFT", col.x, 0)
+			if col.tip then
+				W:Explain(label, col.label, col.tip)
+			end
 		end
 
-		local listTop = 80
+		local listTop = 62
 		local list = W:List(container, ROW_HEIGHT, floor((height - listTop) / ROW_HEIGHT), private.CreateRow, private.UpdateRow)
 		list:SetPoint("TOPLEFT", 0, -listTop)
 		list:SetPoint("TOPRIGHT", 0, -listTop)

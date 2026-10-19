@@ -25,7 +25,7 @@ local COLUMNS = {
 	{ key = "guild", label = "Guild", x = 290 },
 	{ key = "wins", label = "Won", x = 440 },
 	{ key = "losses", label = "Lost", x = 488 },
-	{ key = "detections", label = "Seen", x = 536 },
+	{ key = "detections", label = "Seen", x = 536, tip = "How many times Wanted has detected them." },
 	{ key = "lastSeen", label = "Last seen", x = 584 },
 }
 
@@ -149,7 +149,6 @@ end
 UI:RegisterPage("enemies", {
 	group = "World PvP",
 	title = "Enemies",
-	subtitle = "Every enemy you've met: how often, who won, their guild, and where they were last. Click one for options.",
 	order = 2,
 	badge = function()
 		local nearby = Enemies:CountNearby()
@@ -200,7 +199,7 @@ UI:RegisterPage("enemies", {
 		local filter = W:Segmented(container, {
 			{ key = "all", label = "All enemies" },
 			{ key = "kos", label = "Kill on Sight" },
-			{ key = "ignored", label = "Ignored" },
+			{ key = "ignored", label = "Ignored", tip = { "Ignored", "Ignored enemies never trigger alerts." } },
 		}, function(key)
 			private.filter = key ~= "all" and key or nil
 			private.Refresh()
@@ -240,6 +239,9 @@ UI:RegisterPage("enemies", {
 			header:SetWidth(60)
 			header.key = col.key
 			header.labelText = col.label
+			if col.tip then
+				W:Explain(header, col.label, col.tip)
+			end
 			header:SetScript("OnClick", function()
 				if private.sort == col.key then
 					private.descending = not private.descending
@@ -261,6 +263,7 @@ UI:RegisterPage("enemies", {
 			GameTooltip:SetOwner(row, "ANCHOR_CURSOR_RIGHT", 16, 0)
 			GameTooltip:SetText(Theme:ClassName(d.name, d.class))
 			EnemyMenu:AddTooltip(d)
+			GameTooltip:AddLine("Click for options", C.faint[1], C.faint[2], C.faint[3])
 			GameTooltip:Show()
 		end
 		private.list = list

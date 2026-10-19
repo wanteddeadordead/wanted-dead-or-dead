@@ -13,7 +13,8 @@ local TableUI = Poker.PokerTable
 local Gold = Poker.PokerGold
 local private = { list = nil, form = nil, seat = nil, view = "tables" }
 local ROW_HEIGHT = 42
-local CARD_HEIGHT = 280 -- the form: its longest step (a tournament's players and money) over the footer
+local CARD_HEIGHT = 332 -- the form: the step bar, then its longest step (a tournament's players and money), over the footer
+local STEP_TOP = -82 -- each step's frame starts under the step bar
 -- Blinds to pick from: the card room's standard structures, in chips, or at a gold table in copper, silver or gold
 -- (a gold table's chip is a copper piece)
 local UNITS = { { key = "copper", label = "Copper", mult = 1 }, { key = "silver", label = "Silver", mult = 100 }, { key = "gold", label = "Gold", mult = 10000 } }
@@ -87,17 +88,16 @@ function private.BuildForm(parent, width)
 	form:SetPoint("TOPLEFT")
 	form:SetSize(width, CARD_HEIGHT)
 	local s = Settings()
-	-- TODO(ui-pass PR 3): W:StepBar (Game > Players and money > Table > Review, done steps clickable, sub-lines the
-	-- choices made) in place of the step title and the footer's dots, once the widget exists
-	private.stepTitle = Theme:Text(form, "tiny", "", C.faint)
-	private.stepTitle:SetPoint("TOPLEFT", 14, -12)
+	-- The guild-war step bar: where you are, the choices made under the steps done, a done step a click back
+	private.stepBar = W:StepBar(form, width - 28, STEPS, function(i) private.ShowStep(i) end)
+	private.stepBar:SetPoint("TOPLEFT", 14, -12)
 	private.dealGlyph = W:InfoGlyph(form, "The deal", DEAL)
-	private.dealGlyph:SetPoint("LEFT", private.stepTitle, "RIGHT", 6, 0)
+	private.dealGlyph:SetPoint("TOPRIGHT", -14, -12)
 	-- One frame per step, filling the card under the title and above the footer
 	private.steps = {}
 	for i = 1, #STEPS do
 		local step = CreateFrame("Frame", nil, form)
-		step:SetPoint("TOPLEFT", 0, -30)
+		step:SetPoint("TOPLEFT", 0, STEP_TOP)
 		step:SetPoint("BOTTOMRIGHT", 0, 44)
 		step:Hide()
 		private.steps[i] = step
@@ -250,8 +250,6 @@ function private.BuildForm(parent, width)
 	local report = W:Button(form, "Report a bug", "ghost", 100, 26, function() Poker.PokerTable:ReportBug() end)
 	report:SetPoint("RIGHT", private.next, "LEFT", -8, 0)
 	W:AttachTooltip(report, "Report a bug", "Say what went wrong and the report goes to the developers with the table's log.")
-	private.dots = Theme:Text(form, "small", "", C.muted)
-	private.dots:SetPoint("LEFT", private.back, "RIGHT", 12, 0)
 	private.RefreshBuyin()
 	private.ShowStep(1)
 	return form
@@ -262,15 +260,28 @@ function private.ShowStep(n)
 	n = max(1, min(#STEPS, n))
 	private.step = n
 	for i, step in ipairs(private.steps) do step:SetShown(i == n) end
-	private.stepTitle:SetText(("HOST A TABLE  -  STEP %d OF %d: %s"):format(n, #STEPS, strupper(STEPS[n])))
+	private.stepBar:Set(n, private.StepNotes(n))
 	private.dealGlyph:SetShown(n == #STEPS)
 	private.back:SetShown(n > 1)
 	private.next:SetShown(n < #STEPS)
 	private.go:SetShown(n == #STEPS)
-	local dots = {}
-	for i = 1, #STEPS do dots[i] = i == n and "|cffffffff"..STEPS[i].."|r" or STEPS[i] end
-	private.dots:SetText(table.concat(dots, "  >  "))
 	if n == #STEPS then private.Guide() end
+end
+
+---The choices made, under the steps done before step n: "Cash game", "Gold, 5s/10s", "6 seats, 30 s".
+function private.StepNotes(n)
+	local s = Settings()
+	local stakes = Stakes()
+	local money = stakes == "play" and "Practice" or (stakes == "gold" and "Gold" or "Chips")
+	if s.kind ~= "tournament" then
+		local blinds = Blinds(s.blinds)
+		money = money..", "..Money(blinds.sb).."/"..Money(blinds.bb)
+	end
+	local notes = { s.kind == "tournament" and "Tournament" or "Cash game", money, format("%d seats, %d s", s.seats or 6, s.turn or 30) }
+	for i = n, #notes do
+		notes[i] = ""
+	end
+	return notes
 end
 
 ---Fills the blinds list for the stakes and, when the blinds or stakes changed, a buy-in range of 20 to 100 big
@@ -897,7 +908,7 @@ UI:RegisterPage("poker", {
 UI:Mark("pokerhost", function() return private.form end)
 -- The steps' breadcrumb, not a control on one step: the form may be on any step (2026-10-17: the stakes control's
 -- border sat over the review text on step 4)
-UI:Mark("pokersteps", function() return private.dots end)
+UI:Mark("pokersteps", function() return private.stepBar end)
 UI:Mark("pokergo", function() return private.go end)
 UI:Mark("pokertables", function() return private.list end)
 UI:Mark("pokerseat", function() return private.seat end)

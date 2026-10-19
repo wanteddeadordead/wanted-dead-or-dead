@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true, hidesMenu = true, anchor = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -166,6 +166,8 @@ end
 function Methods:GetParent() return self._parent or NewMock() end
 function Methods:GetObjectType() return self._kind end
 function Methods:IsObjectType(kind) return self._kind == kind end
+-- Under the mouse only when a test says so
+function Methods:IsMouseOver() return self._mouseOver == true end
 -- Mouse settings, so tests can see what a frame takes
 function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
@@ -2995,7 +2997,8 @@ end)()
 	local found = false
 	for _, f in ipairs(Mock.created) do
 		local text = rawget(f, "text")
-		if type(text) == "table" and text._text == "BETA" and tostring(rawget(f, "tooltipText")):find("heavy development through the WoW Forever beta", 1, true) then found = true end
+		local hit = rawget(f, "explainHit")
+		if type(text) == "table" and text._text == "BETA" and hit and tostring(hit.tooltipText):find("heavy development through the WoW Forever beta", 1, true) then found = true end
 	end
 	check(found, "the BETA tag explains the development note")
 end)()
@@ -6432,8 +6435,12 @@ end)()
 	Leave(button)
 	check(not Tip():IsShown(), "and leaving hides it")
 	Hover(button)
+	button._mouseOver = true
 	GameTooltip:Hide()
-	check(not Tip():IsShown(), "a page's own GameTooltip:Hide() hides it too")
+	check(Tip():IsShown(), "GameTooltip hidden elsewhere (a world object left, a timer) while the mouse is on the owner: ours stays")
+	button._mouseOver = false
+	GameTooltip:Hide()
+	check(not Tip():IsShown(), "a page's own GameTooltip:Hide() as the mouse leaves hides it too")
 	-- Disabled: it still explains why
 	W:Explain(button, "Can't go", "Officers only.")
 	check(button._motionWhileDisabled == true, "an explained button keeps its motion scripts while disabled")
@@ -6450,6 +6457,10 @@ end)()
 	Leave(button)
 	W:Explain(button, "Roster", "Ann, Bob, Cy")
 	check(not Tip():IsShown(), "explaining again while hidden doesn't show it")
+	Hover(button)
+	W:Explain(button, nil)
+	check(not Tip():IsShown(), "its text cleared while shown: it goes")
+	Leave(button)
 	-- The body as a function, called on each hover
 	local calls = 0
 	W:Explain(button, "Count", function() calls = calls + 1 return "Hover "..calls end)
@@ -6461,16 +6472,17 @@ end)()
 	Hover(button)
 	check(not Tip().body:IsShown(), "no body, no body line")
 	Leave(button)
-	-- A plain frame: hooked once, motion only, so clicks reach what is under it
+	-- A plain frame: a click-through Button over it carries the tooltip, so the controller reaches it
 	local plain = CreateFrame("Frame", nil, UIParent)
 	local entered = 0
 	plain:SetScript("OnEnter", function() entered = entered + 1 end)
-	check(W:Explain(plain, "Plain", "A frame.") == plain, "a plain frame is its own owner")
-	W:Explain(plain, "Plain", "Again.")
-	check(plain._motion == true and plain._clicks == nil, "a plain frame takes mouse motion, not clicks")
-	Hover(plain)
-	check(entered == 1 and Tip():IsShown() and Tip().body._text == "Again.", "its own OnEnter still runs, hooked once, with the latest text")
-	Leave(plain)
+	local over = W:Explain(plain, "Plain", "A frame.")
+	check(over ~= plain and over._kind == "Button" and over._parent == plain and over._clicks == false and over._motion == true,
+		"a plain frame gets a click-through Button over it")
+	check(W:Explain(plain, "Plain", "Again.") == over, "kept when explained again")
+	Hover(over)
+	check(entered == 1 and Tip():IsShown() and Tip().body._text == "Again.", "the frame's own OnEnter still runs, with the latest text")
+	Leave(over)
 	check(not Tip():IsShown(), "and leaving it hides the tooltip")
 	-- A FontString: a click-through button over its text
 	local holder = CreateFrame("Frame", nil, UIParent)
@@ -8679,7 +8691,7 @@ end)()
 	for _, f in ipairs(Mock.created) do
 		if type(rawget(f, "tooltipTitle")) == "string" and f.tooltipTitle:find("^Signed up for Barrens raid") then signedUp = f end
 	end
-	check(signedUp and signedUp._clicks == nil and signedUp.tooltipText():find("Going (0)", 1, true), "hovering the sign-ups lists them, in our tooltip")
+	check(signedUp and signedUp._kind == "Button" and signedUp._clicks == false and signedUp.tooltipText():find("Going (0)", 1, true), "hovering the sign-ups lists them, in our tooltip, on a click-through Button")
 	for _, fs in ipairs(Mock.fontStrings) do
 		if fs._text == "Edit" and fs._parent._shown then fs._parent:Click() end
 	end
@@ -15471,7 +15483,7 @@ end)()
 	Sample()
 	p = C:Progress(P("hb-mid-3"))
 	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left", 1, true) and not bar.capture.text._text:find("provisional", 1, true)
-		and bar.capture.tooltipText:find("provisional", 1, true),
+		and bar.capture.explainHit.tooltipText:find("provisional", 1, true),
 		"a tick adds the net and the bar says how long at that pace: "..bar.capture.text._text)
 	Enemy(50.8, 35.1) Enemy(50.8, 35.1)
 	enemies[#enemies + 1] = { mapId = 1424, x = 50.8, y = 35.1, lastSeen = clock + 30 } -- a nameplate off at 50 yards: seen, not near
@@ -17210,6 +17222,55 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId, ns.db.settings.siege = saved.info, saved.newer, saved.club, saved.siege
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print
 	ns.UI:Show("home")
+end)()
+-- From the cold review of the UI pass: Escape over a popup closes only it; a dialog takes its dropdown's menu with it;
+-- step bar labels keep to their share; a plain frame's tooltip is on a Button the controller reaches
+;(function()
+	local W = ns.Widgets
+	local function Escape()
+		for _, name in ipairs(UISpecialFrames) do
+			local frame = _G[name]
+			if frame and frame:IsShown() then frame:Hide() end
+		end
+	end
+	local function Listed(name) for _, n in ipairs(UISpecialFrames) do if n == name then return true end end return false end
+	Escape()
+	RunTimers()
+	ns.UI:Show("board")
+	local window = ns.UI:GetFrame()
+	check(window:IsShown() and Listed("WantedFrame"), "the window is up, and Escape would close it")
+	-- A menu open over it: Escape closes the menu, the window stays
+	W:Menu({ { text = "One", onClick = function() end } })
+	check(_G.WantedMenu:IsShown() and not Listed("WantedFrame") and Listed("WantedMenu"), "with a menu open, only the menu is on Escape's list")
+	Escape()
+	check(not _G.WantedMenu:IsShown() and window:IsShown(), "Escape closes the menu and leaves the window")
+	RunTimers()
+	check(Listed("WantedFrame"), "and the window goes back on the list after")
+	-- A multiselect's list over Settings, the same
+	local multi = W:MultiSelect(UIParent, 200, { { key = "a", label = "A" } }, function() end)
+	multi:Click()
+	check(multi.list:IsShown() and not Listed("WantedFrame"), "a popup open: the window comes off the list")
+	Escape()
+	RunTimers()
+	check(not multi.list:IsShown() and window:IsShown() and Listed("WantedFrame"), "Escape closes the popup only, and the window goes back")
+	-- A dialog closing takes its dropdown's menu with it
+	if _G.WantedDialog and _G.WantedDialog:IsShown() then _G.WantedDialog:Hide() end
+	W:Dialog({ title = "Announce", text = "x", choice = { label = "Post in", items = { { key = 1, label = "Guild" }, { key = 2, label = "Party" } }, selected = 1 } })
+	local frame = _G.WantedDialog.frame
+	frame.choice:Click()
+	check(_G.WantedMenu:IsShown() and _G.WantedMenu.anchor == frame.choice, "the dialog's dropdown opens its menu")
+	_G.WantedDialog:Hide()
+	frame.choice:Hide()
+	check(not _G.WantedMenu:IsShown(), "the dialog closing closes its dropdown's menu")
+	RunTimers()
+	-- Step bar labels and sub-lines keep to their share of the bar
+	local bar = W:StepBar(UIParent, 380, { "Formed", "Sign-ups", "Starting", "Started" })
+	bar:Set(3, { "", "12 going", "Thu 20:00 EDT (server 23:00)", "" })
+	check(bar.dots[3].sub._w == 380 / 4 - 6 and bar.dots[3].caption._w == 380 / 4 - 6, "a step's label and sub-line are as wide as its share: "..tostring(bar.dots[3].sub._w))
+	-- A stat tile's tooltip sits on a Button over it
+	local tile = W:StatTile(UIParent, "Season", ns.Theme.C.gold)
+	local over = W:Explain(tile, "Season", "Its days left.")
+	check(over._kind == "Button" and over._parent == tile and tile.explainHit == over, "a stat tile's tooltip is on a Button the controller reaches")
 end)()
 print("wanted smoke: setup checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

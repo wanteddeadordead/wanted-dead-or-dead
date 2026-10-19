@@ -16800,6 +16800,10 @@ end)()
 		if type(fs._text) == "string" and fs._parent and fs._parent._parent == _G.WantedNearbyFrame and rawget(fs, "fitWidth") then title = fs end
 	end
 	check(title, "the Nearby window's title is fitted to its room")
+	-- On the Last hour tab, whose title names its view
+	local nearbySettings = ns.db.settings.detect
+	local realTab = nearbySettings.tab
+	nearbySettings.tab = "hour"
 	title._w = 30
 	ns.NearbyWindow:Refresh()
 	local function Plain(t) return (tostring(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
@@ -16807,6 +16811,8 @@ end)()
 	title._w = 200
 	ns.NearbyWindow:Refresh()
 	check(Plain(title._text):find("%a"), "with room: the view's name too, got "..Plain(title._text))
+	nearbySettings.tab = realTab
+	ns.NearbyWindow:Refresh()
 end)()
 print("wanted smoke: setup checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

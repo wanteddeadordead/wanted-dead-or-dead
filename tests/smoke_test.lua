@@ -6461,16 +6461,19 @@ end)()
 	for _, fs in ipairs(Mock.fontStrings) do
 		check(fs._text ~= "Reload to apply", "no Reload to apply button: themes apply at once")
 	end
-	-- Text on the accent: at least 4.5:1 in every theme, dark on the light ones
+	-- Text on the accent: white where it reaches 3:1 (large, bold button text), else dark at 4.5:1 or more
 	for _, theme in ipairs(Theme.THEMES) do
 		Theme:Apply(theme.key)
 		local ratio = Theme:Contrast(C.accentText, theme.accent)
-		check(ratio >= 4.5, theme.name.."'s primary button text is readable: "..format("%.2f", ratio))
+		local white = C.accentText[1] > 0.9
+		check(ratio >= (white and 3 or 4.5), theme.name.."'s primary button text is readable: "..format("%.2f", ratio))
 		Near(primary.label._textColor, C.accentText, theme.name.."'s primary button repaints its text")
 	end
-	for _, key in ipairs({ "darnassus", "winterspring", "tanaris" }) do
+	Theme:Apply("orgrimmar")
+	check(C.accentText[1] > 0.9, "Orgrimmar's red keeps white text")
+	for _, key in ipairs({ "ironforge", "durotar", "darnassus", "winterspring", "tanaris" }) do
 		Theme:Apply(key)
-		check(C.accentText[1] < 0.2, Theme:Get(key).name.." has a light accent: dark text on it")
+		check(C.accentText[1] < 0.2, Theme:Get(key).name.."'s accent takes dark text")
 	end
 	check(math.abs(Theme:Contrast({ 1, 1, 1 }, { 0, 0, 0 }) - 21) < 1e-9, "white on black is 21:1")
 	Theme:Choose(savedTheme or "stormwind")

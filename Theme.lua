@@ -149,6 +149,7 @@ function Theme:Contrast(a, b)
 end
 
 local ACCENT_TEXT_DARK = { 0.06, 0.05, 0.05 }
+local ACCENT_TEXT_WHITE = 3 -- the contrast white text needs on the accent to stay white
 
 ---Applies a theme to the palette and re-tints everything drawn in its colours. Panels are see-through over the felt,
 ---as the theme's art is meant to show.
@@ -167,9 +168,10 @@ function Theme:Apply(key)
 	Put("accent", { a[1], a[2], a[3], 1 })
 	Put("accentHover", { min(1, a[1] * 1.12 + 0.04), min(1, a[2] * 1.12 + 0.04), min(1, a[3] * 1.12 + 0.04), 1 })
 	Put("accentDim", { a[1], a[2], a[3], 0.2 })
-	-- White on the accent where it reads, near black on a light one (Darnassus, Winterspring, Tanaris)
+	-- White on the accent at 3:1 or more (WCAG's bar for large and bold text, as button labels are): Orgrimmar's red.
+	-- Below it near black, which reads better: the oranges (Ironforge, Durotar) and every lighter accent
 	local white = Theme:Contrast(C.white, a)
-	Put("accentText", white >= 4.5 and C.white or (Theme:Contrast(ACCENT_TEXT_DARK, a) > white and ACCENT_TEXT_DARK or C.white))
+	Put("accentText", white >= ACCENT_TEXT_WHITE and C.white or (Theme:Contrast(ACCENT_TEXT_DARK, a) > white and ACCENT_TEXT_DARK or C.white))
 	for region, entry in pairs(painted) do
 		SetColor(region, entry[1], entry[2])
 	end

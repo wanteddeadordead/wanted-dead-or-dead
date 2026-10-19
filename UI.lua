@@ -23,6 +23,7 @@ local HEADER_HEIGHT = 58
 local BARE_HEADER = 38 -- a page with its title or tabs but no subtitle: the subtitle's line goes back to the page
 local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 34
+local FOOT_TOP = 136 -- the top of the menu's foot (Safety, Suggest a feature, Report a bug): a page at the foot sits on it
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
 -- The menu is one short list (Siege, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
@@ -43,7 +44,8 @@ local DEFAULT_PAGE = "siege"
 ---build(container, width, height), refresh(), badge() -> number|string?, color?; tabs (page keys shown as tabs in
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
 ---out of the menu itself), tabLabel (its tab's label), tabTip = { title, body } (its tab's tooltip: what the page is, now
----that pages have no subtitle), menuLabel (its menu entry's label, when not its title)
+---that pages have no subtitle), menuLabel (its menu entry's label, when not its title), atFoot (its menu entry at the
+---foot of the menu, above Safety, rather than in the list)
 ---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
 ---that count, in blue, unless it has its own.
 function UI:RegisterPage(key, def)
@@ -347,7 +349,7 @@ function private.Create()
 		"Builds a report to copy (versions, settings, errors, recent log) and shows where to send it. Also /wanted bug.")
 	private.ideaButton = Foot("Suggest a feature", 68, function() Wanted.Report:AskAboutIdea() end,
 		"Tells the developers what Wanted should do, through the Wanted app. Also /wanted idea.")
-	private.safetyButton = Foot("Safety", 102, function() UI:ShowSafety() end,
+	private.safetyButton = Foot("Safety", FOOT_TOP - 34, function() UI:ShowSafety() end,
 		"Wanted takes online bullying seriously. What the addon shares and never does, what to do if someone makes you feel unsafe, and where to find help: the website's Safety page. Also /wanted safety.")
 
 	-- Content
@@ -490,6 +492,9 @@ function private.LayoutNav()
 		nav:ClearAllPoints()
 		if def.under or (def.hidden and def.hidden()) then
 			nav:Hide()
+		elseif def.atFoot then
+			nav:SetPoint("BOTTOMLEFT", 0, FOOT_TOP)
+			nav:Show()
 		else
 			nav:SetPoint("TOPLEFT", 0, y)
 			nav:Show()

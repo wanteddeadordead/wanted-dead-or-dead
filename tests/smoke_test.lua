@@ -17467,6 +17467,18 @@ end)()
 	nearbySettings.tab = realTab
 	ns.NearbyWindow:Refresh()
 end)()
+-- The menu: Poker's entry at its foot, directly above Safety
+;(function()
+	ns.UI:Show("board")
+	local poker, safety
+	for _, f in ipairs(Mock.created) do
+		local label = rawget(f, "label")
+		if f._kind == "Button" and type(label) == "table" and label._text == "Poker" and rawget(f, "key") == "poker" then poker = f end
+		if f._kind == "Button" and type(label) == "table" and label._text == "Safety" then safety = f end
+	end
+	check(poker and poker._point[1] == "BOTTOMLEFT" and safety._point[1] == "BOTTOMLEFT" and poker._point[3] == safety._point[3] + safety._h,
+		"Poker sits at the foot of the menu, directly above Safety: "..tostring(poker and poker._point[3]).." over "..tostring(safety and safety._point[3]))
+end)()
 print("wanted smoke: setup checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
 -- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild

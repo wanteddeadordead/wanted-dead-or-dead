@@ -876,6 +876,8 @@ UI:RegisterPage("poker", {
 	group = "World PvP",
 	title = "Poker",
 	order = 3.2,
+	-- Its menu entry at the foot of the menu, above Safety
+	atFoot = true,
 	badge = function()
 		local n = #Net:Tables()
 		return n > 0 and n or nil, C.blue

@@ -14,10 +14,8 @@ local private = {
 	refreshQueued = false,
 	toastTimer = nil,
 }
--- The development note under the title bar adds its height to the window, so pages keep their size
-local NOTE_HEIGHT = 24
 -- EllesmereUI's window size: 1300 by 946 screen pixels, which is 1090 by 795 at the usual UI scale (2026-10-17)
-local WIDTH, HEIGHT = 1090, 771 + NOTE_HEIGHT
+local WIDTH, HEIGHT = 1090, 795
 local TITLE_HEIGHT = 48
 local SIDEBAR_WIDTH = 188
 local CONTENT_PAD = 22
@@ -64,7 +62,7 @@ end
 ---@return number width
 ---@return number height (a page with tabs along its top gets less: build is given its real size)
 function UI:GetPageSize(noHeader)
-	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD - (noHeader and 0 or HEADER_HEIGHT) - FOOTER_HEIGHT
+	return WIDTH - SIDEBAR_WIDTH - CONTENT_PAD * 2, HEIGHT - TITLE_HEIGHT - CONTENT_PAD - (noHeader and 0 or HEADER_HEIGHT) - FOOTER_HEIGHT
 end
 
 
@@ -190,13 +188,12 @@ function private.Create()
 	local brand = titleBar:CreateFontString(nil, "ARTWORK", "WantedFontDisplay")
 	brand:SetText(Theme:Colorize("WANTED:", C.accent).." "..Theme:Colorize("DEAD OR...", C.text).." "..Theme:Colorize("DEAD", C.red))
 	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
-	local anchor = brand
-	if Wanted.BETA then
-		local beta = W:Pill(titleBar)
-		beta:Set("BETA", C.amber)
-		beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
-		anchor = beta
-	end
+	-- Under heavy development through the WoW Forever beta: a tag beside the brand says so, its tooltip how
+	local beta = W:Pill(titleBar)
+	beta:Set("BETA", C.amber)
+	beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
+	W:Explain(beta, "Beta", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", "ANCHOR_BOTTOM")
+	local anchor = beta
 	local tagline = Theme:Text(titleBar, "small", "World PvP bounties, player to player")
 	tagline:SetPoint("LEFT", anchor, "RIGHT", 12, -1)
 
@@ -232,22 +229,9 @@ function private.Create()
 	private.appStatus = Indicator(140, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
 
-	-- Under heavy development through the WoW Forever beta: say so on every page
-	local note = CreateFrame("Frame", nil, frame)
-	note:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT")
-	note:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT")
-	note:SetHeight(NOTE_HEIGHT)
-	Theme:Fill(note, { C.amber[1] * 0.22, C.amber[2] * 0.22, C.amber[3] * 0.22, 0.7 })
-	local noteText = Theme:Text(note, "small", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", C.amber)
-	noteText:SetPoint("LEFT", 14, 0)
-	noteText:SetPoint("RIGHT", -14, 0)
-	noteText:SetJustifyH("LEFT")
-	noteText:SetWordWrap(false)
-	note.text = noteText
-
 	-- Sidebar
 	local sidebar = CreateFrame("Frame", nil, frame)
-	sidebar:SetPoint("TOPLEFT", 1, -TITLE_HEIGHT - NOTE_HEIGHT - 1)
+	sidebar:SetPoint("TOPLEFT", 1, -TITLE_HEIGHT - 1)
 	sidebar:SetPoint("BOTTOMLEFT", 1, 1)
 	sidebar:SetWidth(SIDEBAR_WIDTH)
 	Theme:Fill(sidebar, C.sidebar)
@@ -347,7 +331,7 @@ function private.Create()
 
 	-- Content
 	local content = CreateFrame("Frame", nil, frame)
-	content:SetPoint("TOPLEFT", SIDEBAR_WIDTH + 1 + CONTENT_PAD, -TITLE_HEIGHT - NOTE_HEIGHT - CONTENT_PAD)
+	content:SetPoint("TOPLEFT", SIDEBAR_WIDTH + 1 + CONTENT_PAD, -TITLE_HEIGHT - CONTENT_PAD)
 	content:SetPoint("BOTTOMRIGHT", -CONTENT_PAD, 1)
 	private.title = Theme:Text(content, "title", "")
 	private.title:SetPoint("TOPLEFT", 0, 0)

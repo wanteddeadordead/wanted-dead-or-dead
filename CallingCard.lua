@@ -411,6 +411,11 @@ function CallingCard:Banner(parent, width)
 		box.label:SetPoint("TOP", 0, -5)
 		box.value = Theme:Text(box, "body", "", { 0.96, 0.92, 0.82 })
 		box.value:SetPoint("BOTTOM", 0, 6)
+		-- A long label or value stays in its box, cut short, on the narrower death card banner too
+		for _, fs in ipairs({ box.label, box.value }) do
+			fs:SetWidth(statWidth - 6)
+			fs:SetWordWrap(false)
+		end
 		banner.stats[i] = box
 	end
 	return banner

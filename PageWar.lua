@@ -254,6 +254,33 @@ function private.Refresh()
 	end
 end
 
+---A war's badge: WON or LOST for a day after the result, LIVE from prep to the end, the minutes to prep in the hour
+---before, and "!" while a war officer of ours must act (declare, pick the time, accept or withdraw).
+---@return string? badge
+---@return table? color
+function private.Badge(war, now)
+	local b, r, t = war.battle or {}, war.result or {}, war.time or {}
+	if war.step == "result" and r.won ~= nil then
+		return r.won and "WON" or "LOST", r.won and C.green or C.red
+	elseif type(b.prep) == "number" and now >= b.prep and now < (b.stop or 0) then
+		return "LIVE", C.green
+	elseif type(b.prep) == "number" and now >= b.prep - 3600 and now < b.prep and war.step ~= "result" then
+		return format("%dm", ceil((b.prep - now) / 60)), C.gold
+	end
+	if not GuildWars:AmOfficer() then
+		return nil
+	end
+	local d = war.declare or {}
+	local must = war.step == "declare" and not d.mine and type(d.closesAt) == "number" and now < d.closesAt and not GuildWars:Pending("declare", war.id)
+		or war.state == "awaiting_time" and war.role == "defend" and not GuildWars:Pending("time", war.id)
+		or war.state == "awaiting_answer" and war.role == "attack" and not t.accepted and not t.withdrawn and not GuildWars:Pending("answer", war.id)
+	if must then
+		return "!", C.amber
+	end
+	return nil
+end
+GuildWars.Badge = function(_, war, now) return private.Badge(war, now or GetServerTime()) end
+
 for index = 1, MAX_WARS do
 	UI:RegisterPage("war"..index, {
 		title = "War",
@@ -266,6 +293,13 @@ for index = 1, MAX_WARS do
 		under = "guildwars",
 		order = -2,
 		hidden = function() return GuildWars:War(index) == nil end,
+		badge = function()
+			local war = GuildWars:War(index)
+			if war then
+				return private.Badge(war, GetServerTime())
+			end
+			return nil
+		end,
 		build = function(container, width, height)
 			local tab = private.BuildTab(container, width, height, index)
 			tab.container = container

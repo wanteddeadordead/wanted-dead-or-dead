@@ -18032,6 +18032,14 @@ end
 	local declare = Button("Declare war · stake 300")
 	check(declare and declare:IsEnabled() and Button("Not tonight") and OnScreen("You're a war officer of EMPIRE"),
 		"a war officer: Declare war with the stake, every required check ticked (the Battle.net group's shown, not required)")
+	-- A war officer's to act: "!" on the war's tab and the menu's Guild Wars (no race on then)
+	local realLive = ns.Races.Live
+	ns.Races.Live = function() return nil end
+	ns.UI:Refresh(true)
+	local menuBadge
+	for _, entry in ipairs(ns.UI:Menu()) do if entry.key == "guildwars" then menuBadge = entry.badge end end
+	check(G:Badge(G:War(1)) == "!" and menuBadge == "!", "an officer must act: ! on the tab and the menu: "..tostring(menuBadge))
+	ns.Races.Live = realLive
 	declare._scripts.OnClick(declare)
 	local declareId = "race:na:pvp:"..(clock - 3600)
 	check(G:Pending("declare", declareId) and G:Pending("declare", declareId).data.stake == 300 and OnScreen("Sent; waiting for the site") and not Button("Declare war · stake 300"):IsEnabled(),
@@ -18186,6 +18194,7 @@ end
 	ns.db.settings.warHud = false
 	ns.WarHUD:Update()
 	check(not hud:IsShown(), "Hide the HUD hides it")
+	check(G:Badge(G:War(1)) == "LIVE", "a war on: LIVE")
 	ns.db.settings.warHud = nil
 	-- The zone banner: once on coming into the zone, the holder and the war on
 	ns.WarBanner:Check()
@@ -18277,6 +18286,7 @@ end
 		war.state, war.start = "over", clock - 2400
 		war.result = { winner = "def", towers = 1, inhibitors = 0, turnoutAtt = 20, turnoutDef = 30, protectedUntil = clock + 3 * 86400 }
 	end)
+	check(G:Badge(G:War(1)) == "LOST", "a day after the result: LOST")
 	check(OnScreen("Revenant held Hillsbrad") and OnScreen("LOST") and OnScreen("400 lost to Revenant") and OnScreen("Held by <Revenant>"), "lost: the stake to the holders")
 	AtStep(function(war) war.state, war.start = "over", clock - 2400 end)
 	check(OnScreen("The site is counting"), "not counted yet")

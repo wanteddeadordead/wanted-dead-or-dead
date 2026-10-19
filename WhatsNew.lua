@@ -16,6 +16,21 @@ local private = {}
 -- when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.28.0",
+		note = "Thank you to everyone who helped test Wanted during the beta. Your bug reports, screenshots and ideas "
+			.."made this release. The beta ends on Wednesday, October 21, and this is the last beta release.\n\n"
+			.."Next comes guild wars. After launch, guilds will fight over the zones of Azeroth, and each zone's owner goes on "
+			.."the war map at wanteddeadordead.com.\n\n"
+			.."— Chris aka xmadness",
+		lines = {
+			"A new look: Inter text, themes that recolour at once, and a UI size in Settings > Theme.",
+			"Influence races every night at 7:00, 7:50 and 8:40 PM ET, under Guild Wars in the menu (needs the Wanted app).",
+			"Three points per zone, the middle one worth 20% more, with your side's numbers live as you fight.",
+			"Coming after launch, guild wars: after a race, a guild on the side that doesn't hold the zone can declare war, and the defenders pick a half-hour slot over the next two evenings.",
+			"Wars are up to 40 a side: three lanes with a tower and an inhibitor each, and a keep at each end. The winner gets 3 days of peace. War Marks buy cosmetics only.",
+		},
+	},
+	{
 		version = "1.27.0",
 		note = "New to Wanted, or want a refresher? First steps walks you through it page by page: each stop opens the real "
 			.."page and borders the part it talks about. Poker has its own tour, and you can now invite a friend to your table "

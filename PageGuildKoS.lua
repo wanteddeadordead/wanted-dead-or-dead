@@ -13,11 +13,10 @@ local ROW_HEIGHT = 40
 local SETTINGS_TOP = 0
 local LIST_TOP = 150
 
-local MODE_LABELS = {
-	review = "Review: anyone adds, officers approve",
-	rank = "Rank: the chosen rank and above",
-	open = "Open: any member",
-}
+local MODE_LABELS = { review = "Review", rank = "Rank", open = "Open" }
+-- Who may change the list in each mode, for the mode choice's tooltip
+local MODES_TIP = "Review: anyone adds, officers approve.\nRank: the chosen rank and above.\nOpen: any member."
+local OFFICERS_TIP = "Officers change these."
 
 ---The guild's rank names, by rank index (0 = the guild master).
 function private.Ranks()
@@ -40,19 +39,19 @@ function private.Refresh()
 	local officer = book and GuildKoS:Can("settings")
 	private.settings:SetShown(book ~= nil)
 	if not book then
-		private.status:SetText("Join a guild to use its Kill on Sight list.")
-		private.list:SetItems({}, "Not in a guild.", "")
+		private.status:SetText("")
+		private.permissions:Hide()
+		private.list:SetItems({}, "Not in a guild.")
 		return
 	end
 	local s = book.settings
-	if s.enabled then
-		private.status:SetText(format("<%s>: %s.%s", book.guild, MODE_LABELS[s.mode] or s.mode, officer and " You can change these as an officer." or ""))
-	else
-		private.status:SetText(format("<%s> hasn't switched on Guild Kill on Sight.%s", book.guild, officer and " Switch it on below." or " An officer can switch it on here."))
-	end
-	if not select(2, Wanted.GuildRank:OfficerRanks()) then
-		private.status:SetText(private.status:GetText().." The game won't show your guild's rank permissions here, so only the guild master's changes are taken.")
-	end
+	-- The guild, and whether its list is on: the mode is on its own control
+	private.status:SetText(s.enabled and format("<%s>", book.guild) or format("<%s>: off", book.guild))
+	private.permissions:SetShown(not select(2, Wanted.GuildRank:OfficerRanks()))
+	-- Non-officers see the settings greyed out, and why on hover
+	W:Explain(private.enabled, not officer and "Guild Kill on Sight" or nil, OFFICERS_TIP.." An officer can switch it on here.")
+	W:Explain(private.mode, "Who may change the list", officer and MODES_TIP or (MODES_TIP.."\n\n"..OFFICERS_TIP))
+	W:Explain(private.rank, not officer and "Rank" or nil, OFFICERS_TIP)
 	private.enabled:SetChecked(s.enabled)
 	private.discord:SetChecked(s.discord)
 	private.mode:SetChoice(s.mode)
@@ -128,7 +127,7 @@ end
 UI:RegisterPage("guildkos", {
 	group = "World PvP",
 	title = "Guild Kill on Sight",
-	subtitle = "Your guild's own Kill on Sight list, shared with your guildmates and kept apart from yours.",
+	tabTip = { "Guild Kill on Sight", "Your guild's own Kill on Sight list, shared with your guildmates and kept apart from yours." },
 	order = 3.5,
 	badge = function()
 		if not GuildKoS:Can("approve") then
@@ -142,8 +141,13 @@ UI:RegisterPage("guildkos", {
 	build = function(container, width, height)
 		private.status = Theme:Text(container, "body", "", C.muted)
 		private.status:SetPoint("TOPLEFT", 0, SETTINGS_TOP)
-		private.status:SetPoint("RIGHT")
-		private.status:SetWordWrap(true)
+		-- Rank permissions the game won't show: an amber (i) after the guild's name
+		private.permissions = W:InfoGlyph(container, "Rank permissions unknown", "The game won't show your guild's rank permissions here, so only the guild master's changes are taken.")
+		private.permissions:SetPoint("LEFT", private.status, "RIGHT", 6, 0)
+		local function Amber() private.permissions.ring:SetVertexColor(C.amber[1], C.amber[2], C.amber[3], 0.8) private.permissions.letter:SetVertexColor(C.amber[1], C.amber[2], C.amber[3], 0.9) end
+		private.permissions:HookScript("OnLeave", Amber)
+		Amber()
+		private.permissions:Hide()
 
 		-- The guild's settings: shown to everyone, changed by officers
 		local settings = CreateFrame("Frame", nil, container)
@@ -160,7 +164,7 @@ UI:RegisterPage("guildkos", {
 		for _, key in ipairs(GuildKoS.MODES) do
 			tinsert(choices, { key = key, label = MODE_LABELS[key] })
 		end
-		private.mode = W:Choice(settings, 290, choices, function(key) GuildKoS:SetSettings({ mode = key }) end)
+		private.mode = W:Choice(settings, 200, choices, function(key) GuildKoS:SetSettings({ mode = key }) end)
 		private.mode:SetPoint("TOPLEFT", floor(width / 2), 0)
 		private.rank = W:Choice(settings, 200, private.Ranks(), function(key) GuildKoS:SetSettings({ rank = key }) end)
 		private.rank:SetPoint("TOPLEFT", floor(width / 2), -30)
@@ -185,7 +189,7 @@ UI:RegisterPage("guildkos", {
 
 		local segment = W:Segmented(container, {
 			{ key = "approved", label = "On the list" },
-			{ key = "pending", label = "Waiting" },
+			{ key = "pending", label = "Waiting", tip = { "Waiting", "In review mode, names members add wait here for an officer." } },
 		}, function(key)
 			private.view = key
 			private.Refresh()

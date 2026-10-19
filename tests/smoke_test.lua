@@ -18167,11 +18167,34 @@ end
 	check(all:find("tower%-horde") and all:find("inhib%-broken%-by%-horde") and all:find("tower%-contested") and all:find("tower%-alliance") and all:find("nexus%-keep%-open%-alliance"),
 		"the seals: a tower taken, an inhibitor broken by the attackers, one being taken, one standing, the defenders' keep open: "..all)
 	check(ns.db.warPoints["7"] and #ns.db.warPoints["7"].points == 4, "the live points kept for the result")
+	-- The war HUD: in the war's zone, standing on the Mid tower; not on the roster
+	local realBest, realPos = C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition
+	C_Map.GetBestMapForUnit = function() return 1424 end
+	C_Map.GetPlayerMapPosition = function() return { x = 0.525, y = 0.361 } end
+	local warClock = clock
+	clock = clock + 1
+	ns.WarHUD:Update()
+	local hud = _G.WantedWarHUD
+	check(hud and hud:IsShown() and hud.attacker.name._text == "EMPIRE" and hud.attacker.count._text == "31 / 40" and hud.defender.count._text:find("24 / 40", 1, true)
+		and hud.defender.count._text:find("×1.21", 1, true) and hud.clock._text == "18:19" and hud.kind._text == "GUILD WAR",
+		"the war HUD: both guilds' roster players here, the outnumbered bonus, the battle's time left: "..tostring(hud and hud.clock._text))
+	check(hud.lanes[1].tower._texture:find("tower%-horde$") and hud.lanes[1].inhibitor._texture:find("inhib%-broken%-by%-horde$") and hud.lanes[2].pct._text == "50%"
+		and hud.lanes[3].tower._texture:find("tower%-alliance$") and hud.keep._texture:find("nexus%-keep%-open%-alliance$") and hud.rally._texture:find("rally%-horde$"),
+		"the strip: the rally, the lanes' seals, the keep open")
+	check(hud.bar:IsShown() and hud.bar.label._text == "Mid tower · Darrow Hill" and hud.bar.pct._text == "50%" and hud.friends.text._text:find("Friends", 1, true)
+		and hud.status._text == "You can fight; you don't count", "the point the player stands on, friends, and not on the roster")
+	ns.db.settings.warHud = false
+	ns.WarHUD:Update()
+	check(not hud:IsShown(), "Hide the HUD hides it")
+	ns.db.settings.warHud = nil
 	AtStep(function(war, s)
 		war.state, war.start, war.answer = "prep", clock + 600, "accept"
 		s.warLive = { ["7"] = { phase = "prep", endsAt = clock + 600, points = {}, turnout = { att = 20, def = 18 } } }
 	end)
 	check(OnScreen("Prep: the war starts soon") and OnScreen("Battle at") and OnScreen("THE LANES · PREP"), "prep: the lanes greyed, the battle's time")
+	ns.WarHUD:Update()
+	check(hud:IsShown() and hud.clock._text == "Prep 10:00" and hud.kind._text == "GUILD WAR · PREP" and not hud.bar:IsShown(),
+		"the HUD in prep: the clock to the battle: "..tostring(hud.clock._text))
 	-- The result: won, the lanes and keep as they ended (as last seen live), the zone now, the War Marks
 	AtStep(function(war)
 		war.state, war.start, war.answer = "over", clock - 2400, "accept"
@@ -18189,6 +18212,10 @@ end
 	check(OnScreen("The site is counting"), "not counted yet")
 	AtStep(function(war) war.state, war.start = "void", clock - 2400 end)
 	check(OnScreen("Void: no war") and OnScreen("The stake is back; the war is rescheduled."), "void: no war, the stake back")
+	ns.WarHUD:Update()
+	check(not hud:IsShown(), "no war on here: no HUD")
+	C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition = realBest, realPos
+	clock = warClock
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

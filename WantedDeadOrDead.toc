@@ -122,5 +122,6 @@ CapturesMap.lua
 CapturesHUD.lua
 CapturesHUD.xml
 RacesHUD.lua
+WarHUD.lua
 Minimap.lua
 OptionsPanel.lua

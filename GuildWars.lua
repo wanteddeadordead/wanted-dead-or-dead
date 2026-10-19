@@ -723,3 +723,99 @@ function GuildWars:When(t, now)
 	end
 	return date("%a ", t)..GuildWars:Clock(t)
 end
+
+---A zone map's size in yards: the game's, else the capture fronts' table.
+function private.Yards(mapId)
+	if C_Map and C_Map.GetMapWorldSize then
+		local ok, w, h = pcall(C_Map.GetMapWorldSize, mapId)
+		if ok and type(w) == "number" and type(h) == "number" and w > 0 and h > 0 and not (issecretvalue and (issecretvalue(w) or issecretvalue(h))) then
+			return w, h
+		end
+	end
+	local yards = Wanted.Captures.MAP_YARDS[mapId]
+	if yards then
+		return yards[1], yards[2]
+	end
+	return nil
+end
+
+---The guild's war in the player's zone, from prep to its end by the clock, or nil. Also its zone (WarZones) and the
+---player's place: x, y (0 to 100) and the map.
+---@param now number?
+function GuildWars:Here(now)
+	now = now or GetServerTime()
+	local _, x, y, mapId = Wanted.Recorder:GetPosition()
+	for _, war in ipairs(GuildWars:Wars()) do
+		local b, zone = war.battle, Wanted.WarZones:Get(war.zone)
+		if zone and zone.mapId == mapId and type(b) == "table" and b.prep and b.stop and now >= b.prep and now < b.stop
+			and war.step ~= "result" and war.state ~= "withdrawn" then
+			return war, zone, x, y, mapId
+		end
+	end
+	return nil
+end
+
+---A war's points as the map and the HUD show them: the defenders' half (each lane's tower and inhibitor), the keep
+---and the attackers' rally, each { id, name, x, y, r, role ("tower", "inhibitor", "keep", "rally"), lane }.
+---@param war table
+---@param zone table WarZones'
+---@return table[]
+function GuildWars:Points(war, zone)
+	local defender = type(war.defender) == "table" and war.defender.faction or nil
+	local attacker = type(war.attacker) == "table" and war.attacker.faction or nil
+	local d = defender == "Alliance" and "alliance" or "horde"
+	local points = {}
+	for _, lane in ipairs(zone.lanes) do
+		for _, p in ipairs(lane.points) do
+			if p.side == d then
+				tinsert(points, { id = p.id, name = p.name, x = p.x, y = p.y, r = p.r, role = p.role, lane = lane.id })
+			end
+		end
+	end
+	local keep, rally = zone[d], zone[attacker == "Alliance" and "alliance" or "horde"]
+	tinsert(points, { id = keep.id, name = keep.name, x = keep.x, y = keep.y, r = keep.r, role = "keep" })
+	if rally ~= keep then
+		tinsert(points, { id = rally.id, name = rally.name, x = rally.x, y = rally.y, r = rally.r, role = "rally" })
+	end
+	return points
+end
+
+---The war point the player at (x, y) on a map stands on (within its radius), or nil.
+---@param war table
+---@param zone table
+---@param x number?
+---@param y number?
+---@param mapId number?
+---@return table?
+function GuildWars:PointAt(war, zone, x, y, mapId)
+	if mapId ~= zone.mapId or type(x) ~= "number" or type(y) ~= "number" then
+		return nil
+	end
+	local w, h = private.Yards(mapId)
+	if not w then
+		return nil
+	end
+	for _, point in ipairs(GuildWars:Points(war, zone)) do
+		local dx, dy = (x - point.x) / 100 * w, (y - point.y) / 100 * h
+		if dx * dx + dy * dy <= point.r * point.r then
+			return point
+		end
+	end
+	return nil
+end
+
+---Whether this player is on the war's roster (or its standby), as the site last said.
+---@param war table
+---@return boolean
+function GuildWars:OnRoster(war)
+	local me = UnitGUID("player")
+	local roster = type(war.roster) == "table" and war.roster or {}
+	for _, key in ipairs({ "players", "standby" }) do
+		for _, p in ipairs(List(roster[key])) do
+			if me and p.guid == me then
+				return true
+			end
+		end
+	end
+	return false
+end

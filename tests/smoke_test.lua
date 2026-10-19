@@ -17489,6 +17489,18 @@ end)()
 	check(poker and poker._point[1] == "BOTTOMLEFT" and safety._point[1] == "BOTTOMLEFT" and poker._point[3] == safety._point[3] + safety._h,
 		"Poker sits at the foot of the menu, directly above Safety: "..tostring(poker and poker._point[3]).." over "..tostring(safety and safety._point[3]))
 end)()
+-- What's new 1.28.0 is signed in the maintainer's words: the sign-off is the note's last line, with no author line
+-- under it; older notes keep theirs
+;(function()
+	local N = ns.WhatsNew
+	N:Show()
+	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
+	local text = body and body._text or ""
+	local note = ns.WHATS_NEW[1]
+	check(note.version == "1.28.0" and note.signed and text:find("— Chris aka xmadness", 1, true), "1.28.0's note is signed")
+	check(not text:find("The maintainers of Wanted", 1, true), "with no author line under its sign-off")
+	_G.WantedWhatsNewFrame:Hide()
+end)()
 print("wanted smoke: setup checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
 -- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild

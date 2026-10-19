@@ -11,12 +11,13 @@ local C = Theme.C
 local WhatsNew = Wanted:NewModule("WhatsNew")
 local private = {}
 
--- Each version's note from the author (optional), a picture above it (optional: a calling-card piece's id) and short
--- lines for players, newest first. A pinned version reaches everyone who hasn't seen it, under the newest notes, even
--- when they skipped it.
+-- Each version's note from the author (optional; signed = true when it ends with its own sign-off), a picture above it
+-- (optional: a calling-card piece's id) and short lines for players, newest first. A pinned version reaches everyone
+-- who hasn't seen it, under the newest notes, even when they skipped it.
 Wanted.WHATS_NEW = {
 	{
 		version = "1.28.0",
+		signed = true, -- the note ends with its own sign-off, so no "The maintainers of Wanted" under it
 		note = "Thank you to everyone who helped test Wanted during the beta. Your bug reports, screenshots and ideas "
 			.."made this release. The beta ends on Wednesday, October 21, and this is the last beta release.\n\n"
 			.."Next comes guild wars. After launch, guilds will fight over the zones of Azeroth, and each zone's owner goes on "
@@ -344,7 +345,10 @@ function private.Open(title, note, entries, welcome, art)
 	local parts = {}
 	if note then
 		tinsert(parts, note)
-		tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
+		-- A note signed in its own words ends with them
+		if not (entries[1] and entries[1].signed) then
+			tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
+		end
 		tinsert(parts, "")
 	end
 	for i, entry in ipairs(entries) do
@@ -354,7 +358,9 @@ function private.Open(title, note, entries, welcome, art)
 		-- The first version's note leads the window; a later one's (a pinned launch note) sits under its version
 		if i > 1 and entry.note then
 			tinsert(parts, entry.note)
-			tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
+			if not entry.signed then
+				tinsert(parts, "|cff8f9aa3"..AUTHOR.."|r")
+			end
 		end
 		for _, line in ipairs(entry.lines) do
 			tinsert(parts, "- "..line)

@@ -719,7 +719,9 @@ function Nearby:Refresh()
 		end
 	end
 	-- Just the count: "(2 in sight)" didn't fit beside the buttons, and shaded rows already show who's gone
-	private.title:SetText(format("%s  %s", label, Theme:Colorize(tostring(#items), C.muted)))
+	-- The view's name when there's room beside the buttons, else the count alone (the tab names the view)
+	local count = Theme:Colorize(tostring(#items), C.muted)
+	Theme:FitText(private.title, private.title:GetWidth(), { format("%s  %s", label, count), count })
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)

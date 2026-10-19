@@ -145,7 +145,7 @@ function private.Create()
 	end
 	private.theme = theme
 	-- Its size (Settings, Theme) first: the saved place is in the window's own units at that size
-	frame:SetScale(Theme:ClampScale(Wanted.db.settings.uiScale))
+	frame:SetScale(private.FitScale(Wanted.db.settings.uiScale))
 	local saved = Wanted.db.settings.window
 	if saved and saved.point then
 		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)
@@ -862,11 +862,22 @@ Wanted:RegisterCommand("hotspots", "Opens the Hotspots page: where enemy players
 	UI:Show("hotspots")
 end)
 
+---A window size that keeps the whole window on screen: larger than 100% only as far as the screen has room for. At
+---150% the window ran off the bottom of most screens, and with it the slider to size it back.
+---@param scale any a size setting (Theme:ClampScale)
+---@return number
+function private.FitScale(scale)
+	local room = min(UIParent:GetWidth() / WIDTH, UIParent:GetHeight() / HEIGHT)
+	-- On the slider's steps, rounded down so it still fits
+	room = floor(room * 100 / Theme.SIZE_STEP) * Theme.SIZE_STEP / 100
+	return min(Theme:ClampScale(scale), max(1, room))
+end
+
 ---Sizes the window (Settings, Theme: UI size), saved for the account; its cog popups and menus follow it. The window
 ---keeps its centre and stays on screen.
 ---@param scale number 0.8 to 1.5
 function UI:SetScale(scale)
-	scale = Theme:ClampScale(scale)
+	scale = private.FitScale(scale)
 	Wanted.db.settings.uiScale = scale
 	if private.frame then
 		Wanted.db.settings.window = Theme:SetFrameScale(private.frame, scale) or Wanted.db.settings.window

@@ -28,21 +28,163 @@ local STYLES = {
 -- Tooltip helper
 -- ============================================================================
 
-function W:AttachTooltip(frame, title, text)
-	frame.tooltipTitle = title
-	frame.tooltipText = text
+-- EllesmereUI's tooltip box with a gold title over a light body. It is our own frame, not GameTooltip: GameTooltip
+-- is shared with the game and every other addon (skins, unit and item hooks), and restyling it for our owners would
+-- have to be undone on every hide, by us and in the right order with them.
+local TIP_WIDTH, TIP_PAD, TIP_GAP = 260, 8, 4
+local MEDIA = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\"
+-- GameTooltip's anchor names: the tip's point, the owner's point it sits on, and the offset
+local TIP_ANCHORS = {
+	ANCHOR_TOP = { "BOTTOM", "TOP", 0, TIP_GAP },
+	ANCHOR_BOTTOM = { "TOP", "BOTTOM", 0, -TIP_GAP },
+	ANCHOR_LEFT = { "BOTTOMRIGHT", "TOPLEFT", 0, TIP_GAP },
+	ANCHOR_RIGHT = { "BOTTOMLEFT", "TOPRIGHT", 0, TIP_GAP },
+}
+local tip = nil
+
+local function CreateTip()
+	local frame = CreateFrame("Frame", "WantedTooltip", UIParent)
+	frame:SetFrameStrata("TOOLTIP")
+	frame:SetFrameLevel(100) -- over the menu, which shares the strata
+	frame:SetClampedToScreen(true)
+	Theme:Skin(frame, C.tipBg, C.tipBorder)
+	frame.title = Theme:Text(frame, "body", "", C.tipTitle)
+	frame.title:SetPoint("TOPLEFT", TIP_PAD, -TIP_PAD)
+	frame.title:SetWordWrap(true)
+	frame.body = Theme:Text(frame, "small", "")
+	frame.body:SetTextColor(C.tipBody[1], C.tipBody[2], C.tipBody[3], C.tipBody[4])
+	frame.body:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -4)
+	frame.body:SetWordWrap(true)
+	frame:Hide()
+	-- Gone with its owner: a menu closing under the mouse, a page switched
+	frame:SetScript("OnUpdate", function(self)
+		if not (self.owner and self.owner:IsVisible()) then
+			self:Hide()
+		end
+	end)
+	-- Many OnLeave handlers, ours and the pages', hide GameTooltip: that hides this too
+	hooksecurefunc(GameTooltip, "Hide", function() frame:Hide() end)
+	return frame
+end
+
+local function HideTooltip()
+	if tip then
+		tip:Hide()
+	end
 end
 
 local function ShowTooltip(frame)
-	if not frame.tooltipTitle then
+	local title = frame.tooltipTitle
+	-- A FontString's hit button: nothing to explain while its text is hidden
+	if not title or (frame.explainedText and not frame.explainedText:IsVisible()) then
 		return
 	end
-	GameTooltip:SetOwner(frame, "ANCHOR_TOP")
-	GameTooltip:SetText(frame.tooltipTitle, 1, 1, 1)
-	if frame.tooltipText then
-		GameTooltip:AddLine(frame.tooltipText, C.muted[1], C.muted[2], C.muted[3], true)
+	local body = frame.tooltipText
+	if type(body) == "function" then
+		body = body()
 	end
-	GameTooltip:Show()
+	local hasBody = body ~= nil and body ~= ""
+	tip = tip or CreateTip()
+	tip.owner = frame
+	tip.title:SetText(title)
+	tip.body:SetText(hasBody and body or "")
+	tip.body:SetShown(hasBody)
+	-- As wide as the longer line, wrapping past TIP_WIDTH
+	local width = ceil(min(TIP_WIDTH - TIP_PAD * 2,
+		max(tip.title:GetUnboundedStringWidth(), hasBody and tip.body:GetUnboundedStringWidth() or 0)))
+	tip.title:SetWidth(width)
+	tip.body:SetWidth(width)
+	local height = tip.title:GetStringHeight() + (hasBody and 4 + tip.body:GetStringHeight() or 0)
+	tip:SetSize(width + TIP_PAD * 2, ceil(height) + TIP_PAD * 2)
+	local anchor = TIP_ANCHORS[frame.tooltipAnchor or "ANCHOR_TOP"] or TIP_ANCHORS.ANCHOR_TOP
+	tip:ClearAllPoints()
+	tip:SetPoint(anchor[1], frame, anchor[2], anchor[3], anchor[4])
+	tip:Show()
+end
+
+---A FontString can't take the mouse: a Button over its text does, and lets clicks through to what is under it.
+local function HitButton(text)
+	local hit = CreateFrame("Button", nil, text:GetParent())
+	hit:SetMouseClickEnabled(false)
+	hit.explainedText = text
+	text.explainHit = hit
+	local function Fit()
+		local justify = text:GetJustifyH()
+		local point = (justify == "CENTER" or justify == "RIGHT") and justify or "LEFT"
+		hit:ClearAllPoints()
+		hit:SetPoint(point, text, point)
+		hit:SetSize(max(text:GetStringWidth(), 1), max(text:GetStringHeight(), 1))
+	end
+	hooksecurefunc(text, "SetText", Fit)
+	Fit()
+	return hit
+end
+
+---Explains a frame on hover: our tooltip with a gold title and a light body. Call it again to change the text.
+---@param frame table a widget, a plain frame or a FontString (a FontString gets a hit button sized to its text)
+---@param title string
+---@param body string|fun(): string?|nil a function is called on each hover, for text that follows the state
+---@param anchor string? a GameTooltip anchor: ANCHOR_TOP (default), ANCHOR_BOTTOM, ANCHOR_LEFT or ANCHOR_RIGHT
+---@return table owner the frame that shows the tooltip
+function W:Explain(frame, title, body, anchor)
+	local owner = frame
+	if frame.GetObjectType and frame:GetObjectType() == "FontString" then
+		owner = frame.explainHit or HitButton(frame)
+	end
+	owner.tooltipTitle, owner.tooltipText, owner.tooltipAnchor = title, body, anchor
+	-- Our widgets show it from their own OnEnter; anything else is hooked once, for motion only, so clicks still
+	-- reach what is underneath
+	if not owner.showsTooltip then
+		owner.showsTooltip = true
+		owner:SetMouseMotionEnabled(true)
+		owner:HookScript("OnEnter", ShowTooltip)
+		owner:HookScript("OnLeave", HideTooltip)
+	end
+	-- A disabled button still says why it is disabled
+	if owner.SetMotionScriptsWhileDisabled then
+		owner:SetMotionScriptsWhileDisabled(true)
+	end
+	-- Called again while its tooltip shows: show the new text now
+	if tip and tip:IsShown() and tip.owner == owner then
+		ShowTooltip(owner)
+	end
+	return owner
+end
+
+-- The older name, kept for its callers
+W.AttachTooltip = W.Explain
+
+---A small (i) that only explains: a rule for a whole card or section, or how to fill an empty list. Anchor it
+---yourself, usually glyph:SetPoint("LEFT", label, "RIGHT", 4, 0).
+---@param parent table
+---@param title string
+---@param body string|fun(): string?
+---@param size number? default 14
+---@return table glyph a Button
+function W:InfoGlyph(parent, title, body, size)
+	local glyph = CreateFrame("Button", nil, parent)
+	glyph:SetSize(size or 14, size or 14)
+	glyph.ring = glyph:CreateTexture(nil, "ARTWORK")
+	glyph.ring:SetAllPoints()
+	glyph.ring:SetTexture(MEDIA.."ring")
+	glyph.letter = glyph:CreateTexture(nil, "OVERLAY")
+	glyph.letter:SetAllPoints()
+	glyph.letter:SetTexture(MEDIA.."info-i")
+	local function Light(ring, letter)
+		glyph.ring:SetVertexColor(1, 1, 1, ring)
+		glyph.letter:SetVertexColor(1, 1, 1, letter)
+	end
+	glyph:SetScript("OnEnter", function(self)
+		Light(0.8, 0.8)
+		ShowTooltip(self)
+	end)
+	glyph:SetScript("OnLeave", function()
+		Light(0.3, 0.55)
+		HideTooltip()
+	end)
+	glyph.showsTooltip = true
+	Light(0.3, 0.55)
+	return W:Explain(glyph, title, body)
 end
 
 
@@ -84,6 +226,7 @@ function W:Button(parent, text, style, width, height, onClick, template, name)
 		self.style = STYLES[name] or STYLES.secondary
 		RefreshButton(self)
 	end
+	button.showsTooltip = true
 	button:SetScript("OnEnter", function(self)
 		self.hovered = true
 		RefreshButton(self)
@@ -207,6 +350,7 @@ function W:Toggle(parent, text, onChange)
 			onChange(self.checked)
 		end
 	end)
+	toggle.showsTooltip = true
 	toggle:SetScript("OnEnter", function(self)
 		Theme:SetBorderColor(self.box, C.accent)
 		ShowTooltip(self)
@@ -308,6 +452,7 @@ end
 -- Segmented control
 -- ============================================================================
 
+---@param items table[] { key, label, tip? = { title, body } }
 function W:Segmented(parent, items, onSelect, width)
 	local control = CreateFrame("Frame", nil, parent)
 	control:SetHeight(26)
@@ -325,6 +470,9 @@ function W:Segmented(parent, items, onSelect, width)
 		button:SetScript("OnClick", function()
 			control:Select(item.key)
 		end)
+		if item.tip then
+			W:Explain(button, item.tip[1], item.tip[2])
+		end
 		tinsert(control.buttons, button)
 		x = x + (width or 110) - 1
 	end
@@ -425,6 +573,7 @@ function W:CardButton(parent, onClick)
 	card.arrow = Theme:Text(card, "small", ">", C.faint)
 	card.arrow:SetPoint("TOPRIGHT", -10, -10)
 	card:SetScript("OnClick", onClick)
+	card.showsTooltip = true
 	card:SetScript("OnEnter", function(self)
 		Theme:SetBg(self, C.panelAlt)
 		Theme:SetBorderColor(self, C.borderLight)
@@ -567,9 +716,9 @@ function W:List(parent, rowHeight, numRows, createRow, updateRow)
 	list.empty = Theme:Text(list, "body", "", C.faint)
 	list.empty:SetPoint("CENTER", 0, 10)
 	list.empty:SetJustifyH("CENTER")
-	list.emptyHint = Theme:Text(list, "small", "", C.faint)
-	list.emptyHint:SetPoint("TOP", list.empty, "BOTTOM", 0, -6)
-	list.emptyHint:SetJustifyH("CENTER")
+	-- How to fill it, on hover: an (i) after the empty text
+	list.emptyGlyph = W:InfoGlyph(list, "")
+	list.emptyGlyph:SetPoint("LEFT", list.empty, "RIGHT", 6, 0)
 	list:EnableMouseWheel(true)
 	list:SetScript("OnMouseWheel", function(self, delta)
 		local maxOffset = max(#self.items - self.numRows, 0)
@@ -597,7 +746,11 @@ function W:List(parent, rowHeight, numRows, createRow, updateRow)
 		local total = #self.items
 		local empty = total == 0
 		self.empty:SetText(empty and (self.emptyText or "Nothing here yet.") or "")
-		self.emptyHint:SetText(empty and (self.emptyHintText or "") or "")
+		local hint = empty and self.emptyHintText ~= nil and self.emptyHintText ~= ""
+		W:Explain(self.emptyGlyph, self.empty:GetText(), hint and self.emptyHintText or nil)
+		self.emptyGlyph:SetShown(hint)
+		-- The text and its glyph centred together
+		self.empty:SetPoint("CENTER", hint and -10 or 0, 10)
 		if total > self.numRows then
 			local trackHeight = self:GetHeight()
 			local thumbHeight = max(trackHeight * self.numRows / total, 24)
@@ -925,7 +1078,7 @@ local function CreateMenu()
 end
 
 ---Shows a menu under the frame that opened it, or at the cursor.
----@param items table[] { text, color?, onClick?, header?, disabled? } or "-" for a divider
+---@param items table[] { text, color?, onClick?, header?, disabled?, tip? = { title, body } } or "-" for a divider
 ---@param anchor table? the button that opened it
 function W:Menu(items, anchor)
 	menu = menu or CreateMenu()
@@ -946,13 +1099,16 @@ function W:Menu(items, anchor)
 			item.line = Theme:Line(item)
 			item.line:SetPoint("LEFT", 8, 0)
 			item.line:SetPoint("RIGHT", -8, 0)
+			item.showsTooltip = true
 			item:SetScript("OnEnter", function(self)
 				if self.def and self.def.onClick and not self.def.disabled then
 					self.highlight:SetColorTexture(1, 1, 1, 0.07)
 				end
+				ShowTooltip(self)
 			end)
 			item:SetScript("OnLeave", function(self)
 				self.highlight:SetColorTexture(0, 0, 0, 0)
+				HideTooltip()
 			end)
 			item:SetScript("OnClick", function(self)
 				local d = self.def
@@ -964,6 +1120,9 @@ function W:Menu(items, anchor)
 			menu.items[index] = item
 		end
 		item.def = def ~= "-" and def or nil
+		-- Beside the menu, so it doesn't cover the items above
+		local itemTip = def ~= "-" and def.tip
+		W:Explain(item, itemTip and itemTip[1], itemTip and itemTip[2], "ANCHOR_RIGHT")
 		item:ClearAllPoints()
 		item:SetPoint("TOPLEFT", 1, y)
 		item:SetPoint("TOPRIGHT", -1, y)

@@ -33,6 +33,11 @@ local C = {
 	red = { 0.93, 0.33, 0.31 },
 	redDim = { 0.93, 0.33, 0.31, 0.16 },
 	transparent = { 0, 0, 0, 0 },
+	-- The tooltip: EllesmereUI's box, with the game's gold for the title
+	tipBg = { 0.067, 0.067, 0.067, 0.92 },
+	tipBorder = { 1, 1, 1, 0.15 },
+	tipTitle = { 1, 0.82, 0 },
+	tipBody = { 1, 1, 1, 0.85 },
 }
 Theme.C = C
 

@@ -47,9 +47,13 @@ local function NewMock(kind)
 	return setmetatable({ _scripts = {}, _shown = true, _text = "", _enabled = true, _w = 100, _h = 20, _kind = kind }, Mock)
 end
 Mock.created = {} -- every frame made, so tests can find one by its fields
+-- Fields the tooltip helper reads before any are set: nil until then, as on a real frame
+Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
+	explainedText = true, owner = true, emptyHintText = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
+	if Mock.tooltipFields[k] then return nil end
 	-- Fields the addon stores on frames are plain values; anything else is a method returning a frame
 	return function() return NewMock() end
 end
@@ -144,6 +148,12 @@ function CreateFrame(kind, name, parent, template)
 	return f
 end
 function Methods:GetParent() return self._parent or NewMock() end
+function Methods:GetObjectType() return self._kind end
+-- Mouse settings, so tests can see what a frame takes
+function Methods:SetMouseMotionEnabled(v) self._motion = v end
+function Methods:SetMouseClickEnabled(v) self._clicks = v end
+function Methods:SetMotionScriptsWhileDisabled(v) self._motionWhileDisabled = v end
+function Methods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a } end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
 function Methods:SetPoint(point, ...)
@@ -255,7 +265,14 @@ function MuteSoundFile(file) mutedSounds[file] = true muteCalls = muteCalls + 1 
 function UnmuteSoundFile(file) mutedSounds[file] = nil unmuteCalls = unmuteCalls + 1 end
 -- Hooks on global functions, kept so tests can call them as the game would (globalHooks.SendMail)
 globalHooks = {}
-function hooksecurefunc(name, f) if type(name) == "string" and type(f) == "function" then globalHooks[name] = globalHooks[name] or {} table.insert(globalHooks[name], f) end end
+function hooksecurefunc(name, f, post)
+	if type(name) == "string" and type(f) == "function" then globalHooks[name] = globalHooks[name] or {} table.insert(globalHooks[name], f) end
+	-- A method of a frame or table: runs after it, as the game's does
+	if type(name) == "table" and type(f) == "string" and type(post) == "function" then
+		local method = name[f]
+		name[f] = function(...) local results = { method(...) } post(...) return unpack(results) end
+	end
+end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
 -- An enemy on nameplate1 and, when set, as the target
@@ -6178,6 +6195,120 @@ end)()
 		check(b.label:GetStringWidth() <= b._w - 4, "and each label inside its tab: "..b.label._text)
 	end
 end)()
+-- Tooltips: W:Explain on a widget, a plain frame and a text; the (i) glyph; tips on segmented and menu items; a
+-- list's empty hint behind a glyph
+;(function()
+	local W = ns.Widgets
+	local function Tip() return _G.WantedTooltip end
+	local function Hover(frame) frame._scripts.OnEnter(frame) end
+	local function Leave(frame) frame._scripts.OnLeave(frame) end
+	check(W.AttachTooltip == W.Explain, "AttachTooltip is Explain under its older name")
+	-- A button, through the older name: its own OnEnter shows it, in the new style
+	local button = W:Button(UIParent, "Go", "secondary", 80, 26)
+	check(W:AttachTooltip(button, "Go", "Goes.") == button, "a widget is its own owner")
+	Hover(button)
+	check(Tip() and Tip():IsShown() and Tip().owner == button, "hovering an explained button shows the tooltip")
+	check(Tip().title._text == "Go" and Tip().body._text == "Goes.", "with its title and body")
+	check(Tip().title._textColor[1] == 1 and Tip().title._textColor[2] == 0.82, "the title in gold")
+	check(Tip()._point[1] == "BOTTOM" and Tip()._point[3] == "TOP", "above the owner by default")
+	Leave(button)
+	check(not Tip():IsShown(), "and leaving hides it")
+	Hover(button)
+	GameTooltip:Hide()
+	check(not Tip():IsShown(), "a page's own GameTooltip:Hide() hides it too")
+	-- Disabled: it still explains why
+	W:Explain(button, "Can't go", "Officers only.")
+	check(button._motionWhileDisabled == true, "an explained button keeps its motion scripts while disabled")
+	button:Disable()
+	Hover(button)
+	check(Tip():IsShown() and Tip().title._text == "Can't go", "a disabled button shows its tooltip")
+	Leave(button)
+	-- Explained again while its tooltip shows: the new text shows at once, not on the next hover
+	button:Enable()
+	W:Explain(button, "Roster", "Asking the leader.")
+	Hover(button)
+	W:Explain(button, "Roster", "Ann, Bob")
+	check(Tip():IsShown() and Tip().body._text == "Ann, Bob", "explaining again while shown redraws: "..tostring(Tip().body._text))
+	Leave(button)
+	W:Explain(button, "Roster", "Ann, Bob, Cy")
+	check(not Tip():IsShown(), "explaining again while hidden doesn't show it")
+	-- The body as a function, called on each hover
+	local calls = 0
+	W:Explain(button, "Count", function() calls = calls + 1 return "Hover "..calls end)
+	Hover(button) Leave(button) Hover(button)
+	check(calls == 2 and Tip().body._text == "Hover 2", "a function body is called on each hover: "..calls)
+	Leave(button)
+	-- No body: the title alone
+	W:Explain(button, "Title only")
+	Hover(button)
+	check(not Tip().body:IsShown(), "no body, no body line")
+	Leave(button)
+	-- A plain frame: hooked once, motion only, so clicks reach what is under it
+	local plain = CreateFrame("Frame", nil, UIParent)
+	local entered = 0
+	plain:SetScript("OnEnter", function() entered = entered + 1 end)
+	check(W:Explain(plain, "Plain", "A frame.") == plain, "a plain frame is its own owner")
+	W:Explain(plain, "Plain", "Again.")
+	check(plain._motion == true and plain._clicks == nil, "a plain frame takes mouse motion, not clicks")
+	Hover(plain)
+	check(entered == 1 and Tip():IsShown() and Tip().body._text == "Again.", "its own OnEnter still runs, hooked once, with the latest text")
+	Leave(plain)
+	check(not Tip():IsShown(), "and leaving it hides the tooltip")
+	-- A FontString: a click-through button over its text
+	local holder = CreateFrame("Frame", nil, UIParent)
+	local text = ns.Theme:Text(holder, "body", "Short")
+	local hit = W:Explain(text, "Text", "Explained.")
+	check(hit ~= text and hit._kind == "Button" and hit._parent == holder, "a text gets a button on its parent")
+	check(hit._clicks == false and hit._motion == true, "which lets clicks through")
+	check(W:Explain(text, "Text", "Again.") == hit, "and keeps it when explained again")
+	local width = hit._w
+	text:SetText("A much longer line of text")
+	check(hit._w > width, "the button follows the text's width: "..width.." to "..hit._w)
+	Hover(hit)
+	check(Tip():IsShown() and Tip().owner == hit, "hovering the text shows its tooltip")
+	Leave(hit)
+	text:Hide()
+	Hover(hit)
+	check(not Tip():IsShown(), "a hidden text explains nothing")
+	-- The (i) glyph
+	local glyph = W:InfoGlyph(holder, "Rule", "How the card works.")
+	check(glyph._kind == "Button" and glyph._w == 14 and glyph._h == 14, "the glyph is a 14 px button")
+	check(glyph.ring._texture:find("Media\\ring$") and glyph.letter._texture:find("Media\\info%-i$"), "drawn from our own textures")
+	check(glyph.ring._vertexColor[4] == 0.3 and glyph.letter._vertexColor[4] == 0.55, "faint at rest")
+	Hover(glyph)
+	check(glyph.ring._vertexColor[4] == 0.8 and Tip():IsShown() and Tip().title._text == "Rule", "lit and explaining on hover")
+	Leave(glyph)
+	check(glyph.ring._vertexColor[4] == 0.3 and not Tip():IsShown(), "back at rest after")
+	check(W:InfoGlyph(holder, "Big", "x", 20)._w == 20, "a size can be given")
+	-- Segmented items take a tip
+	local control = W:Segmented(UIParent, { { key = "a", label = "One", tip = { "One", "The first." } }, { key = "b", label = "Two" } }, nil, 80)
+	Hover(control.buttons[1])
+	check(Tip():IsShown() and Tip().body._text == "The first.", "a segmented item's tip shows")
+	Leave(control.buttons[1])
+	Hover(control.buttons[2])
+	check(not Tip():IsShown(), "an item without one shows nothing")
+	-- Menu items take a tip, shown beside the menu
+	W:Menu({ { text = "Locked", disabled = true, tip = { "Locked", "Ask an officer." } }, { text = "Plain", onClick = function() end } })
+	local items = {}
+	for _, f in ipairs(Mock.created) do
+		if f._kind == "Button" and type(rawget(f, "def")) == "table" and f.def.text then items[f.def.text] = f end
+	end
+	Hover(items.Locked)
+	check(Tip():IsShown() and Tip().body._text == "Ask an officer." and Tip()._point[1] == "BOTTOMLEFT", "a menu item's tip shows, beside it")
+	Leave(items.Locked)
+	Hover(items.Plain)
+	check(not Tip():IsShown(), "a menu item without one shows nothing")
+	W:HideMenu()
+	-- A list's empty hint is a glyph after the empty text, not a line under it
+	local list = W:List(UIParent, 20, 3, function() end, function() end)
+	list:SetItems({}, "No bounties yet.", "Post one from the Board.")
+	check(list.emptyGlyph:IsShown() and list.emptyGlyph.tooltipTitle == "No bounties yet." and list.emptyGlyph.tooltipText == "Post one from the Board.",
+		"an empty list with a hint shows a glyph that explains it")
+	list:SetItems({}, "Nothing.")
+	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
+	list:SetItems({ 1 }, "Nothing.", "Hint.")
+	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
+end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
 ;(function()
@@ -11509,7 +11640,9 @@ end)()
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	db.duels = {}
 	ns.UI:Show("duels")
-	check(ns.UI:IsShown("duels") and OnScreen("Duel someone and it shows up here."), "with no duels the page says how to get one")
+	local function Explained(text) for _, f in ipairs(Mock.created) do if f._shown and rawget(f, "tooltipText") == text then return true end end return false end
+	check(ns.UI:IsShown("duels") and OnScreen("No duels yet.") and Explained("Duel someone and it shows up here."),
+		"with no duels the page says how to get one, on its (i)")
 	local function Duel(t, result, mySpec, them) return { id = "Test Player:duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
 		me = { class = "WARRIOR", spec = mySpec, talents = { 31, 20, 0 } }, them = them } end
 	local frost = { guid = "Player-1-0D0E1F00", class = "MAGE", spec = "Frost", name = "Duel Friend" }

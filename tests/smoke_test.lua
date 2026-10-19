@@ -13560,7 +13560,7 @@ end)()
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	local function Button(label) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == label and f._scripts.OnClick and f:IsShown() then return f end end end
 	ns.UI:Show("poker")
-	check(ns.UI:IsShown("poker") and OnScreen("HOST A TABLE"), "the Poker page opens with the host form")
+	check(ns.UI:IsShown("poker") and OnScreen("Players and money"), "the Poker page opens with the host form")
 	local function Ad(sender, ad)
 		ad.v = "0.1.0-dev"
 		Fire("CHAT_MSG_ADDON", "WNTD", "T:za"..math.random(1000, 9999)..":1/1:"..ns.Sync:Encode(ad), "CHANNEL", sender, nil, nil, nil, ns.Sync:GetInfo().channelName)
@@ -13703,7 +13703,7 @@ end)()
 	check(Net:HostedTable() == nil and not TableUI:IsShown(), "closed once the hand is over")
 	check(ToBob("state").st.phase == "closed", "Bob is told the table closed")
 	ns.UI:Show("poker")
-	check(OnScreen("HOST A TABLE"), "the page is back to the host form")
+	check(OnScreen("Players and money"), "the page is back to the host form")
 end)()
 
 -- Poker gold: cash on the table. A seat at a gold table waits, with no chips, until its buy-in has reached the host
@@ -14570,10 +14570,22 @@ end)()
 			end
 		end
 	end
-	check(OnScreen("HOST A TABLE") and (OnScreen("Cash game  ·") or OnScreen("Tournament  ·")) and OnScreen("Who sees it") and Tip("The deal"),
+	check(OnScreen("Players and money") and (OnScreen("Cash game  ·") or OnScreen("Tournament  ·")) and OnScreen("Who sees it") and Tip("The deal"),
 		"the form, with the review of the table being set up and the deal behind an (i)")
 	check(not OnScreen("THE DEAL:") and not OnScreen("SEATS "), "no numbered paragraphs (they numbered the seats line wrongly)")
 	check(Tip("The deal"):find("the deck is shuffled from all of them", 1, true), "the (i) explains the deal")
+	-- The step bar: on Review, the three before ticked with the choices made under them; a done step goes back to it
+	local stepDots = {}
+	for _, f in ipairs(Mock.created) do
+		local caption = rawget(f, "caption")
+		if f._kind == "Button" and caption and f._parent and f._parent._shown and f._parent._parent and f._parent._parent._shown then stepDots[caption._text] = f end
+	end
+	check(stepDots.Game and stepDots.Game.mark._shown and stepDots.Table.mark._shown and stepDots.Review.ring._texture:find("ring%-bold$"), "on Review, the steps before are ticked")
+	check((stepDots.Game.sub._text == "Cash game" or stepDots.Game.sub._text == "Tournament") and stepDots.Table.sub._text:find("^%d+ seats, %d+ s$"),
+		"with the choices made under them: "..stepDots.Game.sub._text..", "..stepDots.Table.sub._text)
+	check(not OnScreen("STEP 4 OF 4") and not OnScreen("  >  Review"), "no step title or footer dots")
+	stepDots.Game:Click()
+	check(OnScreen("Cash game") and stepDots.Game.ring._texture:find("ring%-bold$") and stepDots.Review._w == 14, "a done step is a click back to it")
 	P.PokerPage:GoToStep(2)
 	local practice = Button("Practice")
 	check(practice, "Practice among the stakes")

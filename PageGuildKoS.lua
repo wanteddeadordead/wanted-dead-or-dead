@@ -49,7 +49,7 @@ function private.Refresh()
 	private.status:SetText(s.enabled and format("<%s>", book.guild) or format("<%s>: off", book.guild))
 	private.permissions:SetShown(not select(2, Wanted.GuildRank:OfficerRanks()))
 	-- Non-officers see the settings greyed out, and why on hover
-	W:Explain(private.enabled, not officer and "Guild Kill on Sight" or nil, OFFICERS_TIP.." An officer can switch it on here.")
+	W:Explain(private.enabled, not officer and "Guild Kill on Sight" or nil, OFFICERS_TIP..(s.enabled and "" or " An officer can switch it on here."))
 	W:Explain(private.mode, "Who may change the list", officer and MODES_TIP or (MODES_TIP.."\n\n"..OFFICERS_TIP))
 	W:Explain(private.rank, not officer and "Rank" or nil, OFFICERS_TIP)
 	private.enabled:SetChecked(s.enabled)

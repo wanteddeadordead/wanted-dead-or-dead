@@ -170,6 +170,10 @@ function W:Explain(frame, title, body, anchor)
 	if owner.SetMotionScriptsWhileDisabled then
 		owner:SetMotionScriptsWhileDisabled(true)
 	end
+	-- Called again while its tooltip shows: show the new text now
+	if tip and tip:IsShown() and tip.owner == owner then
+		ShowTooltip(owner)
+	end
 	return owner
 end
 

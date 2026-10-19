@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
+- Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
 
 ## [1.27.3] - 2026-10-17
 

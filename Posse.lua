@@ -124,7 +124,7 @@ function private.OnCall(entry)
 	end
 	W:Dialog({
 		title = "Posse: "..tostring(entry.name),
-		text = format("%s is calling a posse against %s (%s) in %s.\n\nJoin, and you'll be invited to their group.", caller, entry.name, why, where),
+		text = format("%s is calling a posse against %s (%s) in %s.", caller, entry.name, why, where),
 		confirmLabel = "Join",
 		cancelLabel = "Ignore",
 		onConfirm = function()

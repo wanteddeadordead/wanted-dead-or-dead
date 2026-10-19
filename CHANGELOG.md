@@ -8,6 +8,7 @@
 - The beta notice under the title bar is now the tooltip of a BETA tag beside the brand, so pages get its room back.
 - Settings in EllesmereUI's rows: one option per row with a switch, its help on the label, and a scroll bar when a tab runs long. What the Nearby window shows in each row, where ranks show and where capture fronts show are each one dropdown of checkboxes; the TARGETED warning, the streak callout and the rank labels keep their finer settings behind a cog.
 - Raids: the how-it-works block and the subtitle are gone. Each part is now the tooltip of what it explains (Form raid, Now, Later, Close raid, Form raid now), the form is half as tall, and more raids fit in the list. Toasts and the Announce and Whisper dialogs are shorter.
+- Poker: hosting a table explains each choice on hover (Cash game, Tournament, People, Practice, Chips, Gold, the password) in place of the notes under them. The review is a short row per choice, each with its rules on hover. Its step numbers no longer repeat. A gold table's host still sees the two lines that matter: you hold the money, and your client deals. The table window's status line and settings are shorter, with the rest on hover.
 
 ## [1.27.3] - 2026-10-17
 

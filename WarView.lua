@@ -457,8 +457,8 @@ function private.Other(id, live, owners)
 	local owner = type(owners[live.zone]) == "table" and owners[live.zone] or nil
 	local defender = owner and { guild = owner.guild, faction = owner.faction } or {}
 	local attackFaction = OTHER[defender.faction]
-	-- endsAt is the end of the phase: prep ends at the start, the battle 30 minutes later
-	local start = type(live.endsAt) == "number" and (live.phase == "prep" and live.endsAt or live.endsAt - BATTLE) or nil
+	-- The war's start, else from the end of its phase (prep ends at the start, the battle 30 minutes later)
+	local start = tonumber(live.start) or type(live.endsAt) == "number" and (live.phase == "prep" and live.endsAt or live.endsAt - BATTLE) or nil
 	local war = { id = id, warId = tonumber(id), zone = live.zone, role = "watch", step = "battle", state = live.phase, other = true,
 		attacker = { faction = attackFaction }, defender = defender, roster = {} }
 	war.battle = private.Battle({ start = start, zone = live.zone }, live, defender.faction)

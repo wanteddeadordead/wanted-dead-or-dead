@@ -757,17 +757,20 @@ local MARK_SIZE = 16
 
 ---What this client knows of a unit running Wanted: { v = version heard, t = when } from the version book, or
 ---{ app = true, t = app last seen, f = side } from the site's list (an admin's app, app 0.2.58); nil when neither.
-local function Heard(unit)
+function Debug:Heard(unit)
 	if not unit or not UnitIsPlayer(unit) then
 		return nil
 	end
-	local name = UnitName(unit)
-	if not name or (issecretvalue and issecretvalue(name)) then
+	local name, surname = UnitName(unit)
+	if type(name) ~= "string" or (issecretvalue and (issecretvalue(name) or issecretvalue(surname))) then
 		return nil
 	end
+	-- The version book is under the full name others see (a name and a surname on WoW Forever), Store:GetOrigin
+	local full = (type(surname) == "string" and surname ~= "") and (name.." "..surname) or name
 	local book = Wanted.db and Wanted.db.addonVersions
-	local heard = book and book[name]
-	local site = Wanted.appWantedUsers and Wanted.appWantedUsers[name]
+	local heard = book and book[full]
+	local users = Wanted.appWantedUsers
+	local site = users and (users[full] or users[name])
 	if heard then
 		return { v = heard.v, t = heard.t, app = type(site) == "table" }
 	end
@@ -913,7 +916,7 @@ local function Mark(unit)
 		mark:ClearAllPoints()
 		mark:SetPoint(at[1], bar, at[2], at[3], at[4])
 	end
-	mark:SetShown(Heard(unit) ~= nil)
+	mark:SetShown(Debug:Heard(unit) ~= nil)
 end
 
 ---Places every seal shown again (the slot changed).
@@ -1003,7 +1006,7 @@ if TooltipDataProcessor and Enum and Enum.TooltipDataType and TooltipUtil and To
 			return
 		end
 		local _, unit = TooltipUtil.GetDisplayedUnit(tooltip)
-		local entry = Heard(unit)
+		local entry = Debug:Heard(unit)
 		if entry then
 			local ago = Wanted.Theme and Wanted.Theme:Ago(GetServerTime() - (entry.t or 0)) or ""
 			local what = entry.v and format("Wanted %s, heard %s", tostring(entry.v), ago) or format("Wanted app user, app seen %s", ago)

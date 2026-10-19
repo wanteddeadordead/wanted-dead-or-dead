@@ -118,8 +118,8 @@ function Catchup:Import()
 	WantedAppCatchup = nil
 	local entry = type(all) == "table" and all[Wanted.db.accountMark]
 	-- Who runs Wanted, both sides: the site sends it to an admin's app only (app 0.2.58), for a development build's
-	-- nameplate marks (Debug); held for the session, never saved
-	Wanted.appWantedUsers = type(entry) == "table" and type(entry.wantedUsers) == "table" and entry.wantedUsers or nil
+	-- nameplate marks (Debug); held for the session, never saved, and only by a development build
+	Wanted.appWantedUsers = Wanted.DEV and type(entry) == "table" and type(entry.wantedUsers) == "table" and entry.wantedUsers or nil
 	local snapshot = private.Snapshot()
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
 		Wanted.Duels:TakeReports(nil, nil)

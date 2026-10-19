@@ -7835,6 +7835,15 @@ end)()
 	check(D:SealSlot("auto", D:EllesmereSlots(nil)) == "right", "without EllesmereUI the seal keeps its old place")
 	local full = { right = 1, topright = 1, topleft = 1, left = 1, top = 1, bottom = 1 }
 	check(D:SealSlot("auto", full) == "right" and D:SealSlot("nonsense", {}) == "right", "every slot full, or a bad choice: right")
+	-- The seal finds a player with a surname under the full name the version book keeps
+	local realName, realIsPlayer = UnitName, UnitIsPlayer
+	UnitName = function(u) if u == "nameplate1" then return "Surname", "Haver" end return realName(u) end
+	UnitIsPlayer = function(u) return u == "nameplate1" or realIsPlayer(u) end
+	ns.db.addonVersions["Surname Haver"] = { v = "1.27.3", t = 1 }
+	local heard = D:Heard("nameplate1")
+	check(heard and heard.v == "1.27.3", "a player with a surname is found in the version book: "..tostring(heard and heard.v))
+	ns.db.addonVersions["Surname Haver"] = nil
+	UnitName, UnitIsPlayer = realName, realIsPlayer
 end)()
 -- The menu: six entries, each page a tab of one, every old page key still opening its page on the right tab; a menu
 -- entry's badge adds up its tabs'

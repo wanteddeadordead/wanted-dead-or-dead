@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the tooltip helper reads before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true }
+	explainedText = true, owner = true, emptyHintText = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -6195,7 +6195,8 @@ end)()
 		check(b.label:GetStringWidth() <= b._w - 4, "and each label inside its tab: "..b.label._text)
 	end
 end)()
--- Tooltips: W:Explain on a widget, a plain frame and a text; the (i) glyph
+-- Tooltips: W:Explain on a widget, a plain frame and a text; the (i) glyph; tips on segmented and menu items; a
+-- list's empty hint behind a glyph
 ;(function()
 	local W = ns.Widgets
 	local function Tip() return _G.WantedTooltip end
@@ -6270,6 +6271,34 @@ end)()
 	Leave(glyph)
 	check(glyph.ring._vertexColor[4] == 0.3 and not Tip():IsShown(), "back at rest after")
 	check(W:InfoGlyph(holder, "Big", "x", 20)._w == 20, "a size can be given")
+	-- Segmented items take a tip
+	local control = W:Segmented(UIParent, { { key = "a", label = "One", tip = { "One", "The first." } }, { key = "b", label = "Two" } }, nil, 80)
+	Hover(control.buttons[1])
+	check(Tip():IsShown() and Tip().body._text == "The first.", "a segmented item's tip shows")
+	Leave(control.buttons[1])
+	Hover(control.buttons[2])
+	check(not Tip():IsShown(), "an item without one shows nothing")
+	-- Menu items take a tip, shown beside the menu
+	W:Menu({ { text = "Locked", disabled = true, tip = { "Locked", "Ask an officer." } }, { text = "Plain", onClick = function() end } })
+	local items = {}
+	for _, f in ipairs(Mock.created) do
+		if f._kind == "Button" and type(rawget(f, "def")) == "table" and f.def.text then items[f.def.text] = f end
+	end
+	Hover(items.Locked)
+	check(Tip():IsShown() and Tip().body._text == "Ask an officer." and Tip()._point[1] == "BOTTOMLEFT", "a menu item's tip shows, beside it")
+	Leave(items.Locked)
+	Hover(items.Plain)
+	check(not Tip():IsShown(), "a menu item without one shows nothing")
+	W:HideMenu()
+	-- A list's empty hint is a glyph after the empty text, not a line under it
+	local list = W:List(UIParent, 20, 3, function() end, function() end)
+	list:SetItems({}, "No bounties yet.", "Post one from the Board.")
+	check(list.emptyGlyph:IsShown() and list.emptyGlyph.tooltipTitle == "No bounties yet." and list.emptyGlyph.tooltipText == "Post one from the Board.",
+		"an empty list with a hint shows a glyph that explains it")
+	list:SetItems({}, "Nothing.")
+	check(not list.emptyGlyph:IsShown(), "no hint, no glyph")
+	list:SetItems({ 1 }, "Nothing.", "Hint.")
+	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.
@@ -11602,7 +11631,9 @@ end)()
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	db.duels = {}
 	ns.UI:Show("duels")
-	check(ns.UI:IsShown("duels") and OnScreen("Duel someone and it shows up here."), "with no duels the page says how to get one")
+	local function Explained(text) for _, f in ipairs(Mock.created) do if f._shown and rawget(f, "tooltipText") == text then return true end end return false end
+	check(ns.UI:IsShown("duels") and OnScreen("No duels yet.") and Explained("Duel someone and it shows up here."),
+		"with no duels the page says how to get one, on its (i)")
 	local function Duel(t, result, mySpec, them) return { id = "Test Player:duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
 		me = { class = "WARRIOR", spec = mySpec, talents = { 31, 20, 0 } }, them = them } end
 	local frost = { guid = "Player-1-0D0E1F00", class = "MAGE", spec = "Frost", name = "Duel Friend" }

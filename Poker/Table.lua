@@ -25,6 +25,7 @@ local private = {
 }
 local WIDTH, HEIGHT = 980, 560 -- the felt is 738 wide: room for the bets beside eight boxes (the grip scales the window)
 local HEADER = 26
+local HEADER_GAP, HEADER_PAD = 6, 10 -- the title bar's word buttons: apart, and their label's room each side
 local LOG_WIDTH = 220
 local ACTION_H = 58
 local DEFAULT_SCALE, MIN_SCALE, MAX_SCALE = 1.2, 0.7, 2 -- the whole table scales: dragged at its corner grip, kept in the saved window
@@ -672,6 +673,12 @@ function TableUI:ToggleSettings()
 	end
 end
 
+---Sets a title bar button's words and sizes it to them.
+function private.FitHeaderButton(button, text)
+	button:SetText(text)
+	button:SetWidth(ceil(button.label:GetStringWidth()) + 2 * HEADER_PAD)
+end
+
 function private.Build()
 	local frame = CreateFrame("Frame", "WantedPokerTableFrame", UIParent)
 	frame:SetSize(WIDTH, HEIGHT)
@@ -723,14 +730,17 @@ function private.Build()
 	local main = W:Button(header, "W", "ghost", 22, 22, function() Wanted.UI:Show("poker") end)
 	main:SetPoint("RIGHT", close, "LEFT", -2, 0)
 	W:AttachTooltip(main, "Open Wanted", "The Poker page: open tables and your seat.")
-	-- Wide enough for its longest label ("Close table" when hosting)
-	private.leave = W:Button(header, "Leave", "ghost", 84, 22, private.ConfirmLeave)
-	private.leave:SetPoint("RIGHT", main, "LEFT", -2, 0)
-	local report = W:Button(header, "Report a bug", "ghost", 96, 22, function() TableUI:ReportBug() end)
-	report:SetPoint("RIGHT", private.leave, "LEFT", -2, 0)
+	-- The words are chips, each as wide as its label and HEADER_GAP apart: as plain text 2 apart they ran together
+	-- ("Report a bugClose tableW")
+	private.leave = W:Button(header, "", "chip", 60, 22, private.ConfirmLeave)
+	private.leave:SetPoint("RIGHT", main, "LEFT", -HEADER_GAP, 0)
+	private.FitHeaderButton(private.leave, "Leave")
+	local report = W:Button(header, "", "chip", 96, 22, function() TableUI:ReportBug() end)
+	report:SetPoint("RIGHT", private.leave, "LEFT", -HEADER_GAP, 0)
+	private.FitHeaderButton(report, "Report a bug")
 	W:AttachTooltip(report, "Report a bug", "Say what went wrong and the report goes to the developers with the table's log.")
-	local options = W:Button(header, "...", "ghost", 22, 22, function() TableUI:ToggleSettings() end)
-	options:SetPoint("RIGHT", report, "LEFT", -2, 0)
+	local options = W:Button(header, "...", "chip", 28, 22, function() TableUI:ToggleSettings() end)
+	options:SetPoint("RIGHT", report, "LEFT", -HEADER_GAP, 0)
 	W:AttachTooltip(options, "Table settings", "Which sound plays for what, a four-colour deck, the felt, and whether the table opens on your turn.")
 
 	-- The felt, with its rail
@@ -1352,7 +1362,7 @@ function TableUI:Refresh(st)
 	local hand = st.hand
 	local playing = hand and hand.stage == "play" and hand.street ~= "done"
 	private.subtitle:SetText((cfg.title and cfg.title ~= "" and cfg.title or (Name(st.host).."'s table")).."  -  "..Chips(cfg.sb, cfg).."/"..Chips(cfg.bb, cfg).."  -  host "..Name(st.host))
-	private.leave:SetText(Net:HostedTable() and "Close table" or "Leave")
+	private.FitHeaderButton(private.leave, Net:HostedTable() and "Close table" or "Leave")
 	-- The clock for the player to act
 	if hand and hand.left and (playing or hand.stage == "commits" or hand.stage == "reveals") then
 		private.deadlineAt = GetTime() + hand.left
@@ -1666,7 +1676,7 @@ function TableUI:Refresh(st)
 	end
 	private.start:SetShown(tournament and not st.started and st.phase ~= "closed" and Net:HostedTable() ~= nil)
 	private.start:SetEnabled(seated >= Protocol.MIN_SEATS)
-	private.leave:SetText(Net:HostedTable() and (st.closing and "Keep open" or "Close table") or (tournament and st.started and st.phase ~= "finished" and mine and not mine.place and "Forfeit" or "Leave"))
+	private.FitHeaderButton(private.leave, Net:HostedTable() and (st.closing and "Keep open" or "Close table") or (tournament and st.started and st.phase ~= "finished" and mine and not mine.place and "Forfeit" or "Leave"))
 	-- The host closing after this hand: said once in the log, and to everyone else as a toast
 	if st.closing and not private.closingSaid then
 		private.closingSaid = true

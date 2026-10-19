@@ -13833,6 +13833,10 @@ end)()
 	check(ToBob("state").st.closing == true and parts.leave.label._text == "Keep open" and Logged("closing the table after this hand") and OnScreen("The table closes after this hand"), "Bob is told it closes after this hand; the host's button offers Keep open")
 	parts.leave._scripts.OnClick(parts.leave)
 	check(host.closing == nil and ToBob("state").st.closing == nil and parts.leave.label._text == "Close table", "Keep open: the table stays, and everyone hears")
+	-- The title bar's words are chips as wide as their label, so they don't run together
+	check(parts.leave._w >= parts.leave.label:GetStringWidth() + 20 and parts.leave._w <= parts.leave.label:GetStringWidth() + 21,
+		"Close table's chip fits its words: "..parts.leave._w)
+	check(parts.leave._point[1] == "RIGHT" and parts.leave._point[4] == -6, "6 from the W beside it")
 	parts.leave._scripts.OnClick(parts.leave)
 	ConfirmDialog()
 	clock = clock + P.PokerProtocol.SHOWDOWN_SECONDS + 1

@@ -6277,6 +6277,21 @@ end)()
 	check(ns.Captures:Settings().scale == 0.85, "the capture bar's size is saved")
 	ns.CapturesHUD:SetScale(1)
 
+	-- Menus and cog popups open at the size of what opened them
+	local opener = ns.Widgets:Button(UIParent, "Open", "secondary", 80, 24)
+	opener.GetEffectiveScale = function() return 1.3 end
+	ns.Widgets:Menu({ { text = "One", onClick = function() end } }, opener)
+	check(math.abs(_G.WantedMenu:GetScale() - 1.3) < 1e-9, "a menu opened from a window at 130% is at 130%: "..tostring(_G.WantedMenu:GetScale()))
+	ns.Widgets:Menu({ { text = "One", onClick = function() end } })
+	check(_G.WantedMenu:GetScale() == 1, "a menu at the cursor is at the screen's size")
+	_G.WantedMenu:Hide()
+	local optionRow = ns.Widgets:Row(UIParent, 400, "Option", ns.Widgets:Switch(UIParent))
+	local cog = ns.Widgets:Cog(optionRow, "Option", function() return 60 end)
+	cog.GetEffectiveScale = function() return 1.3 end
+	cog:Click()
+	check(cog.popup and math.abs(cog.popup:GetScale() - 1.3) < 1e-9, "and so is a cog's popup")
+	cog.popup:Hide()
+
 	ns.db.settings.uiScale, ns.db.settings.window = savedScale, savedWindow
 	frame:SetScale(Theme:ClampScale(savedScale))
 	UIParent._w, UIParent._h = realW, realH

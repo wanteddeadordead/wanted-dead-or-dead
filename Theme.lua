@@ -16,8 +16,14 @@ local C = {
 	input = { 0.035, 0.039, 0.047, 1 },
 	hover = { 1, 1, 1, 0.05 },
 	rowAlt = { 1, 1, 1, 0.018 },
-	border = { 0.176, 0.184, 0.216, 1 },
-	borderLight = { 0.26, 0.27, 0.31, 1 },
+	-- EllesmereUI's borders: white at a low alpha, so they sit on any felt
+	border = { 1, 1, 1, 0.07 },
+	borderLight = { 1, 1, 1, 0.15 },
+	-- EllesmereUI's fields (inputs, dropdowns, menus): a warm near-black, and a brighter edge under the mouse
+	field = { 0.103, 0.095, 0.088, 0.9 },
+	fieldHover = { 0.103, 0.095, 0.088, 0.98 },
+	fieldBorder = { 1, 1, 1, 0.2 },
+	fieldBorderHover = { 1, 1, 1, 0.3 },
 	text = { 0.925, 0.925, 0.945 },
 	muted = { 0.6, 0.62, 0.68 },
 	faint = { 0.4, 0.42, 0.47 },
@@ -99,8 +105,6 @@ function Theme:Apply(key)
 	Put("panelAlt", Tint(b, 0.26, 0.82))
 	Put("panelSolid", Tint(b, 0.16, 0.97))
 	Put("input", Tint(b, 0.06, 0.9))
-	Put("border", { 0.16 + b[1] * 0.25, 0.16 + b[2] * 0.25, 0.17 + b[3] * 0.25, 0.9 })
-	Put("borderLight", { 0.26 + b[1] * 0.3, 0.26 + b[2] * 0.3, 0.27 + b[3] * 0.3, 1 })
 	Put("accent", { a[1], a[2], a[3], 1 })
 	Put("accentHover", { min(1, a[1] * 1.12 + 0.04), min(1, a[2] * 1.12 + 0.04), min(1, a[3] * 1.12 + 0.04), 1 })
 	Put("accentDim", { a[1], a[2], a[3], 0.2 })

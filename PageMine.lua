@@ -55,7 +55,7 @@ UI:RegisterPage("mine", {
 		private.paidTile:SetPoint("LEFT", private.openTile, "RIGHT", 12, 0)
 		private.paidTile:SetWidth(tileWidth)
 
-		local segment = W:Segmented(container, {
+		local segment = W:Tabs(container, {
 			{ key = "posted", label = "Your live bounties" },
 			{ key = "history", label = "History" },
 			{ key = "record", label = "Your record" },

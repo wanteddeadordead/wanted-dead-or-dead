@@ -840,7 +840,7 @@ UI:RegisterPage("poker", {
 	build = function(container, width, height)
 		private.form = private.BuildForm(container, width)
 		private.seat = private.BuildSeatCard(container, width)
-		private.views = W:Segmented(container, { { key = "tables", label = "Open tables" }, { key = "settlement", label = "Settlement" } }, function(key)
+		private.views = W:Tabs(container, { { key = "tables", label = "Open tables" }, { key = "settlement", label = "Settlement" } }, function(key)
 			private.view = key
 			if key == "settlement" then Gold:AskForLines() end
 			private.Refresh()

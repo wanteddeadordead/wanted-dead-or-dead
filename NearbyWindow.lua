@@ -342,7 +342,7 @@ function private.Create()
 	W:AttachTooltip(clear, "Clear", "Empty the Nearby list. Enemies still around come back on their next sighting.")
 
 	-- View tabs
-	private.tabs = W:Segmented(frame, VIEWS, function(key)
+	private.tabs = W:Tabs(frame, VIEWS, function(key)
 		private.Settings().tab = key
 		Nearby:Refresh()
 	end, 64)

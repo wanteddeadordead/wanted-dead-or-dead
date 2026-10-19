@@ -47,9 +47,9 @@ local function NewMock(kind)
 	return setmetatable({ _scripts = {}, _shown = true, _text = "", _enabled = true, _w = 100, _h = 20, _kind = kind }, Mock)
 end
 Mock.created = {} -- every frame made, so tests can find one by its fields
--- Fields the tooltip helper reads before any are set: nil until then, as on a real frame
+-- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -98,7 +98,7 @@ end
 function Methods:SetFontObject(font) self._font = font end
 function Methods:SetWordWrap(wrap) self._wrap = wrap end
 function Methods:SetTexture(t) self._texture = t end
-function Methods:SetTextColor(r, g, b) self._textColor = { r, g, b } end
+function Methods:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a } end
 function Methods:GetFontObject() return self._font end
 function Methods:GetStringHeight() return 12 * (select(2, tostring(self._text):gsub("\n", "")) + 1) end
 function Methods:IsEnabled() return self._enabled end
@@ -155,6 +155,7 @@ function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
 function Methods:SetMotionScriptsWhileDisabled(v) self._motionWhileDisabled = v end
 function Methods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a } end
+function Methods:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
 function Methods:SetPoint(point, ...)
@@ -6298,6 +6299,92 @@ end)()
 	plainHit._scripts.OnEnter(plainHit)
 	check(not entered, "text on a frame that isn't clickable doesn't call its OnEnter")
 	plainHit._scripts.OnLeave(plainHit)
+end)()
+-- EllesmereUI's look on the widgets: segmented cells with round ends, page tabs, the
+-- dropdown and its menu, the slider's value box, the checkbox, the dialog and the fonts
+;(function()
+	local W, C = ns.Widgets, ns.Theme.C
+	-- Segmented: 28 px cells, round ends on the outer cells only, the chosen one in the accent
+	local control = W:Segmented(UIParent, { { key = "a", label = "Low" }, { key = "b", label = "Mid" }, { key = "c", label = "High" } }, nil, 80)
+	local first, middle, last = control.buttons[1], control.buttons[2], control.buttons[3]
+	check(control._h == 28 and first._h == 28, "segmented cells are 28 px high")
+	check(#first.caps == 2 and first.caps[1]._point[1] == "LEFT" and #last.caps == 2 and last.caps[1]._point[1] == "RIGHT" and middle.caps == nil,
+		"the end cells have round caps on their outer sides, the middle none")
+	check(first.caps[1]._texture:find("cap%-fill$") and first.caps[2]._texture:find("cap%-ring$"), "drawn from our own cap textures")
+	check(first._edges[3]._shown == false and first._edges[4]._shown ~= false, "the square edge gives way to the cap")
+	control:Select("b", true)
+	check(middle.label._textColor[1] == C.accent[1] and first.label._textColor[1] == 1, "the chosen cell's text is in the accent, the others white")
+	local single = W:Segmented(UIParent, { { key = "only", label = "Only" } }, nil, 80)
+	check(#single.buttons[1].caps == 4, "a single cell is round at both ends")
+	-- Page tabs keep the underline and stay square
+	local tabs = W:Tabs(UIParent, { { key = "a", label = "One" }, { key = "b", label = "Two" } }, nil, 80)
+	tabs:Select("b", true)
+	check(tabs.buttons[2].underline._shown and not tabs.buttons[1].underline._shown and tabs.buttons[1].caps == nil, "tabs underline the one shown, without caps")
+	-- The dropdown: the value without a "v", a chevron, and a menu at least as wide with the current choice in the accent
+	local picked
+	local choice = W:Choice(UIParent, 200, { { key = 1, label = "First" }, { key = 2, label = "Second" } }, function(key) picked = key end)
+	choice:SetChoice(2)
+	check(choice._h == 28 and choice.label._text == "Second" and choice.chevron._texture:find("chevron$"), "a dropdown shows its value and our chevron")
+	choice:Click()
+	local menu = _G.WantedMenu
+	check(menu and menu._w >= 200, "its menu is at least as wide as the field: "..tostring(menu and menu._w))
+	local second
+	for _, item in ipairs(menu.items) do if rawget(item, "def") and item.def.text == "Second" then second = item end end
+	check(second and second.label._textColor[1] == C.accent[1] and second.rest == 0.04 and second._h == 28, "the current choice is marked, rows 28 px")
+	local inSpecial = false
+	for _, name in ipairs(UISpecialFrames) do if name == "WantedMenu" then inSpecial = true end end
+	check(inSpecial, "Escape closes the menu")
+	second:Click()
+	check(picked == 2, "choosing from it calls back")
+	-- The slider's value box: a typed number is kept in range and on a step, Escape puts the value back
+	local got
+	local slider = W:Slider(UIParent, "Size", 200, 10, 100, 5, function(v) return v.."%" end, function(v) got = v end)
+	local s = slider.slider
+	s.SetValue = function(self, v) self._value = v self._scripts.OnValueChanged(self, v) end
+	s.GetValue = function(self) return self._value or 10 end
+	slider:SetValue(50)
+	check(slider.box._text == "50%" and got == nil, "SetValue shows the value in the box without calling back")
+	slider.box:SetText("73")
+	slider.box._scripts.OnEnterPressed(slider.box)
+	check(got == 75 and slider.box._text == "75%", "a typed number snaps to the step and applies: "..tostring(got))
+	slider.box:SetText("500")
+	slider.box._scripts.OnEnterPressed(slider.box)
+	check(got == 100, "and stays in range: "..tostring(got))
+	slider.box:SetText("abc")
+	slider.box._scripts.OnEscapePressed(slider.box)
+	check(slider.box._text == "100%", "Escape puts the value back")
+	-- The checkbox: an 18 px box, its edge brighter when checked
+	local toggle = W:Toggle(UIParent, "Sound", nil)
+	check(toggle.box._w == 18, "the checkbox is 18 px")
+	check(toggle.box._edges[1]._color[4] == 0.05, "its edge faint unchecked")
+	toggle:SetChecked(true)
+	check(toggle.box._edges[1]._color[4] == 0.15 and toggle.check._shown and toggle.label._textColor[4] == 1, "brighter when checked, filled, its label white")
+	-- A disabled button fades to 30% white
+	local button = W:Button(UIParent, "Go", "primary", 80, 26)
+	button:Disable()
+	button._scripts.OnDisable(button)
+	check(button.label._textColor[1] == 1 and button.label._textColor[4] == 0.3 and button._edges[1]._color[4] == 0.12,
+		"a disabled button's text at 30% white, its edge at 12%")
+	-- Section headers: 41% white, a line under them when given a width
+	local header = W:SectionLabel(UIParent, "Alerts", 300)
+	check(header._text == "ALERTS" and header._textColor[4] == 0.41 and header.rule and header.rule._w == 300, "a section header with its rule")
+	check(rawget(W:SectionLabel(UIParent, "Plain"), "rule") == nil, "and none without a width")
+	-- The dialog: 390 wide, its buttons side by side about its centre
+	W:Dialog({ title = "Sure?", text = "It can't be undone." })
+	local dialogFrame = _G.WantedDialog.frame
+	check(dialogFrame._w == 390, "a dialog is 390 wide: "..tostring(dialogFrame._w))
+	check(dialogFrame.cancel._point[1] == "BOTTOMRIGHT" and dialogFrame.cancel._point[3] == "BOTTOM" and dialogFrame.confirm._point[1] == "BOTTOMLEFT"
+		and dialogFrame.confirm._point[3] == "BOTTOM", "with Cancel and OK either side of its centre")
+	dialogFrame.cancel:Click()
+	-- Fonts: Barlow Semi Condensed for Latin, the client's Friz Quadrata for Cyrillic
+	local members
+	CreateFontFamily = function(_, list) members = list return CreateFont() end
+	ns.Theme:MakeFont("WantedTestFont", 12, nil, nil, "semibold")
+	CreateFontFamily = nil
+	local files = {}
+	for _, m in ipairs(members) do files[m.alphabet] = m.file end
+	check(files.roman:find("Media\\fonts\\BarlowSemiCondensed%-SemiBold%.ttf$") and files.russian == "Fonts\\FRIZQT___CYR.TTF",
+		"the font family: Barlow for Latin, Friz Quadrata for Cyrillic: "..tostring(files.roman))
 end)()
 -- In any instance Wanted reads no other unit: in a dungeon a mind-controlled party member is a hostile player whose
 -- identity is secret, and asking about them fails. Every unit event and hook passes over them without a call.

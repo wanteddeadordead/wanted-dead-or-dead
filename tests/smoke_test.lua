@@ -17991,6 +17991,13 @@ end
 	check(OnScreen("A race") and OnScreen("+14") and OnScreen("A bounty"), "recent movements of the purse")
 	local slider
 	for _, f in ipairs(Mock.created) do if rawget(f, "slider") and rawget(f, "box") and f._shown and f._parent and f._parent._shown and rawget(f._parent, "taxLabel") then slider = f end end
+	local nextTax = GuildWarsSample(clock)
+	nextTax.guilds["42"].taxNext, nextTax.guilds["42"].taxFrom = 15, clock + 3600
+	G:Take(nextTax)
+	ns.UI:Refresh()
+	check(OnScreen("15% from tomorrow") and OnScreen("10%"), "a tax saved today: the tax now, and the new one from tomorrow")
+	G:Take(GuildWarsSample(clock))
+	ns.UI:Refresh()
 	check(slider and slider._alpha == 0.6, "the tax slider: only the guild master moves it")
 	game.SetLeader(true)
 	ns.UI:Refresh()

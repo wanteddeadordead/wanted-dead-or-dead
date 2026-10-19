@@ -143,7 +143,9 @@ function private.Refresh()
 		tiles.treasury.note:SetText(tonumber(guild.staked) and guild.staked > 0 and (private.Count(guild.staked).." held as a stake") or "")
 		local pending = GuildWars:Pending("tax")
 		tiles.tax.value:SetText((pending and pending.data.percent or tonumber(guild.tax) or 0).."%")
-		tiles.tax.note:SetText(pending and "sent; waiting for the site" or "set by the guild master")
+		-- A tax saved today applies from midnight Eastern: said so, or the guild master thinks the save failed
+		local nextTax = tonumber(guild.taxNext)
+		tiles.tax.note:SetText(pending and "sent; waiting for the site" or nextTax and format("%d%% from tomorrow", nextTax) or "set by the guild master")
 	end
 	-- Today, by source
 	local today = private.today

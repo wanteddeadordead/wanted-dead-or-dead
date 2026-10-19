@@ -6303,7 +6303,16 @@ end)()
 	frame.GetLeft = function(self) return self._scale == 1 and 400 or nil end
 	frame.GetTop = function(self) return self._scale == 1 and 847.5 or nil end
 	ns.UI:SetScale(1.5)
-	check(frame:GetScale() == 1.5 and ns.db.settings.uiScale == 1.5, "UI size 150% sizes the window and is saved")
+	-- Never larger than the screen has room for: at 150% it ran off the bottom, and with it the slider to undo it
+	check(frame:GetScale() == 1.1 and ns.db.settings.uiScale == 1.1, "UI size 150% on a 900-high screen: as large as fits on the slider's steps (110%), and that is saved: "..frame:GetScale())
+	frame:SetScale(1)
+	ns.UI:SetScale(0.8)
+	check(frame:GetScale() == 0.8, "smaller sizes are as asked")
+	frame:SetScale(1)
+	frame.GetLeft = function(self) return self._scale == 1 and 400 or nil end
+	frame.GetTop = function(self) return self._scale == 1 and 847.5 or nil end
+	-- A frame taller than the screen (Theme:SetFrameScale, as the Nearby window can be)
+	ns.db.settings.window = ns.Theme:SetFrameScale(frame, 1.5)
 	local saved = ns.db.settings.window
 	check(saved and saved.point == "TOPLEFT" and math.abs(saved.y) < 1e-9, "a window taller than the screen goes to its top: "..tostring(saved and saved.y))
 	check(math.abs(saved.x * 1.5 - (945 - 1090 * 1.5 / 2)) < 1e-6, "and keeps its centre across: "..saved.x)
@@ -6316,8 +6325,10 @@ end)()
 	saved = ns.db.settings.window
 	check(math.abs(saved.x * 0.8 - (500 + 1090 * 0.1)) < 1e-6 and math.abs(saved.y * 0.8 - (850 - 795 * 0.1 - 900)) < 1e-6,
 		"a smaller window keeps its centre: "..saved.x..", "..saved.y)
+	-- From here a screen with room for 150%
+	UIParent._h = 1400
 	ns.UI:SetScale(9)
-	check(ns.db.settings.uiScale == 1.5, "a size past 150% saves as 150%")
+	check(ns.db.settings.uiScale == 1.5, "a size past 150% saves as 150% on a screen with room for it")
 	frame.GetLeft, frame.GetTop = nil, nil
 
 	-- The Settings slider: a typed size applies at once; a drag waits for the thumb to be let go
@@ -17338,6 +17349,44 @@ end)()
 	local tile = W:StatTile(UIParent, "Season", ns.Theme.C.gold)
 	local over = W:Explain(tile, "Season", "Its days left.")
 	check(over._kind == "Button" and over._parent == tile and tile.explainHit == over, "a stat tile's tooltip is on a Button the controller reaches")
+end)()
+-- From the review of the UI size and theme work: a dialog over a sized window takes its size; the Nearby title keeps
+-- to the room beside its buttons
+;(function()
+	local W = ns.Widgets
+	if _G.WantedDialog and _G.WantedDialog:IsShown() then _G.WantedDialog:Hide() end
+	ns.UI:Show("board")
+	local window = ns.UI:GetFrame()
+	local realScale = window.GetEffectiveScale
+	window.GetEffectiveScale = function() return 1.25 end
+	W:Dialog({ title = "Sure?", text = "x" })
+	check(_G.WantedDialog:GetScale() == 1.25, "a dialog over the window is the window's size: "..tostring(_G.WantedDialog:GetScale()))
+	_G.WantedDialog.frame.cancel:Click()
+	window.GetEffectiveScale = realScale
+	ns.UI:GetFrame():Hide()
+	W:Dialog({ title = "Alone", text = "x" })
+	check(_G.WantedDialog:GetScale() == 1, "with no window under it, the dialog is UIParent's size")
+	_G.WantedDialog.frame.cancel:Click()
+	RunTimers()
+	-- The Nearby title: the view's name and count when they fit, the count alone when they don't
+	local title
+	for _, fs in ipairs(Mock.fontStrings) do
+		if type(fs._text) == "string" and fs._parent and fs._parent._parent == _G.WantedNearbyFrame and rawget(fs, "fitWidth") then title = fs end
+	end
+	check(title, "the Nearby window's title is fitted to its room")
+	-- On the Last hour tab, whose title names its view
+	local nearbySettings = ns.db.settings.detect
+	local realTab = nearbySettings.tab
+	nearbySettings.tab = "hour"
+	title._w = 30
+	ns.NearbyWindow:Refresh()
+	local function Plain(t) return (tostring(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+	check(not Plain(title._text):find("%a"), "squeezed: the count alone, got "..Plain(title._text))
+	title._w = 200
+	ns.NearbyWindow:Refresh()
+	check(Plain(title._text):find("%a"), "with room: the view's name too, got "..Plain(title._text))
+	nearbySettings.tab = realTab
+	ns.NearbyWindow:Refresh()
 end)()
 print("wanted smoke: setup checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -96,7 +96,7 @@ function private.Create()
 	f.status:SetPoint("RIGHT", -14, 0)
 
 	-- Each wide enough for its longest label ("On your Kill on Sight" once added)
-	f.kos = W:Button(f, "Kill on Sight", "primary", 140, 26, function() private.AddKoS() end)
+	f.kos = W:Button(f, "Kill on Sight", "primary", 134, 26, function() private.AddKoS() end)
 	f.kos:SetPoint("BOTTOMLEFT", 14, 12)
 	f.post = W:Button(f, "Post a bounty", "secondary", 104, 26, function() private.PostBounty() end)
 	f.post:SetPoint("LEFT", f.kos, "RIGHT", 6, 0)

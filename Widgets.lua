@@ -1204,6 +1204,8 @@ function W:Dialog(options)
 		return
 	end
 	local frame = dialog.frame
+	-- At the size of the window it's over (Settings: UI size)
+	dialog:SetScale(host and host:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1)
 	dialog:ClearAllPoints()
 	frame:ClearAllPoints()
 	if host then

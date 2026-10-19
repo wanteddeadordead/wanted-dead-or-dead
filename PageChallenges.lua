@@ -19,6 +19,8 @@ local WEEK_HEIGHT = 36 + 3 * WEEK_ROW
 local RECENT_TOP = WEEK_TOP - WEEK_HEIGHT - GAP
 local RECENT_ROWS = 3
 local RECENT_HEIGHT = 34 + RECENT_ROWS * 18
+local EMPTY_HEIGHT = 74 -- the panel without the app's data: its title and button, what the app adds behind its (i)
+local WEEK_END = "Ends Sunday 11:59 PM ET."
 
 ---"6h 40m", "40m" or "2d 5h".
 function private.Duration(seconds)
@@ -115,6 +117,9 @@ function private.BuildWeek(container)
 	card:SetSize(LEFT_WIDTH, WEEK_HEIGHT)
 	local label = W:SectionLabel(card, "This week")
 	label:SetPoint("TOPLEFT", 16, -14)
+	-- What counts, and the points, behind an (i)
+	private.rules = W:InfoGlyph(card, "Rules", function() return private.Rules(Challenges:Get()) end)
+	private.rules:SetPoint("LEFT", label, "RIGHT", 6, 0)
 	card.ends = Theme:Text(card, "tiny", "")
 	card.ends:SetPoint("TOPRIGHT", -16, -14)
 	card.ends:SetJustifyH("RIGHT")
@@ -172,7 +177,7 @@ function private.BuildRecent(container)
 		row.points:SetJustifyH("RIGHT")
 		card.rows[i] = row
 	end
-	card.none = Theme:Text(card, "small", "Nothing finished yet. Your completions show here.", C.faint)
+	card.none = Theme:Text(card, "small", "None yet", C.faint)
 	card.none:SetPoint("TOPLEFT", 16, -32)
 	private.recent = card
 end
@@ -189,6 +194,7 @@ function private.BuildScore(container, width, height)
 	card.label:SetPoint("TOPLEFT", 16, -14)
 	card.score = Theme:Text(card, "stat", "")
 	card.score:SetPoint("TOPLEFT", 16, -34)
+	W:Explain(card.score, "Challenge points", "For fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's.")
 	card.resets = Theme:Text(card, "small", "")
 	card.resets:SetPoint("TOPLEFT", 16, -62)
 	card.resets:SetWidth(inner)
@@ -214,31 +220,24 @@ function private.BuildScore(container, width, height)
 	card.boards:SetPoint("TOPLEFT", 16, -212)
 	card.boards:SetWidth(inner)
 	card.inner = inner
-	local foot = Theme:Text(card, "tiny", "Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's.", C.faint)
-	foot:SetPoint("BOTTOMLEFT", 16, 50)
-	foot:SetWidth(inner)
-	foot:SetWordWrap(true)
 	local rankButton = W:Button(card, "Your PvP rank", "secondary", inner, 26, function() UI:Show("rank") end)
 	rankButton:SetPoint("BOTTOMLEFT", 16, 14)
 	private.score = card
 end
 
+---Without the app's data: get or update the app (how, on the button), and what the site does behind an (i).
 function private.BuildEmpty(container, width)
 	local panel = W:Card(container)
 	panel:SetPoint("TOPLEFT")
-	panel:SetSize(width, 210)
+	panel:SetSize(width, EMPTY_HEIGHT)
 	panel.title = Theme:Text(panel, "title", "")
-	panel.title:SetPoint("TOPLEFT", 24, -26)
-	panel.line = Theme:Text(panel, "body", "", C.amber)
-	panel.line:SetPoint("TOPLEFT", 24, -52)
-	panel.line:SetWidth(width - 48)
-	local about = Theme:Text(panel, "body", "wanteddeadordead.com sets a daily challenge, three weekly ones and today's hot zones, counts your kills toward them, and gives each character a rank. The app brings it all here when you log in.", C.muted)
-	about:SetPoint("TOPLEFT", 24, -78)
-	about:SetWidth(width - 48)
-	about:SetWordWrap(true)
-	about:SetSpacing(3)
+	panel.title:SetPoint("LEFT", 24, 0)
+	panel.title:SetWidth(width - 48 - 140 - 40)
+	panel.title:SetWordWrap(false)
+	panel.glyph = W:InfoGlyph(panel, "Challenges", "wanteddeadordead.com sets a daily challenge, three weekly ones and today's hot "
+		.."zones, and counts your kills toward them for a weekly score. The app brings it all here when you log in.")
 	panel.button = W:Button(panel, "", "primary", 140, 30, function() UI:Show("web") end)
-	panel.button:SetPoint("BOTTOMLEFT", 24, 24)
+	panel.button:SetPoint("RIGHT", -24, 0)
 	private.empty = panel
 end
 
@@ -271,7 +270,8 @@ function private.RefreshDaily(data, mine)
 		card.name:SetText(Challenges:IsDayOver() and "A new day" or "No challenge today")
 		card.name:SetTextColor(C.text[1], C.text[2], C.text[3])
 		card.points:Hide()
-		card.text:SetText(Challenges:IsDayOver() and "Today's challenge comes with the app's next update." or "")
+		card.text:SetText(Challenges:IsDayOver() and "Waiting for the app" or "")
+		W:Explain(card.text, Challenges:IsDayOver() and "A new day" or nil, "Today's challenge comes with the app's next update.")
 		card.resets:SetText("")
 		private.SetProgress(card.bar, card.progress, nil, nil)
 		return
@@ -282,6 +282,7 @@ function private.RefreshDaily(data, mine)
 	card.name:SetTextColor(color[1], color[2], color[3])
 	card.points:Set("+"..daily.points.." pts", C.gold)
 	private.Fit(card.text, { daily.text or "" }, "tiny", true)
+	W:Explain(card.text, nil)
 	card.resets:SetText(data.dayEnds and ("resets in "..private.Duration(data.dayEnds - GetServerTime())) or "")
 	private.SetProgress(card.bar, card.progress, daily, mine and mine.daily)
 end
@@ -311,9 +312,11 @@ function private.RefreshWeek(data, mine)
 	local card = private.week
 	local weekOver = Challenges:IsWeekOver()
 	if weekOver then
-		card.ends:SetText("the new week's come with the app's next update")
+		card.ends:SetText("waiting for the app")
+		W:Explain(card.ends, "A new week", "This week's challenges come with the app's next update.")
 	else
-		card.ends:SetText(data.weekEnds and ("ends Sunday 11:59 PM ET, "..Theme:Left(data.weekEnds - GetServerTime())) or "")
+		card.ends:SetText(data.weekEnds and Theme:Left(data.weekEnds - GetServerTime()) or "")
+		W:Explain(card.ends, "This week", WEEK_END)
 	end
 	for i, row in ipairs(card.rows) do
 		local challenge = not weekOver and data.weekly[i]
@@ -339,11 +342,7 @@ function private.RefreshRecent(mine)
 	local card = private.recent
 	local recent = mine and mine.recent or {}
 	card.none:SetShown(#recent == 0)
-	if not mine then
-		card.none:SetText("Link this character in the app to track its challenges.")
-	else
-		card.none:SetText("Nothing finished yet. Your completions show here.")
-	end
+	card.none:SetText(mine and "None yet" or Theme:Colorize("Not linked", C.amber))
 	for i, row in ipairs(card.rows) do
 		local r = recent[i]
 		row.when:SetText(r and private.When(r.at) or "")
@@ -390,7 +389,8 @@ function private.RefreshScore(data, mine)
 	private.RefreshAchievements(card)
 	if not mine then
 		card.score:SetText("")
-		card.resets:SetText("This character isn't linked to the app yet.")
+		card.resets:SetText(Theme:Colorize("Not linked", C.amber))
+		W:Explain(card.resets, "Not linked", "Link this character in the Wanted app to track its challenges.")
 		card.streak:SetText("")
 		card.weekly:SetText("")
 		card.bonus:SetText("")
@@ -399,8 +399,10 @@ function private.RefreshScore(data, mine)
 	end
 	card.score:SetText(format("%d point%s", mine.week, mine.week == 1 and "" or "s"))
 	local left = data.weekEnds and data.weekEnds - GetServerTime()
-	card.resets:SetText(left and left > 0 and "Resets Sunday, in "..private.Duration(left) or "Resets Sunday")
-	card.streak:SetText(mine.streak > 0 and format("%d day%s in a row", mine.streak, mine.streak == 1 and "" or "s") or "No streak yet: a daily starts one")
+	card.resets:SetText(left and left > 0 and "Resets in "..private.Duration(left) or "Resets Sunday")
+	W:Explain(card.resets, "This week", WEEK_END)
+	card.streak:SetText(mine.streak > 0 and format("%d day%s in a row", mine.streak, mine.streak == 1 and "" or "s") or "No streak")
+	W:Explain(card.streak, mine.streak == 0 and "No streak" or nil, "Finish a daily challenge to start a streak.")
 	local done = 0
 	for i in ipairs(data.weekly) do
 		done = done + (mine.weekly[i] and mine.weekly[i].done and 1 or 0)
@@ -411,19 +413,20 @@ function private.RefreshScore(data, mine)
 	card.total:SetText(format("%s points in all", BreakUpLargeNumbers and BreakUpLargeNumbers(mine.points) or tostring(mine.points)))
 end
 
-function private.RefreshRules(data)
+---What counts as a kill, and the points, for the Rules (i).
+function private.Rules(data)
 	local points = {}
-	if data.daily then
-		tinsert(points, "daily "..data.daily.points)
+	if data and data.daily then
+		tinsert(points, "Daily: "..data.daily.points)
 	end
-	if data.weekly[1] then
-		tinsert(points, "weekly "..data.weekly[1].points)
+	if data and data.weekly[1] then
+		tinsert(points, "Weekly: "..data.weekly[1].points)
 	end
-	if data.allThreeBonus and data.allThreeBonus > 0 then
-		tinsert(points, "all three in a week +"..data.allThreeBonus)
+	if data and data.allThreeBonus and data.allThreeBonus > 0 then
+		tinsert(points, "All three in a week: +"..data.allThreeBonus)
 	end
-	private.rules:SetText("Rules: a kill counts when your app logged it or another player confirmed it. World PvP only; kills on players 10 or more levels below you never count."
-		..(#points > 0 and (" Points: "..table.concat(points, ", ")..".") or ""))
+	return "A kill counts when your app logged it or another player confirmed it. World PvP only; kills on players 10 or more "
+		.."levels below you never count."..(#points > 0 and ("\n\nPoints\n"..table.concat(points, "\n")) or "")
 end
 
 function private.Refresh()
@@ -434,12 +437,15 @@ function private.Refresh()
 	local shown = data ~= nil
 	private.empty:SetShown(not shown)
 	if not shown then
-		local title, line, button = Challenges:EmptyText()
-		private.empty.title:SetText(title)
-		private.empty.line:SetText(line)
-		private.empty.button:SetText(button)
+		local title, tip, button = Challenges:EmptyText()
+		local empty = private.empty
+		empty.title:SetText(title)
+		empty.glyph:ClearAllPoints()
+		empty.glyph:SetPoint("LEFT", empty.title, "LEFT", min(empty.title:GetStringWidth(), empty.title:GetWidth()) + 8, 0)
+		empty.button:SetText(button)
+		W:Explain(empty.button, button, tip)
 	end
-	for _, part in ipairs({ private.daily, private.hot, private.week, private.recent, private.score, private.rules }) do
+	for _, part in ipairs({ private.daily, private.hot, private.week, private.recent, private.score }) do
 		part:SetShown(shown)
 	end
 	if not shown then
@@ -451,7 +457,6 @@ function private.Refresh()
 	private.RefreshWeek(data, mine)
 	private.RefreshRecent(mine)
 	private.RefreshScore(data, mine)
-	private.RefreshRules(data)
 end
 
 ---Your badges as marks: an achievement's key, a medal's key and count (a medal won again is new again). Playstyle badges
@@ -468,7 +473,6 @@ end
 
 UI:RegisterPage("challenges", {
 	title = "Challenges",
-	subtitle = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double.",
 	group = "World PvP",
 	order = 4,
 	-- Badges (achievements and medals) not looked at yet; their count shows over this week's challenges
@@ -494,11 +498,6 @@ UI:RegisterPage("challenges", {
 		private.BuildWeek(container)
 		private.BuildRecent(container)
 		private.BuildScore(container, width, height)
-		private.rules = Theme:Text(container, "tiny", "", C.faint)
-		private.rules:SetPoint("TOPLEFT", 0, RECENT_TOP - RECENT_HEIGHT - 10)
-		private.rules:SetWidth(LEFT_WIDTH)
-		private.rules:SetWordWrap(true)
-		private.rules:SetSpacing(2)
 	end,
 	refresh = private.Refresh,
 })

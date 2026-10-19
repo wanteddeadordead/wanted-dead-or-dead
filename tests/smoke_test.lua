@@ -1371,6 +1371,16 @@ local all = table.concat(details, "\n")
 check(all:find("By Grix Tallowbane |T", 1, true) and all:find("By Maribel Stonehollow |T", 1, true), "posters carry stars on their rows")
 check(all:find("Vorn Ashgrip |T", 1, true) and all:find("Kaelen Duskbrand |T", 1, true), "hunters carry stars on their claims")
 for _, key in ipairs({ "board", "mine", "hunters" }) do ns.UI:Show(key) end
+-- What each leaderboard ranks by is its button's tooltip, not a subtitle
+do
+	local ranks = {}
+	for _, f in ipairs(Mock.created) do
+		local title = rawget(f, "tooltipTitle")
+		if (title == "Bounty hunters" or title == "Posters" or title == "Guilds") and type(rawget(f, "tooltipText")) == "string" then ranks[title] = f.tooltipText end
+	end
+	check(ranks["Bounty hunters"] and ranks["Bounty hunters"]:find("witnessed kills and confirmed claims", 1, true) and ranks.Posters:find("bounties paid", 1, true)
+		and ranks.Guilds:find("last 3 days", 1, true), "each leaderboard says what it ranks by on hover")
+end
 -- Advice for each record
 local meaning, advice = R:GetPosterAdvice(R:GetTally("Grix Tallowbane"))
 check(meaning:find("as many claims unpaid") and advice:find("Pay your 2 unpaid claims"), "Grix is told to pay his 2 unpaid claims")
@@ -5352,6 +5362,21 @@ end)()
 	end
 	check(Shown("1/4"), "the Challenges menu item shows 1/4 done")
 	check(not Shown("Get the Wanted app to track challenges") and not Shown("Update the Wanted app to track challenges"), "the empty state is hidden with challenges")
+	-- The rules, the points and the week's end are on hover, not on the page
+	ns.UI:Show("challenges")
+	local function TipOf(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return type(f.tooltipText) == "function" and f.tooltipText() or f.tooltipText end
+			end
+		end
+	end
+	check(TipOf("Rules") and TipOf("Rules"):find("World PvP only", 1, true) and TipOf("Rules"):find("All three in a week: +15", 1, true), "the rules and points behind the week card's (i)")
+	check(TipOf("Challenge points") and TipOf("Challenge points"):find("make no rank", 1, true) and not Shown("Challenge points are for fun and the weekly boards: they reset each Sunday and make no rank. Your PvP rank is Blizzard's."),
+		"the score explains itself on hover")
+	check(TipOf("This week") == "Ends Sunday 11:59 PM ET." and Shown("4 days in a row"), "when the week ends is on hover")
 
 	-- A later catch-up: the daily done is announced once (challenges have no ranks to announce)
 	local later = Sample({ t = clock })
@@ -5382,8 +5407,14 @@ end)()
 	check(Challenges:Get() == nil and Challenges:CountDone() == nil, "no challenges without the app's")
 	ns.UI:Show("home")
 	ns.UI:Show("challenges")
-	check(Shown("Update the Wanted app to track challenges") and Shown("Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app.")
-		and not Shown("Get the Wanted app to track challenges"), "an app catch-up without challenges: update the app")
+	-- What to do is the button's tooltip
+	local function ButtonTip(label)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == label and f._shown and f._parent and f._parent._shown then return f.tooltipText end
+		end
+	end
+	check(Shown("Update the Wanted app to track challenges") and ButtonTip("Update the app") == "Already updated it? Type /reload to load your challenges. Otherwise open the app and it updates itself, or download 0.2.27 from wanteddeadordead.com/app."
+		and not Shown("Get the Wanted app to track challenges") and not Shown(ButtonTip("Update the app")), "an app catch-up without challenges: update the app, how on the button")
 	ns.UI:Show("home")
 	check(Shown("Update the Wanted app to track challenges") and Shown("Update the app"), "Home says update the app too")
 	-- No catch-up for this account and no app version: get the app, on both pages
@@ -5394,7 +5425,7 @@ end)()
 	ns.UI:Refresh()
 	check(Shown("Get the Wanted app to track challenges") and Shown("Get the app") and not Shown("Update the Wanted app to track challenges"), "no app: get the app on Home")
 	ns.UI:Show("challenges")
-	check(Shown("Get the Wanted app to track challenges") and Shown("Download it for Windows or Mac from wanteddeadordead.com/app."), "no app: get the app on Challenges")
+	check(Shown("Get the Wanted app to track challenges") and ButtonTip("Get the app") == "Download it for Windows or Mac from wanteddeadordead.com/app.", "no app: get the app on Challenges, where on the button")
 	-- Every page that needs the app says so: the calling card can't be saved without it (Home and Challenges already do)
 	ns.UI:Show("card")
 	check(Shown("Saving a calling card needs the Wanted app on this computer. Get it at wanteddeadordead.com/app, start it, then /reload. It brings your unlocks from wanteddeadordead.com and sends your card up."),
@@ -5956,7 +5987,12 @@ end)()
 	check(opened, "the page asks the game for its calendar")
 	check(Shown("Season 1") and Shown("Rank 6 of 14") and Shown("Wanted Season 1"), "the tiles show both seasons and the week's cap")
 	check(Shown("Darkmoon Faire"), "the holiday is on the grid")
-	check(Shown("Battleground weekends start with launch, Nov 4."), "saying when they start")
+	local bgTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Battleground weekends" and rawget(f, "explainedText") and f.explainedText._shown then bgTip = f.tooltipText end
+	end
+	check(not Shown("Battleground weekends start with launch, Nov 4.") and bgTip == "They start with launch, Nov 4.", "saying when they start, on their legend line")
+	check(not Shown("Arena seasons: not on WoW Forever yet."), "no note about arenas, which nothing on the page suggests")
 	-- The calendar is a tab of Progress (Challenges | Leaderboards | Calendar | Rank | Gear), no menu entry of its own
 	local function Count(text)
 		local n = 0
@@ -6624,12 +6660,24 @@ end)()
 	check(Shown("Rank 11  Commander") and Shown("Black War Mounts"), "the next rank and what it unlocks")
 	check(Shown("Lieutenant Commander  (10)") or Shown("Lieutenant Commander"), "your rank's title on its tile, fitted to it")
 	check(Shown("You") and Shown("capped"), "your rank, and the ranks above this week's cap")
+	local cappedTip, vendorGlyph
+	for _, f in ipairs(Mock.created) do
+		local body = rawget(f, "tooltipText")
+		if type(body) == "string" and body:find("Capped: above this week's cap", 1, true) and f._shown then cappedTip = body end
+		if rawget(f, "tooltipTitle") == "Rank vendors" and f._shown then vendorGlyph = f end
+	end
+	check(cappedTip and not Shown("capped: above this week's cap"), "what capped means is on each capped rank's tooltip, not a note")
+	check(vendorGlyph, "where the rank vendors are is behind the Next card's (i)")
 	check(Shown("7"), "your Alterac Valley marks")
 	-- Before a season: no rank
 	C_MajorFactions.GetMajorFactionProgressionInfo = function() return { renownLevel = 0, renownReputationEarned = 0, renownLevelThreshold = 750,
 		currentWeekProgressiveMaxLevel = 0, maxLevel = 14, weekNumber = -1 } end
 	ns.UI:Refresh(true)
-	check(Shown("No rank yet") and Shown("Ranks start with the PvP season."), "no rank before the season")
+	local seasonTip
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "No season yet" and rawget(f, "explainedText") and f.explainedText._shown then seasonTip = f.tooltipText end
+	end
+	check(Shown("No rank yet") and Shown("No season yet") and seasonTip == "Ranks start with the PvP season.", "no rank before the season: a label, the why on hover")
 	C_MajorFactions, C_CurrencyInfo, GetItemCount, UnitFactionGroup = realFactions, realCurrency, realCount, realSide
 end)()
 -- The gear catalogue, from a rank vendor's real stock (Lady Palanseer, Brave Stonehide, Sergeant Thunderhorn,
@@ -11583,8 +11631,9 @@ end)()
 	db.duels = {}
 	ns.UI:Show("duels")
 	local function Explained(text) for _, f in ipairs(Mock.created) do if f._shown and rawget(f, "tooltipText") == text then return true end end return false end
-	check(ns.UI:IsShown("duels") and OnScreen("No duels yet.") and Explained("Duel someone and it shows up here."),
-		"with no duels the page says how to get one, on its (i)")
+	check(ns.UI:IsShown("duels") and OnScreen("No duels yet.") and not OnScreen("Duel someone and it shows up here.") and not OnScreen("Duels never count as kills"),
+		"with no duels the page says so, and no more")
+	check(Explained("Duels never count as kills."), "that duels never count as kills is the record tile's tooltip")
 	local function Duel(t, result, mySpec, them) return { id = "Test Player:duel:"..t, startAt = t, endAt = t + 30, length = 30, result = result, zone = "Durotar",
 		me = { class = "WARRIOR", spec = mySpec, talents = { 31, 20, 0 } }, them = them } end
 	local frost = { guid = "Player-1-0D0E1F00", class = "MAGE", spec = "Frost", name = "Duel Friend" }
@@ -11699,27 +11748,33 @@ end)()
 	local keptAppInfo = WantedAppInfo
 	WantedAppInfo = nil
 	ns.UI:Show("duels")
-	check(Duels:AppState() == "none" and OnScreen("Fight cards need the free Wanted app: wanteddeadordead.com/app"), "no app: the tab says fight cards need it")
+	local function TipOf(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and f._shown and (not rawget(f, "explainedText") or f.explainedText._shown) then return f.tooltipText end
+		end
+	end
+	check(Duels:AppState() == "none" and OnScreen("Needs the Wanted app") and TipOf("Needs the Wanted app") == "Fight cards need the free Wanted app: wanteddeadordead.com/app", "no app: the tab says fight cards need it, where to get it on hover")
 	WantedAppInfo = { running = "0.2.41", seen = GetServerTime() }
 	ns.UI:Show("duels")
-	check(Duels:AppState() == "old" and OnScreen("need Wanted app 0.2.42 or newer (you have 0.2.41)"), "an app too old to make reports: update it")
+	check(Duels:AppState() == "old" and OnScreen("Update the Wanted app") and TipOf("Update the Wanted app"):find("need Wanted app 0.2.42 or newer (you have 0.2.41)", 1, true), "an app too old to make reports: update it")
 	WantedAppInfo = { running = "0.2.42", seen = 1 } -- last ran long before the game read its file
 	ns.UI:Show("duels")
-	check(Duels:AppState() == "stopped" and OnScreen("Start the Wanted app, then /reload"), "an app not running: start it")
+	check(Duels:AppState() == "stopped" and OnScreen("Start the app, then /reload"), "an app not running: start it")
 	WantedAppInfo = { running = "0.2.43", seen = GetServerTime() }
 	check(Duels:AppState() == nil, "an app up to date and running: nothing to say")
 	local function Reload() for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Reload" then return f end end end
 	Duels:TakeReports(nil, nil)
 	ns.UI:Show("duels")
-	check(Duels:ReportState(duel) == "noapp" and OnScreen("need the Wanted app") and not Reload():IsShown(), "no app: fight reports need it, no reload offered")
+	check(Duels:ReportState(duel) == "noapp" and OnScreen("No fight report") and TipOf("No fight report"):find("need the Wanted app", 1, true) and not Reload():IsShown(), "no app: fight reports need it, no reload offered")
 	Duels:TakeReports({}, clock - 100)
 	ns.UI:Show("duels")
-	check(Duels:ReportState(duel) == "save" and OnScreen("Reload to send your last duel to the Wanted app") and Reload():IsShown(), "the app's catch-up is older than the duel: reload to save it")
+	check(Duels:ReportState(duel) == "save" and OnScreen("Fight report waiting") and TipOf("Fight report waiting") == "Reload to send your last duel to the Wanted app." and Reload():IsShown()
+		and Reload().tooltipText:find("only at a /reload", 1, true), "the app's catch-up is older than the duel: reload to save it, why on hover")
 	Reload()._scripts.OnClick(Reload())
 	check(reloads == 1, "the button reloads the UI")
 	Duels:TakeReports({}, clock)
 	ns.UI:Show("duels")
-	check(Duels:ReportState(duel) == "reading" and OnScreen("Reload once more to load") and Reload():IsShown(), "the app has the duel, its report isn't in yet")
+	check(Duels:ReportState(duel) == "reading" and OnScreen("Reload once more") and TipOf("Reload once more"):find("load your last duel's fight report", 1, true) and Reload():IsShown(), "the app has the duel, its report isn't in yet")
 	Duels:TakeReports({ [duel.id] = { v = 1, findings = {} }, ["Someone:duel:1"] = { v = 1 } }, clock)
 	ns.UI:Show("duels")
 	check(Duels:ReportState(duel) == "ready" and db.duelReports["Someone:duel:1"] == nil and not Reload():IsShown(), "a report in: no notice; reports for duels not kept are dropped")
@@ -11797,7 +11852,7 @@ end)()
 	check(Duels:GearScore(duel.them.gear) == nil, "no score while an item isn't loaded yet")
 	loaded = true
 	ns.UI:Show("duels")
-	check(OnScreen("They out-geared you: average item level") and OnScreen("Gear: item level"), "a clear gear gap is a headline, and each side's gear is on the card")
+	check(OnScreen("They out-geared you: item level") and OnScreen("Gear: item level"), "a clear gear gap is a headline, and each side's gear is on the card")
 	local seeGear
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "See gear" and f:IsShown() then seeGear = f end end
 	check(seeGear ~= nil, "a See gear button")
@@ -11830,7 +11885,8 @@ end)()
 	db.duelReports[duel.id].mode = nil
 	db.duelReports[duel.id].partial = true
 	ns.UI:Show("duels")
-	check(OnScreen("the combat log ends before the duel did"), "a report made from part of the duel says so")
+	check(OnScreen("Partial") and not OnScreen("the combat log ends before the duel did") and TipOf("Partial"):find("The combat log ends before the duel did", 1, true),
+		"a report made from part of the duel says so: a Partial pill, why on hover")
 	db.duelReports[duel.id].partial = nil
 	-- The timeline: every cast, blow and control in order, from the app's "t,w,k,id,amt,a,b" (the newest reports)
 	local function Button(text) for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == text and f._scripts.OnClick then return f end end end

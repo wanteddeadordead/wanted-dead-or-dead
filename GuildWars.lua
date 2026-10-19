@@ -35,8 +35,16 @@ GuildWars.DAILY_CAP = 150
 -- ============================================================================
 
 function GuildWars:OnLoad()
-	-- What the player asked for, until the site says it happened: { kind, war, data, t }, newest last
+	-- What the player asked for, until the site says it happened: { id, kind, war, data, t, refused? }, newest last
 	Wanted.db.warActions = type(Wanted.db.warActions) == "table" and Wanted.db.warActions or {}
+	-- The last guild roster report of each of this account's characters: GUID -> { h = its hash, t }
+	Wanted.db.warRosterSent = type(Wanted.db.warRosterSent) == "table" and Wanted.db.warRosterSent or {}
+end
+
+function GuildWars:OnEnable()
+	local frame = CreateFrame("Frame")
+	frame:RegisterEvent("GUILD_ROSTER_UPDATE")
+	frame:SetScript("OnEvent", function() GuildWars:ReportRoster() end)
 end
 
 ---A value from the catch-up as this client may show it: strings as plain text (no escape sequences or control
@@ -121,6 +129,7 @@ function GuildWars:Take(src)
 		end
 	end
 	private.Changed()
+	GuildWars:ReportRoster()
 end
 
 ---Whether the site runs guild wars on this client's campaign: the catch-up named them.
@@ -576,6 +585,100 @@ local REFUSALS = {
 ---@return string
 function GuildWars:RefusalText(code)
 	return REFUSALS[code] or "Refused by the site."
+end
+
+
+
+-- ============================================================================
+-- The guild roster report (the war contract's 2.1)
+-- ============================================================================
+
+-- The roster is read for a report at most this often, and reported again unchanged after a day (the site counts
+-- reports of the last 7 days)
+local REPORT_SECONDS, REPORT_AGAIN, REPORT_PART = 600, 86400, 40
+
+local function secret(value)
+	return issecretvalue and issecretvalue(value) or false
+end
+
+---A short hash of a string (djb2), to tell a changed roster from the last one reported.
+function private.Hash(s)
+	local h = 5381
+	for i = 1, #s do
+		h = (h * 33 + s:byte(i)) % 4294967296
+	end
+	return format("%08x", h)
+end
+
+---The guild's members with their GUIDs: the game's guild window's (GuildRank), else the roster's.
+function private.RosterGuids()
+	local members = Wanted.GuildRank and Wanted.GuildRank:Members()
+	if type(members) == "table" and #members > 0 then
+		return members
+	end
+	local out = {}
+	for _, member in ipairs(GuildWars:Members()) do
+		if member.guid and not secret(member.guid) and strfind(member.guid, "^Player%-") then
+			tinsert(out, { guid = member.guid, ri = member.rankIndex })
+		end
+	end
+	return out
+end
+
+---This character's view of its guild for the app, as WANTEDG1 lines, when it changed or a day after the last: the
+---guild master, the ranks with the guild-invite right, every member's GUID and rank. The site works out membership,
+---the leader and the ranks from many members' reports, never one. Only while the site runs guild wars.
+function GuildWars:ReportRoster()
+	local now = GetServerTime()
+	local mark, me = Wanted.db.accountMark, UnitGUID("player")
+	if not GuildWars:On() or now - (private.reportRead or 0) < REPORT_SECONDS or not (C_Log and C_Log.LogMessage)
+		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) or not GetGuildInfo then
+		return
+	end
+	local ok, guild = pcall(GetGuildInfo, "player")
+	local realm = tonumber(strmatch(me, "^Player%-(%d+)%-"))
+	if not ok or type(guild) ~= "string" or guild == "" or secret(guild) or not realm then
+		return
+	end
+	local members, ranks = private.RosterGuids(), GuildWars:Ranks()
+	local leader, list, rankList = nil, {}, {}
+	for _, member in ipairs(members) do
+		if member.ri == 0 then
+			leader = member.guid
+		end
+		tinsert(list, member.guid.."."..format("%d", member.ri))
+	end
+	for _, rank in ipairs(ranks) do
+		tinsert(rankList, (rank.invite and "1" or "0")..rank.name)
+	end
+	if not leader or #rankList == 0 then
+		return
+	end
+	private.reportRead = now
+	sort(list)
+	local hash = private.Hash(table.concat({ guild, leader, table.concat(rankList, ","), table.concat(list, ",") }, "|"))
+	local last = Wanted.db.warRosterSent[me]
+	if type(last) == "table" and last.h == hash and now - (last.t or 0) < REPORT_AGAIN then
+		return
+	end
+	local parts = ceil(#list / REPORT_PART)
+	for part = 1, parts do
+		local slice = {}
+		for i = (part - 1) * REPORT_PART + 1, min(part * REPORT_PART, #list) do
+			tinsert(slice, list[i])
+		end
+		local fields = { "reporter="..private.Value(me), "at="..format("%d", now) }
+		if part == 1 then
+			tinsert(fields, "guild="..private.Value(guild))
+			tinsert(fields, "realm="..format("%d", realm))
+			tinsert(fields, "leader="..private.Value(leader))
+			tinsert(fields, "ranks="..private.Value(rankList))
+		end
+		tinsert(fields, "members="..private.Value(slice))
+		C_Log.LogMessage(format("WANTEDG1 %s %d/%d %s", mark, part, parts, table.concat(fields, "&")))
+	end
+	Wanted.db.warRosterSent[me] = { h = hash, t = now }
+	Wanted:Log("Guild wars: reported <%s>'s roster, %d members", guild, #list)
 end
 
 

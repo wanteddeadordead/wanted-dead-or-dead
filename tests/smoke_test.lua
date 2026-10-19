@@ -17890,6 +17890,25 @@ end
 	again.actions = { [G:Pending("declare", hb.id).id] = { action = "declare", ok = true, at = clock } }
 	G:Take(again)
 	check(G:Pending("declare", hb.id) == nil and G:Refused("declare", hb.id) == nil, "answered: done")
+	-- The guild roster report: this character's view of its guild, for the site to count from many; again only when it
+	-- changed or a day on
+	logged = {}
+	local realGuildName = GetGuildInfo
+	GetGuildInfo = function() return "EMPIRE", "Member", 3 end
+	C_Log = { LogMessage = function(text) if text:find("^WANTEDG1 ") then logged[#logged + 1] = text end end }
+	G:ReportRoster()
+	check(#logged == 1 and logged[1] == format("WANTEDG1 %s 1/1 reporter=Player-1-ME&at=%d&guild=EMPIRE&realm=1&leader=Player-1-001", ns.db.accountMark, clock)
+		.."&ranks=1Guild%20Master,1Officer,1Veteran,0Member,0Recruit,0Alt&members=Player-1-001.0,Player-1-002.1,Player-1-003.1,Player-1-004.2,Player-1-005.2,Player-1-006.3,Player-1-008.4,Player-1-ME.3",
+		"the roster report: the guild, its leader, its ranks with the invite right, every member's GUID and rank: "..tostring(logged[1]))
+	local realClock = clock
+	clock = clock + 700
+	G:ReportRoster()
+	check(#logged == 1, "unchanged: not again")
+	clock = clock + 86400
+	G:ReportRoster()
+	check(#logged == 2, "a day on: again")
+	clock = realClock
+	GetGuildInfo = realGuildName
 	C_Log = realLog
 	-- The Zones tab
 	ns.db.warActions = {}

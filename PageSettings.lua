@@ -436,6 +436,14 @@ function private.BuildSharing(column)
 	private.Switch(column, Root, "siege", "Siege nights on this client (then /reload)", "Capture fronts, the HUD and map pieces, rally leaders and layer hops. Off until their first public siege night; a /reload applies the change.", function(checked)
 		Wanted:Print("Siege nights %s. Type /reload to apply it.", checked and "on" or "off")
 	end)
+
+	column:Section("Guild wars")
+	private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",
+		function() Wanted.WarHUD:Update() end)
+	private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, races' flags and who holds each zone, on the world map and OpenMap's.",
+		function() Wanted.WarMap:Refresh() end)
+	private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")
+	private.Switch(column, Root, "warToasts", "Guild war notifications", "The draw, the time set and the answer, the reminder an hour before, the war's start, the keep opening and the result.")
 end
 
 

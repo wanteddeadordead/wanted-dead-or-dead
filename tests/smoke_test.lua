@@ -18187,6 +18187,14 @@ end
 	ns.WarHUD:Update()
 	check(not hud:IsShown(), "Hide the HUD hides it")
 	ns.db.settings.warHud = nil
+	-- The zone banner: once on coming into the zone, the holder and the war on
+	ns.WarBanner:Check()
+	local banner = _G.WantedWarBanner
+	check(banner and banner:IsShown() and banner.title._text == "Held by <Revenant>" and banner.line._text:find("Guild war now: EMPIRE attacks, 18:19 left", 1, true),
+		"the zone banner: the holder and the war now: "..tostring(banner and banner.line._text))
+	banner:Hide()
+	ns.WarBanner:Check()
+	check(not banner:IsShown(), "once per coming in")
 	-- The map: the war on its zone's map (the rally, the lanes' seals, the keep ringed while it's open) and a plate
 	local canvas = NewMock()
 	canvas._w, canvas._h = 1002, 668

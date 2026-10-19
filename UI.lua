@@ -188,7 +188,19 @@ function private.Create()
 	mark:SetPoint("LEFT", 12, 0)
 	mark:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\seal")
 	local brand = titleBar:CreateFontString(nil, "ARTWORK", "WantedFontDisplay")
-	brand:SetText(Theme:Colorize("WANTED:", C.accent).." "..Theme:Colorize("DEAD OR...", C.text).." "..Theme:Colorize("DEAD", C.red))
+	local function Brand()
+		brand:SetText(Theme:Colorize("WANTED:", C.accent).." "..Theme:Colorize("DEAD OR...", C.text).." "..Theme:Colorize("DEAD", C.red))
+	end
+	Brand()
+	-- Another theme chosen: what holds its colours in text (the brand, the menu's selected entry, the pages) is drawn
+	-- again, and the felt changes
+	Theme:OnApplied(function(applied)
+		Brand()
+		UI:PreviewTheme(applied.key)
+		if frame:IsShown() then
+			UI:Refresh(true)
+		end
+	end)
 	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
 	-- Under heavy development through the WoW Forever beta: a tag beside the brand says so, its tooltip how
 	local beta = W:Pill(titleBar)
@@ -257,7 +269,7 @@ function private.Create()
 		nav.bar:SetPoint("TOPLEFT")
 		nav.bar:SetPoint("BOTTOMLEFT")
 		nav.bar:SetWidth(3)
-		nav.bar:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+		Theme:Paint(nav.bar, C.accent, 1)
 		nav.edges = {}
 		for _, edge in ipairs({ "TOP", "BOTTOM" }) do
 			local line = nav:CreateTexture(nil, "BORDER")

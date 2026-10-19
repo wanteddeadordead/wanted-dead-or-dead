@@ -8,7 +8,7 @@ local Theme = Wanted.Theme
 local C = Theme.C
 
 local STYLES = {
-	primary = { bg = C.accent, hover = C.accentHover, border = C.accent, text = C.white },
+	primary = { bg = C.accent, hover = C.accentHover, border = C.accent, text = C.accentText },
 	-- EllesmereUI's buttons: a dark see-through fill, a white border at 30% that brightens to 45% under the mouse
 	secondary = { bg = { 0.09, 0.08, 0.07, 0.6 }, hover = { 0.13, 0.12, 0.11, 0.7 }, border = { 1, 1, 1, 0.3 }, hoverBorder = { 1, 1, 1, 0.45 },
 		text = { 0.86, 0.86, 0.88 }, hoverText = C.white },
@@ -278,6 +278,7 @@ function W:Button(parent, text, style, width, height, onClick, template, name)
 		button:SetScript("OnClick", onClick)
 	end
 	RefreshButton(button)
+	Theme:OnRepaint(button, RefreshButton)
 	return button
 end
 
@@ -378,7 +379,7 @@ function W:Toggle(parent, text, onChange)
 	toggle.check = toggle.box:CreateTexture(nil, "ARTWORK")
 	toggle.check:SetPoint("TOPLEFT", 2, -2)
 	toggle.check:SetPoint("BOTTOMRIGHT", -2, 2)
-	toggle.check:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	Theme:Paint(toggle.check, C.accent, 1)
 	toggle.label = Theme:Text(toggle, "label", text)
 	toggle.label:SetPoint("LEFT", toggle.box, "RIGHT", 8, 0)
 	toggle:SetWidth(18 + 8 + toggle.label:GetStringWidth() + 4)
@@ -452,13 +453,14 @@ function W:Slider(parent, label, width, low, high, step, format, onChange)
 	track:SetColorTexture(1, 1, 1, 0.16)
 	local thumb = slider:CreateTexture(nil, "OVERLAY")
 	thumb:SetSize(14, 14)
-	thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	Theme:Paint(thumb, C.accent, 1)
 	slider:SetThumbTexture(thumb)
+	holder.thumb = thumb
 	local fill = slider:CreateTexture(nil, "BORDER")
 	fill:SetPoint("LEFT", track, "LEFT")
 	fill:SetPoint("RIGHT", thumb, "CENTER")
 	fill:SetHeight(4)
-	fill:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.75)
+	Theme:Paint(fill, C.accent, 0.75)
 	holder.slider = slider
 	function holder:SetValue(value)
 		self.quiet = true
@@ -623,7 +625,7 @@ local function Segments(parent, items, onSelect, width, tabs)
 			button.underline = button:CreateTexture(nil, "ARTWORK")
 			button.underline:SetPoint("BOTTOM", 0, 0)
 			button.underline:SetHeight(2)
-			button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+			Theme:Paint(button.underline, C.accent, 1)
 			button.underline:Hide()
 		else
 			button.paint = PaintSegment
@@ -685,7 +687,6 @@ local function Segments(parent, items, onSelect, width, tabs)
 			button:SetFrameLevel(level + (button.key == key and 2 or 1))
 			if tabs then
 				button:SetStyle(button.key == key and "tabSelected" or "tab")
-				button.underline:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 				button.underline:SetWidth(min(button:GetWidth(), button.label:GetStringWidth() + 14))
 				button.underline:SetShown(button.key == key)
 			else
@@ -742,7 +743,14 @@ function W:Pill(parent)
 		Theme:SetBorderColor(self, { color[1], color[2], color[3], 0.45 })
 		self:SetWidth(self.text:GetStringWidth() + 16)
 		self:Show()
+		self.color = color
 	end
+	-- An accent pill (the menu's counts) takes the new accent
+	Theme:OnRepaint(pill, function(self)
+		if self:IsShown() and self.color then
+			self:Set(self.text:GetText(), self.color)
+		end
+	end)
 	return pill
 end
 
@@ -803,8 +811,7 @@ function W:StatTile(parent, label, accent)
 	tile.bar:SetPoint("TOPLEFT", 1, -1)
 	tile.bar:SetPoint("BOTTOMLEFT", 1, 1)
 	tile.bar:SetWidth(3)
-	local color = accent or C.accent
-	tile.bar:SetColorTexture(color[1], color[2], color[3], 1)
+	Theme:Paint(tile.bar, accent or C.accent, 1)
 	tile.label = Theme:Text(tile, "tiny", strupper(label))
 	tile.label:SetPoint("TOPLEFT", 16, -12)
 	tile.value = Theme:Text(tile, "stat", "")
@@ -1493,6 +1500,7 @@ function W:Switch(parent, onChange)
 	function switch:GetChecked()
 		return self.checked
 	end
+	Theme:OnRepaint(switch, function(self) self:SetChecked(self.checked) end)
 	switch:SetScript("OnClick", function(self)
 		self:SetChecked(not self.checked)
 		if onChange then
@@ -1680,7 +1688,7 @@ function W:MultiSelect(parent, width, options, onChange, placeholder)
 				row.check = row.box:CreateTexture(nil, "ARTWORK")
 				row.check:SetPoint("TOPLEFT", 2, -2)
 				row.check:SetPoint("BOTTOMRIGHT", -2, 2)
-				row.check:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+				Theme:Paint(row.check, C.accent, 1)
 				row.label = Theme:Text(row, "body", "")
 				row.label:SetPoint("LEFT", row.box, "RIGHT", 8, 0)
 				row.note = Theme:Text(row, "tiny", "", C.faint)
@@ -1858,6 +1866,7 @@ function W:StepBar(parent, width, steps, onStep)
 		texture:SetVertexColor(color[1], color[2], color[3], alpha or color[4] or 1)
 	end
 	function bar:Set(current, notes, failed)
+		self.shown = { current, notes, failed }
 		for i, dot in ipairs(self.dots) do
 			local state = (failed and failed[i]) and "failed" or (i < current and "done") or (i == current and "current") or "todo"
 			local small = state == "todo"
@@ -1896,5 +1905,6 @@ function W:StepBar(parent, width, steps, onStep)
 		end
 	end
 	bar:Set(1)
+	Theme:OnRepaint(bar, function(self) self:Set(self.shown[1], self.shown[2], self.shown[3]) end)
 	return bar
 end

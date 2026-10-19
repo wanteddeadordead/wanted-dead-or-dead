@@ -85,6 +85,31 @@ function private.Build()
 	return f
 end
 
+---Players of our side here with the player: themselves and the group members the game says are in range.
+function private.FriendsNear()
+	local friends = 1
+	local raid = IsInRaid and IsInRaid()
+	local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+	for i = 1, raid and count or max(count - 1, 0) do
+		local unit = (raid and "raid" or "party")..i
+		local ok, inRange = pcall(UnitInRange, unit)
+		if ok and inRange == true and not (issecretvalue and issecretvalue(inRange)) and not UnitIsUnit(unit, "player") then
+			friends = friends + 1
+		end
+	end
+	return friends
+end
+
+---Who holds the point the player stands on, as the player sees it now: the side with more players here (enemies on
+---the Nearby list against our side in range), or nil when they're even.
+function private.LocalHolder()
+	local enemies = Wanted.Enemies:CountNearby()
+	local friends = private.FriendsNear()
+	local side = UnitFactionGroup("player")
+	local other = side == "Horde" and "Alliance" or "Horde"
+	return friends > enemies and side or enemies > friends and other or nil, friends, enemies
+end
+
 ---Shows the HUD while a race is run in the player's zone, with its numbers; hides it otherwise.
 function RacesHUD:Update()
 	local now = GetServerTime()
@@ -109,15 +134,23 @@ function RacesHUD:Update()
 		f.bar[side]:SetShown(total > 0)
 		f.bar[side]:SetWidth(total > 0 and max((WIDTH - 20) * n / total, 1) or 1)
 	end
+	local here = Races:Current()
 	for i, p in ipairs(f.points) do
 		local point = race.points[i]
 		p:SetShown(point ~= nil)
 		if point then
-			local color = SIDE_COLORS[point.holder] or C.faint
+			-- The point the player stands on: by who's here now; the others by the site's last count
+			local holder, now_ = point.holder, ""
+			if point == here then
+				local seen, friends, enemies = private.LocalHolder()
+				holder = seen or holder
+				now_ = format("\n\nHere now: %d of your side, %d enemies nearby.", friends, enemies)
+			end
+			local color = SIDE_COLORS[holder] or C.faint
 			p.dot:SetVertexColor(color[1], color[2], color[3], 1)
 			p.name:SetText(point.name..(point.bonus and Theme:Colorize(" +20%", C.gold) or ""))
-			W:Explain(p, point.name, (point.holder and ("Held by the "..point.holder..".") or "Nobody has held it yet.")
-				..(point.bonus and " The middle point: a minute here counts +20%." or ""), "ANCHOR_BOTTOM")
+			W:Explain(p, point.name, (point.holder and ("The site last counted it held by the "..point.holder..".") or "Nobody has held it yet.")
+				..(point.bonus and " The middle point: a minute here counts +20%." or "")..now_, "ANCHOR_BOTTOM")
 		end
 	end
 	if not private.mineAt or now - private.mineAt >= MINE_SECONDS or private.mineRace ~= race then

@@ -16856,6 +16856,16 @@ print("wanted smoke: setup checks pass")
 	check(OnScreen("Hillsbrad Foothills") and OnScreen("Arathi Highlands") and OnScreen("LIVE") and OnScreen("Horde 812") and OnScreen("the crossroads")
 		and OnScreen("EMPIRE") and OnScreen("Revenant") and OnScreen("Duskwood"), "Tonight: the races, the live one's influence, its points, both sides' guilds and tomorrow")
 	check(not OnScreen("War Marks"), "no War Marks line until they exist")
+	-- The live numbers' address, to copy
+	local copied
+	local realDialog = ns.Widgets.Dialog
+	ns.Widgets.Dialog = function(_, o) copied = o end
+	for _, f in ipairs(Mock.created) do
+		local l = rawget(f, "label")
+		if type(l) == "table" and l._text == "Copy address" and f._scripts.OnClick then f._scripts.OnClick(f) end
+	end
+	ns.Widgets.Dialog = realDialog
+	check(copied and copied.input.value == "https://wanteddeadordead.com/races", "Copy address: the site's races page to copy")
 	ns.UI:GetFrame():Hide()
 	-- The HUD: in the race's zone while it runs, and only then
 	ns.RacesHUD:Update()
@@ -16863,6 +16873,22 @@ print("wanted smoke: setup checks pass")
 	check(hud and hud:IsShown() and hud.zone._text == "Hillsbrad Foothills" and hud.horde._text:find("Horde 812", 1, true) and hud.you._text:find("1 min", 1, true),
 		"the race HUD in the zone: the zone, the influence and your minutes")
 	check(hud.points[2].name._text:find("+20%", 1, true), "the middle point marked +20%")
+	-- The point the player stands on is coloured by who's here now; the site's holder stays in its tooltip
+	local realCount = ns.Enemies.CountNearby
+	ns.Enemies.CountNearby = function() return 0 end
+	clock = clock + 1
+	R:Sample()
+	ns.RacesHUD:Update()
+	local dot = hud.points[2].dot._vertexColor
+	check(R:Current() == race.points[2] and dot[1] > 0.8 and dot[3] < 0.3, "alone on the Alliance's point: shown as ours (Horde) by who's here")
+	check(hud.points[2].tooltipText:find("held by the Alliance", 1, true) and hud.points[2].tooltipText:find("Here now: 1 of your side, 0 enemies", 1, true),
+		"its tooltip keeps the site's holder and says who's here")
+	ns.Enemies.CountNearby = function() return 3 end
+	ns.RacesHUD:Update()
+	dot = hud.points[2].dot._vertexColor
+	check(dot[3] > 0.8, "three enemies nearby: shown as theirs")
+	check(hud.points[3].dot._vertexColor[1] > 0.8, "a point the player isn't on keeps the site's holder (Horde)")
+	ns.Enemies.CountNearby = realCount
 	mapId, clock = 1417, clock + 1 -- the position is read afresh each moment (Recorder)
 	ns.RacesHUD:Update()
 	check(not hud:IsShown(), "in another zone: no race HUD")
@@ -16870,8 +16896,9 @@ print("wanted smoke: setup checks pass")
 	clock = race.stop + 1
 	ns.RacesHUD:Update()
 	check(not hud:IsShown(), "after the race: no race HUD")
+	local before = #logged
 	R:Sample()
-	check(#logged == 2, "and no samples")
+	check(#logged == before, "and no samples")
 	-- Put back
 	R:Take(nil)
 	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence

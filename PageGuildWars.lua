@@ -20,7 +20,10 @@ local TONIGHT_TIP = "Every night: three races, 45 minutes each. Zones are picked
 local RACE_TIP = "Open to everyone in the zone, Horde v Alliance. Influence only: nothing is captured or owned.\n\n"
 	.."Influence: witnessed kills on the other faction here, and minutes holding its 3 points. The middle point counts "
 	.."+20%.\n\nThe faction that doesn't hold the zone may declare a war when it ends."
+local SITE_RACES = "https://wanteddeadordead.com/races"
 local BAR_TIP = "Provisional, as the site last counted it when your app synced. The site counts the result."
+local AS_OF_TIP = "As the site last counted it when your app synced (at login or /reload). The live numbers are on "
+	.."wanteddeadordead.com/races: Copy address."
 
 ---"7:50 PM" in this computer's clock.
 function private.Clock(t)
@@ -214,7 +217,13 @@ function private.BuildRace(container, width, height)
 	private.others:SetWidth(inner)
 	private.others:SetWordWrap(false)
 	private.asOf = Theme:Text(card, "tiny", "")
-	private.asOf:SetPoint("BOTTOMLEFT", 14, 12)
+	private.asOf:SetPoint("BOTTOMLEFT", 14, 14)
+	-- The site's live numbers: the game can't open a browser, so the address to copy
+	private.copy = W:Button(card, "Copy address", "chip", 100, 20, function()
+		W:Dialog({ title = "Live race numbers", input = { value = SITE_RACES }, confirmLabel = "Close" })
+	end)
+	private.copy:SetPoint("LEFT", private.asOf, "RIGHT", 10, 0)
+	W:Explain(private.copy, "Live race numbers", "wanteddeadordead.com/races: click the address, Ctrl+C, and paste it into your browser.")
 	private.raceCard = card
 	return card
 end
@@ -367,7 +376,7 @@ function private.RefreshRace(now, race)
 	private.others:SetText(table.concat(parts, "   "))
 	-- When the site counted it
 	private.asOf:SetText(race.final and "Final" or race.at and ("Counted as of "..private.Clock(race.at)) or "")
-	W:Explain(private.asOf, race.final and "Final" or "Provisional", race.final and "The site's result." or BAR_TIP)
+	W:Explain(private.asOf, race.final and "Final" or "Provisional", race.final and "The site's result." or AS_OF_TIP)
 end
 
 function private.Refresh()

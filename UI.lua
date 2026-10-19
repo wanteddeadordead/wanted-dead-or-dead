@@ -733,6 +733,8 @@ function UI:Refresh(allBadges)
 					x = x + button:GetWidth() - 1
 				end
 			end
+			-- The bar as wide as its tabs now
+			bar:SetWidth(x + 1)
 			if bar.selected ~= private.current then
 				bar:Select(private.current, true)
 			end

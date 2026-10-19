@@ -52,7 +52,7 @@ function private.RefreshTiles()
 		tile.note:SetText(format("week %d", s.week))
 	else
 		tile.value:SetText("None")
-		tile.note:SetText("when a season runs")
+		tile.note:SetText("")
 	end
 	local c = Wanted.Challenges:Get()
 	local season = c and c.season
@@ -207,9 +207,8 @@ function private.RefreshUpcoming()
 	end
 	private.upcomingEmpty:SetShown(#items == 0)
 	-- Under the list, before launch: why there are no battleground weekends yet
-	private.noSeasonNote:SetShown(not PvPCalendar:Launched())
-	private.noSeasonNote:ClearAllPoints()
-	private.noSeasonNote:SetPoint("TOPLEFT", 14, -44 - max(#items, 1) * 20 - 8)
+	-- Before launch, when the battleground weekends start is on their legend line
+	W:Explain(private.bgLegend, not PvPCalendar:Launched() and "Battleground weekends" or nil, "They start with launch, Nov 4.")
 end
 
 function private.Refresh()
@@ -250,6 +249,7 @@ UI:RegisterPage("calendar", {
 		private.capTile = W:StatTile(container, "This week's rank cap", C.amber)
 		private.capTile:SetPoint("LEFT", private.blizzTile, "RIGHT", 12, 0)
 		private.capTile:SetWidth(tileWidth)
+		W:Explain(private.capTile, "This week's rank cap", "Set each week while a Blizzard PvP season runs: the highest rank you can reach this week.")
 		private.wantedTile = W:StatTile(container, "Wanted season", C.gold)
 		private.wantedTile:SetPoint("LEFT", private.capTile, "RIGHT", 12, 0)
 		private.wantedTile:SetWidth(tileWidth)
@@ -301,23 +301,18 @@ UI:RegisterPage("calendar", {
 		end
 		private.upcomingEmpty = Theme:Text(side, "small", "Nothing on the calendar yet.", C.faint)
 		private.upcomingEmpty:SetPoint("TOPLEFT", 14, -44)
-		private.noSeasonNote = Theme:Text(side, "tiny", "Battleground weekends start with launch, Nov 4.", C.faint)
-		private.noSeasonNote:SetWidth(SIDE_WIDTH - 28)
-		private.noSeasonNote:SetWordWrap(true)
 		local legend = {
 			{ "WoW Forever", "game" }, { "Event", "event" }, { "Blizzard PvP season", "pvpseason" }, { "Wanted season", "wanted" }, { "Weekly challenge reset", "weekly" },
 			{ "Battleground weekend", "pvpholiday" }, { "Other holiday", "holiday" },
 		}
 		for i, item in ipairs(legend) do
 			local key = Theme:Text(side, "tiny", item[1], KIND_COLORS[item[2]])
-			-- Above the arena note, which wraps to two lines, 12 apart: seven lines stay clear of Coming up full (10 rows) and
-			-- its launch note on two
-			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 12 + 30)
+			-- At the foot, 12 apart: seven lines stay clear of Coming up full (10 rows)
+			key:SetPoint("BOTTOMLEFT", 14, 12 + (#legend - i) * 12)
+			if item[2] == "pvpholiday" then
+				private.bgLegend = key
+			end
 		end
-		local arenas = Theme:Text(side, "tiny", "Arena seasons: not on WoW Forever yet.", C.faint)
-		arenas:SetPoint("BOTTOMLEFT", 14, 12)
-		arenas:SetWidth(SIDE_WIDTH - 28)
-		arenas:SetWordWrap(true)
 
 		PvPCalendar:OnUpdate(function()
 			if container:IsVisible() then

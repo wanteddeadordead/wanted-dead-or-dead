@@ -47,7 +47,7 @@ function private.RefreshTiles(r)
 		tile.note:SetText(r.week >= 0 and "week "..r.week or "")
 	else
 		tile.value:SetText("None")
-		tile.note:SetText("when a season runs")
+		tile.note:SetText("")
 	end
 	local have, most = BlizzRank:Honor()
 	tile = private.honorTile
@@ -94,6 +94,9 @@ function private.RefreshLadder(r)
 		Theme:FitText(row.unlock, row.unlockWidth, private.UnlockLabels(unlocks[i] or ""))
 		row.unlock:SetTextColor(unpack(current and C.gold or done and C.muted or C.faint))
 		row.tag:SetText(current and "You" or overCap and "capped" or "")
+		-- The whole unlock, which the column may cut short, and what capped means
+		W:Explain(row, i.."  "..(BlizzRank:Title(i) or ""), (unlocks[i] or "")
+			..(overCap and "\n\nCapped: above this week's cap, so you can't reach it this week." or ""), "ANCHOR_RIGHT")
 		row.tag:SetTextColor(unpack(current and C.accentHover or C.faint))
 		row.bg:SetColorTexture(1, 1, 1, current and 0.06 or 0)
 	end
@@ -119,10 +122,12 @@ function private.RefreshSide(r)
 	card.title:SetText(format("Rank %d  %s", nextRank, BlizzRank:Title(nextRank) or ""))
 	Theme:FitText(card.unlock, card.width, { BlizzRank:Unlocks()[nextRank] or "", "" }, nil, true)
 	if r.weekMax <= 0 then
-		card.need:SetText("Ranks start with the PvP season.")
+		card.need:SetText("No season yet")
+		W:Explain(card.need, "No season yet", "Ranks start with the PvP season.")
 		card.cap:SetText("")
 	else
 		card.need:SetText(r.toNext > 0 and format("%s more points", private.Count(r.toNext - r.earned)) or "")
+		W:Explain(card.need, nil)
 		card.cap:SetText(nextRank > r.weekMax and format("Not this week: the cap is Rank %d.", r.weekMax) or "")
 	end
 end
@@ -142,8 +147,6 @@ function private.BuildLadder(container, height)
 	card:SetPoint("TOPLEFT", 0, -BODY_TOP)
 	card:SetSize(LADDER_WIDTH, height - BODY_TOP)
 	local heading = W:SectionLabel(card, "Blizzard's PvP ranks")
-	local capNote = Theme:Text(card, "tiny", "capped: above this week's cap", C.faint)
-	capNote:SetPoint("TOPRIGHT", -12, -12)
 	heading:SetPoint("TOPLEFT", 14, -12)
 	for i = 1, BlizzRank.MAX_RANK do
 		local row = CreateFrame("Frame", nil, card)
@@ -197,6 +200,11 @@ function private.BuildSide(container, width)
 	card.width = sideWidth - 28
 	local label = W:SectionLabel(card, "Next")
 	label:SetPoint("TOPLEFT", 14, -12)
+	-- Where the rank rewards are bought, in the game's own words
+	local line = UnitFactionGroup("player") == "Alliance" and _G.PVP_RANK_REWARDS_VENDOR_ALLIANCE or _G.PVP_RANK_REWARDS_VENDOR_HORDE
+	if type(line) == "string" then
+		W:InfoGlyph(card, "Rank vendors", (gsub(line, "|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))):SetPoint("LEFT", label, "RIGHT", 6, 0)
+	end
 	card.title = Theme:Text(card, "heading", "")
 	card.title:SetPoint("TOPLEFT", 14, -32)
 	card.title:SetWidth(card.width)
@@ -210,20 +218,12 @@ function private.BuildSide(container, width)
 	card.cap:SetPoint("TOPLEFT", 14, -100)
 	card.cap:SetWidth(card.width)
 	private.nextCard = card
-	-- Where the rank rewards are bought, in the game's own words
-	local vendor = Theme:Text(container, "tiny", "", C.faint)
-	vendor:SetPoint("TOPLEFT", card, "BOTTOMLEFT", 0, -10)
-	vendor:SetWidth(sideWidth)
-	vendor:SetWordWrap(true)
-	local line = UnitFactionGroup("player") == "Alliance" and _G.PVP_RANK_REWARDS_VENDOR_ALLIANCE or _G.PVP_RANK_REWARDS_VENDOR_HORDE
-	vendor:SetText(type(line) == "string" and (gsub(line, "|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) or "")
 end
 
 UI:RegisterPage("rank", {
 	group = "Battlegrounds",
 	title = "Rank & Gear",
 	tabLabel = "Rank",
-	subtitle = "Your Blizzard PvP rank, what each rank unlocks at the rank vendors, and your honor and marks.",
 	order = 7,
 	under = "challenges",
 	build = function(container, width, height)
@@ -234,6 +234,7 @@ UI:RegisterPage("rank", {
 		private.capTile = W:StatTile(container, "This week's cap", C.amber)
 		private.capTile:SetPoint("LEFT", private.rankTile, "RIGHT", 12, 0)
 		private.capTile:SetWidth(tileWidth)
+		W:Explain(private.capTile, "This week's cap", "Set each week while a Blizzard PvP season runs: the highest rank you can reach this week.")
 		private.honorTile = W:StatTile(container, "Honor Points", C.gold)
 		private.honorTile:SetPoint("LEFT", private.capTile, "RIGHT", 12, 0)
 		private.honorTile:SetWidth(tileWidth)

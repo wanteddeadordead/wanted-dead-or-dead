@@ -96,28 +96,27 @@ function private.Refresh()
 	local hunters, posters = Model:GetLeaderboards(since)
 	if private.view == "guilds" then
 		private.SetColumns(GUILD_COLUMNS)
-		private.list:SetItems(Model:GetGuildBoard(since), "No guilds seen yet.", "Guilds come from the players you see and the kills and deaths recorded.")
+		private.list:SetItems(Model:GetGuildBoard(since), "No guilds seen yet.")
 	elseif private.view == "hunters" then
 		private.SetColumns(HUNTER_COLUMNS)
-		private.list:SetItems(hunters, "No bounty hunters yet.", "Claims on bounties put bounty hunters here.")
+		private.list:SetItems(hunters, "No bounty hunters yet.")
 	else
 		private.SetColumns(POSTER_COLUMNS)
-		private.list:SetItems(posters, "No posters yet.", "Anyone who posts a bounty appears here.")
+		private.list:SetItems(posters, "No posters yet.")
 	end
 end
 
 UI:RegisterPage("hunters", {
 	group = "World PvP",
 	title = "Leaderboards",
-	subtitle = "Ranked from what happened: witnessed kills, confirmed claims, bounties paid, guild kills and deaths of the last 3 days.",
 	order = 4,
 	under = "challenges",
 	tabLabel = "Leaderboards",
 	build = function(container, width, height)
 		local view = W:Segmented(container, {
-			{ key = "hunters", label = "Bounty hunters" },
-			{ key = "posters", label = "Posters" },
-			{ key = "guilds", label = "Guilds" },
+			{ key = "hunters", label = "Bounty hunters", tip = { "Bounty hunters", "Ranked by witnessed kills and confirmed claims on bounties." } },
+			{ key = "posters", label = "Posters", tip = { "Posters", "Ranked by bounties paid. Anyone who posts a bounty is here." } },
+			{ key = "guilds", label = "Guilds", tip = { "Guilds", "Guild kills and deaths of the last 3 days, from the players you see and the kills and deaths recorded." } },
 		}, function(key)
 			private.view = key
 			private.Refresh()

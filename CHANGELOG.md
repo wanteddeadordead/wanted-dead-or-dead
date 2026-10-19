@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
+- Progress: no subtitles under the tabs. Challenges keeps its rules behind an (i) on the week card, with what the points are for, the week's end and the streak hint on hover. The empty state no longer says challenges give a rank (they haven't since 1.10.0). Leaderboards say what they rank by on each button. Calendar, Rank and Gear move their notes into tooltips (the cap tile, battleground weekends, capped ranks, where the rank vendors are). Duels shows short states (Fight report waiting, Needs the Wanted app, Partial), with the full reason on hover.
 
 ## [1.27.3] - 2026-10-17
 

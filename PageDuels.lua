@@ -16,14 +16,16 @@ local HEADERS = {
 	matchups = { "Opponent", "Won-lost", "Duels", "Won" },
 	builds = { "Your build", "Won-lost", "Duels", "Won" },
 }
--- What the notice beside the tabs says about the last duel's fight report, and whether a reload would help
+-- What the notice beside the tabs says about the last duel's fight report: a short label, whether a reload would
+-- help, and the rest on hover
 local REPORT_NOTES = {
 	-- A /reload saves the duel and writes out the game's combat log together, so the app reads both at once
-	save = { "Reload to send your last duel to the Wanted app.", true },
-	reading = { "Reload once more to load your last duel's fight report.", true },
-	noapp = { "Fight reports need the Wanted app running on this PC." },
-	nolog = { "No combat log for your last duel, so no fight report." },
+	save = { "Fight report waiting", true, "Reload to send your last duel to the Wanted app." },
+	reading = { "Reload once more", true, "Reload once more to load your last duel's fight report." },
+	noapp = { "No fight report", false, "Fight reports need the Wanted app running on this PC." },
+	nolog = { "No fight report", false, "No combat log for your last duel." },
 }
+local RELOAD_TIP = "The game hands the Wanted app's fight reports to the addon only at a /reload."
 local RESULTS = {
 	won = { "Won", C.green },
 	lost = { "Lost", C.red },
@@ -227,9 +229,9 @@ function private.GearGap(duel)
 	end
 	local gap = theirs.ilvl - mine.ilvl
 	if gap >= 3 then
-		return Theme:Colorize(format("They out-geared you: average item level %.1f to your %.1f.", theirs.ilvl, mine.ilvl), C.red)
+		return Theme:Colorize(format("They out-geared you: item level %.1f to %.1f", theirs.ilvl, mine.ilvl), C.red)
 	elseif gap <= -3 then
-		return Theme:Colorize(format("You out-geared them: average item level %.1f to their %.1f.", mine.ilvl, theirs.ilvl), C.green)
+		return Theme:Colorize(format("You out-geared them: item level %.1f to %.1f", mine.ilvl, theirs.ilvl), C.green)
 	end
 	return nil
 end
@@ -507,7 +509,8 @@ function private.FillTimeline()
 	end
 	panel.note:ClearAllPoints()
 	panel.note:SetPoint("TOPLEFT", 14, -TIMELINE_TOP - n * TIMELINE_ROW - 6)
-	panel.note:SetText(n == 0 and "Nothing here." or cut and "The fight ran long: its timeline ends here." or "")
+	panel.note:SetText(n == 0 and "Nothing here." or cut and "Timeline cut short" or "")
+	W:Explain(panel.note, n > 0 and cut and "Timeline cut short" or nil, "The fight ran long; the timeline stops here.")
 	panel:SetHeight(TIMELINE_TOP + n * TIMELINE_ROW + 30)
 	panel.filter:Select(filter, true)
 end
@@ -634,17 +637,13 @@ function private.BuildCard(container, width)
 	-- Duel coaching is new: its tips are marked so, with a word on where to send a wrong one
 	card.experimental = W:Pill(card)
 	card.experimental:SetPoint("RIGHT", card.back, "LEFT", -8, 0)
-	card.experimental:EnableMouse(true)
-	card.experimental:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-		GameTooltip:SetText("Experimental", 1, 1, 1)
-		GameTooltip:AddLine("Duel coaching is new: a tip can be wrong. \"Something not right?\" under a tip sends it to us.", C.muted[1], C.muted[2], C.muted[3], true)
-		GameTooltip:Show()
-	end)
-	card.experimental:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	W:Explain(card.experimental, "Experimental", "Duel coaching is new: a tip can be wrong. \"Something not right?\" under a tip sends it to us.", "ANCHOR_BOTTOM")
+	-- A report from part of the fight: the combat log ran out first
+	card.partial = W:Pill(card)
+	card.partial:SetPoint("RIGHT", card.experimental, "LEFT", -6, 0)
+	W:Explain(card.partial, "Partial", "The combat log ends before the duel did: this is part of it.", "ANCHOR_BOTTOM")
 	-- Every cast, blow and control of the fight, in order (the newest reports carry it)
 	card.timelineButton = W:Button(card, "Timeline", "secondary", 90, 24, function() private.ShowTimeline() end)
-	card.timelineButton:SetPoint("RIGHT", card.experimental, "LEFT", -8, 0)
 	-- Everything under the title scrolls together: the opener, both lanes and the findings with their tips
 	card.scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	card.scroll.scrollBarHideable = true
@@ -710,6 +709,9 @@ function private.ShowCard(duel)
 	local state, report = Duels:ReportState(duel)
 	local hasReport = state == "ready"
 	card.experimental:Set(hasReport and "Experimental" or nil, C.gold)
+	card.partial:Set(hasReport and report.partial and "Partial" or nil, C.gold)
+	card.timelineButton:ClearAllPoints()
+	card.timelineButton:SetPoint("RIGHT", card.partial:IsShown() and card.partial or card.experimental, "LEFT", -8, 0)
 	card.timelineButton:SetShown(hasReport and Duels:Timeline(report) ~= nil)
 	local opener = hasReport and type(report.opener) == "string" and private.CleanText(report.opener) or ""
 	-- The opener is often one of the findings too: said once, there
@@ -719,20 +721,29 @@ function private.ShowCard(duel)
 		end
 	end
 	opener = opener ~= "" and ("   "..opener) or ""
-	if hasReport and report.partial then
-		-- The app waited for the rest of the duel's combat log and it never came: what it read is all there is
-		opener = opener.."   "..Theme:Colorize("(the combat log ends before the duel did: this is part of it)", C.gold)
-	end
 	-- Made under the Forever Open's rules (the app's tournament setting): its tips follow them
 	if hasReport and report.mode == "tournament" then
 		opener = "   "..Theme:Colorize("Tournament rules", C.gold)..opener
 	end
 	local gap = private.GearGap(duel)
 	opener = opener..(gap and ("   "..gap) or "")
-	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener)
-		or (state == "nolog" and type(report) == "table" and type(report.why) == "string" and ("No fight report: "..private.CleanText(report.why)))
-		or private.AppNote()
-		or ((REPORT_NOTES[state] or {})[1] or "No fight report for this duel."))
+	-- Without a report: why not, as a label with the rest on hover
+	local label, tip
+	if not hasReport then
+		local appLabel, appTip = private.AppNote()
+		local note = REPORT_NOTES[state]
+		if state == "nolog" and type(report) == "table" and type(report.why) == "string" then
+			label, tip = "No fight report", private.CleanText(report.why)
+		elseif appLabel then
+			label, tip = appLabel, appTip
+		elseif note then
+			label, tip = note[1], note[3]
+		else
+			label = "No fight report for this duel."
+		end
+	end
+	card.note:SetText(hasReport and (Duels:Describe(Duels:Side(duel, "them"))..opener) or label)
+	W:Explain(card.note, tip and label or nil, tip)
 	for key, lane in pairs(card.lanes) do
 		for _, part in ipairs({ lane.label, lane.graph, lane.strip, lane.used }) do
 			part:SetShown(hasReport)
@@ -790,16 +801,19 @@ function private.HideCard()
 end
 
 
----What to do about the app, when it's what keeps fight cards away: not installed, too old, or not running.
+---What to do about the app, when it's what keeps fight cards away (not installed, too old, or not running): a label,
+---and the rest for its tooltip.
+---@return string? label
+---@return string? tip
 function private.AppNote()
 	local state, version = Duels:AppState()
 	if state == "none" then
-		return "Fight cards need the free Wanted app: wanteddeadordead.com/app"
+		return "Needs the Wanted app", "Fight cards need the free Wanted app: wanteddeadordead.com/app"
 	elseif state == "old" then
-		return format("Fight cards need Wanted app %s or newer (you have %s): update it from its tray menu or wanteddeadordead.com/app",
+		return "Update the Wanted app", format("Fight cards need Wanted app %s or newer (you have %s): update it from its tray menu or wanteddeadordead.com/app",
 			Duels.MIN_APP, Theme:Plain(version))
 	elseif state == "stopped" then
-		return "Start the Wanted app, then /reload, for fight cards."
+		return "Start the app, then /reload", "Fight cards need the Wanted app running."
 	end
 	return nil
 end
@@ -807,14 +821,19 @@ end
 ---The notice beside the tabs: the app, when it's what keeps fight cards away, else the last duel's fight report
 ---while it isn't in yet.
 function private.ShowReportNote(last)
-	local appNote = last and Duels:ReportState(last) ~= "ready" and private.AppNote()
-	if appNote then
-		private.reportText:SetText(Theme:Colorize(appNote, C.gold))
+	local appLabel, appTip
+	if last and Duels:ReportState(last) ~= "ready" then
+		appLabel, appTip = private.AppNote()
+	end
+	if appLabel then
+		private.reportText:SetText(Theme:Colorize(appLabel, C.gold))
+		W:Explain(private.reportText, appLabel, appTip)
 		private.reloadButton:Hide()
 		return
 	end
 	local note = last and REPORT_NOTES[(Duels:ReportState(last))]
 	private.reportText:SetText(note and Theme:Colorize(note[1], C.muted) or "")
+	W:Explain(private.reportText, note and note[1], note and note[3])
 	private.reloadButton:SetShown(note and note[2] or false)
 end
 
@@ -836,7 +855,6 @@ function private.Refresh()
 	for i, label in ipairs(private.headers) do
 		label:SetText(strupper(HEADERS[private.view][i]))
 	end
-	local empty, hint = "No duels yet.", "Duel someone and it shows up here."
 	local items = {}
 	for _, row in ipairs(sheet[private.view]) do
 		tinsert(items, row)
@@ -849,7 +867,7 @@ function private.Refresh()
 			end
 		end
 	end
-	private.list:SetItems(items, empty, hint)
+	private.list:SetItems(items, "No duels yet.")
 	if private.cardDuel then
 		private.ShowCard(private.cardDuel)
 	end
@@ -859,7 +877,6 @@ UI:RegisterPage("duels", {
 	group = "World PvP",
 	title = "Duels",
 	tabLabel = "Duels",
-	subtitle = "Your duels: your record against each class and spec, and as each of your builds. Duels never count as kills.",
 	order = 7.2,
 	under = "challenges",
 	build = function(container, width, height)
@@ -867,6 +884,7 @@ UI:RegisterPage("duels", {
 		private.recordTile = W:StatTile(container, "Your record", C.accent)
 		private.recordTile:SetPoint("TOPLEFT")
 		private.recordTile:SetWidth(tileWidth)
+		W:Explain(private.recordTile, "Your record", "Duels never count as kills.")
 		private.facedTile = W:StatTile(container, "Most faced", C.blue)
 		private.facedTile:SetPoint("LEFT", private.recordTile, "RIGHT", 12, 0)
 		private.facedTile:SetWidth(tileWidth)
@@ -888,6 +906,7 @@ UI:RegisterPage("duels", {
 		-- The game hands the app's fight reports to the addon only at a /reload: a button for it while one is due
 		private.reloadButton = W:Button(container, "Reload", "secondary", 80, 26, function() C_UI.Reload() end)
 		private.reloadButton:SetPoint("TOPRIGHT", 0, -84)
+		W:Explain(private.reloadButton, "Reload", RELOAD_TIP)
 		private.reportText = Theme:Text(container, "small", "")
 		private.reportText:SetPoint("LEFT", segment, "RIGHT", 16, 0)
 		private.reportText:SetPoint("RIGHT", private.reloadButton, "LEFT", -12, 0)

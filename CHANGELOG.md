@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
+- Poker: hosting a table explains each choice on hover (Cash game, Tournament, People, Practice, Chips, Gold, the password) in place of the notes under them. The review is a short row per choice, each with its rules on hover. Its step numbers no longer repeat. A gold table's host still sees the two lines that matter: you hold the money, and your client deals. The table window's status line and settings are shorter, with the rest on hover.
 
 ## [1.27.3] - 2026-10-17
 

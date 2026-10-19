@@ -311,7 +311,7 @@ function Emotes:MaybeTip()
 	settings.tipShown = true
 	W:Dialog({
 		title = "Emote buttons",
-		text = "The buttons at the bottom of the Nearby window /lol, /flex, /doom and more at your target, even mid-fight. The ... button opens every emote.\n\nChoose your favourites, or turn them all off, in Settings > Emotes.",
+		text = "The buttons at the bottom of the Nearby window send /lol, /flex, /doom and more at your target, even mid-fight. The ... button opens every emote.\n\nChoose your favourites, or turn them all off, in Settings > Emotes.",
 		cancelLabel = "Turn off",
 		confirmLabel = "Keep them",
 		onCancel = function()

@@ -506,7 +506,7 @@ function private.AppText()
 	elseif Wanted:AppNotRunningFor() then
 		return "The Wanted app isn't running: a report waits until you start it. Get it at wanteddeadordead.com/app.", C.amber
 	end
-	return "The Wanted app is set up: a report goes the next time it syncs (after a /reload or logout).", C.muted
+	return "", C.muted
 end
 
 ---Tells the player the queue is full, and what gets the app sending.
@@ -600,7 +600,7 @@ end
 
 function private.Create()
 	local frame = CreateFrame("Frame", "WantedBugReport", UIParent)
-	frame:SetSize(620, 156)
+	frame:SetSize(620, 104)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:SetToplevel(true)
@@ -625,17 +625,12 @@ function private.Create()
 	-- The app sends it on: the player only says what happened
 	local send = W:Button(frame, "Send to the developers", "primary", 180, 28, function() Report:AskAboutBug() end)
 	send:SetPoint("TOPRIGHT", -20, -44)
-	local sendNote = Theme:Text(frame, "body", "Say what happened and the Wanted app sends it, with the recent log.", C.text)
-	sendNote:SetPoint("TOPLEFT", 20, -51)
-	sendNote:SetPoint("RIGHT", send, "LEFT", -12, 0)
-	sendNote:SetWordWrap(true)
-	-- Whether the app will send it, or what the report waits for (set at each Show)
+	W:Explain(send, "Send to the developers", "Say what happened and the Wanted app sends it, with the recent log.")
+	-- What the report waits for, when the app won't send it yet (set at each Show)
 	local appNote = Theme:Text(frame, "small", "")
-	appNote:SetPoint("TOPLEFT", 20, -84)
-	appNote:SetPoint("RIGHT", -20, 0)
+	appNote:SetPoint("TOPLEFT", 20, -48)
+	appNote:SetPoint("RIGHT", send, "LEFT", -12, 0)
 	appNote:SetWordWrap(true)
-	local note = Theme:Text(frame, "tiny", "Say what you were doing, and the exact red error text if the game showed one.")
-	note:SetPoint("BOTTOMLEFT", 20, 18)
 	frame.appNote = appNote
 	private.frame = frame
 end
@@ -661,26 +656,3 @@ end)
 
 
 
--- ============================================================================
--- Beta welcome
--- ============================================================================
-
----Shown once per version the first time the main window opens with no other dialog up.
-function Report:MaybeWelcome()
-	local db = Wanted.db
-	if not Wanted.BETA or db.welcomed == Wanted.VERSION or W:IsDialogShown() then
-		return
-	end
-	db.welcomed = Wanted.VERSION
-	C_Timer.After(0.2, function()
-		if W:IsDialogShown() then
-			db.welcomed = nil -- another came up meanwhile: next time
-			return
-		end
-		W:Dialog({
-			title = "Welcome, bounty hunter",
-			text = "Thanks for trying the Wanted: Dead or... Dead beta. If anything looks off, Report a bug at the foot of the menu (or /wanted bug) sends the details to the developers through the Wanted app.",
-			confirmLabel = "Let's hunt",
-		})
-	end)
-end

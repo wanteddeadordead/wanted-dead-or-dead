@@ -206,6 +206,8 @@ function private.BuildCapture()
 	local C = Wanted.CapturesMap.COLORS
 	local capture = CreateFrame("Frame", "WantedCaptureProgress", UIParent)
 	capture:SetSize(CAPTURE_W, CAPTURE_H)
+	-- Motion only: clicks still reach the world under the bar
+	Wanted.Widgets:Explain(capture, "Capture counts", "Counts are provisional: wanteddeadordead.com decides.", "ANCHOR_BOTTOM")
 	capture:SetFrameStrata("LOW")
 	capture.left = capture:CreateTexture(nil, "BACKGROUND")
 	capture.left:SetPoint("LEFT", BAR_OFFSET, 0)
@@ -474,10 +476,10 @@ function private.UpdateCapture(capture)
 	-- How long at this tick's pace: "3:10 left"
 	local left = p.net > 0 and format(", %s left", private.Clock(ceil((p.cost - p.n) / p.net) * Captures.SAMPLE_SECONDS)) or ""
 	if blocked then
-		private.Line(capture, format("%s: %s, so you don't count here", name, blocked))
+		private.Line(capture, format("%s: you don't count (%s)", name, strlower(blocked)))
 	elseif holder == side then
 		local attacked = p.attackers > 0 and format(", %d attacking%s", p.attackers, left) or ""
-		private.Line(capture, format("Holding the %s: %d of your side%s%s", name, p.defenders, attacked, p.attackers > 0 and " (provisional)" or ""))
+		private.Line(capture, format("Holding the %s: %d of your side%s", name, p.defenders, attacked))
 	elseif Captures:TruceOn(point.front) then
 		private.Line(capture, format("%s: a truce holds the front until %s", name, private.Clock(Captures:Siege().round.truceUntil - GetServerTime())))
 	elseif not point.lane and not Captures:RoundOn(point.front) then
@@ -488,7 +490,7 @@ function private.UpdateCapture(capture)
 		private.Line(capture, format("%s: %d of your side here, %d needed", name, allies, Captures.MIN_PEOPLE))
 	else
 		local held = p.net <= 0 and ", held off" or left
-		private.Line(capture, format("Taking the %s: %d of your side, %d defending%s (provisional)", name, p.attackers, p.defenders, held))
+		private.Line(capture, format("Taking the %s: %d of your side, %d defending%s", name, p.attackers, p.defenders, held))
 	end
 	capture:Show()
 end
@@ -580,7 +582,7 @@ function private.CheckLive()
 	local current = Captures:Current()
 	for _, point in ipairs(Captures.POINTS) do
 		if point.front == front and point ~= current and Captures:Taking(point) and private.Due("taking:"..point.id, now) then
-			local sub = format("%d of your side at %s (provisional)", Captures:Allies(point.id), point.name)
+			local sub = format("%d of your side at %s", Captures:Allies(point.id), point.name)
 			if point.lane then
 				private.Alert("attacking", Captures:Role(point), sub)
 			else

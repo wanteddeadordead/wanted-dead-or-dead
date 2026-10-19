@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Frames and dialogs: the capture bar drops "(provisional)" from its line (hover the bar for why), and says "you don't count (mounted)". The death card says "Probably <name>", with why on hover. The target file and the bug report window are shorter, the siege layer warning just says /wanted hop, and the old beta welcome is gone (the tour covers it). The emote tip's missing word is fixed.
 - Tooltips take EllesmereUI's look: a dark box with a gold title and a light body. Buttons that are greyed out now say why when you hover them, and an empty list's how-to sits behind a small (i) after its text. New textures: restart the client after updating.
 - Every control in EllesmereUI's style: checkboxes, dropdowns with a chevron and the current choice marked in their menu, segmented controls with rounded ends, darker text fields, section headers with a rule, centred dialogs, and a value box beside each slider where you can type a number. Borders are a faint white that sits on any felt, and greyed-out buttons fade further.
 - The interface text is set in Barlow Semi Condensed, a condensed face close to EllesmereUI's; Russian names keep the game's own font. New font files: restart the client after updating.

@@ -201,7 +201,7 @@ function private.FillSummary(frame, entries, deaths, stats)
 	if latest then
 		frame.last:SetText(format("%s%s, %s, by %s", latest.name and (latest.name..", ") or "", private.Where(latest), private.Ago(latest.t), latest.by or "you"))
 	else
-		frame.last:SetText(Theme:Colorize("Not seen yet by you or another Wanted user.", C.faint))
+		frame.last:SetText(Theme:Colorize("Not seen yet", C.faint))
 	end
 	local zones = {}
 	for i = 1, min(#summary.zones, 5) do
@@ -223,13 +223,14 @@ function private.FillSummary(frame, entries, deaths, stats)
 	end
 	if #deaths > 0 then
 		local last = deaths[1]
-		tinsert(record, format("Died %d time%s in the last 3 days' records (wanteddeadordead.com has all), last %s in %s%s.", #deaths, #deaths == 1 and "" or "s", private.Ago(last.t), last.zone or "?", last.killer and (", killed by "..last.killer) or ""))
+		tinsert(record, format("Died %d time%s in 3 days, last %s in %s%s", #deaths, #deaths == 1 and "" or "s", private.Ago(last.t), last.zone or "?", last.killer and (", killed by "..last.killer) or ""))
 	else
 		tinsert(record, "No deaths in the last 3 days' records.")
 	end
 	frame.record:SetText(table.concat(record, "\n"))
+	W:Explain(frame.record, "Deaths", "From the last 3 days' records. wanteddeadordead.com has all of them.")
 	frame.listLabel:SetText(strupper(format("Every sighting (%d)", #entries)))
-	frame.list:SetItems(entries, "No sightings yet.", "They're added as you and other Wanted users see them.")
+	frame.list:SetItems(entries, "No sightings yet.")
 end
 
 ---Opens the file on one player.

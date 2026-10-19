@@ -314,17 +314,22 @@ function private.RefreshRace(now, race)
 	private.title:SetText(race.zone)
 	private.kind:Set("RACE", C.muted)
 	private.left:Set(phase == "live" and (private.MinSec(race.stop - now).." LEFT") or (private.State(race, now)), phase == "live" and C.green or phase == "upcoming" and C.gold or C.muted)
-	-- Influence
-	private.hordeLabel:SetText(Theme:Colorize("Horde "..private.Count(race.horde), SIDE_COLORS.Horde))
-	private.allianceLabel:SetText(Theme:Colorize("Alliance "..private.Count(race.alliance), SIDE_COLORS.Alliance))
-	local total = race.horde + race.alliance
+	-- Influence: the site's, or our side's live estimate while the race runs (Races:SideInfluence)
+	local horde, hordeLive = Races:SideInfluence(race, "Horde")
+	local alliance, allianceLive = Races:SideInfluence(race, "Alliance")
+	private.hordeLabel:SetText(Theme:Colorize("Horde "..private.Count(horde), SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize("  live", C.green) or ""))
+	private.allianceLabel:SetText((allianceLive and Theme:Colorize("live  ", C.green) or "")..Theme:Colorize("Alliance "..private.Count(alliance), SIDE_COLORS.Alliance))
+	local total = horde + alliance
 	local bar = private.bar
 	bar.horde:SetShown(total > 0)
 	bar.alliance:SetShown(total > 0)
 	if total > 0 then
-		bar.horde:SetWidth(max(bar.width * race.horde / total, 1))
-		bar.alliance:SetWidth(max(bar.width * race.alliance / total, 1))
+		bar.horde:SetWidth(max(bar.width * horde / total, 1))
+		bar.alliance:SetWidth(max(bar.width * alliance / total, 1))
 	end
+	local live = phase == "live" and Races:LiveSide(race)
+	W:Explain(bar, "Influence", BAR_TIP..(live and format("\n\nLive, provisional: %d of your side's Wanted players counting now, %d kills, %d minutes on the points.",
+		live.players, live.kills, live.minutes) or ""))
 	-- The points
 	for i, p in ipairs(private.points) do
 		local point = race.points[i]
@@ -333,7 +338,9 @@ function private.RefreshRace(now, race)
 			local color = SIDE_COLORS[point.holder] or C.faint
 			p.dot:SetVertexColor(color[1], color[2], color[3], 1)
 			p.name:SetText(point.name)
-			p.holder:SetText(Theme:Colorize(point.holder or "Nobody yet", color)..(point.bonus and Theme:Colorize(" · the +20% point", C.gold) or ""))
+			local here = phase == "live" and Races:HereNow(point) or 0
+			p.holder:SetText(Theme:Colorize(point.holder or "Nobody yet", color)..(point.bonus and Theme:Colorize(" · the +20% point", C.gold) or "")
+				..(here > 0 and Theme:Colorize(format(" · %d of yours here", here), C.green) or ""))
 			W:Explain(p, point.name, (point.holder and ("Held by the "..point.holder.." as the site last counted it.") or "Nobody has held it yet.")
 				..(point.bonus and "\n\nThe middle point: a minute here counts +20%." or ""))
 		end
@@ -342,7 +349,7 @@ function private.RefreshRace(now, race)
 	local side = UnitFactionGroup("player") == "Alliance" and "Alliance" or "Horde"
 	local other = side == "Horde" and "Alliance" or "Horde"
 	local ours, theirs = Races:Guilds(race, side), Races:Guilds(race, other)
-	local sideTotal = side == "Horde" and race.horde or race.alliance
+	local sideTotal = side == "Horde" and race.horde or race.alliance -- the guilds' shares are of the site's count
 	private.guildsLabel:SetText(strupper(side.." guilds"))
 	private.guildsLabel:SetShown(#ours > 0)
 	local myGuild = GetGuildInfo and GetGuildInfo("player")

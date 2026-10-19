@@ -469,10 +469,12 @@ end
 function private.UsablePage(key)
 	local def = key and private.pageByKey[key]
 	if not def or (def.hidden and def.hidden()) then
-		-- The main page itself switched off (the Siege page while siege nights are off): Home
-		local main = private.pageByKey[DEFAULT_PAGE]
-		if key ~= DEFAULT_PAGE and main and not (main.hidden and main.hidden()) then
-			return DEFAULT_PAGE
+		-- The main page: Guild Wars where the site runs races, else Siege; both switched off, Home
+		for _, mainKey in ipairs({ "guildwars", DEFAULT_PAGE }) do
+			local main = private.pageByKey[mainKey]
+			if key ~= mainKey and main and not (main.hidden and main.hidden()) then
+				return mainKey
+			end
 		end
 		return "home"
 	end

@@ -42,6 +42,7 @@ Catchup.lua
 Challenges.lua
 BlizzRank.lua
 Captures.lua
+Races.lua
 Achievements.lua
 HonorScout.lua
 Duels.lua
@@ -75,6 +76,7 @@ Emotes.lua
 NearbyWindow.lua
 PageHome.lua
 PageSiege.lua
+PageGuildWars.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua
@@ -106,5 +108,6 @@ MapPins.xml
 CapturesMap.lua
 CapturesHUD.lua
 CapturesHUD.xml
+RacesHUD.lua
 Minimap.lua
 OptionsPanel.lua

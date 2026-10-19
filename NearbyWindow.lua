@@ -73,6 +73,10 @@ function Nearby:OnEnable()
 			private.frame:SetShown(private.pendingShow)
 			private.pendingShow = nil
 		end
+		if private.pendingScale then
+			private.pendingScale = nil
+			Nearby:SetScale(private.Show().scale)
+		end
 		if private.pendingLayout then
 			Nearby:Refresh()
 		end
@@ -253,6 +257,19 @@ function Nearby:SetShown(shown)
 	end
 end
 
+---Sizes the window (Settings), saved for the account, keeping it on screen; after combat, if in combat now (its rows
+---are secure buttons).
+---@param scale number 0.8 to 1.5
+function Nearby:SetScale(scale)
+	scale = Theme:ClampScale(scale)
+	private.Show().scale = scale
+	if InCombatLockdown() or not private.frame then
+		private.pendingScale = private.frame ~= nil
+		return
+	end
+	private.Settings().window = Theme:SetFrameScale(private.frame, scale) or private.Settings().window
+end
+
 ---Lays the rows out again (after a display setting changed) and redraws.
 function Nearby:ForceLayout()
 	for _, row in ipairs(private.rows) do
@@ -286,6 +303,8 @@ function private.Create()
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	Theme:Skin(frame, C.bg, C.borderLight)
+	-- Its size (Settings) first: the saved place is in the window's own units at that size
+	frame:SetScale(Theme:ClampScale(private.Show().scale))
 	local saved = private.Settings().window
 	if saved and saved.point then
 		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)

@@ -150,6 +150,8 @@ function private.Create()
 		end
 	end
 	private.theme = theme
+	-- Its size (Settings, Theme) first: the saved place is in the window's own units at that size
+	frame:SetScale(Theme:ClampScale(Wanted.db.settings.uiScale))
 	local saved = Wanted.db.settings.window
 	if saved and saved.point then
 		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)
@@ -860,6 +862,17 @@ end)
 Wanted:RegisterCommand("hotspots", "Opens the Hotspots page: where enemy players are right now.", function()
 	UI:Show("hotspots")
 end)
+
+---Sizes the window (Settings, Theme: UI size), saved for the account; its cog popups and menus follow it. The window
+---keeps its centre and stays on screen.
+---@param scale number 0.8 to 1.5
+function UI:SetScale(scale)
+	scale = Theme:ClampScale(scale)
+	Wanted.db.settings.uiScale = scale
+	if private.frame then
+		Wanted.db.settings.window = Theme:SetFrameScale(private.frame, scale) or Wanted.db.settings.window
+	end
+end
 
 ---Shows a theme's felt behind the window at once, before the /reload that applies its colours (Settings).
 ---@param key string

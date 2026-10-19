@@ -7,7 +7,7 @@ local UI = Wanted.UI
 local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
-local private = { toggles = {}, layoutSliders = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {}, soundPicks = {} }
+local private = { toggles = {}, layoutSliders = {}, sizeSliders = {}, panels = {}, view = "alerts", iconButtons = {}, emoteChips = {}, soundPicks = {} }
 local EMOTE_STYLES = { fav = "selected", list = "chip", hidden = "ghost" }
 local EMOTE_CHIP_WIDTH, EMOTE_COLUMNS = 82, 8
 local SOUND_MENU_PAGE = 25 -- SharedMedia sounds per menu page, so a long list stays on screen
@@ -111,6 +111,34 @@ function private.Switch(column, getTable, key, label, tip, onChange)
 	return column:Row(label, switch, tip), switch
 end
 
+---A size slider for a row, 80% to 150% in 5% steps. A drag applies the size when the thumb is let go, so what it sizes
+---(the window it sits in, even) doesn't change under the mouse; a number typed in its box applies at once.
+---@param get fun(): number? the size saved
+---@param apply fun(scale: number)
+function private.SizeSlider(parent, get, apply)
+	local holder
+	local function Percent(value) return format("%d%%", value) end
+	local function Dragging() return holder.slider.IsDraggingThumb and holder.slider:IsDraggingThumb() == true end
+	holder = W:Slider(parent, "", 200, Theme.SIZE_LOW, Theme.SIZE_HIGH, Theme.SIZE_STEP, Percent, function(value)
+		if not Dragging() then
+			apply(value / 100)
+			return
+		end
+		holder.pending = value
+		holder:SetScript("OnUpdate", function(self)
+			if not Dragging() then
+				self:SetScript("OnUpdate", nil)
+				apply(self.pending / 100)
+				self.pending = nil
+			end
+		end)
+	end)
+	-- No label over it: the row's label names it, so the track and box sit on the row's middle
+	holder:SetHeight(26)
+	tinsert(private.sizeSliders, { slider = holder, get = get })
+	return holder
+end
+
 ---A frame holding buttons side by side, for a row's control.
 local function ButtonGroup(parent, buttons)
 	local group = CreateFrame("Frame", nil, parent)
@@ -194,6 +222,7 @@ function private.BuildAlerts(column)
 		private.moveHud:SetStyle(moving and "primary" or "secondary")
 	end)
 	column:Row("Where it shows", private.moveHud)
+	column:Row("Warning size", private.SizeSlider(content, function() return Detect().hudScale end, function(scale) Wanted.Alerts:SetHudScale(scale) end))
 	column:Note("Needs enemy detection on. Works from nameplates, your target and focus: someone off screen can't be seen targeting you.")
 
 	-- Each alert's sound, with a button to hear it
@@ -316,6 +345,8 @@ function private.BuildNearby(column)
 		RefreshNearby()
 	end, 60)
 	column:Row("Window background", private.opacity)
+	column:Row("Window size", private.SizeSlider(content, function() return NearbyShow().scale end, function(scale) Wanted.NearbyWindow:SetScale(scale) end),
+		"After combat, if you're in one.")
 	private.autoHide = W:Segmented(content, {
 		{ key = "0", label = "Never" },
 		{ key = "120", label = "2m" },
@@ -391,6 +422,8 @@ function private.BuildSharing(column)
 		UI:Refresh()
 	end)
 	column:Row("Show capture fronts on", private.frontsShow)
+	column:Row("Capture bar size", private.SizeSlider(content, function() return Settings().scale end, function(scale) Wanted.CapturesHUD:SetScale(scale) end),
+		"The points held by lane at the top of the screen in a front's zone, and the capture bar under them.")
 	private.Switch(column, Settings, "alerts", "Warn about capture points near me", "When your side gathers at a point in your zone, or enemies are close while you stand in one; and the siege's rounds and Nexus falls while you're in its zone or have its map open.")
 	private.Switch(column, Settings, "autoTrack", "Keep a waypoint on the nearest point to attack", "In a front's zone. Only ever replaces a waypoint Wanted set, never your own.", function() Wanted.Captures:AutoTrack() end)
 	private.Switch(column, Settings, "siegeCall", "Siege call", "Half an hour before each night's siege and when it opens, wherever you are.")
@@ -479,6 +512,11 @@ function private.BuildLook(panel, width)
 		previous = button
 		end
 	end
+
+	card = private.Card(panel, -416, 92, "Size", width)
+	local size = W:Row(card, width, "UI size", private.SizeSlider(card, function() return Wanted.db.settings.uiScale end, function(scale) UI:SetScale(scale) end),
+		"This window's size, with its popups and menus. Saved for every character on the account. The Nearby window and the HUDs have their own sizes in their tabs.")
+	size:SetPoint("TOPLEFT", 0, -36)
 end
 
 ---Borders the chosen theme and says whether a /reload is needed for its colours.
@@ -695,6 +733,12 @@ function private.Refresh()
 	private.RefreshEmotes()
 	for _, entry in ipairs(private.layoutSliders) do
 		entry.slider:SetValue(entry.getTable()[entry.key] or 0)
+	end
+	-- Not while a drag waits to apply
+	for _, entry in ipairs(private.sizeSliders) do
+		if not entry.slider.pending then
+			entry.slider:SetValue(floor(Theme:ClampScale(entry.get()) * 100 + 0.5))
+		end
 	end
 	-- The rank layouts are in cog popups, built on first opening
 	if private.plateAnchor then

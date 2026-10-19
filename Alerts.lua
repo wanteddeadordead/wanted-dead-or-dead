@@ -299,6 +299,8 @@ function private.GetHud()
 	hud:SetFrameStrata("HIGH")
 	hud:SetClampedToScreen(true)
 	hud:SetMovable(true)
+	-- Its size (Settings) first: the saved place is in the warning's own units at that size
+	hud:SetScale(Wanted.Theme:ClampScale(private.Settings().hudScale))
 	local pos = private.Settings().hudPos
 	if pos and pos.point then
 		hud:SetPoint(pos.point, UIParent, pos.point, pos.x, pos.y)
@@ -479,6 +481,18 @@ function Alerts:SetHudMoving(moving)
 	else
 		hud:Hide()
 		Alerts:UpdateTargetedHud()
+	end
+end
+
+---Sizes the warning (Settings), keeping its centre where it is on screen.
+---@param scale number 0.8 to 1.5
+function Alerts:SetHudScale(scale)
+	scale = Wanted.Theme:ClampScale(scale)
+	private.Settings().hudScale = scale
+	local hud = private.GetHud()
+	local x, y = Wanted.Theme:RescaleInPlace(hud, scale)
+	if x then
+		private.Settings().hudPos = { point = (hud:GetPoint(1)), x = x, y = y }
 	end
 end
 

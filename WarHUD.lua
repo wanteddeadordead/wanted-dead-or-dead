@@ -206,7 +206,8 @@ function WarHUD:Update()
 	for _, key in ipairs({ "attacker", "defender" }) do
 		local side, guild = f[key], key == "attacker" and attacker or defender
 		side.crest:SetTexture(GuildWars:CrestFile(guild))
-		side.name:SetText(guild.guild or "?")
+		-- Another guild's war: the holders by name, the attackers by their side
+		side.name:SetText(guild.guild or guild.faction or "?")
 		local color = GuildWars.SIDE_COLORS[guild.faction] or C.text
 		side.name:SetTextColor(color[1], color[2], color[3])
 		local bonus = tonumber(mult[key])

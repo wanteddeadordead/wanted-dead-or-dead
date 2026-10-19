@@ -18466,6 +18466,18 @@ end
 	sights = {}
 	ns.GuildWars:Sight()
 	check(sights[1]:sub(-6) == " 0 0 -", "nobody moving or fighting for 5 minutes: nobody counted: "..sights[1])
+	-- A bystander: another guild's live war in the zone (warLive gives every live war of the campaign, with its zone)
+	local bystander = GuildWarsSample(clock)
+	bystander.declare = nil
+	bystander.warLive = { ["9"] = { zone = "Hillsbrad Foothills", phase = "battle", endsAt = clock + 1200, points = {}, turnout = { att = 12, def = 15 } } }
+	G:Take(bystander)
+	sights = {}
+	ns.GuildWars:Sight()
+	ns.WarHUD:Update()
+	check(G:War(1) == nil and G:Here() and G:Here().warId == 9 and sights[1] and sights[1]:find(" census 9 ", 1, true) and hud:IsShown()
+		and hud.defender.name._text == "Revenant" and hud.attacker.name._text == "Horde" and hud.status._text == "You can fight; you don't count",
+		"a bystander: no war tab, but the HUD, and census lines under that war's id: "..tostring(sights[1]))
+	AtStep(function(war) war.state, war.start, war.answer = "battle", clock - 300, "accept" war.roster = { { guid = ME, name = "Test Player", place = 1 } } end)
 	-- Only on the war's layer once it's fixed
 	local realLayer = ns.Shard.Current
 	G:War(1).battle.layer = "1-1424-3"

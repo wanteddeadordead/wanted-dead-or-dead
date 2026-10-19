@@ -785,13 +785,26 @@ function private.Yards(mapId)
 	return nil
 end
 
----The guild's war in the player's zone, from prep to its end by the clock, or nil. Also its zone (WarZones) and the
----player's place: x, y (0 to 100) and the map.
+---The guild's wars, then every other live war of the campaign (role "watch": a bystander's).
+---@return table[]
+function GuildWars:LiveWars()
+	local out = {}
+	for _, war in ipairs(GuildWars:Wars()) do
+		tinsert(out, war)
+	end
+	for _, war in ipairs(List(private.state and private.state.others)) do
+		tinsert(out, war)
+	end
+	return out
+end
+
+---A war in the player's zone (the guild's, else anyone's), from prep to its end by the clock, or nil. Also its zone
+---(WarZones) and the player's place: x, y (0 to 100) and the map.
 ---@param now number?
 function GuildWars:Here(now)
 	now = now or GetServerTime()
 	local _, x, y, mapId = Wanted.Recorder:GetPosition()
-	for _, war in ipairs(GuildWars:Wars()) do
+	for _, war in ipairs(GuildWars:LiveWars()) do
 		local b, zone = war.battle, Wanted.WarZones:Get(war.zone)
 		if zone and zone.mapId == mapId and type(b) == "table" and b.prep and b.stop and now >= b.prep and now < b.stop
 			and war.step ~= "result" and war.state ~= "withdrawn" then

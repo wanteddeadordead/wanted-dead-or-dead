@@ -46,8 +46,7 @@ function private.BuildLog(container, width, height)
 	card:SetSize(width, height - 144)
 	local label = W:SectionLabel(card, "Debug log")
 	label:SetPoint("TOPLEFT", 16, -14)
-	local hint = Theme:Text(card, "tiny", "Click the text, Ctrl+A, Ctrl+C to copy it.")
-	hint:SetPoint("LEFT", label, "RIGHT", 12, 0)
+	W:InfoGlyph(card, "Debug log", "Click the text, Ctrl+A, Ctrl+C to copy it."):SetPoint("LEFT", label, "RIGHT", 6, 0)
 	local refresh = W:Button(card, "Refresh", "ghost", 80, 22, function() private.Refresh() end)
 	refresh:SetPoint("TOPRIGHT", -10, -8)
 	local scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
@@ -89,7 +88,9 @@ function private.Refresh()
 	private.dot:SetColorTexture(color[1], color[2], color[3], 1)
 	private.netTitle:SetText(title)
 	local stats = info.stats
-	private.netStats:SetText(format("Messages sent %d, received %d. Records merged from others %d. Rejected %d, dropped by limits %d, held back by the game %d, repeat sightings skipped %d.", stats.sent, stats.received - stats.echoed, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped))
+	local counts = { stats.sent, stats.received - stats.echoed, stats.merged, stats.invalid, stats.dropped, stats.throttled, stats.skipped }
+	private.netStats:SetText(format("Sent %d · Received %d · Merged %d · Rejected %d · Dropped %d · Held %d · Skipped %d", unpack(counts)))
+	W:Explain(private.netStats, "Network counters", format("Messages sent %d, received %d. Records merged from others %d. Rejected %d, dropped by limits %d, held back by the game %d, repeat sightings skipped %d.", unpack(counts)))
 	private.logText = table.concat(Wanted:GetLogLines(), "\n")
 	private.logBox:SetText(private.logText)
 end
@@ -97,7 +98,6 @@ end
 UI:RegisterPage("tools", {
 	group = "You",
 	title = "Tools",
-	subtitle = "The player-to-player network and the log to send when something looks wrong.",
 	hidden = function() return not Wanted.db.settings.showTools end,
 	order = 7,
 	under = "card",

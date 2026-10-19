@@ -537,12 +537,20 @@ function private.Refresh()
 	frame.save:SetEnabled(allUnlocked)
 	if private.trying then
 		-- Without the app nothing carries the unlocks down or a card up: say so, instead of a Save that never comes
-		frame.note:SetText(mine and "Trying anything: step through every piece, or shuffle. Nothing here is saved."
-			or not Wanted:HasApp() and Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up."
-			or "Try any combination. Your own card shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts).")
+		if mine then
+			frame.note:SetText("Trying anything: nothing is saved.")
+			W:Explain(frame.note, nil)
+		elseif not Wanted:HasApp() then
+			frame.note:SetText("Needs the Wanted app to save")
+			W:Explain(frame.note, "Needs the Wanted app", Wanted:NeedsApp("Saving a calling card").." It brings your unlocks from wanteddeadordead.com and sends your card up.")
+		else
+			frame.note:SetText("Try any combination")
+			W:Explain(frame.note, "Try any combination", "Your own card shows here once the Wanted app has brought it from wanteddeadordead.com (a /reload after it starts).")
+		end
 	else
-		frame.note:SetText(allUnlocked and "Your card. Step through the pieces, click a stat to change it, then Save."
-			or "Locked pieces can be tried but not saved: earn them through their challenges.")
+		-- The arrows, the stat boxes and Save say how; a locked piece is why Save is greyed out
+		frame.note:SetText(allUnlocked and "" or "Locked pieces can't be saved.")
+		W:Explain(frame.note, nil)
 	end
 end
 
@@ -606,7 +614,7 @@ function private.Save()
 		s1 = private.stats[1], s2 = private.stats[2], s3 = private.stats[3] }
 	mine.card = { plate = card.plate, border = card.border, emblem = card.emblem, background = card.background,
 		stats = { private.stats[1], private.stats[2], private.stats[3] } }
-	private.frame.note:SetText("Saved. The Wanted app sends it to wanteddeadordead.com after your next /reload or logout.")
+	private.frame.note:SetText("Saved. It goes up at your next /reload or logout.")
 end
 
 function private.GetFrame()
@@ -666,7 +674,7 @@ function private.GetFrame()
 	buttons:SetPoint("TOP", previous, "BOTTOM", 0, -14)
 	frame.save = W:Button(buttons, "Save", "primary", 110, 28, private.Save)
 	frame.save:SetPoint("LEFT")
-	W:AttachTooltip(frame.save, "Save your calling card", "Needs the Wanted app: it sends the card to wanteddeadordead.com after your next /reload or logout. Only unlocked pieces can be saved.")
+	W:AttachTooltip(frame.save, "Save your calling card", "Needs the Wanted app: it sends the card to wanteddeadordead.com after your next /reload or logout. Only unlocked pieces can be saved: earn them through their challenges.")
 	frame.mode = W:Button(buttons, "Try anything", "secondary", 130, 28, function()
 		private.trying = not private.trying
 		private.Load()

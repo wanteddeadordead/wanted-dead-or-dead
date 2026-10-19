@@ -9,6 +9,7 @@ local C = Theme.C
 local private = {}
 
 local SITE = "https://wanteddeadordead.com"
+local SITE_HEIGHT, APP_HEIGHT = 156, 170
 
 ---An address with a label over it, in a card.
 local function AddLink(card, y, label, url, width)
@@ -28,42 +29,38 @@ function private.BuildSite(container, width)
 	local card = W:Card(container)
 	private.siteCard = card
 	card:SetPoint("TOPLEFT")
-	card:SetSize(width, 196)
+	card:SetSize(width, SITE_HEIGHT)
 	local label = W:SectionLabel(card, "The website")
 	label:SetPoint("TOPLEFT", 16, -14)
-	local about = Theme:Text(card, "body", "Leaderboards for every kill the network records: most kills, most killed, streaks, the Wall of Shame, guilds, zones and bounties, for both factions or one.")
-	about:SetPoint("TOPLEFT", 16, -34)
-	about:SetPoint("RIGHT", -16, 0)
-	about:SetJustifyH("LEFT")
-	about:SetWordWrap(true)
-	AddLink(card, -80, "The site", SITE, width)
-	private.playerBox = AddLink(card, -132, "Your page", SITE.."/player/", width)
+	W:InfoGlyph(card, "The website", "Leaderboards for every kill the network records: most kills, most killed, streaks, the Wall of Shame, "
+		.."guilds, zones and bounties, for both factions or one."):SetPoint("LEFT", label, "RIGHT", 6, 0)
+	AddLink(card, -40, "The site", SITE, width)
+	private.playerBox = AddLink(card, -92, "Your page", SITE.."/player/", width)
 	UI:Mark("yourpage", function() return private.playerBox end)
 end
 
 function private.BuildApp(container, width)
 	local card = W:Card(container)
 	private.appCard = card
-	card:SetPoint("TOPLEFT", 0, -208)
-	card:SetSize(width, 226)
+	card:SetPoint("TOPLEFT", 0, -(SITE_HEIGHT + 12))
+	card:SetSize(width, APP_HEIGHT)
 	local label = W:SectionLabel(card, "The desktop app")
 	label:SetPoint("TOPLEFT", 16, -14)
-	local about = Theme:Text(card, "body", "Puts your records on the website's leaderboards, lets your records confirm other players' kills, links your characters by itself, and keeps Wanted's saved data safe between sessions. Windows and Mac. The addon works the same without it.")
-	about:SetPoint("TOPLEFT", 16, -34)
-	about:SetPoint("RIGHT", -16, 0)
-	about:SetJustifyH("LEFT")
-	about:SetWordWrap(true)
+	W:InfoGlyph(card, "The desktop app", "Puts your records on the website's leaderboards, lets your records confirm other players' kills, links "
+		.."your characters by itself, and keeps Wanted's saved data safe between sessions. Windows and Mac. The addon works the same "
+		.."without it."):SetPoint("LEFT", label, "RIGHT", 6, 0)
 	private.appStatus = Theme:Text(card, "small", "")
-	private.appStatus:SetPoint("TOPLEFT", 16, -96)
-	AddLink(card, -124, "Download it", SITE.."/app", width)
+	private.appStatus:SetPoint("TOPLEFT", 16, -40)
+	AddLink(card, -68, "Download it", SITE.."/app", width)
 	private.liveLog = W:Toggle(card, "Live battle reports", function(checked)
 		Wanted.db.settings.liveLog = checked
 		Wanted.LiveLog:Update()
 	end)
-	private.liveLog:SetPoint("TOPLEFT", 16, -184)
-	private.appPrompt = W:Toggle(card, "Remind me at login when the app isn't set up", function(checked)
+	private.liveLog:SetPoint("TOPLEFT", 16, -128)
+	private.appPrompt = W:Toggle(card, "Login reminder", function(checked)
 		Wanted.db.settings.appPrompt = checked
 	end)
+	W:Explain(private.appPrompt, "Login reminder", "Remind me at login when the app isn't set up.")
 	private.appPrompt:SetPoint("LEFT", private.liveLog, "RIGHT", 40, 0)
 	W:AttachTooltip(private.liveLog, "Live battle reports", "Keeps the game's combat log on in the open world, so the app can post deaths to the website within about five minutes, without a /reload. Turn it off here rather than with /combatlog. The log files stay in your Logs folder; the app can clean them up.")
 end
@@ -97,12 +94,12 @@ function private.Refresh()
 	private.appCard:ClearAllPoints()
 	if Wanted:HasApp() then
 		private.siteCard:SetPoint("TOPLEFT", 0, -top)
-		private.appCard:SetPoint("TOPLEFT", 0, -top - 208)
+		private.appCard:SetPoint("TOPLEFT", 0, -top - SITE_HEIGHT - 12)
 	else
 		private.appCard:SetPoint("TOPLEFT", 0, -top)
-		private.siteCard:SetPoint("TOPLEFT", 0, -top - 238)
+		private.siteCard:SetPoint("TOPLEFT", 0, -top - APP_HEIGHT - 12)
 	end
-	private.body:SetHeight(top + 434 + 12)
+	private.body:SetHeight(top + SITE_HEIGHT + 12 + APP_HEIGHT + 12)
 	private.liveLog:SetChecked(Wanted.db.settings.liveLog)
 	private.appPrompt:SetChecked(Wanted.db.settings.appPrompt)
 	-- The name the network knows us by (first and last name on WoW Forever), as the site's pages use
@@ -133,7 +130,7 @@ function Wanted:PromptForApp()
 		if ago then
 			W:Dialog({
 				title = "Is the Wanted app running?",
-				text = format("The Wanted app last ran on this computer %s ago, so your kills aren't reaching the website. Start it from the Start menu: Wanted Dead or Dead.", Theme:Ago(ago)),
+				text = format("The Wanted app last ran on this computer %s ago, so your kills aren't reaching the website. Start it: Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac.", Theme:Ago(ago)),
 				confirmLabel = "Close",
 				cancelLabel = "Don't remind me",
 				onConfirm = function() end,
@@ -144,7 +141,7 @@ function Wanted:PromptForApp()
 	end
 	W:Dialog({
 		title = "Get the Wanted app",
-		text = "The Wanted desktop app isn't set up on this computer. It puts your kills on the website's leaderboards, lets your records confirm other players' kills, and keeps Wanted's saved data safe. For Windows and Mac.\n\nClick the address, press Ctrl+C, and paste it into your browser:",
+		text = "The Wanted app isn't set up on this computer. It puts your kills on the website. Copy the address (Ctrl+C) into your browser:",
 		input = { value = SITE.."/app" },
 		confirmLabel = "Close",
 		cancelLabel = "Don't remind me",
@@ -180,7 +177,6 @@ end
 UI:RegisterPage("web", {
 	group = "You",
 	title = "Website & app",
-	subtitle = "Where the leaderboards are, and the app that puts you on them.",
 	order = 6,
 	tabLabel = "Website & app",
 	under = "card",
@@ -194,6 +190,8 @@ UI:RegisterPage("web", {
 		body:SetSize(width - 30, 1)
 		scroll:SetScrollChild(body)
 		private.body = body
+		-- TODO(ui-pass PR 3): the setup steps as a W:StepBar (Addon up to date > Wanted app running > In the group >
+		-- Enemy nameplates), each step's detail and fix its dot's tooltip, the copy box and Turn on under the bar
 		private.setup = Wanted.Setup:BuildCard(body, width - 30)
 		private.setup:SetPoint("TOPLEFT")
 		private.BuildSite(body, width - 30)

@@ -559,7 +559,7 @@ end
 -- The settings panel over the felt
 function private.BuildSettings()
 	local panel = CreateFrame("Frame", nil, private.frame)
-	panel:SetSize(400, 430)
+	panel:SetSize(400, 400)
 	panel:SetPoint("CENTER", private.felt, "CENTER", 0, 0)
 	panel:SetFrameLevel(private.frame:GetFrameLevel() + 30)
 	panel:EnableMouse(true)
@@ -571,6 +571,7 @@ function private.BuildSettings()
 	local o = Options()
 	panel.sounds = W:Toggle(panel, "Sounds", function(on) o.sounds = on end)
 	panel.sounds:SetPoint("TOPLEFT", 14, -40)
+	W:Explain(panel.sounds, "Sounds", "Add your own sounds with a SharedMedia addon.")
 	panel.picks = {}
 	local y = -66
 	for _, kind in ipairs(SOUND_KINDS) do
@@ -586,11 +587,12 @@ function private.BuildSettings()
 		hear:SetPoint("LEFT", pick, "RIGHT", 6, 0)
 		y = y - 28
 	end
-	panel.fourColor = W:Toggle(panel, "Four-colour deck (green clubs, blue diamonds)", function(on)
+	panel.fourColor = W:Toggle(panel, "Four-colour deck", function(on)
 		o.fourColor = on
 		if private.state then TableUI:Refresh(private.state) end
 	end)
 	panel.fourColor:SetPoint("TOPLEFT", 14, y - 8)
+	W:Explain(panel.fourColor, "Four-colour deck", "Green clubs, blue diamonds.")
 	panel.popOnTurn = W:Toggle(panel, "Open the table on my turn", function(on) o.popOnTurn = on end)
 	panel.popOnTurn:SetPoint("TOPLEFT", 14, y - 34)
 	-- The felt: the plain green or one of the painted ones
@@ -610,8 +612,6 @@ function private.BuildSettings()
 	end)
 	panel.brightness:SetPoint("TOPLEFT", 30, y - 92)
 	W:AttachTooltip(panel.brightness, "Background brightness", "How much of the painting shows through the dark glass, for the felt chosen.")
-	local hint = Theme:Text(panel, "tiny", "Add your own sounds with a SharedMedia addon.", C.faint)
-	hint:SetPoint("BOTTOMLEFT", 14, 10)
 	panel:Hide()
 	private.settings = panel
 end
@@ -1525,7 +1525,8 @@ function TableUI:Refresh(st)
 	-- The status line
 	local seated = 0
 	for _ in pairs(st.seats) do seated = seated + 1 end
-	local text, color = "", C.text
+	-- tip: the rest of a status cut to a label, on hover
+	local text, color, tip = "", C.text, nil
 	if st.phase == "closed" then
 		text, color = "The table is closed.", C.muted
 	elseif st.phase == "finished" and st.standings then
@@ -1537,11 +1538,13 @@ function TableUI:Refresh(st)
 		end
 		text, color = "Finished: "..table.concat(parts, ", "), C.green
 	elseif cfg.kind == "tournament" and not st.started then
-		text, color = ("Registering: %d of %d entered. The host starts the tournament.%s"):format(seated, n, (st.lateLevels or 0) > 0 and (" Late entry stays open to level "..st.lateLevels..".") or ""), C.muted
+		text, color = ("Registering: %d of %d"):format(seated, n), C.muted
+		tip = "The host starts the tournament."..((st.lateLevels or 0) > 0 and (" Late entry stays open to level "..st.lateLevels..".") or "")
 	elseif st.phase == "waiting" then
 		text, color = seated < Protocol.MIN_SEATS and ("Waiting for players: %d of %d seated"):format(seated, n) or "Next hand soon", C.muted
 	elseif st.phase == "seeding" then
-		text, color = "Shuffling: every player's secret goes into the deck", C.blue
+		text, color = "Shuffling", C.blue
+		tip = "Every player's secret goes into the deck, so nobody can choose it."
 	elseif st.phase == "playing" and hand then
 		local actor = st.seats[hand.toAct]
 		text, color = hand.toAct == me and "Your turn" or ((actor and Name(actor.n) or "?").." to act"), hand.toAct == me and C.gold or C.text
@@ -1558,15 +1561,20 @@ function TableUI:Refresh(st)
 	end
 	local mine = me and st.seats[me]
 	if private.blocked then
-		text, color = "The game is refusing table messages here (a boss fight or a PvP match). The table waits for it to lift.", C.amber
+		text, color = "Paused: table messages blocked here", C.amber
+		tip = "The game refuses table messages in a boss fight or a PvP match. The table waits for it to lift."
 	elseif mine and mine.unpaid and st.phase ~= "closed" then
+		tip = nil
 		text, color = ("Pay %s your buy-in of %s: trade it to them, or Pay by mail from the Poker page."):format(Name(st.host), Chips(mine.unpaid - (mine.received or 0), cfg)), C.amber
 	elseif mine and mine.rebuyDue and st.phase ~= "closed" then
+		tip = nil
 		text, color = ("Your rebuy of %s: trade it to %s, or Pay by mail from the Poker page."):format(Chips(mine.rebuyDue, cfg), Name(st.host)), C.amber
 	elseif private.hostGone then
-		text, color = "The host has gone quiet. The next seat takes over if they don't come back.", C.amber
+		text, color = "Host gone quiet", C.amber
+		tip = "The next seat takes over if they don't come back."
 	end
 	private.status:SetText(text)
+	W:Explain(private.status, tip and text or nil, tip)
 	private.status:SetTextColor(color[1], color[2], color[3])
 	-- The action bar
 	local legal = playing and hand.legal and hand.toAct == me and hand.legal or nil

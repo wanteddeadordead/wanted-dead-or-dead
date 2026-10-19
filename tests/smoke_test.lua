@@ -17245,6 +17245,15 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		ns:RunCommand("tour", "")
 		f = WantedTourFrame
 		check(Tour:IsShown() and f.counter._text == "First steps · 1 of "..#Tour.STOPS and ns.UI:IsShown("home"), "the tour opens on the Dashboard: "..tostring(f.counter._text))
+		-- The races and guild wars: four stops on Guild Wars, the wars after launch; no stop for the old siege nights
+		local titles, guildWars = {}, 0
+		for _, stop in ipairs(Tour.STOPS) do
+			titles[#titles + 1] = stop.title
+			guildWars = guildWars + (stop.page == "guildwars" and 1 or 0)
+			check(stop.page ~= "siege" and not stop.text:find("siege front", 1, true), "no stop describes the old siege nights: "..stop.title)
+		end
+		local all = table.concat(titles, ", ")
+		check(guildWars == 4 and all:find("Tonight's races, Influence, The race HUD, Live numbers, Guild wars come after launch", 1, true), "the tour's race stops: "..all)
 		check(Setup.cards.home and f.title._text == "Welcome to Wanted", "the first page welcomes")
 		f.next:Click()
 		check(f.counter._text:find("2 of", 1, true) and ns.UI:IsShown("home"), "the lights page stays on the Dashboard")

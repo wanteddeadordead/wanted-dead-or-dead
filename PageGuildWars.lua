@@ -81,6 +81,7 @@ end
 
 function private.BuildTimeline(container, height)
 	local card = W:Card(container)
+	private.timeline = card
 	card:SetPoint("TOPLEFT")
 	card:SetSize(LEFT_WIDTH, height)
 	private.dayLabel = W:SectionLabel(card, "")
@@ -481,3 +482,7 @@ UI:RegisterPage("guildwars", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's Guild Wars stops border these (Tour)
+UI:Mark("racetonight", function() return private.timeline end)
+UI:Mark("racecard", function() return private.raceCard end)

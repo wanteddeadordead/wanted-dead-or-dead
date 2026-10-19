@@ -28,7 +28,7 @@ Tour.SETS = {}
 Tour.SETS.first = {
 	label = "First steps",
 	{ title = "Welcome to Wanted", page = "home", mark = "setup",
-		text = "Wanted is world PvP between players who chose it: enemies near you, kills counted, bounties posted and hunted, siege nights. Everything you see comes from other players' addons and the website.\n\n"
+		text = "Wanted is world PvP between players who chose it: enemies near you, kills counted, bounties posted and hunted, daily races. Everything you see comes from other players' addons and the website.\n\n"
 			.."Three things make it work in full, and the card bordered here says which you still need: the Wanted app on this computer, the Wanted Battle.net group, and enemy nameplates on." },
 	{ title = "The lights", mark = { "app", "net" },
 		text = "Two lights at the top of every page. App: green when the Wanted app runs on this computer, red when there is none. WantedNet: green when you're on your faction's hidden channel with the other Wanted players.\n\nA red light opens the page with the fix." },
@@ -41,15 +41,29 @@ Tour.SETS.first = {
 	{ title = "Raids", page = "raids",
 		text = "Form a world PvP raid, or join one. Everyone with Wanted on your faction sees it, and the leader invites you. A raid can be announced to a chat channel from here." },
 	{ title = "Progress", page = "challenges",
-		text = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double. The calendar has the siege nights and the site's events." },
+		text = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double. The calendar has the site's events." },
 	{ title = "You", page = "card",
 		text = "Your calling card: the banner on your website page and on the death card of anyone you kill, with the art your badges unlock. The Wanted poster next to it shows the price the other faction has put on your head." },
 	{ title = "Website & app", page = "web", mark = "yourpage",
 		text = "The game can't open a browser, so every address is a box to copy: click it, Ctrl+C, paste. The box bordered here is your own page on wanteddeadordead.com.\n\nThe desktop app puts your kills on the website and keeps your saved data safe. Without it you still see enemies and bounties, but your records don't count." },
 	{ title = "Settings", page = "settings", mark = "invite",
 		text = "Alerts, what the Nearby window shows, and what Wanted shares with other players.\n\nThe Wanted Battle.net group is a data link, not a chat: through its members your addon learns which layer the other side is fighting on. Its invite is the box bordered here." },
-	{ title = "Siege nights", page = "siege",
-		text = "Every evening one front is the siege front: three lanes of towers and inhibitors between two Nexus, fought on one layer, 7 to 10 PM US Eastern. The siege features ship switched off until the first public night (Settings > Capture fronts).\n\nThat's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
+	-- Guild Wars: where the site runs races its page tops the menu; before then these stops show the main page
+	{ title = "Tonight's races", page = "guildwars", mark = "racetonight",
+		text = "Every night there are three races, 45 minutes each, in zones picked the evening before. Each is open to everyone in its zone, Horde against Alliance. When the site runs races, Guild Wars sits at the top of the menu.\n\n"
+			.."Tonight lists each race's start, its zone and both sides' influence. Tomorrow's zones are under them." },
+	{ title = "Influence", page = "guildwars", mark = "racecard",
+		text = "A race is won on influence. Kills on the other faction in the zone earn it, once a witness backs them, and so do minutes standing on the zone's three points. The middle point counts 20% more.\n\n"
+			.."Influence is all a race gives: nothing is captured or owned. The site counts the result. Hover a number to see where it comes from." },
+	{ title = "The race HUD", page = "guildwars",
+		text = "In a race's zone while it runs, a small frame at the top of the screen shows the time left, both sides' influence, the three points in their holders' colours, and your own kills and minutes.\n\n"
+			.."Your minutes count while you stand on a point and aren't mounted, stealthed or away. A line under the frame says when they don't." },
+	{ title = "Live numbers", page = "guildwars", mark = "racecard",
+		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
+			.."The other side's number is the site's, as of your last /reload." },
+	{ title = "Guild wars come after launch",
+		text = "After a race, a guild on the side that doesn't hold the zone can declare war and siege the zone. That arrives after launch; until then the races are the whole of it.\n\n"
+			.."That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
 Tour.STOPS = Tour.SETS.first
 

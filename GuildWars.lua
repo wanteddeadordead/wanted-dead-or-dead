@@ -5,14 +5,15 @@
 -- protection. War Marks, a guild treasury and a guild tax pay for the stakes and the cosmetics.
 --
 -- wanteddeadordead.com decides everything; this client only shows it and says what its player wants done. What the
--- site decided comes in the app's catch-up (`wars`, read at every login); what the player asks for (declare, the time,
--- accept or withdraw, the roster, the tax, the war officers) goes to the app through GuildWars:Act. The shapes here
--- are the approved design's (docs/conquest/guild-wars-ui.md), provisional until the war contract
--- (docs/conquest/war-contract.md) fixes them; the catch-up is cleaned generically (plain text, finite numbers, bounded
--- size), and the screens read it defensively, so a field the site leaves out shows as unknown, never as an error.
+-- site decided comes in the app's catch-up (the war contract's section 7: guild, guilds, declare, wars, warLive,
+-- marks, owners and ladders at the top of the account's entry, read at every login), cleaned generically (plain text,
+-- finite numbers, bounded size) and turned into what the screens show by GuildWars.View (WarView.lua). What the
+-- player asks for (declare, the time, accept or withdraw, sign up, the roster, allies, the war officers, the tax) is a
+-- WANTEDA1 line on the game's log through GuildWars:Act: the app sends it to the site once, signed, and writes the
+-- answer into the catch-up's `actions`, by the line's id; a refusal comes back with its code (section 6.3).
 --
 -- Who is a war officer is the guild master's setting (the Guild tab): by default the guild master and every rank with
--- the game's guild-invite right (rank flag 5), plus members added by name and less those left out.
+-- the game's guild-invite right (rank flag 5), plus members added and less those left out. The site judges it.
 
 local _, Wanted = ...
 local GuildWars = Wanted:NewModule("GuildWars")
@@ -66,23 +67,57 @@ function private.Clean(value, depth)
 	return nil
 end
 
----Takes in the wars from a catch-up (or nil: none). Only shown, so read at every login.
+-- The catch-up's guild war fields (the war contract's section 7), and the app's answers to this account's asks
+local FIELDS = { "guild", "guilds", "declare", "wars", "warLive", "marks", "owners", "ladders" }
+
+---Takes in the guild wars from a catch-up entry (or the data addon's snapshot, which has only `owners`), or nil:
+---none. Only shown, so read at every login.
 ---@param src table?
 function GuildWars:Take(src)
-	private.state = type(src) == "table" and private.Clean(src, 0) or nil
-	-- Asks the site can no longer be waiting on drop out: for a war it no longer lists, or a day old (until the war
-	-- contract says how the site acknowledges them)
+	local raw
+	for _, field in ipairs(FIELDS) do
+		local value = type(src) == "table" and src[field] or nil
+		if type(value) == "table" then
+			raw = raw or {}
+			raw[field] = private.Clean(value, 0)
+		end
+	end
+	local db = Wanted.db
+	db.warPoints = type(db.warPoints) == "table" and db.warPoints or {}
+	local live
+	if raw then
+		private.state, live = GuildWars.View(raw, type(src.t) == "number" and src.t or nil, db.warPoints)
+	else
+		private.state = nil
+	end
+	-- Each war's points as last seen live, for its result; kept while the site lists the war
 	local listed, now = {}, GetServerTime()
 	for _, war in ipairs(GuildWars:Wars()) do
 		if war.id ~= nil then
 			listed[war.id] = true
 		end
 	end
-	local actions = Wanted.db.warActions or {}
+	for id in pairs(db.warPoints) do
+		if not listed[id] then
+			db.warPoints[id] = nil
+		end
+	end
+	for id, points in pairs(live or {}) do
+		db.warPoints[id] = points
+	end
+	-- The asks: answered ones done (the war or guild as it stands now is in this catch-up), refused ones kept to say
+	-- why; for a war the site no longer lists, or a day old, they drop
+	local answers = type(src) == "table" and type(src.actions) == "table" and private.Clean(src.actions, 0) or {}
+	local actions = db.warActions or {}
 	for i = #actions, 1, -1 do
 		local action = actions[i]
-		if (action.war ~= nil and not listed[action.war]) or now - (action.t or 0) > 86400 then
+		local answer = action.id and answers[action.id]
+		if type(answer) == "table" and answer.ok == true then
 			tremove(actions, i)
+		elseif (action.war ~= nil and not listed[action.war]) or now - (action.t or 0) > 86400 then
+			tremove(actions, i)
+		elseif type(answer) == "table" then
+			action.refused = { code = answer.code, detail = answer.detail }
 		end
 	end
 	private.Changed()
@@ -115,28 +150,30 @@ local function List(t)
 	return type(t) == "table" and t or {}
 end
 
----The campaign's zones: { zone, holder = { guild, faction, crest }, since, protectedUntil, next = { kind, at, text } }.
+---The campaign's zones: { zone, continent, holder = { guild, faction }, since, protectedUntil, next = { kind, at, text } },
+---the held ones first.
 ---@return table[]
 function GuildWars:Zones()
 	return List(private.state and private.state.zones)
 end
 
----This player's guild's war record: { name, treasury, staked, tax, taxBy, taxAt, week, officers }, or nil.
+---This character's guild: { id, name, faction, treasury, staked, tax, membersWithApp, officers, rankNames, rankInvite,
+---me = { rank, member, joinedAt, countsAt, officer, leader } }, or nil.
 ---@return table?
 function GuildWars:Guild()
 	local guild = private.state and private.state.guild
 	return type(guild) == "table" and guild or nil
 end
 
----This player's War Marks: { marks, today, cap, sources = { { label, n, max } }, recent = { { t, text, purse, treasury } } }.
+---This player's War Marks: { marks, today, cap, resets, sources = { { label, n } }, recent = { { t, text, purse } } }.
 ---@return table?
 function GuildWars:Purse()
 	local purse = private.state and private.state.purse
 	return type(purse) == "table" and purse or nil
 end
 
----The wars this player's guild is in or may declare: each { id, zone, role ("declare", "attack" or "defend"), step,
----attacker, defender, declare, draw, time, roster, battle, result }, in the catch-up's order.
+---The races this player's guild may declare on, then its wars: each { id, warId, zone, role ("attack" or "defend"),
+---step, state, stake, attacker, defender, race, declare, draw, time, roster, battle, result } (WarView.lua).
 ---@return table[]
 function GuildWars:Wars()
 	return List(private.state and private.state.wars)
@@ -188,7 +225,7 @@ function GuildWars:Ranks()
 	return ranks
 end
 
----The guild's members from the game: { name (without the realm), rank, rankIndex, class }.
+---The guild's members from the game: { name (without the realm), rank, rankIndex, class, guid }.
 ---@return table[]
 function GuildWars:Members()
 	local members = {}
@@ -197,35 +234,53 @@ function GuildWars:Members()
 		return members
 	end
 	for i = 1, min(n, 1000) do
-		local fine, name, rank, rankIndex, _, _, _, _, _, _, _, class = pcall(GetGuildRosterInfo, i)
+		local fine, name, rank, rankIndex, _, _, _, _, _, _, _, class, _, _, _, _, _, guid = pcall(GetGuildRosterInfo, i)
 		if fine and type(name) == "string" and type(rankIndex) == "number" then
-			tinsert(members, { name = (strmatch(name, "^([^%-]+)") or name), rank = rank, rankIndex = rankIndex, class = class })
+			tinsert(members, { name = (strmatch(name, "^([^%-]+)") or name), rank = rank, rankIndex = rankIndex, class = class,
+				guid = type(guid) == "string" and guid or nil })
 		end
 	end
 	return members
 end
 
----The war-officer setting in force: the saved one, or the default (the guild master and every rank that can invite).
----Second: whether it's the default.
----@return table { ranks = { [index] = true }, add = { [name] = true }, out = { [name] = true }, savedAt?, savedBy? }
+---The war-officer setting in force: the one just asked for, else the site's saved one, else the default (the guild
+---master and every rank that can invite). The site names people by GUID; the setting by name, from the guild's
+---roster (or the site's list of officers now). Second: whether it's the default.
+---@return table { ranks = { [index] = true }, add = { [name] = true }, out = { [name] = true }, savedAt?, savedBy?, held? }
 ---@return boolean default
 function GuildWars:OfficerSetting()
 	local guild = GuildWars:Guild()
-	-- What the guild master just saved counts until the site's answer comes in
-	local pending = GuildWars:Pending("officers")
-	local saved = pending and pending.data or guild and type(guild.officers) == "table" and guild.officers
 	local setting = { ranks = { [0] = true }, add = {}, out = {} }
-	if saved and type(saved.ranks) == "table" then
+	local pending = GuildWars:Pending("officers")
+	local saved = guild and type(guild.officers) == "table" and guild.officers or nil
+	if pending then
+		for _, index in ipairs(List(pending.data.ranks)) do
+			setting.ranks[index] = true
+		end
+		for _, name in ipairs(List(pending.data.add)) do
+			setting.add[name] = true
+		end
+		for _, name in ipairs(List(pending.data.out)) do
+			setting.out[name] = true
+		end
+		return setting, false
+	end
+	if saved and type(saved.ranks) == "table" and not saved.default then
+		local names = private.NamesByGuid(saved)
 		for _, index in ipairs(saved.ranks) do
 			setting.ranks[index] = true
 		end
-		for _, name in ipairs(List(saved.add)) do
-			setting.add[name] = true
+		for _, guid in ipairs(List(saved.add)) do
+			if names[guid] then
+				setting.add[names[guid]] = true
+			end
 		end
-		for _, name in ipairs(List(saved.out)) do
-			setting.out[name] = true
+		for _, guid in ipairs(List(saved.leaveOut)) do
+			if names[guid] then
+				setting.out[names[guid]] = true
+			end
 		end
-		setting.savedAt, setting.savedBy = saved.savedAt, saved.savedBy
+		setting.savedAt, setting.savedBy, setting.held = saved.savedAt, saved.savedBy, saved.held == true
 		return setting, false
 	end
 	for _, rank in ipairs(GuildWars:Ranks()) do
@@ -234,6 +289,22 @@ function GuildWars:OfficerSetting()
 		end
 	end
 	return setting, true
+end
+
+---Guild members' names by GUID: the game's roster, and the site's list of officers now for anyone it doesn't show.
+function private.NamesByGuid(officers)
+	local names = {}
+	for _, entry in ipairs(type(officers) == "table" and List(officers.now) or {}) do
+		if type(entry) == "table" and type(entry.guid) == "string" and type(entry.name) == "string" then
+			names[entry.guid] = entry.name
+		end
+	end
+	for _, member in ipairs(GuildWars:Members()) do
+		if member.guid then
+			names[member.guid] = member.name
+		end
+	end
+	return names
 end
 
 ---Whether a guild member is a war officer under a setting (the one in force by default): the guild master always;
@@ -272,9 +343,13 @@ function GuildWars:Officers(setting)
 	return list
 end
 
----Whether this player is a war officer of their guild.
+---Whether this player is a war officer of their guild: the site's word when the catch-up has it, else the setting.
 ---@return boolean
 function GuildWars:AmOfficer()
+	local guild = GuildWars:Guild()
+	if guild and type(guild.me.officer) == "boolean" then
+		return guild.me.officer
+	end
 	local me = UnitName("player")
 	for _, member in ipairs(GuildWars:Members()) do
 		if member.name == me then
@@ -297,12 +372,13 @@ end
 -- Actions
 -- ============================================================================
 
----Asks the site, through the app, for something the player chose: "declare" { stake }, "time" { start }, "accept",
----"withdraw", "roster" { names, standby }, "in" { on }, "tax" { percent }, "officers" { ranks, add, out }. Kept in
----saved data until the site's catch-up shows it done (the app takes it from there); the screens say "Sent; waiting
----for the site" meanwhile. Returns whether it was taken.
+---Asks the site, through the app, for something the player chose (the war contract's actions): "declare" { stake },
+---"time" { start }, "answer" { accept }, "signup" { in }, "roster" { names, standby }, "allies" { guild, invite },
+---"officers" { ranks, add, out } (by name) and "tax" { percent }. Written at once as a WANTEDA1 line for the app, and
+---kept in saved data until the app's answer comes back in the catch-up; the screens say "Sent; waiting for the site"
+---meanwhile, and why when the site refused. Returns whether it was taken.
 ---@param kind string
----@param war string? the war's id, nil for a guild-wide one (tax, officers)
+---@param war string? the war's id (GuildWars:Wars), nil for a guild-wide one (tax, officers)
 ---@param data table?
 ---@return boolean
 function GuildWars:Act(kind, war, data)
@@ -316,10 +392,115 @@ function GuildWars:Act(kind, war, data)
 	if #actions >= MAX_ACTIONS then
 		tremove(actions, 1)
 	end
-	tinsert(actions, { kind = kind, war = war, data = data or {}, t = GetServerTime() })
+	local guid = UnitGUID("player")
+	Wanted.db.warActionSeq = (tonumber(Wanted.db.warActionSeq) or 0) + 1
+	local action = { id = guid and (guid..":"..Wanted.db.warActionSeq) or nil, kind = kind, war = war, data = data or {}, t = GetServerTime() }
+	tinsert(actions, action)
+	private.WriteAction(action)
 	Wanted:Log("Guild wars: asked %s%s", kind, war and (" for "..war) or "")
 	private.Changed()
 	return true
+end
+
+---A value on a WANTEDA1 line: anything but letters, digits and -._~: as %XX; a list is its items so escaped, joined by
+---commas; a boolean 1 or 0.
+function private.Value(value)
+	if type(value) == "table" then
+		local items = {}
+		for _, item in ipairs(value) do
+			tinsert(items, private.Value(item))
+		end
+		return table.concat(items, ",")
+	elseif type(value) == "boolean" then
+		return value and "1" or "0"
+	end
+	return (gsub(tostring(value), "[^%w%-%._~:]", function(c) return format("%%%02X", c:byte()) end))
+end
+
+---The GUIDs of names: a war's people (its roster, standby and sign-ups) or the guild's members.
+function private.Guids(names, war)
+	local byName = {}
+	for _, member in ipairs(GuildWars:Members()) do
+		byName[member.name] = member.guid
+	end
+	local roster = war and war.roster or {}
+	for _, key in ipairs({ "players", "standby", "signups" }) do
+		for _, p in ipairs(List(roster[key])) do
+			if p.guid then
+				byName[p.name] = p.guid
+			end
+		end
+	end
+	local guids = {}
+	for _, name in ipairs(List(names)) do
+		if byName[name] then
+			tinsert(guids, byName[name])
+		end
+	end
+	return guids
+end
+
+---An ask's fields, in order, as the app reads them (desktop/warlog.go), or nil when it can't be sent.
+function private.Fields(action)
+	local war
+	for _, w in ipairs(GuildWars:Wars()) do
+		if w.id == action.war then
+			war = w
+		end
+	end
+	local data, kind = action.data, action.kind
+	if kind == "tax" then
+		return { { "percent", floor(tonumber(data.percent) or 0) } }
+	elseif kind == "officers" then
+		local ranks = {}
+		for _, index in ipairs(List(data.ranks)) do
+			tinsert(ranks, format("%d", index))
+		end
+		return { { "ranks", ranks }, { "add", private.Guids(data.add) }, { "leaveOut", private.Guids(data.out) } }
+	elseif not war then
+		return nil
+	elseif kind == "declare" then
+		local race = war.race or {}
+		if not (race.battlegroup and race.ruleset and race.start) then
+			return nil
+		end
+		return { { "battlegroup", race.battlegroup }, { "ruleset", race.ruleset }, { "start", format("%d", race.start) },
+			{ "stake", floor(tonumber(data.stake) or 0) } }
+	elseif not war.warId then
+		return nil
+	end
+	local fields = { { "war", format("%d", war.warId) } }
+	if kind == "time" then
+		tinsert(fields, { "start", format("%d", tonumber(data.start) or 0) })
+	elseif kind == "answer" then
+		tinsert(fields, { "accept", data.accept == true })
+	elseif kind == "signup" then
+		tinsert(fields, { "in", data["in"] == true })
+	elseif kind == "roster" then
+		tinsert(fields, { "roster", private.Guids(data.names, war) })
+		tinsert(fields, { "standby", private.Guids(data.standby, war) })
+	elseif kind == "allies" then
+		tinsert(fields, { "guild", tostring(data.guild or "") })
+		tinsert(fields, { "invite", data.invite ~= false })
+	else
+		return nil
+	end
+	return fields
+end
+
+---An ask on the game's log (Logs\General.log), for the app: "WANTEDA1 <account mark> <action> id=<id>&t=<time>&
+---guid=<GUID>&<fields>".
+function private.WriteAction(action)
+	local mark = Wanted.db.accountMark
+	local fields = action.id and private.Fields(action)
+	if not fields or not (C_Log and C_Log.LogMessage) or type(mark) ~= "string" or not strmatch(mark, "^%w+$") then
+		return
+	end
+	local parts = { "id="..private.Value(action.id), "t="..format("%d", action.t), "guid="..private.Value(UnitGUID("player")) }
+	for _, field in ipairs(fields) do
+		tinsert(parts, field[1].."="..private.Value(field[2]))
+	end
+	C_Log.LogMessage(format("WANTEDA1 %s %s %s", mark, action.kind, table.concat(parts, "&")))
 end
 
 ---The player's last ask of a kind (for a war, or guild-wide), while the site hasn't answered it, or nil.
@@ -330,10 +511,71 @@ function GuildWars:Pending(kind, war)
 	for i = #Wanted.db.warActions, 1, -1 do
 		local action = Wanted.db.warActions[i]
 		if action.kind == kind and action.war == war then
-			return action
+			return not action.refused and action or nil
 		end
 	end
 	return nil
+end
+
+---Why the site refused the player's last ask of a kind, as a sentence, and its code; nil when it didn't.
+---@param kind string
+---@param war string?
+---@return string? text
+---@return string? code
+function GuildWars:Refused(kind, war)
+	for i = #Wanted.db.warActions, 1, -1 do
+		local action = Wanted.db.warActions[i]
+		if action.kind == kind and action.war == war then
+			local refused = action.refused
+			if not refused then
+				return nil
+			end
+			return type(refused.detail) == "string" and refused.detail ~= "" and refused.detail or GuildWars:RefusalText(refused.code), refused.code
+		end
+	end
+	return nil
+end
+
+-- The site's refusal codes (the war contract's 6.3) and the app's own, as the player reads them
+local REFUSALS = {
+	not_linked = "This character isn't linked to your Wanted account.",
+	banned = "This account can't take part.",
+	wrong_side = "This character isn't on your app's side.",
+	not_member = "Not a member of the guild yet, as the site counts it.",
+	not_officer = "Only war officers can do that.",
+	not_leader = "Only the guild master can do that.",
+	window_closed = "Declarations have closed.",
+	not_your_faction = "Your faction holds this zone.",
+	under_share = "Under 10% of the side's influence.",
+	under_members = "Under 5 members with Wanted and the app.",
+	protected = "The zone is protected.",
+	war_on_zone = "There's already a war on this zone.",
+	stake_range = "The stake is out of range.",
+	treasury_low = "The treasury can't cover the stake.",
+	already_declared = "Your guild has already declared.",
+	state = "The war has moved on.",
+	cell_closed = "That time is closed.",
+	cell_past = "That time has passed.",
+	deadline_passed = "Too late for that now.",
+	locked = "The roster is locked.",
+	roster_full = "The roster is full.",
+	ineligible_72h = "Under 72 hours in the guild",
+	ineligible_daily = "Already in a war that day",
+	ineligible_app = "App not seen this week",
+	ally_not_invited = "Their guild isn't invited",
+	not_same_faction = "Not of your faction.",
+	tax_range = "The tax is 0 to 25%.",
+	held = "Waiting for the guild's roster to agree.",
+	bad_request = "The site couldn't read the request.",
+	unavailable = "The site doesn't run guild wars yet.",
+	unsent = "The app couldn't reach the site in time. Try again.",
+}
+
+---A refusal code as a sentence.
+---@param code string?
+---@return string
+function GuildWars:RefusalText(code)
+	return REFUSALS[code] or "Refused by the site."
 end
 
 

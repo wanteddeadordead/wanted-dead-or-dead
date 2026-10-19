@@ -17761,38 +17761,40 @@ print("wanted smoke: setup checks pass")
 	ns.Sync.BroadcastPlugin = real.Broadcast
 end)()
 print("wanted smoke: race checks pass")
--- Guild wars: a sample of what the site's catch-up says (the approved design's shapes, until the war contract), and
--- a guild in the game with its ranks (the invite right on Officer and Veteran) and members
+-- Guild wars: a sample of what the app writes into the catch-up (the war contract's section 7: guild, guilds, declare,
+-- wars, warLive, marks, owners), tonight's races, and a guild in the game with its ranks (the invite right on Officer
+-- and Veteran) and members, each with a GUID (this player's is the suite's "Player-1-ME")
+local ME = "Player-1-ME"
 local function GuildWarsSample(now)
 	return {
-		at = now - 600,
-		zones = {
-			{ zone = "Hillsbrad Foothills", holder = { guild = "Revenant", faction = "Alliance", crest = "raven-black" }, since = now - 3 * 86400,
-				next = { kind = "war", text = "EMPIRE attacks, time not set" } },
-			{ zone = "Alterac Mountains", holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, since = now - 4 * 86400,
-				next = { kind = "race", at = now + 86400 } },
-			{ zone = "Ashenvale", holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, since = now - 86400,
-				protectedUntil = now + 2 * 86400, next = { kind = "race", at = now + 1800 } },
-			{ zone = "Desolace", holder = { guild = "Tea Party", faction = "Alliance", crest = "no-such-crest" }, since = now - 5 * 86400,
-				next = { kind = "war", at = now + 3600, text = "Immortal Forever" } },
-			{ zone = "Arathi Highlands", next = { kind = "race", at = now - 600 } },
-			{ zone = "|cffff0000The Barrens|r", next = { kind = "race", at = now + 2 * 86400 } },
+		t = now - 600,
+		guild = { [ME] = { id = 42, name = "EMPIRE", faction = "Horde", rank = 3, member = true, joinedAt = now - 30 * 86400, countsAt = now - 27 * 86400,
+			officer = false, leader = false } },
+		guilds = { ["42"] = { name = "EMPIRE", faction = "Horde", membersWithApp = 23, treasury = 2140, tax = 10,
+			officers = { ranks = { 0, 1, 2 }, default = true, now = {} } } },
+		declare = { { battlegroup = "na", ruleset = "pvp", raceStart = now - 3600, zone = "Hillsbrad Foothills", closesAt = now + 522, minStake = 300, maxStake = 600,
+			guild = 42, share = 0.41, checks = { share = true, members = true, officer = false, community = false, protected = true, treasury = true },
+			declared = { { guild = "Bloodfang Raiders", stake = 300, influence = 270 } } } },
+		owners = {
+			["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", since = now - 3 * 86400 },
+			["Alterac Mountains"] = { guild = "EMPIRE", faction = "Horde", since = now - 4 * 86400, next = { kind = "race", at = now + 86400 } },
+			["Ashenvale"] = { guild = "EMPIRE", faction = "Horde", since = now - 86400, protectedUntil = now + 2 * 86400, next = { kind = "race", at = now + 1800 } },
+			["Desolace"] = { guild = "Tea Party", faction = "Alliance", since = now - 5 * 86400, next = { kind = "war", at = now + 3600 } },
+			["|cffff0000Nowhere|r"] = { guild = "Revenant", faction = "Alliance", since = now - 86400 },
 		},
-		guild = { name = "EMPIRE", treasury = 2140, staked = 400, tax = 10, taxBy = "Vorgath", taxAt = now - 6 * 86400,
-			week = { { text = "Ashenvale held, 7 days", n = 140 }, { text = "Stake on Hillsbrad (held)", n = -400 } } },
-		purse = { marks = 1262, today = 47, cap = 150, resets = now + 6 * 3600,
-			sources = { { label = "Races: present", n = 10, max = 10 }, { label = "Races: kills", n = 8, max = 30 }, { label = "Wars", n = 0, max = 50 } },
-			recent = { { t = now - 1200, text = "Arathi race so far: 6 kills, 9 min on a point", purse = 14, treasury = 1 },
-				{ t = now - 2000, text = "Hillsbrad war declared: stake held", treasury = -400 } } },
-		wars = {
-			{ id = "hb-1", zone = "Hillsbrad Foothills", role = "attack", step = "declare",
-				attacker = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, defender = { guild = "Revenant", faction = "Alliance", crest = "raven-black" },
-				race = { at = now - 1800 },
-				declare = { closesAt = now + 522, share = 0.41, influence = 527, sideInfluence = 1284, members = 23, officerInCommunity = "Grimtusk",
-					protectedUntil = now - 3 * 86400, minStake = 300, maxStake = 600, treasury = 2140,
-					declared = { { guild = "Bloodfang Raiders", faction = "Horde", share = 0.21, stake = 300, by = "Kroggar", at = now - 1440 } } } },
-		},
+		marks = { purse = 1262, today = { earned = 47, cap = 150, races = 18, wars = 0, bounties = 29, boards = 0 },
+			history = { { at = now - 2000, amount = 10, kind = "earn_bounty", ref = "bounty:9" }, { at = now - 1200, amount = 14, kind = "earn_race", ref = "race:na:pvp:1" } } },
 	}
+end
+
+---Tonight's races: Hillsbrad's just ended (its declarations open), Arathi's on now; tomorrow's Hillsbrad at 7 PM ET.
+local function GuildWarsRaces(now)
+	local point = { { id = "x-r1", name = "a point", x = 50, y = 50, r = 40, weight = 1 } }
+	local tomorrow = ns.GuildWars:EasternAt(now, 1, 19 * 3600)
+	return { tonight = {
+		{ zone = "Hillsbrad Foothills", mapID = 1424, start = now - 3600, ["end"] = now - 900, horde = 1285, alliance = 990, points = point },
+		{ zone = "Arathi Highlands", mapID = 1417, start = now - 600, ["end"] = now + 2100, horde = 400, alliance = 380, points = point },
+	}, tomorrow = { { zone = "Hillsbrad Foothills", start = tomorrow, ["end"] = tomorrow + 2700 } } }
 end
 
 local function GuildWarsGame()
@@ -17800,14 +17802,18 @@ local function GuildWarsGame()
 		GetNumGuildMembers = GetNumGuildMembers, GetGuildRosterInfo = GetGuildRosterInfo, IsGuildLeader = IsGuildLeader, UnitName = UnitName }
 	local ranks = { "Guild Master", "Officer", "Veteran", "Member", "Recruit", "Alt" }
 	local members = {
-		{ "Vorgath-Realm", 0, "WARRIOR" }, { "Grimtusk-Realm", 1, "ROGUE" }, { "Sylvexa-Realm", 1, "PRIEST" }, { "Ex Madness-Realm", 2, "HUNTER" },
-		{ "Gidhon Wins-Realm", 2, "MAGE" }, { "Strix Primal-Realm", 3, "HUNTER" }, { "Test Player-Realm", 3, "WARRIOR" }, { "Newbie-Realm", 4, "MAGE" },
+		{ "Vorgath-Realm", 0, "WARRIOR", "Player-1-001" }, { "Grimtusk-Realm", 1, "ROGUE", "Player-1-002" }, { "Sylvexa-Realm", 1, "PRIEST", "Player-1-003" },
+		{ "Ex Madness-Realm", 2, "HUNTER", "Player-1-004" }, { "Gidhon Wins-Realm", 2, "MAGE", "Player-1-005" }, { "Strix Primal-Realm", 3, "HUNTER", "Player-1-006" },
+		{ "Test Player-Realm", 3, "WARRIOR", ME }, { "Newbie-Realm", 4, "MAGE", "Player-1-008" },
 	}
 	GuildControlGetNumRanks = function() return #ranks end
 	GuildControlGetRankName = function(i) return ranks[i] end
 	C_GuildInfo = { GuildControlGetRankFlags = function(order) return { [5] = order == 2 or order == 3 } end, GuildRoster = function() end }
 	GetNumGuildMembers = function() return #members end
-	GetGuildRosterInfo = function(i) local m = members[i] return m[1], ranks[m[2] + 1], m[2], 60, m[3], "Orgrimmar", "", "", true, 0, m[3] end
+	GetGuildRosterInfo = function(i)
+		local m = members[i]
+		return m[1], ranks[m[2] + 1], m[2], 60, m[3], "Orgrimmar", "", "", true, 0, m[3], 0, 0, false, false, 0, m[4]
+	end
 	local leader = false
 	IsGuildLeader = function() return leader end
 	return {
@@ -17819,18 +17825,27 @@ local function GuildWarsGame()
 	}
 end
 
--- Guild wars' data: the catch-up cleaned (plain text, finite numbers, bounded); on and off; war officers by rank and
--- by person; the player's asks kept until the site answers; the Zones tab
+-- Guild wars' data: the catch-up cleaned (plain text, finite numbers, bounded); on and off; US Eastern evenings; war
+-- officers by rank and by person (the site naming them by GUID); the player's asks as WANTEDA1 lines, kept until the
+-- app's answer; the Zones tab
 ;(function()
 	local G = ns.GuildWars
 	check(not G:On() and #G:Zones() == 0 and G:Guild() == nil, "no wars in the catch-up: off")
-	G:Take({ zones = { { zone = "x", since = 0 / 0, holder = { guild = string.rep("a", 500) } } }, bad = function() end, deep = { { { { { { { { { "too deep" } } } } } } } } } })
-	local zone = G:Zones()[1]
-	check(G:On() and zone.since == nil and #zone.holder.guild == 120 and G:Wars()[1] == nil, "cleaned: no NaN, long text cut, nothing but data")
+	G:Take({ owners = { x = { since = 0 / 0, guild = string.rep("a", 500) } }, bad = function() end,
+		wars = { { id = 1, zone = "y", side = "attack", state = "awaiting_time", deep = { { { { { { { { { "too deep" } } } } } } } } } } } })
+	local zone
+	for _, z in ipairs(G:Zones()) do if z.zone == "x" then zone = z end end
+	check(G:On() and zone and zone.since == nil and #zone.holder.guild == 120 and G:Wars()[1] == nil, "cleaned: no NaN, long text cut, nothing but data; no guild, no wars")
 	G:Take(nil)
 	check(not G:On(), "and off again")
-	-- War officers: the guild master, the ranks that can invite, plus and minus by name
+	G:Take({ t = clock, races = {} })
+	check(not G:On(), "a catch-up with no guild war fields: off")
+	-- US Eastern: the evenings and the War Marks day (summer time to 2 AM on November's first Sunday)
+	check(G:EasternAt(1792411200, 1, 18 * 3600) == 1792533600 and G:EasternAt(1799582400, 1, 18 * 3600) == 1799708400
+		and G:EasternOffset(1793512740) == -4 * 3600 and G:EasternOffset(1793512800) == -5 * 3600, "6 PM Eastern tomorrow, in summer and in winter")
+	-- War officers: the guild master, the ranks that can invite, plus and minus by person
 	local game = GuildWarsGame()
+	ns.Races:Take(GuildWarsRaces(clock))
 	G:Take(GuildWarsSample(clock))
 	local ranks = G:Ranks()
 	check(#ranks == 6 and ranks[1].name == "Guild Master" and ranks[1].invite and ranks[2].invite and ranks[3].invite and not ranks[4].invite
@@ -17841,22 +17856,43 @@ end
 	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
 	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Gidhon Wins", "officers by default, guild master first: "..table.concat(names, ","))
 	local sample = GuildWarsSample(clock)
-	sample.guild.officers = { ranks = { 1, 2 }, add = { "Strix Primal" }, out = { "Gidhon Wins", "Vorgath" }, savedAt = clock - 86400, savedBy = "Vorgath" }
+	sample.guilds["42"].officers = { ranks = { 1, 2 }, add = { "Player-1-006" }, leaveOut = { "Player-1-005", "Player-1-001" }, savedAt = clock - 86400, savedBy = "Vorgath",
+		now = { { guid = "Player-1-006", name = "Strix Primal", rank = 3, added = true } } }
 	G:Take(sample)
 	names = {}
 	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
 	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Strix Primal" and not select(2, G:OfficerSetting()),
-		"saved: plus Strix Primal, minus Gidhon Wins; the guild master can't be left out: "..table.concat(names, ","))
-	check(not G:AmOfficer(), "this player (a Member) isn't one")
-	-- Asks: kept until the site answers, the same ask replaced
+		"saved (by GUID): plus Strix Primal, minus Gidhon Wins; the guild master can't be left out: "..table.concat(names, ","))
+	check(not G:AmOfficer() and G:Guild().name == "EMPIRE" and G:Guild().treasury == 2140, "this player isn't one, as the site says; their guild")
+	-- Asks: a WANTEDA1 line each for the app, kept until it answers, the same ask replacing the last
+	local logged, realLog = {}, C_Log
+	local function Ends(line, tail) return type(line) == "string" and line:sub(-#tail) == tail end
+	C_Log = { LogMessage = function(text) if text:find("^WANTEDA1 ") then logged[#logged + 1] = text end end }
 	ns.db.warActions = {}
 	G:Act("tax", nil, { percent = 12 })
 	G:Act("tax", nil, { percent = 15 })
-	check(#ns.db.warActions == 1 and G:Pending("tax").data.percent == 15, "an ask kept, the same ask again replacing it")
+	local taxId = G:Pending("tax").id
+	check(#ns.db.warActions == 1 and G:Pending("tax").data.percent == 15 and taxId:find("^Player%-1%-ME:%d+$"), "an ask kept, the same ask again replacing it")
+	check(logged[2] == format("WANTEDA1 %s tax id=%s&t=%d&guid=Player-1-ME&percent=15", ns.db.accountMark, taxId, clock), "the line for the app: "..tostring(logged[2]))
+	G:Act("officers", nil, { ranks = { 0, 1 }, add = { "Strix Primal" }, out = { "Gidhon Wins", "Nobody" } })
+	check(logged[3]:find(" officers id=", 1, true) and Ends(logged[3], "&ranks=0,1&add=Player-1-006&leaveOut=Player-1-005"), "officers: ranks and people by GUID, unknown names dropped: "..logged[3])
+	local hb = G:War(1)
+	G:Act("declare", hb.id, { stake = 450 })
+	check(hb.id == "race:na:pvp:"..(clock - 3600) and logged[4]:find("&battlegroup=na&ruleset=pvp&start="..(clock - 3600).."&stake=450$"), "declare: the race and the stake: "..logged[4])
 	G:Act("declare", "gone-1", { stake = 400 })
-	G:Take(GuildWarsSample(clock))
-	check(G:Pending("declare", "gone-1") == nil and G:Pending("tax") ~= nil, "a war the site no longer lists: its asks drop")
+	check(#logged == 4, "an ask for no war the site lists: no line")
+	-- The app's answers: done, or refused with why
+	local again = GuildWarsSample(clock)
+	again.actions = { [taxId] = { action = "tax", ok = false, code = "tax_range", at = clock } }
+	G:Take(again)
+	check(G:Pending("declare", "gone-1") == nil and G:Pending("tax") == nil and G:Refused("tax") == "The tax is 0 to 25%." and select(2, G:Refused("tax")) == "tax_range"
+		and G:Pending("declare", hb.id) ~= nil, "a war the site no longer lists: its asks drop; a refusal says why")
+	again.actions = { [G:Pending("declare", hb.id).id] = { action = "declare", ok = true, at = clock } }
+	G:Take(again)
+	check(G:Pending("declare", hb.id) == nil and G:Refused("declare", hb.id) == nil, "answered: done")
+	C_Log = realLog
 	-- The Zones tab
+	ns.db.warActions = {}
 	ns.UI:Show("warzones")
 	check(ns.UI:IsShown("warzones"), "Guild Wars opens on Zones")
 	local function Rows()
@@ -17870,12 +17906,11 @@ end
 	local rows = Rows()
 	local byZone = {}
 	for _, row in ipairs(rows) do byZone[row.zone._text] = row end
-	local hb, desolace, arathi = byZone["Hillsbrad Foothills"], byZone["Desolace"], byZone["Arathi Highlands"]
-	check(#rows == 6 and hb and hb.guild._text == "Revenant" and hb.crest._texture:find("crest%-raven%-black$") and hb.tag.text._text == "WAR",
-		"Zones: a row a zone, its holder with its crest, and what's next: "..#rows.." "..tostring(hb and hb.guild._text).." "..tostring(hb and hb.crest._texture).." "..tostring(hb and hb.tag.text._text))
-	check(desolace.crest._texture:find("Alliance%-Logo") and desolace.next._text:find("Immortal Forever", 1, true), "a crest we have no art for: the side's emblem")
-	check(arathi.unowned:IsShown() and arathi.next._text:find("live now", 1, true), "an unowned zone with a race on")
-	check(byZone["cffff0000The Barrensr"] ~= nil, "escape codes stripped from names")
+	local hbRow, desolace, arathi = byZone["Hillsbrad Foothills"], byZone["Desolace"], byZone["Arathi Highlands"]
+	check(#rows >= 6 and hbRow and hbRow.guild._text == "Revenant" and hbRow.crest._texture:find("Alliance%-Logo") and desolace.tag.text._text == "WAR",
+		"Zones: a row a zone, the held ones first, its holder with its side's emblem (no crests yet), and what's next: "..#rows)
+	check(arathi and arathi.unowned:IsShown() and arathi.next._text:find("live now", 1, true), "an unowned zone with a race on, from tonight's races")
+	check(byZone["cffff0000Nowherer"] ~= nil, "escape codes stripped from names")
 	local ash = byZone["Ashenvale"]
 	local ashTip = (rawget(ash, "explainHit") or ash).tooltipText
 	check(ash.protected._text:find("^until") and ashTip:find("Protected until", 1, true) and ashTip:find("Click to open its map", 1, true), "protection, and the whole story on hover")
@@ -17884,7 +17919,7 @@ end
 		local l = rawget(f, "label")
 		if type(l) == "table" and l._text == "Only zones someone holds" and f._scripts.OnClick then f._scripts.OnClick(f) end
 	end
-	check(#Rows() == 4, "only zones someone holds: "..#Rows())
+	check(#Rows() == 5, "only zones someone holds: "..#Rows())
 	-- War Marks: the purse, today by source against the cap, the treasury and its tax (the guild master's), recent
 	local function OnScreen(text)
 		for _, f in ipairs(Mock.fontStrings) do
@@ -17895,13 +17930,11 @@ end
 			end
 		end
 	end
-	ns.db.warActions = {}
 	ns.UI:Show("warmarks")
 	-- (Thousands are the game's BreakUpLargeNumbers, which the suite doesn't have)
-	check((OnScreen("1,262") or OnScreen("1262")) and OnScreen("47 / 150") and OnScreen("EMPIRE TREASURY") and OnScreen("400 held as a stake") and OnScreen("10%"), "War Marks: the tiles")
-	check(OnScreen("TODAY · 47 OF 150") and OnScreen("Races: kills") and OnScreen("8 / 30") and OnScreen("Ashenvale held, 7 days") and OnScreen("-400"),
-		"today by source, and the treasury's week")
-	check(OnScreen("Arathi race so far: 6 kills, 9 min on a point") and OnScreen("+14"), "recent movements, purse and treasury")
+	check((OnScreen("1,262") or OnScreen("1262")) and OnScreen("47 / 150") and OnScreen("EMPIRE TREASURY") and OnScreen("10%") and OnScreen("set by the guild master"), "War Marks: the tiles")
+	check(OnScreen("TODAY · 47 OF 150") and OnScreen("Races") and OnScreen("Bounties") and OnScreen("29") and not OnScreen("29 / "), "today by source, against the day's cap")
+	check(OnScreen("A race") and OnScreen("+14") and OnScreen("A bounty"), "recent movements of the purse")
 	local slider
 	for _, f in ipairs(Mock.created) do if rawget(f, "slider") and rawget(f, "box") and f._shown and f._parent and f._parent._shown and rawget(f._parent, "taxLabel") then slider = f end end
 	check(slider and slider._alpha == 0.6, "the tax slider: only the guild master moves it")
@@ -17943,9 +17976,15 @@ end
 	local saved = G:Pending("officers")
 	check(saved and table.concat(saved.data.add, ",") == "Strix Primal" and table.concat(saved.data.out, ",") == "Gidhon Wins" and #saved.data.ranks == 3
 		and OnScreen("Sent; waiting for the site"), "Save asks the site: ranks, added, left out")
-	local names = {}
+	names = {}
 	for _, m in ipairs(G:Officers()) do names[#names + 1] = m.name end
 	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Strix Primal", "what was saved counts until the site answers: "..table.concat(names, ","))
+	local held = GuildWarsSample(clock)
+	held.guilds["42"].officers = { ranks = { 1 }, held = true, savedAt = clock - 600, savedBy = "Vorgath", now = {} }
+	ns.db.warActions = {}
+	G:Take(held)
+	ns.UI:Refresh()
+	check(OnScreen("Saved; waiting for the guild's roster to agree"), "a setting the guild's roster reports don't back yet: held")
 	IsInGuild, GetGuildInfo = realInGuild, realGuildInfo
 	game.SetLeader(false)
 	ns.db.warActions = {}
@@ -17957,101 +17996,101 @@ end
 	check(ns.UI:IsShown("war1") and tabLabel == "Hillsbrad" and not Button("War"), "a war's tab, named by its zone; tabs for no war hidden: "..tostring(tabLabel))
 	check(OnScreen("ATTACK · HILLSBRAD FOOTHILLS · HELD BY REVENANT (ALLIANCE)") and OnScreen("Declare war on Hillsbrad") and OnScreen("8:42") and OnScreen("left to declare"),
 		"the header: attack, the zone and its holder, the headline and the time left")
-	check(OnScreen("CAN EMPIRE DECLARE?") and OnScreen("10% of the Horde's influence") and OnScreen("41%: 527 of 1284") and OnScreen("You're not a war officer of EMPIRE"),
+	check(OnScreen("CAN EMPIRE DECLARE?") and OnScreen("10% of the Horde's influence") and OnScreen("41%: 527 of 1285") and OnScreen("You're not a war officer of EMPIRE"),
 		"the checklist, a member not an officer")
-	check(OnScreen("Bloodfang Raiders") and OnScreen("21% influence · stake 300 · by Kroggar") and OnScreen("66% IF YOU DECLARE") and OnScreen("Chance in the draw  66%"),
+	check(OnScreen("Bloodfang Raiders") and OnScreen("21% influence · stake 300") and OnScreen("66% IF YOU DECLARE") and OnScreen("Chance in the draw  66%"),
 		"declared so far, and our chance if we declare: influence × stake")
 	check(not Button("Not tonight") and OnScreen("Members see this page without its buttons."), "a member: no buttons")
-	-- A war officer (added by name) with the app: Declare war asks the site
+	-- A war officer (as the site says) with the app: Declare war asks the site
 	local officerSample = GuildWarsSample(clock)
-	officerSample.guild.officers = { ranks = { 1, 2 }, add = { "Test Player" } }
+	officerSample.guild[ME].officer = true
+	officerSample.declare[1].checks.officer = true
 	G:Take(officerSample)
 	local realName, realInfo = UnitName, WantedAppInfo
 	UnitName = function(unit) if unit == "player" then return "Test Player" end return realName(unit) end
 	WantedAppInfo = { running = "0.2.60", seen = clock }
 	ns.UI:Refresh()
 	local declare = Button("Declare war · stake 300")
-	check(declare and declare:IsEnabled() and Button("Not tonight") and OnScreen("You're a war officer of EMPIRE"), "a war officer: Declare war with the stake, every check ticked")
+	check(declare and declare:IsEnabled() and Button("Not tonight") and OnScreen("You're a war officer of EMPIRE"),
+		"a war officer: Declare war with the stake, every required check ticked (the Battle.net group's shown, not required)")
 	declare._scripts.OnClick(declare)
-	check(G:Pending("declare", "hb-1") and G:Pending("declare", "hb-1").data.stake == 300 and OnScreen("Sent; waiting for the site") and not Button("Declare war · stake 300"):IsEnabled(),
+	local declareId = "race:na:pvp:"..(clock - 3600)
+	check(G:Pending("declare", declareId) and G:Pending("declare", declareId).data.stake == 300 and OnScreen("Sent; waiting for the site") and not Button("Declare war · stake 300"):IsEnabled(),
 		"declaring asks the site and waits for it")
-	-- The Draw: who declared, at what odds, who was drawn, and the seed
-	local function AtStep(step, fill)
-		local sample = GuildWarsSample(clock)
-		sample.guild.officers = { ranks = { 1, 2 }, add = { "Test Player" } }
-		local war = sample.wars[1]
-		war.step = step
-		war.declare.mine = { stake = 400, at = clock - 3000 }
-		fill(war, sample)
-		G:Take(sample)
+	local refused = GuildWarsSample(clock)
+	refused.guild[ME].officer = true
+	refused.declare[1].checks.officer = true
+	refused.actions = { [G:Pending("declare", declareId).id] = { action = "declare", ok = false, code = "under_share", at = clock } }
+	G:Take(refused)
+	ns.UI:Refresh()
+	check(OnScreen("Under 10% of the side's influence.") and Button("Declare war · stake 300") and not Button("Declare war · stake 300"):IsEnabled(),
+		"refused: why, and the checklist's line it failed")
+	ns.db.warActions = {}
+	-- A war at each step: the site's war (id 7, Hillsbrad, EMPIRE attacking Revenant), changed by fill
+	local function AtStep(fill)
+		local s = GuildWarsSample(clock)
+		s.guild[ME].officer = true
+		s.declare = nil
+		local war = { id = 7, zone = "Hillsbrad Foothills", side = "attack", attacker = "EMPIRE", defender = "Revenant", state = "awaiting_time", stake = 400,
+			drawAt = clock - 60, timeDeadline = clock + 43000, seed = "7f3a...c2",
+			declarations = { { guild = "EMPIRE", influence = 527, stake = 400, weight = 0.67, drawn = true }, { guild = "Bloodfang Raiders", influence = 270, stake = 300, weight = 0.33 } } }
+		s.wars = { war }
+		fill(war, s)
+		G:Take(s)
 		ns.UI:Refresh()
 		return war
 	end
-	AtStep("draw", function(war)
-		war.draw = { at = clock - 60, drawn = true, seed = "7f3a...c2",
-			declarers = { { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold", share = 0.41, stake = 400, chance = 0.67, drawn = true },
-				{ guild = "Bloodfang Raiders", faction = "Horde", share = 0.21, stake = 300, chance = 0.33, drawn = false } } }
-		war.time = { deadline = clock + 43000 }
-	end)
+	-- The Draw: who declared, at what odds, who was drawn, and the seed
+	AtStep(function() end)
 	check(OnScreen("Drawn: EMPIRE attacks Hillsbrad") and OnScreen("for Revenant to pick") and OnScreen("THE DRAW · ") and OnScreen("DRAWN") and OnScreen("67%")
 		and OnScreen("7f3a...c2") and Button("Start the roster") and Button("Open on the site"), "the Draw, drawn: the odds, the result, the seed, Start the roster")
-	AtStep("draw", function(war)
-		war.draw = { at = clock - 60, drawn = false, declarers = { { guild = "EMPIRE", share = 0.41, stake = 400, chance = 0.67 }, { guild = "Bloodfang Raiders", share = 0.21, stake = 300, chance = 0.33, drawn = true } } }
-	end)
-	check(OnScreen("Not drawn") and OnScreen("Not drawn: the stake of 400 is back in your treasury.") and Button("Back to Tonight") and not Button("Start the roster"),
-		"not drawn: the stake back, and Back to Tonight")
-	AtStep("draw", function(war) war.draw = { at = clock + 600, declarers = { { guild = "EMPIRE", share = 0.41, stake = 400 } } } end)
-	check(OnScreen("Only EMPIRE declared: no draw needed."), "a single declarer: no draw needed")
-	-- Time, the defenders: two evenings of half-hour starts, one closed by our other war, the races marked; an
-	-- officer picks one and sets it
-	local evening = clock - clock % 86400 + 86400 + 22 * 3600
-	AtStep("time", function(war)
-		war.role = "defend"
-		war.attacker, war.defender = { guild = "Revenant", faction = "Alliance", crest = "raven-black" }, { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }
-		war.time = { deadline = clock + 40000, evenings = { evening, evening + 86400 }, defaultStart = evening + 86400 + 7200,
-			closed = { { start = evening + 3 * 1800, reason = "Revenant attacks Wetlands then." } }, races = { { start = evening + 2 * 1800, stop = evening + 2 * 1800 + 2700, zone = "Arathi Highlands" } } }
+	-- Time, the defenders: two evenings of half-hour starts (the two Eastern days after the draw's), the ones within an
+	-- hour of our other war closed; an officer picks one and sets it
+	local evening = G:EasternAt(clock - 60, 1, 18 * 3600)
+	AtStep(function(war, s)
+		war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"
+		s.wars[2] = { id = 8, zone = "Wetlands", side = "attack", attacker = "EMPIRE", defender = "Tea Party", state = "scheduled", stake = 300, start = evening + 5 * 1800 }
 	end)
 	local cells = {}
 	for _, f in ipairs(Mock.created) do if rawget(f, "start") and rawget(f, "tick") and f._shown then cells[f.start] = f end end
-	check(OnScreen("Revenant attacks Hillsbrad") and OnScreen("left to choose") and OnScreen("Not picked yet") and not cells[evening + 3 * 1800].open,
-		"the defenders' grid: the closed start can't be picked")
-	local closedTip = (rawget(cells[evening + 3 * 1800], "explainHit") or cells[evening + 3 * 1800]).tooltipText
-	check(closedTip:find("Revenant attacks Wetlands then.", 1, true) and closedTip:find("at least 1 hour apart", 1, true), "a closed start says why")
+	check(OnScreen("Revenant attacks Hillsbrad") and OnScreen("left to choose") and OnScreen("Not picked yet") and cells[evening] and cells[evening + 86400 + 11 * 1800]
+		and not cells[evening + 5 * 1800].open and not cells[evening + 4 * 1800].open and cells[evening + 3 * 1800].open, "the defenders' grid: two evenings, 6 to 11:30 PM; the closed starts can't be picked")
+	local closedTip = (rawget(cells[evening + 5 * 1800], "explainHit") or cells[evening + 5 * 1800]).tooltipText
+	check(closedTip:find("Your war in Wetlands starts", 1, true) and closedTip:find("at least 1 hour apart", 1, true), "a closed start says why")
+	check(OnScreen("If no pick") and OnScreen(ns.GuildWars:Clock(G:EasternAt(clock + 43000, 0, 20 * 3600))), "no pick by the deadline: 8 PM Eastern that evening")
 	cells[evening + 2 * 1800]._scripts.OnClick(cells[evening + 2 * 1800])
 	local setLabel = "Set "..os.date("%a ", evening + 3600)..ns.GuildWars:Clock(evening + 3600)
 	local set = Button(setLabel)
 	check(set and set:IsEnabled() and OnScreen(ns.GuildWars:Clock(evening + 3600 - 900)), "picking a start: the war's time and prep, and Set <time>: "..setLabel)
 	set._scripts.OnClick(set)
-	check(G:Pending("time", "hb-1") and G:Pending("time", "hb-1").data.start == evening + 3600, "Set asks the site")
+	check(G:Pending("time", "7") and G:Pending("time", "7").data.start == evening + 3600, "Set asks the site")
 	ns.db.warActions = {}
 	-- Time, the attackers: the time set, accept or withdraw (with a confirm)
-	AtStep("time", function(war)
-		war.time = { start = evening + 3600, setAt = clock - 600, deadline = clock + 40000, races = { { start = evening + 3600, zone = "Hillsbrad Foothills" } } }
+	local start = G:EasternAt(clock, 1, 19 * 3600)
+	AtStep(function(war)
+		war.state, war.start = "awaiting_answer", start
 	end)
-	check(OnScreen("REVENANT SET THE TIME AT") and OnScreen("Answer by") == nil and OnScreen("ANSWER BY") and OnScreen("No other EMPIRE war that day") and OnScreen("Same time as the")
+	check(OnScreen("REVENANT SET THE TIME") and OnScreen("ANSWER BY") and OnScreen("No other EMPIRE war that day") and OnScreen("Same time as the")
 		and Button("Accept") and Button("Withdraw"), "the attackers: the time set, clashes, accept or withdraw")
 	local asked
 	local realDialog = ns.Widgets.Dialog
 	ns.Widgets.Dialog = function(_, o) asked = o end
 	Button("Withdraw")._scripts.OnClick(Button("Withdraw"))
 	ns.Widgets.Dialog = realDialog
-	check(asked and asked.text:find("stake of 400 goes back to the treasury and Revenant keeps Hillsbrad", 1, true) and G:Pending("withdraw", "hb-1") == nil, "Withdraw asks first")
+	check(asked and asked.text:find("stake of 400 goes back to the treasury and Revenant keeps Hillsbrad", 1, true) and G:Pending("answer", "7") == nil, "Withdraw asks first")
 	asked.onConfirm()
-	check(G:Pending("withdraw", "hb-1") and OnScreen("Sent; waiting for the site") and not Button("Accept"), "confirmed: asked of the site")
+	check(G:Pending("answer", "7") and G:Pending("answer", "7").data.accept == false and OnScreen("Sent; waiting for the site") and not Button("Accept"), "confirmed: asked of the site")
 	ns.db.warActions = {}
 	-- The roster: picked, said I'm in (one can't be picked, with why), standby; an officer adds, takes off, fills and saves
-	AtStep("roster", function(war)
-		war.time = { start = evening + 3600, accepted = true }
-		war.battle = { prep = evening + 2700, start = evening + 3600, stop = evening + 5400 }
-		war.roster = { lockAt = evening + 3600, rival = 36,
-			players = { { name = "Grimtusk", class = "ROGUE", rank = "Officer" }, { name = "Vorgath", class = "WARRIOR", rank = "Guild Master" },
-				{ name = "Ragnok", class = "HUNTER", ally = "Bloodfang Raiders" }, { name = "Morkhal", class = "MAGE", rank = "Member", app = false } },
-			signups = { { name = "Velanna", class = "PRIEST", rank = "Member" }, { name = "Zulkara", class = "DRUID", rank = "Member", why = "joined Sat: counts from Tue 3:10 PM" },
-				{ name = "Thokk", class = "SHAMAN", rank = "Member" } },
-			standby = { { name = "Durgash", class = "WARRIOR" } }, me = { ["in"] = false } }
+	AtStep(function(war)
+		war.state, war.start, war.answer, war.rivalCount = "scheduled", start, "accept", 36
+		war.roster = { { guid = "Player-1-002", name = "Grimtusk", place = 1 }, { guid = "Player-1-001", name = "Vorgath", place = 2 },
+			{ guid = "Player-9-0A", name = "Ragnok", guild = "Bloodfang Raiders", place = 3 }, { guid = "Player-1-0FF", name = "Morkhal", place = 4, why = "ineligible_app" } }
+		war.signups = { { guid = "Player-1-0A1", name = "Velanna" }, { guid = "Player-1-0A2", name = "Zulkara", why = "ineligible_72h" }, { guid = "Player-1-0A3", name = "Thokk" } }
+		war.standby = { { guid = "Player-1-0A4", name = "Durgash", place = 41 } }
 	end)
-	check(OnScreen("ROSTER · 4 OF 40 · REVENANT 36 OF 40") and OnScreen("<Bloodfang Raiders>") and OnScreen("! app not seen") and OnScreen("SAID I'M IN, NOT PICKED (3)")
-		and OnScreen("joined Sat: counts from Tue 3:10 PM") and OnScreen("STANDBY · 1") and OnScreen("36 places open"), "the roster, the sign-ups with why one can't be picked, standby")
+	check(OnScreen("ROSTER · 4 OF 40 · REVENANT 36 OF 40") and OnScreen("<Bloodfang Raiders>") and OnScreen("Officer") and OnScreen("! app not seen") and OnScreen("SAID I'M IN, NOT PICKED (3)")
+		and OnScreen("Under 72 hours in the guild") and OnScreen("STANDBY · 1") and OnScreen("36 places open"), "the roster, the sign-ups with why one can't be picked, standby")
 	local adds = {}
 	for _, f in ipairs(Mock.created) do
 		local l = rawget(f, "label")
@@ -18062,10 +18101,14 @@ end
 	check(OnScreen("ROSTER · 5 OF 40") and OnScreen("Not saved yet"), "added: not saved yet")
 	Button("Fill from sign-ups")._scripts.OnClick(Button("Fill from sign-ups"))
 	check(OnScreen("ROSTER · 6 OF 40") and OnScreen("SAID I'M IN, NOT PICKED (1)"), "fill from sign-ups skips who can't be picked")
+	logged = {}
+	C_Log = { LogMessage = function(text) if text:find("^WANTEDA1 ") then logged[#logged + 1] = text end end }
 	Button("Save roster")._scripts.OnClick(Button("Save roster"))
-	local saved = G:Pending("roster", "hb-1")
+	saved = G:Pending("roster", "7")
 	check(saved and #saved.data.names == 6 and saved.data.names[5] == "Velanna" and saved.data.names[6] == "Thokk" and saved.data.standby[1] == "Durgash",
 		"Save asks the site with the roster and standby")
+	check(logged[1] and Ends(logged[1], "&war=7&roster=Player-1-002,Player-1-001,Player-9-0A,Player-1-0FF,Player-1-0A1,Player-1-0A3&standby=Player-1-0A4"),
+		"the line: the roster and standby by GUID: "..tostring(logged[1]))
 	local switch
 	for _, f in ipairs(Mock.created) do
 		local card = rawget(f, "_parent")
@@ -18079,22 +18122,21 @@ end
 	check(switch ~= nil, "I'm in: a switch")
 	do
 		switch._scripts.OnClick(switch)
-		check(G:Pending("in", "hb-1") and G:Pending("in", "hb-1").data.on == true, "I'm in asks the site")
+		check(G:Pending("signup", "7") and G:Pending("signup", "7").data["in"] == true and logged[2]:find(" signup id=", 1, true) and logged[2]:find("&war=7&in=1$"),
+			"I'm in asks the site")
 	end
+	C_Log = realLog
 	ns.db.warActions = {}
-	-- The battle: the defenders' lanes and the keep, live; turnout and friends; you; what happened
-	AtStep("battle", function(war)
-		war.time = { start = clock - 700, accepted = true }
-		war.battle = { prep = clock - 1600, start = clock - 700, stop = clock + 1100, live = true,
-			lanes = { { id = "top", tower = { state = "taken", at = clock - 400 }, inhibitor = { state = "taken", at = clock - 100 } },
-				{ id = "mid", tower = { state = "taking", pct = 50, us = 4, them = 2 } }, { id = "bot" } },
-			keep = { state = "open", since = clock - 100 }, turnout = { attacker = 31, defender = 24 }, friends = { horde = 9, alliance = 4 },
-			events = { { t = clock - 100, text = "EMPIRE took the Top inhibitor: the keep is open" }, { t = clock - 700, text = "The battle began: 31 v 24" } },
-			me = { counting = true, point = "the Mid tower", kills = 3, deaths = 1, minutes = 6 } }
+	-- The battle: the defenders' lanes and the keep, live; turnout and friends
+	AtStep(function(war, s)
+		war.state, war.start, war.answer = "battle", clock - 700, "accept"
+		s.warLive = { ["7"] = { layer = "1-1424-3", phase = "battle", endsAt = clock + 1100, at = clock - 30, keepOpen = true,
+			points = { { id = "hb-top-a-tower", holder = "att", progress = 22, cost = 22 }, { id = "hb-top-a-inhibitor", holder = "att", progress = 49, cost = 49 },
+				{ id = "hb-mid-a-tower", holder = "def", progress = 11, cost = 22, open = true }, { id = "hb-bot-a-tower", holder = "def", progress = 0, cost = 22, open = true } },
+			turnout = { att = 31, def = 24 }, friends = { h = 9, a = 4 }, mult = { att = 1, def = 1.21 } } }
 	end)
-	check(OnScreen("The war is on") and OnScreen("battle left") and OnScreen("THE LANES · LIVE") and OnScreen("50%, 4 v 2") and OnScreen("open since")
-		and OnScreen("Friends  9 · 4") and OnScreen("Counting at the Mid tower") and OnScreen("Kills 3 · deaths 1 · 6 min on points")
-		and OnScreen("EMPIRE took the Top inhibitor: the keep is open"), "the battle: lanes, keep, turnout, friends, you and what happened")
+	check(OnScreen("The war is on") and OnScreen("battle left") and OnScreen("THE LANES · LIVE") and OnScreen("50%") and OnScreen("open")
+		and OnScreen("Friends  9 · 4") and OnScreen("EMPIRE  31"), "the battle: lanes, keep, turnout, friends")
 	local seals = {}
 	for _, f in ipairs(Mock.created) do
 		if type(rawget(f, "lanes")) == "table" and rawget(f, "keepLine") and f._shown then
@@ -18103,28 +18145,31 @@ end
 		end
 	end
 	local all = table.concat(seals, " ")
-	check(all:find("tower%-alliance") and all:find("inhib%-broken%-by%-horde") and all:find("tower%-contested") and all:find("nexus%-keep%-open%-alliance"),
-		"the seals: a tower taken, an inhibitor broken by the attackers, one being taken, the defenders' keep open")
-	AtStep("battle", function(war)
-		war.battle = { prep = clock - 300, start = clock + 600, stop = clock + 2400 }
+	check(all:find("tower%-horde") and all:find("inhib%-broken%-by%-horde") and all:find("tower%-contested") and all:find("tower%-alliance") and all:find("nexus%-keep%-open%-alliance"),
+		"the seals: a tower taken, an inhibitor broken by the attackers, one being taken, one standing, the defenders' keep open: "..all)
+	check(ns.db.warPoints["7"] and #ns.db.warPoints["7"].points == 4, "the live points kept for the result")
+	AtStep(function(war, s)
+		war.state, war.start, war.answer = "prep", clock + 600, "accept"
+		s.warLive = { ["7"] = { phase = "prep", endsAt = clock + 600, points = {}, turnout = { att = 20, def = 18 } } }
 	end)
 	check(OnScreen("Prep: the war starts soon") and OnScreen("Battle at") and OnScreen("THE LANES · PREP"), "prep: the lanes greyed, the battle's time")
-	-- The result: won, the lanes and keep as they ended, the zone now, the War Marks
-	AtStep("result", function(war)
-		war.result = { won = true, at = clock - 60, holder = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, protectedUntil = clock + 3 * 86400,
-			lanes = { { id = "top", tower = { state = "taken", at = clock - 1440 }, inhibitor = { state = "taken", at = clock - 1140 } }, { id = "mid", tower = { state = "taken", at = clock - 900 } } },
-			keep = { state = "fallen", at = clock - 360 }, turnout = { attacker = 31, defender = 24 }, kills = { attacker = 118, defender = 97 },
-			marks = { stake = 400, stakeBack = true, treasury = 200, purse = 50 } }
+	-- The result: won, the lanes and keep as they ended (as last seen live), the zone now, the War Marks
+	AtStep(function(war)
+		war.state, war.start, war.answer = "over", clock - 2400, "accept"
+		war.result = { winner = "att", keepAt = clock - 600, towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, marks = 50, protectedUntil = clock + 3 * 86400 }
 	end)
 	check(OnScreen("EMPIRE took Hillsbrad") and OnScreen("WON") and OnScreen("NOW EMPIRE'S") and OnScreen("held") and OnScreen("fell at")
-		and OnScreen("31 / 40 v 24 / 40 · kills 118 v 97") and OnScreen("Held by <EMPIRE>") and OnScreen("Protected until") and OnScreen("400 returned")
-		and OnScreen("+200") and OnScreen("each on the roster"), "the result, won: the war, the zone now, the War Marks")
-	AtStep("result", function(war)
-		war.result = { won = false, holder = { guild = "Revenant", faction = "Alliance" }, marks = { stake = 400, treasury = 0 } }
+		and OnScreen("31 / 40 v 24 / 40 · towers 3 · inhibitors 1") and OnScreen("Held by <EMPIRE>") and OnScreen("Protected until") and OnScreen("400 returned")
+		and OnScreen("+200") and OnScreen("for you"), "the result, won: the war, the zone now, the War Marks")
+	AtStep(function(war)
+		war.state, war.start = "over", clock - 2400
+		war.result = { winner = "def", towers = 1, inhibitors = 0, turnoutAtt = 20, turnoutDef = 30, protectedUntil = clock + 3 * 86400 }
 	end)
-	check(OnScreen("Revenant held Hillsbrad") and OnScreen("LOST") and OnScreen("400 lost to Revenant"), "lost: the stake to the holders")
-	AtStep("result", function(war) war.result = {} end)
+	check(OnScreen("Revenant held Hillsbrad") and OnScreen("LOST") and OnScreen("400 lost to Revenant") and OnScreen("Held by <Revenant>"), "lost: the stake to the holders")
+	AtStep(function(war) war.state, war.start = "over", clock - 2400 end)
 	check(OnScreen("The site is counting"), "not counted yet")
+	AtStep(function(war) war.state, war.start = "void", clock - 2400 end)
+	check(OnScreen("Void: no war") and OnScreen("The stake is back; the war is rescheduled."), "void: no war, the stake back")
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)
@@ -18134,6 +18179,7 @@ end
 	check(not OnScreen("EMPIRE TREASURY") and (OnScreen("1,262") or OnScreen("1262")), "no guild: no treasury or tax, the purse still")
 	game.Restore()
 	G:Take(nil)
+	ns.Races:Take(nil)
 	ns.db.warActions = {}
 	ns.UI:GetFrame():Hide()
 end)()

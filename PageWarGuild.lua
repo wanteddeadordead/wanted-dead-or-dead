@@ -114,7 +114,9 @@ function private.Refresh()
 	private.officersCard:SetHeight(42 + max(rows, 1) * 22)
 	-- Saved by, Reset and Save
 	local pending = GuildWars:Pending("officers")
-	private.saved:SetText(pending and "Sent; waiting for the site" or default and "Default"
+	local refused = GuildWars:Refused("officers")
+	private.saved:SetText(pending and "Sent; waiting for the site" or refused and Theme:Colorize(refused, C.red) or default and "Default"
+		or setting.held and Theme:Colorize("Saved; waiting for the guild's roster to agree", C.amber)
 		or (setting.savedAt and format("Saved %s%s", GuildWars:Day(setting.savedAt), setting.savedBy and (" by "..setting.savedBy) or "")) or "")
 	private.reset:SetShown(master)
 	private.save:SetShown(master)

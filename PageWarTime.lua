@@ -156,6 +156,7 @@ function private.RefreshDefend(panel, war, ctx)
 	local deadline = tonumber(t.deadline)
 	panel.defendStatus:SetText(tonumber(t.start) and format("Set %s; %s %s.", date("%a ", t.start)..GuildWars:Clock(t.start), attackers, t.accepted and "accepted" or "hasn't answered")
 		or pending and Theme:Colorize("Sent; waiting for the site", C.amber)
+		or GuildWars:Refused("time", war.id) and Theme:Colorize(GuildWars:Refused("time", war.id), C.red)
 		or deadline and ctx.now > deadline and fallback and format("No pick: %s, set by the site.", date("%a ", fallback)..GuildWars:Clock(fallback))
 		or not ctx.officer and "Members see this page without its buttons."
 		or deadline and format("No pick by %s and the war is at %s.", date("%a ", deadline)..GuildWars:Clock(deadline), fallback and (date("%a ", fallback)..GuildWars:Clock(fallback)) or "8:00 PM the next evening")
@@ -189,20 +190,20 @@ function private.BuildAttack(panel, width)
 	panel.noAnswer = Theme:Text(card, "small", "No answer  "..Theme:Colorize("accepted", C.text), C.muted)
 	panel.noAnswer:SetPoint("TOPLEFT", floor(width * 0.62), -54)
 	panel.accept = W:Button(panel, "Accept", "primary", 120, 30, function()
-		GuildWars:Act("accept", panel.war.id)
+		GuildWars:Act("answer", panel.war.id, { accept = true })
 	end)
 	panel.accept:SetPoint("TOPRIGHT", 0, -140 - 12)
 	W:Explain(panel.accept, "Accept", "The war is on. Pick your roster on the Roster step; reminders 1 hour before.")
 	panel.withdraw = W:Button(panel, "Withdraw", "danger", 120, 30, function()
 		local war = panel.war
-		local stake = type(war.declare) == "table" and type(war.declare.mine) == "table" and war.declare.mine.stake
+		local stake = tonumber(war.stake)
 		W:Dialog({
 			title = "Withdraw from the war?",
 			text = format("No war. Your stake%s goes back to the treasury and %s keeps %s.", stake and (" of "..stake) or "", panel.ctx.theirs.guild or "the holder", GuildWars:Short(war.zone)),
 			confirmLabel = "Withdraw",
 			confirmStyle = "danger",
 			cancelLabel = "Cancel",
-			onConfirm = function() GuildWars:Act("withdraw", war.id) end,
+			onConfirm = function() GuildWars:Act("answer", war.id, { accept = false }) end,
 		})
 	end)
 	panel.withdraw:SetPoint("RIGHT", panel.accept, "LEFT", -10, 0)
@@ -240,7 +241,8 @@ function private.RefreshAttack(panel, war, ctx)
 	panel.answerLabel:SetShown(start ~= nil)
 	panel.answerBy:SetText(prep and (date("%a ", prep)..GuildWars:Clock(prep)..", when prep starts") or "")
 	panel.noAnswer:SetShown(start ~= nil)
-	local pendingAccept, pendingWithdraw = GuildWars:Pending("accept", war.id), GuildWars:Pending("withdraw", war.id)
+	local answer = GuildWars:Pending("answer", war.id)
+	local pendingAccept, pendingWithdraw = answer and answer.data.accept == true, answer and answer.data.accept == false
 	local answered = t.accepted or t.withdrawn or pendingAccept or pendingWithdraw
 	local open = start and ctx.now < prep
 	local canAct = ctx.officer and not ctx.looking and open and not answered
@@ -252,6 +254,7 @@ function private.RefreshAttack(panel, war, ctx)
 	panel.attackStatus:SetText(t.withdrawn and Theme:Colorize("Withdrawn: the stake is back in the treasury.", C.muted)
 		or t.accepted and Theme:Colorize("Accepted. The roster is next.", C.green)
 		or (pendingAccept or pendingWithdraw) and Theme:Colorize("Sent; waiting for the site", C.amber)
+		or GuildWars:Refused("answer", war.id) and Theme:Colorize(GuildWars:Refused("answer", war.id), C.red)
 		or start and not open and "Prep has started: no answer counted as accepting."
 		or not start and tonumber(t.deadline) and format("%s picks by %s, or the war is at 8:00 PM the next evening.", holder, date("%a ", t.deadline)..GuildWars:Clock(t.deadline))
 		or not ctx.officer and "Members see this page without its buttons." or "")

@@ -119,12 +119,14 @@ GuildWars.PANELS.result = {
 			card:SetShown(counted)
 		end
 		panel.counting:SetShown(not counted)
+		panel.counting:SetText(r.void and "Void: the realm or the site was down. The stake is back; the war is rescheduled."
+			or r.cancelled and "Cancelled. The stake is back." or "The site is counting")
 		if not counted then
 			return
 		end
 		local attacker = type(war.attacker) == "table" and war.attacker or {}
 		local defender = type(war.defender) == "table" and war.defender or {}
-		local laneData = {}
+		local laneData, seen = {}, type(r.lanes) == "table"
 		for _, lane in ipairs(type(r.lanes) == "table" and r.lanes or {}) do
 			if type(lane) == "table" and lane.id then
 				laneData[lane.id] = lane
@@ -136,29 +138,36 @@ GuildWars.PANELS.result = {
 			local inhibitor, inhibitorLine = private.End(lane.inhibitor, "inhibitor", defender.faction, attacker.faction)
 			row.tower:SetTexture(tower)
 			row.inhibitor:SetTexture(inhibitor)
-			row.text:SetText(towerLine == "held" and "held" or (inhibitorLine == "held" and ("taken "..towerLine.." / held") or ("taken "..towerLine.." / "..inhibitorLine)))
+			-- Each lane as this client last saw it live; not seen, the summary's counts say what fell
+			row.tower:SetDesaturated(not seen)
+			row.inhibitor:SetDesaturated(not seen)
+			row.text:SetText(not seen and "" or towerLine == "held" and "held" or (inhibitorLine == "held" and ("taken "..towerLine.." / held") or ("taken "..towerLine.." / "..inhibitorLine)))
 		end
 		local keep = type(r.keep) == "table" and r.keep or {}
 		local fell = keep.state == "fallen"
 		panel.keep:SetTexture(GuildWars.MEDIA..(fell and ("nexus-keep-fallen-to-"..(SIDE[attacker.faction] or "alliance")) or ("nexus-keep-sealed-"..(SIDE[defender.faction] or "horde"))))
 		panel.keepLine:SetText(fell and ("fell"..(type(keep.at) == "number" and (" at "..GuildWars:Clock(keep.at)) or "")) or "held")
-		local turnout, kills = type(r.turnout) == "table" and r.turnout or {}, type(r.kills) == "table" and r.kills or {}
-		panel.summary:SetText(format("%d / %d v %d / %d · kills %d v %d", tonumber(turnout.attacker) or 0, GuildWars.MAX_ROSTER, tonumber(turnout.defender) or 0, GuildWars.MAX_ROSTER,
-			tonumber(kills.attacker) or 0, tonumber(kills.defender) or 0))
+		local turnout = type(r.turnout) == "table" and r.turnout or {}
+		panel.summary:SetText(format("%d / %d v %d / %d%s", tonumber(turnout.attacker) or 0, GuildWars.MAX_ROSTER, tonumber(turnout.defender) or 0, GuildWars.MAX_ROSTER,
+			tonumber(r.towers) and format(" · towers %d · inhibitors %d", r.towers, tonumber(r.inhibitors) or 0) or ""))
 		-- The zone now
-		local holder = type(r.holder) == "table" and r.holder or (((war.role == "attack") == (r.won == true)) and attacker or defender)
+		local holder = type(r.holder) == "table" and r.holder or {}
 		panel.zoneLabel:SetText(strupper(GuildWars:Short(war.zone).." now"))
 		panel.crest:SetTexture(GuildWars:CrestFile(holder))
-		panel.holder:SetText("Held by <"..(holder.guild or "?")..">")
+		panel.holder:SetText(holder.guild and ("Held by <"..holder.guild..">") or "No one holds it")
 		local until_ = tonumber(r.protectedUntil)
 		panel.protected:SetText(until_ and ("Protected until "..date("%a ", until_)..GuildWars:Clock(until_)) or "")
 		W:Explain(panel.holder, "Held by "..(holder.guild or "?"), until_ and format("No declarations on %s until %s; races go on.", GuildWars:Short(war.zone), date("%a ", until_)..GuildWars:Clock(until_)) or "Races go on.")
 		-- War Marks
 		local marks = type(r.marks) == "table" and r.marks or {}
 		local stake = tonumber(marks.stake) or 0
-		panel.marks[1]:SetText(stake > 0 and (marks.stakeBack and Theme:Colorize(private.Count(stake).." returned", C.green) or Theme:Colorize(format("%s lost to %s", private.Count(stake), ctx.theirs.guild or "them"), C.red)) or "none")
+		panel.marks[1]:SetText(stake <= 0 and "none"
+			or marks.stakeBack and Theme:Colorize(private.Count(stake).." returned", C.green)
+			or marks.stakeWon and Theme:Colorize(format("%s won from %s", private.Count(stake), ctx.theirs.guild or "them"), C.green)
+			or war.role == "defend" and format("%s back to %s", private.Count(stake), ctx.theirs.guild or "them")
+			or Theme:Colorize(format("%s lost to %s", private.Count(stake), ctx.theirs.guild or "them"), C.red))
 		local treasury, purse = tonumber(marks.treasury) or 0, tonumber(marks.purse) or 0
 		panel.marks[2]:SetText(treasury ~= 0 and Theme:Colorize((treasury > 0 and "+" or "")..private.Count(treasury), treasury > 0 and C.green or C.red) or "0")
-		panel.marks[3]:SetText(purse ~= 0 and (Theme:Colorize("+"..private.Count(purse), C.green).." each on the roster") or "0")
+		panel.marks[3]:SetText(purse ~= 0 and (Theme:Colorize("+"..private.Count(purse), C.green).." for you") or "0")
 	end,
 }

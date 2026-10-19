@@ -45,6 +45,7 @@ Captures.lua
 Races.lua
 WarZones.lua
 GuildWars.lua
+WarView.lua
 Achievements.lua
 HonorScout.lua
 Duels.lua

@@ -142,7 +142,7 @@ function private.Refresh()
 		tiles.treasury.note:SetText(tonumber(guild.staked) and guild.staked > 0 and (private.Count(guild.staked).." held as a stake") or "")
 		local pending = GuildWars:Pending("tax")
 		tiles.tax.value:SetText((pending and pending.data.percent or tonumber(guild.tax) or 0).."%")
-		tiles.tax.note:SetText(pending and "sent; waiting for the site" or "set by leaders")
+		tiles.tax.note:SetText(pending and "sent; waiting for the site" or "set by the guild master")
 	end
 	-- Today, by source
 	local today = private.today
@@ -153,15 +153,17 @@ function private.Refresh()
 	local sources = purse and type(purse.sources) == "table" and purse.sources or {}
 	for i, row in ipairs(private.sources) do
 		local source = type(sources[i]) == "table" and sources[i] or nil
-		local n, most = source and tonumber(source.n) or 0, source and tonumber(source.max) or 0
+		local n, most = source and tonumber(source.n) or 0, source and tonumber(source.max)
 		for _, part in pairs(row) do
 			part:SetShown(source ~= nil)
 		end
 		if source then
 			row.label:SetText(source.label or "?")
-			row.fill:SetWidth(max(row.track:GetWidth() * (most > 0 and min(n / most, 1) or 0), 1))
+			-- Against its own most when it has one, else the day's cap
+			local of = most or cap
+			row.fill:SetWidth(max(row.track:GetWidth() * (of > 0 and min(n / of, 1) or 0), 1))
 			row.fill:SetShown(n > 0)
-			row.value:SetText(Theme:Colorize(private.Count(n), n > 0 and C.gold or C.muted)..Theme:Colorize(" / "..private.Count(most), C.muted))
+			row.value:SetText(Theme:Colorize(private.Count(n), n > 0 and C.gold or C.muted)..(most and Theme:Colorize(" / "..private.Count(most), C.muted) or ""))
 		end
 	end
 	-- The treasury and its tax, with this guild only
@@ -178,7 +180,8 @@ function private.Refresh()
 		treasury.tax.slider:EnableMouse(leader)
 		treasury.tax.box:EnableMouse(leader)
 		treasury.tax:SetAlpha(leader and 1 or 0.6)
-		treasury.taxBy:SetText(pending and "Sent; waiting for the site"
+		local refused = GuildWars:Refused("tax")
+		treasury.taxBy:SetText(pending and "Sent; waiting for the site" or refused and Theme:Colorize(refused, C.red)
 			or (type(guild.taxBy) == "string" and (guild.taxBy..(type(guild.taxAt) == "number" and (", "..GuildWars:Day(guild.taxAt)) or "")) or ""))
 		local week = type(guild.week) == "table" and guild.week or {}
 		treasury.weekLabel:SetShown(#week > 0)

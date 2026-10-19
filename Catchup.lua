@@ -109,8 +109,9 @@ function private.TakePublic(src, fromSnapshot)
 	Wanted.Captures:TakeSiege(src.siege, src.frontWins)
 	-- Tonight's influence races and tomorrow's zones (guild wars), when the site runs them: Siege steps aside then
 	Wanted.Races:Take(src.races)
-	-- Guild wars: the zones' holders, this guild's wars, War Marks and the war officers (the war contract)
-	Wanted.GuildWars:Take(src.wars)
+	-- Guild wars: the war contract's fields (guild, guilds, declare, wars, warLive, marks, owners, ladders) and the app's
+	-- answers to this account's asks (actions)
+	Wanted.GuildWars:Take(src)
 	if fromSnapshot then
 		Wanted.Achievements:CheckNew()
 	end

@@ -89,7 +89,9 @@ function private.Headline(war, now)
 		end
 		return "The war is on", b.stop, "battle left"
 	elseif step == "result" then
-		if r.won == nil then
+		if r.void or r.cancelled then
+			return r.void and "Void: no war" or "Cancelled", nil, nil
+		elseif r.won == nil then
 			return "The site is counting", nil, nil
 		end
 		local winner = r.won and ours.guild or theirs.guild

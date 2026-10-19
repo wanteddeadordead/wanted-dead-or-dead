@@ -19,6 +19,10 @@ function private.Count(n)
 end
 
 ---The checklist: { ok, text, value, tip } for each condition, from the war's declare record.
+-- The checklist's lines as the site judged them (the catch-up's checks), and the refusal codes that fail each
+local CHECK_KEYS = { "share", "members", "officer", "community", "protected", nil }
+local REFUSED_LINE = { under_share = 1, under_members = 2, not_officer = 3, not_member = 3, protected = 5, war_on_zone = 5, window_closed = 6 }
+
 function private.Checks(war, ctx)
 	local d = type(war.declare) == "table" and war.declare or {}
 	local side = ctx.ours.faction or UnitFactionGroup("player")
@@ -29,7 +33,7 @@ function private.Checks(war, ctx)
 	local setting = GuildWars:OfficerSetting()
 	local officerTip = "War officers: the guild master and the ranks ticked on the Guild tab, plus those added by name, less those left out. Set by the guild master."
 	local protected = type(d.protectedUntil) == "number" and d.protectedUntil > ctx.now
-	return {
+	local lines = {
 		{ share >= 0.1, format("10%% of the %s's influence", side),
 			format("%d%%%s", floor(share * 100 + 0.5), (d.influence and d.sideInfluence) and format(": %s of %s", private.Count(d.influence), private.Count(d.sideInfluence)) or ""),
 			"The guild's share of its side's influence in the race. Under 10% can't declare." },
@@ -38,14 +42,26 @@ function private.Checks(war, ctx)
 		{ ctx.officer, ctx.officer and ("You're a war officer of "..guild) or ("You're not a war officer of "..guild), ctx.officer and "Officer" or "",
 			officerTip },
 		{ type(d.officerInCommunity) == "string", "Officer in the Battle.net group"..Theme:Colorize(" (proposed)", C.amber),
-			type(d.officerInCommunity) == "string" and d.officerInCommunity or "none yet",
+			type(d.officerInCommunity) == "string" and d.officerInCommunity or (type(d.checks) == "table" and d.checks.community == true and "yes") or "none yet",
 			"So the other side's officers can be told at once. Proposed until the cross-faction test passes." },
 		{ not protected, short..(protected and " is protected" or " isn't protected"),
 			protected and ("until "..date("%a ", d.protectedUntil)..GuildWars:Clock(d.protectedUntil)) or (type(d.protectedUntil) == "number" and ("ended "..date("%a ", d.protectedUntil)..GuildWars:Clock(d.protectedUntil))) or "",
 			"A zone taken in a war is protected for 3 days: no declarations until then." },
 		{ type(d.closesAt) == "number" and ctx.now < d.closesAt, "Within 15 minutes of the race", type(d.closesAt) == "number" and ("until "..GuildWars:Clock(d.closesAt)) or "",
 			"Declarations close 15 minutes after the race ends." },
-	}, setting
+	}
+	-- The site's word over this client's, and a refusal marks its line
+	local _, code = GuildWars:Refused("declare", war.id)
+	for i, line in ipairs(lines) do
+		local key = CHECK_KEYS[i]
+		if key and type(d.checks) == "table" and type(d.checks[key]) == "boolean" then
+			line[1] = d.checks[key]
+		end
+		if REFUSED_LINE[code] == i then
+			line[1] = false
+		end
+	end
+	return lines, setting
 end
 
 ---The chance in the draw for each declarer, and ours if we declare at this stake: influence × stake over the total.
@@ -144,10 +160,11 @@ GuildWars.PANELS.declare = {
 		local guild = ctx.ours.guild or "your guild"
 		panel.checkLabel:SetText(strupper("Can "..guild.." declare?"))
 		local checks = private.Checks(war, ctx)
-		local all = true
+		-- Every line but the Battle.net group's (shown, not required, while it's proposed), and a treasury that covers the stake
+		local all = not (type(d.checks) == "table" and d.checks.treasury == false)
 		for i, line in ipairs(panel.checks) do
 			local check = checks[i]
-			all = all and check[1]
+			all = all and (check[1] or i == 4)
 			line.mark:SetText(Theme:Colorize(check[1] and "✓" or "✗", check[1] and C.green or C.red))
 			line.text:SetText(check[2])
 			line.value:SetText(check[3])
@@ -210,10 +227,12 @@ GuildWars.PANELS.declare = {
 		panel.declare:SetText("Declare war · stake "..private.Count(stake))
 		panel.declare:SetEnabled(all and ctx.app and not pending)
 		W:Explain(panel.declare, "Declare war", not ctx.app and "Start the Wanted app to act."
+			or type(d.checks) == "table" and d.checks.treasury == false and "The treasury can't cover the stake."
 			or not all and "Every line of the checklist must be ticked."
 			or "Spends the stake from the treasury. It can't be undone until the draw.")
 		panel.status:SetText(declared and Theme:Colorize(format("Declared, stake %s. The draw is at %s.", private.Count(mine), type(war.draw) == "table" and type(war.draw.at) == "number" and GuildWars:Clock(war.draw.at) or "8:00 PM"), C.green)
 			or pending and Theme:Colorize("Sent; waiting for the site", C.amber)
+			or GuildWars:Refused("declare", war.id) and Theme:Colorize(GuildWars:Refused("declare", war.id), C.red)
 			or not ctx.officer and "Members see this page without its buttons." or "")
 	end,
 }

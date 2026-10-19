@@ -76,7 +76,7 @@ GuildWars.PANELS.roster = {
 		panel.labelGlyph = W:InfoGlyph(card, "Roster", ROSTER_TIP)
 		panel.mine = W:Switch(card, function(on)
 			if panel.state.record then
-				GuildWars:Act("in", panel.state.record.id, { on = on })
+				GuildWars:Act("signup", panel.state.record.id, { ["in"] = on })
 			end
 		end)
 		panel.mine:SetPoint("TOPRIGHT", -16, -10)
@@ -186,7 +186,7 @@ GuildWars.PANELS.roster = {
 				onConfirm = function(name)
 					name = strtrim(name or "")
 					if name ~= "" then
-						GuildWars:Act("allies", panel.state.record.id, { guild = name })
+						GuildWars:Act("allies", panel.state.record.id, { guild = name, invite = true })
 					end
 				end })
 		end)
@@ -230,9 +230,9 @@ GuildWars.PANELS.roster = {
 		panel.labelGlyph:ClearAllPoints()
 		panel.labelGlyph:SetPoint("LEFT", panel.label, "LEFT", panel.label:GetStringWidth() + 6, 0)
 		-- I'm in: the player's own sign-up (the latest ask counts until the site answers)
-		local pendingIn = GuildWars:Pending("in", war.id)
+		local pendingIn = GuildWars:Pending("signup", war.id)
 		local me = type(ro.me) == "table" and ro.me or {}
-		panel.mine:SetChecked(pendingIn and pendingIn.data.on or me["in"] == true)
+		panel.mine:SetChecked(pendingIn and pendingIn.data["in"] or me["in"] == true)
 		panel.mine:SetShown(not locked)
 		-- The roster
 		for i, row in ipairs(panel.rows) do
@@ -294,6 +294,8 @@ GuildWars.PANELS.roster = {
 		local pendingRoster = GuildWars:Pending("roster", war.id)
 		panel.status:SetText(locked and "Locked: the battle has started."
 			or pendingRoster and not panel.state.dirty and Theme:Colorize("Sent; waiting for the site", C.amber)
+			or not panel.state.dirty and GuildWars:Refused("roster", war.id) and Theme:Colorize(GuildWars:Refused("roster", war.id), C.red)
+			or GuildWars:Refused("signup", war.id) and Theme:Colorize("I'm in: "..GuildWars:Refused("signup", war.id), C.red)
 			or panel.state.dirty and Theme:Colorize("Not saved yet", C.amber)
 			or not ctx.officer and "Officers pick the roster. Say you're in with I'm in." or "")
 	end,

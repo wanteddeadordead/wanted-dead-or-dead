@@ -17975,6 +17975,33 @@ end
 	declare._scripts.OnClick(declare)
 	check(G:Pending("declare", "hb-1") and G:Pending("declare", "hb-1").data.stake == 300 and OnScreen("Sent; waiting for the site") and not Button("Declare war · stake 300"):IsEnabled(),
 		"declaring asks the site and waits for it")
+	-- The Draw: who declared, at what odds, who was drawn, and the seed
+	local function AtStep(step, fill)
+		local sample = GuildWarsSample(clock)
+		sample.guild.officers = { ranks = { 1, 2 }, add = { "Test Player" } }
+		local war = sample.wars[1]
+		war.step = step
+		war.declare.mine = { stake = 400, at = clock - 3000 }
+		fill(war, sample)
+		G:Take(sample)
+		ns.UI:Refresh()
+		return war
+	end
+	AtStep("draw", function(war)
+		war.draw = { at = clock - 60, drawn = true, seed = "7f3a...c2",
+			declarers = { { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold", share = 0.41, stake = 400, chance = 0.67, drawn = true },
+				{ guild = "Bloodfang Raiders", faction = "Horde", share = 0.21, stake = 300, chance = 0.33, drawn = false } } }
+		war.time = { deadline = clock + 43000 }
+	end)
+	check(OnScreen("Drawn: EMPIRE attacks Hillsbrad") and OnScreen("for Revenant to pick") and OnScreen("THE DRAW · ") and OnScreen("DRAWN") and OnScreen("67%")
+		and OnScreen("7f3a...c2") and Button("Start the roster") and Button("Open on the site"), "the Draw, drawn: the odds, the result, the seed, Start the roster")
+	AtStep("draw", function(war)
+		war.draw = { at = clock - 60, drawn = false, declarers = { { guild = "EMPIRE", share = 0.41, stake = 400, chance = 0.67 }, { guild = "Bloodfang Raiders", share = 0.21, stake = 300, chance = 0.33, drawn = true } } }
+	end)
+	check(OnScreen("Not drawn") and OnScreen("Not drawn: the stake of 400 is back in your treasury.") and Button("Back to Tonight") and not Button("Start the roster"),
+		"not drawn: the stake back, and Back to Tonight")
+	AtStep("draw", function(war) war.draw = { at = clock + 600, declarers = { { guild = "EMPIRE", share = 0.41, stake = 400 } } } end)
+	check(OnScreen("Only EMPIRE declared: no draw needed."), "a single declarer: no draw needed")
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

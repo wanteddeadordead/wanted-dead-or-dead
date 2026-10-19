@@ -227,7 +227,9 @@ function private.RefreshTab(tab)
 	end
 	tab.bar:Set(result and #STEPS + 1 or current, private.Notes(war), failed)
 	-- The panel: the step looked back at, else the war's own
-	local view = tab.viewing and STEP_INDEX[tab.viewing] and STEP_INDEX[tab.viewing] < current and tab.viewing or war.step
+	-- (Start the roster opens the Roster step early, while the time is still being set)
+	local early = tab.early == "roster" and tab.viewing == "roster" and (war.step == "draw" or war.step == "time")
+	local view = tab.viewing and STEP_INDEX[tab.viewing] and (STEP_INDEX[tab.viewing] < current or early) and tab.viewing or war.step
 	local ctx = { now = now, ours = ours, theirs = theirs, officer = GuildWars:AmOfficer(), app = Wanted:HasApp(), looking = view ~= war.step }
 	local shown = false
 	for key, panel in pairs(tab.panels) do

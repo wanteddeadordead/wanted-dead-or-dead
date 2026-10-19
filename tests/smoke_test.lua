@@ -16881,7 +16881,9 @@ print("wanted smoke: setup checks pass")
 	ns.RacesHUD:Update()
 	local dot = hud.points[2].dot._vertexColor
 	check(R:Current() == race.points[2] and dot[1] > 0.8 and dot[3] < 0.3, "alone on the Alliance's point: shown as ours (Horde) by who's here")
-	check(hud.points[2].tooltipText:find("held by the Alliance", 1, true) and hud.points[2].tooltipText:find("Here now: 1 of your side, 0 enemies", 1, true),
+	-- (A frame's tooltip may sit on a hit button over it, explainHit)
+	local pointTip = (rawget(hud.points[2], "explainHit") or hud.points[2]).tooltipText
+	check(pointTip and pointTip:find("held by the Alliance", 1, true) and pointTip:find("Here now: 1 of your side, 0 enemies", 1, true),
 		"its tooltip keeps the site's holder and says who's here")
 	ns.Enemies.CountNearby = function() return 3 end
 	ns.RacesHUD:Update()

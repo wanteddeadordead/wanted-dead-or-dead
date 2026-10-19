@@ -6515,6 +6515,53 @@ end)()
 	list:SetItems({ 1 }, "Nothing.", "Hint.")
 	check(not list.emptyGlyph:IsShown(), "and none once the list has items")
 end)()
+-- Settings: each section's explanation behind an (i) by its header, or on the row it explains; only the BattleTag
+-- line (a privacy fact before joining) and the disputed-kill pointer stay as notes
+;(function()
+	local function Tip(title)
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "tooltipTitle") == title and (not rawget(f, "explainedText") or f.explainedText._shown) then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return type(f.tooltipText) == "function" and f.tooltipText() or f.tooltipText end
+			end
+		end
+	end
+	local function OnScreen(text)
+		for _, f in ipairs(Mock.fontStrings) do
+			if f._text == text then
+				local on, p = f._shown, f._parent
+				while on and p do on, p = p._shown, p._parent end
+				if on then return true end
+			end
+		end
+	end
+	ns.UI:Show("settings")
+	local tabs = {}
+	for _, f in ipairs(Mock.created) do
+		if type(rawget(f, "buttons")) == "table" and type(rawget(f, "Select")) == "function" then tabs[#tabs + 1] = f end
+	end
+	local function Tab(key)
+		for _, bar in ipairs(tabs) do
+			for _, b in ipairs(bar.buttons) do if b.key == key then bar:Select(key) end end
+		end
+	end
+	Tab("alerts")
+	check(Tip("Targeted warning") and Tip("Targeted warning"):find("someone off screen", 1, true), "Settings: the targeted section's rule behind its (i)")
+	check(OnScreen("Still nearby for") and Tip("Still nearby for") and not OnScreen("Add your own sounds with a SharedMedia addon."), "short row labels, the rest on hover")
+	Tab("sharing")
+	check(Tip("What Wanted sends to chat") and Tip("Wanted community") and OnScreen("Members can see each other's BattleTag."), "the chat rule behind an (i); the BattleTag line stays on screen before joining")
+	check(OnScreen("Disputed kill? Post the screenshot:") and Tip("Disputed kill"), "where to post a disputed kill's screenshot is on the link's tooltip")
+	Tab("ranks")
+	check(Tip("Where ranks come from") and Tip("Rank on nameplates"):find("ElvUI and Plater", 1, true), "where ranks come from behind an (i); the nameplates note on its row")
+	Tab("emotes")
+	check(Tip("Emote buttons") and Tip("Emote buttons"):find("after combat", 1, true), "the emote chips' styles behind an (i)")
+	Tab("streaks")
+	check(Tip("Announce streaks to") and Tip("Announce streaks to"):find("Never in public chat", 1, true), "what announcing a streak posts is on its row")
+	Tab("look")
+	check(Tip("Window theme") and Tip("Window theme"):find("felt follows", 1, true), "the theme card's default behind an (i)")
+	Tab("alerts")
+end)()
 -- Text explained inside a clickable row keeps the row's hover
 ;(function()
 	local W = ns.Widgets

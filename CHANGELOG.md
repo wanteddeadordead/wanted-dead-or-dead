@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Guild wars, where wanteddeadordead.com runs them, under the Guild Wars menu entry. Zones shows who holds each zone, since when, its protection and what's next. Each war of your guild gets its own tab, named by its zone: declare (the checklist, the stake and your chance in the draw), the draw, picking the time or accepting it, the roster, the battle and the result. War Marks shows your purse, today's earnings against the cap of 150, and the guild's treasury and tax. Guild lets the guild master choose the war officers. In a war's zone, a HUD shows both guilds, the clock, the lanes and the keep. The world map and OpenMap's map show the war's lanes and races' flags, a banner names the holder as you come into a zone, and toasts follow each step of the war. Needs the Wanted app; new files: restart the client after updating.
+
 ## [1.28.0] - 2026-10-19
 
 - Thank you to everyone who helped test Wanted during the beta. The beta ends on Wednesday, October 21, and this is the last beta release.

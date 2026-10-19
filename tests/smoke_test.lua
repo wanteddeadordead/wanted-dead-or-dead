@@ -8651,6 +8651,18 @@ end)()
 		and dialog.input.value:find("^Forming a world PvP raid: Barrens raid"), "Announce shows the line and where it goes, any channel we're in but Wanted's: "..table.concat(choices, ","))
 	check(dialog.input.multiline and dialog.width == 520, "a wide box that wraps, so the whole line shows")
 	check(shows("Whisper sign-ups") and shows("Invite sign-ups") and shows("Edit") and not shows("Form raid now"), "the leader's card: Invite and Whisper sign-ups, Edit; a raid already started has no Form raid now")
+	-- Your raid's step bar: formed and sign-ups done, started current, each dot explaining its step
+	local stepDots = {}
+	for _, f in ipairs(Mock.created) do
+		local caption = rawget(f, "caption")
+		if f._kind == "Button" and caption and f._parent and f._parent._shown and f._parent._parent and f._parent._parent._shown then stepDots[caption._text] = f end
+	end
+	check(stepDots.Formed and stepDots.Formed.mark._shown and stepDots["Sign-ups"].mark._shown, "Your raid: Formed and Sign-ups ticked")
+	check(stepDots.Started and stepDots.Started.ring._texture:find("ring%-bold$") and stepDots.Started.sub._text == "Forming now", "a started raid is on Started")
+	check(stepDots.Starting.tooltipText:find("From 15 minutes before the start", 1, true), "each step's rule is on its dot")
+	local groupLine
+	for _, fs in ipairs(Mock.fontStrings) do if type(fs._text) == "string" and fs._text:find("in your group", 1, true) and fs._parent._shown then groupLine = fs._text end end
+	check(groupLine and groupLine:find("^%d+/%d+ in your group"), "the step bar takes the Forming part of the lead's line: "..tostring(groupLine))
 	check(Says("Close raid", "they're told") and Says("Edit", "Everyone signed up is told"), "Close raid and Edit say everyone signed up is told")
 	local formNowTip
 	for _, f in ipairs(Mock.created) do

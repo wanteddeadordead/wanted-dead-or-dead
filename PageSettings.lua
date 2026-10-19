@@ -472,19 +472,12 @@ function private.BuildLook(panel, width)
 		swatch.key = theme.key
 		swatch:SetScript("OnClick", function()
 			Theme:Choose(theme.key)
-			UI:PreviewTheme(theme.key)
 			private.RefreshLook()
 		end)
 		swatch:SetScript("OnEnter", function(self) Theme:SetBorderColor(self, C.borderLight) end)
 		swatch:SetScript("OnLeave", function() private.RefreshLook() end)
 		tinsert(private.swatches, swatch)
 	end
-	local reload = W:Button(card, "Reload to apply", "secondary", 130, 24, function() ReloadUI() end)
-	reload:SetPoint("BOTTOMRIGHT", -16, 10)
-	W:Explain(reload, "Reload to apply", function()
-		return format("%s shows behind the window now. Reload to apply its colours.", Theme:Get(Wanted.db.settings.theme).name)
-	end)
-	private.lookReload = reload
 
 	card = private.Card(panel, -274, 130, "Class icons", width)
 	local previous = nil
@@ -525,7 +518,7 @@ function private.BuildLook(panel, width)
 	size:SetPoint("TOPLEFT", 0, -36)
 end
 
----Borders the chosen theme and says whether a /reload is needed for its colours.
+---Borders the chosen theme.
 function private.RefreshLook()
 	if not private.swatches then
 		return
@@ -535,8 +528,6 @@ function private.RefreshLook()
 		Theme:SetBorderColor(swatch, swatch.key == chosen and C.accent or C.border)
 		swatch.name:SetTextColor(unpack(swatch.key == chosen and C.white or C.muted))
 	end
-	local applied = Theme.current and Theme.current.key
-	private.lookReload:SetShown(applied ~= chosen)
 end
 
 

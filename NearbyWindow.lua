@@ -334,7 +334,7 @@ function private.Create()
 	local mark = header:CreateTexture(nil, "ARTWORK")
 	mark:SetSize(3, 14)
 	mark:SetPoint("LEFT", 8, 0)
-	mark:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
+	Theme:Paint(mark, C.accent, 1)
 	private.title = Theme:Text(header, "heading", "")
 	private.title:SetPoint("LEFT", mark, "RIGHT", 7, 0)
 	local close = W:Button(header, "X", "ghost", 22, 22, function() Nearby:SetShown(false) end)
@@ -802,8 +802,7 @@ function Nearby:Refresh()
 	private.pendingLayout = false
 	local layout = private.Show().layout or "auto"
 	local compact = layout == "compact" or (layout == "auto" and #items > COMPACT_ABOVE)
-	local bg = C.bg
-	Theme:SetBg(private.frame, { bg[1], bg[2], bg[3], (bg[4] or 1) * (private.Show().opacity or 1) })
+	Theme:Paint(private.frame._bg, C.bg, (C.bg[4] or 1) * (private.Show().opacity or 1))
 	local capacity = compact and COMPACT_ROWS or NORMAL_ROWS
 	local rowHeight = compact and COMPACT_HEIGHT or ROW_HEIGHT
 	private.offset = min(private.offset, max(#items - capacity, 0))

@@ -348,6 +348,11 @@ another addon registered with LibSharedMedia; Wanted's beep when it's gone). A n
 `minimapPos`, the button's angle in degrees, filled in at load from the older `angle` (which stays, for older
 versions). LibDBIcon may add `lock`. A new key filled in at load: no migration.
 
+Sizes (from 1.28.0, no migration: new keys, filled in from the defaults): `WantedDB.settings.uiScale` the window's
+size, `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's and
+`settings.captures.scale` the capture bar's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
+else read is put back in range (Theme:ClampScale). The window's size is also kept within what the screen has room for.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

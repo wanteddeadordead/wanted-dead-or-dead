@@ -17824,7 +17824,7 @@ end
 ;(function()
 	local G = ns.GuildWars
 	check(not G:On() and #G:Zones() == 0 and G:Guild() == nil, "no wars in the catch-up: off")
-	G:Take({ zones = { { zone = "x", since = 0 / 0, holder = { guild = string.rep("a", 500) } } }, bad = function() end, deep = { { { { { { { "too deep" } } } } } } } })
+	G:Take({ zones = { { zone = "x", since = 0 / 0, holder = { guild = string.rep("a", 500) } } }, bad = function() end, deep = { { { { { { { { { "too deep" } } } } } } } } } })
 	local zone = G:Zones()[1]
 	check(G:On() and zone.since == nil and #zone.holder.guild == 120 and G:Wars()[1] == nil, "cleaned: no NaN, long text cut, nothing but data")
 	G:Take(nil)
@@ -18082,6 +18082,33 @@ end
 		check(G:Pending("in", "hb-1") and G:Pending("in", "hb-1").data.on == true, "I'm in asks the site")
 	end
 	ns.db.warActions = {}
+	-- The battle: the defenders' lanes and the keep, live; turnout and friends; you; what happened
+	AtStep("battle", function(war)
+		war.time = { start = clock - 700, accepted = true }
+		war.battle = { prep = clock - 1600, start = clock - 700, stop = clock + 1100, live = true,
+			lanes = { { id = "top", tower = { state = "taken", at = clock - 400 }, inhibitor = { state = "taken", at = clock - 100 } },
+				{ id = "mid", tower = { state = "taking", pct = 50, us = 4, them = 2 } }, { id = "bot" } },
+			keep = { state = "open", since = clock - 100 }, turnout = { attacker = 31, defender = 24 }, friends = { horde = 9, alliance = 4 },
+			events = { { t = clock - 100, text = "EMPIRE took the Top inhibitor: the keep is open" }, { t = clock - 700, text = "The battle began: 31 v 24" } },
+			me = { counting = true, point = "the Mid tower", kills = 3, deaths = 1, minutes = 6 } }
+	end)
+	check(OnScreen("The war is on") and OnScreen("battle left") and OnScreen("THE LANES · LIVE") and OnScreen("50%, 4 v 2") and OnScreen("open since")
+		and OnScreen("Friends  9 · 4") and OnScreen("Counting at the Mid tower") and OnScreen("Kills 3 · deaths 1 · 6 min on points")
+		and OnScreen("EMPIRE took the Top inhibitor: the keep is open"), "the battle: lanes, keep, turnout, friends, you and what happened")
+	local seals = {}
+	for _, f in ipairs(Mock.created) do
+		if type(rawget(f, "lanes")) == "table" and rawget(f, "keepLine") and f._shown then
+			for _, row in ipairs(f.lanes) do seals[#seals + 1] = row.tower.seal._texture seals[#seals + 1] = row.inhibitor.seal._texture end
+			seals[#seals + 1] = f.keep._texture
+		end
+	end
+	local all = table.concat(seals, " ")
+	check(all:find("tower%-alliance") and all:find("inhib%-broken%-by%-horde") and all:find("tower%-contested") and all:find("nexus%-keep%-open%-alliance"),
+		"the seals: a tower taken, an inhibitor broken by the attackers, one being taken, the defenders' keep open")
+	AtStep("battle", function(war)
+		war.battle = { prep = clock - 300, start = clock + 600, stop = clock + 2400 }
+	end)
+	check(OnScreen("Prep: the war starts soon") and OnScreen("Battle at") and OnScreen("THE LANES · PREP"), "prep: the lanes greyed, the battle's time")
 	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)

@@ -20,7 +20,7 @@ local private = {
 	state = nil, -- the catch-up's wars, cleaned, or nil when it named none
 	listeners = {},
 }
-local MAX_DEPTH, MAX_ITEMS, MAX_TEXT = 6, 200, 120
+local MAX_DEPTH, MAX_ITEMS, MAX_TEXT = 8, 200, 120
 -- The game's rank permission that lets a rank invite to the guild (Blizzard_GuildControlUI.xml, InviteCheckbox id 5)
 local INVITE_FLAG = 5
 local MAX_ACTIONS = 50

@@ -87,6 +87,7 @@ PageWarDeclare.lua
 PageWarDraw.lua
 PageWarTime.lua
 PageWarRoster.lua
+PageWarBattle.lua
 PageBoard.lua
 TrustPanel.lua
 PageMine.lua

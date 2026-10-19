@@ -92,27 +92,12 @@ function GuildWars:Take(src)
 		end
 	end
 	local db = Wanted.db
-	db.warPoints = type(db.warPoints) == "table" and db.warPoints or {}
-	local live
-	if raw then
-		private.state, live = GuildWars.View(raw, type(src.t) == "number" and src.t or nil, db.warPoints)
-	else
-		private.state = nil
-	end
-	-- Each war's points as last seen live, for its result; kept while the site lists the war
+	private.state = raw and GuildWars.View(raw, type(src.t) == "number" and src.t or nil) or nil
 	local listed, now = {}, GetServerTime()
 	for _, war in ipairs(GuildWars:Wars()) do
 		if war.id ~= nil then
 			listed[war.id] = true
 		end
-	end
-	for id in pairs(db.warPoints) do
-		if not listed[id] then
-			db.warPoints[id] = nil
-		end
-	end
-	for id, points in pairs(live or {}) do
-		db.warPoints[id] = points
 	end
 	-- The asks: answered ones done (the war or guild as it stands now is in this catch-up), refused ones kept to say
 	-- why; for a war the site no longer lists, or a day old, they drop
@@ -683,12 +668,13 @@ end
 ---This character's view of its guild for the app, as WANTEDG1 lines, at each read of the roster (at most every
 ---REPORT_SECONDS): the guild master, the ranks with the guild-invite right, every member's GUID and rank; out of a
 ---guild, just that. The app sends a read when it differs from the last it sent, or a day on; the site works out
----membership, the leader and the ranks from many members' reports, never one. Only while the site runs guild wars.
+---membership, the leader and the ranks from many members' reports, never one. Written whether or not the catch-up has
+---guild wars yet: the site reads rosters under a switch of its own, before wars are on.
 ---"WANTEDG1 <mark> reporter=<GUID>&at=<time>&realm=<id>&guild=<name>&leader=<GUID>&ranks=<1|0><name>,..&members=<GUID>.<rank>,..[&part=i/n]"
 function GuildWars:ReportRoster()
 	local now = GetServerTime()
 	local mark, me = Wanted.db.accountMark, UnitGUID("player")
-	if not GuildWars:On() or now - (private.reportRead or 0) < REPORT_SECONDS or not (C_Log and C_Log.LogMessage)
+	if now - (private.reportRead or 0) < REPORT_SECONDS or not (C_Log and C_Log.LogMessage)
 		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) or not (IsInGuild and GetGuildInfo) then
 		return
 	end

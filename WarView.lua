@@ -19,8 +19,6 @@ local STEP = { awaiting_time = "time", awaiting_answer = "time", scheduled = "ro
 local KINDS = { earn_race = "A race", earn_war = "A war", earn_bounty = "A bounty", earn_board = "A weekly board",
 	earn_guild = "The guild's earnings", tax = "Guild tax", stake_hold = "Stake held", stake_refund = "Stake back",
 	stake_lost = "Stake lost", stake_return = "Stake returned", purchase = "The shop", admin_adjust = "An adjustment" }
--- The treasury's war earnings (section 5.1): an attack won, a defence held
-local ATTACK_WON, DEFENCE_HELD = 200, 100
 
 ---A whole number from the catch-up as text: its ids are numbers ("42", never "42.0").
 function private.Id(n)
@@ -402,7 +400,7 @@ function private.Battle(w, live, defender)
 end
 
 ---The Result step: who won, the keep, the lanes as last seen live, the turnout, the stake and the War Marks.
-function private.Result(w, attacker, defender, last)
+function private.Result(w, attacker, defender)
 	if w.state == "void" or w.state == "cancelled" then
 		return { [w.state] = true }
 	end
@@ -422,8 +420,7 @@ function private.Result(w, attacker, defender, last)
 		result.kills = { attacker = r.kills.att, defender = r.kills.def }
 	end
 	result.log = type(r.log) == "table" and r.log or nil
-	-- The treasury's movement from the war: the ledger's lines to and from our treasury, else section 5.1's rules (an
-	-- attack won earns, a failed one loses its stake; a defence held earns and takes the attackers' stake)
+	-- The treasury's movement from the war: the ledger's lines to and from our treasury (none until the site sends them)
 	local ours = (w.side == "attack" and w.attacker or w.defender) or "?"
 	local ledger, moved = type(r.ledger) == "table" and r.ledger or nil, 0
 	for _, line in ipairs(ledger or {}) do
@@ -432,14 +429,8 @@ function private.Result(w, attacker, defender, last)
 			moved = moved + (line.to == ours.." treasury" and amount or 0) - (line.from == ours.." treasury" and amount or 0)
 		end
 	end
-	if ledger then
-		result.marks.treasury = moved
-	elseif w.side == "attack" then
-		result.marks.treasury = attackWon and ATTACK_WON or -stake
-	else
-		result.marks.treasury = attackWon and 0 or DEFENCE_HELD + stake
-	end
-	-- Each lane as the site counted it, else as this client last saw it live
+	result.marks.treasury = ledger and moved or nil
+	-- Each lane as the site counted it
 	if type(r.lanes) == "table" then
 		result.lanes = {}
 		for _, lane in ipairs(r.lanes) do
@@ -450,8 +441,6 @@ function private.Result(w, attacker, defender, last)
 				tinsert(result.lanes, { id = lane.lane, tower = Taken(lane.tower), inhibitor = Taken(lane.inhibitor) })
 			end
 		end
-	elseif type(last) == "table" then
-		result.lanes = private.Lanes(w.zone, defender.faction, last.points, false)
 	end
 	if type(r.keep) == "table" then
 		result.keep.at = r.keep.at or result.keep.at
@@ -461,7 +450,7 @@ function private.Result(w, attacker, defender, last)
 end
 
 ---A war of the guild's, at its step.
-function private.War(w, raw, guild, myGuid, last)
+function private.War(w, raw, guild, myGuid)
 	local key = private.Id(w.id)
 	local side = w.side == "defend" and "defend" or "attack"
 	local mine = guild.faction
@@ -480,8 +469,8 @@ function private.War(w, raw, guild, myGuid, last)
 	war.time = private.Time(w, List(raw.wars))
 	war.roster = private.Roster(w, side == "attack" and attacker or defender, myGuid)
 	war.battle = private.Battle(w, live, OTHER[attackFaction])
-	war.result = private.Result(w, attacker, defender, last)
-	return war, live
+	war.result = private.Result(w, attacker, defender)
+	return war
 end
 
 
@@ -490,21 +479,17 @@ end
 -- The view
 -- ============================================================================
 
----The view the screens read, from the cleaned catch-up fields: { at, zones, guild, purse, wars, ladders }. Second: the
----live points of each war in prep or battle, by its id, for the result to show later.
+---The view the screens read, from the cleaned catch-up fields: { at, zones, guild, purse, wars, ladders }.
 ---@param raw table
 ---@param at number? when the catch-up was written
----@param last table? each war's last live points, by its id
 ---@return table view
----@return table live
-function GuildWars.View(raw, at, last)
+function GuildWars.View(raw, at)
 	local now = GetServerTime()
 	local myGuid = UnitGUID("player")
 	local view = { at = at, wars = {}, ladders = raw.ladders }
 	local guild = private.Guild(raw, myGuid)
 	view.guild = guild
 	view.purse = private.Purse(raw.marks, now)
-	local seen = {}
 	if guild then
 		local owners = type(raw.owners) == "table" and raw.owners or {}
 		for _, open in ipairs(List(raw.declare)) do
@@ -518,14 +503,10 @@ function GuildWars.View(raw, at, last)
 		end
 		for _, w in ipairs(List(raw.wars)) do
 			if type(w) == "table" and type(w.id) == "number" and type(w.zone) == "string" then
-				local war, live = private.War(w, raw, guild, myGuid, last and last[private.Id(w.id)])
-				tinsert(view.wars, war)
-				if live then
-					seen[war.id] = { points = live.points, at = live.at }
-				end
+				tinsert(view.wars, (private.War(w, raw, guild, myGuid)))
 			end
 		end
 	end
 	view.zones = private.Zones(raw, view.wars, now)
-	return view, seen
+	return view
 end

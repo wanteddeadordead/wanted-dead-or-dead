@@ -211,12 +211,15 @@ function private.Create()
 		end
 	end)
 	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
-	-- Under heavy development through the WoW Forever beta: a tag beside the brand says so, its tooltip how
-	local beta = W:Pill(titleBar)
-	beta:Set("BETA", C.amber)
-	beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
-	W:Explain(beta, "Beta", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", "ANCHOR_BOTTOM")
-	local anchor = beta
+	-- Under heavy development through the WoW Forever beta (Wanted.BETA): a tag beside the brand says so, its tooltip how
+	local anchor = brand
+	if Wanted.BETA then
+		local beta = W:Pill(titleBar)
+		beta:Set("BETA", C.amber)
+		beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
+		W:Explain(beta, "Beta", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", "ANCHOR_BOTTOM")
+		anchor = beta
+	end
 	local tagline = Theme:Text(titleBar, "small", "World PvP bounties, player to player")
 	tagline:SetPoint("LEFT", anchor, "RIGHT", 12, -1)
 

@@ -10,7 +10,7 @@ local C = Theme.C
 local GuildWars = Wanted.GuildWars
 local ROWS = 4
 local COLUMNS = { guild = 16, influence = 330, stake = 430, chance = 530, result = 640 }
-local SITE = "https://wanteddeadordead.com/war/"
+local SITE = "https://wanteddeadordead.com/war/wars/"
 
 ---Open on the site: the war's page, an address to copy (the game can't open a browser).
 function GuildWars:OpenOnSite(war)

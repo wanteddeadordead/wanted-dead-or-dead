@@ -3015,7 +3015,8 @@ end)()
 		local hit = rawget(f, "explainHit")
 		if type(text) == "table" and text._text == "BETA" and hit and tostring(hit.tooltipText):find("heavy development through the WoW Forever beta", 1, true) then found = true end
 	end
-	check(found, "the BETA tag explains the development note")
+	-- Only while Wanted.BETA is on: the launch build has no tag
+	check(found == (ns.BETA == true), "the BETA tag only in a beta build, explaining the development note")
 end)()
 ;(function()
 	-- At login, without the app, a popup offers it (like TSM's); "Don't remind me" stops it for good
@@ -17934,8 +17935,14 @@ end
 	IsInGuild = function() return false end
 	G:ReportRoster()
 	check(logged[1] == format("WANTEDG1 %s reporter=Player-1-ME&at=%d&realm=1&guild=", ns.db.accountMark, clock), "out of a guild: just that: "..tostring(logged[1]))
+	-- Whether or not the catch-up has guild wars yet (the site reads rosters under a switch of its own)
+	G:Take(nil)
+	clock = clock + 700
+	G:ReportRoster()
+	check(#logged == 2, "a roster read with no guild wars in the catch-up")
 	IsInGuild = realInGuildR
 	clock = realClock
+	G:Take(GuildWarsSample(clock))
 	GetGuildInfo = realGuildName
 	C_Log = realLog
 	-- The Zones tab
@@ -18217,7 +18224,6 @@ end
 	local all = table.concat(seals, " ")
 	check(all:find("tower%-horde") and all:find("inhib%-broken%-by%-horde") and all:find("tower%-contested") and all:find("tower%-alliance") and all:find("nexus%-keep%-open%-alliance"),
 		"the seals: a tower taken, an inhibitor broken by the attackers, one being taken, one standing, the defenders' keep open: "..all)
-	check(ns.db.warPoints["7"] and #ns.db.warPoints["7"].points == 4, "the live points kept for the result")
 	-- The war HUD: in the war's zone, standing on the Mid tower; not on the roster
 	local realBest, realPos = C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition
 	C_Map.GetBestMapForUnit = function() return 1424 end
@@ -18232,7 +18238,7 @@ end
 	check(hud.lanes[1].tower._texture:find("tower%-horde$") and hud.lanes[1].inhibitor._texture:find("inhib%-broken%-by%-horde$") and hud.lanes[2].pct._text == "50%"
 		and hud.lanes[3].tower._texture:find("tower%-alliance$") and hud.keep._texture:find("nexus%-keep%-open%-alliance$") and hud.rally._texture:find("rally%-horde$"),
 		"the strip: the rally, the lanes' seals, the keep open")
-	check(hud.bar:IsShown() and hud.bar.label._text == "Mid tower · Darrow Hill" and hud.bar.pct._text == "50%" and hud.friends.text._text:find("Friends", 1, true)
+	check(hud.bar:IsShown() and hud.bar.label._text == "Mid tower · Tarren Mill south-west" and hud.bar.pct._text == "50%" and hud.friends.text._text:find("Friends", 1, true)
 		and hud.status._text == "You can fight; you don't count", "the point the player stands on, friends, and not on the roster")
 	ns.db.settings.warHud = false
 	ns.WarHUD:Update()
@@ -18345,10 +18351,13 @@ end
 	ns.WarHUD:Update()
 	check(hud:IsShown() and hud.clock._text == "Prep 10:00" and hud.kind._text == "GUILD WAR · PREP" and not hud.bar:IsShown(),
 		"the HUD in prep: the clock to the battle: "..tostring(hud.clock._text))
-	-- The result: won, the lanes and keep as they ended (as last seen live), the zone now, the War Marks
+	-- The result: won, the lanes and keep as the site counted them, the zone now, the War Marks (the treasury's from the
+	-- site's ledger)
 	AtStep(function(war)
 		war.state, war.start, war.answer = "over", clock - 2400, "accept"
-		war.result = { winner = "att", keepAt = clock - 600, towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, marks = 50, protectedUntil = clock + 3 * 86400 }
+		war.result = { winner = "att", keepAt = clock - 600, towers = 3, inhibitors = 1, turnoutAtt = 31, turnoutDef = 24, marks = 50, protectedUntil = clock + 3 * 86400,
+			lanes = { { lane = "top", tower = { point = "hb-top-a-tower", at = clock - 1800 }, inhibitor = { point = "hb-top-a-inhibitor", at = clock - 1200 } } },
+			ledger = { { at = clock - 600, from = "world", to = "EMPIRE treasury", amount = 200, kind = "earn_guild" } } }
 	end)
 	check(OnScreen("EMPIRE took Hillsbrad") and OnScreen("WON") and OnScreen("NOW EMPIRE'S") and OnScreen("held") and OnScreen("fell at")
 		and OnScreen("31 / 40 v 24 / 40 · towers 3 · inhibitors 1") and OnScreen("Held by <EMPIRE>") and OnScreen("Protected until") and OnScreen("400 returned")

@@ -167,8 +167,9 @@ GuildWars.PANELS.result = {
 			or marks.stakeWon and Theme:Colorize(format("%s won from %s", private.Count(stake), ctx.theirs.guild or "them"), C.green)
 			or war.role == "defend" and format("%s back to %s", private.Count(stake), ctx.theirs.guild or "them")
 			or Theme:Colorize(format("%s lost to %s", private.Count(stake), ctx.theirs.guild or "them"), C.red))
-		local treasury, purse = tonumber(marks.treasury) or 0, tonumber(marks.purse) or 0
-		panel.marks[2]:SetText(treasury ~= 0 and Theme:Colorize((treasury > 0 and "+" or "")..private.Count(treasury), treasury > 0 and C.green or C.red) or "0")
+		-- The treasury's movement from the site's ledger; nothing until it's sent
+		local treasury, purse = tonumber(marks.treasury), tonumber(marks.purse) or 0
+		panel.marks[2]:SetText(not treasury and "" or treasury ~= 0 and Theme:Colorize((treasury > 0 and "+" or "")..private.Count(treasury), treasury > 0 and C.green or C.red) or "0")
 		panel.marks[3]:SetText(purse ~= 0 and (Theme:Colorize("+"..private.Count(purse), C.green).." for you") or "0")
 	end,
 }

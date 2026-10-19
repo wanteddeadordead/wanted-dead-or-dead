@@ -17784,6 +17784,14 @@ local function GuildWarsSample(now)
 			sources = { { label = "Races: present", n = 10, max = 10 }, { label = "Races: kills", n = 8, max = 30 }, { label = "Wars", n = 0, max = 50 } },
 			recent = { { t = now - 1200, text = "Arathi race so far: 6 kills, 9 min on a point", purse = 14, treasury = 1 },
 				{ t = now - 2000, text = "Hillsbrad war declared: stake held", treasury = -400 } } },
+		wars = {
+			{ id = "hb-1", zone = "Hillsbrad Foothills", role = "attack", step = "declare",
+				attacker = { guild = "EMPIRE", faction = "Horde", crest = "wolf-gold" }, defender = { guild = "Revenant", faction = "Alliance", crest = "raven-black" },
+				race = { at = now - 1800 },
+				declare = { closesAt = now + 522, share = 0.41, influence = 527, sideInfluence = 1284, members = 23, officerInCommunity = "Grimtusk",
+					protectedUntil = now - 3 * 86400, minStake = 300, maxStake = 600, treasury = 2140,
+					declared = { { guild = "Bloodfang Raiders", faction = "Horde", share = 0.21, stake = 300, by = "Kroggar", at = now - 1440 } } } },
+		},
 	}
 end
 
@@ -17845,9 +17853,9 @@ end
 	G:Act("tax", nil, { percent = 12 })
 	G:Act("tax", nil, { percent = 15 })
 	check(#ns.db.warActions == 1 and G:Pending("tax").data.percent == 15, "an ask kept, the same ask again replacing it")
-	G:Act("declare", "hb-1", { stake = 400 })
+	G:Act("declare", "gone-1", { stake = 400 })
 	G:Take(GuildWarsSample(clock))
-	check(G:Pending("declare", "hb-1") == nil and G:Pending("tax") ~= nil, "a war the site no longer lists: its asks drop")
+	check(G:Pending("declare", "gone-1") == nil and G:Pending("tax") ~= nil, "a war the site no longer lists: its asks drop")
 	-- The Zones tab
 	ns.UI:Show("warzones")
 	check(ns.UI:IsShown("warzones"), "Guild Wars opens on Zones")
@@ -17940,6 +17948,34 @@ end
 	check(table.concat(names, ",") == "Vorgath,Grimtusk,Sylvexa,Ex Madness,Strix Primal", "what was saved counts until the site answers: "..table.concat(names, ","))
 	IsInGuild, GetGuildInfo = realInGuild, realGuildInfo
 	game.SetLeader(false)
+	ns.db.warActions = {}
+	-- A war's tab: named by its zone; the header, the step bar and the Declare step
+	G:Take(GuildWarsSample(clock))
+	ns.UI:Show("war1")
+	local tabLabel
+	for _, f in ipairs(Mock.created) do if rawget(f, "key") == "war1" and rawget(f, "label") and f._shown then tabLabel = f.label._text end end
+	check(ns.UI:IsShown("war1") and tabLabel == "Hillsbrad" and not Button("War"), "a war's tab, named by its zone; tabs for no war hidden: "..tostring(tabLabel))
+	check(OnScreen("ATTACK · HILLSBRAD FOOTHILLS · HELD BY REVENANT (ALLIANCE)") and OnScreen("Declare war on Hillsbrad") and OnScreen("8:42") and OnScreen("left to declare"),
+		"the header: attack, the zone and its holder, the headline and the time left")
+	check(OnScreen("CAN EMPIRE DECLARE?") and OnScreen("10% of the Horde's influence") and OnScreen("41%: 527 of 1284") and OnScreen("You're not a war officer of EMPIRE"),
+		"the checklist, a member not an officer")
+	check(OnScreen("Bloodfang Raiders") and OnScreen("21% influence · stake 300 · by Kroggar") and OnScreen("66% IF YOU DECLARE") and OnScreen("Chance in the draw  66%"),
+		"declared so far, and our chance if we declare: influence × stake")
+	check(not Button("Not tonight") and OnScreen("Members see this page without its buttons."), "a member: no buttons")
+	-- A war officer (added by name) with the app: Declare war asks the site
+	local officerSample = GuildWarsSample(clock)
+	officerSample.guild.officers = { ranks = { 1, 2 }, add = { "Test Player" } }
+	G:Take(officerSample)
+	local realName, realInfo = UnitName, WantedAppInfo
+	UnitName = function(unit) if unit == "player" then return "Test Player" end return realName(unit) end
+	WantedAppInfo = { running = "0.2.60", seen = clock }
+	ns.UI:Refresh()
+	local declare = Button("Declare war · stake 300")
+	check(declare and declare:IsEnabled() and Button("Not tonight") and OnScreen("You're a war officer of EMPIRE"), "a war officer: Declare war with the stake, every check ticked")
+	declare._scripts.OnClick(declare)
+	check(G:Pending("declare", "hb-1") and G:Pending("declare", "hb-1").data.stake == 300 and OnScreen("Sent; waiting for the site") and not Button("Declare war · stake 300"):IsEnabled(),
+		"declaring asks the site and waits for it")
+	UnitName, WantedAppInfo = realName, realInfo
 	ns.db.warActions = {}
 	local noGuild = GuildWarsSample(clock)
 	noGuild.guild = nil

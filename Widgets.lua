@@ -282,11 +282,27 @@ local function RefreshButton(button)
 	button.label:SetTextColor(text[1], text[2], text[3], text[4] or 1)
 end
 
+-- Text buttons come in two heights, EllesmereUI's: 26, and 22 in compact rows and title bars. A height asked for
+-- between 20 and 30 takes the nearer, so "Open the map" beside "Go to the front" is the same size in any style.
+-- Segments, tabs and fields keep their own; so do the small chips (16) and the picture buttons (over 30).
+local BUTTON_HEIGHT, BUTTON_HEIGHT_COMPACT = 26, 22
+local SIZED_STYLES = { primary = true, secondary = true, ghost = true, chip = true, danger = true, success = true, selected = true }
+W.BUTTON_HEIGHT, W.BUTTON_HEIGHT_COMPACT = BUTTON_HEIGHT, BUTTON_HEIGHT_COMPACT
+
+---The height a button of a style is drawn at, for the height asked.
+function W:ButtonHeight(style, height)
+	height = height or BUTTON_HEIGHT
+	if not SIZED_STYLES[style or "secondary"] or height < 20 or height > 30 then
+		return height
+	end
+	return height < 24 and BUTTON_HEIGHT_COMPACT or BUTTON_HEIGHT
+end
+
 ---@param template string? e.g. "SecureActionButtonTemplate" for a button that runs a macro
 ---@param name string? a global name, for a button a macro clicks (/click)
 function W:Button(parent, text, style, width, height, onClick, template, name)
 	local button = CreateFrame("Button", name, parent, template)
-	button:SetSize(width or 96, height or 26)
+	button:SetSize(width or 96, W:ButtonHeight(style, height))
 	Theme:Skin(button, C.transparent, C.transparent)
 	button.label = Theme:Text(button, "label", text)
 	button.label:SetJustifyH("CENTER")

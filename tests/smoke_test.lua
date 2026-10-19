@@ -6486,6 +6486,27 @@ end)()
 	local gap = wow._point[3] - event._point[3]
 	check(gap >= wow._font._size + 4, "legend lines "..gap.." apart for "..wow._font._size.." px text")
 end)()
+-- Buttons in two heights: 26, and 22 for compact rows; segments, fields, small chips and picture buttons keep theirs
+;(function()
+	local W = ns.Widgets
+	local function H(style, h) return W:Button(UIParent, "Go", style, 80, h):GetHeight() end
+	check(H("primary", 24) == 26 and H("secondary", 28) == 26 and H("danger", 30) == 26 and H("success", 27) == 26, "text buttons from 24 to 30 are 26")
+	check(H("secondary", 20) == 22 and H("ghost", 22) == 22 and H("chip", 20) == 22, "from 20 to 23 they're 22")
+	check(H("chip", 16) == 16 and H("secondary", 58) == 58 and H("field", 28) == 28 and H("tab", 26) == 26, "small chips, pictures and fields keep theirs")
+	check(H("primary") == 26, "26 when no height is asked")
+	-- The Siege card: Open the map and Go to the front side by side, one height
+	ns.UI:Show("siege")
+	local heights = {}
+	for _, f in ipairs(Mock.created) do
+		local label = rawget(f, "label")
+		if f._kind == "Button" and type(label) == "table" and (label._text == "Open the map" or label._text == "Go to the front" or label._text == "Lead the rally") then
+			heights[f._h] = true
+		end
+	end
+	local n = 0
+	for h in pairs(heights) do n = n + 1 check(h == 26 or h == 22, "a Siege button is 26 or 22: "..h) end
+	check(n >= 1, "the Siege page has its buttons")
+end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
 -- 0, or never set) aren't measured here.

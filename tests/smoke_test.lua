@@ -6512,6 +6512,8 @@ end)()
 	check(went == nil, "a step to come doesn't")
 	bar:Set(3, nil, { [2] = true })
 	check(d[2].mark._texture:find("cross$") and d[2].ring._vertexColor[1] == C.red[1] and bar.lines[2]._color[4] == 0.12, "a failed step is a red ring with a cross")
+	bar:Set(2, nil, { [2] = true }, { [3] = true, [4] = true })
+	check(d[2].mark._texture:find("cross$") and d[3].mark._shown and d[3].mark._texture:find("tick$") and d[4]._w == 18, "a checklist: steps after the current one can be done too")
 end)()
 -- Settings in rows: switches for on/off, multiselects for where things show, cogs for the finer settings
 ;(function()

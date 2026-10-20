@@ -38,12 +38,12 @@ function WarLive:Step()
 	local slot = floor(now / TICK)
 	local point = GuildWars:PointAt(war, zone, x, y, mapId)
 	-- Our presence for the site at once, each tick on a war point, roster or not (the site knows the rosters; it only
-	-- reaches back 3 minutes): the same log line as a capture or race point's (WANTEDP1, the war's point id), when it
+	-- reaches back 3 minutes): the same log line as a race point's (Presence, WANTEDP1, the war's point id), when it
 	-- can count (not dead, mounted, stealthed...)
 	if private.presence ~= slot then
 		private.presence = slot
-		if point and not Wanted.Captures:Blocked() then
-			Wanted.Captures:CountRace(point.id, now)
+		if point and not Wanted.Presence:Blocked() then
+			Wanted.Presence:Count(point.id, now)
 		end
 	end
 	if GuildWars:OnRoster(war) and private.sent ~= slot then

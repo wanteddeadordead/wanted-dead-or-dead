@@ -41,6 +41,7 @@ Bridge.lua
 Catchup.lua
 Challenges.lua
 BlizzRank.lua
+Presence.lua
 Captures.lua
 Races.lua
 WarZones.lua

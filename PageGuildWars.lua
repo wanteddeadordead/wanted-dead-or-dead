@@ -433,7 +433,7 @@ function private.GoTo()
 		x, y = nil, nil
 	end
 	local point = Races:Nearest(race, x, y)
-	if Wanted.Captures:Track({ id = point.id, x = point.x, y = point.y, front = { mapId = race.mapId } }) then
+	if Wanted.Presence:Track(race.mapId, point.x, point.y) then
 		UI:Toast(format("Waypoint set on %s.", point.name), C.green)
 	else
 		UI:Toast("The waypoint couldn't be set.", C.red)

@@ -15621,18 +15621,6 @@ end)()
 	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, points = { ["av-mid-3"] = { h = "H", s = clock - 60, r = clock + 60, t = clock } } } }
 	ns.Catchup:Import()
 	check(C:Holder("av-mid-3") == "Horde" and C:Hold("av-mid-3").r == clock + 60 and C:Hold("hb-mid-2") == nil, "the catch-up's holders replace the last ones")
-	-- Old, malformed and excess entries go at load
-	db.presence = {
-		old = { g = "Player-1-ME", n = "Test", p = "hb-mid-2", s = math.floor((clock - 4 * 86400) / 300), c = 4 },
-		bad = { g = "Player-1-ME", n = "Test", p = "nowhere", s = slot, c = 4 },
-		junk = "x",
-	}
-	for i = 1, 2005 do db.presence["k"..i] = { g = "Player-1-ME", n = "Test", p = "av-mid-3", s = slot - 700 + math.floor(i / 3), c = 1 } end
-	C:OnLoad()
-	local n = 0
-	for _ in pairs(db.presence) do n = n + 1 end
-	check(n == 2000 and not db.presence.old and not db.presence.bad and not db.presence.junk and not db.presence.k1 and not db.presence.k2 and db.presence.k2005,
-		"pruning keeps 2,000 of the newest well-formed entries: "..n)
 	db.presence = {}
 	C:Take(nil)
 	C_Map, IsMounted, UnitIsAFK, IsStealthed, ns.Sync.SendPoint, ns.Alerts.Warn = real.C_Map, real.IsMounted, real.UnitIsAFK, real.IsStealthed, real.SendPoint, real.Warn
@@ -17545,6 +17533,27 @@ end)()
 	_G.WantedWhatsNewFrame:Hide()
 end)()
 print("wanted smoke: setup checks pass")
+-- Presence at race and war points: the book's tidy at login keeps any well-formed point id to its age (a retired
+-- capture front's too: its data stays until the post-beta reset), and drops old, malformed and excess entries
+;(function()
+	local P, db = ns.Presence, ns.db
+	local real = db.presence
+	local slot = math.floor(clock / P.SLOT_SECONDS)
+	db.presence = {
+		old = { g = "Player-1-ME", n = "Test", p = "hb-r2", s = math.floor((clock - 4 * 86400) / 300), c = 4 },
+		bad = { g = "Player-1-ME", n = "Test", p = "Not An Id!", s = slot, c = 4 },
+		front = { g = "Player-1-ME", n = "Test", p = "ah-top-3", s = slot, c = 4 },
+		junk = "x",
+	}
+	for i = 1, 2005 do db.presence["k"..i] = { g = "Player-1-ME", n = "Test", p = "hb-top-h-tower", s = slot - 700 + math.floor(i / 3), c = 1 } end
+	P:OnLoad()
+	local n = 0
+	for _ in pairs(db.presence) do n = n + 1 end
+	check(n == 2000 and not db.presence.old and not db.presence.bad and not db.presence.junk and db.presence.front and not db.presence.k1 and db.presence.k2005,
+		"pruning keeps 2,000 of the newest well-formed entries, a retired front's among them: "..n)
+	db.presence = real
+end)()
+print("wanted smoke: presence checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
 -- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild
 -- Wars page in Siege's place; the HUD in the race's zone while it runs
@@ -17611,11 +17620,11 @@ print("wanted smoke: setup checks pass")
 	clock = start + 60
 	check(R:Live() == race, "the race is live by the clock")
 	R:Sample()
-	local slot = math.floor(clock / C.SLOT_SECONDS)
+	local slot = math.floor(clock / ns.Presence.SLOT_SECONDS)
 	local key = "hb-r2:"..slot..":Player-1-ME"
-	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].r == true, "a sample in the presence book, marked a race point's")
+	check(db.presence[key] and db.presence[key].c == 1, "a sample in the presence book")
 	check(logged[1] == ("WANTEDP1 %s hb-r2 %d 1 Horde %s Player-1-ME %s"):format(db.accountMark, slot, db.presence[key].l or "-", ns.Store:GetOrigin()),
-		"and on the log as a capture point's line, the race point's id in the point's place: "..tostring(logged[1]))
+		"and on the log line the app reads: "..tostring(logged[1]))
 	check(R:Current() == race.points[2], "the HUD knows the point")
 	-- Outside every radius: nothing
 	px = 0.573 + 60 / 3200
@@ -17661,7 +17670,7 @@ print("wanted smoke: setup checks pass")
 	clock = clock + 151
 	check(R:HereNow(race.points[3]) == 0, "not heard from lately: not counted as on the point")
 	-- The race points' samples survive the book's tidy at login
-	C:OnLoad()
+	ns.Presence:OnLoad()
 	check(db.presence[key] ~= nil, "a race point's sample is kept in the book at login")
 	-- The Guild Wars page in Siege's place, with the race live
 	db.settings.siege = true
@@ -18838,13 +18847,13 @@ end
 		"a bystander: no war tab, but the HUD, and census lines under that war's id: "..tostring(sights[1]))
 	check(G:Here().battle.start == clock - 600 and hud.clock._text == "20:00", "its clock from the war's start: "..tostring(hud.clock._text))
 	-- And a bystander's presence on that war's point, so their census and sightings count
-	local bpresence, realLogB, realBlockedB = {}, C_Log, ns.Captures.Blocked
+	local bpresence, realLogB, realBlockedB = {}, C_Log, ns.Presence.Blocked
 	C_Log = { LogMessage = function(t) if t:find("^WANTEDP1 ") then bpresence[#bpresence + 1] = t end end }
-	ns.Captures.Blocked = function() return nil end
+	ns.Presence.Blocked = function() return nil end
 	clock = clock + 30
 	ns.WarLive:Step()
 	check(bpresence[1] and bpresence[1]:find(" hb-mid-a-tower ", 1, true), "a bystander's presence on the war's point: "..tostring(bpresence[1]))
-	C_Log, ns.Captures.Blocked = realLogB, realBlockedB
+	C_Log, ns.Presence.Blocked = realLogB, realBlockedB
 	AtStep(function(war) war.state, war.start, war.answer = "battle", clock - 300, "accept" war.roster = { { guid = ME, name = "Test Player", place = 1 } } end)
 	-- Only on the war's layer once it's fixed
 	local realLayer = ns.Shard.Current
@@ -18863,14 +18872,14 @@ end
 	-- And our presence there for the site, on the presence line (WANTEDP1) with the war's point id
 	local presence = {}
 	C_Log = { LogMessage = function(t) if t:find("^WANTEDP1 ") then presence[#presence + 1] = t end end }
-	local realBlocked = ns.Captures.Blocked
-	ns.Captures.Blocked = function() return nil end
+	local realBlocked = ns.Presence.Blocked
+	ns.Presence.Blocked = function() return nil end
 	ns.WarLive:Step()
 	ns.WarLive:Step()
 	check(#presence == 1, "once a tick")
 	clock = clock + 30
 	ns.WarLive:Step()
-	ns.Captures.Blocked = realBlocked
+	ns.Presence.Blocked = realBlocked
 	check(presence[1] and presence[1]:find(" hb-mid-a-tower ", 1, true) and #presence == 2, "presence on the war's point for the site, at once each tick: "..tostring(presence[1]))
 	C_NamePlate, UnitIsPlayer, UnitGUID, UnitFactionGroup, C_Log = realPlates, realIsPlayer, realGUID, realFaction, realLogC
 	AtStep(function(war)

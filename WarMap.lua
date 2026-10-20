@@ -466,7 +466,7 @@ function private.Piece(spec)
 		b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		b:SetScript("OnClick", function(self)
 			local to = self.spec and self.spec.waypoint
-			if to and Wanted.Captures:Track({ id = self.spec.title, x = to.x, y = to.y, front = { mapId = to.mapId } }) then
+			if to and Wanted.Presence:Track(to.mapId, to.x, to.y) then
 				Wanted:Print("Waypoint set on %s.", self.spec.title)
 			end
 		end)

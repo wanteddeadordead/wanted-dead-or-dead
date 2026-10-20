@@ -58,7 +58,7 @@ function GuildWars:GoToRally(war)
 	end
 	local side = war.role == "defend" and war.defender or war.attacker
 	local base = type(side) == "table" and side.faction == "Alliance" and zone.alliance or zone.horde
-	if Wanted.Captures:Track({ id = base.id, x = base.x, y = base.y, front = { mapId = zone.mapId } }) then
+	if Wanted.Presence:Track(zone.mapId, base.x, base.y) then
 		UI:Toast(format("Waypoint set on %s.", war.role == "defend" and ("the keep at "..base.name) or ("the rally at "..base.name)), C.green)
 	else
 		UI:Toast("The waypoint couldn't be set.", C.red)

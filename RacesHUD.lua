@@ -88,7 +88,7 @@ function private.Build()
 	f.you = Theme:Text(body, "small", "", C.text)
 	f.you:SetPoint("TOPLEFT", 10, POINT_TOP - 3 * POINT_ROW - 4)
 	W:Explain(f.you, "You", "Your kills on the other faction here while the race runs, and your minutes on its points, as this client counted them.", "ANCHOR_BOTTOM")
-	-- Why the player's presence on a point doesn't count (Captures:Blocked), under the frame
+	-- Why the player's presence on a point doesn't count (Presence:Blocked), under the frame
 	f.blocked = Theme:Text(body, "small", "", C.amber)
 	f.blocked:SetPoint("TOP", f, "BOTTOM", 0, -4)
 	HudKit:Attach("race", f)

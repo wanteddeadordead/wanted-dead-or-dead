@@ -5,7 +5,7 @@
 -- wanteddeadordead.com runs the races and counts the influence; this client never does. The app brings tonight's
 -- races (with their points and influence as the site last counted them) and tomorrow's zones in its catch-up, read at
 -- every login. While a race is run the addon counts the player's presence on its points every 30 seconds, in the
--- same presence book and on the same log line as a capture point's (Captures:CountRace), for the app to send on.
+-- presence book and on the log line the app reads (Presence:Count), for the app to send on.
 --
 -- Live numbers: once a minute during a race, in its zone, each client tells its own side on WantedNet what it counted
 -- for its player (kills, samples on the points, the point it's on). Each client adds up what its side's players said
@@ -230,7 +230,7 @@ function Races:Phase(race, now)
 	return now < race.start and "upcoming" or now < race.stop and "live" or "ended"
 end
 
----A map's size in yards: the game's, else the capture fronts' table (Captures.MAP_YARDS).
+---A map's size in yards: the game's, else the capture fronts' table (Presence.MAP_YARDS).
 function private.Yards(mapId)
 	if C_Map and C_Map.GetMapWorldSize then
 		local ok, w, h = pcall(C_Map.GetMapWorldSize, mapId)
@@ -238,7 +238,7 @@ function private.Yards(mapId)
 			return w, h
 		end
 	end
-	local yards = Wanted.Captures.MAP_YARDS[mapId]
+	local yards = Wanted.Presence.MAP_YARDS[mapId]
 	if yards then
 		return yards[1], yards[2]
 	end
@@ -342,7 +342,7 @@ end
 -- ============================================================================
 
 ---Every 30 seconds while a race is run: whether the player stands on one of its points, and if their presence can
----count there (Captures:Blocked), a sample in the presence book and on the log line the app reads.
+---count there (Presence:Blocked), a sample in the presence book and on the log line the app reads.
 ---@param now number? server time
 function Races:Sample(now)
 	now = now or GetServerTime()
@@ -352,8 +352,8 @@ function Races:Sample(now)
 		local _, x, y, mapId = Wanted.Recorder:GetPosition()
 		point = Races:PointAt(race, mapId, x, y)
 		if point then
-			blocked = Wanted.Captures:Blocked()
-			if not blocked and Wanted.Captures:CountRace(point.id, now) then
+			blocked = Wanted.Presence:Blocked()
+			if not blocked and Wanted.Presence:Count(point.id, now) then
 				local key = private.Key(race)
 				Wanted.db.raceSamples[key] = (Wanted.db.raceSamples[key] or 0) + 1
 				Wanted.db.raceWeight[key] = (Wanted.db.raceWeight[key] or 0) + point.weight

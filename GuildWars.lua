@@ -993,7 +993,7 @@ function private.Yards(mapId)
 			return w, h
 		end
 	end
-	local yards = Wanted.Captures.MAP_YARDS[mapId]
+	local yards = Wanted.Presence.MAP_YARDS[mapId]
 	if yards then
 		return yards[1], yards[2]
 	end

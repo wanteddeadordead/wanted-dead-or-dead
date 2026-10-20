@@ -12,6 +12,7 @@ local _, Wanted = ...
 local CapturesHUD = Wanted:NewModule("CapturesHUD")
 local Captures = Wanted.Captures
 local W = Wanted.Widgets
+local HudKit = Wanted.HudKit
 local private = {
 	bar = nil,
 	alerted = {},
@@ -146,30 +147,31 @@ function private.Build()
 	local bar = CreateFrame("Frame", "WantedCaptureBar", UIParent)
 	bar:SetSize(330, 112)
 	bar:SetFrameStrata("LOW")
+	local body = HudKit:Body(bar)
 	local middle = -(ROW_TOP + ROW_STEP + LANE_ICON / 2)
-	bar.horde = private.Side(bar, "Horde")
+	bar.horde = private.Side(body, "Horde")
 	bar.horde:SetPoint("LEFT", bar, "TOPLEFT", 6, middle)
-	bar.alliance = private.Side(bar, "Alliance")
+	bar.alliance = private.Side(body, "Alliance")
 	bar.alliance:SetPoint("RIGHT", bar, "TOPRIGHT", -6, middle)
 	bar.count = bar.alliance.text -- the first side's text, for the tests' and screen readers' sake
-	bar.title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	bar.title = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	bar.title:SetPoint("TOP", 0, -4)
 	bar.rows = {}
 	for lane = 1, 3 do
 		local r = { icons = {}, marks = {} }
-		r.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		r.label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		r.label:SetPoint("TOPLEFT", ROWS_X, -(ROW_TOP + (lane - 1) * ROW_STEP + 3))
 		r.label:SetWidth(28)
 		r.label:SetJustifyH("RIGHT")
 		local last = r.label
 		for i = 1, 4 do
-			local icon = bar:CreateTexture(nil, "ARTWORK")
+			local icon = body:CreateTexture(nil, "ARTWORK")
 			icon:SetSize(LANE_ICON, LANE_ICON)
 			icon:SetPoint("LEFT", last, "RIGHT", i == 1 and 3 or 0, 0)
 			r.icons[i] = icon
 			-- An X in its taker's colour, with a dark edge, over a point its home side lost: the piece keeps its home
 			-- side's colour, so a blue tower under a red X is an Alliance tower the Horde took (2026-10-16)
-			local mark = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+			local mark = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 			mark:SetPoint("CENTER", icon, "CENTER", 0, 1)
 			mark:SetText("X")
 			mark:SetShadowColor(0, 0, 0, 1)
@@ -181,12 +183,12 @@ function private.Build()
 		bar.rows[lane] = r
 	end
 	-- Tonight's siege, under the lane rows
-	bar.siege = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	bar.siege = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	bar.siege:SetPoint("TOP", 0, -(ROW_TOP + 3 * ROW_STEP + 4))
 	-- During the siege: its layer and whether we're on it (Shard), with Hop, or the hop under way with Stay
-	bar.hop = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	bar.hop = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	bar.hop:SetPoint("TOP", -26, -(ROW_TOP + 3 * ROW_STEP + 22))
-	bar.hopButton = W:Button(bar, "Hop", "chip", 44, 16, function()
+	bar.hopButton = W:Button(body, "Hop", "chip", 44, 16, function()
 		local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
 		if why then
 			Wanted:Print("%s", why)
@@ -196,6 +198,7 @@ function private.Build()
 	bar.hopButton:SetPoint("LEFT", bar.hop, "RIGHT", 6, 0)
 	W:AttachTooltip(bar.hopButton, "Hop to the siege's layer", "Asks a Wanted player of your side on the siege's layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes.")
 	bar.capture = private.BuildCapture()
+	HudKit:Attach("capture", bar)
 	private.bar = bar
 	return bar
 end
@@ -244,12 +247,7 @@ function private.Place(bar)
 	local scale = Wanted.Theme:ClampScale(Captures:Settings().scale)
 	bar:SetScale(scale)
 	bar.capture:SetScale(scale)
-	bar:ClearAllPoints()
-	if UIWidgetTopCenterContainerFrame then
-		bar:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
-	else
-		bar:SetPoint("TOP", UIParent, "TOP", 0, -60)
-	end
+	HudKit:Place("capture", bar)
 	local capture = bar.capture
 	capture:ClearAllPoints()
 	capture:SetPoint("TOP", bar, "BOTTOM", 0, -6)
@@ -261,11 +259,24 @@ function private.Place(bar)
 	end
 end
 
+---Where the HUD goes without a place the player dragged it to: under the game's top-centre widgets.
+function private.DefaultPlace(bar)
+	if UIWidgetTopCenterContainerFrame then
+		bar:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
+	else
+		bar:SetPoint("TOP", UIParent, "TOP", 0, -60)
+	end
+end
+
+HudKit:Register("capture", { name = "Capture bar", setting = function() return Captures:Settings() end, field = "bar",
+	refresh = function() CapturesHUD:Update() end, place = private.DefaultPlace, collapsedWidth = 300 })
+
 ---Sizes the HUD and its capture bar (Settings), saved for the account.
 ---@param scale number 0.8 to 1.5
 function CapturesHUD:SetScale(scale)
 	Captures:Settings().scale = Wanted.Theme:ClampScale(scale)
 	if private.bar then
+		HudKit:Rescale("capture", private.bar, scale)
 		private.Place(private.bar)
 	end
 end
@@ -300,8 +311,10 @@ function CapturesHUD:Update()
 		bar.horde.text:SetText(format("Points: %d", horde))
 		local winner = Captures:Winner(front)
 		local wins = Captures:FrontWins(front)
-		bar.title:SetText(winner and format("%s: won by the %s this week", front.zone, winner)
-			or wins and format("%s: Horde %d, Alliance %d this week", front.zone, wins.Horde, wins.Alliance) or front.zone)
+		local title = winner and format("%s: won by the %s this week", front.zone, winner)
+			or wins and format("%s: Horde %d, Alliance %d this week", front.zone, wins.Horde, wins.Alliance) or front.zone
+		bar.title:SetText(title)
+		bar.summary:SetText(title)
 		for row, lane in ipairs(front.lanes) do
 			local r = bar.rows[row]
 			r.label:SetText(lane.name)
@@ -331,7 +344,7 @@ function CapturesHUD:Update()
 	end
 	bar.hop:SetShown(hop ~= nil)
 	bar.hopButton:SetShown(button ~= nil)
-	bar:SetHeight(hop and 132 or 112)
+	HudKit:Apply("capture", bar, 330, hop and 132 or 112)
 	private.UpdateCapture(bar.capture)
 	bar:Show()
 end

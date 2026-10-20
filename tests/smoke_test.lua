@@ -15483,17 +15483,42 @@ end)()
 	local buttons = {}
 	for i = before + 1, #Mock.created do if rawget(Mock.created[i], "point") then buttons[#buttons + 1] = Mock.created[i] end end
 	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
-	-- A button on the map itself turns the fronts off and on
-	local mapButton
-	for _, f in ipairs(Mock.created) do
-		local icon = rawget(f, "icon")
-		if type(icon) == "table" and tostring(rawget(icon, "_texture")):find("pieces\\tower%-h$") and f._scripts and f._scripts.OnClick and not rawget(f, "point") then mapButton = f end
+	-- The Wanted button on the map: left click turns every layer off and on, right click opens the layers' menu
+	local mb = _G.WantedMapButton
+	check(mb and mb.icon._texture:find("seal$") and mb._scripts.OnClick, "a Wanted seal button on the map")
+	local function Layers() return ns.MapPins:IsShown(), ns.Captures:Settings().map, ns.WarMap:Shown() end
+	local function Same(a, b, c, ...) local x, y, z = Layers() return x == a and y == b and z == c end
+	check(Same(true, true, true) and mb._alpha == 1, "every layer starts on")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Same(false, false, false) and mb._alpha == 0.5 and ns.db.settings.detect.mapPins == false and ns.db.settings.warMap == false
+		and ns.Captures:Settings().map == false, "left click hides every layer, in Settings' own switches, and dims the button")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Same(true, true, true) and mb._alpha == 1, "and shows them all again")
+	ns.WarMap:SetShown(false)
+	mb._scripts.OnClick(mb, "LeftButton")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Same(true, true, false), "a layer that was off stays off")
+	ns.WarMap:SetShown(true)
+	mb._scripts.OnClick(mb, "RightButton")
+	local entries = {}
+	for _, item in ipairs(_G.WantedMenu.items) do
+		local def = rawget(item, "def")
+		if def and item._shown then entries[def.text:gsub("^%[.-%]%s+", "")] = def end
 	end
-	check(mapButton ~= nil, "a capture fronts button on the map")
-	mapButton._scripts.OnClick(mapButton)
-	check(ns.Captures:Settings().map == false, "it hides the fronts")
-	mapButton._scripts.OnClick(mapButton)
-	check(ns.Captures:Settings().map == true, "and shows them again")
+	check(entries["Enemy sightings"] and entries["Capture fronts"] and entries["Guild wars and races"] and entries["Open Wanted"] and entries["Map settings..."],
+		"right click: a checkbox for each layer, Open Wanted and Map settings")
+	entries["Capture fronts"].onClick()
+	check(Same(true, false, true) and ns.Captures:Settings().map == false, "the menu switches one layer")
+	entries["Enemy sightings"].onClick()
+	entries["Guild wars and races"].onClick()
+	check(Same(false, false, false) and mb._alpha == 0.5, "each layer has its own switch; none showing dims the button")
+	entries["Enemy sightings"].onClick()
+	check(Same(true, false, false) and mb._alpha == 1 and ns.db.settings.detect.mapPins == true, "one showing: the button is lit")
+	ns.MapPins:SetShown(true)
+	ns.CapturesMap:SetMapShown(true)
+	ns.WarMap:SetShown(true)
+	ns.db.settings.mapKept = nil
+	_G.WantedMenu:Hide()
 	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
 	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
 	-- map's level table: that taints the game's own pins
@@ -18401,15 +18426,10 @@ end
 	pieces, n = Pieces()
 	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"]:GetParent()._level == 5001, "stitched: the war's pieces, above the stitched art")
 	OpenMapAPI = nil
-	-- The map's button turns it off and on
-	local warButton
-	for _, f in ipairs(Mock.created) do
-		local icon = rawget(f, "icon")
-		if type(icon) == "table" and tostring(rawget(icon, "_texture")):find("nexus%-keep%-sealed") and f._scripts and f._scripts.OnClick and not rawget(f, "spec") then warButton = f end
-	end
-	warButton._scripts.OnClick(warButton)
-	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map's Guild wars button hides it")
-	warButton._scripts.OnClick(warButton)
+	-- The Wanted map button's guild wars layer turns it off and on
+	ns.MapButton:Layers()[3].set(false)
+	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map button's Guild wars layer hides it")
+	ns.MapButton:Layers()[3].set(true)
 	check(ns.db.settings.warMap == true, "and shows it")
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
 	-- Live between catch-ups: our side's clients say where they stand each tick; the capture rule runs here as an

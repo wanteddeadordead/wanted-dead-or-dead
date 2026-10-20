@@ -118,6 +118,7 @@ PageCard.lua
 PagePoster.lua
 WhatsNew.lua
 Tour.lua
+MapButton.lua
 MapPins.lua
 MapPins.xml
 CapturesMap.lua

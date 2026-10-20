@@ -4,6 +4,7 @@
 
 - Guild wars, where wanteddeadordead.com runs them, under the Guild Wars menu entry. Zones shows who holds each zone, since when, its protection and what's next. Each war of your guild gets its own tab, named by its zone: declare (the checklist, the stake and your chance in the draw), the draw, picking the time or accepting it, the roster, the battle and the result. War Marks shows your purse, today's earnings against the cap of 150, and the guild's treasury and tax. Guild lets the guild master choose the war officers. In a war's zone, a HUD shows both guilds, the clock, the lanes and the keep. The world map and OpenMap's map show the war's lanes and races' flags, a banner names the holder as you come into a zone, and toasts follow each step of the war. Needs the Wanted app; new files: restart the client after updating.
 - Zone HUD: in a campaign zone while wars are on, a small frame shows who holds the zone, since when, its protection, what comes next there and the tax. The war and race HUDs take its place when they show. Off, and sized, in Settings, Guild wars. New file: restart the client after updating.
+- The zone, race, war and capture HUDs move and hide alike: drag one where you want it (Settings, Reset HUD positions puts them back), fold it to one line with its chevron, hide it with its X or /wanted hud (all) or /wanted hud zone, race, war or capture; each is also a switch in Settings. New file: restart the client after updating.
 
 ## [1.28.0] - 2026-10-19
 

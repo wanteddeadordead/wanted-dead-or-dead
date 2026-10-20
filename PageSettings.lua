@@ -444,6 +444,10 @@ function private.BuildSharing(column)
 		function() Wanted.ZoneHUD:Update() end)
 	column:Row("Zone HUD size", private.SizeSlider(content, function() return Root().zoneHudScale end, function(scale) Wanted.ZoneHUD:SetScale(scale) end),
 		"The zone HUD's size. Drag the HUD to move it.")
+	private.Switch(column, Root, "raceHud", "Race HUD", "In a race's zone while it runs: the time left, each side's influence and the three points.",
+		function() Wanted.RacesHUD:Update() end)
+	private.resetHuds = W:Button(content, "Reset HUD positions", "secondary", 160, 24, function() Wanted.HudKit:ResetPositions() end)
+	column:Row("HUD positions", private.resetHuds, "Puts the zone, race, war and capture HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
 	private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, races' flags and who holds each zone, on the world map and OpenMap's.",
 		function() Wanted.WarMap:Refresh() end)
 	private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")

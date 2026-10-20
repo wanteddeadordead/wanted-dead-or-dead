@@ -8,6 +8,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = { sources = {}, week = {}, recent = {} }
 local GAP = 12
 local SOURCE_ROWS, WEEK_ROWS = 7, 5
@@ -79,7 +80,7 @@ function private.BuildTreasury(card, width)
 	card.taxGlyph = W:InfoGlyph(card, "Guild tax", TAX_TIP)
 	card.taxGlyph:SetPoint("LEFT", card.taxLabel, "RIGHT", 6, 0)
 	card.tax = W:Slider(card, "", 240, 0, 25, 1, function(v) return v.."%" end, function(v)
-		GuildWars:Act("tax", nil, { percent = v })
+		Data:Act("tax", nil, { percent = v })
 		private.Refresh()
 	end)
 	card.tax:SetPoint("TOPRIGHT", -16, -66)
@@ -126,7 +127,7 @@ function private.Refresh()
 	if not private.tiles then
 		return
 	end
-	local purse, guild = GuildWars:Purse(), GuildWars:Guild()
+	local purse, guild = Data:Purse(), Data:Guild()
 	local inGuild = guild ~= nil and type(guild.name) == "string"
 	local tiles = private.tiles
 	-- The tiles: purse, today, treasury, tax
@@ -141,7 +142,7 @@ function private.Refresh()
 		tiles.treasury.label:SetText(strupper(guild.name.." treasury"))
 		tiles.treasury.value:SetText(private.Count(guild.treasury))
 		tiles.treasury.note:SetText(tonumber(guild.staked) and guild.staked > 0 and (private.Count(guild.staked).." held as a stake") or "")
-		local pending = GuildWars:Pending("tax")
+		local pending = Data:Pending("tax")
 		tiles.tax.value:SetText((pending and pending.data.percent or tonumber(guild.tax) or 0).."%")
 		-- A tax saved today applies from midnight Eastern: said so, or the guild master thinks the save failed
 		local nextTax = tonumber(guild.taxNext)
@@ -176,14 +177,14 @@ function private.Refresh()
 		treasury.label:SetText(strupper(guild.name.." treasury"))
 		treasury.value:SetText(private.Count(guild.treasury))
 		treasury.staked:SetText(tonumber(guild.staked) and guild.staked > 0 and (private.Count(guild.staked).." staked") or "")
-		local pending = GuildWars:Pending("tax")
+		local pending = Data:Pending("tax")
 		treasury.tax:SetValue(pending and pending.data.percent or tonumber(guild.tax) or 0)
 		-- Leaders only: the guild master moves it, everyone sees it
-		local leader = GuildWars:AmGuildMaster()
+		local leader = Data:AmGuildMaster()
 		treasury.tax.slider:EnableMouse(leader)
 		treasury.tax.box:EnableMouse(leader)
 		treasury.tax:SetAlpha(leader and 1 or 0.6)
-		local refused = GuildWars:Refused("tax")
+		local refused = Data:Refused("tax")
 		treasury.taxBy:SetText(pending and "Sent; waiting for the site" or refused and Theme:Colorize(refused, C.red)
 			or (type(guild.taxBy) == "string" and (guild.taxBy..(type(guild.taxAt) == "number" and (", "..GuildWars:Day(guild.taxAt)) or "")) or ""))
 		local week = type(guild.week) == "table" and guild.week or {}
@@ -217,7 +218,7 @@ UI:RegisterPage("warmarks", {
 	tabTip = { "War Marks", "Earned from races, wars and bounties the site verifies, up to 150 a day. They buy cosmetics on the site." },
 	under = "guildwars",
 	order = -2,
-	hidden = function() return not GuildWars:On() end,
+	hidden = function() return not Data:On() end,
 	build = function(container, width, height)
 		local tileWidth = floor((width - 3 * GAP) / 4)
 		private.tiles = {
@@ -254,6 +255,9 @@ UI:RegisterPage("warmarks", {
 		private.BuildRecent(recent, width, recentHeight)
 		private.recentCard = recent
 		local shop = W:Button(container, "Open on the site", "secondary", 140, 28, function()
+			if GuildWars:Sampling() then
+				return
+			end
 			W:Dialog({ title = "Your War Marks on the site", input = { value = MARKS_PAGE }, confirmLabel = "Close" })
 		end)
 		shop:SetPoint("BOTTOMRIGHT", 0, 4)
@@ -267,3 +271,8 @@ UI:RegisterPage("warmarks", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's War Marks stop borders these
+UI:Mark("warpurse", function() return private.tiles and private.tiles.purse end)
+UI:Mark("warmarkstoday", function() return private.today end)
+UI:Mark("wartax", function() return private.tiles and private.tiles.tax end)

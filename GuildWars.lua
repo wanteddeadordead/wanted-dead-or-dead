@@ -97,6 +97,10 @@ function GuildWars:Take(src)
 	end
 	local db = Wanted.db
 	private.state = raw and GuildWars.View(raw, type(src.t) == "number" and src.t or nil) or nil
+	-- The tour's sample (WarSample.lua) gives way to the real wars
+	if private.state then
+		GuildWars:StopSample()
+	end
 	local listed, now = {}, GetServerTime()
 	for _, war in ipairs(GuildWars:Wars()) do
 		if war.id ~= nil then
@@ -386,6 +390,10 @@ end
 ---@param data table?
 ---@return boolean
 function GuildWars:Act(kind, war, data)
+	-- Nothing is asked while the tour's sample is up
+	if GuildWars:Sampling() then
+		return false
+	end
 	local actions = Wanted.db.warActions
 	-- The same ask again replaces the last one
 	for i = #actions, 1, -1 do

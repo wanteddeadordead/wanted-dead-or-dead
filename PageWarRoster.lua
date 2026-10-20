@@ -9,6 +9,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = {}
 local GAP = 12
 local ROW = 21
@@ -76,7 +77,7 @@ GuildWars.PANELS.roster = {
 		panel.labelGlyph = W:InfoGlyph(card, "Roster", ROSTER_TIP)
 		panel.mine = W:Switch(card, function(on)
 			if panel.state.record then
-				GuildWars:Act("signup", panel.state.record.id, { ["in"] = on })
+				Data:Act("signup", panel.state.record.id, { ["in"] = on })
 			end
 		end)
 		panel.mine:SetPoint("TOPRIGHT", -16, -10)
@@ -186,7 +187,7 @@ GuildWars.PANELS.roster = {
 				onConfirm = function(name)
 					name = strtrim(name or "")
 					if name ~= "" then
-						GuildWars:Act("allies", panel.state.record.id, { guild = name, invite = true })
+						Data:Act("allies", panel.state.record.id, { guild = name, invite = true })
 					end
 				end })
 		end)
@@ -210,7 +211,7 @@ GuildWars.PANELS.roster = {
 			if not war then
 				return
 			end
-			GuildWars:Act("roster", war.id, { names = edit.names, standby = edit.standby })
+			Data:Act("roster", war.id, { names = edit.names, standby = edit.standby })
 			panel.state.dirty = false
 		end)
 		panel.save:SetPoint("TOPRIGHT", 0, y)
@@ -230,7 +231,7 @@ GuildWars.PANELS.roster = {
 		panel.labelGlyph:ClearAllPoints()
 		panel.labelGlyph:SetPoint("LEFT", panel.label, "LEFT", panel.label:GetStringWidth() + 6, 0)
 		-- I'm in: the player's own sign-up (the latest ask counts until the site answers)
-		local pendingIn = GuildWars:Pending("signup", war.id)
+		local pendingIn = Data:Pending("signup", war.id)
 		local me = type(ro.me) == "table" and ro.me or {}
 		panel.mine:SetChecked(pendingIn and pendingIn.data["in"] or me["in"] == true)
 		panel.mine:SetShown(not locked)
@@ -291,11 +292,11 @@ GuildWars.PANELS.roster = {
 		W:Explain(panel.save, "Save roster", ctx.app and "Saved on the site; the roster locks when the battle starts." or "Start the Wanted app to save.")
 		local open = GuildWars.MAX_ROSTER - #edit.names
 		panel.open:SetText(canEdit and (open > 0 and format("%d place%s open", open, open == 1 and "" or "s") or "Full") or "")
-		local pendingRoster = GuildWars:Pending("roster", war.id)
+		local pendingRoster = Data:Pending("roster", war.id)
 		panel.status:SetText(locked and "Locked: the battle has started."
 			or pendingRoster and not panel.state.dirty and Theme:Colorize("Sent; waiting for the site", C.amber)
-			or not panel.state.dirty and GuildWars:Refused("roster", war.id) and Theme:Colorize(GuildWars:Refused("roster", war.id), C.red)
-			or GuildWars:Refused("signup", war.id) and Theme:Colorize("I'm in: "..GuildWars:Refused("signup", war.id), C.red)
+			or not panel.state.dirty and Data:Refused("roster", war.id) and Theme:Colorize(Data:Refused("roster", war.id), C.red)
+			or Data:Refused("signup", war.id) and Theme:Colorize("I'm in: "..Data:Refused("signup", war.id), C.red)
 			or panel.state.dirty and Theme:Colorize("Not saved yet", C.amber)
 			or not ctx.officer and "Officers pick the roster. Say you're in with I'm in." or "")
 	end,

@@ -9,6 +9,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = { edit = nil, exceptionRows = {}, officerCells = {} }
 local ROW = 44
 local MAX_EXCEPTIONS, MAX_OFFICERS = 6, 24
@@ -60,19 +61,19 @@ function private.Refresh()
 	if not private.ranks then
 		return
 	end
-	local guildName = GetGuildInfo and GetGuildInfo("player") or (GuildWars:Guild() and GuildWars:Guild().name) or "your guild"
-	local setting, default = GuildWars:OfficerSetting()
+	local guildName = GuildWars:Sampling() and "Sample" or GetGuildInfo and GetGuildInfo("player") or (Data:Guild() and Data:Guild().name) or "your guild"
+	local setting, default = Data:OfficerSetting()
 	private.edit = private.edit or private.Copy(setting)
 	local edit = private.edit
 	edit.ranks[0] = true
-	local master = GuildWars:AmGuildMaster()
-	local ranks = GuildWars:Ranks()
+	local master = Data:AmGuildMaster()
+	local ranks = Data:Ranks()
 	private.ranks:SetOptions(private.RankOptions(ranks, guildName))
 	private.ranks:SetSelected(edit.ranks)
 	private.ranks:SetEnabled(master)
 	-- The exceptions: added in green with +, left out in red with -
 	local rankOf = {}
-	for _, member in ipairs(GuildWars:Members()) do
+	for _, member in ipairs(Data:Members()) do
 		rankOf[member.name] = member.rank
 	end
 	local list = {}
@@ -97,7 +98,7 @@ function private.Refresh()
 	private.add:SetShown(master)
 	private.out:SetShown(master)
 	-- The war officers this would make
-	local officers = GuildWars:Officers(edit)
+	local officers = Data:Officers(edit)
 	private.officersCard:ClearAllPoints()
 	private.officersCard:SetPoint("TOPLEFT", 0, y)
 	private.officersCard:SetPoint("TOPRIGHT", 0, y)
@@ -113,8 +114,8 @@ function private.Refresh()
 	local rows = ceil(min(#officers, MAX_OFFICERS) / 2)
 	private.officersCard:SetHeight(42 + max(rows, 1) * 22)
 	-- Saved by, Reset and Save
-	local pending = GuildWars:Pending("officers")
-	local refused = GuildWars:Refused("officers")
+	local pending = Data:Pending("officers")
+	local refused = Data:Refused("officers")
 	private.saved:SetText(pending and "Sent; waiting for the site" or refused and Theme:Colorize(refused, C.red) or default and "Default"
 		or setting.held and Theme:Colorize("Saved; waiting for the guild's roster to agree", C.amber)
 		or (setting.savedAt and format("Saved %s%s", GuildWars:Day(setting.savedAt), setting.savedBy and (" by "..setting.savedBy) or "")) or "")
@@ -146,7 +147,7 @@ UI:RegisterPage("warguild", {
 	tabTip = { "Guild", "Who your guild's war officers are. The guild master sets them; everyone in the guild can see them." },
 	under = "guildwars",
 	order = -2,
-	hidden = function() return not GuildWars:On() or not (IsInGuild and IsInGuild()) end,
+	hidden = function() return not Data:On() or not (GuildWars:Sampling() or (IsInGuild and IsInGuild())) end,
 	build = function(container, width)
 		local inner = width
 		-- War officer ranks
@@ -164,7 +165,7 @@ UI:RegisterPage("warguild", {
 		private.box:SetPoint("LEFT")
 		W:Suggest(private.box, function()
 			local names = {}
-			for _, member in ipairs(GuildWars:Members()) do
+			for _, member in ipairs(Data:Members()) do
 				tinsert(names, member.name)
 			end
 			return names
@@ -221,13 +222,13 @@ UI:RegisterPage("warguild", {
 		private.save = W:Button(container, "Save", "primary", 110, 28, function()
 			local edit = private.edit
 			local ranks = private.Keys(edit.ranks)
-			GuildWars:Act("officers", nil, { ranks = ranks, add = private.Keys(edit.add), out = private.Keys(edit.out) })
+			Data:Act("officers", nil, { ranks = ranks, add = private.Keys(edit.add), out = private.Keys(edit.out) })
 			private.Refresh()
 		end)
 		private.save:SetPoint("TOPRIGHT", card, "BOTTOMRIGHT", 0, -12)
 		private.reset = W:Button(container, "Reset to default", "secondary", 140, 28, function()
 			private.edit = { ranks = { [0] = true }, add = {}, out = {} }
-			for _, rank in ipairs(GuildWars:Ranks()) do
+			for _, rank in ipairs(Data:Ranks()) do
 				if rank.invite then
 					private.edit.ranks[rank.index] = true
 				end
@@ -248,3 +249,7 @@ UI:RegisterPage("warguild", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's Guild stop borders these
+UI:Mark("warranks", function() return private.ranks end)
+UI:Mark("warofficers", function() return private.officersCard end)

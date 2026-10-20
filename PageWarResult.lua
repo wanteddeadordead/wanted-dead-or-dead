@@ -7,6 +7,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = {}
 local GAP = 12
 local LANES = { { "top", "Top" }, { "mid", "Mid" }, { "bot", "Bot" } }
@@ -95,7 +96,7 @@ GuildWars.PANELS.result = {
 		local y = -152 - GAP - 112 - GAP
 		panel.map = W:Button(panel, "Open the map", "secondary", 120, 30, function()
 			local zoneData = panel.state.record and Wanted.WarZones:Get(panel.state.record.zone)
-			if zoneData and OpenWorldMap and not InCombatLockdown() then
+			if zoneData and OpenWorldMap and not InCombatLockdown() and not GuildWars:Sampling() then
 				OpenWorldMap(zoneData.mapId)
 			end
 		end)

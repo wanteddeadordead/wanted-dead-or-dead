@@ -9,6 +9,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = {}
 local SLOTS, EVENINGS = 12, 2
 local CELL_W, CELL_H, CELL_GAP = 52, 34, 6
@@ -95,7 +96,7 @@ function private.BuildDefend(panel, width)
 	panel.fallback:SetPoint("TOPLEFT", 16, -82)
 	panel.set = W:Button(panel, "Set", "primary", 170, 30, function()
 		if panel.state.picked then
-			GuildWars:Act("time", panel.war.id, { start = panel.state.picked })
+			Data:Act("time", panel.war.id, { start = panel.state.picked })
 		end
 	end)
 	panel.set:SetPoint("TOPRIGHT", 0, -196 - 12 - 104 - 12)
@@ -107,7 +108,7 @@ function private.RefreshDefend(panel, war, ctx)
 	panel.war, panel.ctx = war, ctx
 	local t = type(war.time) == "table" and war.time or {}
 	local evenings = type(t.evenings) == "table" and t.evenings or {}
-	local pending = GuildWars:Pending("time", war.id)
+	local pending = Data:Pending("time", war.id)
 	local set = tonumber(t.start) or (pending and pending.data.start)
 	panel.state.canPick = ctx.officer and not ctx.looking and not tonumber(t.start)
 	panel.state.picked = panel.state.picked or set
@@ -157,7 +158,7 @@ function private.RefreshDefend(panel, war, ctx)
 	local deadline = tonumber(t.deadline)
 	panel.defendStatus:SetText(tonumber(t.start) and format("Set %s; %s %s.", date("%a ", t.start)..GuildWars:Clock(t.start), attackers, t.accepted and "accepted" or "hasn't answered")
 		or pending and Theme:Colorize("Sent; waiting for the site", C.amber)
-		or GuildWars:Refused("time", war.id) and Theme:Colorize(GuildWars:Refused("time", war.id), C.red)
+		or Data:Refused("time", war.id) and Theme:Colorize(Data:Refused("time", war.id), C.red)
 		or deadline and ctx.now > deadline and fallback and format("No pick: %s, set by the site.", date("%a ", fallback)..GuildWars:Clock(fallback))
 		or not ctx.officer and "Members see this page without its buttons."
 		or deadline and format("No pick by %s and the war is at %s.", date("%a ", deadline)..GuildWars:Clock(deadline), fallback and (date("%a ", fallback)..GuildWars:Clock(fallback)) or "8:00 PM the next evening")
@@ -191,7 +192,7 @@ function private.BuildAttack(panel, width)
 	panel.noAnswer = Theme:Text(card, "small", "No answer  "..Theme:Colorize("accepted", C.text), C.muted)
 	panel.noAnswer:SetPoint("TOPLEFT", floor(width * 0.62), -54)
 	panel.accept = W:Button(panel, "Accept", "primary", 120, 30, function()
-		GuildWars:Act("answer", panel.war.id, { accept = true })
+		Data:Act("answer", panel.war.id, { accept = true })
 	end)
 	panel.accept:SetPoint("TOPRIGHT", 0, -140 - 12)
 	W:Explain(panel.accept, "Accept", "The war is on. Pick your roster on the Roster step; reminders 1 hour before.")
@@ -204,7 +205,7 @@ function private.BuildAttack(panel, width)
 			confirmLabel = "Withdraw",
 			confirmStyle = "danger",
 			cancelLabel = "Cancel",
-			onConfirm = function() GuildWars:Act("answer", war.id, { accept = false }) end,
+			onConfirm = function() Data:Act("answer", war.id, { accept = false }) end,
 		})
 	end)
 	panel.withdraw:SetPoint("RIGHT", panel.accept, "LEFT", -10, 0)
@@ -242,7 +243,7 @@ function private.RefreshAttack(panel, war, ctx)
 	panel.answerLabel:SetShown(start ~= nil)
 	panel.answerBy:SetText(prep and (date("%a ", prep)..GuildWars:Clock(prep)..", when prep starts") or "")
 	panel.noAnswer:SetShown(start ~= nil)
-	local answer = GuildWars:Pending("answer", war.id)
+	local answer = Data:Pending("answer", war.id)
 	local pendingAccept, pendingWithdraw = answer and answer.data.accept == true, answer and answer.data.accept == false
 	local answered = t.accepted or t.withdrawn or pendingAccept or pendingWithdraw
 	local open = start and ctx.now < prep
@@ -255,7 +256,7 @@ function private.RefreshAttack(panel, war, ctx)
 	panel.attackStatus:SetText(t.withdrawn and Theme:Colorize("Withdrawn: the stake is back in the treasury.", C.muted)
 		or t.accepted and Theme:Colorize("Accepted. The roster is next.", C.green)
 		or (pendingAccept or pendingWithdraw) and Theme:Colorize("Sent; waiting for the site", C.amber)
-		or GuildWars:Refused("answer", war.id) and Theme:Colorize(GuildWars:Refused("answer", war.id), C.red)
+		or Data:Refused("answer", war.id) and Theme:Colorize(Data:Refused("answer", war.id), C.red)
 		or start and not open and "Prep has started: no answer counted as accepting."
 		or not start and tonumber(t.deadline) and format("%s picks by %s, or the war is at 8:00 PM the next evening.", holder, date("%a ", t.deadline)..GuildWars:Clock(t.deadline))
 		or not ctx.officer and "Members see this page without its buttons." or "")

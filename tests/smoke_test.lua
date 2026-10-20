@@ -18426,6 +18426,58 @@ end
 	pieces, n = Pieces()
 	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"]:GetParent()._level == 5001, "stitched: the war's pieces, above the stitched art")
 	OpenMapAPI = nil
+	-- Tonight's races show all day: three neutral flags with the race time before it, on a war zone's map and on a zone
+	-- that has a race and no war (Moonglade); in the holders' colours once it runs
+	do
+		local savedClock = clock
+		local function Point(id, name, x, y, bonus) return { id = id, name = name, x = x, y = y, r = 40, weight = bonus and 1.2 or 1, bonus = bonus } end
+		local evening = ns.GuildWars:EasternAt(clock, 0, 19 * 3600)
+		if evening < clock then evening = evening + 86400 end
+		local raceStart = evening + 3000
+		ns.Races:Take({ tonight = {
+			{ zone = "Ashenvale", mapID = 1440, start = raceStart, ["end"] = raceStart + 2700, horde = 0, alliance = 0, n = 1,
+				points = { Point("av-r1", "The Howling Vale", 53, 33), Point("av-r2", "Greenpaw Village", 54.5, 62, true), Point("av-r3", "Fallen Sky Lake", 68, 85) } },
+			{ zone = "Moonglade", mapID = 1450, start = raceStart + 1000, ["end"] = raceStart + 3700, horde = 0, alliance = 0, n = 2,
+				points = { Point("mg-r1", "Shrine of Remulos", 33, 36), Point("mg-r2", "the north meadow", 52, 26, true), Point("mg-r3", "Stormrage Barrow Dens", 71, 55) } },
+		}, tomorrow = {} })
+		check(ns.Races:Live(clock) == nil, "no race runs yet")
+		for _, mapId in ipairs({ 1440, 1450 }) do
+			WorldMapFrame.GetMapID = function() return mapId end
+			ns.WarMap:Refresh()
+			local flags, count = Pieces()
+			local neutral = 0
+			for _, f in pairs(flags) do
+				if f.spec.texture:find("race%-neutral$") and f.label._text:find("%d:%d%d [AP]M") then neutral = neutral + 1 end
+			end
+			check(count == 3 and neutral == 3, "map "..mapId..": the race's three points before it starts, neutral and labelled with its time: "..count.."/"..neutral)
+		end
+		-- Running: the holders' colours
+		clock = raceStart + 600
+		ns.Races:Take({ tonight = {
+			{ zone = "Ashenvale", mapID = 1440, start = raceStart, ["end"] = raceStart + 2700, horde = 10, alliance = 5, n = 1, state = "live",
+				points = { Point("av-r1", "The Howling Vale", 53, 33), Point("av-r2", "Greenpaw Village", 54.5, 62, true), Point("av-r3", "Fallen Sky Lake", 68, 85) } },
+		}, tomorrow = {} })
+		WorldMapFrame.GetMapID = function() return 1440 end
+		ns.WarMap:Refresh()
+		local live, liveCount = Pieces()
+		check(liveCount == 3 and live["The Howling Vale"].spec.lines[1][1] == "Race now", "while it runs: the same points, live")
+		-- The continent: an icon on each race zone before and while it runs
+		clock = raceStart - 3000
+		ns.Races:Take({ tonight = {
+			{ zone = "Moonglade", mapID = 1450, start = raceStart + 1000, ["end"] = raceStart + 3700, horde = 0, alliance = 0, n = 2,
+				points = { Point("mg-r1", "Shrine of Remulos", 33, 36), Point("mg-r2", "the north meadow", 52, 26, true), Point("mg-r3", "Stormrage Barrow Dens", 71, 55) } },
+		}, tomorrow = {} })
+		WorldMapFrame.GetMapID = function() return 1414 end
+		C_Map.GetMapInfo = function(id) if id == 1414 then return { mapType = 2 } end return realInfoMap(id) end
+		C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
+		ns.WarMap:Refresh()
+		local icons = Pieces()
+		check(icons["Moonglade"] and icons["Moonglade"].spec.texture:find("race%-neutral$"), "the continent: a race zone with no war has its flag icon before the race")
+		C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realInfoMap, realRect
+		WorldMapFrame.GetMapID = function() return 1424 end
+		clock = savedClock
+		ns.Races:Take(GuildWarsRaces(clock))
+	end
 	-- The Wanted map button's guild wars layer turns it off and on
 	ns.MapButton:Layers()[3].set(false)
 	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map button's Guild wars layer hides it")

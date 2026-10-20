@@ -677,23 +677,6 @@ Wanted:RegisterCommand("streaktest", "Development builds: three pretend kills 2 
 	Wanted:Print("Streak test: three pretend kills over the next 6 seconds. Nothing is recorded.")
 end)
 
--- A 30-minute siege on the front the player stands in, starting now, so the siege rules can be tried with two people
--- on one point. The next catch-up (login) replaces it with the site's.
-Wanted:RegisterCommand("siege", "Development builds: /wanted siege now opens a 30-minute test siege on the front you stand in.", function(args)
-	if strtrim(args) ~= "now" then
-		Wanted:Print("Usage: /wanted siege now")
-		return
-	end
-	local _, _, _, mapId = Recorder:GetPosition()
-	local front = Wanted.Captures:FrontOn(mapId)
-	if not front then
-		Wanted:Print("Stand in a capture front first: Arathi Highlands, Hillsbrad Foothills or Ashenvale.")
-		return
-	end
-	Wanted.Captures:OpenTestSiege(front)
-	Wanted:Print("Test siege: %s for 30 minutes from now. Nothing is recorded; the next login takes the site's siege.", front.zone)
-end)
-
 ---Made-up challenges in the shape the Wanted app brings them (docs: the challenges contract), for this character
 ---at rank 4 with a few done, so Home and Challenges can be seen before the app sends any.
 function Debug:DemoChallenges()

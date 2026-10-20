@@ -103,11 +103,7 @@ function private.TakePublic(src, fromSnapshot)
 	Wanted.Achievements:TakeCosmetics(src.cosmetics) -- app 0.2.36
 	-- Players on other realm names to greet as realm links
 	Sync:TakeDirectory(src.links)
-	-- Who holds each capture point, as the site worked it out
-	Wanted.Captures:Take(src.points)
-	-- Tonight's siege and this week's siege wins per front (siege nights): the site's call overrides the client's
-	Wanted.Captures:TakeSiege(src.siege, src.frontWins)
-	-- Tonight's influence races and tomorrow's zones (guild wars), when the site runs them: Siege steps aside then
+	-- Tonight's influence races and tomorrow's zones (guild wars), when the site runs them
 	Wanted.Races:Take(src.races)
 	-- Guild wars: the war contract's fields (guild, guilds, declare, wars, warLive, marks, owners, ladders) and the app's
 	-- answers to this account's asks (actions)
@@ -131,8 +127,6 @@ function Catchup:Import()
 			private.TakePublic(snapshot, true)
 		else
 			Wanted.Challenges:Take(nil, true)
-			Wanted.Captures:Take(nil)
-			Wanted.Captures:TakeSiege(nil, nil)
 			Wanted.Races:Take(nil)
 			Wanted.GuildWars:Take(nil)
 		end

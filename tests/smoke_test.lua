@@ -6395,13 +6395,10 @@ end)()
 	Fire("PLAYER_REGEN_ENABLED")
 	check(nearby:GetScale() == 1.3, "and applies after combat: "..nearby:GetScale())
 	ns.NearbyWindow:SetScale(1)
-	-- The TARGETED warning and the capture bar
+	-- The TARGETED warning
 	ns.Alerts:SetHudScale(1.4)
 	check(ns.db.settings.detect.hudScale == 1.4 and _G.WantedTargetedHud:GetScale() == 1.4, "the warning's size applies and is saved")
 	ns.Alerts:SetHudScale(1)
-	ns.CapturesHUD:SetScale(0.85)
-	check(ns.Captures:Settings().scale == 0.85, "the capture bar's size is saved")
-	ns.CapturesHUD:SetScale(1)
 
 	-- Menus and cog popups open at the size of what opened them
 	local opener = ns.Widgets:Button(UIParent, "Open", "secondary", 80, 24)
@@ -6992,8 +6989,11 @@ end)()
 	show.guild = guild
 	local ranks = RowOf("Also show ranks in")
 	check(ranks and #ranks.control.list.rows == 4, "ranks' other places are a multiselect")
-	local fronts = RowOf("Show capture fronts on")
-	check(fronts and #fronts.control.list.rows == 3, "capture fronts' places are a multiselect")
+	local fight = RowOf("Announce a big fight's layer")
+	check(fight and ns.Shard:Settings().alerts == true, "the fight layer's announcement is a switch, on by default")
+	fight.control:Click()
+	check(ns.Shard:Settings().alerts == false, "and the switch turns it off")
+	fight.control:Click()
 	local targeted = RowOf("Show a TARGETED warning")
 	check(targeted and targeted.control.GetChecked and Find(function(f) return rawget(f, "icon") and rawget(f, "tooltipTitle") == "The TARGETED warning" end), "the TARGETED warning is a switch with a cog")
 	local callout = RowOf("Show a callout for streaks and multi-kills")
@@ -15236,242 +15236,17 @@ end)()
 	PlaySound, SOUNDKIT = realPlaySound, realKit
 end)()
 
--- Capture fronts: a sample every 30 s while the player stands in a point able to fight, kept in the presence book for
--- the app and told to our side; the holders as the site told the app; lanes taken in order; the map, minimap, bar,
--- waypoints and alerts
+-- The announcement frame (WarAlerts.xml, from Blizzard's template, which registers the BG system events) has them all
+-- unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
 ;(function()
-	local C, db = ns.Captures, ns.db
-	local real = { C_Map = C_Map, IsMounted = IsMounted, UnitIsAFK = UnitIsAFK, IsStealthed = IsStealthed, SendPoint = ns.Sync.SendPoint,
-		Warn = ns.Alerts.Warn, GetMapID = WorldMapFrame.GetMapID, GetCanvas = WorldMapFrame.GetCanvas, IsShown = WorldMapFrame.IsShown,
-		C_Minimap = C_Minimap, UiMapPoint = UiMapPoint, C_SuperTrack = C_SuperTrack, CountNearby = ns.Enemies.CountNearby,
-		GetShapeshiftForm = GetShapeshiftForm, GetShapeshiftFormInfo = GetShapeshiftFormInfo, PlaySound = PlaySound }
-	local mapId, px, py = 1424, 0.523, 0.309 -- Hillsbrad's Mid Tower on the Horde's side
-	local waypoint, superTracked
-	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
-		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end,
-		CanSetUserWaypointOnMap = function() return true end, SetUserWaypoint = function(p) waypoint = p return true end,
-		HasUserWaypoint = function() return waypoint ~= nil end, GetUserWaypoint = function() return waypoint end,
-		GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end }
-	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
-	C_SuperTrack = { SetSuperTrackedUserWaypoint = function(on) superTracked = on end }
-	C_Minimap = { GetViewRadius = function() return 200 end }
-	local mounted, afk, form = false, false, 0
-	IsMounted = function() return mounted end
-	UnitIsAFK = function() return afk end
-	IsStealthed = function() return false end
-	GetShapeshiftForm = function() return form end
-	GetShapeshiftFormInfo = function(i) return "icon", true, true, i == 3 and 783 or 768 end
-	local told, sounds = {}, {}
-	ns.Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
-	PlaySound = function(kit) sounds[#sounds + 1] = kit end
-	-- The game's sounds the alerts use (SoundKitConstants)
-	for name, id in pairs({ RAID_WARNING = 8959, PVP_THROUGH_QUEUE = 8459, IG_PVP_UPDATE = 4574, PVP_ENTER_QUEUE = 8458, RAID_BOSS_EMOTE_WARNING = 12197 }) do SOUNDKIT[name] = SOUNDKIT[name] or id end
-	local warned = {}
-	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
-	ns.Enemies.CountNearby = function() return 0 end -- nobody near until the enemies check below
-	local function Warned(text) for _, w in ipairs(warned) do if w:find(text, 1, true) then return true end end return false end
-	-- Three fronts of three lanes of four points, and two Nexuses each; the words in one place
-	check(#C.FRONTS == 3 and #C.POINTS == 42, "three fronts, 42 points: "..#C.POINTS)
-	check(C.TERMS.nexus == "Nexus" and C:Role(C:Get("hb-mid-2")) == "Mid Tower" and C:Role(C:Get("hb-mid-4")) == "Mid Inhibitor" and C:Role(C:Get("hb-horde")) == "Nexus",
-		"towers, inhibitors and the Nexus")
-	-- The circle is measured in yards: 39 yards east of the Mid Tower's middle is in, 41 out (Hillsbrad is 3,200 yards wide)
-	check(C:PointAt(1424, 52.3, 30.9).id == "hb-mid-2", "the tower's middle is in it")
-	check(C:PointAt(1424, 52.3 + 39 / 32, 30.9), "39 yards east is in")
-	check(C:PointAt(1424, 52.3 + 41 / 32, 30.9) == nil, "41 yards east is out")
-	check(C:PointAt(1424, 52.3, 30.9 + 41 / 21.333) == nil, "41 yards south is out: the map is shorter than it is wide")
-	check(C:PointAt(1424, 55.7, 22.7).id == "hb-horde", "the Horde's Nexus is on the road into Tarren Mill")
-	check(C:PointAt(1424, 60.14, 18.62) == nil, "not among Tarren Mill's guards at the flight master")
-	check(C:PointAt(1411, 50.9, 33.7) == nil and C:PointAt(nil, 50, 50) == nil, "other maps have no points")
-	-- Every point starts with its half; lanes are taken in order from your own end
-	C:Take(nil)
-	local P = function(id) return C:Get(id) end
-	check(C:Holder("hb-mid-2") == "Horde" and C:Holder("hb-mid-3") == "Alliance" and C:Holder("hb-alliance") == "Alliance", "points start with their half")
-	check(C:CanAttack("Horde", P("hb-mid-3")) and not C:CanAttack("Horde", P("hb-mid-4")) and not C:CanAttack("Horde", P("hb-mid-2")),
-		"the Horde attacks the Alliance's tower first")
-	check(C:CanAttack("Alliance", P("hb-mid-2")) and not C:CanAttack("Horde", P("hb-alliance")), "and the Alliance the Horde's; no Nexus yet")
-	db.presence = {}
-	local logged = {}
-	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
-	local printedBefore = #ns:CapturePrints(function() end)
-	local function Sample() clock = clock + 30 return ns:CapturePrints(function() C:Sample() end) end
-	local lines = Sample()
-	check(#lines == printedBefore and C:Current() == P("hb-mid-2"), "entering says nothing in chat: the bar shows it")
-	local slot = math.floor(clock / C.SLOT_SECONDS)
-	local key = "hb-mid-2:"..slot..":Player-1-ME"
-	check(db.presence[key] and db.presence[key].c == 1 and db.presence[key].g == "Player-1-ME" and db.presence[key].n == ns.Store:GetOrigin() and db.presence[key].f == "Horde",
-		"a sample is counted for this character, point and slot")
-	-- and written to the game's log at once, for the app to read live
-	local live = logged[#logged]
-	check(live == ("WANTEDP1 %s hb-mid-2 %d 1 Horde %s Player-1-ME %s"):format(ns.db.accountMark, slot, db.presence[key].l or "-", ns.Store:GetOrigin()),
-		"the sample goes to the game's log as one line: "..tostring(live))
-	C_Log = nil
-	check(#told == 1 and told[1].p == "hb-mid-2" and told[1].s == slot and told[1].c == 1, "our side is told")
-	Sample()
-	check(#told == 1, "at most once a minute")
-	clock = slot * C.SLOT_SECONDS + C.SLOT_SECONDS + 1
-	db.presence = {}
-	mounted = true
-	Sample()
-	check(C:BlockedReason() == "Mounted", "mounted: presence doesn't count")
-	mounted = false
-	C:Watch()
-	check(C:BlockedReason() == nil, "dismounted: the reason clears at the next look (3 s), not the next sample")
-	mounted = true
-	C:Watch()
-	check(C:BlockedReason() == "Mounted", "and comes back as fast")
-	mounted = false
-	Fire("PLAYER_MOUNT_DISPLAY_CHANGED")
-	check(C:BlockedReason() == nil, "the game's mount event clears it at once")
-	form = 3 -- Travel Form
-	Sample()
-	check(C:BlockedReason() == "In travel form", "a travel form doesn't count either")
-	form = 1 -- Cat Form does
-	afk = setmetatable({}, {}) -- a secret answer can't rule it out
-	local realSecret = issecretvalue
-	issecretvalue = function(v) return type(v) == "table" end
-	Sample()
-	check(C:BlockedReason() == "Away", "a secret AFK counts as away")
-	issecretvalue, afk = realSecret, false
-	local counted = 0
-	for _, e in pairs(db.presence) do counted = counted + e.c end
-	check(counted == 0, "nothing counted while blocked: "..counted)
-	for _ = 1, 25 do Sample() end
-	local most = 0
-	for _, e in pairs(db.presence) do most = math.max(most, e.c) end
-	check(most == 10, "a slot holds at most 10 samples: "..most)
-	-- Our side at a point, from the channel: shown only, and only when well formed
-	slot = math.floor(clock / C.SLOT_SECONDS)
-	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally One")
-	C:OnPeer({ p = "hb-mid-3", s = slot - 5, c = 4 }, "Ally Two")
-	C:OnPeer({ p = "nowhere", s = slot, c = 4 }, "Ally Three")
-	C:OnPeer({ p = "hb-mid-3", s = slot, c = 40 }, "Ally Four")
-	check(C:Allies("hb-mid-3") == 1 and not C:Taking(P("hb-mid-3")), "one of us heard there, not taking it")
-	warned, sounds = {}, {}
-	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally Two")
-	check(C:Allies("hb-mid-3") == 2 and C:Taking(P("hb-mid-3")), "two of us there: taking it")
-	check(Warned("Your side is attacking the enemy Mid Tower") and #sounds == 1, "an alert says so, with a sound: "..table.concat(warned, "; "))
-	C:OnPeer({ p = "hb-mid-4", s = slot, c = 4 }, "Ally Two")
-	check(C:Allies("hb-mid-3") == 1 and C:Allies("hb-mid-4") == 1, "one sender is at one point")
-	-- The bar at the top while in the front, the capture bar while in a point
-	ns.CapturesHUD:Update()
-	local bar = _G.WantedCaptureBar
-	check(bar and bar:IsShown() and bar.title._text == "Hillsbrad Foothills" and bar.rows[2].label._text == "Mid", "the front's bar shows")
-	check(bar.capture:IsShown() and bar.capture.text._text:find("Holding the Horde Mid Tower", 1, true), "holding our own point: "..bar.capture.text._text)
-	C:OnPeer({ p = "hb-mid-3", s = slot, c = 4 }, "Ally Two")
-	px, py = 0.508, 0.351 -- the Alliance's Mid Tower
-	Sample()
-	ns.CapturesHUD:Update()
-	check(bar.capture.text._text:find("Taking the Alliance Mid Tower", 1, true), "taking theirs with two of us: "..bar.capture.text._text)
-	px, py = 0.503, 0.399 -- its inhibitor
-	Sample()
-	ns.CapturesHUD:Update()
-	check(bar.capture.text._text:find("take the lane before it first", 1, true), "the inhibitor waits: "..bar.capture.text._text)
-	mounted = true
-	Sample()
-	ns.CapturesHUD:Update()
-	check(bar.capture.text._text:find(": you don't count (mounted)", 1, true), "the bar says why presence doesn't count: "..bar.capture.text._text)
-	mounted = false
-	mapId = 1411
-	Sample()
-	ns.CapturesHUD:Update()
-	check(not bar:IsShown(), "no bar outside a front")
-	mapId, px, py = 1424, 0.523, 0.309
-	-- Like a battleground's: "Towers: N" a side, the tower icon from the widgets' atlas, under the top-centre widgets; the
-	-- capture bar's spark at the holder's end; the map icons from POIIcons by index; announcements in the BG system's way
-	local realTexture, realRaid, realUtil, realTop, realAnnounce = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedAnnounceFrame
-	local atlases, announced, poi = {}, {}, {}
-	C_Texture = { GetAtlasInfo = function(name) return { width = 32, height = 32, name = name } end }
-	C_Minimap.GetPOITextureCoords = function(i) poi[#poi + 1] = i return 0, 0.1, 0, 0.1 end
-	-- Our own frame from the RaidWarning template; the game's own is never touched
-	WantedAnnounceFrame = { AddMessage = function(_, text, color, _, kind) announced[#announced + 1] = text.."|"..tostring(kind).."|"..tostring(color and color.r) end }
-	RaidWarningFrame = { AddMessage = function() error("the global RaidWarningFrame was used") end }
-	RaidWarningUtil = { MessageType = { BGSystem = 3 } }
-	UIWidgetTopCenterContainerFrame = NewMock()
-	local realSetAtlas = Methods.SetAtlas
-	Methods.SetAtlas = function(self, name) atlases[#atlases + 1] = name self._atlas = name end
-	clock = clock + 1 -- back in Hillsbrad: a new reading of where we are
-	ns.CapturesHUD:Update()
-	check(_G.WantedCaptureBar:IsShown() and _G.WantedCaptureBar._point[2] == UIWidgetTopCenterContainerFrame,
-		"the HUD hangs under the game's top-centre widgets")
-	local hud = _G.WantedCaptureBar
-	check(hud.alliance.text._text == "Points: 6" and hud.horde.text._text == "Points: 6", "each side's points, towers and inhibitors: "..tostring(hud.alliance.text._text))
-	check(hud.alliance.icon._atlas == "alliance_tower-icon" and hud.horde.icon._atlas == "horde_tower-icon", "the widgets' tower icons")
-	local row = hud.rows[1].icons
-	local pieces = "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\"
-	check(row[1]._texture == pieces.."inhibitor-h" and row[2]._texture == pieces.."tower-h" and row[3]._texture == pieces.."tower-a" and row[4]._texture == pieces.."inhibitor-a",
-		"the lane row: the Horde's crystal (inhibitor) and tower, the Alliance's tower and crystal, the painted pieces: "..tostring(row[1]._texture))
-	check(#poi == 0, "the battlegrounds' POI icons are no longer read")
-	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
-	ns.CapturesHUD.TestAlert = nil
-	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
-	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Eight")
-	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3|1", 1, true), "announced as a battleground does, gold without the chat colours: "..table.concat(announced, "; "))
-	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedAnnounceFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop, realAnnounce
-	C_Minimap.GetPOITextureCoords = nil
-	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
-	-- The site's holders at login, and what changed since the addon last showed them, in the MOBA way
-	db.captureSeen = {}
-	C:Take({})
-	warned = {}
-	C:Take({ ["hb-mid-3"] = { h = "H", s = clock - 900, t = clock - 7200 }, ["hb-mid-4"] = { h = "H", s = clock - 300, r = clock + 1200, t = clock - 7200 },
-		["hb-top-2"] = { h = "A", t = clock - 7200 }, ["nowhere"] = { h = "H", t = clock }, ["hb-top-3"] = { h = "X", t = clock } })
-	check(C:Holder("hb-mid-4") == "Horde" and C:Hold("hb-mid-4").r == clock + 1200 and C:Holder("hb-top-3") == "Alliance" and C:Hold("nowhere") == nil,
-		"the site's holders are taken, unknown points and sides left out")
-	check(Warned("Enemy Mid Inhibitor down") and not Warned("Your Mid"), "the biggest news is the alert: "..table.concat(warned, "; "))
-	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
-	-- The announcement frame (WarAlerts.xml, from Blizzard's template, which registers the BG system events) has them
-	-- all unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
 	local announceEvents = { CHAT_MSG_BG_SYSTEM_ALLIANCE = true, CHAT_MSG_BG_SYSTEM_HORDE = true }
 	local realAnnounceFrame = WantedAnnounceFrame
 	WantedAnnounceFrame = { UnregisterAllEvents = function() wipe(announceEvents) end }
 	ns.WarAlerts:OnLoad()
 	check(next(announceEvents) == nil, "the announcement frame listens to nothing of the game's")
 	WantedAnnounceFrame = realAnnounceFrame
-	-- At login the catch-up is read (Catchup) before the HUD is enabled (it comes later in the .toc): the news waits, and
-	-- what the addon showed isn't marked until the HUD takes it
-	local tocOrder, at = {}, 0
-	for line in io.lines(ADDON.."WantedDeadOrDead.toc") do at = at + 1 tocOrder[line:gsub("\r", "")] = at end
-	check(tocOrder["Catchup.lua"] < tocOrder["CapturesHUD.lua"], "the catch-up comes before the HUD")
-	local realTake, realDeliver = C.TakeNews, ns.CapturesHUD.DeliverNews
-	ns.CapturesHUD.DeliverNews = function() end -- not enabled yet
-	local seenBefore = db.captureSeen["hb-bot-2"]
-	warned = {}
-	C:Take({ ["hb-bot-2"] = { h = "A", t = clock }, ["hb-top-2"] = { h = "A", t = clock } })
-	check(#warned == 0 and db.captureSeen["hb-bot-2"] == seenBefore, "nothing shown or marked before the HUD is there")
-	ns.CapturesHUD.DeliverNews = realDeliver
-	ns.CapturesHUD:DeliverNews()
-	check(Warned("Your Bot Tower has been destroyed") and db.captureSeen["hb-bot-2"] == "Alliance", "the HUD shows the waiting news and marks it: "..table.concat(warned, "; "))
-	warned = {}
-	ns.CapturesHUD:DeliverNews()
-	check(#warned == 0, "once")
-	C.TakeNews = realTake
-	C:Take({ ["hb-mid-3"] = { h = "H", s = clock - 900, t = clock - 7200 }, ["hb-mid-4"] = { h = "H", s = clock - 300, r = clock + 1200, t = clock - 7200 } })
-	-- Its respawn time passing brings it back (provisionally), once
-	warned = {}
-	clock = clock + 1201
-	ns.CapturesHUD:Update()
-	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Mid Inhibitor respawned"), "the inhibitor respawns: "..table.concat(warned, "; "))
-	warned = {}
-	ns.CapturesHUD:Update()
-	check(#warned == 0, "and says so once")
-	C:Take({ ["hb-alliance"] = { h = "H", s = clock, t = clock } })
-	check(C:Winner(C.FRONTS[2]) == "Horde" and not C:CanAttack("Alliance", P("hb-mid-2")), "taking the Nexus wins the front; nothing more to take")
-	check(Warned("Victory: the enemy Nexus has fallen"), "and says so: "..table.concat(warned, "; "))
-	C:Take({ ["hb-mid-2"] = { h = "A", s = clock - 900, t = clock - 7200 } })
-	lines = ns:CapturePrints(function() ns:RunCommand("points", "") end)
-	check(#lines == #C.POINTS + #C.FRONTS and lines[1]:find("Arathi Highlands", 1, true) and table.concat(lines, "\n"):find("Mid Tower (", 1, true),
-		"/wanted points lists every front and point")
-	-- The world map: circles, lane lines, crests and an icon on each point of the front's map
-	local canvas = NewMock()
-	canvas._w, canvas._h = 1002, 668
-	WorldMapFrame.GetCanvas = function() return canvas end
-	WorldMapFrame.GetMapID = function() return 1424 end
-	WorldMapFrame.IsShown = function() return true end
-	local before = #Mock.created
-	ns.CapturesMap:Refresh()
-	local buttons = {}
-	for i = before + 1, #Mock.created do if rawget(Mock.created[i], "point") then buttons[#buttons + 1] = Mock.created[i] end end
-	check(#buttons == 14, "an icon on each of the front's points: "..#buttons)
+end)()
+;(function()
 	-- The Wanted button on the map: left click turns every layer off and on, right click opens the layers' menu
 	local mb = _G.WantedMapButton
 	check(mb and mb.icon._texture:find("seal$") and mb._scripts.OnClick, "a Wanted seal button on the map")
@@ -15520,362 +15295,6 @@ end)()
 		check(Is(true, true, true, true), "and back on: "..key)
 	end
 	_G.WantedMenu:Hide()
-	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
-	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
-	-- map's level table: that taints the game's own pins
-	check(insertedAbove == nil, "no level of our own in the map's table, got "..tostring(insertedAbove))
-	check(buttons[1]:GetParent()._level == 2399 and buttons[1]._level == 2401, "the overlay at its slot and the icons above it: "..tostring(buttons[1]:GetParent()._level)..", "..tostring(buttons[1]._level))
-	local lostTower
-	for _, b in ipairs(buttons) do if b.point.id == "hb-mid-2" then lostTower = b end end
-	check(lostTower and lostTower.icon._texture == "Interface\\AddOns\\WantedDeadOrDead\\Media\\pieces\\tower-h", "a Horde tower the Alliance took keeps the Horde's painted tower: "..tostring(lostTower and lostTower.icon._texture))
-	check(lostTower and lostTower.icon._alpha == 0.55, "and faded, as a point its home side lost: "..tostring(lostTower and lostTower.icon._alpha))
-	check(lostTower and lostTower.cross._shown ~= false and lostTower.cross._text == "X", "with a red X over it: destroyed")
-	local keptTower
-	for _, b in ipairs(buttons) do if b.point.id == "hb-top-2" then keptTower = b end end
-	check(keptTower and keptTower.cross._shown == false, "a tower its home side holds has no X")
-	-- Nobody is taking anything: no piece flashes (a false compared with nil once made every piece flash, 2026-10-16)
-	local flashing = 0
-	for _, b in ipairs(buttons) do if b.flash and b.flash._playing then flashing = flashing + 1 end end
-	check(flashing == 0, "no piece flashes while nobody is taking it, got "..flashing)
-	waypoint = nil
-	buttons[1]:Click()
-	check(waypoint and waypoint.uiMapID == 1424 and superTracked == true, "clicking a point sets and tracks a waypoint")
-	buttons[1]._scripts.OnEnter(buttons[1])
-	WorldMapFrame.GetMapID = function() return 1415 end
-	ns.CapturesMap:Refresh()
-	WorldMapFrame.GetMapID = function() return 947 end
-	C_Map.GetMapInfo = function(id) if id == 947 then return { mapType = 1 } end return { mapType = 3, parentMapID = 1415 } end
-	ns.CapturesMap:Refresh()
-	-- The minimap's icons, each point's circle round its icon when it fits the view (200 yards; the mock minimap is
-	-- 100 px wide across 400 yards, so an 80-yard circle is 20 px), and its tracking menu's switch
-	local made = {}
-	local createTexture = Minimap.CreateTexture
-	Minimap.CreateTexture = function(self, ...) local t = createTexture(self, ...) made[#made + 1] = t return t end
-	ns.CapturesMap:UpdateMinimap()
-	Minimap.CreateTexture = createTexture
-	local rings = 0
-	for _, t in ipairs(made) do
-		if rawget(t, "_texture") and tostring(t._texture):find("pieces\\ring", 1, true) and t._shown ~= false then
-			rings = rings + 1
-			check(t._w == 20 and t._h == 20, "a point's circle on the minimap is its 40 yards round: "..tostring(t._w).." px")
-		end
-	end
-	check(rings >= 1, "the circles of the points in view are drawn round their icons, got "..rings)
-	-- Hovering a minimap icon names the point, as the world map's icons do
-	local dot
-	for _, f in ipairs(Mock.created) do if rawget(f, "point") and f._scripts.OnEnter and not f._scripts.OnClick and f:GetParent() == Minimap then dot = f end end
-	check(dot, "the minimap's icons take the mouse")
-	if dot then
-		local lines, origAdd = {}, GameTooltip.AddLine
-		GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
-		dot._scripts.OnEnter(dot)
-		GameTooltip.AddLine = origAdd
-		check(tostring(GameTooltip._text):find(dot.point.home.." ", 1, true) and lines[1] == dot.point.name and not tostring(lines[#lines]):find("waypoint", 1, true),
-			"hovering a minimap icon says which point it is, with no click to offer: "..tostring(GameTooltip._text).." / "..tostring(lines[1]))
-	end
-	local root = {}
-	root.CreateDivider = function() end
-	root.CreateCheckbox = function(_, text, isSelected, setSelected) if text:find("Capture points", 1, true) then root.box = { isSelected, setSelected } end end
-	menus.MENU_MINIMAP_TRACKING(nil, root)
-	check(root.box and root.box[1](), "the minimap's tracking menu has the capture points, on")
-	root.box[2]()
-	check(not C:Settings().minimap, "and turns them off")
-	C:Settings().minimap = true
-	-- Auto-tracking replaces only our own waypoint
-	C:Settings().autoTrack = true
-	waypoint = { uiMapID = 1424, position = { x = 0.9, y = 0.9 } } -- the player's own
-	C:AutoTrack()
-	check(waypoint.position.x == 0.9, "the player's own waypoint stays")
-	waypoint = nil
-	C:AutoTrack()
-	check(waypoint and waypoint.uiMapID == 1424, "with none, the nearest point to attack is tracked")
-	C:Settings().autoTrack = false
-	-- Enemies close while standing on our own point
-	C:Take(nil)
-	warned = {}
-	ns.Enemies.CountNearby = function() return 3 end
-	clock = clock + 30
-	C:Sample()
-	check(Warned("Your Mid Tower is under attack"), "enemies at our tower warn: "..table.concat(warned, "; "))
-	-- A C message on the channel from the player it's about counts them there; the same from a guild member too
-	local heardBefore = C:Allies("ah-top-3")
-	slot = math.floor(clock / C.SLOT_SECONDS)
-	Fire("CHAT_MSG_ADDON", "WNTD", "C:pt1:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "CHANNEL", "Ally Five", nil, nil, nil, ns.Sync:GetInfo().channelName)
-	Fire("CHAT_MSG_ADDON", "WNTD", "C:pt2:1/1:"..ns.Sync:Encode({ p = "ah-top-3", s = slot, c = 4 }), "GUILD", "Ally Six")
-	RunFrames()
-	check(C:Allies("ah-top-3") == heardBefore + 2, "C messages count their senders there: "..C:Allies("ah-top-3"))
-	-- The catch-up passes the holders at every login
-	WantedAppCatchup = { [db.accountMark] = { t = clock, records = {}, points = { ["av-mid-3"] = { h = "H", s = clock - 60, r = clock + 60, t = clock } } } }
-	ns.Catchup:Import()
-	check(C:Holder("av-mid-3") == "Horde" and C:Hold("av-mid-3").r == clock + 60 and C:Hold("hb-mid-2") == nil, "the catch-up's holders replace the last ones")
-	db.presence = {}
-	C:Take(nil)
-	C_Map, IsMounted, UnitIsAFK, IsStealthed, ns.Sync.SendPoint, ns.Alerts.Warn = real.C_Map, real.IsMounted, real.UnitIsAFK, real.IsStealthed, real.SendPoint, real.Warn
-	WorldMapFrame.GetMapID, WorldMapFrame.GetCanvas, WorldMapFrame.IsShown = real.GetMapID, real.GetCanvas, real.IsShown
-	C_Minimap, UiMapPoint, C_SuperTrack, ns.Enemies.CountNearby = real.C_Minimap, real.UiMapPoint, real.C_SuperTrack, real.CountNearby
-	GetShapeshiftForm, GetShapeshiftFormInfo, PlaySound = real.GetShapeshiftForm, real.GetShapeshiftFormInfo, real.PlaySound
-	ns.CapturesHUD:Update()
-end)()
-
--- Siege nights: the site's sample rules mirrored provisionally (attackers less defenders a tick, at most 6, costs by
--- kind and inhibitors down, a reset after two quiet minutes, the respawn pause), rounds and truces from a Nexus
--- falling, the HUD's siege line and announcements, the settings and the dev command
-;(function()
-	local C, HUD = ns.Captures, ns.CapturesHUD
-	local real = { C_Map = C_Map, SendPoint = ns.Sync.SendPoint, Warn = ns.Alerts.Warn, EachNearby = ns.Enemies.EachNearby,
-		GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown, PlaySound = PlaySound }
-	local mapId, px, py = 1424, 0.508, 0.351 -- Hillsbrad's Alliance Mid Tower, the Horde player's to attack
-	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
-		GetMapInfo = function() return { mapType = 3, parentMapID = 1415 } end }
-	local told, warned, enemies = {}, {}, {}
-	ns.Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
-	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
-	ns.Enemies.EachNearby = function(_, f) for _, e in ipairs(enemies) do f(e) end end
-	PlaySound = function() end
-	WorldMapFrame.IsShown = function() return false end
-	local function Warned(text) for _, w in ipairs(warned) do if w:find(text, 1, true) then return true end end return false end
-	local function Sample(n) for _ = 1, n or 1 do clock = clock + 30 C:Sample() HUD:Update() end end
-	local function Slot() return math.floor(clock / C.SLOT_SECONDS) end
-	local function Peers(id, n) for i = 1, n do C:OnPeer({ p = id, s = Slot(), c = 1 }, "Siege Ally "..i) end end
-	-- n of our side at a point for so many ticks (heard players lapse after 90 s, so they're heard again each tick)
-	local function Attack(id, n, ticks) for _ = 1, ticks do Peers(id, n) Sample() end end
-	local function Enemy(x, y) enemies[#enemies + 1] = { mapId = 1424, x = x, y = y, lastSeen = clock, closeAt = clock } end
-	-- The enemies registered stay in sight and in the fight: each sample sees them again, close by (an enemy counts
-	-- only while seen and near: within 28 yards by the last check, or their health changing)
-	local sampleAt = Sample
-	local function Sample(n) for _ = 1, n or 1 do for _, e in ipairs(enemies) do e.lastSeen = clock + 30 if e.closeAt then e.closeAt = clock + 30 end end sampleAt() end end
-	local P = function(id) return C:Get(id) end
-	local bar = _G.WantedCaptureBar
-	check(C:Settings().siegeCall == true, "the siege call is on by default")
-	check(C.ATTACK_CAP == 6 and C.POINT_COST == 40 and C.SAMPLE_SECONDS == 30, "the site's figures")
-	C:Take(nil)
-	C:TakeSiege(nil, nil)
-	check(C:Phase() == nil and not C:RoundOn(C.FRONTS[2]), "no siege until the catch-up names one")
-	-- Attackers less defenders a tick, at most 6 attackers; nothing while the defenders match them
-	Sample()
-	Peers("hb-mid-3", 7) -- and us: 8 of our side
-	local p = C:Progress(P("hb-mid-3"))
-	check(p.side == "Horde" and p.attackers == 8 and p.defenders == 0 and p.net == 6 and p.cost == 40, "8 attack, 6 count: net "..p.net)
-	Sample()
-	p = C:Progress(P("hb-mid-3"))
-	check(p.n == 6 and bar.capture.text._text:find("Taking the Alliance Mid Tower: 8 of your side, 0 defending, 3:00 left", 1, true) and not bar.capture.text._text:find("provisional", 1, true)
-		and bar.capture.explainHit.tooltipText:find("provisional", 1, true),
-		"a tick adds the net and the bar says how long at that pace: "..bar.capture.text._text)
-	Enemy(50.8, 35.1) Enemy(50.8, 35.1)
-	enemies[#enemies + 1] = { mapId = 1424, x = 50.8, y = 35.1, lastSeen = clock + 30 } -- a nameplate off at 50 yards: seen, not near
-	Sample()
-	check(C:Progress(P("hb-mid-3")).n == 10 and C:Enemies("hb-mid-3") == 2, "two defenders cancel two attackers; a nameplate neither close nor fighting isn't one: "..C:Progress(P("hb-mid-3")).n)
-	table.remove(enemies)
-	for _ = 1, 4 do Enemy(50.8, 35.1) end
-	Sample()
-	check(C:Progress(P("hb-mid-3")).n == 10 and bar.capture.text._text:find("6 defending, held off", 1, true), "six defenders hold eight attackers: "..bar.capture.text._text)
-	enemies = {}
-	Attack("hb-mid-3", 7, 5) -- 10 + 5 * 6 = 40
-	check(C:Holder("hb-mid-3") == "Horde" and C:Progress(P("hb-mid-3")).n == 0, "at 40 samples the tower is ours (provisionally)")
-	check(Warned("Enemy Mid Tower destroyed"), "and the HUD says so: "..table.concat(warned, "; "))
-	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 8 of your side", 1, true), "now holding it: "..bar.capture.text._text)
-	-- Progress resets after two minutes with no attacker; the holder's tower under attack reads the attackers
-	clock = clock + 100 -- our side heard there has lapsed
-	Enemy(50.8, 35.1) Enemy(50.8, 35.1) Enemy(50.8, 35.1)
-	Sample()
-	p = C:Progress(P("hb-mid-3"))
-	check(p.side == "Alliance" and p.attackers == 3 and p.defenders == 1 and p.n == 2, "three enemies at our tower less us: net 2, got "..p.n)
-	check(bar.capture.text._text:find("Holding the Alliance Mid Tower: 1 of your side, 3 attacking, 9:30 left", 1, true), "the bar reads the attack: "..bar.capture.text._text)
-	enemies = {}
-	Sample(3)
-	check(C:Progress(P("hb-mid-3")).n == 2, "progress stays a while with nobody attacking")
-	Sample()
-	check(C:Progress(P("hb-mid-3")).n == 0, "and resets after two minutes")
-	-- A taken inhibitor respawns in 30 minutes unless its takers stay
-	warned = {}
-	Attack("hb-mid-4", 6, 7)
-	check(C:Holder("hb-mid-4") == "Horde" and Warned("Enemy Mid Inhibitor down"), "the inhibitor falls to six of us: "..table.concat(warned, "; "))
-	local respawnAt = clock + C.RESPAWN_SECONDS
-	Attack("hb-mid-4", 6, 1) -- the takers are still there: the respawn moves on
-	clock = respawnAt + 1
-	HUD:Update()
-	check(C:Holder("hb-mid-4") == "Horde", "its takers there a tick later moved the respawn on")
-	clock = clock + 30
-	HUD:Update()
-	check(C:Holder("hb-mid-4") == "Alliance" and Warned("Inhibitor respawned"), "then it respawns: "..table.concat(warned, "; "))
-	-- Tonight's siege from the catch-up: the HUD names it; respawns on its front pause from an hour before
-	local start = clock + 3540
-	C:TakeSiege({ front = "hb", zone = "Hillsbrad Foothills", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 }, nexusCost = { ["hb-alliance"] = 120, ["hb-horde"] = 120 } },
-		{ hb = { h = 3, a = 1 }, ah = { h = 0, a = "x" } })
-	check(C:Phase() == "before" and C:RespawnPaused(C.FRONTS[2]) and not C:RespawnPaused(C.FRONTS[1]), "an hour before the window the siege front's respawns pause")
-	check(C:FrontWins(C.FRONTS[2]).Horde == 3 and C:FrontWins(C.FRONTS[1]) == nil, "this week's siege wins per front, well formed only")
-	HUD:Update()
-	-- The test's clock isn't today, so the window carries its weekday, as a siege picked for tomorrow does
-	check(bar.siege._text:find("^Siege: Hillsbrad Foothills %a%a%a %d+ to %d+ [AP]M$") or bar.siege._text:find("^Siege: Hillsbrad Foothills %a%a%a %d+ [AP]M to %d+ [AP]M$"),
-		"the HUD names the siege front, its day and its window in the client's clock: "..bar.siege._text)
-	check(bar.title._text == "Hillsbrad Foothills: Horde 3, Alliance 1 this week", "the title carries the week's siege wins: "..bar.title._text)
-	local lines = ns:CapturePrints(function() ns:RunCommand("points", "") end)
-	check(lines[1]:find("Tonight's siege: Hillsbrad Foothills, before", 1, true) and table.concat(lines, "\n"):find("Hillsbrad Foothills: Horde 9, Alliance 5; siege wins this week Horde 3, Alliance 1", 1, true), "/wanted points tells the siege: "..table.concat(lines, " // "))
-	-- The Nexus costs the site's figure until an inhibitor on the front changes; by its inhibitors down after
-	check(C:Cost(P("hb-alliance")) == 120, "the site's Nexus cost")
-	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock }, ["hb-bot-4"] = { h = "H", t = clock } })
-	check(C:Cost(P("hb-alliance")) == 120 and C:Cost(P("hb-horde")) == 120, "still the site's, with the site's holds")
-	Attack("hb-mid-4", 6, 1) -- our side at the inhibitor we hold: defenders, no change
-	check(C:Cost(P("hb-alliance")) == 120, "the site's figure holds until this client sees an inhibitor change")
-	C:Take(nil)
-	Attack("hb-mid-3", 6, 7)
-	Attack("hb-mid-4", 6, 7)
-	check(C:Holder("hb-mid-4") == "Horde" and C:Cost(P("hb-alliance")) == 120, "one inhibitor down: 120")
-	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock } })
-	check(C:Cost(P("hb-alliance")) == 60, "two: 60")
-	C:Take({ ["hb-mid-4"] = { h = "H", t = clock }, ["hb-top-4"] = { h = "H", t = clock }, ["hb-bot-4"] = { h = "H", t = clock } })
-	check(C:Cost(P("hb-alliance")) == 30, "three: 30")
-	C:Take({ ["hb-mid-3"] = { h = "H", t = clock }, ["hb-mid-4"] = { h = "H", r = start - 1700, t = clock } })
-	-- The call half an hour before the window, wherever the player is; the open with the setting off says nothing
-	mapId = 1411
-	warned = {}
-	clock = start - 1810
-	C:SiegeTick(clock)
-	check(#warned == 0, "not yet")
-	clock = start - 1800
-	C:SiegeTick(clock)
-	check(#warned == 1 and warned[1]:find("The Nexuses of Hillsbrad Foothills open at %d+ [AP]M"), "the call, outside the zone: "..table.concat(warned, "; "))
-	C:SiegeTick(clock + 5)
-	check(#warned == 1, "once")
-	clock = start - 1400
-	HUD:Update()
-	check(C:Holder("hb-mid-4") == "Horde", "a downed inhibitor stays down into the siege, past its respawn time")
-	C:Settings().siegeCall = false
-	clock = start
-	C:SiegeTick(clock)
-	check(#warned == 1 and C:Phase() == "round" and C:RoundOn(C.FRONTS[2]) and C:Siege().round.n == 1, "the window opens round 1, quietly with the siege call off")
-	C:Settings().siegeCall = true
-	mapId = 1424
-	-- A Nexus only falls in a round: six of us at the open Nexus, 120 samples at 6 a tick
-	px, py = 0.4985, 0.4468 -- the Alliance's Nexus, on the road into Southshore
-	check(not C:Taking(P("hb-horde")) and C:CanAttack("Horde", P("hb-alliance")), "our own Nexus isn't ours to take; theirs is open")
-	warned, told = {}, {}
-	Attack("hb-alliance", 5, 19)
-	check(C:Progress(P("hb-alliance")).n == 114 and C:Taking(P("hb-alliance")), "19 ticks in: "..C:Progress(P("hb-alliance")).n)
-	Attack("hb-alliance", 5, 1)
-	local fellAt = clock
-	local s = C:Siege()
-	check(C:Phase() == "truce" and s.wins.Horde == 1 and s.round.n == 2 and s.round.truceUntil == fellAt + C.TRUCE_SECONDS, "the Nexus falls: round 1 to the Horde, a 30-minute truce")
-	check(C:TruceOn(C.FRONTS[2]) and not C:CanAttack("Alliance", P("hb-mid-2")) and not C:CanAttack("Horde", P("hb-mid-3")), "a truce holds the front: no lane point can be attacked by either side")
-	check(Warned("The Southshore Nexus has fallen | Round 1 to the Horde (provisional)"), "announced: "..table.concat(warned, "; "))
-	check(C:Holder("hb-mid-4") == "Alliance" and C:Holder("hb-mid-3") == "Alliance" and C:Progress(P("hb-alliance")).n == 0, "the front goes back to level")
-	check(told[#told].f == "hb-alliance" and told[#told].t == fellAt, "the channel hears when it fell")
-	check(bar.siege._text == "Truce 30:00 · Horde 1 Alliance 0", "the HUD's truce clock: "..bar.siege._text)
-	-- During the truce the presence message carries the fall for late joiners; a peer's newer time for the same fall
-	-- moves the truce clock, an older one doesn't
-	told = {}
-	clock = clock + 61
-	px, py = 0.503, 0.399 -- the Alliance's Mid Inhibitor
-	C:Sample()
-	check(told[1] and told[1].p == "hb-mid-4" and told[1].f == "hb-alliance" and told[1].t == fellAt, "the presence message repeats the fall")
-	C:OnPeer({ p = "hb-mid-4", s = Slot(), c = 1, f = "hb-alliance", t = fellAt + 20 }, "Siege Ally 9")
-	check(s.fellAt == fellAt + 20 and s.round.truceUntil == fellAt + 20 + C.TRUCE_SECONDS and s.wins.Horde == 1, "a peer's newer time wins the tie")
-	C:OnPeer({ p = "hb-mid-4", s = Slot(), c = 1, f = "hb-alliance", t = fellAt + 5 }, "Siege Ally 9")
-	check(s.fellAt == fellAt + 20, "an older one doesn't")
-	-- Nothing falls in a truce (the site's rule): not a lane point, not the Nexus; the bar says a truce holds the front
-	Attack("hb-mid-3", 6, 7)
-	check(C:Holder("hb-mid-3") == "Alliance" and C:Progress(P("hb-mid-3")).n == 0 and bar.capture.text._text:find("a truce holds the front until", 1, true), "a lane can't fall in the truce: "..bar.capture.text._text)
-	px, py = 0.4985, 0.4468
-	Attack("hb-alliance", 5, 1)
-	check(C:Progress(P("hb-alliance")).n == 0 and not C:Taking(P("hb-alliance")) and bar.capture.text._text:find("a truce holds the front until", 1, true), "the Nexus doesn't: "..bar.capture.text._text)
-	-- The truce ends in round 2, announced with the map of the zone open from elsewhere
-	mapId = 1411
-	WorldMapFrame.IsShown = function() return true end
-	WorldMapFrame.GetMapID = function() return 1424 end
-	warned = {}
-	clock = s.round.truceUntil
-	C:SiegeTick(clock)
-	check(C:Phase() == "round" and Warned("Round 2 begins"), "round 2: "..table.concat(warned, "; "))
-	WorldMapFrame.IsShown = function() return false end
-	mapId = 1424
-	-- Round 2: the mid lane falls again (the front went level), which opens the Nexus
-	px, py = 0.508, 0.351
-	Attack("hb-mid-3", 6, 7)
-	px, py = 0.503, 0.399
-	Attack("hb-mid-4", 6, 7)
-	check(C:Holder("hb-mid-4") == "Horde" and C:CanAttack("Horde", P("hb-alliance")), "in round 2 the lane falls and opens the Nexus")
-	px, py = 0.4985, 0.4468
-	-- A win before the window's end earns another round even though its truce ends after it; that round is the last
-	-- and ends with no winner after a quiet quarter hour
-	Attack("hb-alliance", 5, 19)
-	clock = s["end"] - 80
-	Attack("hb-alliance", 5, 1)
-	check(s.wins.Horde == 2 and C:Phase() == "truce" and s.round.n == 3 and s.round.truceUntil > s["end"], "a second win at 9:59 earns round 3 after the window")
-	warned = {}
-	clock = s.round.truceUntil
-	C:SiegeTick(clock)
-	check(C:Phase() == "round" and Warned("Round 3 begins"), "round 3 begins after 10 PM")
-	clock = clock + 14 * 60
-	C:SiegeTick(clock)
-	check(C:Phase() == "round", "not over yet")
-	clock = clock + 60
-	warned = {}
-	C:SiegeTick(clock)
-	check(C:Phase() == "over" and Warned("The siege is over: Horde 2, Alliance 0"), "over after a quiet quarter hour: "..table.concat(warned, "; "))
-	HUD:Update()
-	check(bar.siege._text == "Siege over · Horde 2 Alliance 0", "the HUD's result: "..bar.siege._text)
-	-- The last round stops an hour after the window however the Nexus is going; the end outside the zone is quiet
-	local now = clock
-	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now, round = { n = 2, start = now - 600, truceUntil = 0, last = true }, wins = { h = 1, a = 0 } }, nil)
-	check(C:Phase() == "round" and C:Siege().round.n == 2, "the catch-up's round overrides")
-	mapId = 1411
-	warned = {}
-	for _ = 1, 11 do
-		clock = clock + 300
-		C:Siege().progressAt = clock -- progress keeps coming
-		C:SiegeTick(clock)
-		check(C:Phase() == "round", "progress holds the last round open")
-	end
-	clock = clock + 300
-	C:Siege().progressAt = clock
-	C:SiegeTick(clock)
-	check(C:Phase() == "over" and #warned == 0, "an hour after the window it's over, and quiet outside the zone")
-	-- The site's rule: no progress in the window's last quarter hour ends the last round when the window closes
-	now = clock
-	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now + 60, round = { n = 1, start = now - 3 * 3600, truceUntil = 0, last = true }, wins = { h = 0, a = 0 } }, nil)
-	C:Siege().progressAt = now - 20 * 60
-	C:SiegeTick(now)
-	check(C:Phase() == "round" and C:LastRoundEnd() == now + 60, "a quiet window's last round ends with the window: "..tostring(C:LastRoundEnd() and C:LastRoundEnd() - now))
-	clock = now + 60
-	C:SiegeTick(clock)
-	check(C:Phase() == "over", "and is over at once when it closes")
-	-- Progress five minutes before the end holds it ten minutes past the window
-	now = clock
-	C:TakeSiege({ front = "hb", start = now - 3 * 3600, ["end"] = now, round = { n = 1, start = now - 3 * 3600, truceUntil = 0, last = true }, wins = { h = 0, a = 0 } }, nil)
-	C:Siege().progressAt = now - 300
-	check(C:LastRoundEnd() == now + 600, "progress at 9:55 ends it at 10:10")
-	mapId = 1424
-	clock = clock + 1 -- a new reading of where we are
-	-- The catch-up at login: a truce in progress, nothing already past announced again; a siege that ended
-	warned = {}
-	C:TakeSiege({ front = "ah", zone = "Arathi Highlands", start = clock - 3600, ["end"] = clock + 7200, round = { n = 2, start = clock + 600, truceUntil = clock + 600, last = false }, wins = { h = 0, a = 1 } }, nil)
-	C:SiegeTick(clock)
-	check(C:Phase() == "truce" and #warned == 0 and not C:RoundOn(C.FRONTS[1]), "a truce from the catch-up, quietly")
-	HUD:Update()
-	check(bar.siege._text == "Truce 10:00 · Horde 0 Alliance 1", "shown on every front's HUD: "..bar.siege._text)
-	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 2, a = 1 } }, nil)
-	C:SiegeTick(clock)
-	check(C:Phase() == "over" and #warned == 0 and not C:RespawnPaused(C.FRONTS[2]), "one that ended: over, respawns back on")
-	C:TakeSiege({ front = "xx", start = 1, ["end"] = 2 }, nil)
-	check(C:Phase() == nil, "an unknown front is no siege")
-	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = {}, siege = { front = "av", start = clock + 600, ["end"] = clock + 11400 }, frontWins = { av = { h = 1, a = 2 } } } }
-	ns.Catchup:Import()
-	check(C:Phase() == "before" and C:Siege().front.id == "av" and C:FrontWins(C.FRONTS[3]).Alliance == 2, "the catch-up passes the siege and the week's wins")
-	-- Development builds: /wanted siege now opens a 30-minute siege on the front the player stands in
-	warned = {}
-	clock = clock + 1
-	lines = ns:CapturePrints(function() ns:RunCommand("siege", "now") end)
-	check(C:Phase() == "round" and C:Siege().front.id == "hb" and C:Siege()["end"] == clock + 1800 and lines[1]:find("Test siege: Hillsbrad Foothills", 1, true), "a test siege here and now: "..tostring(lines[1]))
-	check(Warned("The siege of Hillsbrad Foothills has begun"), "and it opens: "..table.concat(warned, "; "))
-	mapId = 1411
-	clock = clock + 1
-	lines = ns:CapturePrints(function() ns:RunCommand("siege", "now") end)
-	check(lines[1]:find("Stand in a capture front", 1, true), "outside a front: "..tostring(lines[1]))
-	C:TakeSiege(nil, nil)
-	C:Take(nil)
-	C_Map, ns.Sync.SendPoint, ns.Alerts.Warn, ns.Enemies.EachNearby, PlaySound = real.C_Map, real.SendPoint, real.Warn, real.EachNearby, real.PlaySound
-	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
-	HUD:Update()
 end)()
 -- Rally leaders: a group's leader claims the rally in their zone (not in a fight, an instance or while another holds
 -- it), their position goes out on the channel, and players of their faction there see it on the map and in Nearby.
@@ -16461,26 +15880,15 @@ end)()
 	local before = line.text._text
 	Fire("ZONE_CHANGED_NEW_AREA")
 	check(line.text._text ~= before and line.text._text:find("yours isn't read yet", 1, true), "a new zone: the line says the layer must be read again: "..tostring(line.text._text))
-	-- The HUD during a siege at the front we're in
+	-- Our layer read again in the zone
 	best = 1424
 	clock = clock + 1
 	for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
-	ns.Captures:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
-	ns.CapturesHUD:Update()
-	local bar = _G.WantedCaptureBar
-	check(bar:IsShown() and not bar.hop:IsShown() and not bar.hopButton:IsShown(), "no layer line on the HUD while the siege's layer isn't picked")
-	ns.Captures:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = B, layerSince = clock }, nil)
-	ns.CapturesHUD:Update()
-	check(bar.hop:IsShown() and bar.hop._text == "The siege is on layer 501, you're on 497" and bar.hopButton:IsShown() and bar.hopButton._text == "Hop",
-		"the HUD says the siege's layer and ours, with Hop: "..tostring(bar.hop._text))
 	for _ = 1, 7 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
-	ns.CapturesHUD:Update()
 	check(Shard:Same("4615-0-6", "1-1424-6") and not Shard:Same("4615-0-6", "4615-0-2") and not Shard:Same(nil, "4615-0-6"),
 		"two ids with the same layer number are the same layer, whatever their server and map parts")
-	check(bar.hop:IsShown() and bar.hop._text == "You're on the siege's layer" and not bar.hopButton:IsShown(), "on it: said, without a button: "..tostring(bar.hop._text))
-	ns.Captures:TakeSiege(nil, nil)
 	-- The settings, and /wanted shard
-	check(Shard:Settings().host == false and Shard:Settings().accept == true, "hosting is off by default (on while leading), auto-accept on")
+	check(Shard:Settings().host == false and Shard:Settings().accept == true and Shard:Settings().alerts == true, "hosting is off by default (on while leading), auto-accept and the fight's announcement on")
 	best = 1
 	Rallying("Grimshaw", B)
 	RunTimers()
@@ -16500,10 +15908,9 @@ end)()
 -- sightings carry l (Shard:Current()), left out while it isn't known
 ;(function()
 	local Shard, Store, db = ns.Shard, ns.Store, ns.db
-	local real = { C_Map = C_Map, SendPoint = ns.Sync.SendPoint }
+	local real = { C_Map = C_Map }
 	C_Map = { GetBestMapForUnit = function() return 1424 end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
 		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
-	ns.Sync.SendPoint = function() return true end
 	Fire("ZONE_CHANGED_NEW_AREA")
 	check(Shard:Current() == nil, "no layer known yet")
 	local function Kill(id) return Store:NewRecord("kill", { killer = "Player-1-ME", killerName = Store:GetOrigin(), victim = "Player-9-L"..id, victimName = "Layer "..id, deathId = "layer-"..id, zone = "Hillsbrad Foothills", honor = true }) end
@@ -16531,27 +15938,24 @@ end)()
 	check(Store:SightingIterator()().l == nil, "a shared one doesn't: the sharer's layer isn't ours")
 	db.presence = {}
 	clock = clock + 30
-	ns.Captures:Sample()
+	ns.Presence:Count("hb-r2", clock)
 	local key = next(db.presence)
 	local entry = key and db.presence[key]
-	check(entry and entry.p == "hb-mid-2" and entry.l == "4615-1-497", "a presence sample carries the layer: "..tostring(entry and entry.l))
+	check(entry and entry.p == "hb-r2" and entry.l == "4615-1-497", "a presence sample carries the layer: "..tostring(entry and entry.l))
 	db.presence = {}
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C_Map, ns.Sync.SendPoint = real.C_Map, real.SendPoint
+	C_Map = real.C_Map
 end)()
--- The target layer of a zone: the siege's layer while the siege is on at that front, else the zone's fight layer as
--- the site last said it (the catch-up's layers, for a quarter hour), else this client's own estimate from the channel
+-- The target layer of a zone: the zone's fight layer as the site last said it (the catch-up's layers, for a quarter hour), else this client's own estimate from the channel
 -- (deaths heard there and Wanted players of our side heard there, by layer, from five). One line says it.
 ;(function()
-	local Shard, Store, C, Sync = ns.Shard, ns.Store, ns.Captures, ns.Sync
+	local Shard, Store, Sync = ns.Shard, ns.Store, ns.Sync
 	local startClock = clock
-	local real = { C_Map = C_Map, GetZoneText = GetZoneText, SendPoint = Sync.SendPoint }
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText }
 	local best = 1424
 	C_Map = { GetBestMapForUnit = function() return best end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
 		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
 	GetZoneText = function() return best == 1424 and "Hillsbrad Foothills" or "Durotar" end
-	local told = {}
-	Sync.SendPoint = function(_, t) told[#told + 1] = t return true end
 	local channelName, msgs = Sync:GetInfo().channelName, 0
 	local function Hear(tag, tbl, sender)
 		msgs = msgs + 1
@@ -16562,7 +15966,6 @@ end)()
 	local L = function(n) return "4615-1-"..n end
 	clock = clock + 601 -- the deaths and players heard before have lapsed
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C:TakeSiege(nil, nil)
 	Shard:TakeLayers(nil)
 	check(Shard:Target(HB) == nil and Shard:TargetText(HB) == nil, "no target before anything is heard")
 	-- The estimate: deaths heard with a layer, five of them
@@ -16629,54 +16032,27 @@ end)()
 	Shard:TakeLayers({ [HB] = { active = L(505), deaths = 9, since = clock - 16 * 60 } })
 	check(Shard:Target(HB) == L(497), "the site's word from over a quarter hour ago: the estimate again")
 	Shard:TakeLayers({ [HB] = { active = L(505), deaths = 9, since = clock }, [AH] = { active = L(507), since = clock } })
-	-- The siege's layer wins at its front from an hour before the window until the siege is over
-	C:TakeSiege({ front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(511), layerSince = clock }, nil)
-	key, kind = Shard:Target(HB)
-	check(key == L(511) and kind == "siege" and C:SiegeLayer() == L(511), "the siege's layer over the fight layer: "..tostring(key))
-	check(Shard:TargetText(HB) == "The siege is on layer 511, you're on 503", "the line says the siege: "..tostring(Shard:TargetText(HB)))
-	check(Shard:Target(AH) == L(507), "the other fronts keep their fight layer")
-	C:TakeSiege({ front = "hb", start = clock + 7200, ["end"] = clock + 7200 + 3 * 3600, layer = L(511), layerSince = clock }, nil)
-	check(Shard:Target(HB) == L(505), "two hours before the window the fight layer still rules")
-	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, layer = L(511), layerSince = clock }, nil)
-	check(Shard:Target(HB) == L(505), "the siege over: the fight layer")
-	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
-	check(Shard:Target(HB) == L(505) and C:SiegeLayer() == nil, "a siege whose layer isn't picked yet: the fight layer")
-	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = "junk" }, nil)
-	check(C:SiegeLayer() == nil, "a malformed siege layer is nothing")
-	-- A peer's word on the siege's layer (the C message) is taken when newer, and our own C message carries it
-	local news = {}
-	C:OnSiege(function(k, a) news[#news + 1] = tostring(k)..":"..tostring(a) end)
-	local slot = math.floor(clock / C.SLOT_SECONDS)
-	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(513), st = clock - 30 }, "Thrall")
-	check(C:SiegeLayer() == L(513) and Shard:Target(HB) == L(513) and news[#news] == "layer:"..L(513), "a peer's word picks the siege's layer: "..tostring(news[#news]))
-	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock - 60 }, "Thrall")
-	check(C:SiegeLayer() == L(513), "an older word doesn't replace it")
-	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock + 600 }, "Thrall")
-	check(C:SiegeLayer() == L(513), "nor one from the future")
-	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(515), st = clock }, "Thrall")
-	check(C:SiegeLayer() == L(515) and news[#news] == "layer:"..L(515), "a newer word switches it")
-	clock = clock + 61
-	C:Sample()
-	check(told[#told] and told[#told].sl == L(515) and told[#told].st == clock - 61, "our own presence message carries the siege's layer: "..tostring(told[#told] and told[#told].sl))
-	-- The catch-up carries both
-	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, layers = { [AH] = { active = L(517), deaths = 7, since = clock } },
-		siege = { front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(519), layerSince = clock } } }
+	-- An older version's capture-point presence (the retired C message) is dropped unread
+	Hear("C", { p = "hb-mid-2", s = math.floor(clock / 300), c = 1, sl = L(513), st = clock - 30 }, "Thrall")
+	check(Shard:Target(HB) == L(505), "an old C message changes nothing")
+	-- The catch-up carries the fight layers
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, layers = { [AH] = { active = L(517), deaths = 7, since = clock } } } }
 	ns.Catchup:Import()
 	RunTimers()
-	check(Shard:Target(HB) == L(519) and Shard:Target(AH) == L(517) and news[#news] == "layer:"..L(519), "the catch-up's siege layer and fight layers: "..tostring(Shard:Target(HB)))
+	check(Shard:Target(AH) == L(517), "the catch-up's fight layers: "..tostring(Shard:Target(AH)))
 	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {} } }
 	ns.Catchup:Import()
 	RunTimers()
-	check(Shard:Target(AH) == nil and C:Siege() == nil, "a catch-up without them: none")
+	check(Shard:Target(AH) == nil, "a catch-up without them: none")
 	-- Put back
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C_Map, GetZoneText, Sync.SendPoint = real.C_Map, real.GetZoneText, real.SendPoint
+	C_Map, GetZoneText = real.C_Map, real.GetZoneText
 	clock = startClock
 end)()
--- The layer announcements: the siege's layer when it's picked or switches (the Siege call setting), and a fight layer
--- newly known in our zone, at most once in ten minutes (the capture alerts setting)
+-- The layer announcements: a fight layer newly known in our zone, at most once in ten minutes (the layers' alerts
+-- setting)
 ;(function()
-	local Shard, C, Sync = ns.Shard, ns.Captures, ns.Sync
+	local Shard = ns.Shard
 	local startClock = clock
 	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn }
 	local best = 1424
@@ -16685,40 +16061,12 @@ end)()
 	GetZoneText = function() return best == 1424 and "Hillsbrad Foothills" or "Durotar" end
 	local warned = {}
 	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
-	local channelName, msgs = Sync:GetInfo().channelName, 0
-	local function Hear(tag, tbl, sender)
-		msgs = msgs + 1
-		Fire("CHAT_MSG_ADDON", "WNTD", tag..":al"..msgs..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, channelName)
-		RunFrames()
-	end
 	local HB, AH = "Hillsbrad Foothills", "Arathi Highlands"
 	local L = function(n) return "4615-1-"..n end
 	clock = clock + 7201 -- whatever was heard before has lapsed, and the last announcements too (earlier blocks ran the clock ahead)
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C:TakeSiege(nil, nil)
 	Shard:TakeLayers(nil)
-	C:Settings().alerts, C:Settings().siegeCall = true, true
-	warned = {}
-	-- The siege's layer
-	local siege = { front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600 }
-	C:TakeSiege(siege, nil)
-	check(#warned == 0, "a siege without its layer picked: nothing to announce")
-	siege.layer, siege.layerSince = L(531), clock
-	C:TakeSiege(siege, nil)
-	check(#warned == 1 and warned[1] == "The siege of Hillsbrad Foothills is on layer 531 | /wanted hop", "the siege's layer picked is announced, with the Hop hint: "..tostring(warned[1]))
-	C:TakeSiege(siege, nil)
-	check(#warned == 1, "the same pick again (another login) isn't")
-	local slot = math.floor(clock / C.SLOT_SECONDS)
-	Hear("C", { p = "hb-mid-2", s = slot, c = 1, sl = L(533), st = clock + 1 }, "Thrall")
-	check(#warned == 2 and warned[2]:find("The siege of Hillsbrad Foothills is on layer 533", 1, true), "a switch heard from a peer is announced: "..tostring(warned[2]))
-	C:Settings().siegeCall = false
-	siege.layer, siege.layerSince = L(535), clock + 2
-	C:TakeSiege(siege, nil)
-	check(#warned == 2, "the Siege call setting off: not announced")
-	C:Settings().siegeCall = true
-	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, layer = L(537), layerSince = clock }, nil)
-	check(#warned == 2, "a siege that's over: not announced")
-	C:TakeSiege(nil, nil)
+	Shard:Settings().alerts = true
 	-- A fight layer newly known in our zone
 	warned = {}
 	Shard:TakeLayers({ [AH] = { active = L(541), since = clock } })
@@ -16735,10 +16083,10 @@ end)()
 	Shard:TakeLayers({ [HB] = { active = L(545), since = clock } })
 	check(#warned == 2 and warned[2]:find("Big fight on layer 545", 1, true), "a new one is: "..tostring(warned[2]))
 	clock = clock + 601
-	C:Settings().alerts = false
+	Shard:Settings().alerts = false
 	Shard:TakeLayers({ [HB] = { active = L(547), since = clock } })
 	check(#warned == 2, "the alerts setting off: not announced")
-	C:Settings().alerts = true
+	Shard:Settings().alerts = true
 	clock = clock + 601
 	local n = 0
 	local function Look(key)
@@ -16750,29 +16098,17 @@ end)()
 	for _ = 1, 3 do Look(L(549)) end
 	Shard:TakeLayers({ [HB] = { active = L(549), since = clock } })
 	check(#warned == 3 and warned[3] == "Big fight on layer 549 | Hillsbrad Foothills: you're on it", "on the fight's layer already: said so: "..tostring(warned[3]))
-	clock = clock + 601
-	local before = #warned
-	C:TakeSiege({ front = "hb", start = clock + 1800, ["end"] = clock + 1800 + 3 * 3600, layer = L(551), layerSince = clock }, nil)
-	Shard:TakeLayers({ [HB] = { active = L(553), since = clock } })
-	local siegeSaid, fightSaid = false, false
-	for i = before + 1, #warned do
-		siegeSaid = siegeSaid or warned[i]:find("The siege of Hillsbrad Foothills is on layer 551", 1, true) ~= nil
-		fightSaid = fightSaid or warned[i]:find("Big fight", 1, true) ~= nil
-	end
-	check(siegeSaid and not fightSaid, "during the siege at the front, its layer is the word; no fight-layer announcement: "..table.concat(warned, "; ", before + 1))
 	-- Put back
-	C:TakeSiege(nil, nil)
 	Shard:TakeLayers(nil)
 	Fire("ZONE_CHANGED_NEW_AREA")
 	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
 	clock = startClock
 end)()
 -- The layer lines: Nearby's rally line (the target layer with Hop; the rally leader told to lead from it; the rally
--- when we're on the layer), the Hotspots page (each zone's layer, and our own zone's line with Hop) and the Siege
--- page's Tonight card (the siege's layer with Hop); and a host's refusals in a raid without invite rights, in an
--- instance, or dead
+-- when we're on the layer) and the Hotspots page (each zone's layer, and our own zone's line with Hop); and a host's
+-- refusals in a raid without invite rights, in an instance, or dead
 ;(function()
-	local Shard, C, Sync, Store = ns.Shard, ns.Captures, ns.Sync, ns.Store
+	local Shard, Sync, Store = ns.Shard, ns.Sync, ns.Store
 	local startClock = clock
 	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn, Here = ns.Rally.Here, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
 		UnitInParty = UnitInParty, C_PartyInfo = C_PartyInfo, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown }
@@ -16823,7 +16159,6 @@ end)()
 	end
 	clock = clock + 14401
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C:TakeSiege(nil, nil)
 	Shard:TakeLayers(nil)
 	-- Nearby's rally line
 	local nearbyPrivate
@@ -17289,9 +16624,9 @@ print("wanted smoke: presence checks pass")
 		if name == "private" then shardPrivate = value break end
 		if not name then break end
 	end
-	local realSiege, realOnRecord, realOnSiege = db.settings.siege, ns.Store.OnRecord, ns.Captures.OnSiege
+	local realSiege, realOnRecord = db.settings.siege, ns.Store.OnRecord
 	db.settings.siege = false
-	ns.Store.OnRecord, ns.Captures.OnSiege = function() end, function() end
+	ns.Store.OnRecord = function() end
 	shardPrivate.frame:UnregisterAllEvents()
 	Shard:OnEnable()
 	local function Registered(event)
@@ -17303,14 +16638,14 @@ print("wanted smoke: presence checks pass")
 	Shard:NoteFar("bnet:9", { { m = 1424, l = "4615-1-902", n = 3 } })
 	local far = Shard:FarSummary()
 	check(#far >= 1, "and other players' layers are kept and summed for the other side")
-	db.settings.siege, ns.Store.OnRecord, ns.Captures.OnSiege = realSiege, realOnRecord, realOnSiege
+	db.settings.siege, ns.Store.OnRecord = realSiege, realOnRecord
 end)()
 print("wanted smoke: layer checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
--- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild
--- Wars page in Siege's place; the HUD in the race's zone while it runs
+-- WANTEDP1 line the app reads, and none outside it, while it can't count or outside the race; the Guild Wars page as
+-- the window's main page; the HUD in the race's zone while it runs
 ;(function()
-	local R, C, db = ns.Races, ns.Captures, ns.db
+	local R, db = ns.Races, ns.db
 	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, siege = db.settings.siege, presence = db.presence, Broadcast = ns.Sync.BroadcastPlugin }
 	-- What we tell our side, live (Races' live numbers)
 	local told = {}
@@ -18226,7 +17561,7 @@ end
 		zhud.grip._scripts.OnDragStop(zhud.grip)
 		local pos = ns.db.settings.zoneHudPos
 		check(pos and pos.point == "TOPLEFT" and pos.x == 120 and pos.y == -80, "a drag is kept for the HUD")
-		for _, name in ipairs({ "race", "war", "capture" }) do check(ns.db.settings[name.."HudPos"] == nil, "and only for that HUD: "..name) end
+		for _, name in ipairs({ "race", "war" }) do check(ns.db.settings[name.."HudPos"] == nil, "and only for that HUD: "..name) end
 		zhud.fold._scripts.OnClick(zhud.fold)
 		check(ns.db.settings.zoneHudCollapsed == true and not zhud.body:IsShown() and zhud.summary:IsShown() and zhud.summary._text:find("Hillsbrad Foothills", 1, true)
 			and zhud:GetHeight() == 28, "the chevron folds it to a bar, kept")
@@ -18242,10 +17577,10 @@ end
 		ns:RunCommand("hud", "zone")
 		check(#printed == 1, "the hint is said once")
 		ns:RunCommand("hud", "")
-		check(ns.db.settings.zoneHud == false and ns.db.settings.raceHud == false and ns.db.settings.warHud == false and ns.Captures:Settings().bar == false and not zhud:IsShown(),
+		check(ns.db.settings.zoneHud == false and ns.db.settings.raceHud == false and ns.db.settings.warHud == false and not zhud:IsShown(),
 			"/wanted hud with any shown hides them all")
 		ns:RunCommand("hud", "")
-		check(ns.db.settings.zoneHud == true and ns.db.settings.raceHud == true and ns.db.settings.warHud == true and ns.Captures:Settings().bar == true and zhud:IsShown(),
+		check(ns.db.settings.zoneHud == true and ns.db.settings.raceHud == true and ns.db.settings.warHud == true and zhud:IsShown(),
 			"and with all hidden shows them all")
 		ns:RunCommand("hud", "elsewhere")
 		check(printed[#printed]:find("Which HUD", 1, true), "an unknown name says which there are")
@@ -18706,8 +18041,8 @@ end)()
 	end
 	local logged, realLog = {}, C_Log
 	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
-	local waypoints, realTrack = 0, ns.Captures.Track
-	ns.Captures.Track = function() waypoints = waypoints + 1 return true end
+	local waypoints, realTrack = 0, ns.Presence.Track
+	ns.Presence.Track = function() waypoints = waypoints + 1 return true end
 	local realPrompt = ns.PromptForApp
 	ns.PromptForApp = function() end
 	local function Tag()
@@ -18846,7 +18181,7 @@ end)()
 	f.next:Click()
 	check(f.title._text == "The draw" and G.Page:War(1).sample == true and G.Page:Guild() == G:Guild(), "the next stage, which they have no war at, is the sample")
 	f.close:Click()
-	C_Log, ns.Captures.Track = realLog, realTrack
+	C_Log, ns.Presence.Track = realLog, realTrack
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown = realCanvas, realMapId, realShown
 	ns.PromptForApp = realPrompt
 	G:Take(nil)

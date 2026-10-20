@@ -26,7 +26,7 @@ local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent 
 local MAP_TYPE_ZONE = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
 -- The stitched map shows each zone's pieces from this zoom (1: the whole world fits); further out, one icon a zone
 local STITCHED_DETAIL = 4
--- The map overlay's slot in the map's pin levels (as CapturesMap's, one index above it)
+-- The map overlay's slot in the map's pin levels
 local FRAME_LEVEL, FRAME_LEVEL_INDEX = "PIN_FRAME_LEVEL_WORLD_QUEST", 101
 
 

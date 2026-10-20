@@ -1,4 +1,4 @@
--- Wanted: what the HUDs share (the zone, race, war and capture HUDs). Each HUD registers once with its Settings switch;
+-- Wanted: what the HUDs share (the zone, race and war HUDs). Each HUD registers once with its Settings switch;
 -- the kit then gives it a place the player can drag it to (kept per HUD for the account, Reset puts them back), a
 -- chevron that folds it to a one-line bar (kept per HUD), a close X, and the /wanted hud commands. A hidden HUD is the
 -- HUD's switch in Settings turned off, so the switch and the commands always agree.
@@ -11,11 +11,11 @@ local C = Theme.C
 local COLLAPSED_HEIGHT = 28
 local CHEVRON = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\chevron"
 -- The order /wanted hud lists and toggles them in
-local ORDER = { "zone", "race", "war", "capture" }
+local ORDER = { "zone", "race", "war" }
 local specs, frames = {}, {}
 
 ---Registers a HUD.
----@param key string "zone", "race", "war" or "capture"
+---@param key string "zone", "race" or "war"
 ---@param spec table { name, setting = fun(): table, field (its switch in that table: false is hidden), refresh = fun(),
 ---  place = fun(frame) (where it goes without a saved place), collapsedWidth? }
 function HudKit:Register(key, spec)
@@ -171,13 +171,13 @@ function HudKit:ResetPositions()
 	end
 end
 
-Wanted:RegisterCommand("hud", "Shows or hides the HUDs: /wanted hud for all, /wanted hud zone, race, war or capture for one.", function(args)
+Wanted:RegisterCommand("hud", "Shows or hides the HUDs: /wanted hud for all, /wanted hud zone, race or war for one.", function(args)
 	local key = strlower(strtrim(args or ""))
 	if key == "" then
 		HudKit:ToggleAll()
 	elseif specs[key] then
 		HudKit:SetHidden(key, not HudKit:IsHidden(key))
 	else
-		Wanted:Print("Which HUD? /wanted hud, or /wanted hud zone, race, war or capture.")
+		Wanted:Print("Which HUD? /wanted hud, or /wanted hud zone, race or war.")
 	end
 end)

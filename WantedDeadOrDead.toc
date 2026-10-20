@@ -42,7 +42,6 @@ Catchup.lua
 Challenges.lua
 BlizzRank.lua
 Presence.lua
-Captures.lua
 Races.lua
 WarZones.lua
 GuildWars.lua
@@ -121,10 +120,8 @@ Tour.lua
 MapButton.lua
 MapPins.lua
 MapPins.xml
-CapturesMap.lua
 StatsMap.lua
 WarMap.lua
-CapturesHUD.lua
 RacesHUD.lua
 WarHUD.lua
 ZoneHUD.lua

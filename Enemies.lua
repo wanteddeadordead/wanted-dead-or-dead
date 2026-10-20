@@ -938,8 +938,8 @@ end
 ---stood when they were last scanned), ... }. Read only: the entries are Enemies' own.
 ---@param func function
 ---A nearby enemy's health changed: someone is fighting them, so they're in the fight here now (fightAt). The client
----gives no positions, no combat log and no distance in a fight, so this is how a defender at a capture point is told
----from a nameplate 50 yards off (Captures).
+---gives no positions, no combat log and no distance in a fight, so this is how an enemy in the fight here is told
+---from a nameplate 50 yards off (Recorder's census).
 ---@param unit string
 function Enemies:NoteHealthChange(unit)
 	local guid = private.Readable(UnitGUID(unit))

@@ -368,13 +368,6 @@ function private.BuildNearby(column)
 	column:Row("Show in each row", private.nearbyShow)
 end
 
--- Where capture fronts show: { key, label, tooltip, refresh }
-local FRONT_PLACES = {
-	{ "map", "World map", "Each point at its real size, coloured by who holds it, and the lanes between them. Click a point for a waypoint.", function() Wanted.CapturesMap:Refresh() end },
-	{ "minimap", "Minimap", "Capture points on the minimap. Also in the minimap's tracking menu.", function() Wanted.CapturesMap:UpdateMinimap() end },
-	{ "bar", "Capture bar", "Points each side holds by lane at the top of the screen in a front's zone, and your side's progress while you stand in a point.", function() Wanted.CapturesHUD:Update() end },
-}
-
 function private.BuildSharing(column)
 	local content = column.content
 	local function Root() return Wanted.db.settings end
@@ -413,24 +406,9 @@ function private.BuildSharing(column)
 	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
 	W:Explain(proofLink, "Disputed kill", format("Post the screenshot in %s on the Forever PvP Discord. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_CHANNEL))
 
-	column:Section("Capture fronts")
-	local Settings = function() return Wanted.Captures:Settings() end
-	private.frontsShow = W:MultiSelect(content, 260, Options(FRONT_PLACES), function(key, checked)
-		Settings()[key] = checked
-		for _, place in ipairs(FRONT_PLACES) do
-			if place[1] == key then
-				place[4]()
-			end
-		end
-		UI:Refresh()
-	end)
-	column:Row("Show capture fronts on", private.frontsShow)
-	column:Row("Capture bar size", private.SizeSlider(content, function() return Settings().scale end, function(scale) Wanted.CapturesHUD:SetScale(scale) end),
-		"The points held by lane at the top of the screen in a front's zone, and the capture bar under them.")
-	private.Switch(column, Settings, "alerts", "Warn about capture points near me", "When your side gathers at a point in your zone, or enemies are close while you stand in one; and the siege's rounds and Nexus falls while you're in its zone or have its map open.")
-	private.Switch(column, Settings, "autoTrack", "Keep a waypoint on the nearest point to attack", "In a front's zone. Only ever replaces a waypoint Wanted set, never your own.", function() Wanted.Captures:AutoTrack() end)
-	private.Switch(column, Settings, "siegeCall", "Siege call", "Half an hour before each night's siege and when it opens, wherever you are.")
+	column:Section("Layers")
 	local Shard = function() return Wanted.Shard:Settings() end
+	private.Switch(column, Shard, "alerts", "Announce a big fight's layer", "When the fight in your zone is on a layer newly known, at most once in ten minutes, with Hop if you're not on it.")
 	private.Switch(column, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group or the rally you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later unless you lead the rally.")
 	private.Switch(column, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.")
 	private.Switch(column, Root, "siege", "Siege nights on this client (then /reload)", "Capture fronts, the HUD and map pieces, rally leaders and layer hops. Off until their first public siege night; a /reload applies the change.", function(checked)
@@ -748,7 +726,6 @@ function private.Refresh()
 	end
 	private.nearbyShow:SetSelected(Selected(NearbyShow(), NEARBY_ITEMS))
 	private.rankShow:SetSelected(Selected(Wanted.db.settings.ranks, RANK_PLACES))
-	private.frontsShow:SetSelected(Selected(Wanted.Captures:Settings(), FRONT_PLACES))
 	for _, entry in ipairs(private.toggles) do
 		entry.toggle:SetChecked(entry.getTable()[entry.key])
 	end

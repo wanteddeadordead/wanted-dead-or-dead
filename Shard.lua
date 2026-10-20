@@ -4,12 +4,11 @@
 -- one layer to the next and stay the same within one (the maintainer's combat logs, 2026-10-09: one quest giver under
 -- a new number on each layer, a zone's creatures all under one). Our layer is the one most of the creatures looked at
 -- lately in this zone live in, so a creature seen over a zone border doesn't change it. It goes out with our hello,
--- our rally position and our capture-point presence (Sync, Rally, Captures), so every Wanted player's layer is known
+-- our rally position and our presence at race and war points (Sync, Rally, Presence), so every Wanted player's layer is known
 -- with their zone, and the Nearby window says when the rally leader is on another one.
 --
--- Each zone has one target layer (Shard:Target): the layer the site picked for tonight's siege while the siege is on
--- at that front, else the zone's fight layer, as the site last said it or as this client reckons it from the deaths
--- and the Wanted players heard on the channel. Nobody picks a layer: the hop goes to the target or nowhere.
+-- Each zone has one target layer (Shard:Target): the zone's fight layer, as the site last said it or as this client
+-- reckons it from the deaths and the Wanted players heard on the channel. Nobody picks a layer: the hop goes to the target or nowhere.
 --
 -- The only way onto another layer is to join a group whose leader is on it. A layer hop asks the Wanted player of
 -- our side heard latest on the target layer in our zone for an invite (by addon whisper); their addon invites us
@@ -41,7 +40,6 @@ local private = {
 	hosted = {}, -- name -> GetTime() we last invited them for a hop (one ask a while each)
 	hops = 0, -- hops started, so a timer for an earlier one changes nothing
 	lastHopAt = nil, -- GetTime() we last joined a host's group for a hop (the cooldown runs from it)
-	siegeTold = nil, -- the siege layer last announced
 	fight = nil, -- the fight layer last seen in our zone, { zone, key }, so a new one is news
 	fightToldAt = nil, -- GetTime() a fight layer was last announced
 }
@@ -113,10 +111,10 @@ local GUID_KINDS = { Creature = true, Vehicle = true }
 
 function Shard:OnLoad()
 	-- host: invite Wanted players who ask for a hop onto our layer even when we lead nothing (Shard:Hosting); accept:
-	-- take the invite our hop asked for by itself
+	-- take the invite our hop asked for by itself; alerts: announce a big fight's layer in our zone
 	local settings = Wanted.db.settings
 	settings.shard = type(settings.shard) == "table" and settings.shard or {}
-	for key, value in pairs({ host = false, accept = true }) do
+	for key, value in pairs({ host = false, accept = true, alerts = true }) do
 		if type(settings.shard[key]) ~= "boolean" then
 			settings.shard[key] = value
 		end
@@ -135,17 +133,9 @@ function Shard:OnEnable()
 	-- The deaths our side hears of (both sides' kills and deaths reach the channel) say where the fight is, by layer
 	Wanted.Store:OnRecord("kill", private.OnDeath)
 	Wanted.Store:OnRecord("death", private.OnDeath)
-	-- The siege's layer, picked or switched (a peer's word, or the catch-up); the catch-up read at login came before
-	-- this module was enabled, so its pick is told now
-	Wanted.Captures:OnSiege(function(kind)
-		if kind == "layer" then
-			private.TellSiegeLayer()
-		end
-	end)
-	private.TellSiegeLayer()
 end
 
----The layer hop settings: { host, accept }.
+---The layer settings: { host, accept, alerts }.
 function Shard:Settings()
 	return Wanted.db.settings.shard
 end
@@ -613,35 +603,24 @@ function Shard:NoteFar(sender, list)
 	private.CheckFight()
 end
 
----A zone's map: ours when it's the zone we're in, a front's by its name, else nil.
+---A zone's map: ours when it's the zone we're in, a campaign zone's by its name (WarZones), else nil.
 function private.MapOf(zone)
 	if zone == Shard:Zone() then
 		return Shard:ZoneMap()
 	end
-	for _, front in ipairs(Wanted.Captures.FRONTS) do
-		if front.zone == zone then
-			return front.mapId
-		end
-	end
-	return nil
+	local known = Wanted.WarZones:Get(zone)
+	return known and known.mapId or nil
 end
 
----A zone's target layer, the one to be on: during the siege at that front (from an hour before the window until it's
----over) the layer the site picked for it, once picked; else the zone's fight layer as the site last said it (the
----catch-up, for a quarter hour), else this client's own estimate from the channel. Returns the layer and which it
----is, "siege" or "fight", or nil when there's none.
+---A zone's target layer, the one to be on: the zone's fight layer as the site last said it (the catch-up, for a quarter
+---hour), else this client's own estimate from the channel. Returns the layer and "fight", or nil when there's none.
 ---@param zone string the zone's name, as records carry it
----@param mapId number? its zone map (worked out when left out: ours, or a front's)
+---@param mapId number? its zone map (worked out when left out: ours, or a campaign zone's)
 ---@return string? key
 ---@return string? kind
 function Shard:Target(zone, mapId)
 	if type(zone) ~= "string" then
 		return nil, nil
-	end
-	local Captures = Wanted.Captures
-	local s = Captures:Siege()
-	if s and s.front.zone == zone and s.layer and Captures:RespawnPaused(s.front) then
-		return s.layer, "siege"
 	end
 	local site = private.site[zone]
 	if site and GetServerTime() - site.since <= SITE_SECONDS then
@@ -654,24 +633,8 @@ end
 ---The Hop hint under an announcement: the command only (a warning has no tooltip); chat says it in full.
 local HOP_HINT = "/wanted hop"
 
----Says which layer tonight's siege is on, when it's picked or switches (the Siege call setting, wherever we are),
----once per pick.
-function private.TellSiegeLayer()
-	local Captures = Wanted.Captures
-	local s, key = Captures:Siege(), Captures:SiegeLayer()
-	if not s or not key or s.over or key == private.siegeTold then
-		return
-	end
-	private.siegeTold = key
-	if Captures:Settings().siegeCall then
-		Wanted.Alerts:Warn(format("The siege of %s is on %s", s.front.zone, Shard:LayerText(key)), HOP_HINT, Wanted.Theme.C.gold)
-		Wanted:Print("The siege of %s is on %s. Hop to it: /wanted hop, or Hop in Nearby.", s.front.zone, Shard:LayerText(key))
-	end
-	private.Changed()
-end
-
 ---A fight layer newly known in our zone (the site's word or this client's estimate) is announced, at most once in
----ten minutes (the capture alerts setting); the siege's layer is told by private.TellSiegeLayer instead.
+---ten minutes (the alerts setting).
 function private.CheckFight()
 	if Wanted:InInstance() then
 		return
@@ -691,7 +654,7 @@ function private.CheckFight()
 	end
 	private.fight = { zone = zone, key = key }
 	local now = GetTime()
-	if (private.fightToldAt and now - private.fightToldAt < FIGHT_TOLD_SECONDS) or not Wanted.Captures:Settings().alerts then
+	if (private.fightToldAt and now - private.fightToldAt < FIGHT_TOLD_SECONDS) or not Shard:Settings().alerts then
 		return
 	end
 	private.fightToldAt = now
@@ -701,28 +664,27 @@ function private.CheckFight()
 	private.Changed()
 end
 
----One line on a zone's target layer: "The fight is on layer 3, you're on 5" (or "The siege is ..."), "You're on
----the fight's layer", and for a zone we're not in "The siege is on layer 3"; nil when there's no target.
+---One line on a zone's target layer: "The fight is on layer 3, you're on 5", "You're on the fight's layer", and for a
+---zone we're not in "The fight is on layer 3"; nil when there's no target.
 ---@param zone string
 ---@param mapId number?
 ---@return string?
 function Shard:TargetText(zone, mapId)
-	local key, kind = Shard:Target(zone, mapId)
+	local key = Shard:Target(zone, mapId)
 	if not key then
 		return nil
 	end
-	local what = kind == "siege" and "siege" or "fight"
 	local map = mapId or private.MapOf(zone)
 	if not map or map ~= Shard:ZoneMap() then
-		return format("The %s is on %s", what, Shard:LayerText(key))
+		return format("The fight is on %s", Shard:LayerText(key))
 	end
 	local mine = Shard:Current()
 	if Shard:Same(mine, key) then
-		return format("You're on the %s's layer", what)
+		return "You're on the fight's layer"
 	elseif not mine then
-		return format("The %s is on %s, yours isn't read yet", what, Shard:LayerText(key))
+		return format("The fight is on %s, yours isn't read yet", Shard:LayerText(key))
 	end
-	return format("The %s is on %s, you're on %s", what, Shard:LayerText(key), Shard:Short(mine))
+	return format("The fight is on %s, you're on %s", Shard:LayerText(key), Shard:Short(mine))
 end
 
 
@@ -775,7 +737,7 @@ function Shard:HopWhyNot()
 	end
 end
 
----Hops to our zone's target layer, the fight's or the siege's (Shard:Target): asks the Wanted player of our side
+---Hops to our zone's target layer, the fight's (Shard:Target): asks the Wanted player of our side
 ---heard latest on it in our zone for an invite. Their addon invites us (or says why it can't, and the next host is
 ---asked); ours accepts their invite and holds their group a while (private.Joined). Returns why not, or nil.
 ---@return string?
@@ -1078,9 +1040,6 @@ function private.Changed()
 	if Wanted.NearbyWindow and Wanted.NearbyWindow:IsShown() then
 		Wanted.NearbyWindow:Refresh()
 	end
-	if Wanted.CapturesHUD then
-		Wanted.CapturesHUD:Update()
-	end
 	if Wanted.UI and Wanted.UI:IsShown("hotspots") then
 		Wanted.UI:Refresh()
 	end
@@ -1125,7 +1084,7 @@ function private.Host(name)
 	Wanted:Print("Inviting %s to your group: they asked for a hop onto your layer.", name)
 end
 
-Wanted:RegisterCommand("hop", "Hops to the fight's (or the siege's) layer in your zone (/wanted hop), or stays in the group after one (/wanted hop stay).", function(args)
+Wanted:RegisterCommand("hop", "Hops to the fight's layer in your zone (/wanted hop), or stays in the group after one (/wanted hop stay).", function(args)
 	args = strlower(strtrim(args or ""))
 	local why
 	if args == "stay" then

@@ -134,9 +134,7 @@ local TAG_MOVE = "M"
 local TAG_HOP = "O"
 local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S = true, U = true, J = true, A = true, I = true, W = true, Y = true, M = true, C = true, L = true, O = true }
 function private.OwnTag(tag) return OWN_TAGS[tag] == true end
--- A player standing at a capture point (Captures): { p = point id, s = slot, c = samples }. Passing news like
--- sightings: on the channel (or the guild's) only, from the player it's about, never stored, relayed or counted; the
--- addon only shows it as what its side is doing there now. Older versions ignore it.
+-- Retired: older versions' presence at a capture front's point, { p, s, c }. Dropped unread, the tag kept taken.
 local TAG_POINT = "C"
 -- A rally leader's position (Rally): { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it
 -- ended }. Passing news like sightings, sent by the leader's own client only (the game names the sender, which is the
@@ -1989,9 +1987,12 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		private.partial[key] = nil
 		payload = table.concat(partial.parts, "", 1, total)
 	end
-	-- Sightings, capture point news and rally positions are news only while fresh; everything else waits out a fight
-	-- (and any backlog, to keep order)
-	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and tag ~= TAG_POINT and tag ~= TAG_RALLY and not private.plugins[tag] and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+	if tag == TAG_POINT then
+		return
+	end
+	-- Sightings and rally positions are news only while fresh; everything else waits out a fight (and any backlog, to
+	-- keep order)
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and tag ~= TAG_RALLY and not private.plugins[tag] and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
 		local waiting = private.deferred[sender] or 0
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
@@ -2102,12 +2103,6 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 	end
 	if viaLink then
 		private.HandleLinkMessage(tag, tbl, sender)
-		return
-	end
-	if tag == TAG_POINT then
-		if (channel == "CHANNEL" or channel == "GUILD") and Wanted.Captures then
-			Wanted.Captures:OnPeer(tbl, sender)
-		end
 		return
 	end
 	if tag == TAG_ENEMY or tag == TAG_SIGHTINGS then
@@ -2835,12 +2830,6 @@ end
 ---@param roster table
 function Sync:SendRaidRoster(to, roster)
 	return private.Send(TAG_RAID_ROSTER, roster, nil, to)
-end
-
----Tells our side we're standing at a capture point: { p, s, c } (Captures). On the channel only, never to realm links.
----@param presence table
-function Sync:SendPoint(presence)
-	return private.Send(TAG_POINT, presence)
 end
 
 ---Runs func with the records merged in it kept to this client: not forwarded to realm links or re-shared. For

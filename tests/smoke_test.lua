@@ -18687,6 +18687,24 @@ end)()
 			if rawget(frame, "text") and frame.text._text == "SAMPLE" and frame._shown then return frame end
 		end
 	end
+	-- The world map the battle stop draws on: the pieces of the sample war
+	local canvas = NewMock()
+	canvas._w, canvas._h = 1002, 668
+	local realCanvas, realMapId, realShown = WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown
+	WorldMapFrame.GetCanvas = function() return canvas end
+	WorldMapFrame.GetMapID = function() return 1424 end
+	WorldMapFrame.IsShown = function() return true end
+	local function MapPieces()
+		local titles, n = {}, 0
+		for _, frame in ipairs(Mock.created) do
+			local spec = rawget(frame, "spec")
+			if type(spec) == "table" and frame._shown then
+				titles[#titles + 1] = spec.title
+				n = n + (spec.waypoint == nil and 1 or 0)
+			end
+		end
+		return titles, n
+	end
 	local first, last = First("Zones"), First("That's the tour")
 	-- Walks the war stops from the first to the last
 	local function Walk(label)
@@ -18720,6 +18738,23 @@ end)()
 				check(hud.kind._text:find("SAMPLE", 1, true) and hud.attacker.name._text == "Sample", label..": the sample HUD says SAMPLE")
 			end
 			check(_G.WantedWarHUD == nil or not _G.WantedWarHUD:IsShown(), label..": the real HUD doesn't show the sample")
+			local zhud = _G.WantedZoneHUDSample
+			check((stop.zoneHud == true) == (zhud ~= nil and zhud:IsShown()), label..": the sample zone HUD shows on the stops that ask for it: "..stop.title)
+			if stop.zoneHud then
+				local row
+				for _, z in ipairs(G.Page:Zones()) do if z.zone == "Hillsbrad Foothills" then row = z end end
+				check(zhud.zone._text == "SAMPLE · Hillsbrad Foothills" and row and zhud.guild._text == row.holder.guild, label..": the sample zone HUD says SAMPLE and who holds the zone: "..tostring(zhud.guild._text))
+			end
+			check(_G.WantedZoneHUD == nil or not _G.WantedZoneHUD:IsShown(), label..": the real zone HUD doesn't show the sample")
+			-- The sample war on the world map at the battle stop only: tagged, no waypoints
+			local titles, noWaypoint = MapPieces()
+			if stop.map then
+				local tagged = true
+				for _, title in ipairs(titles) do tagged = tagged and title:find("^SAMPLE · ") ~= nil end
+				check(#titles == 8 and noWaypoint == 8 and tagged, label..": the sample war on the map: eight pieces, tagged, no waypoints: "..#titles)
+			else
+				check(#titles == 0, label..": "..stop.title.." has nothing on the map: "..#titles)
+			end
 			-- Every ask is inert
 			if stop.sample then
 				check(G.Page:Act("tax", nil, { percent = 5 }) == false and G:Act("declare", "x", {}) == false, label..": asks do nothing in the sample")
@@ -18727,8 +18762,9 @@ end)()
 			if page < last then f.next:Click() end
 		end
 		f.next:Click()
-		check(not Tour:IsShown() and not G:Sampling() and (_G.WantedWarHUDSample == nil or not _G.WantedWarHUDSample:IsShown()),
-			label..": the tour ends and the sample and its HUD with it")
+		check(not Tour:IsShown() and not G:Sampling() and (_G.WantedWarHUDSample == nil or not _G.WantedWarHUDSample:IsShown())
+			and (_G.WantedZoneHUDSample == nil or not _G.WantedZoneHUDSample:IsShown()) and #MapPieces() == 0,
+			label..": the tour ends and the sample, its HUDs and its map pieces with it")
 		check(G:On() == realOn and #G:Zones() == realZones and #G:Wars() == realWars and G.Page:On() == realOn, label..": the real state is as before")
 	end
 	-- Wars off
@@ -18783,6 +18819,7 @@ end)()
 	check(f.title._text == "The draw" and G.Page:War(1).sample == true and G.Page:Guild() == G:Guild(), "the next stage, which they have no war at, is the sample")
 	f.close:Click()
 	C_Log, ns.Captures.Track = realLog, realTrack
+	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown = realCanvas, realMapId, realShown
 	ns.PromptForApp = realPrompt
 	G:Take(nil)
 	ns.Races:Take(nil)

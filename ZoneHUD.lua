@@ -30,8 +30,8 @@ function ZoneHUD:OnEnable()
 	Races:OnChange(function() ZoneHUD:Update() end)
 end
 
-function private.Build()
-	local f = CreateFrame("Frame", "WantedZoneHUD", UIParent)
+function private.Build(sample)
+	local f = CreateFrame("Frame", sample and "WantedZoneHUDSample" or "WantedZoneHUD", UIParent)
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetFrameStrata("LOW")
 	Theme:Skin(f, { 0.067, 0.067, 0.067, 0.85 }, { 1, 1, 1, 0.15 })
@@ -61,10 +61,23 @@ function private.Build()
 	f.next:SetPoint("LEFT")
 	f.next:SetWidth(WIDTH - 20)
 	f.next:SetWordWrap(false)
-	f:SetScale(Theme:ClampScale(Wanted.db.settings.zoneHudScale))
-	HudKit:Attach("zone", f)
+	-- The tour's sample copy (ShowSample) is not registered with the kit: no grip, fold or close, no saved place or size,
+	-- and it takes no clicks
+	if sample then
+		f:EnableMouse(false)
+		f.summary = Theme:Text(f, "small", "")
+		f.summary:Hide()
+		private.Place(f)
+	else
+		f:SetScale(Theme:ClampScale(Wanted.db.settings.zoneHudScale))
+		HudKit:Attach("zone", f)
+	end
 	f:Hide()
-	private.frame = f
+	if sample then
+		private.sample = f
+	else
+		private.frame = f
+	end
 	return f
 end
 
@@ -192,8 +205,26 @@ function ZoneHUD:Update()
 	end
 	private.Schedule(now, mapId)
 	f = f or private.Build()
+	private.Draw(f, info, now)
+end
+
+---A sample copy of the HUD for the tour (WarSample.lua), for a zone row of the sample (GuildWars.Page:Zones): its own
+---frame, nothing about it saved or reported. Hidden by HideSample.
+---@param info table
+function ZoneHUD:ShowSample(info)
+	private.Draw(private.sample or private.Build(true), info, GetServerTime(), true)
+end
+
+function ZoneHUD:HideSample()
+	if private.sample then
+		private.sample:Hide()
+	end
+end
+
+---Draws a zone row on a HUD frame; sample: the tour's, which says so.
+function private.Draw(f, info, now, sample)
 	local holder = type(info.holder) == "table" and type(info.holder.guild) == "string" and info.holder or nil
-	f.zone:SetText(info.zone or "?")
+	f.zone:SetText((sample and "SAMPLE · " or "")..(info.zone or "?"))
 	f.crest:SetShown(holder ~= nil)
 	f.guild:ClearAllPoints()
 	f.since:ClearAllPoints()
@@ -226,6 +257,11 @@ function ZoneHUD:Update()
 		W:Explain(f.nextHit, tip[1], tip[2], "ANCHOR_BOTTOM")
 	end
 	f.summary:SetText(info.zone.."  ·  "..(holder and Theme:Colorize(holder.guild, GuildWars.SIDE_COLORS[holder.faction] or C.text) or Theme:Colorize("Unclaimed", C.faint)))
-	HudKit:Apply("zone", f, WIDTH, HEIGHT)
+	if sample then
+		f.body:Show()
+		f:SetSize(WIDTH, HEIGHT)
+	else
+		HudKit:Apply("zone", f, WIDTH, HEIGHT)
+	end
 	f:Show()
 end

@@ -101,6 +101,38 @@ function private.UpdateMapButton()
 	end
 end
 
+---Shows the tour's sample war on the map of its zone (opening it): its lanes, towers, inhibitors and keep through the
+---same drawing as a real war's, from the war and zone row given here, not from GuildWars' state. Nothing is reported or
+---saved; a click sets no waypoint. Cleared by HideSample.
+---@param war table the sample war (GuildWars.Page:War)
+---@param info table the zone's row (GuildWars.Page:Zones)
+function WarMap:ShowSample(war, info)
+	private.sample = { war = war, info = info }
+	local zone = Wanted.WarZones:Get(war.zone)
+	if zone and OpenWorldMap and not InCombatLockdown() and not (WorldMapFrame and WorldMapFrame:IsShown()) then
+		OpenWorldMap(zone.mapId)
+		private.sampleOpened = true
+	elseif zone and WorldMapFrame and WorldMapFrame.SetMapID and WorldMapFrame:IsShown() then
+		WorldMapFrame:SetMapID(zone.mapId)
+	end
+	WarMap:Refresh()
+end
+
+---Takes the sample off the map, and closes the map if the sample opened it.
+function WarMap:HideSample()
+	if not private.sample then
+		return
+	end
+	private.sample = nil
+	if private.sampleOpened then
+		private.sampleOpened = nil
+		if WorldMapFrame and WorldMapFrame:IsShown() then
+			if HideUIPanel then HideUIPanel(WorldMapFrame) else WorldMapFrame:Hide() end
+		end
+	end
+	WarMap:Refresh()
+end
+
 ---Redraws the layer while the map is open.
 function WarMap:Refresh()
 	private.UpdateMapButton()
@@ -130,8 +162,16 @@ end
 -- What's on in a zone
 -- ============================================================================
 
+---Whether a war is the tour's sample (WarMap:ShowSample).
+function private.IsSample(war)
+	return private.sample ~= nil and war == private.sample.war
+end
+
 ---The guild's war in a zone, from its draw to a day after the result, or nil.
 function private.WarIn(zone)
+	if private.sample and private.sample.war.zone == zone.name then
+		return private.sample.war
+	end
 	for _, war in ipairs(GuildWars:LiveWars()) do
 		if war.zone == zone.name and war.step ~= "declare" and war.state ~= "withdrawn" and not (type(war.result) == "table" and (war.result.void or war.result.cancelled)) then
 			return war
@@ -154,6 +194,9 @@ end
 
 ---The zone's holder from the Zones list: { holder, since, protectedUntil, next }, or nil.
 function private.ZoneInfo(zone)
+	if private.sample and private.sample.info and private.sample.info.zone == zone.name then
+		return private.sample.info
+	end
 	for _, z in ipairs(GuildWars:Zones()) do
 		if z.zone == zone.name then
 			return z
@@ -215,7 +258,7 @@ end
 
 function private.Provider:RefreshAllData()
 	self:RemoveAllData()
-	if not Wanted.db or not WarMap:Shown() or not (GuildWars:On() or Races:On()) then
+	if not Wanted.db or not WarMap:Shown() or not (GuildWars:On() or Races:On() or private.sample) then
 		return
 	end
 	local map = self:GetMap()
@@ -434,6 +477,8 @@ function private.DrawWar(war, zone, place, now)
 	local lanes, keep = private.Lanes(war)
 	local prep = war.battle and war.battle.start and now < war.battle.start
 	local points = GuildWars:Points(war, zone)
+	-- The tour's sample: tagged, and a click sets no waypoint
+	local tag = private.IsSample(war) and "SAMPLE · " or ""
 	local byRole = {}
 	for _, p in ipairs(points) do
 		byRole[(p.lane or "")..p.role] = p
@@ -466,19 +511,19 @@ function private.DrawWar(war, zone, place, now)
 	for _, p in ipairs(points) do
 		local fx, fy = place(p.x, p.y)
 		if fx then
-			local spec = { fx = fx, fy = fy, px = SEAL_PX, desaturated = prep, waypoint = { mapId = zone.mapId, x = p.x, y = p.y } }
+			local spec = { fx = fx, fy = fy, px = SEAL_PX, desaturated = prep, waypoint = tag == "" and { mapId = zone.mapId, x = p.x, y = p.y } or nil }
 			if p.role == "keep" then
 				spec.texture, spec.px = GuildWars:KeepFile(keep, d, a), KEEP_PX
-				spec.title = "The keep · "..p.name
+				spec.title = tag.."The keep · "..p.name
 				spec.lines = { { keep == "open" and "Open: pulses orange. Take it to win." or keep == "fallen" and ("Taken by "..(attacker.guild or "the attackers")) or "Sealed until an inhibitor falls." } }
 			elseif p.role == "rally" then
 				spec.texture = GuildWars.MEDIA.."rally-"..a
-				spec.title = format("%s's rally point", attacker.guild or "The attackers'")
+				spec.title = tag..format("%s's rally point", attacker.guild or "The attackers'")
 				spec.lines = { { p.name, C.muted } }
 			else
 				local state = type(lanes[p.lane]) == "table" and lanes[p.lane][p.role] or nil
 				spec.texture = GuildWars:SealFile(state, p.role, d, a)
-				spec.title = format("%s%s %s", strupper(strsub(p.lane, 1, 1)), strsub(p.lane, 2), p.role)
+				spec.title = tag..format("%s%s %s", strupper(strsub(p.lane, 1, 1)), strsub(p.lane, 2), p.role)
 				local s = type(state) == "table" and state or {}
 				spec.lines = { { p.name, C.muted }, { s.state == "taken" and ("Taken by "..(attacker.guild or "the attackers"))
 					or s.state == "taking" and format("Being taken: %d%%", s.pct or 0) or format("Standing (%s)", defender.guild or "the holders"), s.state and C.gold or C.text } }
@@ -586,7 +631,7 @@ function private.FillPlate(zone, now)
 	plate.lanes:SetText("")
 	if war and b.prep and now >= b.prep and now < (b.stop or 0) then
 		local prep = now < b.start
-		plate.now:SetText(Theme:Colorize("WAR", C.red).."  ·  "..format("%s attacks · %s", war.attacker.guild or "?", prep and ("prep, battle in "..private.Left(b.start - now)) or (private.Left(b.stop - now).." left")))
+		plate.now:SetText(Theme:Colorize(private.IsSample(war) and "SAMPLE WAR" or "WAR", C.red).."  ·  "..format("%s attacks · %s", war.attacker.guild or "?", prep and ("prep, battle in "..private.Left(b.start - now)) or (private.Left(b.stop - now).." left")))
 		local lanes, keep = private.Lanes(war)
 		local parts = {}
 		for _, laneId in ipairs({ "top", "mid", "bot" }) do

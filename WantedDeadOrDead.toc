@@ -61,6 +61,7 @@ Debug.lua
 #@end-debug@
 Theme.lua
 Widgets.lua
+HudKit.lua
 Model.lua
 Alerts.lua
 Toast.lua

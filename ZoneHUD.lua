@@ -1,8 +1,8 @@
 -- Wanted: the zone HUD. In a campaign zone while wars are on, a small frame under the game's top-centre widgets: the
 -- zone, who holds it (crest, guild in its side's colour, since when) or "Unclaimed", the protection left, what comes
 -- next there (a race or a war) and the tax when the site gave one. It gives way to the race HUD and the war HUD, which
--- take over in their zone, and hides in instances. Off in Settings (Guild wars, Zone HUD), with its own size, and
--- dragged where the player wants it.
+-- take over in their zone, and hides in instances. Off in Settings (Guild wars, Zone HUD), with its own size; dragged,
+-- folded and hidden as the other HUDs are (HudKit).
 
 local _, Wanted = ...
 local ZoneHUD = Wanted:NewModule("ZoneHUD")
@@ -11,6 +11,7 @@ local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
 local Races = Wanted.Races
+local HudKit = Wanted.HudKit
 local private = {}
 local WIDTH, HEIGHT = 280, 112
 -- The protection countdown moves by the minute
@@ -39,85 +40,63 @@ function private.Build()
 	local f = CreateFrame("Frame", "WantedZoneHUD", UIParent)
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetFrameStrata("LOW")
-	f:SetClampedToScreen(true)
 	Theme:Skin(f, { 0.067, 0.067, 0.067, 0.85 }, { 1, 1, 1, 0.15 })
-	-- Dragged where the player wants it, kept for the account
-	f:SetMovable(true)
-	f:EnableMouse(true)
-	f:RegisterForDrag("LeftButton")
-	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-	f:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, _, relative, x, y = self:GetPoint(1)
-		Wanted.db.settings.zoneHudPos = { point = point, relative = relative, x = x, y = y }
-	end)
-	private.Place(f)
-	f.zone = Theme:Text(f, "heading", "", C.gold)
+	local body = HudKit:Body(f)
+	f.zone = Theme:Text(body, "heading", "", C.gold)
 	f.zone:SetPoint("TOPLEFT", 10, -8)
 	f.zone:SetWidth(WIDTH - 20 - 70)
 	f.zone:SetWordWrap(false)
-	f.tax = Theme:Text(f, "small", "", C.muted)
+	f.tax = Theme:Text(body, "small", "", C.muted)
 	f.tax:SetPoint("TOPRIGHT", -10, -10)
 	f.tax:SetJustifyH("RIGHT")
 	W:Explain(f.tax, "Tax", "The share of a war's winnings and the zone's income the holder's guild takes.", "ANCHOR_BOTTOM")
-	f.crest = f:CreateTexture(nil, "ARTWORK")
+	f.crest = body:CreateTexture(nil, "ARTWORK")
 	f.crest:SetSize(26, 26)
 	f.crest:SetPoint("TOPLEFT", 10, -32)
-	f.guild = Theme:Text(f, "body", "", C.text)
+	f.guild = Theme:Text(body, "body", "", C.text)
 	f.guild:SetWidth(WIDTH - 20 - 34)
 	f.guild:SetWordWrap(false)
-	f.since = Theme:Text(f, "small", "", C.muted)
+	f.since = Theme:Text(body, "small", "", C.muted)
 	f.since:SetWidth(WIDTH - 20 - 34)
 	f.since:SetWordWrap(false)
-	f.protection = Theme:Text(f, "small", "", C.text)
+	f.protection = Theme:Text(body, "small", "", C.text)
 	f.protection:SetPoint("TOPLEFT", 10, -66)
 	f.protection:SetWidth(WIDTH - 20)
 	f.protection:SetWordWrap(false)
 	-- The next race or war, with its tag on hover
-	f.nextHit = CreateFrame("Frame", nil, f)
+	f.nextHit = CreateFrame("Frame", nil, body)
 	f.nextHit:SetSize(WIDTH - 20, 16)
 	f.nextHit:SetPoint("TOPLEFT", 10, -86)
 	f.next = Theme:Text(f.nextHit, "small", "", C.text)
 	f.next:SetPoint("LEFT")
 	f.next:SetWidth(WIDTH - 20)
 	f.next:SetWordWrap(false)
+	f:SetScale(Theme:ClampScale(Wanted.db.settings.zoneHudScale))
+	HudKit:Attach("zone", f)
 	f:Hide()
 	private.frame = f
 	return f
 end
 
----Where the HUD goes: where the player dragged it, else under the game's top-centre widgets (the race HUD's place);
----at its size (Settings).
+---Where the HUD goes without a place the player dragged it to: under the game's top-centre widgets (the race HUD's place).
 function private.Place(f)
-	f:SetScale(Theme:ClampScale(Wanted.db.settings.zoneHudScale))
-	f:ClearAllPoints()
-	local pos = Wanted.db.settings.zoneHudPos
-	if type(pos) == "table" and type(pos.point) == "string" and type(pos.x) == "number" and type(pos.y) == "number" then
-		f:SetPoint(pos.point, UIParent, type(pos.relative) == "string" and pos.relative or pos.point, pos.x, pos.y)
-	elseif UIWidgetTopCenterContainerFrame then
+	if UIWidgetTopCenterContainerFrame then
 		f:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
 	else
 		f:SetPoint("TOP", UIParent, "TOP", 0, -60)
 	end
 end
 
+HudKit:Register("zone", { name = "Zone HUD", setting = function() return Wanted.db.settings end, field = "zoneHud",
+	refresh = function() ZoneHUD:Update() end, place = private.Place, collapsedWidth = 220 })
+
 ---Sizes the HUD (Settings), saved for the account; where it was dragged stays where it is.
 ---@param scale number 0.8 to 1.5
 function ZoneHUD:SetScale(scale)
 	scale = Theme:ClampScale(scale)
 	Wanted.db.settings.zoneHudScale = scale
-	local f = private.frame
-	if not f then
-		return
-	end
-	local pos = Wanted.db.settings.zoneHudPos
-	if type(pos) == "table" then
-		local x, y = Theme:RescaleInPlace(f, scale)
-		if x then
-			pos.x, pos.y = x, y
-		end
-	else
-		private.Place(f)
+	if private.frame then
+		HudKit:Rescale("zone", private.frame, scale)
 	end
 end
 
@@ -265,5 +244,7 @@ function ZoneHUD:Update()
 	if kind then
 		W:Explain(f.nextHit, TAG_TIPS[kind][1], TAG_TIPS[kind][2], "ANCHOR_BOTTOM")
 	end
+	f.summary:SetText(info.zone.."  ·  "..(holder and Theme:Colorize(holder.guild, GuildWars.SIDE_COLORS[holder.faction] or C.text) or Theme:Colorize("Unclaimed", C.faint)))
+	HudKit:Apply("zone", f, WIDTH, HEIGHT)
 	f:Show()
 end

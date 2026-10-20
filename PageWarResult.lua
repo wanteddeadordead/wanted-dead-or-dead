@@ -66,7 +66,7 @@ GuildWars.PANELS.result = {
 		zone:SetSize(width - wide - GAP, 152)
 		panel.zoneLabel = W:SectionLabel(zone, "")
 		panel.zoneLabel:SetPoint("TOPLEFT", 16, -14)
-		panel.crest = zone:CreateTexture(nil, "ARTWORK")
+		panel.crest = GuildWars:NewCrest(zone)
 		panel.crest:SetSize(32, 32)
 		panel.crest:SetPoint("TOPLEFT", 16, -36)
 		panel.holder = Theme:Text(zone, "body", "", C.text)
@@ -155,7 +155,7 @@ GuildWars.PANELS.result = {
 		-- The zone now
 		local holder = type(r.holder) == "table" and r.holder or {}
 		panel.zoneLabel:SetText(strupper(GuildWars:Short(war.zone).." now"))
-		panel.crest:SetTexture(GuildWars:CrestFile(holder))
+		panel.crest:SetGuild(holder)
 		panel.holder:SetText(holder.guild and ("Held by <"..holder.guild..">") or "No one holds it")
 		local until_ = tonumber(r.protectedUntil)
 		panel.protected:SetText(until_ and ("Protected until "..date("%a ", until_)..GuildWars:Clock(until_)) or "")

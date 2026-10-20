@@ -130,7 +130,7 @@ GuildWars.PANELS.declare = {
 			local row = CreateFrame("Frame", nil, declared)
 			row:SetSize(width - 32, 24)
 			row:SetPoint("TOPLEFT", 16, -32 - (i - 1) * 24)
-			row.crest = row:CreateTexture(nil, "ARTWORK")
+			row.crest = GuildWars:NewCrest(row)
 			row.crest:SetSize(20, 20)
 			row.crest:SetPoint("LEFT")
 			row.guild = Theme:Text(row, "body", "", C.text)
@@ -209,7 +209,7 @@ GuildWars.PANELS.declare = {
 			row:SetShown(entry ~= nil)
 			if entry then
 				local share = tonumber(entry.share) or 0
-				row.crest:SetTexture(GuildWars:CrestFile(entry))
+				row.crest:SetGuild(entry)
 				row.guild:SetText(entry.guild or "?")
 				local declaredAt = type(entry.at) == "number" and (" at "..GuildWars:Clock(entry.at)) or ""
 				if entry.mine and not entry.stake then

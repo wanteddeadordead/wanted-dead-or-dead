@@ -154,7 +154,7 @@ function private.BuildTab(container, width, height, index)
 		local crest = CreateFrame("Frame", nil, header)
 		crest:SetSize(76, 72)
 		crest:SetPoint("TOPRIGHT", -16 - (2 - i) * 84, -8)
-		crest.icon = crest:CreateTexture(nil, "ARTWORK")
+		crest.icon = GuildWars:NewCrest(crest)
 		crest.icon:SetSize(44, 44)
 		crest.icon:SetPoint("TOP", 0, -4)
 		crest.name = Theme:Text(crest, "small", "", C.text)
@@ -220,7 +220,7 @@ function private.RefreshTab(tab)
 	for i, guild in ipairs({ ours, theirs }) do
 		local crest = tab.crests[i]
 		crest:SetShown(guild.guild ~= nil)
-		crest.icon:SetTexture(GuildWars:CrestFile(guild))
+		crest.icon:SetGuild(guild)
 		crest.name:SetText(guild.guild or "")
 	end
 	-- The step bar: where the war is, a failed step marked (not drawn, withdrawn)

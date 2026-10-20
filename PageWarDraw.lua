@@ -37,7 +37,7 @@ GuildWars.PANELS.draw = {
 			local row = CreateFrame("Frame", nil, card)
 			row:SetSize(width - 32, 38)
 			row:SetPoint("TOPLEFT", 0, -34 - (i - 1) * 40)
-			row.crest = row:CreateTexture(nil, "ARTWORK")
+			row.crest = GuildWars:NewCrest(row)
 			row.crest:SetSize(22, 22)
 			row.crest:SetPoint("LEFT", COLUMNS.guild, 0)
 			row.guild = Theme:Text(row, "body", "", C.text)
@@ -90,7 +90,7 @@ GuildWars.PANELS.draw = {
 			local entry = type(declarers[i]) == "table" and declarers[i] or nil
 			row:SetShown(entry ~= nil)
 			if entry then
-				row.crest:SetTexture(GuildWars:CrestFile(entry))
+				row.crest:SetGuild(entry)
 				row.guild:SetText(entry.guild or "?")
 				row.influence:SetText(format("%d%%", floor((tonumber(entry.share) or 0) * 100 + 0.5)))
 				row.stake:SetText(tostring(tonumber(entry.stake) or 0))

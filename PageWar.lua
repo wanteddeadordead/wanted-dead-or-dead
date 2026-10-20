@@ -10,6 +10,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = { tabs = {} }
 local MAX_WARS = 3
 local HEADER_HEIGHT, BAR_CARD = 88, 78
@@ -139,6 +140,7 @@ function private.BuildTab(container, width, height, index)
 	local tab = { index = index, panels = {} }
 	-- The header
 	local header = W:Card(container)
+	tab.header = header
 	header:SetPoint("TOPLEFT")
 	header:SetSize(width, HEADER_HEIGHT)
 	tab.kicker = Theme:Text(header, "labelSmall", "")
@@ -175,6 +177,7 @@ function private.BuildTab(container, width, height, index)
 	tab.pill:SetPoint("TOPRIGHT", -16 - 2 * 84 - 22, -18)
 	-- The step bar: a done step's dot opens its panel; the current one comes back to the war's own
 	local barCard = W:Card(container)
+	tab.barCard = barCard
 	barCard:SetPoint("TOPLEFT", 0, -HEADER_HEIGHT - GAP)
 	barCard:SetSize(width, BAR_CARD)
 	tab.bar = W:StepBar(barCard, width - 32, STEP_BAR, function(step)
@@ -200,7 +203,7 @@ function private.BuildTab(container, width, height, index)
 end
 
 function private.RefreshTab(tab)
-	local war = GuildWars:War(tab.index)
+	local war = Data:War(tab.index)
 	if not war then
 		return
 	end
@@ -233,7 +236,7 @@ function private.RefreshTab(tab)
 	-- (Start the roster opens the Roster step early, while the time is still being set)
 	local early = tab.early == "roster" and tab.viewing == "roster" and (war.step == "draw" or war.step == "time")
 	local view = tab.viewing and STEP_INDEX[tab.viewing] and (STEP_INDEX[tab.viewing] < current or early) and tab.viewing or war.step
-	local ctx = { now = now, ours = ours, theirs = theirs, officer = GuildWars:AmOfficer(), app = Wanted:HasApp(), looking = view ~= war.step }
+	local ctx = { now = now, ours = ours, theirs = theirs, officer = Data:AmOfficer(), app = Wanted:HasApp(), looking = view ~= war.step }
 	local shown = false
 	for key, panel in pairs(tab.panels) do
 		panel:SetShown(key == view)
@@ -267,13 +270,13 @@ function private.Badge(war, now)
 	elseif type(b.prep) == "number" and now >= b.prep - 3600 and now < b.prep and war.step ~= "result" then
 		return format("%dm", ceil((b.prep - now) / 60)), C.gold
 	end
-	if not GuildWars:AmOfficer() then
+	if not Data:AmOfficer() then
 		return nil
 	end
 	local d = war.declare or {}
-	local must = war.step == "declare" and not d.mine and type(d.closesAt) == "number" and now < d.closesAt and not GuildWars:Pending("declare", war.id)
-		or war.state == "awaiting_time" and war.role == "defend" and not GuildWars:Pending("time", war.id)
-		or war.state == "awaiting_answer" and war.role == "attack" and not t.accepted and not t.withdrawn and not GuildWars:Pending("answer", war.id)
+	local must = war.step == "declare" and not d.mine and type(d.closesAt) == "number" and now < d.closesAt and not Data:Pending("declare", war.id)
+		or war.state == "awaiting_time" and war.role == "defend" and not Data:Pending("time", war.id)
+		or war.state == "awaiting_answer" and war.role == "attack" and not t.accepted and not t.withdrawn and not Data:Pending("answer", war.id)
 	if must then
 		return "!", C.amber
 	end
@@ -286,7 +289,7 @@ for index = 1, MAX_WARS do
 		title = "War",
 		-- Named by its zone
 		tabLabel = function()
-			local war = GuildWars:War(index)
+			local war = Data:War(index)
 			if not war then
 				return "War"
 			end
@@ -297,9 +300,9 @@ for index = 1, MAX_WARS do
 		tabTip = { "A war of your guild's", "Members see this page without its buttons. It closes 24 hours after the result; the war stays in the guild's history on the site." },
 		under = "guildwars",
 		order = -2,
-		hidden = function() return GuildWars:War(index) == nil end,
+		hidden = function() return Data:War(index) == nil end,
 		badge = function()
-			local war = GuildWars:War(index)
+			local war = Data:War(index)
 			if war then
 				return private.Badge(war, GetServerTime())
 			end
@@ -332,6 +335,18 @@ for index = 1, MAX_WARS do
 		end,
 	})
 end
+
+-- The tour's war stops border these (Tour): the first war's header, step bar and lanes
+UI:Mark("warheader", function() return private.tabs[1] and private.tabs[1].header end)
+UI:Mark("warbar", function() return private.tabs[1] and private.tabs[1].barCard end)
+UI:Mark("warlanes", function()
+	local panel = private.tabs[1] and private.tabs[1].panels.battle
+	return panel and panel.lanesCard
+end)
+UI:Mark("warturnout", function()
+	local panel = private.tabs[1] and private.tabs[1].panels.battle
+	return panel and panel.lanesCard
+end)
 
 -- For the panels: the shared bits
 GuildWars.Sides = function(_, war) return private.Sides(war) end

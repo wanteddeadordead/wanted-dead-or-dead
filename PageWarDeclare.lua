@@ -7,6 +7,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = {}
 local GAP = 12
 local CHECKS = 6
@@ -30,7 +31,7 @@ function private.Checks(war, ctx)
 	local short = GuildWars:Short(war.zone)
 	local share = tonumber(d.share) or 0
 	local need = tonumber(d.need) or 5
-	local setting = GuildWars:OfficerSetting()
+	local setting = Data:OfficerSetting()
 	local officerTip = "War officers: the guild master and the ranks ticked on the Guild tab, plus those added by name, less those left out. Set by the guild master."
 	local protected = type(d.protectedUntil) == "number" and d.protectedUntil > ctx.now
 	local lines = {
@@ -51,7 +52,7 @@ function private.Checks(war, ctx)
 			"Declarations close 15 minutes after the race ends." },
 	}
 	-- The site's word over this client's, and a refusal marks its line
-	local _, code = GuildWars:Refused("declare", war.id)
+	local _, code = Data:Refused("declare", war.id)
 	for i, line in ipairs(lines) do
 		local key = CHECK_KEYS[i]
 		if key and type(d.checks) == "table" and type(d.checks[key]) == "boolean" then
@@ -142,7 +143,7 @@ GuildWars.PANELS.declare = {
 		end
 		-- The buttons, a war officer's
 		panel.declare = W:Button(panel, "Declare war", "primary", 210, 30, function()
-			GuildWars:Act("declare", panel.war.id, { stake = panel.stakeValue })
+			Data:Act("declare", panel.war.id, { stake = panel.stakeValue })
 		end)
 		panel.declare:SetPoint("TOPRIGHT", 0, -196 - GAP - 104 - GAP)
 		panel.notTonight = W:Button(panel, "Not tonight", "secondary", 110, 30, function()
@@ -177,14 +178,14 @@ GuildWars.PANELS.declare = {
 		local most = tonumber(d.maxStake) or least * 2
 		local slider = panel.stake.slider
 		slider:SetMinMaxValues(least, most)
-		local pending = GuildWars:Pending("declare", war.id)
+		local pending = Data:Pending("declare", war.id)
 		local mine = type(d.mine) == "table" and tonumber(d.mine.stake) or nil
 		if not panel.tab.dirty then
 			panel.stake:SetValue(mine or (pending and pending.data.stake) or least)
 		end
 		local stake = tonumber(slider:GetValue()) or least
 	panel.stakeValue = stake
-		local treasury = tonumber(d.treasury) or (GuildWars:Guild() and tonumber(GuildWars:Guild().treasury)) or 0
+		local treasury = tonumber(d.treasury) or (Data:Guild() and tonumber(Data:Guild().treasury)) or 0
 		panel.treasury:SetText(Theme:Colorize("Treasury  ", C.muted)..private.Count(treasury).." → "..private.Count(treasury - stake))
 		local holder = ctx.theirs.guild or "the holders"
 		W:Explain(panel.stake, "Stake", format("From %s's treasury: %s's minimum is %d, and you may raise it to twice that. A higher stake raises your chance in the draw.\n\nBack to the treasury if you aren't drawn or you withdraw; lost to %s if the attack fails; returned if you take the zone.",
@@ -234,7 +235,7 @@ GuildWars.PANELS.declare = {
 			or "Spends the stake from the treasury. It can't be undone until the draw.")
 		panel.status:SetText(declared and Theme:Colorize(format("Declared, stake %s. The draw is at %s.", private.Count(mine), type(war.draw) == "table" and type(war.draw.at) == "number" and GuildWars:Clock(war.draw.at) or "8:00 PM"), C.green)
 			or pending and Theme:Colorize("Sent; waiting for the site", C.amber)
-			or GuildWars:Refused("declare", war.id) and Theme:Colorize(GuildWars:Refused("declare", war.id), C.red)
+			or Data:Refused("declare", war.id) and Theme:Colorize(Data:Refused("declare", war.id), C.red)
 			or not ctx.officer and "Members see this page without its buttons." or "")
 	end,
 }

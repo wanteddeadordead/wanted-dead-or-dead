@@ -46,6 +46,7 @@ Races.lua
 WarZones.lua
 GuildWars.lua
 WarView.lua
+WarSample.lua
 Achievements.lua
 HonorScout.lua
 Duels.lua

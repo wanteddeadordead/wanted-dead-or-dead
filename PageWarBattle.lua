@@ -9,6 +9,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = {}
 local GAP = 12
 local LANES = { { "top", "Top" }, { "mid", "Mid" }, { "bot", "Bot" } }
@@ -47,6 +48,9 @@ end
 
 ---Go to the rally: a waypoint on the player's side's rally point; the defenders' is their keep.
 function GuildWars:GoToRally(war)
+	if GuildWars:Sampling() then
+		return
+	end
 	local zone = Wanted.WarZones:Get(war.zone)
 	if not zone then
 		UI:Toast("This zone's war map isn't known yet.", C.red)
@@ -65,6 +69,7 @@ GuildWars.PANELS.battle = {
 	build = function(panel, width)
 		panel.state = {}
 		local lanes = W:Card(panel)
+		panel.lanesCard = lanes
 		lanes:SetPoint("TOPLEFT")
 		lanes:SetSize(width, LANES_HEIGHT)
 		panel.lanesLabel = W:SectionLabel(lanes, "")
@@ -148,12 +153,15 @@ GuildWars.PANELS.battle = {
 		W:Explain(panel.rally, "Go to the rally", "A waypoint to your side's rally point (defenders: the keep).")
 		panel.map = W:Button(panel, "Open the map", "secondary", 120, 30, function()
 			local zone = panel.state.record and Wanted.WarZones:Get(panel.state.record.zone)
-			if zone and OpenWorldMap and not InCombatLockdown() then
+			if zone and OpenWorldMap and not InCombatLockdown() and not GuildWars:Sampling() then
 				OpenWorldMap(zone.mapId)
 			end
 		end)
 		panel.map:SetPoint("LEFT", panel.rally, "RIGHT", 10, 0)
 		panel.hud = W:Button(panel, "Show the HUD", "secondary", 120, 30, function()
+			if GuildWars:Sampling() then
+				return
+			end
 			local settings = Wanted.db.settings
 			settings.warHud = settings.warHud == false
 			if GuildWars.UpdateHUD then

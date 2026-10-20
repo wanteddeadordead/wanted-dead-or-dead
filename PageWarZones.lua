@@ -7,6 +7,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local Data = GuildWars.Page -- what the pages read: the tour's sample war while one is on (WarSample.lua)
 local private = { filter = "all", heldOnly = false }
 local ROW_HEIGHT = 44
 local HEADER = 30
@@ -117,7 +118,7 @@ end
 ---The zones shown: the continent picked, and only held ones when ticked.
 function private.Shown()
 	local list = {}
-	for _, zone in ipairs(GuildWars:Zones()) do
+	for _, zone in ipairs(Data:Zones()) do
 		if type(zone) == "table" and (private.filter == "all" or private.Continent(zone) == private.filter)
 			and (not private.heldOnly or (type(zone.holder) == "table" and zone.holder.guild)) then
 			tinsert(list, zone)
@@ -130,14 +131,14 @@ function private.Refresh()
 	if not private.list then
 		return
 	end
-	local zones = GuildWars:Zones()
+	local zones = Data:Zones()
 	local held = 0
 	for _, zone in ipairs(zones) do
 		if type(zone) == "table" and type(zone.holder) == "table" and zone.holder.guild then
 			held = held + 1
 		end
 	end
-	local at = GuildWars:At()
+	local at = Data:At()
 	private.count:SetText(format("%d zone%s in the campaign · %d held", #zones, #zones == 1 and "" or "s", held)
 		..(at and Theme:Colorize("  ·  as of "..GuildWars:Clock(at), C.faint) or ""))
 	private.list:SetItems(private.Shown(), held == 0 and #zones > 0 and private.heldOnly and "Nobody holds a zone yet. Win a race, then a war."
@@ -146,7 +147,7 @@ end
 
 ---Open the map: the zone's (a row), or the continent's (the button). The game can block it in a fight.
 function private.OpenMap(mapId)
-	if not OpenWorldMap then
+	if not OpenWorldMap or GuildWars:Sampling() then
 		return
 	end
 	if InCombatLockdown() then
@@ -162,7 +163,7 @@ UI:RegisterPage("warzones", {
 	tabTip = { "Zones", "Who holds each zone of the campaign, how long it's protected, and what comes next there." },
 	under = "guildwars",
 	order = -2,
-	hidden = function() return not GuildWars:On() end,
+	hidden = function() return not Data:On() end,
 	build = function(container, width, height)
 		local filter = W:Segmented(container, {
 			{ key = "all", label = "All" },
@@ -183,6 +184,7 @@ UI:RegisterPage("warzones", {
 		private.count:SetPoint("TOPRIGHT", 0, -8)
 		private.count:SetJustifyH("RIGHT")
 		local card = W:Card(container)
+		private.card = card
 		card:SetPoint("TOPLEFT", 0, -38)
 		card:SetSize(width, height - 38 - 48)
 		for key, x in pairs(COLUMNS) do
@@ -212,3 +214,6 @@ UI:RegisterPage("warzones", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's Zones stop borders the list
+UI:Mark("warzones", function() return private.card end)

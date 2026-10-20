@@ -18070,7 +18070,7 @@ end
 	local byZone = {}
 	for _, row in ipairs(rows) do byZone[row.zone._text] = row end
 	local hbRow, desolace, arathi = byZone["Hillsbrad Foothills"], byZone["Desolace"], byZone["Arathi Highlands"]
-	check(#rows >= 6 and hbRow and hbRow.guild._text == "Revenant" and hbRow.crest._texture:find("Alliance%-Logo") and desolace.tag.text._text == "WAR",
+	check(#rows >= 6 and hbRow and hbRow.guild._text == "Revenant" and hbRow.crest.fallback._texture:find("Alliance%-Logo") and desolace.tag.text._text == "WAR",
 		"Zones: a row a zone, the held ones first, its holder with its side's emblem (no crests yet), and what's next: "..#rows)
 	check(arathi and arathi.unowned:IsShown() and arathi.next._text:find("live now", 1, true), "an unowned zone with a race on, from tonight's races")
 	check(byZone["cffff0000Nowherer"] ~= nil, "escape codes stripped from names")

@@ -106,7 +106,7 @@ GuildWars.PANELS.battle = {
 		W:SectionLabel(lanes, "Turnout"):SetPoint("TOPLEFT", turnoutX, -14)
 		panel.turnout = {}
 		for i = 1, 2 do
-			local crest = lanes:CreateTexture(nil, "ARTWORK")
+			local crest = GuildWars:NewCrest(lanes)
 			crest:SetSize(18, 18)
 			crest:SetPoint("TOPLEFT", turnoutX, -36 - (i - 1) * 26)
 			local text = Theme:Text(lanes, "body", "", C.text)
@@ -210,7 +210,7 @@ GuildWars.PANELS.battle = {
 		for i, guild in ipairs({ ctx.ours, ctx.theirs }) do
 			local ourKey = war.role == "defend" and "defender" or "attacker"
 			local n = turnout[i == 1 and ourKey or (ourKey == "attacker" and "defender" or "attacker")]
-			panel.turnout[i].crest:SetTexture(GuildWars:CrestFile(guild))
+			panel.turnout[i].crest:SetGuild(guild)
 			panel.turnout[i].text:SetText((guild.guild or "?").."  "..Theme:Colorize(tostring(tonumber(n) or 0), i == 1 and C.green or C.text)..Theme:Colorize(" / "..GuildWars.MAX_ROSTER, C.muted))
 		end
 		local friends = type(b.friends) == "table" and b.friends or {}

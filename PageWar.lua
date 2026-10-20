@@ -339,6 +339,9 @@ end
 -- The tour's war stops border these (Tour): the first war's header, step bar and lanes
 UI:Mark("warheader", function() return private.tabs[1] and private.tabs[1].header end)
 UI:Mark("warbar", function() return private.tabs[1] and private.tabs[1].barCard end)
+for _, key in ipairs(STEPS) do
+	UI:Mark("warpanel-"..key, function() return private.tabs[1] and private.tabs[1].panels[key] end)
+end
 UI:Mark("warlanes", function()
 	local panel = private.tabs[1] and private.tabs[1].panels.battle
 	return panel and panel.lanesCard

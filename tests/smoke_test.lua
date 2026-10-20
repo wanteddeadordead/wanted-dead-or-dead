@@ -17258,7 +17258,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 			check(stop.page ~= "siege" and not stop.text:find("siege front", 1, true), "no stop describes the old siege nights: "..stop.title)
 		end
 		local all = table.concat(titles, ", ")
-		check(guildWars == 5 and all:find("Tonight's races, Influence, The race HUD, Live numbers, Zones, A war, War Marks, Guild, Bystanders and witnesses", 1, true), "the tour's race and war stops: "..all)
+		check(guildWars == 5 and all:find("Tonight's races, Influence, The race HUD, Live numbers, Zones, Declare, The draw, The time, The roster, The battle, The result, War Marks, Guild, Bystanders and witnesses, That's the tour", 1, true), "the tour's race and war stops: "..all)
 		check(Setup.cards.home and f.title._text == "Welcome to Wanted", "the first page welcomes")
 		f.next:Click()
 		check(f.counter._text:find("2 of", 1, true) and ns.UI:IsShown("home"), "the lights page stays on the Dashboard")
@@ -18635,9 +18635,9 @@ end
 	ns.db.warActions = {}
 	ns.UI:GetFrame():Hide()
 end)()
--- The tour's war stops: with wars off they show a sample war that is display only (nothing logged, sent or saved; the
--- real accessors, the HUD and the map never see it) and tagged Sample; it ends with the tour; with real wars on there
--- is no sample
+-- The tour's war stops walk one sample war through its life, a stop per screen, tagged SAMPLE. It is display only
+-- (nothing logged, sent or saved; the real accessors, the HUD and the map never see it), the player's own data wins
+-- per screen, and it is gone with the tour
 ;(function()
 	local G, Tour = ns.GuildWars, ns.Tour
 	local function First(title)
@@ -18676,94 +18676,83 @@ end)()
 		table.sort(out)
 		return table.concat(out, ";")
 	end
-	G:Take(nil)
-	ns.Races:Take(nil)
-	check(not G:On() and not G:Sampling(), "wars off, no sample")
 	local logged, realLog = {}, C_Log
 	C_Log = { LogMessage = function(text) logged[#logged + 1] = text end }
 	local waypoints, realTrack = 0, ns.Captures.Track
 	ns.Captures.Track = function() waypoints = waypoints + 1 return true end
-	local hud = ns.db.settings.warHud
+	local realPrompt = ns.PromptForApp
+	ns.PromptForApp = function() end
+	local function Tag()
+		for _, frame in ipairs(Mock.created) do
+			if rawget(frame, "text") and frame.text._text == "SAMPLE" and frame._shown then return frame end
+		end
+	end
+	local first, last = First("Zones"), First("That's the tour")
+	-- Walks the war stops from the first to the last
+	local function Walk(label)
+		local f = WantedTourFrame
+		local realZones, realOn = #G:Zones(), G:On()
+		local realWars = #G:Wars()
+		for page = first, last do
+			local stop = Tour.STOPS[page]
+			check(Tour:IsShown() and f.title._text == stop.title, label..": the tour reaches "..stop.title..": "..tostring(f.title._text))
+			if stop.sample then
+				check(G:Sampling() and G:SampleStage() == stop.sample and Tag() ~= nil, label..": "..stop.title.." is a sample, tagged SAMPLE")
+				local war = G.Page:War(1)
+				if stop.page == "war1" then
+					check(war and war.step == stop.sample and ns.UI:IsShown("war1"), label..": "..stop.title.." shows the war at its "..stop.sample.." step: "..tostring(war and war.step))
+					check(war.sample == true, label..": "..stop.title.." reads the sample war")
+				else
+					check(ns.UI:IsShown(stop.page), label..": "..stop.title.." opens its page")
+				end
+				for _, name in ipairs(type(stop.mark) == "table" and stop.mark or { stop.mark }) do
+					local frame = ns.UI:MarkFrame(name)
+					check(frame and frame:IsVisible(), label..": "..stop.title.." marks "..name.." on screen")
+				end
+				-- The real accessors don't move
+				check(G:On() == realOn and #G:Zones() == realZones and #G:Wars() == realWars, label..": the real On, Zones and Wars are unchanged")
+			else
+				check(not G:Sampling() and Tag() == nil, label..": "..stop.title.." has no sample and no tag")
+			end
+			local hud = _G.WantedWarHUDSample
+			check((stop.hud == true) == (hud ~= nil and hud:IsShown()), label..": the sample HUD shows on the stops that ask for it: "..stop.title)
+			if stop.hud and hud and hud:IsShown() then
+				check(hud.kind._text:find("SAMPLE", 1, true) and hud.attacker.name._text == "Sample", label..": the sample HUD says SAMPLE")
+			end
+			check(_G.WantedWarHUD == nil or not _G.WantedWarHUD:IsShown(), label..": the real HUD doesn't show the sample")
+			-- Every ask is inert
+			if stop.sample then
+				check(G.Page:Act("tax", nil, { percent = 5 }) == false and G:Act("declare", "x", {}) == false, label..": asks do nothing in the sample")
+			end
+			if page < last then f.next:Click() end
+		end
+		f.next:Click()
+		check(not Tour:IsShown() and not G:Sampling() and (_G.WantedWarHUDSample == nil or not _G.WantedWarHUDSample:IsShown()),
+			label..": the tour ends and the sample and its HUD with it")
+		check(G:On() == realOn and #G:Zones() == realZones and #G:Wars() == realWars and G.Page:On() == realOn, label..": the real state is as before")
+	end
+	-- Wars off
+	G:Take(nil)
+	ns.Races:Take(nil)
+	check(not G:On() and not G:Sampling(), "wars off, no sample")
 	ns.db.tour = nil
 	addonSent = {}
 	local before = Saved()
-	local beforeKeys = {}
-	for k, v in pairs(ns.db) do beforeKeys[k] = Section(k, v) end
-	Tour:Start("first", First("Zones"))
-	local f = WantedTourFrame
-	local pages = { Zones = "warzones", ["A war"] = "war1", ["War Marks"] = "warmarks", Guild = "warguild" }
-	local order = { "Zones", "A war", "War Marks", "Guild" }
-	for n, title in ipairs(order) do
-		check(Tour:IsShown() and f.title._text == title and G:Sampling() and ns.UI:IsShown(pages[title]), "the tour reaches the "..title.." stop with a sample: "..tostring(f.title._text))
-		for _, name in ipairs(type(Tour.STOPS[First(title)].mark) == "table" and Tour.STOPS[First(title)].mark or { Tour.STOPS[First(title)].mark }) do
-			local frame = ns.UI:MarkFrame(name)
-			check(frame and frame:IsVisible(), title.." marks "..name.." on screen")
-		end
-		check(WantedTourFrame and ns.UI:GetFrame():IsShown() and ns.UI:MarkFrame("app") and f.title._text == title, "the "..title.." stop shows the window")
-		-- The Sample tag in the title bar
-		local tag
-		for _, frame in ipairs(Mock.created) do
-			if rawget(frame, "text") and frame.text._text == "SAMPLE" and frame._shown then tag = frame end
-		end
-		check(tag ~= nil, "the "..title.." screen is tagged SAMPLE")
-		-- What the pages read is the sample; everything else stays real
-		check(not G:On() and #G:Zones() == 0 and G:Guild() == nil and #G:Wars() == 0 and G:War(1) == nil and G:Purse() == nil and G:At() == nil,
-			"the real accessors stay empty during the sample")
-		check(G.Page:On() and #G.Page:Zones() > 0 and G.Page:Guild().name == "Sample" and G.Page:War(1).attacker.guild == "Sample"
-			and G.Page:War(1).defender.guild == "Sample" and G.Page:Purse().marks == 420, "the pages read the sample")
-		if n < #order then f.next:Click() end
-	end
-	local war = G.Page:War(1)
-	check(#war.battle.lanes == 3 and war.battle.lanes[1].tower.state == "taken" and war.battle.lanes[1].inhibitor.state == "taken"
-		and war.battle.lanes[2].tower.state == "taking" and war.battle.keep.state == "open", "the sample war: three lanes with a tower and an inhibitor each, a keep, mid-fight")
-	-- Display only: asks, the log, the addon messages, the HUD and the saved data
-	check(G.Page:Act("tax", nil, { percent = 5 }) == false and G:Act("declare", war.id, { stake = 300 }) == false, "asks do nothing")
-	G:GoToRally(war)
-	G:OpenOnSite(war)
-	G:ReportRoster()
-	G:Sight()
-	G:LookActive()
-	ns.WarHUD:Update()
-	ns.WarBanner:Check()
-	ns.WarMap:Refresh()
-	RunTimers()
-	check(G:Here() == nil and (_G.WantedWarHUD == nil or not _G.WantedWarHUD:IsShown()), "the HUD and the map don't see it")
+	Tour:Start("first", first)
+	Walk("wars off")
 	local wars = {}
 	for _, text in ipairs(logged) do
-		if text:find("^WANTEDA1") or text:find("^WANTEDW") then wars[#wars + 1] = text end
+		if text:find("^WANTEDA1") or text:find("^WANTEDW") or text:find("^WANTEDG") then wars[#wars + 1] = text end
 	end
-	check(#wars == 0, "no war lines on the log: "..table.concat(wars, " | "))
-	local warMessages = 0
-	for _, m in ipairs(addonSent) do
-		if tostring(m.text):find("sample", 1, true) or tostring(m.text):find("Sample", 1, true) then warMessages = warMessages + 1 end
-	end
-	check(warMessages == 0, "no addon message carries the sample")
-	check(waypoints == 0 and ns.db.settings.warHud == hud, "no waypoint, no HUD setting")
-	local diff = {}
-	for k, v in pairs(ns.db) do
-		if k ~= "tour" and Section(k, v) ~= beforeKeys[k] then diff[#diff + 1] = k end
-	end
-	check(Saved() == before, "nothing of it saved: "..table.concat(diff, ","))
-	local named = {}
-	for k, v in pairs(ns.db) do
-		if Dump(v):find("Sample", 1, true) then named[#named + 1] = k end
-	end
-	check(#named == 0, "no sample name in the saved data: "..table.concat(named, ","))
-	-- The last stop leaves the sample; Finish ends the tour
-	f.next:Click()
-	check(f.title._text == "Bystanders and witnesses" and not G:Sampling() and not G.Page:On() and G.Page:War(1) == nil, "the closing stop has no sample")
-	local realPrompt = ns.PromptForApp
-	ns.PromptForApp = function() end
-	f.next:Click()
-	ns.PromptForApp = realPrompt
-	check(not Tour:IsShown() and not G:Sampling(), "the tour ends: no sample")
-	-- Closed in the middle of a war stop: the sample goes too, and the window leaves its war page
-	Tour:Start("first", First("A war"))
-	check(G:Sampling() and ns.UI:IsShown("war1"), "back on the war stop")
-	f.close:Click()
-	check(not G:Sampling() and not ns.UI:IsShown("war1") and not G.Page:On() and #G.Page:Zones() == 0, "closing the tour ends the sample and the war page")
-	check(Saved() == before, "and still nothing saved")
-	-- A fight closes it, the end of the fight brings it back with the sample
+	check(#wars == 0 and #logged == 0, "wars off: nothing on the game's log over the whole tour: "..table.concat(logged, " | "))
+	check(#addonSent == 0, "wars off: no addon message over the whole tour: "..#addonSent)
+	check(waypoints == 0, "wars off: no waypoint")
+	check(Saved() == before, "wars off: nothing saved")
+	-- A leftover: closed in the middle of a stop, and a fight
+	Tour:Start("first", First("The battle"))
+	check(G:Sampling() and _G.WantedWarHUDSample:IsShown(), "back on the battle stop, with its HUD")
+	WantedTourFrame.close:Click()
+	check(not G:Sampling() and not _G.WantedWarHUDSample:IsShown() and not G.Page:On(), "closing the tour ends the sample and its HUD")
 	Tour:Start("first", First("Guild"))
 	inCombat = true
 	Fire("PLAYER_REGEN_DISABLED")
@@ -18771,19 +18760,32 @@ end)()
 	inCombat = false
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
-	check(Tour:IsShown() and G:Sampling(), "the end of the fight brings the sample back")
-	f.close:Click()
-	-- A real catch-up with wars ends a sample at once, and the tour then shows the real data
-	Tour:Start("first", First("Zones"))
-	check(G:Sampling(), "the sample is up again")
+	check(Tour:IsShown() and G:Sampling(), "the end of the fight brings the tour back with its sample")
+	WantedTourFrame.close:Click()
+	-- Wars on, the player's guild with no war: the same sample
+	local noWar = GuildWarsSample(clock)
+	noWar.wars, noWar.declare = nil, nil
+	ns.Races:Take(GuildWarsRaces(clock))
+	G:Take(noWar)
+	check(G:On(), "wars on")
+	ns.db.tour = nil
+	Tour:Start("first", first)
+	Walk("wars on, no war")
+	check(G.Page:Zones() == G:Zones() and G.Page:Guild() == G:Guild() or not G:Sampling(), "after the tour the pages read the real ones")
+	-- Wars on with a war of the player's own at the declare step: the real war wins that screen
 	G:Take(GuildWarsSample(clock))
-	check(G:On() and not G:Sampling() and G.Page:Zones() == G:Zones(), "a real catch-up with wars: the sample is gone, the pages read the real ones")
+	Tour:Start("first", first)
+	local f = WantedTourFrame
 	f.next:Click()
-	check(not G:Sampling() and G.Page:War(1) == G:War(1) and G.Page:Guild() == G:Guild(), "the war stop with real wars on uses them")
-	check(G:StartSample() == false and not G:Sampling(), "a sample can't start while wars are on")
+	check(f.title._text == "Declare" and G.Page:War(1) == G:War(1) and G.Page:War(1).sample == nil and G.Page:Guild() == G:Guild() and G.Page:Zones() == G:Zones(),
+		"the player's own war and guild win their screens")
+	f.next:Click()
+	check(f.title._text == "The draw" and G.Page:War(1).sample == true and G.Page:Guild() == G:Guild(), "the next stage, which they have no war at, is the sample")
 	f.close:Click()
-	G:Take(nil)
 	C_Log, ns.Captures.Track = realLog, realTrack
+	ns.PromptForApp = realPrompt
+	G:Take(nil)
+	ns.Races:Take(nil)
 	ns.db.tour = nil
 	ns.UI:GetFrame():Hide()
 end)()

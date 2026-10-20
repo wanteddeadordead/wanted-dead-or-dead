@@ -8,6 +8,7 @@
 local _, Wanted = ...
 local UI = Wanted.UI
 local Theme = Wanted.Theme
+local GuildWars = Wanted.GuildWars
 local W = Wanted.Widgets
 local C = Theme.C
 local Tour = Wanted:NewModule("Tour")
@@ -61,8 +62,23 @@ Tour.SETS.first = {
 	{ title = "Live numbers", page = "guildwars", mark = "racecard",
 		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
 			.."The other side's number is the site's, as of your last /reload." },
-	{ title = "Guild wars come after launch",
-		text = "After a race, a guild on the side that doesn't hold the zone can declare war and siege the zone. That arrives after launch; until then the races are the whole of it. Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting.\n\n"
+	-- Guild wars: the site runs none yet, so the stops marked sample show a made-up war (GuildWars:StartSample; WarSample.lua),
+	-- tagged Sample in the window's title bar; where the site does run wars they show the real ones
+	{ title = "Zones", page = "warzones", mark = "warzones", sample = true,
+		text = "After a race, a guild can win a zone. Zones lists every zone of the campaign: who holds it, since when, whether it is protected, and what comes next there, a race or a war. A zone is protected for 3 days after a war.\n\n"
+			.."Wars are not on yet, so this screen and the next three show a sample. Every guild in it is called Sample; none of it is real." },
+	{ title = "A war", page = "war1", mark = { "warbar", "warlanes" }, sample = true,
+		text = "The tab of a guild's war. The bar runs from the race to the result; its Battle note is the half-hour, after 15 minutes of prep.\n\n"
+			.."Attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win. Turnout counts each guild's players here." },
+	{ title = "War Marks", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, sample = true,
+		text = "War Marks buy cosmetics, never power. You earn them from races, wars, bounties and weekly boards, up to 150 a day.\n\n"
+			.."The guild's leader sets a tax from 0 to 25%. It sends part of each earning to the guild's treasury first, and the whole earning still counts toward the 150. The treasury pays the stake a guild puts on a war." },
+	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, sample = true,
+		text = "War officers declare, pick the time, accept or withdraw, and set the roster. By default they are the guild master and every rank that can invite. The guild master adds or leaves out people; everyone sees the list.\n\n"
+			.."To declare, a guild needs 10% of its side's influence in the race, 5 members with the app, and a treasury that holds the stake." },
+	{ title = "Bystanders and witnesses", page = "guildwars",
+		text = "Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting. Only the two rosters take and hold points; everyone else fights freely.\n\n"
+			.."Wars switch on after launch.\n\n"
 			.."That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
 Tour.STOPS = Tour.SETS.first
@@ -142,6 +158,38 @@ function Tour:Close(done)
 	end
 end
 
+---Ends the sample war, and the window leaves its pages.
+function private.EndSample()
+	if GuildWars:Sampling() then
+		GuildWars:StopSample()
+		private.Tag(false)
+		if UI:IsShown() then
+			UI:Refresh()
+		end
+	end
+end
+
+---The Sample tag in the window's title bar, beside the lights, while the tour shows the sample war.
+---@param on boolean
+function private.Tag(on)
+	if not on then
+		if private.tag then
+			private.tag:Hide()
+		end
+		return
+	end
+	local anchor = UI:MarkFrame("app")
+	if not private.tag and anchor then
+		private.tag = W:Pill(UI:GetFrame())
+		private.tag:SetFrameLevel(UI:GetFrame():GetFrameLevel() + 30)
+		private.tag:SetPoint("RIGHT", anchor, "LEFT", -10, 0)
+		W:Explain(private.tag, "Sample", "The tour is showing a made-up war so you can see the screens. Nothing here is real, and nothing you click is sent.")
+	end
+	if private.tag then
+		private.tag:Set("SAMPLE", C.amber)
+	end
+end
+
 ---Shows a page: the window's page behind, the marks bordered, the text and the buttons.
 function private.Go(page)
 	local f, stops = private.frame, Tour.SETS[private.set]
@@ -152,6 +200,13 @@ function private.Go(page)
 	f.title:SetText(stop.title)
 	f.body:SetText(stop.text)
 	f.back:SetEnabled(page > 1)
+	-- A sample war while the site runs none; a stop without one ends it
+	if stop.sample then
+		GuildWars:StartSample()
+	else
+		private.EndSample()
+	end
+	private.Tag(stop.sample and GuildWars:Sampling())
 	if stop.page then
 		UI:Show(stop.page)
 	end
@@ -287,6 +342,7 @@ function private.Create()
 	f.close:SetPoint("TOPRIGHT", -10, -10)
 	f:SetScript("OnShow", function() private.Place() end)
 	f:SetScript("OnHide", function()
+		private.EndSample()
 		private.Unmark()
 		if private.waitTicker then
 			private.waitTicker:Cancel()

@@ -17501,8 +17501,8 @@ end)()
 	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
 	local text = body and body._text or ""
 	local note = ns.WHATS_NEW[1]
-	check(note.version == "1.28.0" and note.signed and text:find("— Chris aka xmadness", 1, true), "1.28.0's note is signed")
-	check(not text:find("The maintainers of Wanted", 1, true), "with no author line under its sign-off")
+	check(note.version == "1.28.0" and note.signed == nil and not text:find("aka", 1, true), "1.28.0's note uses the default sign-off")
+	check(text:find("The maintainers of Wanted", 1, true), "with the maintainers' line under it")
 	_G.WantedWhatsNewFrame:Hide()
 end)()
 print("wanted smoke: setup checks pass")

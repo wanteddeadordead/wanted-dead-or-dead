@@ -17,12 +17,10 @@ local private = {}
 Wanted.WHATS_NEW = {
 	{
 		version = "1.28.0",
-		signed = true, -- the note ends with its own sign-off, so no "The maintainers of Wanted" under it
 		note = "Thank you to everyone who helped test Wanted during the beta. Your bug reports, screenshots and ideas "
 			.."made this release. The beta ends on Wednesday, October 21, and this is the last beta release.\n\n"
 			.."Next comes guild wars. After launch, guilds will fight over the zones of Azeroth, and each zone's owner goes on "
-			.."the war map at wanteddeadordead.com.\n\n"
-			.."— Chris aka xmadness",
+			.."the war map at wanteddeadordead.com.",
 		lines = {
 			"A new look: Inter text, themes that recolour at once, and a UI size in Settings > Theme.",
 			"Influence races every night at 7:00, 7:50 and 8:40 PM ET, under Guild Wars in the menu (needs the Wanted app).",

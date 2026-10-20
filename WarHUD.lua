@@ -88,7 +88,8 @@ function private.Build(sample)
 	local middle = STRIP_TOP - LANE_ROW
 	f.rally = private.Seal(body, 24)
 	f.rally:SetPoint("CENTER", f, "TOPLEFT", RALLY_X, middle)
-	f.keep = private.Seal(body, 34)
+	f.keep = GuildWars:NewCrest(body)
+	f.keep:SetSize(34, 34)
 	f.keep:SetPoint("CENTER", f, "TOPLEFT", KEEP_X, middle)
 	f.keepHit = CreateFrame("Frame", nil, body)
 	f.keepHit:SetSize(34, 34)
@@ -270,8 +271,13 @@ function private.Draw(f, war, zone, x, y, mapId, now, sample)
 		row.inhibPct:SetText(not prep and private.Pct(inhib, estimate[ids[row.id.."inhibitor"]]) or "")
 	end
 	local keep = type(b.keep) == "table" and b.keep.state or "sealed"
-	f.keep:SetTexture(GuildWars:KeepFile(keep, d, a))
-	f.keep:SetDesaturated(prep)
+	-- The defenders' crest, the keep's state a ring on it; their side's keep art until their tabard is known
+	f.keep:SetGuild(defender)
+	f.keep:SetDesaturated(false)
+	f.keep:SetKeep(keep, d, a)
+	if prep then
+		f.keep:SetDesaturated(true)
+	end
 	W:Explain(f.keepHit, "The keep", keep == "open" and "Open: one inhibitor down. Take it to win." or keep == "fallen" and "Taken: the attackers won."
 		or "Sealed until an inhibitor falls.", "ANCHOR_BOTTOM")
 	-- Friends here

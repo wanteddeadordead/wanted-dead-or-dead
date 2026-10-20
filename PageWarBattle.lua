@@ -34,16 +34,16 @@ function private.Point(point, role, defender, attacker)
 	return GuildWars.MEDIA..(role == "tower" and ("tower-"..d) or ("inhib-"..d)), "standing"
 end
 
----The keep's seal and its line.
+---The keep's state ("sealed", "open" or "fallen"), its line, and the two sides' codes; the crest paints the seal.
 function private.Keep(keep, defender, attacker)
 	keep = type(keep) == "table" and keep or {}
 	local d, a = SIDE[defender] or "horde", SIDE[attacker] or "alliance"
 	if keep.state == "fallen" then
-		return GuildWars.MEDIA.."nexus-keep-fallen-to-"..a, "fell"..(type(keep.at) == "number" and (" at "..GuildWars:Clock(keep.at)) or "")
+		return "fallen", "fell"..(type(keep.at) == "number" and (" at "..GuildWars:Clock(keep.at)) or ""), d, a
 	elseif keep.state == "open" then
-		return GuildWars.MEDIA.."nexus-keep-open-"..d, "open"..(type(keep.since) == "number" and (" since "..GuildWars:Clock(keep.since)) or "")
+		return "open", "open"..(type(keep.since) == "number" and (" since "..GuildWars:Clock(keep.since)) or ""), d, a
 	end
-	return GuildWars.MEDIA.."nexus-keep-sealed-"..d, "sealed"
+	return "sealed", "sealed", d, a
 end
 
 ---Go to the rally: a waypoint on the player's side's rally point; the defenders' is their keep.
@@ -91,7 +91,7 @@ GuildWars.PANELS.battle = {
 			end
 			panel.lanes[i] = row
 		end
-		panel.keep = lanes:CreateTexture(nil, "ARTWORK")
+		panel.keep = GuildWars:NewCrest(lanes)
 		panel.keep:SetSize(56, 56)
 		panel.keep:SetPoint("TOPLEFT", 420, -50)
 		panel.keepName = Theme:Text(lanes, "body", "The keep", C.text)
@@ -200,9 +200,13 @@ GuildWars.PANELS.battle = {
 				row[role].text:SetText(prep and "" or line)
 			end
 		end
-		local keepTexture, keepLine = private.Keep(b.keep, defender.faction, attacker.faction)
-		panel.keep:SetTexture(keepTexture)
-		panel.keep:SetDesaturated(prep)
+		local keepState, keepLine, kd, ka = private.Keep(b.keep, defender.faction, attacker.faction)
+		panel.keep:SetGuild(defender)
+		panel.keep:SetDesaturated(false)
+		panel.keep:SetKeep(keepState, kd, ka)
+		if prep then
+			panel.keep:SetDesaturated(true)
+		end
 		panel.keepLine:SetText(prep and "" or Theme:Colorize(keepLine, type(b.keep) == "table" and b.keep.state == "open" and C.amber or C.muted))
 		W:Explain(panel.keepName, "The keep", "One inhibitor down opens it; it pulses orange on the map. Take it to win.")
 		-- Turnout: ours first

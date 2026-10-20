@@ -460,7 +460,6 @@ function private.Piece(spec)
 		b.icon:SetAllPoints()
 		-- A guild's own crest in place of the icon (spec.guild)
 		b.crest = GuildWars:NewCrest(b, "OVERLAY")
-		b.crest:SetAllPoints()
 		b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		b.label:SetPoint("LEFT", b, "RIGHT", 2, 0)
 		b:SetScript("OnEnter", private.OnEnterPiece)
@@ -482,7 +481,17 @@ function private.Piece(spec)
 	button.crest:SetShown(spec.guild ~= nil)
 	button.icon:SetShown(spec.guild == nil)
 	if spec.guild then
+		-- Its own size, so the crest knows when it is small
+		button.crest:ClearAllPoints()
+		button.crest:SetPoint("CENTER")
+		button.crest:SetSize(size, size)
 		button.crest:SetGuild(spec.guild)
+		button.crest:SetDesaturated(false)
+		-- A keep: the crest of those who hold it, its state a ring
+		button.crest:SetKeep(spec.keep, spec.d, spec.a)
+		if spec.desaturated then
+			button.crest:SetDesaturated(true)
+		end
 	end
 	button.icon:SetTexture(spec.texture)
 	button.icon:SetDesaturated(spec.desaturated == true)
@@ -570,6 +579,8 @@ function private.DrawWar(war, zone, place, now)
 			local spec = { fx = fx, fy = fy, px = SEAL_PX, desaturated = prep, waypoint = tag == "" and { mapId = zone.mapId, x = p.x, y = p.y } or nil }
 			if p.role == "keep" then
 				spec.texture, spec.px = GuildWars:KeepFile(keep, d, a), KEEP_PX
+				-- The defenders' crest, the keep's state a ring on it (their side's keep art until the tabard is known)
+				spec.guild, spec.keep, spec.d, spec.a = defender, keep, d, a
 				spec.title = tag.."The keep · "..p.name
 				spec.lines = { { keep == "open" and "Open: pulses orange. Take it to win." or keep == "fallen" and ("Taken by "..(attacker.guild or "the attackers")) or "Sealed until an inhibitor falls." } }
 			elseif p.role == "rally" then
@@ -620,20 +631,23 @@ function private.ZoneIcon(zone, fx, fy, now)
 	local holder = info and info.holder
 	local war = private.WarShown(zone)
 	local race = WarMap:RacesShown() and private.RaceFor(zone.mapId, now) or nil
-	local texture
+	local piece = { fx = fx, fy = fy, px = ICON_PX, title = zone.name, lines = private.ZoneLines(zone, now) }
 	if war and war.battle and war.battle.prep and now < (war.battle.stop or 0) then
-		local d = SIDE[type(war.defender) == "table" and war.defender.faction] or "alliance"
-		local a = SIDE[type(war.attacker) == "table" and war.attacker.faction] or "horde"
+		-- A war: the keep, the defenders' crest with its state
 		local _, keep = private.Lanes(war)
-		texture = GuildWars:KeepFile(keep, d, a)
+		piece.guild, piece.keep = war.defender or {}, keep
+		piece.d = SIDE[type(war.defender) == "table" and war.defender.faction] or "alliance"
+		piece.a = SIDE[type(war.attacker) == "table" and war.attacker.faction] or "horde"
 	elseif race then
-		texture = GuildWars.MEDIA.."race-"..(now < race.start and "neutral" or "contested")
-	end
-	if texture then
-		private.Piece({ fx = fx, fy = fy, px = ICON_PX, texture = texture, title = zone.name, lines = private.ZoneLines(zone, now) })
+		piece.texture = GuildWars.MEDIA.."race-"..(now < race.start and "neutral" or "contested")
 	elseif holder and holder.guild then
 		-- The holder's own crest (its tabard), else its side's emblem
-		private.Piece({ fx = fx, fy = fy, px = ICON_PX, guild = holder, title = zone.name, lines = private.ZoneLines(zone, now) })
+		piece.guild = holder
+	else
+		piece = nil
+	end
+	if piece then
+		private.Piece(piece)
 	end
 	if Wanted.StatsMap:Shown() then
 		private.StatsBadge(zone, fx, fy, now)

@@ -15391,12 +15391,12 @@ end)()
 	mapId, px, py = 1424, 0.523, 0.309
 	-- Like a battleground's: "Towers: N" a side, the tower icon from the widgets' atlas, under the top-centre widgets; the
 	-- capture bar's spark at the holder's end; the map icons from POIIcons by index; announcements in the BG system's way
-	local realTexture, realRaid, realUtil, realTop, realAnnounce = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame
+	local realTexture, realRaid, realUtil, realTop, realAnnounce = C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedAnnounceFrame
 	local atlases, announced, poi = {}, {}, {}
 	C_Texture = { GetAtlasInfo = function(name) return { width = 32, height = 32, name = name } end }
 	C_Minimap.GetPOITextureCoords = function(i) poi[#poi + 1] = i return 0, 0.1, 0, 0.1 end
 	-- Our own frame from the RaidWarning template; the game's own is never touched
-	WantedCaptureAnnounceFrame = { AddMessage = function(_, text, color, _, kind) announced[#announced + 1] = text.."|"..tostring(kind).."|"..tostring(color and color.r) end }
+	WantedAnnounceFrame = { AddMessage = function(_, text, color, _, kind) announced[#announced + 1] = text.."|"..tostring(kind).."|"..tostring(color and color.r) end }
 	RaidWarningFrame = { AddMessage = function() error("the global RaidWarningFrame was used") end }
 	RaidWarningUtil = { MessageType = { BGSystem = 3 } }
 	UIWidgetTopCenterContainerFrame = NewMock()
@@ -15419,7 +15419,7 @@ end)()
 	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Seven")
 	C:OnPeer({ p = "hb-bot-3", s = math.floor(clock / C.SLOT_SECONDS), c = 4 }, "Ally Eight")
 	check(#announced >= 1 and announced[#announced]:find("Your side is attacking the enemy Bot Tower|3|1", 1, true), "announced as a battleground does, gold without the chat colours: "..table.concat(announced, "; "))
-	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedCaptureAnnounceFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop, realAnnounce
+	Methods.SetAtlas, C_Texture, RaidWarningFrame, RaidWarningUtil, UIWidgetTopCenterContainerFrame, WantedAnnounceFrame = realSetAtlas, realTexture, realRaid, realUtil, realTop, realAnnounce
 	C_Minimap.GetPOITextureCoords = nil
 	ns.Alerts.Warn = function(_, title, sub) warned[#warned + 1] = title.." | "..tostring(sub) end
 	-- The site's holders at login, and what changed since the addon last showed them, in the MOBA way
@@ -15432,14 +15432,14 @@ end)()
 		"the site's holders are taken, unknown points and sides left out")
 	check(Warned("Enemy Mid Inhibitor down") and not Warned("Your Mid"), "the biggest news is the alert: "..table.concat(warned, "; "))
 	check(C:CanAttack("Horde", P("hb-alliance")) and not C:Winner(C.FRONTS[2]), "an inhibitor down opens the Nexus")
-	-- The announcement frame (CapturesHUD.xml, from Blizzard's template, which registers the BG system events) has them
+	-- The announcement frame (WarAlerts.xml, from Blizzard's template, which registers the BG system events) has them
 	-- all unregistered at load, which also runs on a Normal-ruleset character where nothing is enabled
 	local announceEvents = { CHAT_MSG_BG_SYSTEM_ALLIANCE = true, CHAT_MSG_BG_SYSTEM_HORDE = true }
-	local realAnnounceFrame = WantedCaptureAnnounceFrame
-	WantedCaptureAnnounceFrame = { UnregisterAllEvents = function() wipe(announceEvents) end }
-	ns.CapturesHUD:OnLoad()
+	local realAnnounceFrame = WantedAnnounceFrame
+	WantedAnnounceFrame = { UnregisterAllEvents = function() wipe(announceEvents) end }
+	ns.WarAlerts:OnLoad()
 	check(next(announceEvents) == nil, "the announcement frame listens to nothing of the game's")
-	WantedCaptureAnnounceFrame = realAnnounceFrame
+	WantedAnnounceFrame = realAnnounceFrame
 	-- At login the catch-up is read (Catchup) before the HUD is enabled (it comes later in the .toc): the news waits, and
 	-- what the addon showed isn't marked until the HUD takes it
 	local tocOrder, at = {}, 0
@@ -18771,8 +18771,8 @@ end
 	local announced = {}
 	ns.Toast.Add = function(_, t) toasts[#toasts + 1] = t.kind..": "..t.name..". "..(t.detail or "") end
 	ns.Alerts.Warn = function(_, text) announced[#announced + 1] = text end
-	local realAnnounce = WantedCaptureAnnounceFrame
-	WantedCaptureAnnounceFrame = nil
+	local realAnnounce = WantedAnnounceFrame
+	WantedAnnounceFrame = nil
 	ns.db.warSeen = {}
 	AtStep(function() end)
 	check(toasts[#toasts] and toasts[#toasts]:find("^DRAWN: Hillsbrad%. EMPIRE attacks Hillsbrad; Revenant picks the time by"), "drawn: told: "..tostring(toasts[#toasts]))
@@ -18893,7 +18893,7 @@ end
 	AtStep(function() end)
 	check(#toasts == told, "notifications off: none")
 	ns.db.settings.warToasts = nil
-	ns.Toast.Add, ns.Alerts.Warn, WantedCaptureAnnounceFrame = realAdd, realWarn, realAnnounce
+	ns.Toast.Add, ns.Alerts.Warn, WantedAnnounceFrame = realAdd, realWarn, realAnnounce
 	C_Map.GetBestMapForUnit, C_Map.GetPlayerMapPosition = realBest, realPos
 	clock = warClock
 	UnitName, WantedAppInfo = realName, realInfo

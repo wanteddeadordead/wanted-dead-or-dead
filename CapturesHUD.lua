@@ -5,7 +5,7 @@
 -- minimap (the CaptureBar widget's "factions" art: Alliance fill left, Horde right, the spark moving as a side takes
 -- it): how far our side is toward taking it, as our side's channel tells it (provisional; the site decides), or why the
 -- player's presence doesn't count. Announcements in the middle of the screen the way a battleground's are, on our own
--- frame made from Blizzard's RaidWarningFrameTemplate (CapturesHUD.xml), worded the MOBA way. Our own frames only,
+-- frame made from Blizzard's RaidWarningFrameTemplate (WarAlerts.xml), worded the MOBA way. Our own frames only,
 -- nothing protected and nothing of Blizzard's touched: safe in combat.
 
 local _, Wanted = ...
@@ -63,15 +63,6 @@ local LANE_ICON = 18
 -- ============================================================================
 -- Lifecycle
 -- ============================================================================
-
----At load, before anything else and also on a Normal-ruleset character where Wanted stays idle: our announcement frame
----(made from Blizzard's template, which registers the BG system message events) shows only what Wanted gives it, never
----the game's own messages.
-function CapturesHUD:OnLoad()
-	if WantedCaptureAnnounceFrame then
-		WantedCaptureAnnounceFrame:UnregisterAllEvents()
-	end
-end
 
 function CapturesHUD:OnEnable()
 	if not Wanted:SiegeOn() then
@@ -252,7 +243,7 @@ function private.Place(bar)
 	capture:ClearAllPoints()
 	capture:SetPoint("TOP", bar, "BOTTOM", 0, -6)
 	-- The announcements under the capture bar's line, never over it (the XML's fixed spot crossed it, 2026-10-16)
-	local announce = WantedCaptureAnnounceFrame
+	local announce = WantedAnnounceFrame
 	if announce and announce.ClearAllPoints and announce.SetPoint then
 		announce:ClearAllPoints()
 		announce:SetPoint("TOP", capture, "BOTTOM", 0, -30)
@@ -531,7 +522,7 @@ end
 local GOLD = { r = 1, g = 0.82, b = 0 }
 
 ---Announces in the middle of the screen as a battleground does: on our own frame from Blizzard's RaidWarningFrameTemplate
----(WantedCaptureAnnounceFrame, CapturesHUD.xml, BG system messages only), in that side's BG system colour, and plays its
+---(WantedAnnounceFrame, WarAlerts.xml, BG system messages only), in that side's BG system colour, and plays its
 ---sound: key from ALERTS, what (the role, for the title), sub (where, in chat). Falls back to Wanted's own warning when
 ---the frame isn't there.
 function private.Alert(key, what, sub)
@@ -543,7 +534,7 @@ function private.Alert(key, what, sub)
 	if type(info) ~= "table" or type(info.r) ~= "number" or type(info.g) ~= "number" or type(info.b) ~= "number" then
 		info = GOLD
 	end
-	local frame = WantedCaptureAnnounceFrame
+	local frame = WantedAnnounceFrame
 	local shown = frame and frame.AddMessage and RaidWarningUtil and RaidWarningUtil.MessageType
 		and pcall(frame.AddMessage, frame, text, info, nil, RaidWarningUtil.MessageType.BGSystem)
 	if not shown then

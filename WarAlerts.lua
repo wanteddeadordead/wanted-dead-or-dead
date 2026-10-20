@@ -13,7 +13,12 @@ local private = {}
 local GOLD = { r = 1, g = 0.82, b = 0 }
 local HOUR, PREP = 3600, 15 * 60
 
+---Made from Blizzard's template, which registers the BG system message events, the announcement frame
+---(WarAlerts.xml) shows only what Wanted gives it, never the game's own messages.
 function WarAlerts:OnLoad()
+	if WantedAnnounceFrame then
+		WantedAnnounceFrame:UnregisterAllEvents()
+	end
 	-- What was told of each war (and race to declare on), by its id
 	Wanted.db.warSeen = type(Wanted.db.warSeen) == "table" and Wanted.db.warSeen or {}
 end
@@ -38,12 +43,12 @@ function private.Tell(index, kind, name, detail)
 	Wanted:Print("Guild war: %s%s", name, detail and (". "..detail) or "")
 end
 
----A line on the announcement frame (the capture fronts', which shows in a fight), else the warning line, and a sound.
+---A line on the announcement frame (WarAlerts.xml, which shows in a fight), else the warning line, and a sound.
 function private.Announce(text)
 	if not private.On() then
 		return
 	end
-	local frame = WantedCaptureAnnounceFrame
+	local frame = WantedAnnounceFrame
 	local shown = frame and frame.AddMessage and RaidWarningUtil and RaidWarningUtil.MessageType
 		and pcall(frame.AddMessage, frame, text, GOLD, nil, RaidWarningUtil.MessageType.BGSystem)
 	if not shown and Wanted.Alerts then

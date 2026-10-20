@@ -126,11 +126,11 @@ CapturesMap.lua
 StatsMap.lua
 WarMap.lua
 CapturesHUD.lua
-CapturesHUD.xml
 RacesHUD.lua
 WarHUD.lua
 ZoneHUD.lua
 WarBanner.lua
+WarAlerts.xml
 WarAlerts.lua
 WarLive.lua
 Minimap.lua

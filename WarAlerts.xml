@@ -1,10 +1,10 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<!-- The capture fronts' announcements, in the middle of the screen as a battleground's are: our own frame from
+	<!-- The guild wars' announcements, in the middle of the screen as a battleground's are: our own frame from
 	     Blizzard's RaidWarningFrameTemplate, set up as the Commentator's event alerts are (Blizzard_Commentator's
 	     CommentatorEventAlertsFrame), for the BG system message type only, where RaidWarningFrame sits. The global
-	     RaidWarningFrame is never touched. Its events are unregistered in CapturesHUD.lua: it shows only what Wanted
+	     RaidWarningFrame is never touched. Its events are unregistered in WarAlerts.lua: it shows only what Wanted
 	     gives it. -->
-	<Frame name="WantedCaptureAnnounceFrame" inherits="RaidWarningFrameTemplate" parent="UIParent" frameStrata="HIGH" toplevel="true">
+	<Frame name="WantedAnnounceFrame" inherits="RaidWarningFrameTemplate" parent="UIParent" frameStrata="HIGH" toplevel="true">
 		<KeyValues>
 			<KeyValue key="maxMessageSlots" value="2" type="number"/>
 			<KeyValue key="maxTotalLines" value="4" type="number"/>

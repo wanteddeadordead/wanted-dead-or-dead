@@ -15503,11 +15503,11 @@ end)()
 	local entries = {}
 	for _, item in ipairs(_G.WantedMenu.items) do
 		local def = rawget(item, "def")
-		if def and item._shown then entries[def.text:gsub("^%[.-%]%s+", "")] = def end
+		if def and item._shown then entries[def.text] = def end
 	end
-	check(entries["Enemy sightings"] and entries["Capture fronts"] and entries["Guild wars and races"] and entries["Open Wanted"] and entries["Map settings..."],
+	check(entries["Enemy sightings"] and entries["Capture points"] and entries["Guild wars and races"] and entries["Open Wanted"] and entries["Map settings..."],
 		"right click: a checkbox for each layer, Open Wanted and Map settings")
-	entries["Capture fronts"].onClick()
+	entries["Capture points"].onClick()
 	check(Same(true, false, true) and ns.Captures:Settings().map == false, "the menu switches one layer")
 	entries["Enemy sightings"].onClick()
 	entries["Guild wars and races"].onClick()

@@ -6,7 +6,7 @@
 
 ## [1.28.0] - 2026-10-19
 
-- A Wanted button on the world map, in the corner with the map's own buttons: left click shows or hides everything Wanted draws there, right click opens a menu with a checkbox for enemy sightings, capture fronts and guild wars and races, plus Open Wanted and Map settings. It replaces the separate capture fronts and guild wars buttons. New file: restart the client after updating.
+- A Wanted button on the world map, in the corner with the map's own buttons: left click shows or hides everything Wanted draws there, right click opens a menu with a checkbox for enemy sightings, capture points and guild wars and races, plus Open Wanted and Map settings. It replaces the separate capture fronts and guild wars buttons. New file: restart the client after updating.
 - Zone HUD: in a campaign zone while wars are on, a small frame shows who holds the zone, since when, its protection, and what comes next there. The war and race HUDs take its place when they show. Off, and sized, in Settings, Guild wars. New file: restart the client after updating.
 - The zone, race, war and capture HUDs move and hide alike: drag one where you want it (Settings, Reset HUD positions puts them back), fold it to one line with its chevron, hide it with its X or /wanted hud (all) or /wanted hud zone, race, war or capture; each is also a switch in Settings. New file: restart the client after updating.
 - Thank you to everyone who helped test Wanted during the beta. The beta ends on Friday, October 23, and this is the last beta release.

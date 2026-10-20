@@ -80,9 +80,9 @@ Tour.SETS.first = {
 	{ title = "The roster", page = "war1", mark = { "warbar", "warpanel-roster" }, sample = "roster",
 		text = "Each guild picks up to 40 players. Only the roster takes and holds points. Players sign up first; the officers pick from the sign-ups, keep some on standby, and can invite allies from another guild of the same side.\n\n"
 			.."The roster locks when the battle starts." },
-	{ title = "The battle", page = "war1", mark = "warlanes", sample = "battle", hud = true,
+	{ title = "The battle", page = "war1", mark = "warlanes", sample = "battle", hud = true, map = true,
 		text = "15 minutes of prep, then 30 of battle. The attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win.\n\n"
-			.."Turnout counts each guild's players here; friends are on neither roster. In the war's zone, the frame at the top of the screen (shown now) is the war HUD." },
+			.."Turnout counts each guild's players here; friends are on neither roster. The frame at the top of the screen (shown now) is the war HUD, and the world map shows the same war." },
 	{ title = "The result", page = "war1", mark = { "warbar", "warpanel-result" }, sample = "result",
 		text = "The site counts the result. The winner holds the zone, protected for 3 days. If the attackers win, their stake comes back; if the defenders hold, the stake is theirs.\n\n"
 			.."The site pays War Marks to the roster players who were there." },
@@ -92,8 +92,8 @@ Tour.SETS.first = {
 	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, sample = "battle",
 		text = "War officers declare, pick the time, accept or withdraw, and set the roster. By default they are the guild master and every rank that can invite. The guild master adds or leaves out people; everyone sees the list.\n\n"
 			.."To declare, a guild needs 10% of its side's influence in the race, 5 members with the app, and a treasury that holds the stake." },
-	{ title = "Bystanders and witnesses", page = "war1", mark = "warlanes", sample = "battle", hud = true,
-		text = "Anyone in a war's zone sees the war HUD, whatever their guild. Wanted also witnesses the war points for the site: it reports the players it sees there, even if your guild isn't fighting.\n\n"
+	{ title = "Bystanders and witnesses", page = "warzones", mark = "warzones", sample = "battle", zoneHud = true,
+		text = "Anyone in a campaign zone sees the zone HUD (shown now), whatever their guild; while a war is on there, the war HUD takes its place. Wanted also witnesses the war points for the site: it reports the players it sees there, even if your guild isn't fighting.\n\n"
 			.."The site counts a roster player in full only when another computer saw them at the point, so witnesses keep the count honest." },
 	{ title = "That's the tour", page = "guildwars",
 		text = "That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
@@ -177,7 +177,7 @@ end
 
 ---Ends the sample war, and the window leaves its pages.
 function private.EndSample()
-	private.Huds(false)
+	private.Huds({})
 	if GuildWars:Sampling() then
 		GuildWars:StopSample()
 		private.Tag(false)
@@ -187,21 +187,30 @@ function private.EndSample()
 	end
 end
 
----The sample HUDs: the war HUD (and the zone HUD, where this version has one) as a SAMPLE copy while a stop with hud is
----up; none otherwise. Shown only for the sample war, never over a real one.
----@param on boolean
-function private.Huds(on)
-	local war = on and GuildWars:Sampling() and GuildWars.Page:War(1) or nil
-	if war and war.sample then
+---The sample overlays: the war HUD at a stop with hud, the zone HUD at a stop with zoneHud, each a SAMPLE copy of its
+---own, and the war on the world map at a stop with map; none otherwise. Only for the sample war, never over a real one.
+---@param stop table
+function private.Huds(stop)
+	local war = GuildWars:Sampling() and GuildWars.Page:War(1) or nil
+	war = war and war.sample and war or nil
+	local zone
+	for _, row in ipairs(war and GuildWars.Page:Zones() or {}) do
+		zone = zone or (row.zone == war.zone and row) or nil
+	end
+	if war and stop.hud then
 		Wanted.WarHUD:ShowSample(war)
-		if Wanted.ZoneHUD and Wanted.ZoneHUD.ShowSample then
-			Wanted.ZoneHUD:ShowSample(war)
-		end
 	else
 		Wanted.WarHUD:HideSample()
-		if Wanted.ZoneHUD and Wanted.ZoneHUD.HideSample then
-			Wanted.ZoneHUD:HideSample()
-		end
+	end
+	if zone and stop.zoneHud then
+		Wanted.ZoneHUD:ShowSample(zone)
+	else
+		Wanted.ZoneHUD:HideSample()
+	end
+	if war and zone and stop.map then
+		Wanted.WarMap:ShowSample(war, zone)
+	else
+		Wanted.WarMap:HideSample()
 	end
 end
 
@@ -249,7 +258,7 @@ function private.Go(page)
 	if stop.nearby and Wanted.NearbyWindow and not Wanted.NearbyWindow:IsShown() then
 		Wanted.NearbyWindow:Toggle()
 	end
-	private.Huds(stop.hud == true)
+	private.Huds(stop)
 	private.Mark(stop.mark)
 	private.Wait(stop)
 end

@@ -17249,7 +17249,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		ns.db.tour = nil
 		ns:RunCommand("tour", "")
 		f = WantedTourFrame
-		check(Tour:IsShown() and f.counter._text == "First steps · 1 of "..#Tour.STOPS and ns.UI:IsShown("home"), "the tour opens on the Dashboard: "..tostring(f.counter._text))
+		check(Tour:IsShown() and f.counter._text == "First steps · 1 of 14" and ns.UI:IsShown("home"), "the tour opens on the Dashboard: "..tostring(f.counter._text))
 		-- The races and guild wars: four stops on Guild Wars, the wars after launch; no stop for the old siege nights
 		local titles, guildWars = {}, 0
 		for _, stop in ipairs(Tour.STOPS) do
@@ -17258,7 +17258,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 			check(stop.page ~= "siege" and not stop.text:find("siege front", 1, true), "no stop describes the old siege nights: "..stop.title)
 		end
 		local all = table.concat(titles, ", ")
-		check(guildWars == 4 and all:find("Tonight's races, Influence, The race HUD, Live numbers, Guild wars come after launch", 1, true), "the tour's race stops: "..all)
+		check(guildWars == 5 and all:find("Tonight's races, Influence, The race HUD, Live numbers, Zones, A war, War Marks, Guild, Bystanders and witnesses", 1, true), "the tour's race and war stops: "..all)
 		check(Setup.cards.home and f.title._text == "Welcome to Wanted", "the first page welcomes")
 		f.next:Click()
 		check(f.counter._text:find("2 of", 1, true) and ns.UI:IsShown("home"), "the lights page stays on the Dashboard")
@@ -17288,6 +17288,22 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 		for _ = 1, #Tour.STOPS do f.next:Click() end
 		ns.PromptForApp = realPrompt
 		check(not Tour:IsShown() and ns.db.tour.done and prompted, "Finish on the last page ends it with the app prompt")
+		-- Wars off: the war stops are skipped, the last stop shown carries the closing words, and it ends cleanly
+		ns.db.tour = nil
+		ns:RunCommand("tour", "")
+		local shown = {}
+		for page = 1, 14 do
+			shown[#shown + 1] = f.title._text
+			if page == 14 then
+				check(f.body._text:find("That's the tour.", 1, true) and f.next:GetText() == "Finish", "the last stop shown, "..f.title._text..", says the tour ends")
+			end
+			ns.PromptForApp = function() end
+			f.next:Click()
+			ns.PromptForApp = realPrompt
+		end
+		local list = table.concat(shown, ", ")
+		check(not Tour:IsShown() and not list:find("Zones", 1, true) and not list:find("A war", 1, true) and not list:find("Guild,", 1, true)
+			and not list:find("Bystanders", 1, true) and shown[14] == "Live numbers", "wars off: no war stop, ends cleanly: "..list)
 	end
 	-- The poker tour: the first Poker page opens it; Next waits for a table to be hosted; the table's bar and log are
 	-- marked once it is; /wanted tour poker comes back where it was; Finish ends it without the app prompt
@@ -18546,6 +18562,53 @@ end
 	G:Take(nil)
 	ns.Races:Take(nil)
 	ns.db.warActions = {}
+	ns.UI:GetFrame():Hide()
+end)()
+-- The tour's war stops, on the real data: each shown where its screen exists, all reached with a war on
+;(function()
+	local G, Tour = ns.GuildWars, ns.Tour
+	local realInGuild = IsInGuild
+	IsInGuild = function() return true end
+	ns.Races:Take(GuildWarsRaces(clock))
+	G:Take(GuildWarsSample(clock))
+	ns.db.tour = nil
+	ns:RunCommand("tour", "")
+	local f = WantedTourFrame
+	local titles = {}
+	local realPrompt = ns.PromptForApp
+	ns.PromptForApp = function() end
+	local total = tonumber(f.counter._text:match("of (%d+)$"))
+	check(total == 19, "wars on, in a guild, a war listed: every stop is shown: "..tostring(total))
+	for page = 1, total do
+		titles[#titles + 1] = f.title._text
+		local stop = Tour.STOPS[page]
+		if stop.title == "Zones" or stop.title == "A war" or stop.title == "War Marks" or stop.title == "Guild" then
+			for _, name in ipairs(type(stop.mark) == "table" and stop.mark or { stop.mark }) do
+				local frame = ns.UI:MarkFrame(name)
+				check(frame and frame:IsVisible(), stop.title.." marks "..name.." on screen")
+			end
+			check(ns.UI:IsShown(stop.page), stop.title.." opens its page")
+		end
+		if page == total then
+			check(f.title._text == "Bystanders and witnesses" and f.body._text:find("That's the tour.", 1, true) and f.body._text:find("witnesses the war points", 1, true), "the last stop: the bystander role, then the closing words")
+		end
+		f.next:Click()
+	end
+	ns.PromptForApp = realPrompt
+	check(not Tour:IsShown() and table.concat(titles, ","):find("Zones,A war,War Marks,Guild,Bystanders and witnesses", 1, true), "with a war on, every war stop is reached: "..table.concat(titles, ","))
+	-- Not in a guild: no Guild stop; no war: no war tab
+	IsInGuild = function() return false end
+	local noWar = GuildWarsSample(clock)
+	noWar.wars, noWar.declare = nil, nil
+	G:Take(noWar)
+	ns.db.tour = nil
+	ns:RunCommand("tour", "")
+	check(f.counter._text:match("of (%d+)$") == "17", "wars on, no guild and no war: the Guild and war tab stops are skipped: "..f.counter._text)
+	f.close:Click()
+	IsInGuild = realInGuild
+	G:Take(nil)
+	ns.Races:Take(nil)
+	ns.db.tour = nil
 	ns.UI:GetFrame():Hide()
 end)()
 print("wanted smoke: guild wars checks pass")

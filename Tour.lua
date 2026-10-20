@@ -8,6 +8,7 @@
 local _, Wanted = ...
 local UI = Wanted.UI
 local Theme = Wanted.Theme
+local GuildWars = Wanted.GuildWars
 local W = Wanted.Widgets
 local C = Theme.C
 local Tour = Wanted:NewModule("Tour")
@@ -61,11 +62,43 @@ Tour.SETS.first = {
 	{ title = "Live numbers", page = "guildwars", mark = "racecard",
 		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
 			.."The other side's number is the site's, as of your last /reload." },
-	{ title = "Guild wars come after launch",
-		text = "After a race, a guild on the side that doesn't hold the zone can declare war and siege the zone. That arrives after launch; until then the races are the whole of it. Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting.\n\n"
-			.."That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
+	-- Guild wars, on the real data: each stop has when = function() -> boolean and is skipped where its screen isn't
+	-- there (wars off, not in a guild, no war of the guild's yet)
+	{ title = "Zones", page = "warzones", mark = "warzones", when = function() return GuildWars:On() end,
+		text = "After a race, a guild can win a zone. Zones lists every zone of the campaign: who holds it, since when, whether it is protected, and what comes next there, a race or a war. A zone is protected for 3 days after a war." },
+	{ title = "A war", page = "war1", mark = { "warbar", "warlanes" }, when = function() return GuildWars:War(1) ~= nil end,
+		text = "The tab of your guild's war. The bar runs from the race to the result; its Battle note is the half-hour, after 15 minutes of prep.\n\n"
+			.."Attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win. Turnout counts each guild's players here." },
+	{ title = "War Marks", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, when = function() return GuildWars:On() end,
+		text = "War Marks buy cosmetics, never power. You earn them from races, wars, bounties and weekly boards, up to 150 a day.\n\n"
+			.."The guild's leader sets a tax from 0 to 25%. It sends part of each earning to the guild's treasury first, and the whole earning still counts toward the 150. The treasury pays the stake a guild puts on a war." },
+	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, when = function() return GuildWars:On() and IsInGuild() end,
+		text = "War officers declare, pick the time, accept or withdraw, and set the roster. By default they are the guild master and every rank that can invite. The guild master adds or leaves out people; everyone sees the list.\n\n"
+			.."To declare, a guild needs 10% of its side's influence in the race, 5 members with the app, and a treasury that holds the stake." },
+	{ title = "Bystanders and witnesses", page = "guildwars", when = function() return GuildWars:On() end,
+		text = "Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting. Only the two rosters take and hold points; everyone else fights freely." },
 }
+-- Said under the last stop shown, whichever it is
+Tour.SETS.first.closing = "That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu."
 Tour.STOPS = Tour.SETS.first
+
+---A set's stops that apply now: those without a when(), or whose when() is true; the set's closing words on the last.
+---@param name string
+---@return table stops with label
+function private.Stops(name)
+	local set, stops = Tour.SETS[name], {}
+	stops.label = set.label
+	for _, stop in ipairs(set) do
+		if not stop.when or stop.when() then
+			tinsert(stops, stop)
+		end
+	end
+	local last = stops[#stops]
+	if set.closing and last then
+		stops[#stops] = setmetatable({ text = last.text.."\n\n"..set.closing }, { __index = last })
+	end
+	return stops
+end
 
 ---Registers a set of stops under a name (/wanted tour <name>; Tour:Start(name)).
 ---@param name string
@@ -114,7 +147,7 @@ function Tour:Start(name, page)
 	if Wanted:InCombat() then
 		return
 	end
-	local stops, state = Tour.SETS[name], private.State(name)
+	local stops, state = private.Stops(name), private.State(name)
 	page = tonumber(page) or state.page or 1
 	page = max(1, min(#stops, page))
 	local f = private.frame or private.Create()
@@ -144,7 +177,8 @@ end
 
 ---Shows a page: the window's page behind, the marks bordered, the text and the buttons.
 function private.Go(page)
-	local f, stops = private.frame, Tour.SETS[private.set]
+	local f, stops = private.frame, private.Stops(private.set)
+	page = max(1, min(#stops, page))
 	local stop = stops[page]
 	private.page = page
 	private.State(private.set).page = page
@@ -164,7 +198,7 @@ end
 
 ---Next waits for a stop's condition (stop.wait), saying so on the button, and looks again every WAIT_SECONDS.
 function private.Wait(stop)
-	local f, stops = private.frame, Tour.SETS[private.set]
+	local f, stops = private.frame, private.Stops(private.set)
 	if private.waitTicker then
 		private.waitTicker:Cancel()
 		private.waitTicker = nil
@@ -270,7 +304,7 @@ function private.Create()
 	f.skip = W:Button(f, "Skip the tour", "chip", 110, 24, function() Tour:Close(true) end)
 	f.skip:SetPoint("BOTTOMLEFT", PAD, 16)
 	f.next = W:Button(f, "Next", "primary", 150, 26, function()
-		if private.page >= #Tour.SETS[private.set] then
+		if private.page >= #private.Stops(private.set) then
 			Tour:Close(true)
 		else
 			private.Go(private.page + 1)

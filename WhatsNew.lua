@@ -18,7 +18,7 @@ Wanted.WHATS_NEW = {
 	{
 		version = "1.28.0",
 		note = "Thank you to everyone who helped test Wanted during the beta. Your bug reports, screenshots and ideas "
-			.."made this release. The beta ends on Wednesday, October 21, and this is the last beta release.\n\n"
+			.."made this release. The beta ends on Friday, October 23, and this is the last beta release.\n\n"
 			.."Next comes guild wars. After launch, guilds will fight over the zones of Azeroth, and each zone's owner goes on "
 			.."the war map at wanteddeadordead.com.",
 		lines = {

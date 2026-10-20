@@ -6112,7 +6112,7 @@ end)()
 	check(not upcoming["Wanted Season 1 starts"], "nothing already past")
 	local launch = ns.PvPCalendar:GetMonth(2026, 11)[os.date("*t", 1793833200).day]
 	check(launch and launch[1].text == "WoW Forever launches (3 p.m. PST)" and launch[1].short == "Launch day", "launch day, first on its day")
-	local betaEnd = ns.PvPCalendar:GetMonth(2026, 10)[21]
+	local betaEnd = ns.PvPCalendar:GetMonth(2026, 10)[23]
 	check(betaEnd and betaEnd[1].kind == "game" and betaEnd[1].short == "Beta ends", "the beta's last day")
 	ns.UI:Show("calendar")
 	check(opened, "the page asks the game for its calendar")

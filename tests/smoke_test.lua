@@ -4534,14 +4534,12 @@ end)()
 	end
 	PlaySoundFile, PlaySound = realFile, realKit
 end)()
--- The siege toggle: off hides the Siege page and reads off; the command turns it on and off (a /reload applies it)
+-- The siege toggle reads the setting (a /reload applies it)
 do
 	ns.db.settings.siege = false
-	ns.UI:Show("siege")
-	check(not ns:SiegeOn() and not ns.UI:IsShown("siege"), "siege nights off: the Siege page is hidden")
+	check(not ns:SiegeOn(), "siege nights off")
 	ns.db.settings.siege = true
-	ns.UI:Show("siege")
-	check(ns:SiegeOn() and ns.UI:IsShown("siege"), "siege nights on: the Siege page shows")
+	check(ns:SiegeOn(), "siege nights on")
 end
 print("wanted smoke: all checks pass")
 ;(function()
@@ -5619,12 +5617,13 @@ end)()
 	check(moneyLine, "no zero amounts on the bounty money card")
 	ns.Challenges:SetDemo(nil)
 
-	-- The window remembers its page; a page switched off falls back to the Siege page, the window's first
+	-- The window remembers its page; a page switched off falls back to the window's main page: Guild Wars where the
+	-- site runs races, else Home
 	ns.UI:Show("hotspots")
 	check(db.settings.lastPage == "hotspots", "the page shown is remembered")
 	db.settings.showTools = false
 	ns.UI:Show("tools")
-	check(db.settings.lastPage == "siege" and ns.UI:IsShown("siege"), "a hidden page opens the Siege page instead")
+	check(db.settings.lastPage == "home" and ns.UI:IsShown("home"), "no races: a hidden page opens Home instead")
 	ns.UI:Show("home")
 	check(ns.UI:IsShown("home") and db.settings.lastPage == "home", "Home, the Dashboard now, still opens by its key and is remembered as home")
 	check(not Shown("WORLD PVP") and not Shown("BATTLEGROUNDS") and Shown("Bounties") and Shown("Progress") and Shown("You"),
@@ -6501,18 +6500,6 @@ end)()
 	check(H("secondary", 20) == 22 and H("ghost", 22) == 22 and H("chip", 20) == 22, "from 20 to 23 they're 22")
 	check(H("chip", 16) == 16 and H("secondary", 58) == 58 and H("field", 28) == 28 and H("tab", 26) == 26, "small chips, pictures and fields keep theirs")
 	check(H("primary") == 26, "26 when no height is asked")
-	-- The Siege card: Open the map and Go to the front side by side, one height
-	ns.UI:Show("siege")
-	local heights = {}
-	for _, f in ipairs(Mock.created) do
-		local label = rawget(f, "label")
-		if f._kind == "Button" and type(label) == "table" and (label._text == "Open the map" or label._text == "Go to the front" or label._text == "Lead the rally") then
-			heights[f._h] = true
-		end
-	end
-	local n = 0
-	for h in pairs(heights) do n = n + 1 check(h == 26 or h == 22, "a Siege button is 26 or 22: "..h) end
-	check(n >= 1, "the Siege page has its buttons")
 end)()
 -- Text stays inside its button: after every page above has been built and shown, no button's label (with the text
 -- it last had) is wider than the button less a little padding on each side. Buttons sized by their anchors (width
@@ -8928,17 +8915,17 @@ end)()
 	UI:Show("home")
 	local labels = {}
 	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
-	check(table.concat(labels, ", ") == "Siege, Dashboard, Bounties, Enemies, Raids, Poker, Progress, You", "the menu entries, Siege first and Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
+	check(table.concat(labels, ", ") == "Dashboard, Bounties, Enemies, Raids, Poker, Progress, You", "the menu entries, Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
 	local function selected()
 		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Dashboard", siege = "Siege", poker = "Poker" }) do
+		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Dashboard", poker = "Poker" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
-		if entry ~= "Dashboard" and entry ~= "Siege" and entry ~= "Raids" and entry ~= "Poker" then
+		if entry ~= "Dashboard" and entry ~= "Raids" and entry ~= "Poker" then
 			check(tabs and tabs.selected == key, key.."'s tab is selected")
 		end
 	end
@@ -16061,246 +16048,6 @@ end)()
 	_G.UnitIsGroupLeader = nil
 	C_Map.GetMapInfo = realInfo
 end)()
--- The Siege page, the window's first: tonight's siege (nothing known, before the window with the countdown and
--- what to do, a round, a truce and the result with the lanes and the rally leader), the results with tonight's rounds
--- and the week's wins per front, the three fronts with their lanes' holders and waypoints, the rules, and the
--- website's addresses to copy
-;(function()
-	local C = ns.Captures
-	local real = { C_Map = C_Map, UiMapPoint = UiMapPoint, C_SuperTrack = C_SuperTrack, Leader = UnitIsGroupLeader, Rally = ns.Rally,
-		Warn = ns.Alerts.Warn, PlaySound = PlaySound, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown }
-	local mapId, px, py, waypoint = 1424, 0.508, 0.351, nil -- Hillsbrad's Alliance Mid Tower, the Horde player's to attack
-	C_Map = { GetBestMapForUnit = function() return mapId end, GetPlayerMapPosition = function() return { x = px, y = py } end,
-		GetMapInfo = function() return { mapType = 3, parentMapID = 1415 } end,
-		SetUserWaypoint = function(p) waypoint = p return true end, CanSetUserWaypointOnMap = function() return true end }
-	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
-	C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
-	ns.Alerts.Warn = function() end
-	PlaySound = function() end
-	WorldMapFrame.IsShown = function() return false end
-	clock = clock + 1 -- a new reading of where we are
-	local function On(f)
-		local on, p = f._shown, f._parent
-		while on and p do on, p = p._shown, p._parent end
-		return on
-	end
-	local function Plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-	local function shows(text, exact)
-		for _, f in ipairs(Mock.fontStrings) do
-			if type(f._text) == "string" and On(f) then
-				local plain = Plain(f._text)
-				if exact and plain == text or not exact and plain:find(text, 1, true) then return true end
-			end
-		end
-		return false
-	end
-	local function box(url)
-		for _, f in ipairs(Mock.created) do
-			if f._kind == "EditBox" and f._text == url and On(f) then return true end
-		end
-		return false
-	end
-	local function click(label, nth)
-		local n = 0
-		for _, f in ipairs(Mock.fontStrings) do
-			if f._text == label and On(f) and f._parent:GetScript("OnClick") then
-				n = n + 1
-				if n == (nth or 1) then f._parent:Click() return true end
-			end
-		end
-		return false
-	end
-	local function fits()
-		for _, fs in ipairs(Mock.fontStrings) do
-			if rawget(fs, "fitWidth") and fs._text ~= "" and On(fs) and not fs._wrap then
-				check(fs:GetUnboundedStringWidth() <= fs.fitWidth, "a line too long for the Siege page: "..fs._text)
-			end
-		end
-	end
-	local function Subtitle()
-		for _, f in ipairs(Mock.fontStrings) do
-			if On(f) and type(f._text) == "string" and f._text:find("^Hillsbrad Foothills, ") then return f._text end
-		end
-	end
-	-- No siege known: the header says so, the one text, the results and fronts without wins, the rules and the links
-	C:Take(nil)
-	C:TakeSiege(nil, nil)
-	ns.UI:Show("siege")
-	check(ns.UI:IsShown("siege") and shows("Siege", true) and shows("No siege picked yet", true), "the Siege page: its title, and no siege picked yet")
-	check(shows("picks each evening's front the day before") and not shows("Go to the front") and shows("No siege tonight yet.") and shows("no wins yet")
-		and shows("no siege wins this week yet"), "no siege: how it's picked, no buttons, nothing to show in the results or on the fronts")
-	check(shows("HOW IT WORKS") and shows("One front a night.") and shows("Taking a point.") and shows("Rounds.") and shows("Who decides."), "the rules, in full")
-	check(box("https://wanteddeadordead.com/rules#points") and box("https://wanteddeadordead.com/sieges") and box("https://wanteddeadordead.com/war"), "the website's addresses to copy")
-	check(shows("THE FRONTS") and shows("Hillsbrad Foothills", true) and shows("Arathi Highlands", true) and shows("Ashenvale", true)
-		and shows("Top: Horde 2 · Alliance 2   Mid: Horde 2 · Alliance 2   Bot: Horde 2 · Alliance 2"), "the fronts, with their lanes level")
-	check(click("Go there") and waypoint and waypoint.uiMapID == 1417 and abs(waypoint.position.x - 0.5655) < 0.001, "Go there on Arathi: a waypoint on its first point our side can attack")
-	check(click("Open the map", 2) and mapOpened == 1424, "Open the map on Hillsbrad opens its map")
-	C:TakeSiege(nil, { hb = { h = 3, a = 1 } })
-	ns.UI:Refresh(true)
-	check(shows("THIS WEEK") and shows("Horde 3 · Alliance 1") and shows("Horde 3 · Alliance 1 this week") and shows("no wins yet"), "the week's wins per front in the results and on the front")
-	fits()
-	-- Before the window: the header and the label, the window pill and the countdown, what to do, the lanes closed,
-	-- the next siege, the map and the front buttons
-	local start = clock + 21 * 3600 + 40 * 60
-	local before = #tickers
-	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, wins = { h = 0, a = 0 }, next = { front = "av", start = start + 86400, ["end"] = start + 86400 + 3 * 3600 } }, { hb = { h = 3, a = 1 } })
-	ns.UI:Refresh(true)
-	local subtitle = Subtitle()
-	check(subtitle and (subtitle:find("^Hillsbrad Foothills, %a%a%a %d+ to %d+ [AP]M$") or subtitle:find("^Hillsbrad Foothills, %a%a%a %d+ [AP]M to %d+ [AP]M$")), "the header: the front and its window: "..tostring(subtitle))
-	check(shows("NEXT: "..string.upper(date("%A", start)), true) and shows("Opens in 21:40") and shows("Break a lane before") and shows("they stay down from"),
-		"before the window: the day (the test's clock isn't today), the countdown in hours and minutes, and what to do")
-	check(shows("Then: Ashenvale, "), "the siege after it, from the catch-up")
-	check(shows(string.upper(date("%a", start)), true) and shows(date("%a", start), true), "the front's rows are marked with the siege's day")
-	check(shows("Top", true) and shows("Mid", true) and shows("Bot", true) and shows("closed", true) and not shows("open", true), "the three lanes, both Nexuses closed")
-	check(shows("Open the map", true) and shows("Go to the front", true) and not shows("Lead the rally") and not shows("Set waypoint") and not shows("same layer") and #tickers == before,
-		"the map and the front buttons, no rally without the module, no ticker with over an hour to go")
-	check(shows(date("%A", start)..": not started."), "the results: not started")
-	waypoint = nil
-	check(click("Go to the front") and waypoint and waypoint.uiMapID == 1424 and abs(waypoint.position.x - 0.5005) < 0.001 and abs(waypoint.position.y - 0.352) < 0.001,
-		"Go to the front: a waypoint on the nearest point our side can attack")
-	mapOpened = nil
-	check(click("Open the map") and mapOpened == 1424, "Open the map opens the front's map")
-	fits()
-	-- Under an hour: minutes and seconds on a one-second ticker, which stops with the window closed
-	clock = start - 40 * 60 - 12
-	ns.UI:Refresh(true)
-	check(shows("Opens in 40:12") and #tickers == before + 1, "under an hour the countdown has seconds, and a ticker")
-	clock = clock + 1
-	tickers[#tickers]()
-	check(shows("Opens in 40:11"), "the ticker moves it")
-	ns.UI:GetFrame():Hide()
-	tickers[#tickers]()
-	ns.UI:Show("siege")
-	check(#tickers == before + 3, "closed, the ticker stops; opening the page starts one again (with the window's own)")
-	-- A round: the pill and the score, a lane broken opens a Nexus and shows on the front's line, a point being taken
-	-- says so when hovered
-	C:Take({ ["hb-mid-3"] = { h = "H", t = clock }, ["hb-mid-4"] = { h = "H", t = clock } })
-	clock = start
-	C:SiegeTick(clock)
-	ns.UI:Refresh(true)
-	check(shows("Round 1", true) and shows("Horde 0 · Alliance 0") and not shows("Opens in") and not shows("Break a lane"), "the window opens: Round 1 and the score")
-	check(shows("open", true) and shows("closed", true) and shows("Mid: Horde 4 · Alliance 0"), "the Alliance Nexus is open with its Mid inhibitor down, the Horde's closed; the front's line says the lane is broken")
-	for i = 1, 3 do C:OnPeer({ p = "hb-top-3", s = math.floor(clock / C.SLOT_SECONDS), c = 1 }, "Siege Page Ally "..i) end
-	clock = clock + 30
-	C:Sample()
-	local lines, icon = {}, nil
-	for _, f in ipairs(Mock.created) do
-		-- The page's icon, not the map's button for the point (which carries a respawn timer)
-		if rawget(f, "point") == C:Get("hb-top-3") and f._scripts.OnEnter and not rawget(f, "timer") then icon = f end
-	end
-	GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
-	icon._scripts.OnEnter(icon)
-	GameTooltip.AddLine = nil
-	check(icon and table.concat(lines, "|"):find("Being taken by the Horde: 3 of 40", 1, true), "hovering a lane icon: its progress toward being taken: "..table.concat(lines, "|"))
-	-- The rally: as the group's leader on the front with none live, Lead the rally; a leader live, their line, the layer
-	-- note and a waypoint on them (the module stands in: it's on its own branch)
-	local claimed = false
-	ns.Rally = { Holder = function() return nil end, Claim = function() claimed = true return nil end }
-	UnitIsGroupLeader = function() return true end
-	ns.UI:Refresh(true)
-	check(shows("Lead the rally", true) and shows("No rally leader on this front yet."), "a group leader on the front may lead the rally")
-	check(click("Lead the rally") and claimed, "Lead the rally claims it")
-	local leader = { name = "Grimshaw", class = "ROGUE", zone = "Hillsbrad Foothills", mapId = 1424, x = 52.3, y = 30.9, heard = clock }
-	ns.Rally.Holder = function(_, m) return m == 1424 and leader or nil end
-	ns.UI:Refresh(true)
-	check(shows("Grimshaw") and shows("leads at Darrow Hill") and shows("Set waypoint", true) and shows("The siege's layer isn't picked yet.") and not shows("Lead the rally"),
-		"a rally live: who leads it and where, the siege's layer not picked yet, and Set waypoint")
-	waypoint = nil
-	check(click("Set waypoint") and waypoint and abs(waypoint.position.x - 0.523) < 0.001 and abs(waypoint.position.y - 0.309) < 0.001, "Set waypoint puts it on the leader")
-	leader.mine = true
-	ns.UI:Refresh(true)
-	check(shows("You lead the rally at Darrow Hill") and not shows("Set waypoint"), "our own rally: said so, no waypoint on ourselves")
-	ns.Rally, UnitIsGroupLeader = real.Rally, real.Leader
-	fits()
-	-- A Nexus falls (a peer's word): the round in the results with its time, the truce's clock
-	C:OnPeer({ p = "hb-mid-4", s = math.floor(clock / C.SLOT_SECONDS), c = 1, f = "hb-alliance", t = clock }, "Siege Page Ally 9")
-	ns.UI:Refresh(true)
-	check(shows("Truce 30:00", true) and shows("Horde 1 · Alliance 0") and shows("Round 1 to the Horde: the Southshore Nexus fell at ")
-		and not shows("Rounds before you logged in"), "a Nexus falls: the truce clock, the score, and the round in the results")
-	-- The catch-up's wins outnumber the rounds seen: said so; the result
-	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 2, a = 1 } }, nil)
-	C:SiegeTick(clock)
-	ns.UI:Refresh(true)
-	check(shows("Over", true) and shows("Horde 2 · Alliance 1") and shows("(over)") and shows("Rounds before you logged in aren't listed") and not shows("Go to the front") and shows("Open the map", true),
-		"over: the result, the rounds not seen noted, the map still")
-	fits()
-	C:TakeSiege(nil, nil)
-	C:Take(nil)
-	ns.UI:GetFrame():Hide()
-	C_Map, UiMapPoint, C_SuperTrack, ns.Alerts.Warn, PlaySound = real.C_Map, real.UiMapPoint, real.C_SuperTrack, real.Warn, real.PlaySound
-	WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetMapID, real.IsShown
-	ns.CapturesHUD:Update()
-end)()
--- The upcoming siege evenings: Captures:Evenings (a week from tonight, or from tomorrow once tonight's window has
--- closed, the fronts the catch-up named in place), the Siege page's Upcoming card and the Dashboard's card
-;(function()
-	local C, HUD = ns.Captures, ns.CapturesHUD
-	local real = { Warn = ns.Alerts.Warn, PlaySound = PlaySound }
-	ns.Alerts.Warn = function() end
-	PlaySound = function() end
-	local function On(f)
-		local on, p = f._shown, f._parent
-		while on and p do on, p = p._shown, p._parent end
-		return on
-	end
-	local function Plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-	local function count(text, pattern)
-		local n = 0
-		for _, f in ipairs(Mock.fontStrings) do
-			if type(f._text) == "string" and On(f) and (pattern and Plain(f._text):find(text) or not pattern and Plain(f._text) == text) then n = n + 1 end
-		end
-		return n
-	end
-	local function shows(text) for _, f in ipairs(Mock.fontStrings) do if type(f._text) == "string" and On(f) and Plain(f._text):find(text, 1, true) then return true end end return false end
-	local function Day(t) return date("%Y%m%d", t) end
-	-- Tonight's siege at 7 PM on the client's clock, the next one named
-	local t = date("*t", clock)
-	local start = time({ year = t.year, month = t.month, day = t.day, hour = 19, min = 0, sec = 0 })
-	C:TakeSiege({ front = "hb", start = start, ["end"] = start + 3 * 3600, next = { front = "av", start = start + 86400, ["end"] = start + 86400 + 3 * 3600 } }, nil)
-	local evenings = C:Evenings(7, clock)
-	local closed = start + 3 * 3600 <= clock -- the test's clock may be past tonight's window already
-	check(#evenings == 7 and evenings[1].today == not closed and Day(evenings[1].day) == Day(clock + (closed and 86400 or 0)), "seven evenings from tonight, or tomorrow once tonight's window has closed")
-	for i, e in ipairs(evenings) do
-		check(date("%H:%M", e.start) == "19:00" and e["end"] - e.start == 3 * 3600 and Day(e.day) == Day(e.start) and (i == 1 or Day(e.day) == Day(evenings[i - 1].day + 86400)),
-			"each evening a day on, at the known siege's hours: "..tostring(date("%c", e.start)))
-		local expected = Day(e.day) == Day(start) and "hb" or Day(e.day) == Day(start + 86400) and "av" or nil
-		check((e.front and e.front.id) == expected, "the catch-up's fronts on their evenings, none on the rest: "..tostring(e.front and e.front.id))
-	end
-	check(C:Evenings(7, start + 3 * 3600)[1].front.id == "av" and not C:Evenings(7, start + 3 * 3600)[1].today, "once tonight's window closes, tomorrow's is first")
-	-- The Siege page's Upcoming card: the rows, the windows, the fronts named, the rest to be picked, tonight marked
-	ns.UI:Show("siege")
-	check(shows("UPCOMING") and count("^%a%a%a %d+ %a%a%a$", true) >= 7 and count("7 to 10 PM") == 7, "the Upcoming card: seven days with the window in the client's clock")
-	check(count("Hillsbrad Foothills") >= 1 and count("Ashenvale") >= 1 and count("front picked the evening before") == 5, "the fronts named for two evenings, the rest picked the evening before")
-	-- (The tonight card and the fronts' pill go by the PC's own day, which the test's clock isn't: only the row's pill here)
-	check(count("TONIGHT") == (closed and 0 or 1), "tonight's row marked: "..count("TONIGHT"))
-	check(count("Open the map") == 1 + 3 + 2, "Open the map on the two evenings with a front: "..count("Open the map"))
-	-- The Dashboard's card: the next three evenings in a line each; click for the Siege page
-	ns:RunCommand("demo", "")
-	ns.UI:Show("home")
-	for i, e in ipairs(C:Evenings(3, clock)) do
-		local line = format("%s %s · %s", date("%a", e.day), HUD:HourText(e.start), e.front and e.front.zone or "to be picked")
-		check(count(line) == 1, "the Dashboard's upcoming line "..i..": "..line)
-	end
-	check(shows("UPCOMING SIEGES"), "under its label")
-	for _, f in ipairs(Mock.fontStrings) do
-		if f._text == "UPCOMING SIEGES" and On(f) then f._parent:Click() end
-	end
-	check(ns.UI:IsShown("siege"), "clicking the card opens the Siege page")
-	-- Nothing known: the site's window on the page, and said so on the Dashboard
-	C:TakeSiege(nil, nil)
-	ns.UI:Show("siege")
-	check(count("7 to 10 PM Eastern") == 7 and count("front picked the evening before") == 7 and count("Open the map") == 3, "no siege known: the site's window, every front to be picked")
-	ns.UI:Show("home")
-	local upcomingTip
-	for _, f in ipairs(Mock.created) do
-		if rawget(f, "tooltipTitle") == "Upcoming sieges" then upcomingTip = f.tooltipText end
-	end
-	check(shows("No siege picked yet") and not shows("Picked each evening") and upcomingTip and upcomingTip:find("picked the evening before", 1, true),
-		"the Dashboard says none is picked yet; when they're picked is on hover")
-	ns:RunCommand("demo", "")
-	ns.UI:GetFrame():Hide()
-	ns.Alerts.Warn, PlaySound = real.Warn, real.PlaySound
-end)()
 -- Skull and Flare: secure buttons the game runs itself, set up out of combat only. Skull marks the target with the
 -- skull when it's a bounty or Kill on Sight enemy and we lead or assist the group (its action sits under the button
 -- name the game switches to only for a target we can attack, so in a fight it never marks anyone else); Flare places a
@@ -17131,28 +16878,6 @@ end)()
 	Shard:TakeLayers(nil)
 	ns.UI:Refresh(true)
 	check(shows("Fight layer: unknown") and not shows("Hop", true), "nothing known: said, no Hop")
-	-- The Siege page's Tonight card: the siege's layer with Hop
-	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 } }, nil)
-	ns.UI:Show("siege")
-	check(shows("The siege's layer isn't picked yet.") and not shows("Hop", true), "the siege's layer not picked: said, no Hop")
-	C:TakeSiege({ front = "hb", start = clock - 600, ["end"] = clock + 3600, round = { n = 1, start = clock - 600 }, wins = { h = 0, a = 0 }, layer = L(581), layerSince = clock }, nil)
-	ns.UI:Refresh(true)
-	check(shows("The siege is on layer 581, yours isn't read yet") and shows("Hop", true), "picked: the line with Hop")
-	for _ = 1, 3 do Look(L(581)) end
-	ns.CapturesHUD:Update() -- the HUD's own Hop goes too
-	ns.UI:Refresh(true)
-	check(shows("You're on the siege's layer") and not shows("Hop", true), "on it: said, no Hop")
-	best = 1
-	clock = clock + 1
-	Fire("ZONE_CHANGED_NEW_AREA")
-	ns.CapturesHUD:Update()
-	ns.UI:Refresh(true)
-	check(shows("The siege is on layer 581") and not shows("yours isn't read yet") and not shows("Hop", true), "from another zone: the siege's layer alone, no Hop")
-	C:TakeSiege({ front = "hb", start = clock - 4 * 3600, ["end"] = clock - 3600, wins = { h = 1, a = 0 }, layer = L(581), layerSince = clock }, nil)
-	ns.UI:Refresh(true)
-	check(not shows("The siege is on layer 581") and not shows("isn't picked yet"), "over: no layer line")
-	C:TakeSiege(nil, nil)
-	ns.UI:Show("home")
 	-- A host in a raid without invite rights, in an instance, or dead refuses and says why
 	Shard:Settings().host = true
 	addonSent = {}
@@ -17699,10 +17424,10 @@ print("wanted smoke: layer checks pass")
 	-- The race points' samples survive the book's tidy at login
 	ns.Presence:OnLoad()
 	check(db.presence[key] ~= nil, "a race point's sample is kept in the book at login")
-	-- The Guild Wars page in Siege's place, with the race live
-	db.settings.siege = true
-	ns.UI:Show("siege")
-	check(ns.UI:IsShown("guildwars"), "with races on, Siege gives way to Guild Wars")
+	-- The Guild Wars page, the window's main page with races on, with the race live
+	db.settings.showTools = false
+	ns.UI:Show("tools")
+	check(ns.UI:IsShown("guildwars"), "with races on, a hidden page gives way to Guild Wars")
 	local function OnScreen(text)
 		for _, f in ipairs(Mock.fontStrings) do
 			if tostring(f._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then

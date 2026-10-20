@@ -1073,7 +1073,7 @@ function private.Leave()
 	end
 end
 
----Redraws the layer lines (Nearby, the HUD, the Hotspots and Siege pages when open) for a hop's or a zone's change.
+---Redraws the layer lines (Nearby, the HUD, the Hotspots page when open) for a hop's or a zone's change.
 function private.Changed()
 	if Wanted.NearbyWindow and Wanted.NearbyWindow:IsShown() then
 		Wanted.NearbyWindow:Refresh()
@@ -1081,7 +1081,7 @@ function private.Changed()
 	if Wanted.CapturesHUD then
 		Wanted.CapturesHUD:Update()
 	end
-	if Wanted.UI and (Wanted.UI:IsShown("hotspots") or Wanted.UI:IsShown("siege")) then
+	if Wanted.UI and Wanted.UI:IsShown("hotspots") then
 		Wanted.UI:Refresh()
 	end
 end

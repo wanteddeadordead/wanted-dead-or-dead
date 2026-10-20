@@ -26,10 +26,10 @@ local NAV_HEIGHT = 34
 local FOOT_TOP = 136 -- the top of the menu's foot (Safety, Suggest a feature, Report a bug): a page at the foot sits on it
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
--- The menu is one short list (Siege, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
+-- The menu is one short list (Guild Wars, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
 -- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
 local GROUPS = {}
-local DEFAULT_PAGE = "siege"
+local DEFAULT_PAGE = "guildwars"
 
 
 
@@ -451,10 +451,10 @@ function UI:Show(key)
 		private.current = key
 	end
 	-- The first open since login goes to the page remembered, except that Home, the Dashboard now, gives way to the
-	-- Siege page: the window's main page (the Dashboard is one click away, and opens by its key as ever)
+	-- window's main page (the Dashboard is one click away, and opens by its key as ever)
 	local remembered = Wanted.db.settings.lastPage
 	if remembered == "home" then
-		remembered = "siege"
+		remembered = DEFAULT_PAGE
 	end
 	private.current = private.UsablePage(private.current or remembered)
 	Wanted.db.settings.lastPage = private.current
@@ -475,12 +475,10 @@ end
 function private.UsablePage(key)
 	local def = key and private.pageByKey[key]
 	if not def or (def.hidden and def.hidden()) then
-		-- The main page: Guild Wars where the site runs races, else Siege; both switched off, Home
-		for _, mainKey in ipairs({ "guildwars", DEFAULT_PAGE }) do
-			local main = private.pageByKey[mainKey]
-			if key ~= mainKey and main and not (main.hidden and main.hidden()) then
-				return mainKey
-			end
+		-- The main page: Guild Wars where the site runs races, else Home
+		local main = private.pageByKey[DEFAULT_PAGE]
+		if key ~= DEFAULT_PAGE and main and not (main.hidden and main.hidden()) then
+			return DEFAULT_PAGE
 		end
 		return "home"
 	end
@@ -895,7 +893,7 @@ end
 -- Commands
 -- ============================================================================
 
-Wanted:RegisterCommand("show", "Opens the window: /wanted show [siege|home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
+Wanted:RegisterCommand("show", "Opens the window: /wanted show [guildwars|home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
 	local key = strtrim(args or "")
 	UI:Show(key ~= "" and key or nil)
 end)

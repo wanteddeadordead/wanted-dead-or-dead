@@ -81,7 +81,6 @@ DeathCard.lua
 Emotes.lua
 NearbyWindow.lua
 PageHome.lua
-PageSiege.lua
 PageGuildWars.lua
 PageWarZones.lua
 PageWarMarks.lua

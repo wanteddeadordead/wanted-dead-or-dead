@@ -18317,8 +18317,8 @@ end
 		-- The kit: dragged where the player puts it, folded, hidden by command, reset
 		Zone()
 		zhud.GetPoint = function() return "TOPLEFT", nil, "TOPLEFT", 120, -80 end
-		zhud._scripts.OnDragStart(zhud)
-		zhud._scripts.OnDragStop(zhud)
+		zhud.grip._scripts.OnDragStart(zhud.grip)
+		zhud.grip._scripts.OnDragStop(zhud.grip)
 		local pos = ns.db.settings.zoneHudPos
 		check(pos and pos.point == "TOPLEFT" and pos.x == 120 and pos.y == -80, "a drag is kept for the HUD")
 		for _, name in ipairs({ "race", "war", "capture" }) do check(ns.db.settings[name.."HudPos"] == nil, "and only for that HUD: "..name) end

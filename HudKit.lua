@@ -70,21 +70,9 @@ function HudKit:Attach(key, f)
 	local spec = specs[key]
 	frames[key] = f
 	f:SetMovable(true)
-	f:EnableMouse(true)
-	f:RegisterForDrag("LeftButton")
+	-- The HUD itself takes no clicks, so world PvP clicks pass through it: only the grip, the chevron and the X do
+	f:EnableMouse(false)
 	f:SetClampedToScreen(true)
-	f:SetScript("OnDragStart", function(self)
-		-- Ours are plain frames; a protected one can't be moved in a fight
-		if InCombatLockdown() and self:IsProtected() == true then
-			return
-		end
-		self:StartMoving()
-	end)
-	f:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, _, relative, x, y = self:GetPoint(1)
-		Wanted.db.settings[spec.posKey] = { point = point, relative = relative, x = x, y = y }
-	end)
 	-- What the HUD says folded: the module sets its text
 	f.summary = Theme:Text(f, "small", "", C.text)
 	f.summary:SetPoint("LEFT", 10, 0)
@@ -93,10 +81,30 @@ function HudKit:Attach(key, f)
 	f.summary:SetWordWrap(false)
 	-- Beside the HUD, not on it: its own corners are full
 	local buttons = CreateFrame("Frame", nil, f)
-	buttons:SetSize(40, 18)
+	buttons:SetSize(62, 18)
 	buttons:SetPoint("TOPLEFT", f, "TOPRIGHT", 2, 0)
+	f.grip = CreateFrame("Frame", nil, buttons)
+	f.grip:SetSize(18, 18)
+	f.grip:SetPoint("LEFT")
+	f.grip:EnableMouse(true)
+	f.grip:RegisterForDrag("LeftButton")
+	f.grip.label = Theme:Text(f.grip, "label", "::", C.muted)
+	f.grip.label:SetPoint("CENTER")
+	W:Explain(f.grip, "Move", "Drag to move it. Reset HUD positions in Settings puts it back.", "ANCHOR_BOTTOM")
+	f.grip:SetScript("OnDragStart", function()
+		-- Ours are plain frames; a protected one can't be moved in a fight
+		if InCombatLockdown() and f:IsProtected() == true then
+			return
+		end
+		f:StartMoving()
+	end)
+	f.grip:SetScript("OnDragStop", function()
+		f:StopMovingOrSizing()
+		local point, _, relative, x, y = f:GetPoint(1)
+		Wanted.db.settings[spec.posKey] = { point = point, relative = relative, x = x, y = y }
+	end)
 	f.fold = W:Button(buttons, "", "ghost", 18, 18, function() HudKit:SetCollapsed(key, not HudKit:IsCollapsed(key)) end)
-	f.fold:SetPoint("LEFT")
+	f.fold:SetPoint("LEFT", f.grip, "RIGHT", 4, 0)
 	f.fold.icon = f.fold:CreateTexture(nil, "ARTWORK")
 	f.fold.icon:SetSize(12, 12)
 	f.fold.icon:SetPoint("CENTER")

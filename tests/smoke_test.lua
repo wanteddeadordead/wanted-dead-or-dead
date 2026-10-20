@@ -174,6 +174,8 @@ function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
 function Methods:SetMotionScriptsWhileDisabled(v) self._motionWhileDisabled = v end
 function Methods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a } end
+function Methods:SetTexCoord(...) self._coords = { ... } end
+function Methods:SetDesaturated(on) self._desaturated = on end
 function Methods:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
 function Methods:SetParent(parent) self._parent = parent end
 -- The last point set, and which sides are anchored (a line anchored left and right has its width set by them)
@@ -17970,6 +17972,54 @@ end
 		check(not Report({ GetGuildTabardInfo = function() return { emblemFileID = nil, backgroundColor = info.backgroundColor } end }):find("tabard=", 1, true), "a guild with no design: no field")
 		check(#logged > 0 and not Report({ GetGuildTabardInfo = function() error("boom") end }):find("tabard=", 1, true) and #logged > 0, "an erroring game call: the report still goes, without the field")
 		C_GuildInfo = realInfo
+	end
+	-- A guild's crest from the game's own textures: the tabard tinted, else the faction art
+	do
+		local crest = G:NewCrest(UIParent)
+		local tabard = { background = { 31, 58, 92 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 12, file = 132456 }
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
+		local c = crest.emblem._coords
+		check(c[1] == 0.75 and c[2] == 0.8125 and c[3] == 0 and c[4] == 0.0625 and crest.emblem._vertexColor[1] == 1 and math.abs(crest.emblem._vertexColor[2] - 209 / 255) < 1e-9
+			and math.abs(crest.background._vertexColor[1] - 31 / 255) < 1e-9 and math.abs(crest.background._vertexColor[3] - 92 / 255) < 1e-9
+			and crest.emblem._shown and crest.background._shown and crest.border._shown and not crest.fallback._shown, "a holder with a tabard: style 12's cell, its colours, no fallback")
+		tabard.style = 17
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
+		c = crest.emblem._coords
+		check(c[1] == 0.0625 and c[2] == 0.125 and c[3] == 0.0625 and c[4] == 0.125, "style 17 is the second row's second cell")
+		local function Bad(label, value)
+			crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = value })
+			check(crest.fallback._shown and not crest.emblem._shown and not crest.background._shown and not crest.border._shown and crest.fallback._texture == G:CrestFile({ faction = "Alliance" }),
+				"a holder with "..label..": the faction art")
+		end
+		Bad("no tabard", nil)
+		Bad("a style of 256", { background = { 31, 58, 92 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 256, file = 1 })
+		Bad("a colour of 300", { background = { 300, 58, 92 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 1, file = 1 })
+		Bad("file 0", { background = { 31, 58, 92 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 1, file = 0 })
+		Bad("a colour list of 2", { background = { 31, 58 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 1, file = 1 })
+		Bad("a string for the tabard", "1f3a5c")
+		-- Your own guild: the game's tabard wins over the catch-up's; a game error falls back to it
+		local realInfo, realGuild, realInGuild = C_GuildInfo, GetGuildInfo, IsInGuild
+		GetGuildInfo = function() return "EMPIRE" end
+		IsInGuild = function() return true end
+		local function Color(r, g, b) return { GetRGB = function() return r, g, b end } end
+		C_GuildInfo = { GetGuildTabardInfo = function() return { backgroundColor = Color(0, 0, 1), borderColor = Color(0, 0, 0), emblemColor = Color(1, 1, 1), emblemStyle = 3, emblemFileID = 9 } end }
+		local mine = { guild = "EMPIRE", faction = UnitFactionGroup("player"), tabard = tabard }
+		crest:SetGuild(mine)
+		check(crest.emblem._coords[1] == 3 * 64 / 1024 and crest.background._vertexColor[3] == 1, "your own guild: the game's tabard wins over the site's")
+		C_GuildInfo = { GetGuildTabardInfo = function() error("boom") end }
+		crest:SetGuild(mine)
+		check(crest.emblem._coords[1] == (17 % 16) * 64 / 1024 and crest.emblem._shown, "and the game erroring falls back to the site's")
+		crest:SetDesaturated(true)
+		check(crest.emblem._desaturated and crest.fallback._desaturated, "a crest desaturates all its layers")
+		C_GuildInfo, GetGuildInfo, IsInGuild = realInfo, realGuild, realInGuild
+		-- The views carry the tabard from owners
+		local view = G.View({ owners = { ["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", since = clock - 86400, tabard = tabard } } }, clock)
+		local held
+		for _, z in ipairs(view.zones) do if z.zone == "Hillsbrad Foothills" then held = z end end
+		check(held and held.holder.tabard and held.holder.tabard.style == 17, "WarView: the holder's tabard comes through from owners")
+		local other = G.View({ owners = { ["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", tabard = tabard } },
+			warLive = { ["99"] = { zone = "Hillsbrad Foothills", phase = "battle", endsAt = clock + 1000, at = clock, points = {}, turnout = { att = 1, def = 1 }, friends = {}, mult = {} } } }, clock)
+		check(other.others and other.others[1] and other.others[1].defender.tabard and other.others[1].defender.tabard.style == 17, "and the defender of another guild's war")
 	end
 	-- A big guild: in parts, each under 255 bytes, the members spread over them in order
 	local realRosterInfo, realCount = GetGuildRosterInfo, GetNumGuildMembers

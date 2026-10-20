@@ -88,7 +88,7 @@ function private.Guild(raw, myGuid)
 	info = type(info) == "table" and info or {}
 	local guild = { id = me.id, name = info.name or me.name, faction = info.faction or me.faction, treasury = info.treasury,
 		tax = info.tax, membersWithApp = info.membersWithApp, officers = info.officers, rankNames = info.rankNames,
-		rankInvite = info.rankInvite, me = me, staked = 0, taxBy = info.taxSetBy, taxAt = info.taxSetAt,
+		rankInvite = info.rankInvite, tabard = info.tabard, me = me, staked = 0, taxBy = info.taxSetBy, taxAt = info.taxSetAt,
 		-- A tax set today takes effect at taxFrom (the next midnight US Eastern)
 		taxNext = info.taxNext, taxFrom = info.taxFrom }
 	-- The treasury's last 7 days, from the ledger
@@ -147,7 +147,7 @@ function private.Zones(raw, wars, now)
 		local owner = type(owners[name]) == "table" and owners[name] or nil
 		local zone = { zone = name, continent = continent }
 		if owner then
-			zone.holder = { guild = owner.guild, faction = owner.faction }
+			zone.holder = { guild = owner.guild, faction = owner.faction, tabard = owner.tabard }
 			zone.since, zone.protectedUntil = owner.since, owner.protectedUntil
 			zone.next = type(owner.next) == "table" and { kind = owner.next.kind, at = owner.next.at } or nil
 		end
@@ -245,7 +245,7 @@ function private.Declare(open, guild, owners)
 		id = format("race:%s:%s:%s", tostring(open.battlegroup), tostring(open.ruleset), private.Id(open.raceStart) or "?"),
 		zone = open.zone, role = "attack", step = "declare",
 		race = { battlegroup = open.battlegroup, ruleset = open.ruleset, start = open.raceStart, at = race and race.stop or open.raceStart },
-		attacker = ours, defender = owner and { guild = owner.guild, faction = owner.faction } or {},
+		attacker = ours, defender = owner and { guild = owner.guild, faction = owner.faction, tabard = owner.tabard } or {},
 		declare = { closesAt = open.closesAt, share = share, minStake = open.minStake, maxStake = open.maxStake,
 			treasury = guild.treasury, members = guild.membersWithApp, checks = type(open.checks) == "table" and open.checks or nil,
 			protectedUntil = owner and owner.protectedUntil, seedCommit = open.seedCommit, declared = declared,
@@ -455,7 +455,7 @@ end
 ---its zone sees, for the HUD, the map and the census. The holders from owners; the attackers, the other faction.
 function private.Other(id, live, owners)
 	local owner = type(owners[live.zone]) == "table" and owners[live.zone] or nil
-	local defender = owner and { guild = owner.guild, faction = owner.faction } or {}
+	local defender = owner and { guild = owner.guild, faction = owner.faction, tabard = owner.tabard } or {}
 	local attackFaction = OTHER[defender.faction]
 	-- The war's start, else from the end of its phase (prep ends at the start, the battle 30 minutes later)
 	local start = tonumber(live.start) or type(live.endsAt) == "number" and (live.phase == "prep" and live.endsAt or live.endsAt - BATTLE) or nil

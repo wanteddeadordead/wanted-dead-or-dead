@@ -6,7 +6,7 @@
 
 ## [1.28.0] - 2026-10-19
 
-- Zones on the world map, the zone banner and the HUD show the holding guild's own crest, and so do the war screens.
+- Zones on the world map, the zone banner and the HUD show the holding guild's own crest, and so do the war screens. A war's keep is the defending guild's crest, with a ring for sealed, open or fallen.
 - Your guild's tabard goes with your roster report, so the site can show your guild's crest.
 - The world map shows tonight's three race zones all day: their three points, grey and labelled with the race time, turning to the holders' colours while the race runs, also on a race zone that has no war (Moonglade), and as a flag on the continent map.
 - Current stats on the world map: each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now, as a badge on the continent's map and a plate on the zone's.

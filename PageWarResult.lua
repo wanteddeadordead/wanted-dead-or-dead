@@ -51,7 +51,7 @@ GuildWars.PANELS.result = {
 			row.text:SetPoint("TOPLEFT", 124, y - 6)
 			panel.lanes[i] = row
 		end
-		panel.keep = war:CreateTexture(nil, "ARTWORK")
+		panel.keep = GuildWars:NewCrest(war)
 		panel.keep:SetSize(48, 48)
 		panel.keep:SetPoint("TOPLEFT", floor(wide * 0.55), -44)
 		local keepName = Theme:Text(war, "body", "The keep", C.text)
@@ -146,7 +146,9 @@ GuildWars.PANELS.result = {
 		end
 		local keep = type(r.keep) == "table" and r.keep or {}
 		local fell = keep.state == "fallen"
-		panel.keep:SetTexture(GuildWars.MEDIA..(fell and ("nexus-keep-fallen-to-"..(SIDE[attacker.faction] or "alliance")) or ("nexus-keep-sealed-"..(SIDE[defender.faction] or "horde"))))
+		panel.keep:SetGuild(defender)
+		panel.keep:SetDesaturated(false)
+		panel.keep:SetKeep(fell and "fallen" or "sealed", SIDE[defender.faction] or "horde", SIDE[attacker.faction] or "alliance")
 		panel.keepLine:SetText(fell and ("fell"..(type(keep.at) == "number" and (" at "..GuildWars:Clock(keep.at)) or "")) or "held")
 		local turnout = type(r.turnout) == "table" and r.turnout or {}
 		panel.summary:SetText(format("%d / %d v %d / %d%s", tonumber(turnout.attacker) or 0, GuildWars.MAX_ROSTER, tonumber(turnout.defender) or 0, GuildWars.MAX_ROSTER,

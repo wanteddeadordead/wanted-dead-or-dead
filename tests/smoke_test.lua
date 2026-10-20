@@ -18367,7 +18367,7 @@ end
 	for _, f in ipairs(Mock.created) do
 		if type(rawget(f, "lanes")) == "table" and rawget(f, "keepLine") and f._shown then
 			for _, row in ipairs(f.lanes) do seals[#seals + 1] = row.tower.seal._texture seals[#seals + 1] = row.inhibitor.seal._texture end
-			seals[#seals + 1] = f.keep._texture
+			seals[#seals + 1] = f.keep.fallback._texture
 		end
 	end
 	local all = table.concat(seals, " ")
@@ -18385,7 +18385,7 @@ end
 		and hud.defender.count._text:find("×1.21", 1, true) and hud.clock._text == "18:19" and hud.kind._text == "GUILD WAR",
 		"the war HUD: both guilds' roster players here, the outnumbered bonus, the battle's time left: "..tostring(hud and hud.clock._text))
 	check(hud.lanes[1].tower._texture:find("tower%-horde$") and hud.lanes[1].inhibitor._texture:find("inhib%-broken%-by%-horde$") and hud.lanes[2].pct._text == "50%"
-		and hud.lanes[3].tower._texture:find("tower%-alliance$") and hud.keep._texture:find("nexus%-keep%-open%-alliance$") and hud.rally._texture:find("rally%-horde$"),
+		and hud.lanes[3].tower._texture:find("tower%-alliance$") and hud.keep.fallback._texture:find("nexus%-keep%-open%-alliance$") and hud.rally._texture:find("rally%-horde$"),
 		"the strip: the rally, the lanes' seals, the keep open")
 	check(hud.bar:IsShown() and hud.bar.label._text == "Mid tower · Tarren Mill south-west" and hud.bar.pct._text == "50%" and hud.friends.text._text:find("Friends", 1, true)
 		and hud.status._text == "You can fight; you don't count", "the point the player stands on, friends, and not on the roster")
@@ -18512,7 +18512,7 @@ end
 	end
 	ns.WarMap:Refresh()
 	local pieces, n = Pieces()
-	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"].icon._texture:find("nexus%-keep%-open%-alliance$")
+	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"].crest.fallback._texture:find("nexus%-keep%-open%-alliance$")
 		and pieces["EMPIRE's rally point"].icon._texture:find("rally%-horde$") and pieces["Mid tower"].label._text == "50%"
 		and pieces["Top inhibitor"].icon._texture:find("inhib%-broken%-by%-horde$"), "the war on its zone's map: the rally, six seals and the keep: "..n)
 	local plate
@@ -18536,7 +18536,7 @@ end
 	C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
 	ns.WarMap:Refresh()
 	pieces = Pieces()
-	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].icon._texture:find("nexus%-keep%-open%-alliance$") and pieces["Ashenvale"]
+	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].crest.fallback._texture:find("nexus%-keep%-open%-alliance$") and pieces["Ashenvale"]
 		and pieces["Hillsbrad Foothills"].spec.lines[2][1]:find("Guild war now: EMPIRE attacks", 1, true) and pieces["Hillsbrad Foothills"].spec.lines[1][1]:find("Held by <Revenant> (Alliance) since", 1, true),
 		"the continent: the war's zone as a keep, held zones by emblem, who and what's on in the tooltip")
 	do
@@ -18548,6 +18548,15 @@ end
 		ns.WarMap:Refresh()
 		ash = Pieces()["Ashenvale"]
 		check(ash and ash.crest.emblem._shown and not ash.crest.fallback._shown and ash.crest.emblem._coords[1] == 5 * 64 / 1024, "and its own tabard once the catch-up has it")
+		-- The keep on a war zone's map is the defenders' crest with the keep's state as a ring
+		G:War(1).defender.tabard = { background = { 1, 2, 3 }, border = { 4, 5, 6 }, emblem = { 7, 8, 9 }, style = 1, file = 3 }
+		WorldMapFrame.GetMapID = function() return 1424 end
+		ns.WarMap:Refresh()
+		local keep = Pieces()["The keep · Southshore"]
+		check(keep and keep.crest.emblem._shown and keep.crest.ring._shown and keep.crest.ring._vertexColor[2] == 0.55, "the keep: the defenders' crest, an orange ring while it is open")
+		G:War(1).defender.tabard = nil
+		WorldMapFrame.GetMapID = function() return 1415 end
+		ns.WarMap:Refresh()
 	end
 	-- OpenMap's stitched map: the zone's pieces over its art
 	OpenMapAPI = { major = 1, IsStitched = function() return true end, GetView = function() return 0.5, 0.5, 6 end, ArtTopLevel = function() return 5000 end,

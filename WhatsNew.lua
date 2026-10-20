@@ -26,7 +26,7 @@ Wanted.WHATS_NEW = {
 			"Influence races every night at 7:00, 7:50 and 8:40 PM ET, under Guild Wars in the menu (needs the Wanted app).",
 			"Three points per zone, the middle one worth 20% more, with your side's numbers live as you fight.",
 			"Coming after launch, guild wars: after a race, a guild on the side that doesn't hold the zone can declare war, and the defenders pick a half-hour slot over the next two evenings.",
-			"Wars are up to 40 a side: three lanes with a tower and an inhibitor each, and a keep at each end. The winner gets 3 days of peace. War Marks buy cosmetics only.",
+			"Wars are up to 40 a side: three lanes with a tower and an inhibitor each, and a keep at each end. The winner gets 3 days of peace. War Marks buy cosmetics only. Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting.",
 		},
 	},
 	{

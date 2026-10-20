@@ -62,7 +62,7 @@ Tour.SETS.first = {
 		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
 			.."The other side's number is the site's, as of your last /reload." },
 	{ title = "Guild wars come after launch",
-		text = "After a race, a guild on the side that doesn't hold the zone can declare war and siege the zone. That arrives after launch; until then the races are the whole of it.\n\n"
+		text = "After a race, a guild on the side that doesn't hold the zone can declare war and siege the zone. That arrives after launch; until then the races are the whole of it. Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting.\n\n"
 			.."That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
 Tour.STOPS = Tour.SETS.first

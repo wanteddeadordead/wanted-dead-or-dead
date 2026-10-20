@@ -659,6 +659,56 @@ local function secret(value)
 	return issecretvalue and issecretvalue(value) or false
 end
 
+---An integer in a range, or nil.
+function private.Int(value, low, high)
+	if type(value) == "number" and not secret(value) and value == floor(value) and value >= low and value <= high then
+		return value
+	end
+	return nil
+end
+
+---The game's colour as three integers 0 to 255, or nil.
+function private.Rgb(color)
+	if type(color) ~= "table" or type(color.GetRGB) ~= "function" then
+		return nil
+	end
+	local ok, r, g, b = pcall(color.GetRGB, color)
+	if not ok or type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" or secret(r) or secret(g) or secret(b) then
+		return nil
+	end
+	return { max(0, min(255, floor(r * 255 + 0.5))), max(0, min(255, floor(g * 255 + 0.5))), max(0, min(255, floor(b * 255 + 0.5))) }
+end
+
+---This character's own guild tabard from the game, as the catch-up has tabards: { background = { r, g, b }, border,
+---emblem (0 to 255), style (0 to 255), file }, or nil: none, a guild without a design, or the game wouldn't say.
+---Only ever "player": another guild's tabard is the server's majority, never one client's word.
+---@return table?
+function GuildWars:LiveTabard()
+	if not (C_GuildInfo and C_GuildInfo.GetGuildTabardInfo) then
+		return nil
+	end
+	local ok, info = pcall(C_GuildInfo.GetGuildTabardInfo, "player")
+	if not ok or type(info) ~= "table" or info.emblemFileID == nil then
+		return nil
+	end
+	local background, border, emblem = private.Rgb(info.backgroundColor), private.Rgb(info.borderColor), private.Rgb(info.emblemColor)
+	local style, file = private.Int(info.emblemStyle, 0, 255), private.Int(info.emblemFileID, 1, 2147483647)
+	if not (background and border and emblem and style and file) then
+		return nil
+	end
+	return { background = background, border = border, emblem = emblem, style = style, file = file }
+end
+
+---The roster line's tabard field: "<background>.<border>.<emblem>.<style>.<file>" ("1f3a5c.000000.ffd100.12.132456"), or nil.
+function private.Tabard()
+	local t = GuildWars:LiveTabard()
+	if not t then
+		return nil
+	end
+	local function Hex(c) return format("%02x%02x%02x", c[1], c[2], c[3]) end
+	return format("%s.%s.%s.%d.%d", Hex(t.background), Hex(t.border), Hex(t.emblem), t.style, t.file)
+end
+
 ---The guild's members with their GUIDs: the game's guild window's (GuildRank), else the roster's.
 function private.RosterGuids()
 	local members = Wanted.GuildRank and Wanted.GuildRank:Members()
@@ -679,7 +729,7 @@ end
 ---guild, just that. The app sends a read when it differs from the last it sent, or a day on; the site works out
 ---membership, the leader and the ranks from many members' reports, never one. Written whether or not the catch-up has
 ---guild wars yet: the site reads rosters under a switch of its own, before wars are on.
----"WANTEDG1 <mark> reporter=<GUID>&at=<time>&realm=<id>&guild=<name>&leader=<GUID>&ranks=<1|0><name>,..&members=<GUID>.<rank>,..[&part=i/n]"
+---"WANTEDG1 <mark> reporter=<GUID>&at=<time>&realm=<id>&guild=<name>&leader=<GUID>&ranks=<1|0><name>,..[&tabard=<bg>.<border>.<emblem>.<style>.<file>]&members=<GUID>.<rank>,..[&part=i/n]"
 function GuildWars:ReportRoster()
 	local now = GetServerTime()
 	local mark, me = Wanted.db.accountMark, UnitGUID("player")
@@ -724,7 +774,12 @@ function GuildWars:ReportRoster()
 	end
 	private.reportRead = now
 	sort(list)
-	local fields = { { "realm", format("%d", realm) }, { "guild", guild }, { "leader", leader }, { "ranks", rankList }, { "members", list } }
+	local fields = { { "realm", format("%d", realm) }, { "guild", guild }, { "leader", leader }, { "ranks", rankList } }
+	local tabard = private.Tabard()
+	if tabard then
+		tinsert(fields, { "tabard", tabard })
+	end
+	tinsert(fields, { "members", list })
 	for _, line in ipairs(private.Lines(prefix, header, fields)) do
 		C_Log.LogMessage(line)
 	end

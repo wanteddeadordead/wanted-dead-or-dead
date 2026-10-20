@@ -473,6 +473,11 @@ function private.War(w, raw, guild, myGuid)
 	local attackFaction = side == "attack" and mine or OTHER[mine]
 	local attacker = { guild = w.attacker, faction = attackFaction }
 	local defender = w.defender and { guild = w.defender, faction = OTHER[attackFaction] } or {}
+	-- The defenders' tabard, when they hold the zone (the owners row carries it)
+	local owner = type(raw.owners) == "table" and type(raw.owners[w.zone]) == "table" and raw.owners[w.zone] or nil
+	if owner and defender.guild and owner.guild == defender.guild then
+		defender.tabard = owner.tabard
+	end
 	local step = STEP[w.state] or "time"
 	-- The attackers wait on the holders' pick looking at the draw
 	if w.state == "awaiting_time" and side == "attack" then

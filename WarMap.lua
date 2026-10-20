@@ -62,43 +62,6 @@ function private.Attach()
 	end
 	private.provider = private.Provider
 	WorldMapFrame:AddDataProvider(private.Provider)
-	private.AddMapButton()
-end
-
----The Guild wars button on the map, top right under the game's buttons (and the capture fronts' when siege nights are on).
-function private.AddMapButton()
-	local container = WorldMapFrame.GetCanvasContainer and WorldMapFrame:GetCanvasContainer() or WorldMapFrame
-	local above = (WorldMapFrame.WorldMapTrackingOptionsButton and 1 or 2) + (WorldMapFrame.WorldMapTrackingPinButton and 1 or 0) + (Wanted:SiegeOn() and 1 or 0)
-	local button = CreateFrame("Button", nil, container)
-	button:SetSize(28, 28)
-	button:SetPoint("TOPRIGHT", -4, -2 - 32 * above)
-	button:SetFrameLevel(container:GetFrameLevel() + 3000)
-	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetAllPoints()
-	button.icon:SetTexture(GuildWars.MEDIA.."nexus-keep-sealed-"..(SIDE[UnitFactionGroup("player")] or "horde"))
-	button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	button:SetScript("OnClick", function()
-		WarMap:SetShown(not WarMap:Shown())
-		GameTooltip:Hide()
-	end)
-	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetText("Wanted: guild wars", 1, 0.82, 0)
-		GameTooltip:AddLine(WarMap:Shown() and "Shown. Click to hide." or "Hidden. Click to show.", 1, 1, 1)
-		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	private.mapButton = button
-	private.UpdateMapButton()
-end
-
-function private.UpdateMapButton()
-	local button = private.mapButton
-	if button then
-		button:SetShown(GuildWars:On() or Races:On())
-		button.icon:SetDesaturated(not WarMap:Shown())
-		button.icon:SetAlpha(WarMap:Shown() and 1 or 0.6)
-	end
 end
 
 ---Shows the tour's sample war on the map of its zone (opening it): its lanes, towers, inhibitors and keep through the
@@ -135,7 +98,7 @@ end
 
 ---Redraws the layer while the map is open.
 function WarMap:Refresh()
-	private.UpdateMapButton()
+	Wanted.MapButton:Update()
 	if private.provider and WorldMapFrame:IsShown() then
 		private.provider:RefreshAllData()
 	end

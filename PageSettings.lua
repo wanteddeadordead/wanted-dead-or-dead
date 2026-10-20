@@ -814,6 +814,14 @@ UI:RegisterPage("settings", {
 	refresh = private.Refresh,
 })
 
+---Opens Settings on its Sharing and display tab, where the map's switches are (the map button's Map settings).
+function UI:ShowMapSettings()
+	UI:Show("settings")
+	if private.tabs then
+		private.tabs:Select("sharing")
+	end
+end
+
 ---Opens Settings on its Theme tab (the poker table's Felt button).
 function UI:ShowThemeSettings()
 	UI:Show("settings")

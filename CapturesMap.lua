@@ -66,7 +66,6 @@ function private.Attach()
 			end)
 		end)
 	end
-	private.AddMapButton()
 end
 
 ---Shows or hides the capture fronts on the world map.
@@ -76,46 +75,9 @@ function CapturesMap:SetMapShown(shown)
 	CapturesMap:Refresh()
 end
 
----A button on the map itself, top right under the game's own buttons, turning the capture fronts on and off: the
----filter menu's checkbox is easy to miss, and a game rule can take the filter menu away (2026-10-16: "a place on the
----main map to turn on or off the overlay").
-function private.AddMapButton()
-	local container = WorldMapFrame.GetCanvasContainer and WorldMapFrame:GetCanvasContainer() or WorldMapFrame
-	-- Under the game's buttons there (filter, tracking pin) and Wanted's enemy sightings button when the filter is gone
-	local above = (WorldMapFrame.WorldMapTrackingOptionsButton and 1 or 2) + (WorldMapFrame.WorldMapTrackingPinButton and 1 or 0)
-	local button = CreateFrame("Button", nil, container)
-	button:SetSize(28, 28)
-	button:SetPoint("TOPRIGHT", -4, -2 - 32 * above)
-	button:SetFrameLevel(container:GetFrameLevel() + 3000)
-	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetAllPoints()
-	button.icon:SetTexture(PIECES.."tower-h")
-	button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	button:SetScript("OnClick", function()
-		CapturesMap:SetMapShown(not Captures:Settings().map)
-		GameTooltip:Hide()
-	end)
-	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetText("Wanted: capture fronts", 1, 0.82, 0)
-		GameTooltip:AddLine(Captures:Settings().map and "Shown. Click to hide." or "Hidden. Click to show.", 1, 1, 1)
-		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	private.mapButton = button
-	private.UpdateMapButton()
-end
-
-function private.UpdateMapButton()
-	if private.mapButton then
-		private.mapButton.icon:SetDesaturated(not Captures:Settings().map)
-		private.mapButton.icon:SetAlpha(Captures:Settings().map and 1 or 0.6)
-	end
-end
-
 ---Redraws the map overlay while the map is open.
 function CapturesMap:Refresh()
-	private.UpdateMapButton()
+	Wanted.MapButton:Update()
 	if private.provider and WorldMapFrame:IsShown() then
 		private.provider:RefreshAllData()
 	end

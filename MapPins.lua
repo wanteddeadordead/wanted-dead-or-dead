@@ -269,9 +269,7 @@ end
 
 ---Redraws the markers while the map is open (a new sighting, a setting changed).
 function MapPins:Refresh()
-	if private.toggleButton then
-		private.toggleButton.icon:SetDesaturated(not MapPins:IsShown())
-	end
+	Wanted.MapButton:Update()
 	if private.provider and WorldMapFrame:IsShown() then
 		private.provider:RefreshAllData()
 	end
@@ -298,8 +296,8 @@ end
 -- Show / hide on the map itself
 -- ============================================================================
 
----An "Enemy sightings" checkbox in the map's own filter menu, where players look for map icon options. When
----the client has no filter menu (a game rule can turn it off), a small button on the map instead.
+---An "Enemy sightings" checkbox in the map's own filter menu, where players look for map icon options. (The Wanted
+---button on the map, MapButton, has it too, and stays when the game takes the filter menu away.)
 function private.AddMapToggle()
 	if WorldMapFrame.WorldMapTrackingOptionsButton and Menu and Menu.ModifyMenu then
 		Menu.ModifyMenu("MENU_WORLD_MAP_TRACKING", function(_, rootDescription)
@@ -309,28 +307,5 @@ function private.AddMapToggle()
 				MapPins:SetShown(not MapPins:IsShown())
 			end)
 		end)
-		return
 	end
-	local container = WorldMapFrame.GetCanvasContainer and WorldMapFrame:GetCanvasContainer() or WorldMapFrame
-	local button = CreateFrame("Button", nil, container)
-	button:SetSize(28, 28)
-	button:SetPoint("TOPRIGHT", -4, -2)
-	button:SetFrameLevel(container:GetFrameLevel() + 3000)
-	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetAllPoints()
-	button.icon:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\icon")
-	button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	button:SetScript("OnClick", function()
-		MapPins:SetShown(not MapPins:IsShown())
-		GameTooltip:Hide()
-	end)
-	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:SetText("Wanted: enemy sightings", 1, 0.82, 0)
-		GameTooltip:AddLine(MapPins:IsShown() and "Shown. Click to hide." or "Hidden. Click to show.", 1, 1, 1)
-		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	private.toggleButton = button
-	button.icon:SetDesaturated(not MapPins:IsShown())
 end

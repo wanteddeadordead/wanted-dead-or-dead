@@ -18501,6 +18501,16 @@ end
 	check(pieces["Hillsbrad Foothills"] and pieces["Hillsbrad Foothills"].icon._texture:find("nexus%-keep%-open%-alliance$") and pieces["Ashenvale"]
 		and pieces["Hillsbrad Foothills"].spec.lines[2][1]:find("Guild war now: EMPIRE attacks", 1, true) and pieces["Hillsbrad Foothills"].spec.lines[1][1]:find("Held by <Revenant> (Alliance) since", 1, true),
 		"the continent: the war's zone as a keep, held zones by emblem, who and what's on in the tooltip")
+	do
+		local ash = pieces["Ashenvale"]
+		check(ash and ash.crest._shown and not ash.icon._shown and ash.crest.fallback._shown, "a held zone from further out shows its guild's crest, the faction art until the tabard is known")
+		for _, z in ipairs(G:Zones()) do
+			if z.zone == "Ashenvale" then z.holder.tabard = { background = { 1, 2, 3 }, border = { 4, 5, 6 }, emblem = { 7, 8, 9 }, style = 5, file = 77 } end
+		end
+		ns.WarMap:Refresh()
+		ash = Pieces()["Ashenvale"]
+		check(ash and ash.crest.emblem._shown and not ash.crest.fallback._shown and ash.crest.emblem._coords[1] == 5 * 64 / 1024, "and its own tabard once the catch-up has it")
+	end
 	-- OpenMap's stitched map: the zone's pieces over its art
 	OpenMapAPI = { major = 1, IsStitched = function() return true end, GetView = function() return 0.5, 0.5, 6 end, ArtTopLevel = function() return 5000 end,
 		WorldFromMap = function(m, x, y) if m == 1424 then return x, y end end, MapFromWorld = function(_, u, v) return u, v end }

@@ -458,6 +458,9 @@ function private.Piece(spec)
 		local b = CreateFrame("Button", nil, private.overlay)
 		b.icon = b:CreateTexture(nil, "OVERLAY")
 		b.icon:SetAllPoints()
+		-- A guild's own crest in place of the icon (spec.guild)
+		b.crest = GuildWars:NewCrest(b, "OVERLAY")
+		b.crest:SetAllPoints()
 		b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		b.label:SetPoint("LEFT", b, "RIGHT", 2, 0)
 		b:SetScript("OnEnter", private.OnEnterPiece)
@@ -476,6 +479,11 @@ function private.Piece(spec)
 	button:SetSize(size, size)
 	button:ClearAllPoints()
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", spec.fx * w, -spec.fy * h)
+	button.crest:SetShown(spec.guild ~= nil)
+	button.icon:SetShown(spec.guild == nil)
+	if spec.guild then
+		button.crest:SetGuild(spec.guild)
+	end
 	button.icon:SetTexture(spec.texture)
 	button.icon:SetDesaturated(spec.desaturated == true)
 	local tint = spec.color or { 1, 1, 1 }
@@ -620,11 +628,12 @@ function private.ZoneIcon(zone, fx, fy, now)
 		texture = GuildWars:KeepFile(keep, d, a)
 	elseif race then
 		texture = GuildWars.MEDIA.."race-"..(now < race.start and "neutral" or "contested")
-	elseif holder and holder.guild then
-		texture = GuildWars:CrestFile(holder)
 	end
 	if texture then
 		private.Piece({ fx = fx, fy = fy, px = ICON_PX, texture = texture, title = zone.name, lines = private.ZoneLines(zone, now) })
+	elseif holder and holder.guild then
+		-- The holder's own crest (its tabard), else its side's emblem
+		private.Piece({ fx = fx, fy = fy, px = ICON_PX, guild = holder, title = zone.name, lines = private.ZoneLines(zone, now) })
 	end
 	if Wanted.StatsMap:Shown() then
 		private.StatsBadge(zone, fx, fy, now)
@@ -655,7 +664,7 @@ function private.BuildPlate()
 	plate:SetPoint("BOTTOMLEFT", 16, 16)
 	plate:SetFrameLevel(container:GetFrameLevel() + 2900)
 	Theme:Skin(plate, { 0.067, 0.067, 0.067, 0.88 }, { 1, 1, 1, 0.15 })
-	plate.crest = plate:CreateTexture(nil, "ARTWORK")
+	plate.crest = GuildWars:NewCrest(plate)
 	plate.crest:SetSize(40, 40)
 	plate.crest:SetPoint("LEFT", 10, 0)
 	plate.holder = Theme:Text(plate, "heading", "", C.text)
@@ -688,7 +697,7 @@ function private.FillPlate(zone, now)
 	local plate = private.plate
 	local info = private.ZoneInfo(zone)
 	local holder = info and info.holder
-	plate.crest:SetTexture(holder and holder.guild and GuildWars:CrestFile(holder) or "Interface\\Timer\\"..(UnitFactionGroup("player") == "Alliance" and "Alliance" or "Horde").."-Logo")
+	plate.crest:SetGuild(holder and holder.guild and holder or { faction = UnitFactionGroup("player") })
 	plate.crest:SetDesaturated(not (holder and holder.guild))
 	plate.holder:SetText(holder and holder.guild and ("Held by <"..holder.guild..">") or "Unclaimed")
 	local color = holder and COLORS[holder.faction] or C.text

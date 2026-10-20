@@ -15486,38 +15486,50 @@ end)()
 	-- The Wanted button on the map: left click turns every layer off and on, right click opens the layers' menu
 	local mb = _G.WantedMapButton
 	check(mb and mb.icon._texture:find("seal$") and mb._scripts.OnClick, "a Wanted seal button on the map")
-	local function Layers() return ns.MapPins:IsShown(), ns.Captures:Settings().map, ns.WarMap:Shown() end
-	local function Same(a, b, c, ...) local x, y, z = Layers() return x == a and y == b and z == c end
-	check(Same(true, true, true) and mb._alpha == 1, "every layer starts on")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(false, false, false) and mb._alpha == 0.5 and ns.db.settings.detect.mapPins == false and ns.db.settings.warMap == false
-		and ns.Captures:Settings().map == false, "left click hides every layer, in Settings' own switches, and dims the button")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(true, true, true) and mb._alpha == 1, "and shows them all again")
-	ns.WarMap:SetShown(false)
-	mb._scripts.OnClick(mb, "LeftButton")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(true, true, false), "a layer that was off stays off")
-	ns.WarMap:SetShown(true)
-	mb._scripts.OnClick(mb, "RightButton")
-	local entries = {}
-	for _, item in ipairs(_G.WantedMenu.items) do
-		local def = rawget(item, "def")
-		if def and item._shown then entries[def.text] = def end
+	local KEYS = { "sightings", "stats", "war", "races" }
+	local SETTING = { sightings = function() return ns.db.settings.detect.mapPins end, stats = function() return ns.db.settings.statsMap end,
+		war = function() return ns.db.settings.warMap end, races = function() return ns.db.settings.raceMap end }
+	local function State()
+		local out = {}
+		for _, layer in ipairs(ns.MapButton:Layers()) do out[layer.key] = layer.get() end
+		return out
 	end
-	check(entries["Enemy sightings"] and entries["Capture points"] and entries["Guild wars and races"] and entries["Open Wanted"] and entries["Map settings..."],
-		"right click: a checkbox for each layer, Open Wanted and Map settings")
-	entries["Capture points"].onClick()
-	check(Same(true, false, true) and ns.Captures:Settings().map == false, "the menu switches one layer")
-	entries["Enemy sightings"].onClick()
-	entries["Guild wars and races"].onClick()
-	check(Same(false, false, false) and mb._alpha == 0.5, "each layer has its own switch; none showing dims the button")
-	entries["Enemy sightings"].onClick()
-	check(Same(true, false, false) and mb._alpha == 1 and ns.db.settings.detect.mapPins == true, "one showing: the button is lit")
-	ns.MapPins:SetShown(true)
-	ns.CapturesMap:SetMapShown(true)
-	ns.WarMap:SetShown(true)
-	ns.db.settings.mapKept = nil
+	local function Is(...)
+		local want, state = { ... }, State()
+		for i, key in ipairs(KEYS) do if state[key] ~= want[i] or SETTING[key]() ~= want[i] then return false end end
+		return true
+	end
+	check(#ns.MapButton:Layers() == 4 and ns.MapButton:Layers()[3].label == "Guild wars" and ns.MapButton:Layers()[4].label == "Races", "four layers: sightings, stats, guild wars, races")
+	check(Is(true, true, true, true) and mb._alpha == 1, "every layer starts on, each its own saved switch")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(false, false, false, false) and mb._alpha == 0.5, "left click hides all four, in Settings' own switches, and dims the button")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(true, true, true, true) and mb._alpha == 1, "and shows them all again")
+	ns.WarMap:SetRacesShown(false)
+	mb._scripts.OnClick(mb, "LeftButton")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(true, true, true, false), "a layer that was off stays off")
+	ns.WarMap:SetRacesShown(true)
+	local function Menu()
+		mb._scripts.OnClick(mb, "RightButton")
+		local entries = {}
+		for _, item in ipairs(_G.WantedMenu.items) do
+			local def = rawget(item, "def")
+			if def and item._shown then entries[def.text] = def end
+		end
+		return entries
+	end
+	local entries = Menu()
+	check(entries["Enemy sightings"] and entries["Current stats"] and entries["Guild wars"] and entries["Races"] and entries["Open Wanted"] and entries["Map settings..."]
+		and not entries["Capture points"] and entries["Races"].checked == true, "right click: a checkbox for each layer, Open Wanted and Map settings, no capture points")
+	for i, key in ipairs(KEYS) do
+		local want = { true, true, true, true }
+		Menu()[ns.MapButton:Layers()[i].label].onClick()
+		want[i] = false
+		check(Is(want[1], want[2], want[3], want[4]), "the menu switches "..key.." alone, and Settings follows")
+		Menu()[ns.MapButton:Layers()[i].label].onClick()
+		check(Is(true, true, true, true), "and back on: "..key)
+	end
 	_G.WantedMenu:Hide()
 	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
 	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
@@ -18382,6 +18394,7 @@ end
 	WorldMapFrame.GetCanvas = function() return canvas end
 	WorldMapFrame.GetMapID = function() return 1424 end
 	WorldMapFrame.IsShown = function() return true end
+	ns.db.settings.statsMap = false
 	local function Pieces()
 		local out, n = {}, 0
 		for _, f in ipairs(Mock.created) do
@@ -18473,6 +18486,40 @@ end
 		ns.WarMap:Refresh()
 		local icons = Pieces()
 		check(icons["Moonglade"] and icons["Moonglade"].spec.texture:find("race%-neutral$"), "the continent: a race zone with no war has its flag icon before the race")
+		-- Each overlay is drawn only when ticked
+		ns.WarMap:SetRacesShown(false)
+		check(select(2, Pieces()) == 0 or Pieces()["Moonglade"] == nil, "Races off: no race flag on the continent")
+		ns.WarMap:SetRacesShown(true)
+		WorldMapFrame.GetMapID = function() return 1450 end
+		ns.WarMap:SetRacesShown(false)
+		check(select(2, Pieces()) == 0, "Races off: no race points on the zone map")
+		ns.WarMap:SetRacesShown(true)
+		check(select(2, Pieces()) == 3, "Races on: the three points")
+		-- Current stats: a badge on the continent, a plate on the zone map, only when ticked
+		ns.WarMap:SetRacesShown(false)
+		ns.StatsMap:SetShown(true)
+		ns.Store:NewRecord("kill", { victim = "Player-9-VICTIM", victimName = "Victim", killer = "Player-9-KILLER", killerName = "Killer", killerFaction = "Horde",
+			zone = "Moonglade", mapId = 1450, deathId = "stats-test-1" })
+		ns.StatsMap:Zone(1450, "Moonglade", clock + 100)
+		WorldMapFrame.GetMapID = function() return 1414 end
+		C_Map.GetMapInfo = function(id) if id == 1414 then return { mapType = 2 } end return realInfoMap(id) end
+		C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
+		ns.WarMap:Refresh()
+		local statsBadge = Pieces()["Moonglade"]
+		check(statsBadge and statsBadge.label._text:find("kill") and statsBadge.spec.texture:find("disc$"), "Current stats on: a badge with the kills on the continent")
+		WorldMapFrame.GetMapID = function() return 1450 end
+		ns.WarMap:Refresh()
+		local plate
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "kills") and rawget(f, "holder") and rawget(f, "busy") and f._shown then plate = f end
+		end
+		check(plate and plate.kills._text:find("Kills in the last hour: 1 (Horde 1, Alliance 0)", 1, true) and plate.kills._text:find("Horde ahead", 1, true),
+			"Current stats on: the zone map's plate has the kills and who is ahead: "..tostring(plate and plate.kills._text))
+		WorldMapFrame.GetMapID = function() return 1414 end
+		ns.StatsMap:SetShown(false)
+		check(Pieces()["Moonglade"] == nil, "Current stats off: no badge")
+		ns.StatsMap:SetShown(false)
+		ns.WarMap:SetRacesShown(true)
 		C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realInfoMap, realRect
 		WorldMapFrame.GetMapID = function() return 1424 end
 		clock = savedClock
@@ -18480,9 +18527,14 @@ end
 	end
 	-- The Wanted map button's guild wars layer turns it off and on
 	ns.MapButton:Layers()[3].set(false)
-	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map button's Guild wars layer hides it")
+	local pieces3, left = Pieces()
+	check(ns.db.settings.warMap == false and not pieces3["The keep · Southshore"] and not pieces3["Mid tower"], "the map button's Guild wars layer hides the war")
+	ns.MapButton:Layers()[4].set(false)
+	check(select(2, Pieces()) == 0, "and Races the rest")
+	ns.MapButton:Layers()[4].set(true)
 	ns.MapButton:Layers()[3].set(true)
 	check(ns.db.settings.warMap == true, "and shows it")
+	ns.db.settings.statsMap = nil
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
 	-- Live between catch-ups: our side's clients say where they stand each tick; the capture rule runs here as an
 	-- estimate marked live, never who holds a point

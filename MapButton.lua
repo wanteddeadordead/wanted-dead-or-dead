@@ -23,10 +23,12 @@ function MapButton:Layers()
 	return {
 		{ key = "sightings", label = "Enemy sightings", get = function() return Wanted.MapPins:IsShown() end,
 			set = function(on) Wanted.MapPins:SetShown(on) end },
-		{ key = "fronts", label = "Capture points", get = function() return Wanted.Captures:Settings().map == true end,
-			set = function(on) Wanted.CapturesMap:SetMapShown(on) end },
-		{ key = "war", label = "Guild wars and races", get = function() return Wanted.WarMap:Shown() end,
+		{ key = "stats", label = "Current stats", get = function() return Wanted.StatsMap:Shown() end,
+			set = function(on) Wanted.StatsMap:SetShown(on) end },
+		{ key = "war", label = "Guild wars", get = function() return Wanted.WarMap:Shown() end,
 			set = function(on) Wanted.WarMap:SetShown(on) end },
+		{ key = "races", label = "Races", get = function() return Wanted.WarMap:RacesShown() end,
+			set = function(on) Wanted.WarMap:SetRacesShown(on) end },
 	}
 end
 

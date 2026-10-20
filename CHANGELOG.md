@@ -7,6 +7,7 @@
 ## [1.28.0] - 2026-10-19
 
 - The world map shows tonight's three race zones all day: their three points, grey and labelled with the race time, turning to the holders' colours while the race runs, also on a race zone that has no war (Moonglade), and as a flag on the continent map.
+- Current stats on the world map: each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now, as a badge on the continent's map and a plate on the zone's.
 - A Wanted button on the world map, in the corner with the map's own buttons: left click shows or hides everything Wanted draws there, right click opens a menu with a checkbox for enemy sightings, capture points and guild wars and races, plus Open Wanted and Map settings. It replaces the separate capture fronts and guild wars buttons. New file: restart the client after updating.
 - Zone HUD: in a campaign zone while wars are on, a small frame shows who holds the zone, since when, its protection, and what comes next there. The war and race HUDs take its place when they show. Off, and sized, in Settings, Guild wars. New file: restart the client after updating.
 - The zone, race, war and capture HUDs move and hide alike: drag one where you want it (Settings, Reset HUD positions puts them back), fold it to one line with its chevron, hide it with its X or /wanted hud (all) or /wanted hud zone, race, war or capture; each is also a switch in Settings. New file: restart the client after updating.

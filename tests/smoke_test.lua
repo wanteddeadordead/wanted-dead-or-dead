@@ -18500,11 +18500,26 @@ end
 		ns.StatsMap:SetShown(true)
 		ns.Store:NewRecord("kill", { victim = "Player-9-VICTIM", victimName = "Victim", killer = "Player-9-KILLER", killerName = "Killer", killerFaction = "Horde",
 			zone = "Moonglade", mapId = 1450, deathId = "stats-test-1" })
+		-- Records as the PC's saved data has them: a reported death names the victim's side and no killer, in a zone outside
+		-- the campaign; an old one names only the zone
+		ns.Store:NewRecord("death", { victim = "Player-4613-016951F6", plates = "e", victimGuild = "We Are Relentless", nearEC = 4, victimFaction = "Horde", nearF = 53,
+			victimLevel = 30, mapId = 1458, victimClass = "SHAMAN", nearE = 5, y = 31.8, x = 65.7, victimName = "Sky Montague", deathId = "f7650bd3", victimRace = "Skyborne",
+			zone = "Undercity", victimSex = "female" })
+		ns.Store:NewRecord("death", { victim = "Player-4613-0AAAAAAA", victimFaction = "Alliance", victimLevel = 30, victimName = "Old Record", deathId = "old-1", zone = "Hillsbrad Foothills" })
+		local undercity = ns.StatsMap:Zone(1458, "Undercity", clock + 100)
+		check(undercity.kills == 1 and undercity.Alliance == 1 and undercity.ahead == "Alliance", "a death with only the victim's side counts for the other side")
+		local hillsbrad = ns.StatsMap:Zone(1424, "Hillsbrad Foothills", clock + 100)
+		check(hillsbrad.kills >= 1 and hillsbrad.Horde >= 1, "a record naming only a campaign zone finds its map")
+		local others = ns.StatsMap:OtherZones(clock + 100)
+		local listed = {}
+		for _, z in ipairs(others) do listed[z.name] = true end
+		check(listed["Undercity"] and listed["Moonglade"], "zones outside the campaign are listed")
 		ns.StatsMap:Zone(1450, "Moonglade", clock + 100)
 		WorldMapFrame.GetMapID = function() return 1414 end
 		C_Map.GetMapInfo = function(id) if id == 1414 then return { mapType = 2 } end return realInfoMap(id) end
 		C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
 		ns.WarMap:Refresh()
+		check(Pieces()["Undercity"] and Pieces()["Undercity"].label._text:find("1 kill"), "a non-campaign zone has its badge on the continent")
 		local statsBadge = Pieces()["Moonglade"]
 		check(statsBadge and statsBadge.label._text:find("kill") and statsBadge.spec.texture:find("disc$"), "Current stats on: a badge with the kills on the continent")
 		WorldMapFrame.GetMapID = function() return 1450 end

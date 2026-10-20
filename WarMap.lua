@@ -237,6 +237,18 @@ function private.Zones()
 			tinsert(list, { name = race.zone, mapId = race.mapId, raceOnly = true })
 		end
 	end
+	-- Any other zone with kills or enemies seen: only its stats
+	if Wanted.StatsMap:Shown() then
+		for _, zone in ipairs(Wanted.StatsMap:OtherZones()) do
+			local taken = false
+			for _, z in ipairs(list) do
+				taken = taken or z.mapId == zone.mapId
+			end
+			if not taken then
+				tinsert(list, zone)
+			end
+		end
+	end
 	return list
 end
 
@@ -316,7 +328,7 @@ function private.Provider:RefreshAllData()
 	end
 	if zone then
 		private.DrawZone(zone, function(x, y) return x / 100, y / 100 end, now)
-		if (wars or private.sample) and not zone.raceOnly then
+		if (wars or private.sample) and not zone.raceOnly and not zone.statsOnly then
 			private.ShowPlate(zone, now)
 		end
 		if stats then

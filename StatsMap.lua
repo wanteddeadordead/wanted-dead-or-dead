@@ -25,38 +25,70 @@ function StatsMap:SetShown(shown)
 	Wanted.WarMap:Refresh()
 end
 
----Kills in the last hour by the killer's side, and the enemies seen, per map: mapId -> { Horde, Alliance, kills,
----recent, hour }. Kept for a few seconds: the map redraws often.
+local OPPOSITE = { Horde = "Alliance", Alliance = "Horde" }
+
+---Kills in the last hour by the killer's side, and the enemies seen, per map: mapId -> { name, Horde, Alliance, kills,
+---recent, hour }. Kept for a few seconds: the map redraws often. A record names its zone by map id, and by name alone
+---in a few old ones (a campaign zone's name still finds its map). Most deaths other players report carry the
+---victim's side and no killer, so the killer's side is the other one (PvP deaths are between the factions).
 function private.Build(now)
 	local byMap = {}
-	local function Entry(mapId)
-		byMap[mapId] = byMap[mapId] or { Horde = 0, Alliance = 0, kills = 0, recent = 0, hour = 0 }
-		return byMap[mapId]
+	local function Entry(mapId, name)
+		local entry = byMap[mapId]
+		if not entry then
+			entry = { Horde = 0, Alliance = 0, kills = 0, recent = 0, hour = 0 }
+			byMap[mapId] = entry
+		end
+		entry.name = entry.name or name
+		return entry
 	end
 	local counted = {}
 	for _, kind in ipairs({ "kill", "death" }) do
 		for record in Store:Iterator(kind) do
 			local data = record.data
 			local key = data.deathId or record.id
-			if record.t and now - record.t <= HOUR and type(data.mapId) == "number" and not counted[key] and not Store:IsTest(record) then
+			if record.t and now - record.t <= HOUR and not counted[key] and not Store:IsTest(record) then
 				counted[key] = true
-				local known = type(data.killer) == "string" and Wanted.db.players[data.killer]
-				local side = data.killerFaction or (known and known.faction)
-				local entry = Entry(data.mapId)
-				entry.kills = entry.kills + 1
-				if COLORS[side] then
-					entry[side] = entry[side] + 1
+				local mapId = type(data.mapId) == "number" and data.mapId
+					or type(data.zone) == "string" and Wanted.WarZones.byName[data.zone] and Wanted.WarZones.byName[data.zone].mapId
+				if mapId then
+					local known = type(data.killer) == "string" and Wanted.db.players[data.killer]
+					local side = data.killerFaction or (known and known.faction) or OPPOSITE[data.victimFaction]
+					local entry = Entry(mapId, data.zone)
+					entry.kills = entry.kills + 1
+					if COLORS[side] then
+						entry[side] = entry[side] + 1
+					end
 				end
 			end
 		end
 	end
 	for _, group in ipairs(Wanted.Hotspots:Get()) do
 		if type(group.mapId) == "number" then
-			local entry = Entry(group.mapId)
+			local entry = Entry(group.mapId, group.zone)
 			entry.recent, entry.hour = group.recent, group.hour
 		end
 	end
 	return byMap
+end
+
+function private.Cache(now)
+	if not private.cache or now - private.cache.t >= CACHE_SECONDS then
+		private.cache = { t = now, byMap = private.Build(now) }
+	end
+	return private.cache.byMap
+end
+
+---The zones outside the campaign and tonight's races that have kills or enemies seen in the last hour: { name, mapId }.
+function StatsMap:OtherZones(now)
+	local list = {}
+	for mapId, entry in pairs(private.Cache(now or GetServerTime())) do
+		if not Wanted.WarZones.byMap[mapId] and (entry.kills > 0 or entry.hour > 0) and entry.name then
+			tinsert(list, { name = entry.name, mapId = mapId, statsOnly = true })
+		end
+	end
+	sort(list, function(a, b) return a.mapId < b.mapId end)
+	return list
 end
 
 ---One zone's stats: { name, mapId, kills, Horde, Alliance, ahead, recent, hour, busy, holder (the guild), faction (its
@@ -66,10 +98,7 @@ end
 ---@param now number?
 function StatsMap:Zone(mapId, name, now)
 	now = now or GetServerTime()
-	if not private.cache or now - private.cache.t >= CACHE_SECONDS then
-		private.cache = { t = now, byMap = private.Build(now) }
-	end
-	local entry = private.cache.byMap[mapId] or { Horde = 0, Alliance = 0, kills = 0, recent = 0, hour = 0 }
+	local entry = private.Cache(now)[mapId] or { Horde = 0, Alliance = 0, kills = 0, recent = 0, hour = 0 }
 	local stats = { name = name, mapId = mapId, kills = entry.kills, Horde = entry.Horde, Alliance = entry.Alliance, recent = entry.recent,
 		hour = entry.hour, busy = entry.recent >= BUSY_MIN }
 	stats.ahead = entry.Horde > entry.Alliance and "Horde" or entry.Alliance > entry.Horde and "Alliance" or nil

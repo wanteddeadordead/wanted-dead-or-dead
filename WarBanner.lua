@@ -105,7 +105,7 @@ function private.Build()
 	else
 		f:SetPoint("TOP", UIParent, "TOP", 0, -250)
 	end
-	f.crest = f:CreateTexture(nil, "ARTWORK")
+	f.crest = GuildWars:NewCrest(f)
 	f.crest:SetSize(36, 36)
 	f.title = Theme:Text(f, "title", "")
 	f.title:SetPoint("TOP", 20, 0)
@@ -135,7 +135,7 @@ function private.Show(zone, title, line)
 	local _, _, holder = WarBanner:Lines(zone, GetServerTime())
 	f.crest:SetShown(holder ~= nil and holder.guild ~= nil)
 	if holder and holder.guild then
-		f.crest:SetTexture(GuildWars:CrestFile(holder))
+		f.crest:SetGuild(holder)
 	end
 	local color = holder and COLORS[holder.faction] or C.text
 	f.title:SetText(title)

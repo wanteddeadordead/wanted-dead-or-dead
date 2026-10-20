@@ -18381,6 +18381,11 @@ end
 		local function Zone() ns.ZoneHUD:Update() return _G.WantedZoneHUD end
 		local zhud = Zone()
 		check(zhud and zhud:IsShown() and zhud.zone._text == "Hillsbrad Foothills" and zhud.guild._text == "Revenant" and zhud.since._text:find("^since "), "the zone HUD: shown in a held zone with wars on")
+		check(zhud.crest.fallback._shown and not zhud.crest.emblem._shown, "the zone HUD: the faction art until the holder's tabard is known")
+		held.holder.tabard = { background = { 1, 2, 3 }, border = { 4, 5, 6 }, emblem = { 7, 8, 9 }, style = 2, file = 5 }
+		Zone()
+		check(zhud.crest.emblem._shown and zhud.crest.emblem._coords[1] == 2 * 64 / 1024 and not zhud.crest.fallback._shown, "and the holder's own crest once it is")
+		held.holder.tabard = nil
 		check(zhud.protection._text:find("Protected 2d 4h", 1, true) and zhud.next._text:find("^Race .*tonight"), "its protection and the next race: "..zhud.protection._text.." / "..zhud.next._text)
 		held.protectedUntil, held.next = clock - 10, { kind = "war", at = clock + 3 * 86400 }, nil
 		Zone()

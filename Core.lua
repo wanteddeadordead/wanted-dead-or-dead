@@ -45,7 +45,7 @@ local DEFAULTS = {
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)
-		siege = false, -- siege nights: capture fronts, rally leaders and layer hops; off until their first public night (Wanted:SiegeOn)
+		siege = false, -- siege nights: capture fronts and rally leaders; off until their first public night (Wanted:SiegeOn)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
@@ -659,7 +659,8 @@ function Wanted:AppNotRunningFor()
 	return GetServerTime() - seen
 end
 
----Whether the siege features run on this client: capture fronts, the HUD and map pieces, rally leaders and layer hops.
+---Whether the siege features run on this client: capture fronts, the HUD and map pieces, and rally leaders (layers
+---are read and hops run on every client).
 ---Shipped off (settings.siege), switched on with /wanted siege on (or in Settings) and a /reload, until their first
 ---public siege night makes them the default.
 ---@return boolean

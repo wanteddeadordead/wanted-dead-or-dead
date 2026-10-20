@@ -124,9 +124,6 @@ function Shard:OnLoad()
 end
 
 function Shard:OnEnable()
-	if not Wanted:SiegeOn() then
-		return -- siege nights are off on this client (Wanted:SiegeOn)
-	end
 	for event in pairs(UNIT_EVENTS) do
 		private.Register(event)
 	end
@@ -385,9 +382,6 @@ end
 ---@param key any their layer
 ---@param mapId any the zone map they were on
 function Shard:Note(name, key, mapId)
-	if not Wanted:SiegeOn() then
-		return -- siege nights are off on this client (Wanted:SiegeOn)
-	end
 	if type(name) ~= "string" then
 		return
 	end
@@ -543,14 +537,10 @@ function private.FarCounts(mapId, tally)
 end
 
 ---Our side's Wanted players by zone map and layer, from the channel in the last PEER_SECONDS (us too), for the other
----side's reckoning: { { m = mapId, l = layer, n = count }, ... }, the busiest first, at most MAX_FAR_ENTRIES. Empty
----while the siege features are off.
+---side's reckoning: { { m = mapId, l = layer, n = count }, ... }, the busiest first, at most MAX_FAR_ENTRIES.
 ---@return table[]
 function Shard:FarSummary()
 	local list = {}
-	if not Wanted:SiegeOn() then
-		return list
-	end
 	local now, counts = GetTime(), {}
 	local function Add(mapId, key)
 		counts[mapId] = counts[mapId] or {}
@@ -589,7 +579,7 @@ end
 ---@param sender string who it came from (a Battle.net game account, or the channel peer passing it on)
 ---@param list any
 function Shard:NoteFar(sender, list)
-	if not Wanted:SiegeOn() or type(sender) ~= "string" or type(list) ~= "table" then
+	if type(sender) ~= "string" or type(list) ~= "table" then
 		return
 	end
 	local kept, count = {}, 0
@@ -857,9 +847,6 @@ end
 ---@param tbl table
 ---@param sender string
 function Shard:OnMessage(tbl, sender)
-	if not Wanted:SiegeOn() then
-		return -- siege nights are off on this client (Wanted:SiegeOn)
-	end
 	if type(tbl) ~= "table" or type(sender) ~= "string" then
 		return
 	end

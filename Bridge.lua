@@ -115,7 +115,7 @@ end
 ---for them. Data only, never chat: the other side's addons reckon the fight layer with it.
 function private.SendLayers()
 	C_Timer.After(LAYERS_SECONDS, private.SendLayers)
-	if not private.Enabled() or not Wanted.Shard or not Wanted:SiegeOn() then
+	if not private.Enabled() or not Wanted.Shard then
 		return
 	end
 	local list = Wanted.Shard:FarSummary()
@@ -566,7 +566,7 @@ function private.OnMessage(text, senderID)
 		-- The other side's players by layer: into our reckoning, and on to our channel for the rest of our side
 		private.stats.layersReceived = private.stats.layersReceived + 1
 		Wanted.Shard:NoteFar("bnet:"..tostring(senderID), tbl.z)
-		if Wanted:SiegeOn() and GetTime() - private.farShared >= FAR_SHARE_SECONDS then
+		if GetTime() - private.farShared >= FAR_SHARE_SECONDS then
 			private.farShared = GetTime()
 			Sync:BroadcastPlugin("X", { z = tbl.z })
 		end

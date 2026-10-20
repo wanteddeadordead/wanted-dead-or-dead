@@ -17554,6 +17554,33 @@ print("wanted smoke: setup checks pass")
 	db.presence = real
 end)()
 print("wanted smoke: presence checks pass")
+-- Layers are read on every client, whatever the siege switch says: presence and a war's census and witness lines carry
+-- the player's layer, and a war is fought on the defenders' layer
+;(function()
+	local Shard, db = ns.Shard, ns.db
+	local shardPrivate
+	for i = 1, 60 do
+		local name, value = debug.getupvalue(Shard.OnEnable, i)
+		if name == "private" then shardPrivate = value break end
+		if not name then break end
+	end
+	local realSiege, realOnRecord, realOnSiege = db.settings.siege, ns.Store.OnRecord, ns.Captures.OnSiege
+	db.settings.siege = false
+	ns.Store.OnRecord, ns.Captures.OnSiege = function() end, function() end
+	shardPrivate.frame:UnregisterAllEvents()
+	Shard:OnEnable()
+	local function Registered(event)
+		for _, f in ipairs(registry[event] or {}) do if f == shardPrivate.frame then return true end end
+		return false
+	end
+	check(Registered("UPDATE_MOUSEOVER_UNIT") and Registered("NAME_PLATE_UNIT_ADDED") and Registered("SHARD_TRANSFER"), "the siege switch off: layers are still read, and hops still run")
+	Shard:Note("Layer Peer", "4615-1-901", 1424)
+	Shard:NoteFar("bnet:9", { { m = 1424, l = "4615-1-902", n = 3 } })
+	local far = Shard:FarSummary()
+	check(#far >= 1, "and other players' layers are kept and summed for the other side")
+	db.settings.siege, ns.Store.OnRecord, ns.Captures.OnSiege = realSiege, realOnRecord, realOnSiege
+end)()
+print("wanted smoke: layer checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
 -- same WANTEDP1 line as a capture point's, and none outside it, while it can't count or outside the race; the Guild
 -- Wars page in Siege's place; the HUD in the race's zone while it runs

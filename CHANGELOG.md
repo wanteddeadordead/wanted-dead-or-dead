@@ -6,6 +6,7 @@
 
 ## [1.28.0] - 2026-10-19
 
+- Your guild's tabard goes with your roster report, so the site can show your guild's crest.
 - The world map shows tonight's three race zones all day: their three points, grey and labelled with the race time, turning to the holders' colours while the race runs, also on a race zone that has no war (Moonglade), and as a flag on the continent map.
 - Current stats on the world map: each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now, as a badge on the continent's map and a plate on the zone's.
 - A Wanted button on the world map, in the corner with the map's own buttons: left click shows or hides everything Wanted draws there, right click opens a menu with a checkbox for enemy sightings, capture points and guild wars and races, plus Open Wanted and Map settings. It replaces the separate capture fronts and guild wars buttons. New file: restart the client after updating.

@@ -17952,6 +17952,25 @@ end
 	clock = clock + 400
 	G:ReportRoster()
 	check(#logged == 4 and logged[3]:find("&at="..clock.."&", 1, true), "then each read, with its time (the app sends what changed)")
+	-- The guild's tabard goes with the report, between the ranks and the members; none, no design or a game error: no field
+	do
+		local function Color(r, g, b) return { GetRGB = function() return r, g, b end } end
+		local info = { backgroundColor = Color(31 / 255, 58 / 255, 92 / 255), borderColor = Color(0, 0, 0), emblemColor = Color(1, 209 / 255, 0), emblemStyle = 12, emblemFileID = 132456 }
+		local realInfo = C_GuildInfo
+		local function Report(api)
+			C_GuildInfo = api
+			clock = clock + 700
+			logged = {}
+			G:ReportRoster()
+			return table.concat(logged, "\n")
+		end
+		check(not Report({}):find("tabard=", 1, true), "no tabard field when the game has no API for it")
+		local text = Report({ GetGuildTabardInfo = function(unit) return unit == "player" and info or nil end })
+		check(text:find("&ranks=[^&]*&tabard=1f3a5c.000000.ffd100.12.132456&members=") ~= nil or text:find("&tabard=1f3a5c.000000.ffd100.12.132456&", 1, true), "the tabard field: "..text)
+		check(not Report({ GetGuildTabardInfo = function() return { emblemFileID = nil, backgroundColor = info.backgroundColor } end }):find("tabard=", 1, true), "a guild with no design: no field")
+		check(#logged > 0 and not Report({ GetGuildTabardInfo = function() error("boom") end }):find("tabard=", 1, true) and #logged > 0, "an erroring game call: the report still goes, without the field")
+		C_GuildInfo = realInfo
+	end
 	-- A big guild: in parts, each under 255 bytes, the members spread over them in order
 	local realRosterInfo, realCount = GetGuildRosterInfo, GetNumGuildMembers
 	GetNumGuildMembers = function() return 120 end

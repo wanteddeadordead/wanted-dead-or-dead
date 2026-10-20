@@ -889,12 +889,30 @@ function GuildWars:NewCrest(parent, layer, sublevel)
 	crest.emblem:SetTexture(EMBLEMS)
 	crest.fallback = crest:CreateTexture(nil, layer, nil, sublevel or 0)
 	crest.fallback:SetAllPoints()
-	crest:SetScript("OnSizeChanged", function(self, width) self.emblem:SetWidth(width * 7 / 8) end)
-	crest.emblem:SetWidth(crest:GetWidth() * 7 / 8)
+	-- The keep's ring (SetKeep), a quarter bigger than the crest
+	crest.ring = crest:CreateTexture(nil, layer, nil, (sublevel or 0) + 3)
+	crest.ring:SetPoint("CENTER")
+	crest.ring:SetTexture("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\pieces\\ring")
+	crest.ring:Hide()
+	crest:SetScript("OnSizeChanged", function(self) GuildWars.CrestLayout(self) end)
 	crest.SetGuild = GuildWars.CrestSetGuild
+	crest.SetKeep = GuildWars.CrestSetKeep
 	crest.SetDesaturated = GuildWars.CrestSetDesaturated
 	crest:SetGuild(nil)
 	return crest
+end
+
+-- At this height and under, a crest is the emblem on its background colour, with no border
+local SMALL_CREST = 22
+
+---Fits the crest's layers to its size: the emblem 7/8 as wide as it is tall, or filling the background when small
+---(no border); the ring a quarter bigger.
+function GuildWars.CrestLayout(crest)
+	local width, height = crest:GetWidth(), crest:GetHeight()
+	local small = height <= SMALL_CREST
+	crest.border:SetShown(crest.hasTabard == true and not small)
+	crest.emblem:SetWidth(small and width or width * 7 / 8)
+	crest.ring:SetSize(width * 1.25, height * 1.25)
 end
 
 function GuildWars.CrestSetGuild(crest, guild)
@@ -903,6 +921,9 @@ function GuildWars.CrestSetGuild(crest, guild)
 	crest.border:SetShown(tabard ~= nil)
 	crest.emblem:SetShown(tabard ~= nil)
 	crest.fallback:SetShown(tabard == nil)
+	crest.hasTabard = tabard ~= nil
+	crest.ring:Hide()
+	GuildWars.CrestLayout(crest)
 	if tabard then
 		local b, o, e = tabard.background, tabard.border, tabard.emblem
 		crest.background:SetVertexColor(b[1] / 255, b[2] / 255, b[3] / 255)
@@ -915,6 +936,28 @@ function GuildWars.CrestSetGuild(crest, guild)
 	else
 		crest.fallback:SetTexture(GuildWars:CrestFile(guild))
 	end
+end
+
+---The crest as a keep's seal (call SetGuild with the defenders first): its state is a ring on it, the defenders' colour
+---sealed, orange open, the attackers' with the crest greyed when fallen. Without a tabard the keep's own art stands in,
+---as it always did, and no ring. nil takes the ring off.
+---@param state string? "sealed", "open" or "fallen"
+---@param d string the defenders' side, "horde" or "alliance"
+---@param a string the attackers'
+function GuildWars.CrestSetKeep(crest, state, d, a)
+	if not state or not crest.hasTabard then
+		crest.ring:Hide()
+		crest:SetDesaturated(false)
+		if state then
+			crest.fallback:SetTexture(GuildWars:KeepFile(state, d, a))
+		end
+		return
+	end
+	local function Side(code) return GuildWars.SIDE_COLORS[code == "alliance" and "Alliance" or "Horde"] end
+	local color = state == "open" and { 1, 0.55, 0.1 } or state == "fallen" and Side(a) or Side(d)
+	crest.ring:SetVertexColor(color[1], color[2], color[3], 1)
+	crest.ring:Show()
+	crest:SetDesaturated(state == "fallen")
 end
 
 function GuildWars.CrestSetDesaturated(crest, on)

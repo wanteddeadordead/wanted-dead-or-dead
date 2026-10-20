@@ -17976,6 +17976,7 @@ end
 	-- A guild's crest from the game's own textures: the tabard tinted, else the faction art
 	do
 		local crest = G:NewCrest(UIParent)
+		crest:SetSize(40, 40)
 		local tabard = { background = { 31, 58, 92 }, border = { 0, 0, 0 }, emblem = { 255, 209, 0 }, style = 12, file = 132456 }
 		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
 		local c = crest.emblem._coords
@@ -18011,6 +18012,32 @@ end
 		check(crest.emblem._coords[1] == (17 % 16) * 64 / 1024 and crest.emblem._shown, "and the game erroring falls back to the site's")
 		crest:SetDesaturated(true)
 		check(crest.emblem._desaturated and crest.fallback._desaturated, "a crest desaturates all its layers")
+		-- Small: the emblem on its background colour, no border; 40 px shows it
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
+		check(crest.border._shown and crest.emblem._w == 35, "a 40 px crest has its border and a 7/8 emblem")
+		crest:SetSize(22, 22)
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
+		check(not crest.border._shown and crest.background._shown and crest.emblem._shown and crest.emblem._w == 22, "a 22 px crest hides the border and the emblem fills the background")
+		crest:SetSize(40, 40)
+		-- The keep's seal: the ring is the state; greyed only when fallen; the keep's own art without a tabard
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance", tabard = tabard })
+		crest:SetKeep("sealed", "alliance", "horde")
+		local ring = crest.ring._vertexColor
+		check(crest.ring._shown and ring[1] == G.SIDE_COLORS.Alliance[1] and ring[3] == G.SIDE_COLORS.Alliance[3] and not crest.emblem._desaturated, "a sealed keep: the ring in the defenders' colour")
+		crest:SetKeep("open", "alliance", "horde")
+		ring = crest.ring._vertexColor
+		check(crest.ring._shown and ring[1] == 1 and ring[2] == 0.55 and ring[3] == 0.1 and not crest.emblem._desaturated, "an open keep: an orange ring")
+		crest:SetKeep("fallen", "alliance", "horde")
+		ring = crest.ring._vertexColor
+		check(crest.ring._shown and ring[1] == G.SIDE_COLORS.Horde[1] and crest.emblem._desaturated and crest.background._desaturated, "a fallen keep: the attackers' ring, the crest greyed")
+		crest:SetKeep(nil)
+		check(not crest.ring._shown, "no state: no ring")
+		crest:SetGuild({ guild = "Revenant", faction = "Alliance" })
+		for _, state in ipairs({ "sealed", "open", "fallen" }) do
+			crest:SetKeep(state, "alliance", "horde")
+			check(crest.fallback._shown and crest.fallback._texture == G:KeepFile(state, "alliance", "horde") and not crest.ring._shown and not crest.fallback._desaturated,
+				"without a tabard a "..state.." keep is the keep's own art, no ring")
+		end
 		C_GuildInfo, GetGuildInfo, IsInGuild = realInfo, realGuild, realInGuild
 		-- The views carry the tabard from owners
 		local view = G.View({ owners = { ["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", since = clock - 86400, tabard = tabard } } }, clock)

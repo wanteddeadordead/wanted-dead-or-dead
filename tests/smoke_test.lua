@@ -18047,6 +18047,12 @@ end
 		local other = G.View({ owners = { ["Hillsbrad Foothills"] = { guild = "Revenant", faction = "Alliance", tabard = tabard } },
 			warLive = { ["99"] = { zone = "Hillsbrad Foothills", phase = "battle", endsAt = clock + 1000, at = clock, points = {}, turnout = { att = 1, def = 1 }, friends = {}, mult = {} } } }, clock)
 		check(other.others and other.others[1] and other.others[1].defender.tabard and other.others[1].defender.tabard.style == 17, "and the defender of another guild's war")
+		local raw = GuildWarsSample(clock)
+		raw.owners["Hillsbrad Foothills"].tabard = tabard
+		local own = G.View(raw, clock)
+		local ownWar
+		for _, w in ipairs(own.wars) do if w.zone == "Hillsbrad Foothills" then ownWar = w end end
+		check(ownWar and ownWar.defender.guild == "Revenant" and ownWar.defender.tabard and ownWar.defender.tabard.style == 17, "and the defender of the account's own war, when it holds the zone")
 	end
 	-- A big guild: in parts, each under 255 bytes, the members spread over them in order
 	local realRosterInfo, realCount = GetGuildRosterInfo, GetNumGuildMembers

@@ -62,24 +62,41 @@ Tour.SETS.first = {
 	{ title = "Live numbers", page = "guildwars", mark = "racecard",
 		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
 			.."The other side's number is the site's, as of your last /reload." },
-	-- Guild wars: the site runs none yet, so the stops marked sample show a made-up war (GuildWars:StartSample; WarSample.lua),
-	-- tagged Sample in the window's title bar; where the site does run wars they show the real ones
-	{ title = "Zones", page = "warzones", mark = "warzones", sample = true,
+	-- Guild wars: one sample war ("Sample" against "Sample", WarSample.lua) is walked through its life, the sample moving
+	-- to each stop's stage (sample = stage); the player's own guild's data shows instead where it has some for that screen.
+	-- Every sampled screen is tagged SAMPLE. hud = the sample war HUD shows too.
+	{ title = "Zones", page = "warzones", mark = "warzones", sample = "battle",
 		text = "After a race, a guild can win a zone. Zones lists every zone of the campaign: who holds it, since when, whether it is protected, and what comes next there, a race or a war. A zone is protected for 3 days after a war.\n\n"
-			.."Wars are not on yet, so this screen and the next three show a sample. Every guild in it is called Sample; none of it is real." },
-	{ title = "A war", page = "war1", mark = { "warbar", "warlanes" }, sample = true,
-		text = "The tab of a guild's war. The bar runs from the race to the result; its Battle note is the half-hour, after 15 minutes of prep.\n\n"
-			.."Attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win. Turnout counts each guild's players here." },
-	{ title = "War Marks", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, sample = true,
+			.."The next stops walk one war through its life. Every guild in the sample is called Sample; none of it is real." },
+	{ title = "Declare", page = "war1", mark = { "warbar", "warpanel-declare" }, sample = "declare",
+		text = "A war starts with a declaration. When a race ends, an officer of a guild on the side that didn't hold the zone has 15 minutes to declare, with a stake: a multiple of 50, from the zone's minimum to twice it.\n\n"
+			.."The checks list what the guild may still lack: 10% of its side's influence, 5 members with the app, a treasury that holds the stake." },
+	{ title = "The draw", page = "war1", mark = { "warbar", "warpanel-draw" }, sample = "draw",
+		text = "When declaring closes, the site draws one declaring guild. Each guild's chance follows its share of the influence and its stake. The seed is published, so anyone can check the draw on the site.\n\n"
+			.."A guild that isn't drawn gets its stake back." },
+	{ title = "The time", page = "war1", mark = { "warbar", "warpanel-time" }, sample = "time",
+		text = "The holders pick the war's time: a half-hour start between 6 PM and midnight Eastern, on one of the next two evenings. This is the holders' side. The attackers then accept or withdraw, and a withdrawal returns their stake.\n\n"
+			.."If the holders pick nothing within 12 hours of the draw, the war starts at 8 PM the next evening." },
+	{ title = "The roster", page = "war1", mark = { "warbar", "warpanel-roster" }, sample = "roster",
+		text = "Each guild picks up to 40 players. Only the roster takes and holds points. Players sign up first; the officers pick from the sign-ups, keep some on standby, and can invite allies from another guild of the same side.\n\n"
+			.."The roster locks when the battle starts." },
+	{ title = "The battle", page = "war1", mark = "warlanes", sample = "battle", hud = true,
+		text = "15 minutes of prep, then 30 of battle. The attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win.\n\n"
+			.."Turnout counts each guild's players here; friends are on neither roster. In the war's zone, the frame at the top of the screen (shown now) is the war HUD." },
+	{ title = "The result", page = "war1", mark = { "warbar", "warpanel-result" }, sample = "result",
+		text = "The site counts the result. The winner holds the zone, protected for 3 days. If the attackers win, their stake comes back; if the defenders hold, the stake is theirs.\n\n"
+			.."The site pays War Marks to the roster players who were there." },
+	{ title = "War Marks", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, sample = "battle",
 		text = "War Marks buy cosmetics, never power. You earn them from races, wars, bounties and weekly boards, up to 150 a day.\n\n"
 			.."The guild's leader sets a tax from 0 to 25%. It sends part of each earning to the guild's treasury first, and the whole earning still counts toward the 150. The treasury pays the stake a guild puts on a war." },
-	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, sample = true,
+	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, sample = "battle",
 		text = "War officers declare, pick the time, accept or withdraw, and set the roster. By default they are the guild master and every rank that can invite. The guild master adds or leaves out people; everyone sees the list.\n\n"
 			.."To declare, a guild needs 10% of its side's influence in the race, 5 members with the app, and a treasury that holds the stake." },
-	{ title = "Bystanders and witnesses", page = "guildwars",
-		text = "Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting. Only the two rosters take and hold points; everyone else fights freely.\n\n"
-			.."Wars switch on after launch.\n\n"
-			.."That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
+	{ title = "Bystanders and witnesses", page = "war1", mark = "warlanes", sample = "battle", hud = true,
+		text = "Anyone in a war's zone sees the war HUD, whatever their guild. Wanted also witnesses the war points for the site: it reports the players it sees there, even if your guild isn't fighting.\n\n"
+			.."The site counts a roster player in full only when another computer saw them at the point, so witnesses keep the count honest." },
+	{ title = "That's the tour", page = "guildwars",
+		text = "That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
 Tour.STOPS = Tour.SETS.first
 
@@ -160,11 +177,30 @@ end
 
 ---Ends the sample war, and the window leaves its pages.
 function private.EndSample()
+	private.Huds(false)
 	if GuildWars:Sampling() then
 		GuildWars:StopSample()
 		private.Tag(false)
 		if UI:IsShown() then
 			UI:Refresh()
+		end
+	end
+end
+
+---The sample HUDs: the war HUD (and the zone HUD, where this version has one) as a SAMPLE copy while a stop with hud is
+---up; none otherwise. Shown only for the sample war, never over a real one.
+---@param on boolean
+function private.Huds(on)
+	local war = on and GuildWars:Sampling() and GuildWars.Page:War(1) or nil
+	if war and war.sample then
+		Wanted.WarHUD:ShowSample(war)
+		if Wanted.ZoneHUD and Wanted.ZoneHUD.ShowSample then
+			Wanted.ZoneHUD:ShowSample(war)
+		end
+	else
+		Wanted.WarHUD:HideSample()
+		if Wanted.ZoneHUD and Wanted.ZoneHUD.HideSample then
+			Wanted.ZoneHUD:HideSample()
 		end
 	end
 end
@@ -200,19 +236,20 @@ function private.Go(page)
 	f.title:SetText(stop.title)
 	f.body:SetText(stop.text)
 	f.back:SetEnabled(page > 1)
-	-- A sample war while the site runs none; a stop without one ends it
+	-- The sample war at the stop's stage; a stop without one ends it
 	if stop.sample then
-		GuildWars:StartSample()
+		GuildWars:StartSample(stop.sample)
 	else
 		private.EndSample()
 	end
-	private.Tag(stop.sample and GuildWars:Sampling())
+	private.Tag(stop.sample ~= nil)
 	if stop.page then
 		UI:Show(stop.page)
 	end
 	if stop.nearby and Wanted.NearbyWindow and not Wanted.NearbyWindow:IsShown() then
 		Wanted.NearbyWindow:Toggle()
 	end
+	private.Huds(stop.hud == true)
 	private.Mark(stop.mark)
 	private.Wait(stop)
 end

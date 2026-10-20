@@ -67,8 +67,8 @@ function private.Side(f, right)
 	return side
 end
 
-function private.Build()
-	local f = CreateFrame("Frame", "WantedWarHUD", UIParent)
+function private.Build(sample)
+	local f = CreateFrame("Frame", sample and "WantedWarHUDSample" or "WantedWarHUD", UIParent)
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetFrameStrata("LOW")
 	f:SetClampedToScreen(true)
@@ -136,9 +136,22 @@ function private.Build()
 	W:Explain(bar, "Capture", "Net count here (yours minus theirs, up to 6); progress is kept if you leave.", "ANCHOR_BOTTOM")
 	f.bar = bar
 	f.status = Theme:Text(body, "small", "", C.amber)
-	HudKit:Attach("war", f)
+	-- The tour's sample copy (ShowSample) is its own frame: not registered with the kit, so it has no grip, fold or close
+	-- and no saved place, and it takes no clicks
+	if sample then
+		f:EnableMouse(false)
+		f.summary = Theme:Text(f, "small", "")
+		f.summary:Hide()
+		private.Place(f)
+	else
+		HudKit:Attach("war", f)
+	end
 	f:Hide()
-	private.frame = f
+	if sample then
+		private.sample = f
+	else
+		private.frame = f
+	end
 	return f
 end
 
@@ -185,13 +198,36 @@ function WarHUD:Update()
 		return
 	end
 	f = f or private.Build()
+	private.Draw(f, war, zone, x, y, mapId, now)
+end
+
+---A sample copy of the HUD for the tour (WarSample.lua): its own frame, drawn from the sample war, no place on the
+---map, and nothing about it reaches the game's log, the messages or saved data. Hidden by HideSample.
+---@param war table the sample war (GuildWars.Page:War)
+function WarHUD:ShowSample(war)
+	local zone = Wanted.WarZones:Get(war.zone)
+	if not zone or type(war.battle) ~= "table" or not war.battle.start then
+		return
+	end
+	local f = private.sample or private.Build(true)
+	private.Draw(f, war, zone, nil, nil, nil, GetServerTime(), true)
+end
+
+function WarHUD:HideSample()
+	if private.sample then
+		private.sample:Hide()
+	end
+end
+
+---Draws a war on a HUD frame; sample: the tour's, which says so and has the player on the roster.
+function private.Draw(f, war, zone, x, y, mapId, now, sample)
 	local b = war.battle
 	local attacker, defender = war.attacker or {}, war.defender or {}
 	local d, a = SIDE[defender.faction] or "alliance", SIDE[attacker.faction] or "horde"
 	local prep = now < b.start
 	-- The clock: to the battle in prep, then the battle's time left
 	f.clock:SetText(prep and ("Prep "..private.Clock(b.start - now)) or private.Clock(b.stop - now))
-	f.kind:SetText(prep and "GUILD WAR · PREP" or "GUILD WAR")
+	f.kind:SetText((sample and "SAMPLE · " or "")..(prep and "GUILD WAR · PREP" or "GUILD WAR"))
 	-- The guilds: roster players here, and the outnumbered bonus when a side has it
 	local turnout, mult = b.turnout or {}, b.mult or {}
 	for _, key in ipairs({ "attacker", "defender" }) do
@@ -264,10 +300,15 @@ function WarHUD:Update()
 	end
 	-- Why the player doesn't count, or no live data
 	f.status:SetText(not b.live and "No live data: only the clock"
-		or not GuildWars:OnRoster(war) and "You can fight; you don't count"
+		or not sample and not GuildWars:OnRoster(war) and "You can fight; you don't count"
 		or "")
 	f.summary:SetText(format("%s  ·  %s %d v %s %d", prep and ("Prep "..private.Clock(b.start - now)) or private.Clock(b.stop - now),
 		attacker.guild or attacker.faction or "?", tonumber((b.turnout or {}).attacker) or 0, defender.guild or defender.faction or "?", tonumber((b.turnout or {}).defender) or 0))
-	HudKit:Apply("war", f, WIDTH, HEIGHT)
+	if sample then
+		f.body:Show()
+		f:SetSize(WIDTH, HEIGHT)
+	else
+		HudKit:Apply("war", f, WIDTH, HEIGHT)
+	end
 	f:Show()
 end

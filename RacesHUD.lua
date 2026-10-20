@@ -9,6 +9,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local Races = Wanted.Races
+local HudKit = Wanted.HudKit
 local private = {}
 -- The points one under another, each the frame's width: the longest real names ("east of Dabyrie's Farmstead +20%")
 -- didn't fit a third of it
@@ -25,31 +26,39 @@ function RacesHUD:OnEnable()
 	Races:OnChange(function() RacesHUD:Update() end)
 end
 
-function private.Build()
-	local f = CreateFrame("Frame", "WantedRaceHUD", UIParent)
-	f:SetSize(WIDTH, HEIGHT)
-	f:SetFrameStrata("LOW")
-	Theme:Skin(f, { 0.067, 0.067, 0.067, 0.85 }, { 1, 1, 1, 0.15 })
+---Where the HUD goes without a place the player dragged it to: under the game's top-centre widgets.
+function private.Place(f)
 	if UIWidgetTopCenterContainerFrame then
 		f:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
 	else
 		f:SetPoint("TOP", UIParent, "TOP", 0, -60)
 	end
-	f.kind = W:Pill(f)
+end
+
+HudKit:Register("race", { name = "Race HUD", setting = function() return Wanted.db.settings end, field = "raceHud",
+	refresh = function() RacesHUD:Update() end, place = private.Place, collapsedWidth = 300 })
+
+function private.Build()
+	local f = CreateFrame("Frame", "WantedRaceHUD", UIParent)
+	f:SetSize(WIDTH, HEIGHT)
+	f:SetFrameStrata("LOW")
+	Theme:Skin(f, { 0.067, 0.067, 0.067, 0.85 }, { 1, 1, 1, 0.15 })
+	local body = HudKit:Body(f)
+	f.kind = W:Pill(body)
 	f.kind:SetPoint("TOPLEFT", 10, -8)
 	f.kind:Set("RACE", C.muted)
 	W:Explain(f.kind, "Race", "Open to everyone here. Influence only: nothing is captured.", "ANCHOR_BOTTOM")
-	f.zone = Theme:Text(f, "heading", "", C.gold)
+	f.zone = Theme:Text(body, "heading", "", C.gold)
 	f.zone:SetPoint("LEFT", f.kind, "RIGHT", 8, 0)
-	f.left = Theme:Text(f, "stat", "")
+	f.left = Theme:Text(body, "stat", "")
 	f.left:SetPoint("TOPRIGHT", -10, -6)
 	f.left:SetJustifyH("RIGHT")
-	f.horde = Theme:Text(f, "small", "")
+	f.horde = Theme:Text(body, "small", "")
 	f.horde:SetPoint("TOPLEFT", 10, -34)
-	f.alliance = Theme:Text(f, "small", "")
+	f.alliance = Theme:Text(body, "small", "")
 	f.alliance:SetPoint("TOPRIGHT", -10, -34)
 	f.alliance:SetJustifyH("RIGHT")
-	local bar = CreateFrame("Frame", nil, f)
+	local bar = CreateFrame("Frame", nil, body)
 	bar:SetPoint("TOPLEFT", 10, -50)
 	bar:SetSize(WIDTH - 20, 4)
 	bar.track = Theme:Fill(bar, { 1, 1, 1, 0.08 }, "BACKGROUND")
@@ -63,7 +72,7 @@ function private.Build()
 	f.bar = bar
 	f.points = {}
 	for i = 1, 3 do
-		local p = CreateFrame("Frame", nil, f)
+		local p = CreateFrame("Frame", nil, body)
 		p:SetSize(WIDTH - 20, 16)
 		p:SetPoint("TOPLEFT", 10, POINT_TOP - (i - 1) * POINT_ROW)
 		p.dot = p:CreateTexture(nil, "ARTWORK")
@@ -76,12 +85,13 @@ function private.Build()
 		p.name:SetWordWrap(false)
 		f.points[i] = p
 	end
-	f.you = Theme:Text(f, "small", "", C.text)
+	f.you = Theme:Text(body, "small", "", C.text)
 	f.you:SetPoint("TOPLEFT", 10, POINT_TOP - 3 * POINT_ROW - 4)
 	W:Explain(f.you, "You", "Your kills on the other faction here while the race runs, and your minutes on its points, as this client counted them.", "ANCHOR_BOTTOM")
 	-- Why the player's presence on a point doesn't count (Captures:Blocked), under the frame
-	f.blocked = Theme:Text(f, "small", "", C.amber)
+	f.blocked = Theme:Text(body, "small", "", C.amber)
 	f.blocked:SetPoint("TOP", f, "BOTTOM", 0, -4)
+	HudKit:Attach("race", f)
 	f:Hide()
 	private.frame = f
 	return f
@@ -123,7 +133,7 @@ function RacesHUD:Update()
 	local race = Races:Live(now)
 	local _, _, _, mapId = Wanted.Recorder:GetPosition()
 	local f = private.frame
-	if not race or mapId ~= race.mapId then
+	if not race or mapId ~= race.mapId or Wanted.db.settings.raceHud == false then
 		if f then
 			f:Hide()
 		end
@@ -136,8 +146,11 @@ function RacesHUD:Update()
 	-- The site's numbers, or our side's live estimate when it's more (Races:SideInfluence)
 	local horde, hordeLive = Races:SideInfluence(race, "Horde")
 	local alliance, allianceLive = Races:SideInfluence(race, "Alliance")
-	f.horde:SetText(Theme:Colorize("Horde "..private.Count(horde), SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize(" live", C.green) or ""))
-	f.alliance:SetText((allianceLive and Theme:Colorize("live ", C.green) or "")..Theme:Colorize("Alliance "..private.Count(alliance), SIDE_COLORS.Alliance))
+	local hordeText = Theme:Colorize("Horde "..private.Count(horde), SIDE_COLORS.Horde)..(hordeLive and Theme:Colorize(" live", C.green) or "")
+	local allianceText = (allianceLive and Theme:Colorize("live ", C.green) or "")..Theme:Colorize("Alliance "..private.Count(alliance), SIDE_COLORS.Alliance)
+	f.horde:SetText(hordeText)
+	f.alliance:SetText(allianceText)
+	f.summary:SetText(format("%d:%02d", floor(left / 60), left % 60)..Theme:Colorize(" left", C.muted).."  ·  "..hordeText.."  ·  "..allianceText)
 	local total = horde + alliance
 	for _, side in ipairs({ "Horde", "Alliance" }) do
 		local n = side == "Horde" and horde or alliance
@@ -172,5 +185,6 @@ function RacesHUD:Update()
 	f.you:SetText(format("You  ·  %d kill%s  ·  %d min", private.kills, private.kills == 1 and "" or "s", private.minutes))
 	local point, blocked = Races:Current()
 	f.blocked:SetText(point and blocked and format("Not counted on %s: %s", point.name, strlower(blocked)) or "")
+	HudKit:Apply("race", f, WIDTH, HEIGHT)
 	f:Show()
 end

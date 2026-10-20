@@ -267,3 +267,8 @@ UI:RegisterPage("warmarks", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's War Marks stop borders these
+UI:Mark("warpurse", function() return private.tiles and private.tiles.purse end)
+UI:Mark("warmarkstoday", function() return private.today end)
+UI:Mark("wartax", function() return private.tiles and private.tiles.tax end)

@@ -65,6 +65,7 @@ GuildWars.PANELS.battle = {
 	build = function(panel, width)
 		panel.state = {}
 		local lanes = W:Card(panel)
+		panel.lanesCard = lanes
 		lanes:SetPoint("TOPLEFT")
 		lanes:SetSize(width, LANES_HEIGHT)
 		panel.lanesLabel = W:SectionLabel(lanes, "")

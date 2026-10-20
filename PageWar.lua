@@ -175,6 +175,7 @@ function private.BuildTab(container, width, height, index)
 	tab.pill:SetPoint("TOPRIGHT", -16 - 2 * 84 - 22, -18)
 	-- The step bar: a done step's dot opens its panel; the current one comes back to the war's own
 	local barCard = W:Card(container)
+	tab.barCard = barCard
 	barCard:SetPoint("TOPLEFT", 0, -HEADER_HEIGHT - GAP)
 	barCard:SetSize(width, BAR_CARD)
 	tab.bar = W:StepBar(barCard, width - 32, STEP_BAR, function(step)
@@ -332,6 +333,13 @@ for index = 1, MAX_WARS do
 		end,
 	})
 end
+
+-- The tour's war stop borders these (Tour): the first war's step bar and lanes
+UI:Mark("warbar", function() return private.tabs[1] and private.tabs[1].barCard end)
+UI:Mark("warlanes", function()
+	local panel = private.tabs[1] and private.tabs[1].panels.battle
+	return panel and panel.lanesCard
+end)
 
 -- For the panels: the shared bits
 GuildWars.Sides = function(_, war) return private.Sides(war) end

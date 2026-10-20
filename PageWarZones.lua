@@ -180,6 +180,7 @@ UI:RegisterPage("warzones", {
 		private.count:SetPoint("TOPRIGHT", 0, -8)
 		private.count:SetJustifyH("RIGHT")
 		local card = W:Card(container)
+		private.card = card
 		card:SetPoint("TOPLEFT", 0, -38)
 		card:SetSize(width, height - 38 - 48)
 		for key, x in pairs(COLUMNS) do
@@ -209,3 +210,6 @@ UI:RegisterPage("warzones", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's Zones stop borders the list
+UI:Mark("warzones", function() return private.card end)

@@ -248,3 +248,7 @@ UI:RegisterPage("warguild", {
 	end,
 	refresh = private.Refresh,
 })
+
+-- The tour's Guild stop borders these
+UI:Mark("warranks", function() return private.ranks end)
+UI:Mark("warofficers", function() return private.officersCard end)

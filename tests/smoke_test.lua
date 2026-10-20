@@ -18315,6 +18315,39 @@ end
 		ns.ZoneHUD:SetScale(1.2)
 		check(ns.db.settings.zoneHudScale == 1.2 and zhud:GetScale() == 1.2, "its size is kept")
 		ns.ZoneHUD:SetScale(1)
+		-- The kit: dragged where the player puts it, folded, hidden by command, reset
+		Zone()
+		zhud.GetPoint = function() return "TOPLEFT", nil, "TOPLEFT", 120, -80 end
+		zhud._scripts.OnDragStart(zhud)
+		zhud._scripts.OnDragStop(zhud)
+		local pos = ns.db.settings.zoneHudPos
+		check(pos and pos.point == "TOPLEFT" and pos.x == 120 and pos.y == -80, "a drag is kept for the HUD")
+		for _, name in ipairs({ "race", "war", "capture" }) do check(ns.db.settings[name.."HudPos"] == nil, "and only for that HUD: "..name) end
+		zhud.fold._scripts.OnClick(zhud.fold)
+		check(ns.db.settings.zoneHudCollapsed == true and not zhud.body:IsShown() and zhud.summary:IsShown() and zhud.summary._text:find("Hillsbrad Foothills", 1, true)
+			and zhud:GetHeight() == 28, "the chevron folds it to a bar, kept")
+		zhud.fold._scripts.OnClick(zhud.fold)
+		check(ns.db.settings.zoneHudCollapsed == nil and zhud.body:IsShown() and not zhud.summary:IsShown() and zhud:GetHeight() == 112, "and opens it again")
+		local printed, realPrint = {}, ns.Print
+		ns.Print = function(_, fmt, ...) printed[#printed + 1] = fmt end
+		ns.db.settings.hudHint = false
+		ns:RunCommand("hud", "zone")
+		check(ns.db.settings.zoneHud == false and not zhud:IsShown() and #printed == 1 and printed[1]:find("/wanted hud", 1, true), "/wanted hud zone hides it and says once how to bring it back")
+		ns:RunCommand("hud", "zone")
+		check(ns.db.settings.zoneHud == true and zhud:IsShown(), "and shows it again")
+		ns:RunCommand("hud", "zone")
+		check(#printed == 1, "the hint is said once")
+		ns:RunCommand("hud", "")
+		check(ns.db.settings.zoneHud == false and ns.db.settings.raceHud == false and ns.db.settings.warHud == false and ns.Captures:Settings().bar == false and not zhud:IsShown(),
+			"/wanted hud with any shown hides them all")
+		ns:RunCommand("hud", "")
+		check(ns.db.settings.zoneHud == true and ns.db.settings.raceHud == true and ns.db.settings.warHud == true and ns.Captures:Settings().bar == true and zhud:IsShown(),
+			"and with all hidden shows them all")
+		ns:RunCommand("hud", "elsewhere")
+		check(printed[#printed]:find("Which HUD", 1, true), "an unknown name says which there are")
+		ns.Print = realPrint
+		ns.HudKit:ResetPositions()
+		check(ns.db.settings.zoneHudPos == nil, "Reset HUD positions clears the places")
 		G.Zones, G.Here, ns.Races.Live = realZones, realHere, realLive
 		ns.ZoneHUD:Update()
 	end

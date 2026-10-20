@@ -52,7 +52,7 @@ end
 function private.Side(f, right)
 	local side = {}
 	local anchor, sign = right and "TOPRIGHT" or "TOPLEFT", right and -1 or 1
-	side.crest = f:CreateTexture(nil, "ARTWORK")
+	side.crest = GuildWars:NewCrest(f)
 	side.crest:SetSize(30, 30)
 	side.crest:SetPoint(anchor, 10 * sign, -8)
 	side.name = Theme:Text(f, "heading", "")
@@ -232,7 +232,7 @@ function private.Draw(f, war, zone, x, y, mapId, now, sample)
 	local turnout, mult = b.turnout or {}, b.mult or {}
 	for _, key in ipairs({ "attacker", "defender" }) do
 		local side, guild = f[key], key == "attacker" and attacker or defender
-		side.crest:SetTexture(GuildWars:CrestFile(guild))
+		side.crest:SetGuild(guild)
 		-- Another guild's war: the holders by name, the attackers by their side
 		side.name:SetText(guild.guild or guild.faction or "?")
 		local color = GuildWars.SIDE_COLORS[guild.faction] or C.text

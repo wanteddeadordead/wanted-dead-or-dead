@@ -23,7 +23,7 @@ function MapButton:Layers()
 	return {
 		{ key = "sightings", label = "Enemy sightings", get = function() return Wanted.MapPins:IsShown() end,
 			set = function(on) Wanted.MapPins:SetShown(on) end },
-		{ key = "fronts", label = "Capture fronts", get = function() return Wanted.Captures:Settings().map == true end,
+		{ key = "fronts", label = "Capture points", get = function() return Wanted.Captures:Settings().map == true end,
 			set = function(on) Wanted.CapturesMap:SetMapShown(on) end },
 		{ key = "war", label = "Guild wars and races", get = function() return Wanted.WarMap:Shown() end,
 			set = function(on) Wanted.WarMap:SetShown(on) end },
@@ -81,7 +81,7 @@ function MapButton:OpenMenu()
 	local items = { { text = "Wanted on the map", header = true } }
 	for _, layer in ipairs(MapButton:Layers()) do
 		local on = layer.get()
-		tinsert(items, { text = (on and "[x]  " or "[  ]  ")..layer.label, selected = on, onClick = function()
+		tinsert(items, { text = layer.label, checked = on == true, onClick = function()
 			private.SetLayer(layer, not layer.get())
 			MapButton:OpenMenu()
 		end })

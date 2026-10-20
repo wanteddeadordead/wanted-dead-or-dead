@@ -1398,7 +1398,7 @@ end
 
 ---Shows a menu under the frame that opened it (at least as wide), or at the cursor.
 ---@param items table[] { text, color?, onClick?, header?, disabled?, selected? (the current choice: in the accent),
----tip? = { title, body } } or "-" for a divider
+---tip? = { title, body }, checked? (true or false: a checkbox before the text) } or "-" for a divider
 ---@param anchor table? the button that opened it
 function W:Menu(items, anchor)
 	menu = menu or CreateMenu()
@@ -1415,6 +1415,15 @@ function W:Menu(items, anchor)
 			item.highlight = Theme:Fill(item, C.transparent)
 			item.label = Theme:Text(item, "body", "")
 			item.label:SetPoint("LEFT", 12, 0)
+			-- A checkbox for items that carry `checked`: a box with a filled square in the accent
+			item.box = item:CreateTexture(nil, "ARTWORK")
+			item.box:SetSize(14, 14)
+			item.box:SetPoint("LEFT", 10, 0)
+			item.box:SetColorTexture(C.fieldBorder[1], C.fieldBorder[2], C.fieldBorder[3], C.fieldBorder[4] or 1)
+			item.tick = item:CreateTexture(nil, "OVERLAY")
+			item.tick:SetSize(8, 8)
+			item.tick:SetPoint("CENTER", item.box)
+			item.tick:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1)
 			item.line = Theme:Line(item, C.fieldBorder)
 			item.showsTooltip = true
 			item:SetScript("OnEnter", function(self)
@@ -1447,6 +1456,8 @@ function W:Menu(items, anchor)
 		item.rest = 0
 		if def == "-" then
 			item:SetHeight(MENU_DIVIDER)
+			item.box:Hide()
+			item.tick:Hide()
 			item.label:SetText("")
 			item.line:SetPoint("LEFT", 8, 0)
 			item.line:SetPoint("RIGHT", -8, 0)
@@ -1461,10 +1472,15 @@ function W:Menu(items, anchor)
 			item.line:SetShown(def.header == true)
 			item.label:SetFontObject(def.header and Theme.Fonts.labelSmall or Theme.Fonts.body)
 			item.label:SetText(def.text)
+			local boxed = def.checked ~= nil
+			item.box:SetShown(boxed)
+			item.tick:SetShown(boxed and def.checked == true)
+			item.label:ClearAllPoints()
+			item.label:SetPoint("LEFT", boxed and 32 or 12, 0)
 			local color = def.disabled and C.faint or (def.selected and C.accent) or def.color or (def.header and MENU_HEADER_TEXT or C.text)
 			item.label:SetTextColor(color[1], color[2], color[3])
 			item.rest = def.selected and 0.04 or 0
-			width = max(width, item.label:GetStringWidth() + 32)
+			width = max(width, item.label:GetStringWidth() + (def.checked ~= nil and 52 or 32))
 			y = y - height
 		end
 		item.highlight:SetColorTexture(1, 1, 1, item.rest)

@@ -1,6 +1,7 @@
 -- Wanted: guild wars and races on the maps. On a war zone's map: the guild's war there as its lanes (the attackers'
 -- rally, each lane's tower and inhibitor on the defenders' half, the keep, ringed while it's open), and during a race
--- its three flags in their holders' colours; a plate in the corner says who holds the zone and what's on. On a
+-- its three flags (tonight's races all day: neutral and labelled with the race time before it, in their holders'
+-- colours while it runs and after); a plate in the corner says who holds the zone and what's on. On a
 -- continent's map: an icon on each war zone (its holder's emblem, a keep while a war is on, a flag while a race is),
 -- with who holds it, since when and what's next on hover. With OpenMap's stitched map up (OpenMapAPI), the same pieces
 -- go on its canvas wherever the zones are in view. Seals are flat icons a fixed size on screen: the keep 32 px, the
@@ -22,6 +23,7 @@ local COLORS = { Horde = { 0.82, 0.24, 0.2 }, Alliance = { 0.24, 0.48, 0.92 } }
 local ORANGE = { 1, 0.55, 0.1 }
 local RING = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\pieces\\ring"
 local MAP_TYPE_CONTINENT = Enum and Enum.UIMapType and Enum.UIMapType.Continent or 2
+local MAP_TYPE_ZONE = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
 -- The stitched map shows each zone's pieces from this zoom (1: the whole world fits); further out, one icon a zone
 local STITCHED_DETAIL = 4
 -- The map overlay's slot in the map's pin levels (as CapturesMap's, one index above it)
@@ -53,6 +55,16 @@ end
 
 function WarMap:SetShown(shown)
 	Wanted.db.settings.warMap = shown and true or false
+	WarMap:Refresh()
+end
+
+---Whether tonight's races are drawn (the map button's Races, Settings).
+function WarMap:RacesShown()
+	return Wanted.db.settings.raceMap ~= false
+end
+
+function WarMap:SetRacesShown(shown)
+	Wanted.db.settings.raceMap = shown and true or false
 	WarMap:Refresh()
 end
 
@@ -143,6 +155,15 @@ function private.WarIn(zone)
 	return nil
 end
 
+---The war drawn in a zone: the tour's sample whatever the switches say, else a real one when Guild wars is ticked.
+function private.WarShown(zone)
+	local war = private.WarIn(zone)
+	if war and (private.IsSample(war) or WarMap:Shown()) then
+		return war
+	end
+	return nil
+end
+
 ---A war's lanes and keep as they stand: live in prep or battle, else as the result left them (as last seen live).
 function private.Lanes(war)
 	local b, r = war.battle or {}, war.result or {}
@@ -180,6 +201,8 @@ function private.ZoneLines(zone, now)
 		tinsert(lines, { format("Guild war now: %s attacks, %s left", war.attacker.guild or "?", private.Left(war.battle.stop - now)), C.red })
 	elseif race and race.zone == zone.name then
 		tinsert(lines, { format("Race now, %s left", private.Left(race.stop - now)), C.gold })
+	elseif private.RaceFor(zone.mapId, now) then
+		tinsert(lines, { "Race "..GuildWars:When(private.RaceFor(zone.mapId, now).start, now), C.gold })
 	elseif info and type(info.protectedUntil) == "number" and info.protectedUntil > now then
 		tinsert(lines, { "Protected until "..date("%a ", info.protectedUntil)..GuildWars:Clock(info.protectedUntil), C.muted })
 	elseif info and type(info.next) == "table" and type(info.next.at) == "number" then
@@ -202,10 +225,50 @@ end
 
 private.Provider = CreateFromMixins(MapCanvasDataProviderMixin)
 
+---The zones the layer draws: the campaign's, and any other zone tonight's races are run in (Moonglade has a race and
+---no war, so it is not in WarZones).
+function private.Zones()
+	local list = {}
+	for _, zone in ipairs(Wanted.WarZones.LIST) do
+		tinsert(list, zone)
+	end
+	for _, race in ipairs(Races:Tonight()) do
+		if not Wanted.WarZones.byMap[race.mapId] then
+			tinsert(list, { name = race.zone, mapId = race.mapId, raceOnly = true })
+		end
+	end
+	-- Any other zone with kills or enemies seen: only its stats
+	if Wanted.StatsMap:Shown() then
+		for _, zone in ipairs(Wanted.StatsMap:OtherZones()) do
+			local taken = false
+			for _, z in ipairs(list) do
+				taken = taken or z.mapId == zone.mapId
+			end
+			if not taken then
+				tinsert(list, zone)
+			end
+		end
+	end
+	return list
+end
+
+---Tonight's race in a zone that is live or still to come, or nil.
+function private.RaceFor(mapId, now)
+	for _, race in ipairs(Races:Tonight()) do
+		if race.mapId == mapId and now < race.stop then
+			return race
+		end
+	end
+	return nil
+end
+
 function private.Provider:RemoveAllData()
 	private.ReleaseAll()
 	if private.plate then
 		private.plate:Hide()
+	end
+	if private.statsPlate then
+		private.statsPlate:Hide()
 	end
 end
 
@@ -221,7 +284,12 @@ end
 
 function private.Provider:RefreshAllData()
 	self:RemoveAllData()
-	if not Wanted.db or not WarMap:Shown() or not (GuildWars:On() or Races:On() or private.sample) then
+	if not Wanted.db then
+		return
+	end
+	-- The tour's sample war draws whatever the layer switches say
+	local wars, races, stats = WarMap:Shown() and GuildWars:On(), WarMap:RacesShown() and Races:On(), Wanted.StatsMap:Shown()
+	if not (wars or races or stats or private.sample) then
 		return
 	end
 	local map = self:GetMap()
@@ -235,7 +303,7 @@ function private.Provider:RefreshAllData()
 	if private.Stitched() then
 		local om = OpenMapAPI
 		local _, _, zoom = om.GetView()
-		for _, zone in ipairs(Wanted.WarZones.LIST) do
+		for _, zone in ipairs(private.Zones()) do
 			local place = function(x, y)
 				local u, v = om.WorldFromMap(zone.mapId, x / 100, y / 100)
 				if not u then
@@ -252,15 +320,28 @@ function private.Provider:RefreshAllData()
 		end
 		return
 	end
-	local zone = Wanted.WarZones.byMap[mapId]
+	local zone
+	for _, z in ipairs(private.Zones()) do
+		if z.mapId == mapId then
+			zone = z
+		end
+	end
 	if zone then
 		private.DrawZone(zone, function(x, y) return x / 100, y / 100 end, now)
-		private.ShowPlate(zone, now)
+		if (wars or private.sample) and not zone.raceOnly and not zone.statsOnly then
+			private.ShowPlate(zone, now)
+		end
+		if stats then
+			private.ShowStatsPlate(zone, now)
+		end
 		return
 	end
 	local info = C_Map.GetMapInfo(mapId)
+	if stats and info and info.mapType == MAP_TYPE_ZONE and type(info.name) == "string" and Wanted.StatsMap:Zone(mapId, info.name, now).active then
+		private.ShowStatsPlate({ mapId = mapId, name = info.name }, now)
+	end
 	if info and info.mapType == MAP_TYPE_CONTINENT then
-		for _, z in ipairs(Wanted.WarZones.LIST) do
+		for _, z in ipairs(private.Zones()) do
 			local fx, fy = private.MiddleOn(z.mapId, mapId)
 			if fx then
 				private.ZoneIcon(z, fx, fy, now)
@@ -397,6 +478,8 @@ function private.Piece(spec)
 	button:SetPoint("CENTER", private.overlay, "TOPLEFT", spec.fx * w, -spec.fy * h)
 	button.icon:SetTexture(spec.texture)
 	button.icon:SetDesaturated(spec.desaturated == true)
+	local tint = spec.color or { 1, 1, 1 }
+	button.icon:SetVertexColor(tint[1], tint[2], tint[3], 1)
 	button.label:SetText(spec.label or "")
 	return button
 end
@@ -424,13 +507,15 @@ end
 ---A zone's war (its lanes, rally and keep) and its race's flags, at places given by place(x, y) (0 to 100 on the
 ---zone's map, to the canvas's 0 to 1, or nil off it).
 function private.DrawZone(zone, place, now)
-	local war = private.WarIn(zone)
+	local war = private.WarShown(zone)
 	if war then
 		private.DrawWar(war, zone, place, now)
 	end
-	local race = Races:Live(now)
-	if race and race.zone == zone.name then
-		private.DrawRace(race, zone, place)
+	for _, race in ipairs(WarMap:RacesShown() and Races:Tonight() or {}) do
+		-- A finished race gives way to the war fought in its zone
+		if race.mapId == zone.mapId and not (war and Races:Phase(race, now) == "ended") then
+			private.DrawRace(race, zone, place, now)
+		end
 	end
 end
 
@@ -499,14 +584,20 @@ function private.DrawWar(war, zone, place, now)
 	end
 end
 
-function private.DrawRace(race, zone, place)
+function private.DrawRace(race, zone, place, now)
+	local phase = Races:Phase(race, now)
+	local clock = GuildWars:Clock(race.start)
 	for _, point in ipairs(race.points) do
 		local fx, fy = place(point.x, point.y)
 		if fx then
-			local holder = point.holder
+			-- Before the race nobody holds a point
+			local holder = phase ~= "upcoming" and point.holder or nil
+			local first = phase == "upcoming" and ("Race "..GuildWars:When(race.start, now)) or phase == "live" and "Race now"
+				or "Race ended"
 			private.Piece({ fx = fx, fy = fy, px = SEAL_PX, texture = GuildWars.MEDIA.."race-"..(SIDE[holder] or "neutral"),
-				title = point.name..(point.bonus and " (+20%)" or ""), waypoint = { mapId = zone.mapId, x = point.x, y = point.y },
-				lines = { { holder and ("Held by the "..holder) or "Nobody holds it yet", holder and COLORS[holder] or C.muted },
+				title = point.name..(point.bonus and " (+20%)" or ""), label = clock, waypoint = { mapId = zone.mapId, x = point.x, y = point.y },
+				lines = { { first, phase == "live" and C.gold or C.muted },
+					phase ~= "upcoming" and { holder and ("Held by the "..holder) or "Nobody holds it yet", holder and COLORS[holder] or C.muted } or nil,
 					point.bonus and { "The middle point: a minute here counts +20%.", C.gold } or nil } })
 		end
 	end
@@ -517,24 +608,38 @@ function private.ZoneIcon(zone, fx, fy, now)
 	if not fx then
 		return
 	end
-	local info = private.ZoneInfo(zone)
+	local info = WarMap:Shown() and private.ZoneInfo(zone) or nil
 	local holder = info and info.holder
-	local war = private.WarIn(zone)
-	local race = Races:Live(now)
+	local war = private.WarShown(zone)
+	local race = WarMap:RacesShown() and private.RaceFor(zone.mapId, now) or nil
 	local texture
-	if war and war.battle and war.battle.prep and now >= war.battle.prep and now < (war.battle.stop or 0) then
+	if war and war.battle and war.battle.prep and now < (war.battle.stop or 0) then
 		local d = SIDE[type(war.defender) == "table" and war.defender.faction] or "alliance"
 		local a = SIDE[type(war.attacker) == "table" and war.attacker.faction] or "horde"
 		local _, keep = private.Lanes(war)
 		texture = GuildWars:KeepFile(keep, d, a)
-	elseif race and race.zone == zone.name then
-		texture = GuildWars.MEDIA.."race-contested"
+	elseif race then
+		texture = GuildWars.MEDIA.."race-"..(now < race.start and "neutral" or "contested")
 	elseif holder and holder.guild then
 		texture = GuildWars:CrestFile(holder)
-	else
+	end
+	if texture then
+		private.Piece({ fx = fx, fy = fy, px = ICON_PX, texture = texture, title = zone.name, lines = private.ZoneLines(zone, now) })
+	end
+	if Wanted.StatsMap:Shown() then
+		private.StatsBadge(zone, fx, fy, now)
+	end
+end
+
+---A zone's stats under its icon on a continent's map: a dot in its holder's (else the leader's) tint, and the kills.
+function private.StatsBadge(zone, fx, fy, now)
+	local stats = Wanted.StatsMap:Zone(zone.mapId, zone.name, now)
+	if not stats.active then
 		return
 	end
-	private.Piece({ fx = fx, fy = fy, px = ICON_PX, texture = texture, title = zone.name, lines = private.ZoneLines(zone, now) })
+	local color = Wanted.StatsMap:Color(stats)
+	private.Piece({ fx = fx, fy = fy + 0.035, px = 12, texture = GuildWars.MEDIA.."disc", color = color, title = zone.name,
+		label = Wanted.StatsMap:Short(stats), lines = Wanted.StatsMap:Lines(stats) })
 end
 
 
@@ -620,4 +725,53 @@ function private.FillPlate(zone, now)
 		plate.now:SetText(lines[2] and Theme:Colorize(lines[2][1], lines[2][2]) or "")
 		plate.tipTitle, plate.tip = zone.name, "Who holds the zone, as the site last said."
 	end
+end
+
+
+
+-- ============================================================================
+-- The stats plate on a zone's map
+-- ============================================================================
+
+function private.BuildStatsPlate()
+	local container = WorldMapFrame.GetCanvasContainer and WorldMapFrame:GetCanvasContainer() or WorldMapFrame
+	local plate = CreateFrame("Frame", nil, container)
+	plate:SetSize(380, 64)
+	-- Over the war plate in the same corner
+	plate:SetPoint("BOTTOMLEFT", 16, 86)
+	plate:SetFrameLevel(container:GetFrameLevel() + 2900)
+	Theme:Skin(plate, { 0.067, 0.067, 0.067, 0.88 }, { 1, 1, 1, 0.15 })
+	plate.dot = plate:CreateTexture(nil, "ARTWORK")
+	plate.dot:SetSize(14, 14)
+	plate.dot:SetPoint("TOPLEFT", 12, -11)
+	plate.dot:SetTexture(GuildWars.MEDIA.."disc")
+	plate.holder = Theme:Text(plate, "body", "", C.text)
+	plate.holder:SetPoint("TOPLEFT", 32, -8)
+	plate.holder:SetWidth(336)
+	plate.holder:SetWordWrap(false)
+	plate.kills = Theme:Text(plate, "small", "", C.text)
+	plate.kills:SetPoint("TOPLEFT", 12, -28)
+	plate.kills:SetWidth(356)
+	plate.kills:SetWordWrap(false)
+	plate.busy = Theme:Text(plate, "small", "", C.muted)
+	plate.busy:SetPoint("TOPLEFT", 12, -44)
+	plate.busy:SetWidth(356)
+	plate.busy:SetWordWrap(false)
+	private.statsPlate = plate
+	return plate
+end
+
+---The zone's current stats in the corner of its map.
+function private.ShowStatsPlate(zone, now)
+	local plate = private.statsPlate or private.BuildStatsPlate()
+	local stats = Wanted.StatsMap:Zone(zone.mapId, zone.name, now)
+	local lines = Wanted.StatsMap:Lines(stats)
+	local color = Wanted.StatsMap:Color(stats)
+	plate.dot:SetVertexColor(color[1], color[2], color[3], 1)
+	local kills = stats.kills > 0 and { lines[2][1].."  ·  "..lines[3][1], C.text } or lines[2]
+	for field, line in pairs({ holder = lines[1], kills = kills, busy = lines[#lines] }) do
+		plate[field]:SetText(line[1])
+		plate[field]:SetTextColor(line[2][1], line[2][2], line[2][3])
+	end
+	plate:Show()
 end

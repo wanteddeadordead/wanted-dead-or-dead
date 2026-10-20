@@ -15486,38 +15486,50 @@ end)()
 	-- The Wanted button on the map: left click turns every layer off and on, right click opens the layers' menu
 	local mb = _G.WantedMapButton
 	check(mb and mb.icon._texture:find("seal$") and mb._scripts.OnClick, "a Wanted seal button on the map")
-	local function Layers() return ns.MapPins:IsShown(), ns.Captures:Settings().map, ns.WarMap:Shown() end
-	local function Same(a, b, c, ...) local x, y, z = Layers() return x == a and y == b and z == c end
-	check(Same(true, true, true) and mb._alpha == 1, "every layer starts on")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(false, false, false) and mb._alpha == 0.5 and ns.db.settings.detect.mapPins == false and ns.db.settings.warMap == false
-		and ns.Captures:Settings().map == false, "left click hides every layer, in Settings' own switches, and dims the button")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(true, true, true) and mb._alpha == 1, "and shows them all again")
-	ns.WarMap:SetShown(false)
-	mb._scripts.OnClick(mb, "LeftButton")
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(Same(true, true, false), "a layer that was off stays off")
-	ns.WarMap:SetShown(true)
-	mb._scripts.OnClick(mb, "RightButton")
-	local entries = {}
-	for _, item in ipairs(_G.WantedMenu.items) do
-		local def = rawget(item, "def")
-		if def and item._shown then entries[def.text] = def end
+	local KEYS = { "sightings", "stats", "war", "races" }
+	local SETTING = { sightings = function() return ns.db.settings.detect.mapPins end, stats = function() return ns.db.settings.statsMap end,
+		war = function() return ns.db.settings.warMap end, races = function() return ns.db.settings.raceMap end }
+	local function State()
+		local out = {}
+		for _, layer in ipairs(ns.MapButton:Layers()) do out[layer.key] = layer.get() end
+		return out
 	end
-	check(entries["Enemy sightings"] and entries["Capture points"] and entries["Guild wars and races"] and entries["Open Wanted"] and entries["Map settings..."],
-		"right click: a checkbox for each layer, Open Wanted and Map settings")
-	entries["Capture points"].onClick()
-	check(Same(true, false, true) and ns.Captures:Settings().map == false, "the menu switches one layer")
-	entries["Enemy sightings"].onClick()
-	entries["Guild wars and races"].onClick()
-	check(Same(false, false, false) and mb._alpha == 0.5, "each layer has its own switch; none showing dims the button")
-	entries["Enemy sightings"].onClick()
-	check(Same(true, false, false) and mb._alpha == 1 and ns.db.settings.detect.mapPins == true, "one showing: the button is lit")
-	ns.MapPins:SetShown(true)
-	ns.CapturesMap:SetMapShown(true)
-	ns.WarMap:SetShown(true)
-	ns.db.settings.mapKept = nil
+	local function Is(...)
+		local want, state = { ... }, State()
+		for i, key in ipairs(KEYS) do if state[key] ~= want[i] or SETTING[key]() ~= want[i] then return false end end
+		return true
+	end
+	check(#ns.MapButton:Layers() == 4 and ns.MapButton:Layers()[3].label == "Guild wars" and ns.MapButton:Layers()[4].label == "Races", "four layers: sightings, stats, guild wars, races")
+	check(Is(true, true, true, true) and mb._alpha == 1, "every layer starts on, each its own saved switch")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(false, false, false, false) and mb._alpha == 0.5, "left click hides all four, in Settings' own switches, and dims the button")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(true, true, true, true) and mb._alpha == 1, "and shows them all again")
+	ns.WarMap:SetRacesShown(false)
+	mb._scripts.OnClick(mb, "LeftButton")
+	mb._scripts.OnClick(mb, "LeftButton")
+	check(Is(true, true, true, false), "a layer that was off stays off")
+	ns.WarMap:SetRacesShown(true)
+	local function Menu()
+		mb._scripts.OnClick(mb, "RightButton")
+		local entries = {}
+		for _, item in ipairs(_G.WantedMenu.items) do
+			local def = rawget(item, "def")
+			if def and item._shown then entries[def.text] = def end
+		end
+		return entries
+	end
+	local entries = Menu()
+	check(entries["Enemy sightings"] and entries["Current stats"] and entries["Guild wars"] and entries["Races"] and entries["Open Wanted"] and entries["Map settings..."]
+		and not entries["Capture points"] and entries["Races"].checked == true, "right click: a checkbox for each layer, Open Wanted and Map settings, no capture points")
+	for i, key in ipairs(KEYS) do
+		local want = { true, true, true, true }
+		Menu()[ns.MapButton:Layers()[i].label].onClick()
+		want[i] = false
+		check(Is(want[1], want[2], want[3], want[4]), "the menu switches "..key.." alone, and Settings follows")
+		Menu()[ns.MapButton:Layers()[i].label].onClick()
+		check(Is(true, true, true, true), "and back on: "..key)
+	end
 	_G.WantedMenu:Hide()
 	-- The overlay sits in the map's pin levels (a slot in the world quests' band) above the area POIs, so the fog of war
 	-- over unexplored ground (a pin layer itself) doesn't cover it; its buttons two above. Nothing is added to the
@@ -18382,6 +18394,7 @@ end
 	WorldMapFrame.GetCanvas = function() return canvas end
 	WorldMapFrame.GetMapID = function() return 1424 end
 	WorldMapFrame.IsShown = function() return true end
+	ns.db.settings.statsMap = false
 	local function Pieces()
 		local out, n = {}, 0
 		for _, f in ipairs(Mock.created) do
@@ -18426,11 +18439,117 @@ end
 	pieces, n = Pieces()
 	check(n == 8 and pieces["The keep · Southshore"] and pieces["The keep · Southshore"]:GetParent()._level == 5001, "stitched: the war's pieces, above the stitched art")
 	OpenMapAPI = nil
+	-- Tonight's races show all day: three neutral flags with the race time before it, on a war zone's map and on a zone
+	-- that has a race and no war (Moonglade); in the holders' colours once it runs
+	do
+		local savedClock = clock
+		local function Point(id, name, x, y, bonus) return { id = id, name = name, x = x, y = y, r = 40, weight = bonus and 1.2 or 1, bonus = bonus } end
+		local evening = ns.GuildWars:EasternAt(clock, 0, 19 * 3600)
+		if evening < clock then evening = evening + 86400 end
+		local raceStart = evening + 3000
+		ns.Races:Take({ tonight = {
+			{ zone = "Ashenvale", mapID = 1440, start = raceStart, ["end"] = raceStart + 2700, horde = 0, alliance = 0, n = 1,
+				points = { Point("av-r1", "The Howling Vale", 53, 33), Point("av-r2", "Greenpaw Village", 54.5, 62, true), Point("av-r3", "Fallen Sky Lake", 68, 85) } },
+			{ zone = "Moonglade", mapID = 1450, start = raceStart + 1000, ["end"] = raceStart + 3700, horde = 0, alliance = 0, n = 2,
+				points = { Point("mg-r1", "Shrine of Remulos", 33, 36), Point("mg-r2", "the north meadow", 52, 26, true), Point("mg-r3", "Stormrage Barrow Dens", 71, 55) } },
+		}, tomorrow = {} })
+		check(ns.Races:Live(clock) == nil, "no race runs yet")
+		for _, mapId in ipairs({ 1440, 1450 }) do
+			WorldMapFrame.GetMapID = function() return mapId end
+			ns.WarMap:Refresh()
+			local flags, count = Pieces()
+			local neutral = 0
+			for _, f in pairs(flags) do
+				if f.spec.texture:find("race%-neutral$") and f.label._text:find("%d:%d%d [AP]M") then neutral = neutral + 1 end
+			end
+			check(count == 3 and neutral == 3, "map "..mapId..": the race's three points before it starts, neutral and labelled with its time: "..count.."/"..neutral)
+		end
+		-- Running: the holders' colours
+		clock = raceStart + 600
+		ns.Races:Take({ tonight = {
+			{ zone = "Ashenvale", mapID = 1440, start = raceStart, ["end"] = raceStart + 2700, horde = 10, alliance = 5, n = 1, state = "live",
+				points = { Point("av-r1", "The Howling Vale", 53, 33), Point("av-r2", "Greenpaw Village", 54.5, 62, true), Point("av-r3", "Fallen Sky Lake", 68, 85) } },
+		}, tomorrow = {} })
+		WorldMapFrame.GetMapID = function() return 1440 end
+		ns.WarMap:Refresh()
+		local live, liveCount = Pieces()
+		check(liveCount == 3 and live["The Howling Vale"].spec.lines[1][1] == "Race now", "while it runs: the same points, live")
+		-- The continent: an icon on each race zone before and while it runs
+		clock = raceStart - 3000
+		ns.Races:Take({ tonight = {
+			{ zone = "Moonglade", mapID = 1450, start = raceStart + 1000, ["end"] = raceStart + 3700, horde = 0, alliance = 0, n = 2,
+				points = { Point("mg-r1", "Shrine of Remulos", 33, 36), Point("mg-r2", "the north meadow", 52, 26, true), Point("mg-r3", "Stormrage Barrow Dens", 71, 55) } },
+		}, tomorrow = {} })
+		WorldMapFrame.GetMapID = function() return 1414 end
+		C_Map.GetMapInfo = function(id) if id == 1414 then return { mapType = 2 } end return realInfoMap(id) end
+		C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
+		ns.WarMap:Refresh()
+		local icons = Pieces()
+		check(icons["Moonglade"] and icons["Moonglade"].spec.texture:find("race%-neutral$"), "the continent: a race zone with no war has its flag icon before the race")
+		-- Each overlay is drawn only when ticked
+		ns.WarMap:SetRacesShown(false)
+		check(select(2, Pieces()) == 0 or Pieces()["Moonglade"] == nil, "Races off: no race flag on the continent")
+		ns.WarMap:SetRacesShown(true)
+		WorldMapFrame.GetMapID = function() return 1450 end
+		ns.WarMap:SetRacesShown(false)
+		check(select(2, Pieces()) == 0, "Races off: no race points on the zone map")
+		ns.WarMap:SetRacesShown(true)
+		check(select(2, Pieces()) == 3, "Races on: the three points")
+		-- Current stats: a badge on the continent, a plate on the zone map, only when ticked
+		ns.WarMap:SetRacesShown(false)
+		ns.StatsMap:SetShown(true)
+		ns.Store:NewRecord("kill", { victim = "Player-9-VICTIM", victimName = "Victim", killer = "Player-9-KILLER", killerName = "Killer", killerFaction = "Horde",
+			zone = "Moonglade", mapId = 1450, deathId = "stats-test-1" })
+		-- Records as the PC's saved data has them: a reported death names the victim's side and no killer, in a zone outside
+		-- the campaign; an old one names only the zone
+		ns.Store:NewRecord("death", { victim = "Player-4613-016951F6", plates = "e", victimGuild = "We Are Relentless", nearEC = 4, victimFaction = "Horde", nearF = 53,
+			victimLevel = 30, mapId = 1458, victimClass = "SHAMAN", nearE = 5, y = 31.8, x = 65.7, victimName = "Sky Montague", deathId = "f7650bd3", victimRace = "Skyborne",
+			zone = "Undercity", victimSex = "female" })
+		ns.Store:NewRecord("death", { victim = "Player-4613-0AAAAAAA", victimFaction = "Alliance", victimLevel = 30, victimName = "Old Record", deathId = "old-1", zone = "Hillsbrad Foothills" })
+		local undercity = ns.StatsMap:Zone(1458, "Undercity", clock + 100)
+		check(undercity.kills == 1 and undercity.Alliance == 1 and undercity.ahead == "Alliance", "a death with only the victim's side counts for the other side")
+		local hillsbrad = ns.StatsMap:Zone(1424, "Hillsbrad Foothills", clock + 100)
+		check(hillsbrad.kills >= 1 and hillsbrad.Horde >= 1, "a record naming only a campaign zone finds its map")
+		local others = ns.StatsMap:OtherZones(clock + 100)
+		local listed = {}
+		for _, z in ipairs(others) do listed[z.name] = true end
+		check(listed["Undercity"] and listed["Moonglade"], "zones outside the campaign are listed")
+		ns.StatsMap:Zone(1450, "Moonglade", clock + 100)
+		WorldMapFrame.GetMapID = function() return 1414 end
+		C_Map.GetMapInfo = function(id) if id == 1414 then return { mapType = 2 } end return realInfoMap(id) end
+		C_Map.GetMapRectOnMap = function() return 0.4, 0.5, 0.3, 0.4 end
+		ns.WarMap:Refresh()
+		check(Pieces()["Undercity"] and Pieces()["Undercity"].label._text:find("1 kill"), "a non-campaign zone has its badge on the continent")
+		local statsBadge = Pieces()["Moonglade"]
+		check(statsBadge and statsBadge.label._text:find("kill") and statsBadge.spec.texture:find("disc$"), "Current stats on: a badge with the kills on the continent")
+		WorldMapFrame.GetMapID = function() return 1450 end
+		ns.WarMap:Refresh()
+		local plate
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "kills") and rawget(f, "holder") and rawget(f, "busy") and f._shown then plate = f end
+		end
+		check(plate and plate.kills._text:find("Kills in the last hour: 1 (Horde 1, Alliance 0)", 1, true) and plate.kills._text:find("Horde ahead", 1, true),
+			"Current stats on: the zone map's plate has the kills and who is ahead: "..tostring(plate and plate.kills._text))
+		WorldMapFrame.GetMapID = function() return 1414 end
+		ns.StatsMap:SetShown(false)
+		check(Pieces()["Moonglade"] == nil, "Current stats off: no badge")
+		ns.StatsMap:SetShown(false)
+		ns.WarMap:SetRacesShown(true)
+		C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realInfoMap, realRect
+		WorldMapFrame.GetMapID = function() return 1424 end
+		clock = savedClock
+		ns.Races:Take(GuildWarsRaces(clock))
+	end
 	-- The Wanted map button's guild wars layer turns it off and on
 	ns.MapButton:Layers()[3].set(false)
-	check(ns.db.settings.warMap == false and select(2, Pieces()) == 0, "the map button's Guild wars layer hides it")
+	local pieces3, left = Pieces()
+	check(ns.db.settings.warMap == false and not pieces3["The keep · Southshore"] and not pieces3["Mid tower"], "the map button's Guild wars layer hides the war")
+	ns.MapButton:Layers()[4].set(false)
+	check(select(2, Pieces()) == 0, "and Races the rest")
+	ns.MapButton:Layers()[4].set(true)
 	ns.MapButton:Layers()[3].set(true)
 	check(ns.db.settings.warMap == true, "and shows it")
+	ns.db.settings.statsMap = nil
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
 	-- Live between catch-ups: our side's clients say where they stand each tick; the capture rule runs here as an
 	-- estimate marked live, never who holds a point
@@ -18660,6 +18779,8 @@ end)()
 -- per screen, and it is gone with the tour
 ;(function()
 	local G, Tour = ns.GuildWars, ns.Tour
+	-- The sample is the tour's, not the layers': it draws whatever the map switches say, so they are all off here
+	ns.db.settings.warMap, ns.db.settings.raceMap, ns.db.settings.statsMap = false, false, false
 	local function First(title)
 		for i, stop in ipairs(Tour.STOPS) do
 			if stop.title == title then return i end
@@ -18771,7 +18892,7 @@ end)()
 			if stop.map then
 				local tagged = true
 				for _, title in ipairs(titles) do tagged = tagged and title:find("^SAMPLE · ") ~= nil end
-				check(#titles == 8 and noWaypoint == 8 and tagged, label..": the sample war on the map: eight pieces, tagged, no waypoints: "..#titles)
+				check(#titles == 8 and noWaypoint == 8 and tagged, label..": the sample war on the map: eight pieces, tagged, no waypoints, with every map layer switched off: "..#titles)
 			else
 				check(#titles == 0, label..": "..stop.title.." has nothing on the map: "..#titles)
 			end
@@ -18844,6 +18965,7 @@ end)()
 	G:Take(nil)
 	ns.Races:Take(nil)
 	ns.db.tour = nil
+	ns.db.settings.warMap, ns.db.settings.raceMap, ns.db.settings.statsMap = true, nil, nil
 	ns.UI:GetFrame():Hide()
 end)()
 print("wanted smoke: guild wars checks pass")

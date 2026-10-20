@@ -122,6 +122,7 @@ MapButton.lua
 MapPins.lua
 MapPins.xml
 CapturesMap.lua
+StatsMap.lua
 WarMap.lua
 CapturesHUD.lua
 CapturesHUD.xml

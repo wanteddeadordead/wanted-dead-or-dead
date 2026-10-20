@@ -12,6 +12,7 @@ local Theme = Wanted.Theme
 local W = Wanted.Widgets
 local C = Theme.C
 local GuildWars = Wanted.GuildWars
+local HudKit = Wanted.HudKit
 local private = {}
 local WIDTH, HEIGHT = 440, 132
 local LANES = { { "top", "Top" }, { "mid", "Mid" }, { "bot", "Bot" } }
@@ -72,66 +73,56 @@ function private.Build()
 	f:SetFrameStrata("LOW")
 	f:SetClampedToScreen(true)
 	Theme:Skin(f, { 0.067, 0.067, 0.067, 0.88 }, { 1, 1, 1, 0.15 })
-	-- Dragged where the player wants it, kept for the account
-	f:SetMovable(true)
-	f:EnableMouse(true)
-	f:RegisterForDrag("LeftButton")
-	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-	f:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, _, relative, x, y = self:GetPoint(1)
-		Wanted.db.settings.warHudPos = { point = point, relative = relative, x = x, y = y }
-	end)
-	private.Place(f)
-	f.attacker = private.Side(f, false)
-	f.defender = private.Side(f, true)
-	f.clock = Theme:Text(f, "stat", "", C.text)
+	local body = HudKit:Body(f)
+	f.attacker = private.Side(body, false)
+	f.defender = private.Side(body, true)
+	f.clock = Theme:Text(body, "stat", "", C.text)
 	f.clock:SetPoint("TOP", 0, -8)
-	f.kind = Theme:Text(f, "tiny", "", RED)
+	f.kind = Theme:Text(body, "tiny", "", RED)
 	f.kind:SetPoint("TOP", 0, -32)
-	local divider = f:CreateTexture(nil, "BORDER")
+	local divider = body:CreateTexture(nil, "BORDER")
 	divider:SetColorTexture(1, 1, 1, 0.08)
 	divider:SetSize(WIDTH - 20, 1)
 	divider:SetPoint("TOP", 0, -48)
 	-- The strip: the rally, three lanes of a tower and an inhibitor, the keep
 	local middle = STRIP_TOP - LANE_ROW
-	f.rally = private.Seal(f, 24)
+	f.rally = private.Seal(body, 24)
 	f.rally:SetPoint("CENTER", f, "TOPLEFT", RALLY_X, middle)
-	f.keep = private.Seal(f, 34)
+	f.keep = private.Seal(body, 34)
 	f.keep:SetPoint("CENTER", f, "TOPLEFT", KEEP_X, middle)
-	f.keepHit = CreateFrame("Frame", nil, f)
+	f.keepHit = CreateFrame("Frame", nil, body)
 	f.keepHit:SetSize(34, 34)
 	f.keepHit:SetPoint("CENTER", f.keep)
 	f.lanes = {}
 	for i, lane in ipairs(LANES) do
 		local y = STRIP_TOP - (i - 1) * LANE_ROW
-		private.Line(f, RALLY_X + 12, middle, TOWER_X - 10, y)
-		private.Line(f, TOWER_X + 10, y, INHIB_X - 10, y)
-		private.Line(f, INHIB_X + 10, y, KEEP_X - 17, middle)
+		private.Line(body, RALLY_X + 12, middle, TOWER_X - 10, y)
+		private.Line(body, TOWER_X + 10, y, INHIB_X - 10, y)
+		private.Line(body, INHIB_X + 10, y, KEEP_X - 17, middle)
 		local row = { id = lane[1] }
-		row.label = Theme:Text(f, "small", lane[2], C.muted)
+		row.label = Theme:Text(body, "small", lane[2], C.muted)
 		-- Left of the rally, clear of the lanes' lines
 		row.label:SetPoint("RIGHT", f, "TOPLEFT", RALLY_X - 18, y)
-		row.tower = private.Seal(f, 20)
+		row.tower = private.Seal(body, 20)
 		row.tower:SetPoint("CENTER", f, "TOPLEFT", TOWER_X, y)
-		row.inhibitor = private.Seal(f, 20)
+		row.inhibitor = private.Seal(body, 20)
 		row.inhibitor:SetPoint("CENTER", f, "TOPLEFT", INHIB_X, y)
-		row.pct = Theme:Text(f, "tiny", "", C.gold)
+		row.pct = Theme:Text(body, "tiny", "", C.gold)
 		-- Above the line out of the seal, not on it
 		row.pct:SetPoint("BOTTOMLEFT", f, "TOPLEFT", TOWER_X + 12, y + 3)
-		row.inhibPct = Theme:Text(f, "tiny", "", C.gold)
+		row.inhibPct = Theme:Text(body, "tiny", "", C.gold)
 		row.inhibPct:SetPoint("BOTTOMLEFT", f, "TOPLEFT", INHIB_X + 12, y + 3)
 		f.lanes[i] = row
 	end
 	-- Under the frame: the friends here, the point the player stands on, and why they don't count
-	local friends = CreateFrame("Frame", nil, f)
+	local friends = CreateFrame("Frame", nil, body)
 	friends:SetSize(130, 20)
 	friends:SetPoint("TOP", f, "BOTTOM", 0, -4)
 	Theme:Skin(friends, { 0.067, 0.067, 0.067, 0.88 }, { 1, 1, 1, 0.15 })
 	friends.text = Theme:Text(friends, "small", "", C.text)
 	friends.text:SetPoint("CENTER")
 	f.friends = friends
-	local bar = CreateFrame("StatusBar", nil, f)
+	local bar = CreateFrame("StatusBar", nil, body)
 	bar:SetSize(240, 10)
 	bar:SetPoint("TOP", friends, "BOTTOM", 0, -18)
 	bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
@@ -144,25 +135,25 @@ function private.Build()
 	bar.pct:SetPoint("LEFT", bar, "RIGHT", 6, 0)
 	W:Explain(bar, "Capture", "Net count here (yours minus theirs, up to 6); progress is kept if you leave.", "ANCHOR_BOTTOM")
 	f.bar = bar
-	f.status = Theme:Text(f, "small", "", C.amber)
+	f.status = Theme:Text(body, "small", "", C.amber)
+	HudKit:Attach("war", f)
 	f:Hide()
 	private.frame = f
 	return f
 end
 
----Where the HUD goes: where the player dragged it, else under the game's top-centre widgets (the race HUD's place:
+---Where the HUD goes without a place the player dragged it to: under the game's top-centre widgets (the race HUD's place:
 ---a race and a war are never in one zone at once).
 function private.Place(f)
-	f:ClearAllPoints()
-	local pos = Wanted.db.settings.warHudPos
-	if type(pos) == "table" and type(pos.point) == "string" and type(pos.x) == "number" and type(pos.y) == "number" then
-		f:SetPoint(pos.point, UIParent, type(pos.relative) == "string" and pos.relative or pos.point, pos.x, pos.y)
-	elseif UIWidgetTopCenterContainerFrame then
+	if UIWidgetTopCenterContainerFrame then
 		f:SetPoint("TOP", UIWidgetTopCenterContainerFrame, "BOTTOM", 0, -4)
 	else
 		f:SetPoint("TOP", UIParent, "TOP", 0, -60)
 	end
 end
+
+HudKit:Register("war", { name = "War HUD", setting = function() return Wanted.db.settings end, field = "warHud",
+	refresh = function() WarHUD:Update() end, place = private.Place, collapsedWidth = 300 })
 
 ---A point's capture: the site's percent, or the live estimate (WarLive) marked live when it's further on; nil for
 ---none or a point taken.
@@ -275,5 +266,8 @@ function WarHUD:Update()
 	f.status:SetText(not b.live and "No live data: only the clock"
 		or not GuildWars:OnRoster(war) and "You can fight; you don't count"
 		or "")
+	f.summary:SetText(format("%s  ·  %s %d v %s %d", prep and ("Prep "..private.Clock(b.start - now)) or private.Clock(b.stop - now),
+		attacker.guild or attacker.faction or "?", tonumber((b.turnout or {}).attacker) or 0, defender.guild or defender.faction or "?", tonumber((b.turnout or {}).defender) or 0))
+	HudKit:Apply("war", f, WIDTH, HEIGHT)
 	f:Show()
 end

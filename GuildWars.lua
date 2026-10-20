@@ -810,6 +810,119 @@ function GuildWars:CrestFile(guild)
 	return type(guild) == "table" and guild.faction == "Alliance" and "Interface\\Timer\\Alliance-Logo" or "Interface\\Timer\\Horde-Logo"
 end
 
+---A tabard as the catch-up has it, checked: { background, border, emblem = { r, g, b } (0 to 255), style (0 to 255), file },
+---or nil for anything else.
+---@param tabard any
+---@return table?
+function GuildWars:CleanTabard(tabard)
+	if type(tabard) ~= "table" then
+		return nil
+	end
+	local out = {}
+	for _, key in ipairs({ "background", "border", "emblem" }) do
+		local c = tabard[key]
+		if type(c) ~= "table" or #c ~= 3 then
+			return nil
+		end
+		local r, g, b = private.Int(c[1], 0, 255), private.Int(c[2], 0, 255), private.Int(c[3], 0, 255)
+		if not (r and g and b) then
+			return nil
+		end
+		out[key] = { r, g, b }
+	end
+	out.style, out.file = private.Int(tabard.style, 0, 255), private.Int(tabard.file, 1, 2147483647)
+	return out.style and out.file and out or nil
+end
+
+---A guild's tabard to draw, or nil (then the faction art stands in): the player's own guild's from the game, so it shows
+---before the site's vote settles, else the catch-up's, which is the server's majority of that guild's own members.
+---Never another unit's.
+---@param guild table? { guild or name, faction, tabard }
+---@return table?
+function GuildWars:Tabard(guild)
+	if type(guild) ~= "table" then
+		return nil
+	end
+	local name = guild.guild or guild.name
+	if type(name) == "string" and IsInGuild and GetGuildInfo then
+		local ok, mine = pcall(GetGuildInfo, "player")
+		if ok and type(mine) == "string" and mine == name and (guild.faction == nil or guild.faction == UnitFactionGroup("player")) then
+			local live = GuildWars:LiveTabard()
+			if live then
+				return live
+			end
+		end
+	end
+	return GuildWars:CleanTabard(guild.tabard)
+end
+
+-- GuildInviteFrame.xml's tabard art: one background and one border, tinted, and the emblem sheet (16 columns of 64 px in 1024)
+local GUILD_FRAME = "Interface\\GuildFrame\\GuildFrame"
+local EMBLEMS = "Interface\\GuildFrame\\GuildEmblemsLG_01"
+local CREST = {
+	background = { 0.63183594, 0.69238281, 0.61914063, 0.74023438 },
+	border = { 0.63183594, 0.69238281, 0.74414063, 0.86523438 },
+}
+
+---A guild crest on a frame, from the game's own textures: the tabard tinted as the game's guild window does, else the
+---faction art (CrestFile). A mouse-disabled frame; set it with crest:SetGuild(guild), anchor and size it as a frame.
+---@param parent Frame
+---@param layer string? the textures' draw layer, "ARTWORK"
+---@param sublevel number?
+---@return Frame crest with SetGuild(guild) and SetDesaturated(on)
+function GuildWars:NewCrest(parent, layer, sublevel)
+	layer = layer or "ARTWORK"
+	local crest = CreateFrame("Frame", nil, parent)
+	crest:EnableMouse(false)
+	crest.background = crest:CreateTexture(nil, layer, nil, sublevel or 0)
+	crest.background:SetAllPoints()
+	crest.background:SetTexture(GUILD_FRAME)
+	crest.background:SetTexCoord(unpack(CREST.background))
+	crest.border = crest:CreateTexture(nil, layer, nil, (sublevel or 0) + 1)
+	crest.border:SetAllPoints()
+	crest.border:SetTexture(GUILD_FRAME)
+	crest.border:SetTexCoord(unpack(CREST.border))
+	crest.emblem = crest:CreateTexture(nil, layer, nil, (sublevel or 0) + 2)
+	crest.emblem:SetPoint("TOP")
+	crest.emblem:SetPoint("BOTTOM")
+	crest.emblem:SetPoint("CENTER")
+	crest.emblem:SetTexture(EMBLEMS)
+	crest.fallback = crest:CreateTexture(nil, layer, nil, sublevel or 0)
+	crest.fallback:SetAllPoints()
+	crest:SetScript("OnSizeChanged", function(self, width) self.emblem:SetWidth(width * 7 / 8) end)
+	crest.emblem:SetWidth(crest:GetWidth() * 7 / 8)
+	crest.SetGuild = GuildWars.CrestSetGuild
+	crest.SetDesaturated = GuildWars.CrestSetDesaturated
+	crest:SetGuild(nil)
+	return crest
+end
+
+function GuildWars.CrestSetGuild(crest, guild)
+	local tabard = GuildWars:Tabard(guild)
+	crest.background:SetShown(tabard ~= nil)
+	crest.border:SetShown(tabard ~= nil)
+	crest.emblem:SetShown(tabard ~= nil)
+	crest.fallback:SetShown(tabard == nil)
+	if tabard then
+		local b, o, e = tabard.background, tabard.border, tabard.emblem
+		crest.background:SetVertexColor(b[1] / 255, b[2] / 255, b[3] / 255)
+		crest.border:SetVertexColor(o[1] / 255, o[2] / 255, o[3] / 255)
+		-- The same sums as the game's SetLargeGuildTabardTextures
+		local cell = 64 / 1024
+		local x, y = (tabard.style % 16) * cell, floor(tabard.style / 16) * cell
+		crest.emblem:SetTexCoord(x, x + cell, y, y + cell)
+		crest.emblem:SetVertexColor(e[1] / 255, e[2] / 255, e[3] / 255)
+	else
+		crest.fallback:SetTexture(GuildWars:CrestFile(guild))
+	end
+end
+
+function GuildWars.CrestSetDesaturated(crest, on)
+	for _, texture in ipairs({ crest.background, crest.border, crest.emblem, crest.fallback }) do
+		texture:SetDesaturated(on == true)
+	end
+end
+
 ---"7:50 PM" in this computer's clock.
 function GuildWars:Clock(t)
 	return (gsub(date("%I:%M %p", t), "^0", ""))

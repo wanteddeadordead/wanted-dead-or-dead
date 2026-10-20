@@ -1,6 +1,6 @@
 -- Wanted: the zone HUD. In a campaign zone while wars are on, a small frame under the game's top-centre widgets: the
--- zone, who holds it (crest, guild in its side's colour, since when) or "Unclaimed", the protection left, what comes
--- next there (a race or a war) and the tax when the site gave one. It gives way to the race HUD and the war HUD, which
+-- zone, who holds it (crest, guild in its side's colour, since when) or "Unclaimed", the protection left, and what
+-- comes next there (a race or a war). It gives way to the race HUD and the war HUD, which
 -- take over in their zone, and hides in instances. Off in Settings (Guild wars, Zone HUD), with its own size; dragged,
 -- folded and hidden as the other HUDs are (HudKit).
 
@@ -16,12 +16,6 @@ local private = {}
 local WIDTH, HEIGHT = 280, 112
 -- The protection countdown moves by the minute
 local MINUTE = 60
--- A race is "live now" this long after it starts (as on the Zones page)
-local RACE_SECONDS = 45 * 60
-local TAG_TIPS = {
-	war = { "War", "A guild war: one guild attacks the zone's holder, 40 a side. Only the rosters take points." },
-	race = { "Race", "An influence race: open to everyone in the zone, Horde v Alliance. Nothing is captured." },
-}
 
 function ZoneHUD:OnEnable()
 	local frame = CreateFrame("Frame")
@@ -44,12 +38,8 @@ function private.Build()
 	local body = HudKit:Body(f)
 	f.zone = Theme:Text(body, "heading", "", C.gold)
 	f.zone:SetPoint("TOPLEFT", 10, -8)
-	f.zone:SetWidth(WIDTH - 20 - 70)
+	f.zone:SetWidth(WIDTH - 20)
 	f.zone:SetWordWrap(false)
-	f.tax = Theme:Text(body, "small", "", C.muted)
-	f.tax:SetPoint("TOPRIGHT", -10, -10)
-	f.tax:SetJustifyH("RIGHT")
-	W:Explain(f.tax, "Tax", "The share of a war's winnings and the zone's income the holder's guild takes.", "ANCHOR_BOTTOM")
 	f.crest = body:CreateTexture(nil, "ARTWORK")
 	f.crest:SetSize(26, 26)
 	f.crest:SetPoint("TOPLEFT", 10, -32)
@@ -111,25 +101,17 @@ function private.Span(seconds)
 	return format("%dm", max(floor(seconds / 60), 1))
 end
 
----"Race tonight 8:40 PM" (gold today), "War Tue 7:50 PM" (red today, else amber), "Live now" (green), and the kind.
+---"Race tonight 8:40 PM", "War Tue 7:50 PM" or "Live now": the Zones page's wording (PageWarZones), the kind named first.
 ---@return string text
 ---@return string? kind "war" or "race"
 function private.Next(next_, now)
-	if type(next_) ~= "table" then
+	local line, kind, live = Wanted.WarZoneText.Next(next_, now)
+	if not kind then
 		return "", nil
+	elseif live then
+		return (gsub(line, "live now", "Live now")), kind
 	end
-	local kind = next_.kind == "war" and "war" or "race"
-	local at = type(next_.at) == "number" and next_.at or nil
-	if kind == "race" and at and now >= at and now < at + RACE_SECONDS then
-		return Theme:Colorize("Live now", C.green), kind
-	end
-	local label = kind == "war" and "War" or "Race"
-	local today = at and date("%Y-%m-%d", at) == date("%Y-%m-%d", now)
-	local line = label..(at and " "..GuildWars:When(at, now) or kind == "war" and " soon" or "")
-	if kind == "war" then
-		return Theme:Colorize(line, today and C.red or C.amber), kind
-	end
-	return today and Theme:Colorize(line, C.gold) or line, kind
+	return (kind == "war" and "War" or "Race")..(line ~= "" and " "..line or ""), kind
 end
 
 ---The zone's catch-up row (GuildWars:Zones) for the campaign zone the player is in, with the zone's map data; nil
@@ -212,8 +194,6 @@ function ZoneHUD:Update()
 	f = f or private.Build()
 	local holder = type(info.holder) == "table" and type(info.holder.guild) == "string" and info.holder or nil
 	f.zone:SetText(info.zone or "?")
-	local tax = tonumber(info.tax)
-	f.tax:SetText(tax and format("Tax %d%%", tax) or "")
 	f.crest:SetShown(holder ~= nil)
 	f.guild:ClearAllPoints()
 	f.since:ClearAllPoints()
@@ -242,7 +222,8 @@ function ZoneHUD:Update()
 	f.next:SetText(line)
 	f.nextHit:SetShown(kind ~= nil)
 	if kind then
-		W:Explain(f.nextHit, TAG_TIPS[kind][1], TAG_TIPS[kind][2], "ANCHOR_BOTTOM")
+		local tip = Wanted.WarZoneText.TAG_TIPS[kind]
+		W:Explain(f.nextHit, tip[1], tip[2], "ANCHOR_BOTTOM")
 	end
 	f.summary:SetText(info.zone.."  ·  "..(holder and Theme:Colorize(holder.guild, GuildWars.SIDE_COLORS[holder.faction] or C.text) or Theme:Colorize("Unclaimed", C.faint)))
 	HudKit:Apply("zone", f, WIDTH, HEIGHT)

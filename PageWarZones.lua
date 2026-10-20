@@ -36,7 +36,7 @@ function private.Next(next_, now)
 	local at = type(next_.at) == "number" and next_.at or nil
 	local text = type(next_.text) == "string" and next_.text or nil
 	if kind == "race" and at and now >= at and now < at + 45 * 60 then
-		return Theme:Colorize("live now", C.green), kind
+		return Theme:Colorize("live now", C.green), kind, true
 	end
 	local when = at and GuildWars:When(at, now) or ""
 	if kind == "war" then
@@ -45,6 +45,9 @@ function private.Next(next_, now)
 	end
 	return at and date("%Y-%m-%d", at) == date("%Y-%m-%d", now) and Theme:Colorize(when, C.gold) or when, kind
 end
+
+-- Shared with the zone HUD, so the wording is one
+Wanted.WarZoneText = { Next = private.Next, TAG_TIPS = TAG_TIPS }
 
 function private.CreateRow(row)
 	row.zone = Theme:Text(row, "body", "", C.text)

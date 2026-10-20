@@ -18267,19 +18267,18 @@ end
 	do
 		local realZones, realHere, realLive, realInst = G.Zones, G.Here, ns.Races.Live, IsInInstance
 		local held = { zone = "Hillsbrad Foothills", holder = { guild = "Revenant", faction = "Alliance" }, since = clock - 3 * 86400,
-			protectedUntil = clock + 2 * 86400 + 4 * 3600 + 60, next = { kind = "race", at = clock + 600 }, tax = 10 }
+			protectedUntil = clock + 2 * 86400 + 4 * 3600 + 60, next = { kind = "race", at = clock + 600 } }
 		local zones = { held }
 		G.Zones = function() return zones end
 		G.Here = function() return nil end
 		ns.Races.Live = function() return nil end
 		local function Zone() ns.ZoneHUD:Update() return _G.WantedZoneHUD end
 		local zhud = Zone()
-		check(zhud and zhud:IsShown() and zhud.zone._text == "Hillsbrad Foothills" and zhud.guild._text == "Revenant" and zhud.since._text:find("^since ")
-			and zhud.tax._text == "Tax 10%", "the zone HUD: shown in a held zone with wars on")
-		check(zhud.protection._text:find("Protected 2d 4h", 1, true) and zhud.next._text:find("Race tonight", 1, true), "its protection and the next race: "..zhud.protection._text.." / "..zhud.next._text)
-		held.protectedUntil, held.next, held.tax = clock - 10, { kind = "war", at = clock + 3 * 86400 }, nil
+		check(zhud and zhud:IsShown() and zhud.zone._text == "Hillsbrad Foothills" and zhud.guild._text == "Revenant" and zhud.since._text:find("^since "), "the zone HUD: shown in a held zone with wars on")
+		check(zhud.protection._text:find("Protected 2d 4h", 1, true) and zhud.next._text:find("^Race .*tonight"), "its protection and the next race: "..zhud.protection._text.." / "..zhud.next._text)
+		held.protectedUntil, held.next = clock - 10, { kind = "war", at = clock + 3 * 86400 }, nil
 		Zone()
-		check(zhud.protection._text:find("Open to war", 1, true) and zhud.next._text:find("War ", 1, true) and zhud.tax._text == "", "unprotected: open to war, a war next, no tax")
+		check(zhud.protection._text:find("Open to war", 1, true) and zhud.next._text:find("War ", 1, true), "unprotected: open to war, a war next")
 		zones[1] = { zone = "Hillsbrad Foothills", next = { kind = "race", at = clock - 60 } }
 		Zone()
 		check(zhud:IsShown() and zhud.guild._text == "Unclaimed" and not zhud.crest:IsShown() and zhud.protection._text:find("Open to war", 1, true)

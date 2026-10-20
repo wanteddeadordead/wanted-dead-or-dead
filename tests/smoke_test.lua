@@ -18779,6 +18779,8 @@ end)()
 -- per screen, and it is gone with the tour
 ;(function()
 	local G, Tour = ns.GuildWars, ns.Tour
+	-- The sample is the tour's, not the layers': it draws whatever the map switches say, so they are all off here
+	ns.db.settings.warMap, ns.db.settings.raceMap, ns.db.settings.statsMap = false, false, false
 	local function First(title)
 		for i, stop in ipairs(Tour.STOPS) do
 			if stop.title == title then return i end
@@ -18890,7 +18892,7 @@ end)()
 			if stop.map then
 				local tagged = true
 				for _, title in ipairs(titles) do tagged = tagged and title:find("^SAMPLE · ") ~= nil end
-				check(#titles == 8 and noWaypoint == 8 and tagged, label..": the sample war on the map: eight pieces, tagged, no waypoints: "..#titles)
+				check(#titles == 8 and noWaypoint == 8 and tagged, label..": the sample war on the map: eight pieces, tagged, no waypoints, with every map layer switched off: "..#titles)
 			else
 				check(#titles == 0, label..": "..stop.title.." has nothing on the map: "..#titles)
 			end
@@ -18963,6 +18965,7 @@ end)()
 	G:Take(nil)
 	ns.Races:Take(nil)
 	ns.db.tour = nil
+	ns.db.settings.warMap, ns.db.settings.raceMap, ns.db.settings.statsMap = true, nil, nil
 	ns.UI:GetFrame():Hide()
 end)()
 print("wanted smoke: guild wars checks pass")

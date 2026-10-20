@@ -18263,6 +18263,61 @@ end
 	banner:Hide()
 	ns.WarBanner:Check()
 	check(not banner:IsShown(), "once per coming in")
+	-- The zone HUD: the holder, the protection and what's next in a campaign zone; it gives way to the war HUD and the race HUD
+	do
+		local realZones, realHere, realLive, realInst = G.Zones, G.Here, ns.Races.Live, IsInInstance
+		local held = { zone = "Hillsbrad Foothills", holder = { guild = "Revenant", faction = "Alliance" }, since = clock - 3 * 86400,
+			protectedUntil = clock + 2 * 86400 + 4 * 3600 + 60, next = { kind = "race", at = clock + 600 }, tax = 10 }
+		local zones = { held }
+		G.Zones = function() return zones end
+		G.Here = function() return nil end
+		ns.Races.Live = function() return nil end
+		local function Zone() ns.ZoneHUD:Update() return _G.WantedZoneHUD end
+		local zhud = Zone()
+		check(zhud and zhud:IsShown() and zhud.zone._text == "Hillsbrad Foothills" and zhud.guild._text == "Revenant" and zhud.since._text:find("^since ")
+			and zhud.tax._text == "Tax 10%", "the zone HUD: shown in a held zone with wars on")
+		check(zhud.protection._text:find("Protected 2d 4h", 1, true) and zhud.next._text:find("Race tonight", 1, true), "its protection and the next race: "..zhud.protection._text.." / "..zhud.next._text)
+		held.protectedUntil, held.next, held.tax = clock - 10, { kind = "war", at = clock + 3 * 86400 }, nil
+		Zone()
+		check(zhud.protection._text:find("Open to war", 1, true) and zhud.next._text:find("War ", 1, true) and zhud.tax._text == "", "unprotected: open to war, a war next, no tax")
+		zones[1] = { zone = "Hillsbrad Foothills", next = { kind = "race", at = clock - 60 } }
+		Zone()
+		check(zhud:IsShown() and zhud.guild._text == "Unclaimed" and not zhud.crest:IsShown() and zhud.protection._text:find("Open to war", 1, true)
+			and zhud.next._text:find("Live now", 1, true), "an unheld zone: Unclaimed")
+		zones[1] = held
+		G.Here = realHere
+		Zone()
+		check(not zhud:IsShown(), "the war HUD showing: hidden")
+		ns.db.settings.warHud = false
+		Zone()
+		check(zhud:IsShown(), "the war HUD off: back")
+		ns.db.settings.warHud = nil
+		G.Here = function() return nil end
+		ns.Races.Live = function() return { mapId = 1424, zone = "Hillsbrad Foothills" } end
+		Zone()
+		check(not zhud:IsShown(), "the race HUD showing: hidden")
+		ns.Races.Live = function() return nil end
+		IsInInstance = function() return true end
+		Zone()
+		check(not zhud:IsShown(), "in an instance: hidden")
+		IsInInstance = realInst
+		Zone()
+		check(zhud:IsShown(), "and back outside")
+		ns.db.settings.zoneHud = false
+		Zone()
+		check(not zhud:IsShown(), "the setting off: hidden")
+		ns.db.settings.zoneHud = nil
+		local realOn = G.On
+		G.On = function() return false end
+		Zone()
+		check(not zhud:IsShown(), "wars off: hidden")
+		G.On = realOn
+		ns.ZoneHUD:SetScale(1.2)
+		check(ns.db.settings.zoneHudScale == 1.2 and zhud:GetScale() == 1.2, "its size is kept")
+		ns.ZoneHUD:SetScale(1)
+		G.Zones, G.Here, ns.Races.Live = realZones, realHere, realLive
+		ns.ZoneHUD:Update()
+	end
 	-- The map: the war on its zone's map (the rally, the lanes' seals, the keep ringed while it's open) and a plate
 	local canvas = NewMock()
 	canvas._w, canvas._h = 1002, 668

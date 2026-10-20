@@ -440,6 +440,10 @@ function private.BuildSharing(column)
 	column:Section("Guild wars")
 	private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",
 		function() Wanted.WarHUD:Update() end)
+	private.Switch(column, Root, "zoneHud", "Zone HUD", "In a campaign zone: who holds it, how long it's protected and what comes next there. The war and race HUDs take its place when they show.",
+		function() Wanted.ZoneHUD:Update() end)
+	column:Row("Zone HUD size", private.SizeSlider(content, function() return Root().zoneHudScale end, function(scale) Wanted.ZoneHUD:SetScale(scale) end),
+		"The zone HUD's size. Drag the HUD to move it.")
 	private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, races' flags and who holds each zone, on the world map and OpenMap's.",
 		function() Wanted.WarMap:Refresh() end)
 	private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")

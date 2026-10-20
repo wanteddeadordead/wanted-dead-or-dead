@@ -486,8 +486,8 @@ do
 	broken.Deserialize = function() error("Division by zero") end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
--- Siege nights are shipped off; the suite runs them on (the toggle itself is checked below)
-assert(ns.db.settings.siege == false and not ns:SiegeOn(), "siege nights are off by default")
+-- Rally leaders are shipped off; the suite runs them on (the toggle itself is checked below)
+assert(ns.db.settings.siege == false and not ns:SiegeOn(), "rally leaders are off by default")
 ns.db.settings.siege = true
 ns.db.tour = { poker = { seen = true, done = true } } -- the poker tour starts itself on the first Poker page; its own block tests that
 -- The poker addon depends on the base: its files load after the base's ADDON_LOADED, into its own namespace
@@ -4534,12 +4534,12 @@ end)()
 	end
 	PlaySoundFile, PlaySound = realFile, realKit
 end)()
--- The siege toggle reads the setting (a /reload applies it)
+-- The rally toggle: the command turns it on and off (a /reload applies it)
 do
-	ns.db.settings.siege = false
-	check(not ns:SiegeOn(), "siege nights off")
-	ns.db.settings.siege = true
-	check(ns:SiegeOn(), "siege nights on")
+	ns:RunCommand("siege", "off")
+	check(ns.db.settings.siege == false and not ns:SiegeOn(), "rally leaders off")
+	ns:RunCommand("siege", "on")
+	check(ns.db.settings.siege == true and ns:SiegeOn(), "rally leaders on")
 end
 print("wanted smoke: all checks pass")
 ;(function()

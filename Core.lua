@@ -45,7 +45,7 @@ local DEFAULTS = {
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		showTools = false, -- the Tools page (network details, test data, debug log)
-		siege = false, -- siege nights: capture fronts and rally leaders; off until their first public night (Wanted:SiegeOn)
+		siege = false, -- rally leaders (Rally), off by default (Wanted:SiegeOn; the key is the retired siege nights')
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)
@@ -659,10 +659,8 @@ function Wanted:AppNotRunningFor()
 	return GetServerTime() - seen
 end
 
----Whether the siege features run on this client: capture fronts, the HUD and map pieces, and rally leaders (layers
----are read and hops run on every client).
----Shipped off (settings.siege), switched on with /wanted siege on (or in Settings) and a /reload, until their first
----public siege night makes them the default.
+---Whether rally leaders run on this client (Rally): shipped off (settings.siege, the retired siege nights' switch),
+---switched on with /wanted siege on (or in Settings) and a /reload.
 ---@return boolean
 function Wanted:SiegeOn()
 	return Wanted.db ~= nil and Wanted.db.settings.siege == true
@@ -826,14 +824,14 @@ function Wanted:RegisterCommand(name, help, func)
 	private.commands[name] = { help = help, func = func }
 end
 
-Wanted:RegisterCommand("siege", "Siege nights on or off on this client: /wanted siege on, /wanted siege off (then /reload).", function(args)
+Wanted:RegisterCommand("siege", "Rally leaders on or off on this client: /wanted siege on, /wanted siege off (then /reload).", function(args)
 	local want = strlower(strtrim(args or ""))
 	if want == "on" or want == "off" then
 		Wanted.db.settings.siege = want == "on"
-		Wanted:Print("Siege nights %s. Type /reload to apply it.", want)
+		Wanted:Print("Rally leaders %s. Type /reload to apply it.", want)
 		return
 	end
-	Wanted:Print("Siege nights are %s on this client: /wanted siege on, or /wanted siege off (then /reload).", Wanted:SiegeOn() and "on" or "off")
+	Wanted:Print("Rally leaders are %s on this client: /wanted siege on, or /wanted siege off (then /reload).", Wanted:SiegeOn() and "on" or "off")
 end)
 
 ---Runs a subcommand by name.

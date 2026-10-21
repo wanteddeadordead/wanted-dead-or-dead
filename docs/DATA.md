@@ -381,7 +381,8 @@ vault then ended with the crash, and every seat is owed what it had.
   version's `L` is dropped unread, and the tag stays taken. Nothing was saved.
 - Layers (`Shard.lua`, from the release after 1.22.0): a client's layer of its zone is `"server-map-zone instance"`
   from the creature GUIDs it looks at (`Shard:Current()`); the site shows the zone instance part as "layer N". It goes
-  out as `l` in the hello (with `lm`, the zone map it was read on). Each receiver keeps the sender's last word on it for ten
+  out as `l` in the hello (with `lm`, the zone map it was read on), and from 1.28.0 in the live race numbers (`K`, the zone is
+  the race's) and a war's samples (`G`, the war's zone). Each receiver keeps the sender's last word on it for ten
   minutes, never saved; a missing or malformed `l` forgets them. `kill`, `death` and `spotted` records carry the
   recorder's layer as `l` in their data, left out while it isn't known (an optional field: no migration), and so do
   the client's own entries in the `WantedDB.sightings` ring (shared sightings carry none: the sharer's layer isn't

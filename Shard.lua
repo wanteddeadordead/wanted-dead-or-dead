@@ -371,7 +371,8 @@ function Shard:IsKey(key)
 	return private.IsKey(key)
 end
 
----A Wanted player's layer, as their last hello said, with the zone map it was on. No layer, or not one: they're forgotten.
+---A Wanted player's layer, as their last message said (a hello, their live race numbers or their war sample), with
+---the zone map it was on. No layer, or not one: they're forgotten.
 ---@param name any the sender, as the game names them
 ---@param key any their layer
 ---@param mapId any the zone map they were on
@@ -479,8 +480,8 @@ function private.Lower(a, b)
 end
 
 ---This client's own estimate of a zone's fight layer, from the channel: the deaths heard there in the last ten
----minutes by layer, plus the Wanted players of our side heard in the zone by layer (their hello; us too when it's our
----zone), the busiest layer once it reaches the floor. nil below it.
+---minutes by layer, plus the Wanted players of our side heard in the zone by layer (their hello, race numbers or war
+---sample; us too when it's our zone), the busiest layer once it reaches the floor. nil below it.
 ---@param zone string
 ---@param mapId number?
 ---@return string?
@@ -698,7 +699,7 @@ end
 -- ============================================================================
 
 ---The Wanted player of our side to ask for an invite onto a layer in our zone: the one heard there latest (their
----hello), leaving out the ones that couldn't invite this hop. nil when there's
+---hello, race numbers or war sample), leaving out the ones that couldn't invite this hop. nil when there's
 ---nobody.
 ---@param layer string
 ---@param tried table name -> true

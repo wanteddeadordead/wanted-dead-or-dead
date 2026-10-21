@@ -16471,6 +16471,12 @@ print("wanted smoke: layer checks pass")
 	local horde, isLive = R:SideInfluence(race, "Horde")
 	check(isLive and horde == live.influence and R:SideInfluence(race, "Alliance") == 780, "over the catch-up's: ours shown live; theirs stays the site's")
 	check(R:HereNow(race.points[3]) == 1 and R:HereNow(race.points[1]) == 0, "who of our side is on which point now")
+	-- Their layer comes with their numbers, for a hop's host; an older version's numbers (no l) forget nothing
+	R:OnPeer({ z = race.zone, s = race.start, k = 100, n = 90, w = 108, p = "hb-r3", l = "4615-1-777" }, "Big Hitter")
+	check(ns.Shard:Of("Big Hitter") and ns.Shard:Of("Big Hitter").key == "4615-1-777" and ns.Shard:Of("Big Hitter").mapId == 1424, "a race peer's layer is noted")
+	R:OnPeer({ z = race.zone, s = race.start, k = 100, n = 90, w = 108, p = "hb-r3" }, "Big Hitter")
+	check(ns.Shard:Of("Big Hitter") and ns.Shard:Of("Big Hitter").key == "4615-1-777", "and kept when their next numbers carry none")
+	check(told[#told].t.l == ns.Shard:Current(), "our own numbers carry our layer")
 	R:OnPeer({ z = race.zone, s = race.start, k = 1, n = 2, w = 2 }, "Big Hitter")
 	check(R:LiveSide(race).kills == 1 and R:HereNow(race.points[3]) == 0, "a player's latest word replaces their last")
 	R:OnPeer({ z = race.zone, s = race.start, k = 100, n = 90, w = 108, p = "hb-r3" }, "Big Hitter")
@@ -17499,6 +17505,11 @@ end
 	for i = 1, 3 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1 }, "Peer"..i) end
 	ns.WarLive:OnPeer({ w = 8, t = tick, p = "hb-mid-a-tower", e = 0 }, "Other")
 	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 500 }, "Liar")
+	check(ns.Shard:Of("Peer1") == nil, "a sample without a layer notes none")
+	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1, l = "4615-1-779" }, "Peer1")
+	check(ns.Shard:Of("Peer1") and ns.Shard:Of("Peer1").key == "4615-1-779" and ns.Shard:Of("Peer1").mapId == 1424, "a war peer's layer comes with their sample")
+	ns.WarLive:OnPeer({ w = 8, t = tick, p = "hb-mid-a-tower", e = 0, l = "4615-1-781" }, "Other War")
+	check(ns.Shard:Of("Other War") == nil, "one for another war is ignored")
 	clock = clock + 30
 	ns.WarLive:Step()
 	local battle = G:War(1).battle

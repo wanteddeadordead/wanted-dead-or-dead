@@ -27,9 +27,9 @@ local MAX_RACES, MAX_GUILDS = 6, 20
 local STATES = { upcoming = true, live = true, counting = true, final = true }
 local SIDES = { H = "Horde", A = "Alliance" }
 Races.SAMPLE_SECONDS = SAMPLE_SECONDS
--- Live numbers on WantedNet: { z = zone, s = race start, k = kills, n = samples, w = weighted samples, p = point id },
--- from the player they're about, at most once a minute each, only in a race's zone while it's run. Older versions
--- ignore the tag.
+-- Live numbers on WantedNet: { z = zone, s = race start, k = kills, n = samples, w = weighted samples, p = point id,
+-- l = the sender's layer (Shard) }, from the player they're about, at most once a minute each, only in a race's zone
+-- while it's run. Older versions ignore the tag, and send no l.
 local LIVE_TAG = "K"
 local SEND_SECONDS = 60
 local HERE_SECONDS = 150 -- a peer said they're on a point this recently: still there
@@ -384,7 +384,7 @@ function private.Tell(race, point)
 	local key = private.Key(race)
 	private.sentAt = now
 	Wanted.Sync:BroadcastPlugin(LIVE_TAG, { z = race.zone, s = race.start, k = kills, n = Wanted.db.raceSamples[key] or 0,
-		w = floor((Wanted.db.raceWeight[key] or 0) * 10 + 0.5) / 10, p = point and point.id or nil })
+		w = floor((Wanted.db.raceWeight[key] or 0) * 10 + 0.5) / 10, p = point and point.id or nil, l = Wanted.Shard:Current() })
 end
 
 ---What a player of our side said they counted in a race being run now: kept by sender, the latest only.
@@ -419,6 +419,10 @@ function Races:OnPeer(tbl, sender)
 		end
 	end
 	private.peers[sender] = { key = private.Key(race), k = floor(k), n = floor(n), w = w, p = point and point.id, at = GetTime() }
+	-- Their layer, for a hop's host (an older version says none, and nothing is forgotten)
+	if tbl.l ~= nil then
+		Wanted.Shard:Note(sender, tbl.l, race.mapId)
+	end
 	private.Changed()
 end
 

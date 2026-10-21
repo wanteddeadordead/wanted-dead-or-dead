@@ -1,6 +1,6 @@
 -- Wanted: a war's live estimates in game, between catch-ups. The catch-up is read at login only, so during a war each
 -- roster member's client says every 30-second tick, to the others of its side (Sync plugin G), which war point it
--- stands on and how many enemy players are near it; each client then runs the capture rule (the war contract's 4.2)
+-- stands on, how many enemy players are near it and its layer (Shard, for a hop's host); each client then runs the capture rule (the war contract's 4.2)
 -- over the ticks as an estimate: at each point open by the site's count, net = min(6, attackers − defenders), progress
 -- kept. Our side's count is the members who said they're there; the other side's (whose clients can't reach ours) is
 -- the most enemies one of them saw near it, friends included. Estimates only, shown marked "live" (as the races' live
@@ -48,7 +48,7 @@ function WarLive:Step()
 	end
 	if GuildWars:OnRoster(war) and private.sent ~= slot then
 		private.sent = slot
-		local sample = { w = war.warId, t = slot, p = point and point.id or "", e = min(Wanted.Enemies:CountNearby(), MAX_ENEMIES) }
+		local sample = { w = war.warId, t = slot, p = point and point.id or "", e = min(Wanted.Enemies:CountNearby(), MAX_ENEMIES), l = Wanted.Shard:Current() }
 		Wanted.Sync:BroadcastPlugin(TAG, sample)
 		private.Take(war, UnitName("player") or "?", sample)
 	end
@@ -63,7 +63,7 @@ function WarLive:OnPeer(tbl, sender)
 	if type(tbl) ~= "table" or type(sender) ~= "string" or sender == "" then
 		return
 	end
-	local war = GuildWars:Here()
+	local war, zone = GuildWars:Here()
 	if not war or tbl.w ~= war.warId or type(tbl.t) ~= "number" or type(tbl.e) ~= "number" or type(tbl.p) ~= "string" then
 		return
 	end
@@ -71,6 +71,10 @@ function WarLive:OnPeer(tbl, sender)
 		return
 	end
 	private.Take(war, sender, tbl)
+	-- Their layer, for a hop's host (an older version says none, and nothing is forgotten)
+	if tbl.l ~= nil then
+		Wanted.Shard:Note(sender, tbl.l, zone.mapId)
+	end
 end
 
 function private.Take(war, sender, sample)

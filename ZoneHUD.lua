@@ -244,11 +244,18 @@ function private.Draw(f, info, now, sample)
 		f.since:SetText("")
 	end
 	local protected = holder ~= nil and type(info.protectedUntil) == "number" and info.protectedUntil > now
-	f.protection:SetText(protected and Theme:Colorize("Protected "..private.Span(info.protectedUntil - now), C.amber)
-		or Theme:Colorize("Open to war", C.muted))
-	W:Explain(f.protection, protected and "Protected" or "Open to war", protected
-		and format("No war can be declared on this zone until %s.", date("%a ", info.protectedUntil)..GuildWars:Clock(info.protectedUntil))
-		or "A guild on the other side can declare war here after winning a race.", "ANCHOR_BOTTOM")
+	if protected then
+		f.protection:SetText(Theme:Colorize("Protected "..private.Span(info.protectedUntil - now), C.amber))
+		W:Explain(f.protection, "Protected", format("No war can be declared on this zone until %s.",
+			date("%a ", info.protectedUntil)..GuildWars:Clock(info.protectedUntil)), "ANCHOR_BOTTOM")
+	elseif holder then
+		f.protection:SetText(Theme:Colorize("Open to war", C.muted))
+		W:Explain(f.protection, "Open to war", "A guild on the other side can declare war here after winning a race.", "ANCHOR_BOTTOM")
+	else
+		f.protection:SetText(Theme:Colorize("Open to claim", C.muted))
+		W:Explain(f.protection, "Open to claim", "Any guild, Horde or Alliance, can claim it. The top guild in a race here "
+			.."takes it with no war, and no war can be declared on it for 3 days.", "ANCHOR_BOTTOM")
+	end
 	local line, kind = private.Next(info.next, now)
 	f.next:SetText(line)
 	f.nextHit:SetShown(kind ~= nil)

@@ -17252,7 +17252,7 @@ end
 		check(zhud.protection._text:find("Open to war", 1, true) and zhud.next._text:find("War ", 1, true), "unprotected: open to war, a war next")
 		zones[1] = { zone = "Hillsbrad Foothills", next = { kind = "race", at = clock - 60 } }
 		Zone()
-		check(zhud:IsShown() and zhud.guild._text == "Unclaimed" and not zhud.crest:IsShown() and zhud.protection._text:find("Open to war", 1, true)
+		check(zhud:IsShown() and zhud.guild._text == "Unclaimed" and not zhud.crest:IsShown() and zhud.protection._text:find("Open to claim", 1, true)
 			and zhud.next._text:find("Live now", 1, true), "an unheld zone: Unclaimed")
 		zones[1] = held
 		G.Here = realHere

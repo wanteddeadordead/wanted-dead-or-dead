@@ -95,6 +95,11 @@ function GuildWars:Take(src)
 			raw[field] = private.Clean(value, 0)
 		end
 	end
+	-- Races run only with wars: with no holder and no war yet the site sends no war fields, and the zones are all
+	-- unclaimed rather than off
+	if not raw and type(src) == "table" and type(src.races) == "table" then
+		raw = {}
+	end
 	local db = Wanted.db
 	private.state = raw and GuildWars.View(raw, type(src.t) == "number" and src.t or nil) or nil
 	local listed, now = {}, GetServerTime()

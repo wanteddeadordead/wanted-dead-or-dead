@@ -16703,8 +16703,13 @@ end
 	check(G:On() and zone and zone.since == nil and #zone.holder.guild == 120 and G:Wars()[1] == nil, "cleaned: no NaN, long text cut, nothing but data; no guild, no wars")
 	G:Take(nil)
 	check(not G:On(), "and off again")
+	G:Take({ t = clock })
+	check(not G:On(), "a catch-up with no guild war fields and no races: off")
 	G:Take({ t = clock, races = {} })
-	check(not G:On(), "a catch-up with no guild war fields: off")
+	local unclaimed = 0
+	for _, z in ipairs(G:Zones()) do if not z.holder then unclaimed = unclaimed + 1 end end
+	check(G:On() and #G:Zones() == #ns.WarZones.LIST and unclaimed == #ns.WarZones.LIST,
+		"races but no holders and no wars yet: on, every zone unclaimed")
 	-- US Eastern: the evenings and the War Marks day (summer time to 2 AM on November's first Sunday)
 	check(G:EasternAt(1792411200, 1, 18 * 3600) == 1792533600 and G:EasternAt(1799582400, 1, 18 * 3600) == 1799708400
 		and G:EasternOffset(1793512740) == -4 * 3600 and G:EasternOffset(1793512800) == -5 * 3600, "6 PM Eastern tomorrow, in summer and in winter")
@@ -17299,9 +17304,9 @@ end
 		ns:RunCommand("hud", "zone")
 		check(ns.db.settings.zoneHud == false and not zhud:IsShown() and #printed == 1 and printed[1]:find("/wanted hud", 1, true), "/wanted hud zone hides it and says once how to bring it back")
 		ns:RunCommand("hud", "zone")
-		check(ns.db.settings.zoneHud == true and zhud:IsShown(), "and shows it again")
+		check(ns.db.settings.zoneHud == true and zhud:IsShown() and #printed == 2 and printed[2]:find("Zone HUD on", 1, true), "and shows it again, and says so")
 		ns:RunCommand("hud", "zone")
-		check(#printed == 1, "the hint is said once")
+		check(#printed == 3 and printed[3] == "Zone HUD hidden.", "the hint is said once; after it, a plain line")
 		ns:RunCommand("hud", "")
 		check(ns.db.settings.zoneHud == false and ns.db.settings.raceHud == false and ns.db.settings.warHud == false and not zhud:IsShown(),
 			"/wanted hud with any shown hides them all")

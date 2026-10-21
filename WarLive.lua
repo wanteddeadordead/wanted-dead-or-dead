@@ -67,7 +67,8 @@ function WarLive:OnPeer(tbl, sender)
 	if not war or tbl.w ~= war.warId or type(tbl.t) ~= "number" or type(tbl.e) ~= "number" or type(tbl.p) ~= "string" then
 		return
 	end
-	if abs(tbl.t - floor(GetServerTime() / TICK)) > 2 or tbl.e < 0 or tbl.e > MAX_ENEMIES then
+	-- A whole tick (NaN is not: it would be a table key), a count that is a number
+	if tbl.t ~= floor(tbl.t) or tbl.e ~= tbl.e or abs(tbl.t - floor(GetServerTime() / TICK)) > 2 or tbl.e < 0 or tbl.e > MAX_ENEMIES then
 		return
 	end
 	private.Take(war, sender, tbl)

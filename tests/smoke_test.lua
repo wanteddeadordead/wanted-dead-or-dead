@@ -17510,6 +17510,10 @@ end
 	for i = 1, 3 do ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1 }, "Peer"..i) end
 	ns.WarLive:OnPeer({ w = 8, t = tick, p = "hb-mid-a-tower", e = 0 }, "Other")
 	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 500 }, "Liar")
+	-- Not a number a tick can be: refused, not a Lua error on every client in the zone
+	ns.WarLive:OnPeer({ w = 7, t = 0/0, p = "hb-mid-a-tower", e = 1 }, "NaN Tick")
+	ns.WarLive:OnPeer({ w = 7, t = tick + 0.5, p = "hb-mid-a-tower", e = 1 }, "Half Tick")
+	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 0/0 }, "NaN Enemies")
 	check(ns.Shard:Of("Peer1") == nil, "a sample without a layer notes none")
 	ns.WarLive:OnPeer({ w = 7, t = tick, p = "hb-mid-a-tower", e = 1, l = "4615-1-779" }, "Peer1")
 	check(ns.Shard:Of("Peer1") and ns.Shard:Of("Peer1").key == "4615-1-779" and ns.Shard:Of("Peer1").mapId == 1424, "a war peer's layer comes with their sample")

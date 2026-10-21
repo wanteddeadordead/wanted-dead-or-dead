@@ -16655,7 +16655,8 @@ print("wanted smoke: layer checks pass")
 		GetMapInfo = function() return { mapType = 3 } end }
 	local mounted = false
 	IsMounted = function() return mounted end
-	local start = clock + 600
+	-- On a presence slot's start, so the samples a minute apart below share a slot
+	local start = (math.floor(clock / 300) + 2) * 300
 	local hillsbrad = { n = 1, zone = "Hillsbrad Foothills", mapID = 1424, start = start, ["end"] = start + 2700, state = "upcoming", horde = 812, alliance = 780,
 		points = {
 			{ id = "hb-r1", name = "Hillsbrad Fields", x = 40, y = 45, r = 40, weight = 1 },

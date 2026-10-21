@@ -198,7 +198,7 @@ Retired with capture fronts and siege nights (1.28.0), left in saved data unread
 post-beta reset, no migration: `WantedDB.captureSeen`, `WantedDB.settings.captures` (`{ map, minimap, bar, alerts,
 autoTrack, siegeCall, scale }`), `settings.captureHudPos` and `settings.captureHudCollapsed`, and `presence` entries
 at capture front points (`ah-`, `hb-`, `av-` with a lane or a side: they age out after 3 days as any entry does).
-`settings.siege` stays in use as the rally leaders' switch (`Wanted:SiegeOn`). The catch-up's `points`, `siege` and
+`settings.siege` (the siege nights', then the rally leaders' switch) too. The catch-up's `points`, `siege` and
 `frontWins`, and the `C` message (capture point presence, from older versions: dropped unread), are no longer read.
 
 `minimapPos`, the button's angle in degrees, filled in at load from the older `angle` (which stays, for older
@@ -377,18 +377,11 @@ vault then ended with the crash, and every seat is owed what it had.
   keeps the app's last epoch. A client with nothing saved (ceiling 1) can follow the server's channel only while the
   server's epoch is at most 4 (it was 1 for the Horde and 0 for the Alliance on 2026-10-08). The app's pointer is never older than the app's last, and replaces one a whisper brought only when
   it's no older than it or the catch-up was written after that whisper (`syncChannel.t`). New fields: no migration.
-- Rally positions (`L`, `Rally.lua`, from the release after 1.22.0) carry `{ c = claimed (server time), z = zone name
-  (shown only), m = the zone's map id, x, y (map percent on it), k = class file, f = faction, e = 1 when it ended }`.
-  Passing news like sightings: never stored or saved, never passed on, sent on the channel every 30 s (also while sync
-  is paused) and to realm links every two minutes, and taken only as the sender's own rally (the game names the
-  sender, whichever way it came). Zones are told apart by `m`, so every language agrees; a cave's or town's map counts
-  as its zone's, and underground (the continent's map) the leader's last place on the zone stands. A claim counts from
-  `c`, but never more than five minutes before this client first heard it; the earlier claim per faction and zone map
-  holds, ties going to the name that sorts first. A leader answers each later claim once, at most three per rival. An
-  end (`e`) drops only a claim no newer than its `c`. Older versions ignore the tag. Nothing saved: no migration.
+- Rally positions (`L`, from the release after 1.22.0 to 1.27): retired with rally leaders in 1.28.0. An older
+  version's `L` is dropped unread, and the tag stays taken. Nothing was saved.
 - Layers (`Shard.lua`, from the release after 1.22.0): a client's layer of its zone is `"server-map-zone instance"`
   from the creature GUIDs it looks at (`Shard:Current()`); the site shows the zone instance part as "layer N". It goes
-  out as `l` in the hello (with `lm`, the zone map it was read on), and in rally positions (`L`, the zone is `m`). Each receiver keeps the sender's last word on it for ten
+  out as `l` in the hello (with `lm`, the zone map it was read on). Each receiver keeps the sender's last word on it for ten
   minutes, never saved; a missing or malformed `l` forgets them. `kill`, `death` and `spotted` records carry the
   recorder's layer as `l` in their data, left out while it isn't known (an optional field: no migration), and so do
   the client's own entries in the `WantedDB.sightings` ring (shared sightings carry none: the sharer's layer isn't
@@ -399,8 +392,8 @@ vault then ended with the crash, and every seat is owed what it had.
   says the invite is coming, any other `r` (`combat`, `dead`, `full`, `cant` (not the group's leader or an
   assistant), `off`, `instance`, `busy`) says why not. The hopper takes an invite only from the host it asked, within
   thirty seconds, and hops once in ten minutes. Older versions ignore the tag and the fields. `WantedDB.settings.shard`
-  is `{ host, accept, alerts }`: `host` defaults off (hosting is on anyway while the player leads a group or the
-  rally), `accept` and `alerts` (announce a big fight's layer, from 1.28.0) on, all set at load: no
+  is `{ host, accept, alerts }`: `host` defaults off (hosting is on anyway while the player leads a group),
+  `accept` and `alerts` (announce a big fight's layer, from 1.28.0) on, all set at load: no
   migration. Layers are read and hops run on every client from 1.28.0 (before, only with
   `settings.siege` on).
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,

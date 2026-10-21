@@ -102,6 +102,7 @@ local UNIT_EVENTS = {
 }
 -- GUID kinds that carry a layer. Players' don't (Player-<realm>-<id>); pets are left out, a player's own summons.
 local GUID_KINDS = { Creature = true, Vehicle = true }
+local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
 
 
 
@@ -311,10 +312,15 @@ function Shard:IsFresh()
 	return Shard:Current() ~= nil and GetTime() - (private.seenAt or 0) <= FRESH_SECONDS
 end
 
----The zone map we're on (Rally's reading: a cave's or a town's map counts as its zone's), or nil where none reaches.
+---The zone map we're on (a cave's or a town's map counts as its zone's), or nil where none reaches.
 ---@return number?
 function Shard:ZoneMap()
-	return Wanted.Rally and Wanted.Rally:ZoneMap() or nil
+	local mapId = C_Map.GetBestMapForUnit("player")
+	local info = mapId and C_Map.GetMapInfo(mapId)
+	while info and info.mapType and info.mapType > MAP_ZONE and info.parentMapID and info.parentMapID > 0 do
+		mapId, info = info.parentMapID, C_Map.GetMapInfo(info.parentMapID)
+	end
+	return info and info.mapType == MAP_ZONE and mapId or nil
 end
 
 ---A layer's short name for chat and the Nearby window: its zone instance number, "497", or "?" for none.

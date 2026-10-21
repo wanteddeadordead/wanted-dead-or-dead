@@ -140,7 +140,7 @@ function HudKit:SetHidden(key, hidden)
 	spec.setting()[spec.field] = not hidden
 	if hidden and not Wanted.db.settings.hudHint then
 		Wanted.db.settings.hudHint = true
-		Wanted:Print("A HUD is hidden. Bring it back with /wanted hud (all) or /wanted hud zone, race, war or capture, or in Settings.")
+		Wanted:Print("A HUD is hidden. Bring it back with /wanted hud (all) or /wanted hud zone, race or war, or in Settings.")
 	end
 	spec.refresh()
 	if Wanted.UI then
@@ -176,7 +176,14 @@ Wanted:RegisterCommand("hud", "Shows or hides the HUDs: /wanted hud for all, /wa
 	if key == "" then
 		HudKit:ToggleAll()
 	elseif specs[key] then
+		local hinted = Wanted.db.settings.hudHint
 		HudKit:SetHidden(key, not HudKit:IsHidden(key))
+		-- The first hide prints the hint instead
+		if not HudKit:IsHidden(key) then
+			Wanted:Print(specs[key].name.." on. It shows when you are where it has something to show.")
+		elseif hinted then
+			Wanted:Print(specs[key].name.." hidden.")
+		end
 	else
 		Wanted:Print("Which HUD? /wanted hud, or /wanted hud zone, race or war.")
 	end

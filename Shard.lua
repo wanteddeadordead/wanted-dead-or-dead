@@ -4,8 +4,7 @@
 -- one layer to the next and stay the same within one (the maintainer's combat logs, 2026-10-09: one quest giver under
 -- a new number on each layer, a zone's creatures all under one). Our layer is the one most of the creatures looked at
 -- lately in this zone live in, so a creature seen over a zone border doesn't change it. It goes out with our hello,
--- our rally position and our presence at race and war points (Sync, Rally, Presence), so every Wanted player's layer is known
--- with their zone, and the Nearby window says when the rally leader is on another one.
+-- and our presence at race and war points (Sync, Presence), so every Wanted player's layer is known with their zone.
 --
 -- Each zone has one target layer (Shard:Target): the zone's fight layer, as the site last said it or as this client
 -- reckons it from the deaths and the Wanted players heard on the channel. Nobody picks a layer: the hop goes to the target or nowhere.
@@ -14,7 +13,7 @@
 -- our side heard latest on the target layer in our zone for an invite (by addon whisper); their addon invites us
 -- (never dead, in a fight, in an instance, in a full group, in a raid they can't invite to, or with hosting off, and
 -- a refusal moves the ask to the next host), ours accepts the invite from that host alone, holds the group twenty
--- seconds so the server doesn't bounce us back, then leaves it, unless we chose to stay or the host leads the rally.
+-- seconds so the server doesn't bounce us back, then leaves it, unless we chose to stay.
 -- The game says whether the move happens: SHARD_TRANSFER_IMMINENT (its "refresh world" countdown; the group is held
 -- until it runs out), then SHARD_TRANSFER (moved) or SHARD_TRANSFER_CANCELLED (not moved: we say so and leave). When
 -- no such event comes, the creatures around us say at fifteen seconds whether we moved. One hop every ten minutes.
@@ -62,7 +61,7 @@ local REFUSALS = {
 	dead = "dead",
 	full = "their group is full",
 	cant = "not their group's leader or an assistant",
-	off = "they aren't leading a group or the rally, and hosting hops is off in their settings",
+	off = "they aren't leading a group, and hosting hops is off in their settings",
 	instance = "in an instance",
 	busy = "they invited you a moment ago",
 }
@@ -74,7 +73,7 @@ local STALE_SECONDS = 10 * 60
 local FRESH_SECONDS = 60
 -- A layer a peer sends: three numbers, never longer than this
 local MAX_KEY_BYTES = 32
--- A peer's word on their layer is kept this long (rally positions and point presence come every half minute)
+-- A peer's word on their layer is kept this long
 local PEER_SECONDS = 10 * 60
 local MAX_PEERS = 200
 -- A zone's fight layer: the site's word holds this long; this client's own estimate counts the deaths heard in the
@@ -150,11 +149,11 @@ function private.LeadsGroup()
 	return ok and not (issecretvalue and issecretvalue(yes)) and yes == true
 end
 
----Whether we host layer hops now: while we lead a group or the rally here, hosting is on (whoever gathers people
+---Whether we host layer hops now: while we lead a group, hosting is on (whoever gathers people
 ---takes them onto their layer); otherwise only with the setting switched on.
 ---@return boolean
 function Shard:Hosting()
-	return Shard:Settings().host == true or private.LeadsGroup() or (Wanted.Rally and Wanted.Rally:Mine() ~= nil) or false
+	return Shard:Settings().host == true or private.LeadsGroup() or false
 end
 
 ---Registers an event if this client has it.
@@ -372,8 +371,7 @@ function Shard:IsKey(key)
 	return private.IsKey(key)
 end
 
----A Wanted player's layer, as their last message said (a hello, a rally position, their presence at a capture
----point), with the zone map it was on. No layer, or not one: they're forgotten.
+---A Wanted player's layer, as their last hello said, with the zone map it was on. No layer, or not one: they're forgotten.
 ---@param name any the sender, as the game names them
 ---@param key any their layer
 ---@param mapId any the zone map they were on
@@ -481,8 +479,8 @@ function private.Lower(a, b)
 end
 
 ---This client's own estimate of a zone's fight layer, from the channel: the deaths heard there in the last ten
----minutes by layer, plus the Wanted players of our side heard in the zone by layer (their hello, rally position or
----point presence; us too when it's our zone), the busiest layer once it reaches the floor. nil below it.
+---minutes by layer, plus the Wanted players of our side heard in the zone by layer (their hello; us too when it's our
+---zone), the busiest layer once it reaches the floor. nil below it.
 ---@param zone string
 ---@param mapId number?
 ---@return string?
@@ -700,7 +698,7 @@ end
 -- ============================================================================
 
 ---The Wanted player of our side to ask for an invite onto a layer in our zone: the one heard there latest (their
----hello, rally position or point presence), leaving out the ones that couldn't invite this hop. nil when there's
+---hello), leaving out the ones that couldn't invite this hop. nil when there's
 ---nobody.
 ---@param layer string
 ---@param tried table name -> true
@@ -895,7 +893,7 @@ end
 
 ---In the host's group: the game moves us to their layer. We hold the group HOLD_SECONDS so the server doesn't bounce
 ---us back (longer while the game's transfer countdown runs: private.OnImminent), then leave it, unless we chose to
----stay or the host leads the rally here. The game's events say whether we moved; failing them, at WATCHDOG_SECONDS the
+---stay. The game's events say whether we moved; failing them, at WATCHDOG_SECONDS the
 ---creatures around us do: still on the old layer, we say so and leave.
 function private.Joined()
 	local hop = private.hop
@@ -905,13 +903,7 @@ function private.Joined()
 	-- The creatures here are the new layer's: what the old ones said is forgotten
 	private.Forget()
 	local where = Shard:LayerText(hop.target)
-	local leader = Wanted.Rally:Here()
-	if leader and not leader.mine and leader.name == hop.host then
-		hop.stay = true
-		Wanted:Print("You joined %s's group, the rally leader's: it takes you to %s. Staying in it.", hop.host, where)
-	else
-		Wanted:Print("You joined %s's group: it takes you to %s. Leaving it in %d seconds (/wanted hop stay to stay).", hop.host, where, HOLD_SECONDS)
-	end
+	Wanted:Print("You joined %s's group: it takes you to %s. Leaving it in %d seconds (/wanted hop stay to stay).", hop.host, where, HOLD_SECONDS)
 	private.Countdown()
 	private.Later(WATCHDOG_SECONDS, private.Watchdog)
 	private.Later(HOLD_SECONDS, private.Settle)
@@ -965,7 +957,7 @@ function private.Countdown()
 	private.Later(1, private.Countdown)
 end
 
----Stays in the host's group after the hop (the rally's raid). Returns why not, or nil.
+---Stays in the host's group after the hop. Returns why not, or nil.
 ---@return string?
 function Shard:Stay()
 	local hop = private.hop
@@ -1105,18 +1097,11 @@ Wanted:RegisterCommand("hop", "Hops to the fight's layer in your zone (/wanted h
 	end
 end)
 
-Wanted:RegisterCommand("shard", "Says which layer of your zone you're on, which the fight is on, and which the rally leader is on.", function()
+Wanted:RegisterCommand("shard", "Says which layer of your zone you're on and which the fight is on.", function()
 	local mine = Shard:Current()
 	Wanted:Print("Your layer: %s%s.", Shard:Short(mine), mine and (Shard:IsFresh() and " (confirmed in the last minute)" or "") or " (look at a creature nearby to read it)")
 	local text = Shard:TargetText(Shard:Zone())
 	Wanted:Print("%s.", text or format("No fight layer is known in %s yet", Shard:Zone()))
-	local leader = Wanted.Rally and Wanted.Rally:Here()
-	if not leader or leader.mine then
-		return
-	end
-	local theirs = Shard:Of(leader.name)
-	Wanted:Print("%s leads the rally here on layer %s%s.", leader.name, Shard:Short(theirs and theirs.key),
-		Shard:IsOther(leader.name) and ": not yours" or theirs and theirs.key == mine and ": yours" or "")
 end)
 
 -- The other side's summary passed on the channel by a bridge of our side (Bridge), so every Wanted player of the

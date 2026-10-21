@@ -486,9 +486,6 @@ do
 	broken.Deserialize = function() error("Division by zero") end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead")
--- Rally leaders are shipped off; the suite runs them on (the toggle itself is checked below)
-assert(ns.db.settings.siege == false and not ns:SiegeOn(), "rally leaders are off by default")
-ns.db.settings.siege = true
 ns.db.tour = { poker = { seen = true, done = true } } -- the poker tour starts itself on the first Poker page; its own block tests that
 -- The poker addon depends on the base: its files load after the base's ADDON_LOADED, into its own namespace
 WantedPokerTestNS = {} -- global: the main chunk is at its limit of locals
@@ -4534,13 +4531,6 @@ end)()
 	end
 	PlaySoundFile, PlaySound = realFile, realKit
 end)()
--- The rally toggle: the command turns it on and off (a /reload applies it)
-do
-	ns:RunCommand("siege", "off")
-	check(ns.db.settings.siege == false and not ns:SiegeOn(), "rally leaders off")
-	ns:RunCommand("siege", "on")
-	check(ns.db.settings.siege == true and ns:SiegeOn(), "rally leaders on")
-end
 print("wanted smoke: all checks pass")
 ;(function()
 	-- Underground, where no zone map reaches, the game places the player on the continent's map, where a tenth of
@@ -15296,260 +15286,12 @@ end)()
 	end
 	_G.WantedMenu:Hide()
 end)()
--- Rally leaders: a group's leader claims the rally in their zone (not in a fight, an instance or while another holds
--- it), their position goes out on the channel, and players of their faction there see it on the map and in Nearby.
--- Zones are told apart by their map, never their name. The earlier claim holds (a claim counts at most five minutes
--- before it was first heard), the same second goes to the name that sorts first, and a rally ends on death, leaving
--- the zone, standing still for half an hour, or five minutes unheard. Only the sender's own rally is taken.
+-- Layers: our layer of the zone is read from the GUIDs of the creatures we look at and goes out with our hello. A layer
+-- hop asks a Wanted player on the fight's layer for an invite by whisper: their addon invites (never in a fight, a
+-- full group, or with hosting off), ours accepts the invite from that host alone, holds the group twenty seconds, then
+-- leaves unless we stay; still on the old layer at fifteen seconds, it says so and leaves.
 ;(function()
-	local Rally, Sync = ns.Rally, ns.Sync
-	local sent, realSend = {}, Sync.SendRally
-	Sync.SendRally = function(_, tbl, toLinks) sent[#sent + 1] = { tbl = tbl, toLinks = toLinks } return true end
-	-- Zone maps (the stub's have no type), a town's map inside Durotar, and the continent the game falls back to underground
-	local realInfo, realBest = C_Map.GetMapInfo, C_Map.GetBestMapForUnit
-	local maps = { [1] = { name = "Durotar", mapType = 3, parentMapID = 2 }, [10] = { name = "The Barrens", mapType = 3, parentMapID = 2 },
-		[2] = { name = "Kalimdor", mapType = 2 }, [85] = { name = "Orgrimmar Gate", mapType = 5, parentMapID = 1 } }
-	local best = 1
-	C_Map.GetMapInfo = function(id) return maps[id] end
-	C_Map.GetBestMapForUnit = function() return best end
-	local function Hear(sender, tbl)
-		Fire("CHAT_MSG_ADDON", "WNTD", "L:rl"..#sent..":1/1:"..Sync:Encode(tbl), "CHANNEL", sender, nil, nil, nil, Sync:GetInfo().channelName)
-	end
-	local function Claim(c, extra)
-		local t = { c = c, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde" }
-		for k, v in pairs(extra or {}) do t[k] = v end
-		return t
-	end
-	local leader = false
-	_G.UnitIsGroupLeader = function(unit) return unit == "player" and leader end
-	check(Rally:Claim():find("group's leader", 1, true) and not Rally:Mine(), "only a group's leader can lead a rally")
-	leader = true
-	Fire("PLAYER_REGEN_DISABLED")
-	check(Rally:Claim():find("fight", 1, true) and not Rally:Mine(), "not in a fight")
-	Fire("PLAYER_REGEN_ENABLED")
-	clock = clock + 10
-	RunTimers()
-	local realInstance = IsInInstance
-	IsInInstance = function() return true, "party" end
-	check(Rally:Claim():find("instances", 1, true) and not Rally:Mine(), "not in an instance")
-	IsInInstance = realInstance
-	best = 2
-	check(Rally:Claim():find("isn't known", 1, true) and not Rally:Mine(), "not where no zone map reaches")
-	best = 85
-	check(Rally:Claim() == nil and Rally:Mine() and Rally:Mine().zone == "Durotar" and Rally:Mine().mapId == 1, "a group's leader leads the rally in their zone (a town's map counts as its zone's)")
-	best = 1
-	local first = sent[#sent]
-	check(first.tbl.c == clock and first.tbl.z == "Durotar" and first.tbl.f == "Horde" and first.tbl.m == 1 and first.toLinks and not first.tbl.e
-		and printed[#printed]:find("see you on their map", 1, true), "the claim goes out with its time, zone, map and faction, to the realm links too")
-	check(Rally:Claim():find("already lead", 1, true), "one rally at a time")
-	local mineAt = Rally:Mine().claimed
-	-- A rival's later claim: ours holds, and is said again at once so they stand down, once per claim
-	clock = clock + 10
-	local before = #sent
-	Hear("Late Leader", Claim(clock))
-	Hear("Late Leader", Claim(clock))
-	check(Rally:Mine() and Rally:Here().mine and #sent == before + 1, "a later claim leaves ours, which answers it once")
-	-- A griefer's spam of ever-new later claims is answered a few times, then left to our regular sends
-	before = #sent
-	for i = 1, 10 do Hear("Spam Leader", Claim(clock + i)) end
-	check(Rally:Mine() and #sent == before + 3, "a rival's many claims are answered three times at most: "..(#sent - before))
-	-- Messages that make no sense, or from the other faction, are dropped
-	Hear("Odd One", Claim(clock + 3600))
-	Hear("Odd Two", Claim(clock, { x = 500 }))
-	Hear("Odd Three", Claim(0 / 0))
-	Hear("Odd Four", Claim(clock - 100, { f = "Alliance" }))
-	Hear("Odd Five", Claim(clock, { z = "" }))
-	Hear("Odd Six", Claim(clock - 100, { m = 1 / 0 }))
-	Hear("Odd Seven", Claim(clock - 100, { m = -1 }))
-	check(Rally:Holder(1).mine, "nonsense and the other faction's rallies take nothing")
-	-- Another language's zone name is the same zone: its map says so
-	Hear("Foreign Leader", Claim(clock, { z = "Durotar (fr)" }))
-	check(Rally:Holder(1).mine and #sent > before + 3, "a rival under another zone name on the same map is the same zone")
-	-- An earlier claim (both heard as they were made) ends ours
-	Hear("Early Leader", Claim(mineAt - 5))
-	check(not Rally:Mine() and Rally:Here() and Rally:Here().name == "Early Leader" and sent[#sent].tbl.e == 1
-		and printed[#printed - 1]:find("before you", 1, true) and printed[#printed]:find("Early Leader leads the rally in Durotar (50, 60)", 1, true),
-		"an earlier claim in our zone ends ours, the others are told, and who leads now is said")
-	-- An end late in the queue doesn't hide a newer claim; the end of the claim held does
-	Hear("Early Leader", { e = 1, f = "Horde", c = mineAt - 60 })
-	check(Rally:Here().name == "Early Leader", "an end for an older claim leaves the newer one")
-	Hear("Early Leader", { e = 1, f = "Horde", c = mineAt - 5 })
-	check(Rally:Here().name ~= "Early Leader", "an ended rally is dropped at once")
-	for _, name in ipairs({ "Late Leader", "Spam Leader", "Foreign Leader" }) do Hear(name, { e = 1, f = "Horde", c = clock + 30 }) end
-	Hear("Alpha Leader", Claim(clock - 1))
-	Hear("Beta Leader", Claim(clock - 1))
-	check(Rally:Here().name == "Alpha Leader", "the same second goes to the name that sorts first")
-	-- A made-up early claim counts from at most five minutes before it was first heard
-	clock = clock + 600
-	Hear("Alpha Leader", Claim(clock - 601))
-	Hear("Beta Leader", Claim(clock - 601))
-	Hear("Forger", Claim(1))
-	check(Rally:Here().name == "Alpha Leader", "a claim heard for the first time can't go back further than five minutes")
-	-- Shown on the map and in Nearby while fresh (redrawn once for a burst of news)
-	RunTimers()
-	ns.MapPins:Refresh()
-	local pinned
-	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
-	check(pinned == "Alpha Leader", "the rally leader is marked on the map: "..tostring(pinned))
-	ns.NearbyWindow:SetShown(true)
-	ns.NearbyWindow:Refresh()
-	local line
-	for _, fs in ipairs(Mock.fontStrings) do local t = rawget(fs, "_text") if type(t) == "string" and t:find("Rally:", 1, true) then line = t end end
-	check(line and line:find("Alpha Leader", 1, true) and line:find("50, 60", 1, true), "Nearby shows the rally leader and where: "..tostring(line))
-	-- Heard in a fight: taken at once, not held until it's over
-	Fire("PLAYER_REGEN_DISABLED")
-	Hear("Alpha Leader", Claim(clock - 601, { x = 51 }))
-	check(Rally:Here().x == 51, "a rally position heard in a fight is taken at once")
-	Fire("PLAYER_REGEN_ENABLED")
-	clock = clock + 10
-	RunTimers()
-	-- Five minutes unheard: gone
-	clock = clock + 301
-	Rally:Tick()
-	check(Rally:Here() == nil, "a rally not heard for five minutes has gone")
-	ns.MapPins:Refresh()
-	pinned = nil
-	for _, pin in ipairs(WorldMapFrame.pins) do if pin.leader then pinned = pin.leader.name end end
-	check(pinned == nil, "and its marker with it")
-	-- Ours ends when we die, leave the zone, or stand still for half an hour; underground it keeps its zone and place
-	check(Rally:Claim() == nil and Rally:Mine(), "the zone is free to claim again")
-	Fire("PLAYER_DEAD")
-	check(not Rally:Mine() and sent[#sent].tbl.e == 1, "dying ends our rally")
-	Rally:Claim()
-	best = 2
-	Fire("ZONE_CHANGED_NEW_AREA")
-	Rally:Tick()
-	check(Rally:Mine() and Rally:Mine().mapId == 1 and sent[#sent].tbl.m == 1 and sent[#sent].tbl.x == 44.6, "underground (the continent's map) the rally keeps its zone, map and place")
-	best = 10
-	Fire("ZONE_CHANGED_NEW_AREA")
-	best = 1
-	check(not Rally:Mine(), "leaving the zone ends it")
-	Rally:Claim()
-	for _ = 1, 59 do clock = clock + 30 Rally:Tick() end
-	check(Rally:Mine(), "standing still for under half an hour keeps it")
-	clock = clock + 30
-	Rally:Tick()
-	check(not Rally:Mine() and printed[#printed]:find("haven't moved", 1, true), "half an hour standing still ends it")
-	-- A claim that couldn't go out says so
-	Sync.SendRally = function() return false end
-	Rally:Claim()
-	check(Rally:Mine() and printed[#printed]:find("couldn't be shared yet", 1, true), "a claim not sent doesn't say others see it")
-	Rally:End()
-	Sync.SendRally, _G.UnitIsGroupLeader = realSend, nil
-	C_Map.GetMapInfo, C_Map.GetBestMapForUnit = realInfo, realBest
-	RunTimers()
-end)()
--- The rally message itself: on the channel, while sync is paused too (a leader who couldn't answer a rival would
--- leave two rallies standing), only from the leader's client, and passed on by nobody
-;(function()
-	local Rally, Sync = ns.Rally, ns.Sync
-	local realInfo = C_Map.GetMapInfo
-	C_Map.GetMapInfo = function(id) return id == 1 and { name = "Durotar", mapType = 3 } or nil end
-	_G.UnitIsGroupLeader = function() return true end
-	local syncPrivate
-	for i = 1, 60 do
-		local name, value = debug.getupvalue(Sync.Status, i)
-		if name == "private" then syncPrivate = value break end
-		if not name then break end
-	end
-	check(syncPrivate and syncPrivate.pausedUntil, "Sync's state is reachable")
-	local realPause = syncPrivate.pausedUntil
-	syncPrivate.pausedUntil = clock + 600
-	addonSent = {}
-	Rally:Claim()
-	clock = clock + 5
-	RunTimers()
-	local onChannel = 0
-	for _, m in ipairs(addonSent) do if m.text:sub(1, 2) == "L:" and m.chatType == "CHANNEL" then onChannel = onChannel + 1 end end
-	check(onChannel == 1 and printed[#printed]:find("see you on their map", 1, true), "the claim goes out on the channel while sync is paused: "..onChannel)
-	Rally:End()
-	syncPrivate.pausedUntil = realPause
-	_G.UnitIsGroupLeader = nil
-	C_Map.GetMapInfo = realInfo
-end)()
--- Skull and Flare: secure buttons the game runs itself, set up out of combat only. Skull marks the target with the
--- skull when it's a bounty or Kill on Sight enemy and we lead or assist the group (its action sits under the button
--- name the game switches to only for a target we can attack, so in a fight it never marks anyone else); Flare places a
--- world marker for the rally leader. Not set up, a click says why; in a fight Skull only says it can't change.
-;(function()
-	local Rally = ns.Rally
-	local skull, flare = _G.WantedRallySkullButton, _G.WantedRallyFlareButton
-	check(skull and flare and skull:GetAttribute("marker") == 8 and skull:GetAttribute("unit") == "target" and skull:GetAttribute("action") == "set"
-		and skull:GetAttribute("harmbutton") == "skull" and flare:GetAttribute("marker") == 1,
-		"the Skull and Flare buttons are made, named for /click, with the skull for attackable targets and a world marker")
-	local realInfo = C_Map.GetMapInfo
-	C_Map.GetMapInfo = function(id) return id == 1 and { name = "Durotar", mapType = 3 } or nil end
-	local role = nil
-	_G.UnitIsGroupLeader = function() return role == "leader" end
-	_G.UnitIsGroupAssistant = function() return role == "assist" end
-	_G.UnitCanAttack = function(_, unit) local e = enemyUnits[unit] return e ~= nil and (e.faction or "Alliance") ~= "Horde" end
-	local said = #printed
-	enemyUnits.target = { guid = "Player-9-SKULL1", name = "Skull Target", class = "ROGUE", level = 20 }
-	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type-skull") == nil and skull:GetAttribute("type") == nil, "not the group's leader or an assistant: Skull does nothing")
-	skull._scripts.PostClick(skull, "LeftButton")
-	check(#printed == said + 1 and printed[#printed]:find("leader or assistants", 1, true), "and a click says why: "..tostring(printed[#printed]))
-	role = "assist"
-	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type-skull") == nil and skull.why:find("no bounty", 1, true), "a target with no bounty and not on Kill on Sight isn't marked: "..tostring(skull.why))
-	-- An enemy we can't attack (not flagged, a sanctuary) never sets it up: the game's click would do nothing
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
-	local realCanAttack = UnitCanAttack
-	_G.UnitCanAttack = function() return false end
-	Fire("PLAYER_TARGET_CHANGED")
-	check(skull:GetAttribute("type-skull") == nil and skull.why:find("can't attack", 1, true), "a Kill on Sight enemy we can't attack isn't set up: "..tostring(skull.why))
-	_G.UnitCanAttack = realCanAttack
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
-	RunTimers()
-	-- Put on Kill on Sight while targeted: set up again without a target change
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
-	RunTimers()
-	check(skull:GetAttribute("type-skull") == "raidtarget" and skull:GetAttribute("type") == nil,
-		"our target put on Kill on Sight: Skull marks it, under the attackable-target button only")
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
-	RunTimers()
-	check(skull:GetAttribute("type-skull") == nil, "taken off Kill on Sight: Skull does nothing again")
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", true)
-	RunTimers()
-	said = #printed
-	skull._scripts.PostClick(skull, "LeftButton")
-	check(#printed == said, "a click that marks says nothing")
-	-- In a fight the game forbids changes: it stays as it was, and a click that can't act says only that
-	inCombat = true
-	enemyUnits.target = { guid = "Player-9-SKULL2", name = "Plain Target", class = "ROGUE", level = 20, faction = "Horde" }
-	Fire("PLAYER_TARGET_CHANGED")
-	ns.Enemies:SetKoS("Player-9-SKULL1", "Skull Target", false)
-	RunTimers()
-	check(skull:GetAttribute("type-skull") == "raidtarget", "nothing is changed in a fight")
-	skull._scripts.PostClick(skull, "LeftButton")
-	check(#printed == said + 1 and printed[#printed]:find("can't be changed in a fight", 1, true), "a click in a fight on a target we can't attack says why, plainly: "..tostring(printed[#printed]))
-	inCombat = false
-	Fire("PLAYER_REGEN_ENABLED")
-	check(skull:GetAttribute("type-skull") == nil, "and it's set up again when the fight ends")
-	enemyUnits.target = nil
-	-- Flare is for the rally leader
-	role = "leader"
-	Fire("GROUP_ROSTER_UPDATE")
-	check(flare:GetAttribute("type") == nil and flare.why:find("rally leader", 1, true), "Flare waits for a rally")
-	check(Rally:Claim() == nil and flare:GetAttribute("type") == "worldmarker", "leading the rally, Flare places a world marker")
-	ns.NearbyWindow:SetShown(true)
-	ns.NearbyWindow:Refresh()
-	check(skull:IsShown() and flare:IsShown(), "the leader's rally line shows Skull and Flare")
-	Rally:End()
-	check(flare:GetAttribute("type") == nil, "the rally over, Flare does nothing")
-	RunTimers()
-	ns.NearbyWindow:Refresh()
-	check(not skull:IsShown() and not flare:IsShown(), "and the buttons go")
-	_G.UnitIsGroupLeader, _G.UnitIsGroupAssistant, _G.UnitCanAttack = nil, nil, nil
-	C_Map.GetMapInfo = realInfo
-end)()
--- Layers: our layer of the zone is read from the GUIDs of the creatures we look at, goes out with our hello, rally
--- position and point presence, and the rally line says when the leader is on another one. A layer hop asks a Wanted
--- player on the rally's layer for an invite by whisper: their addon invites (never in a fight, a full group, or with
--- hosting off), ours accepts the invite from that host alone, holds the group twenty seconds, then leaves unless we
--- stay or the host leads the rally; still on the old layer at fifteen seconds, it says so and leaves.
-;(function()
-	local Shard, Rally, Sync = ns.Shard, ns.Rally, ns.Sync
+	local Shard, Sync = ns.Shard, ns.Sync
 	local startClock = clock
 	local real = { GetMapInfo = C_Map.GetMapInfo, GetBestMapForUnit = C_Map.GetBestMapForUnit, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
 		groupSize = groupSize, C_PartyInfo = C_PartyInfo, AcceptGroup = AcceptGroup, UnitInParty = UnitInParty, UnitInRaid = UnitInRaid, Warn = ns.Alerts.Warn }
@@ -15629,26 +15371,27 @@ end)()
 	end
 	local hello = id and Sync:Decode(table.concat(parts))
 	check(hello and hello.l == A and hello.lm == 1, "our hello says our layer and its zone map: "..tostring(hello and hello.l))
-	-- Theirs: a hello, a rally position or point presence says a peer's layer; nonsense says nothing
+	-- Theirs: a hello says a peer's layer; nonsense says nothing
 	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
 	check(Shard:Of("Thrall") and Shard:Of("Thrall").key == B and Shard:Of("Thrall").mapId == 1, "a peer's hello says their layer and zone map")
 	Hear("H", { c = {}, l = "junk", lm = 1 }, "CHANNEL", "Thrall")
 	check(Shard:Of("Thrall") == nil, "one that isn't a layer forgets them")
 	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
-	local function Rallying(sender, layer, extra)
-		local t = { c = clock - 60, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde", l = layer }
-		for k, v in pairs(extra or {}) do t[k] = v end
-		Hear("L", t, "CHANNEL", sender)
+	local function Hello(sender, layer)
+		Hear("H", { c = {}, l = layer, lm = 1 }, "CHANNEL", sender)
 	end
-	Rallying("Grimshaw", B)
+	Hello("Grimshaw", B)
 	RunTimers()
-	check(Rally:Here() and Rally:Here().name == "Grimshaw" and Shard:Of("Grimshaw").key == B, "the rally leader's position says their layer")
+	check(Shard:Of("Grimshaw").key == B, "another peer's hello says theirs")
+	-- An older version's rally position (the retired L message) is dropped unread
+	Hear("L", { c = clock - 60, z = "Durotar", m = 1, x = 50, y = 60, k = "HUNTER", f = "Horde", l = A }, "CHANNEL", "Grimshaw")
+	check(Shard:Of("Grimshaw").key == B, "an old L message changes nothing")
 	check(Shard:IsOther("Grimshaw") and Shard:IsOther("Thrall"), "both are in our zone on another layer")
-	Rallying("Grimshaw", A)
+	Hello("Grimshaw", A)
 	check(not Shard:IsOther("Grimshaw"), "on ours: not another")
 	clock = clock + 1 -- heard after Thrall
-	Rallying("Grimshaw", B)
-	-- Nearby's rally line says so, with Hop
+	Hello("Grimshaw", B)
+	-- Nearby's layer line
 	local nearbyPrivate
 	for i = 1, 60 do
 		local name, value = debug.getupvalue(ns.NearbyWindow.Refresh, i)
@@ -15657,8 +15400,8 @@ end)()
 	end
 	ns.NearbyWindow:SetShown(true)
 	ns.NearbyWindow:Refresh()
-	local line = nearbyPrivate.rally
-	check(line:IsShown() and line.text._text:find("Grimshaw", 1, true) and not line.hop:IsShown(), "the rally line names the leader; no fight layer known, so no Hop: "..tostring(line.text._text))
+	local line = nearbyPrivate.layer
+	check(not line:IsShown(), "no fight layer known: no layer line")
 	-- The hop: to the zone's target layer only, and when we can't
 	check(Shard:Hop():find("No fight layer is known in Durotar", 1, true), "no target: no hop, said: "..tostring(Shard:Hop()))
 	Shard:TakeLayers({ Durotar = { active = B, since = clock } })
@@ -15694,13 +15437,13 @@ end)()
 	check(Shard:Hopping() and Shard:Hopping().host == "Thrall", "an answer from someone we didn't ask changes nothing")
 	Hear("O", { r = "cant" }, "WHISPER", "Thrall")
 	check(Said("Thrall couldn't invite (not their group's leader or an assistant)") and Shard:Hopping() == nil, "nobody else to ask: the hop is over")
-	Rallying("Grimshaw", A)
+	Hello("Grimshaw", A)
 	Hear("H", { c = {}, l = A, lm = 1 }, "CHANNEL", "Thrall")
 	check(Shard:Hop():find("No one on layer 501 can invite you yet", 1, true), "nobody heard on the target layer: said, "..tostring(Shard:Hop()))
 	Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
 	clock = clock + 1
-	Rallying("Grimshaw", B)
-	-- Hosting is on while we lead a group or the rally, else only with the setting on: an ask gets an invite (the Raids
+	Hello("Grimshaw", B)
+	-- Hosting is on while we lead a group, else only with the setting on: an ask gets an invite (the Raids
 	-- module's) and "ok"; in a fight, full, dead or with hosting off, why not
 	addonSent, invited = {}, {}
 	check(Shard:Settings().host == false and not Shard:Hosting(), "hosting is off by default, leading nothing")
@@ -15714,15 +15457,11 @@ end)()
 	check(not Shard:Hosting(), "a group member who doesn't lead it: not hosting")
 	_G.UnitIsGroupLeader = nil
 	wipe(inGroup)
-	local realMine = ns.Rally.Mine
-	ns.Rally.Mine = function() return {} end
-	check(Shard:Hosting(), "leading the rally: hosting")
+	Shard:Settings().host = true
+	check(Shard:Hosting(), "the setting on: hosting while leading nothing")
 	Hear("O", { a = 1 }, "WHISPER", "Hopper")
 	answerTo, answer = LastWhisper("O")
 	check(invited[1] == "Hopper" and answerTo == "Hopper" and answer.r == "ok" and Said("Inviting Hopper to your group"), "an ask is invited and told ok: "..tostring(answer and answer.r))
-	ns.Rally.Mine = realMine
-	Shard:Settings().host = true
-	check(Shard:Hosting(), "the setting on: hosting while leading nothing")
 	Hear("O", { a = 1 }, "WHISPER", "Hopper")
 	answerTo, answer = LastWhisper("O")
 	check(#invited == 1 and answer.r == "busy", "asked again at once: not invited twice")
@@ -15753,11 +15492,13 @@ end)()
 	check(Said("Grimshaw is inviting you") and Shard:Hopping().state == "invited", "ok: the invite is coming")
 	Fire("PARTY_INVITE_REQUEST", "Grimshaw-Realm")
 	check(accepted == 1 and hiddenPopups[#hiddenPopups].which == "PARTY_INVITE" and Shard:Hopping().state == "accepted", "the host's invite is accepted and the popup closed")
-	-- In the group: the hold, the countdown, and the rally leader's group kept
+	-- In the group: the hold, and /wanted hop stay keeps the group
 	inGroup.Grimshaw = true
 	printed = {}
 	Fire("GROUP_ROSTER_UPDATE")
-	check(Said("You joined Grimshaw's group, the rally leader's: it takes you to layer 501") and Said("Staying in it") and not Shard:Holding(), "the rally leader's group is kept: "..tostring(printed[#printed]))
+	check(Said("You joined Grimshaw's group: it takes you to layer 501") and Shard:Holding(), "joined: holding: "..tostring(printed[#printed]))
+	ns:RunCommand("hop", "stay")
+	check(Said("Staying in Grimshaw's group") and not Shard:Holding(), "staying: "..tostring(printed[#printed]))
 	clock = clock + 20
 	RunTimers()
 	check(left == 0 and Shard:Hopping() == nil, "and not left")
@@ -15767,12 +15508,12 @@ end)()
 	local function OnA() for _ = 1, 3 do Look(A, "nameplate70", "NAME_PLATE_UNIT_ADDED") end end
 	OnA()
 	check(Shard:Hop():find("One hop every 10 minutes: your next is allowed in 10 min", 1, true), "a second hop within ten minutes waits: "..tostring(Shard:Hop()))
-	-- Ten minutes on: a host who isn't the rally leader, heard latest on the layer; held twenty seconds, then left, with
+	-- Ten minutes on: the host heard latest on the layer; held twenty seconds, then left, with
 	-- the move checked against the creatures
 	local function Later()
 		clock = clock + 601
 		Shard:TakeLayers({ Durotar = { active = B, since = clock } })
-		Rallying("Grimshaw", B)
+		Hello("Grimshaw", B)
 		clock = clock + 1
 		Hear("H", { c = {}, l = B, lm = 1 }, "CHANNEL", "Thrall")
 		OnA()
@@ -15784,7 +15525,7 @@ end)()
 	Fire("GROUP_ROSTER_UPDATE")
 	check(Said("it takes you to layer 501. Leaving it in 20 seconds") and Shard:Holding() and Shard:Current() == nil, "joined: holding, the old layer's creatures forgotten")
 	ns.NearbyWindow:Refresh()
-	check(line.hop:IsShown() and line.hop._text == "Stay" and line.text._text:find("In Thrall's group for layer 501: leaving it in 20 s", 1, true), "the rally line says so, with Stay: "..tostring(line.text._text))
+	check(line.hop:IsShown() and line.hop._text == "Stay" and line.text._text:find("In Thrall's group for layer 501: leaving it in 20 s", 1, true), "the layer line says so, with Stay: "..tostring(line.text._text))
 	check(warned[#warned] and warned[#warned]:find("LAYER HOP Leaving Thrall's group in 20 s", 1, true), "the countdown at the top of the screen: "..tostring(warned[#warned]))
 	for _ = 1, 3 do Look(B, "nameplate70", "NAME_PLATE_UNIT_ADDED") end
 	RunTimers()
@@ -15890,13 +15631,9 @@ end)()
 	-- The settings, and /wanted shard
 	check(Shard:Settings().host == false and Shard:Settings().accept == true and Shard:Settings().alerts == true, "hosting is off by default (on while leading), auto-accept and the fight's announcement on")
 	best = 1
-	Rallying("Grimshaw", B)
-	RunTimers()
 	ns:RunCommand("shard", "")
-	check(Said("Your layer: 501") and Said("Grimshaw leads the rally here on layer 501: yours"), "/wanted shard says ours and the leader's: "..tostring(printed[#printed]))
+	check(Said("Your layer: 501"), "/wanted shard says ours: "..tostring(printed[#printed]))
 	-- Put back
-	Rallying("Grimshaw", B, { e = 1, c = clock + 10 })
-	RunTimers()
 	Fire("ZONE_CHANGED_NEW_AREA")
 	ns.NearbyWindow:Refresh()
 	C_Map.GetMapInfo, C_Map.GetBestMapForUnit = real.GetMapInfo, real.GetBestMapForUnit
@@ -16104,13 +15841,12 @@ end)()
 	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
 	clock = startClock
 end)()
--- The layer lines: Nearby's rally line (the target layer with Hop; the rally leader told to lead from it; the rally
--- when we're on the layer) and the Hotspots page (each zone's layer, and our own zone's line with Hop); and a host's
+-- The layer lines: Nearby's layer line (the target layer with Hop; said when we're on it) and the Hotspots page (each zone's layer, and our own zone's line with Hop); and a host's
 -- refusals in a raid without invite rights, in an instance, or dead
 ;(function()
 	local Shard, Sync, Store = ns.Shard, ns.Sync, ns.Store
 	local startClock = clock
-	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn, Here = ns.Rally.Here, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn, IsInGroup = IsInGroup, IsInRaid = IsInRaid,
 		UnitInParty = UnitInParty, C_PartyInfo = C_PartyInfo, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown }
 	local best = 1
 	C_Map = { GetBestMapForUnit = function() return best end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
@@ -16160,7 +15896,7 @@ end)()
 	clock = clock + 14401
 	Fire("ZONE_CHANGED_NEW_AREA")
 	Shard:TakeLayers(nil)
-	-- Nearby's rally line
+	-- Nearby's layer line
 	local nearbyPrivate
 	for i = 1, 60 do
 		local name, value = debug.getupvalue(ns.NearbyWindow.Refresh, i)
@@ -16168,33 +15904,19 @@ end)()
 		if not name then break end
 	end
 	ns.NearbyWindow:SetShown(true)
-	ns.Rally.Here = function() return nil end
 	ns.NearbyWindow:Refresh()
-	local line = nearbyPrivate.rally
-	check(not line:IsShown(), "no rally and no target: no line")
+	local line = nearbyPrivate.layer
+	check(not line:IsShown(), "no target: no line")
 	Shard:TakeLayers({ Durotar = { active = L(571), since = clock } })
 	ns.NearbyWindow:Refresh()
 	check(line:IsShown() and Plain(line.text._text) == "The fight is on layer 571, yours isn't read yet" and line.hop:IsShown() and line.hop._text == "Hop", "the target layer, ours unread, with Hop: "..tostring(line.text._text))
 	for _ = 1, 3 do Look(L(573)) end
 	ns.NearbyWindow:Refresh()
 	check(Plain(line.text._text) == "The fight is on layer 571, you're on 573" and line.hop:IsShown(), "ours read: "..tostring(line.text._text))
-	ns.Rally.Here = function() return { name = "Grimshaw", class = "HUNTER", x = 50, y = 60 } end
-	ns.NearbyWindow:Refresh()
-	check(Plain(line.text._text) == "The fight is on layer 571, you're on 573" and line.hop:IsShown(), "a rally here: the target line still, one line only")
-	ns.Rally.Here = function() return { name = "Test Player", mine = true } end
-	ns.NearbyWindow:Refresh()
-	check(Plain(line.text._text) == "You lead the rally here: lead from layer 571" and not line.hop:IsShown(), "the rally leader is told to lead from it, no Hop: "..tostring(line.text._text))
 	Fire("ZONE_CHANGED_NEW_AREA")
 	for _ = 1, 3 do Look(L(571)) end
 	ns.NearbyWindow:Refresh()
-	check(Plain(line.text._text) == "You lead the rally here" and not line.hop:IsShown(), "on it, the leader's line is the rally's: "..tostring(line.text._text))
-	ns.Rally.Here = function() return { name = "Grimshaw", class = "HUNTER", x = 50, y = 60 } end
-	ns.NearbyWindow:Refresh()
-	check(Plain(line.text._text):find("Rally: Grimshaw", 1, true) and not line.hop:IsShown(), "on it, the rally shows: "..tostring(line.text._text))
-	ns.Rally.Here = function() return nil end
-	ns.NearbyWindow:Refresh()
-	check(Plain(line.text._text) == "You're on the fight's layer" and not line.hop:IsShown(), "on it without a rally: said: "..tostring(line.text._text))
-	ns.Rally.Here = real.Here
+	check(Plain(line.text._text) == "You're on the fight's layer" and not line.hop:IsShown(), "on it: said: "..tostring(line.text._text))
 	ns.NearbyWindow:SetShown(false) -- its Hop would show up in the pages' checks below
 	-- The Hotspots page: a zone with a known layer says it; our own zone's line, with Hop
 	Store:UpdatePlayer("Player-9-HBROW", { name = "Hills Rower", class = "ROGUE", level = 30, faction = "Alliance", zone = HB, mapId = 1424 })
@@ -16235,7 +15957,7 @@ end)()
 	Shard:Settings().host = false
 	-- Put back
 	Fire("ZONE_CHANGED_NEW_AREA")
-	C_Map, GetZoneText, ns.Alerts.Warn, ns.Rally.Here = real.C_Map, real.GetZoneText, real.Warn, real.Here
+	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
 	IsInGroup, IsInRaid, UnitInParty, C_PartyInfo, WorldMapFrame.IsShown = real.IsInGroup, real.IsInRaid, real.UnitInParty, real.C_PartyInfo, real.IsShown
 	clock = startClock
 end)()
@@ -16247,7 +15969,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 -- /wanted setup
 ;(function()
 	local Setup = ns.Setup
-	local saved = { info = WantedAppInfo, newer = ns.newerVersion, club = ns.Bridge.clubId, siege = ns.db.settings.siege,
+	local saved = { info = WantedAppInfo, newer = ns.newerVersion, club = ns.Bridge.clubId,
 		plates = cvars.nameplateShowEnemies, C_Club = C_Club, IsSecret = IsSecret, Print = ns.Print }
 	local printed = {}
 	ns.Print = function(_, fmt, ...) printed[#printed + 1] = select("#", ...) > 0 and string.format(fmt, ...) or tostring(fmt) end
@@ -16257,7 +15979,6 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns.newerVersion = nil
 	ns.Bridge.clubId = 0
 	cvars.nameplateShowEnemies = "0"
-	ns.db.settings.siege = false
 	local steps = Setup:Steps()
 	local by = {}
 	for _, step in ipairs(steps) do by[step.key] = step end
@@ -16298,7 +16019,6 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns.Bridge.clubId = "23053871"
 	check(Setup:Steps()[3].state == "ok", "in the group: green")
 	check(Setup:AllSet(), "all set")
-	ns.db.settings.siege = true
 	ns.newerVersion = "9.9.9"
 	local addon = Setup:Steps()[1]
 	check(addon.state == "bad" and addon.url == "https://wanteddeadordead.com/addon" and addon.detail:find("9.9.9", 1, true), "a newer version out: the addon step red, with the site's addon page")
@@ -16477,7 +16197,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns:RunCommand("setup", "")
 	check(#printed >= 5 and printed[#printed - 4]:find("Your setup", 1, true) and printed[#printed - 1]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed]:find("[ok] Enemy nameplates on", 1, true), "/wanted setup prints each step with its mark")
 	-- Put back
-	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId, ns.db.settings.siege = saved.info, saved.newer, saved.club, saved.siege
+	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId = saved.info, saved.newer, saved.club
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print
 	ns.UI:Show("home")
 end)()
@@ -16614,18 +16334,17 @@ print("wanted smoke: setup checks pass")
 	db.presence = real
 end)()
 print("wanted smoke: presence checks pass")
--- Layers are read on every client, whatever the siege switch says: presence and a war's census and witness lines carry
+-- Layers are read on every client: presence and a war's census and witness lines carry
 -- the player's layer, and a war is fought on the defenders' layer
 ;(function()
-	local Shard, db = ns.Shard, ns.db
+	local Shard = ns.Shard
 	local shardPrivate
 	for i = 1, 60 do
 		local name, value = debug.getupvalue(Shard.OnEnable, i)
 		if name == "private" then shardPrivate = value break end
 		if not name then break end
 	end
-	local realSiege, realOnRecord = db.settings.siege, ns.Store.OnRecord
-	db.settings.siege = false
+	local realOnRecord = ns.Store.OnRecord
 	ns.Store.OnRecord = function() end
 	shardPrivate.frame:UnregisterAllEvents()
 	Shard:OnEnable()
@@ -16633,12 +16352,12 @@ print("wanted smoke: presence checks pass")
 		for _, f in ipairs(registry[event] or {}) do if f == shardPrivate.frame then return true end end
 		return false
 	end
-	check(Registered("UPDATE_MOUSEOVER_UNIT") and Registered("NAME_PLATE_UNIT_ADDED") and Registered("SHARD_TRANSFER"), "the siege switch off: layers are still read, and hops still run")
+	check(Registered("UPDATE_MOUSEOVER_UNIT") and Registered("NAME_PLATE_UNIT_ADDED") and Registered("SHARD_TRANSFER"), "layers are read, and hops run, on every client")
 	Shard:Note("Layer Peer", "4615-1-901", 1424)
 	Shard:NoteFar("bnet:9", { { m = 1424, l = "4615-1-902", n = 3 } })
 	local far = Shard:FarSummary()
 	check(#far >= 1, "and other players' layers are kept and summed for the other side")
-	db.settings.siege, ns.Store.OnRecord = realSiege, realOnRecord
+	ns.Store.OnRecord = realOnRecord
 end)()
 print("wanted smoke: layer checks pass")
 -- Influence races: the catch-up's races read and cleaned; presence on a race point every 30 s inside its radius, on the
@@ -16646,7 +16365,7 @@ print("wanted smoke: layer checks pass")
 -- the window's main page; the HUD in the race's zone while it runs
 ;(function()
 	local R, db = ns.Races, ns.db
-	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, siege = db.settings.siege, presence = db.presence, Broadcast = ns.Sync.BroadcastPlugin }
+	local real = { C_Map = C_Map, IsMounted = IsMounted, C_Log = C_Log, presence = db.presence, Broadcast = ns.Sync.BroadcastPlugin }
 	-- What we tell our side, live (Races' live numbers)
 	local told = {}
 	ns.Sync.BroadcastPlugin = function(_, tag, t) told[#told + 1] = { tag = tag, t = t, at = clock } return true end
@@ -16897,7 +16616,7 @@ print("wanted smoke: layer checks pass")
 	C_Map.GetMapWorldSize = nil
 	-- Put back
 	R:Take(nil)
-	C_Map, IsMounted, C_Log, db.settings.siege, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.siege, real.presence
+	C_Map, IsMounted, C_Log, db.presence = real.C_Map, real.IsMounted, real.C_Log, real.presence
 	ns.Sync.BroadcastPlugin = real.Broadcast
 end)()
 print("wanted smoke: race checks pass")

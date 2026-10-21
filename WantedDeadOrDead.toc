@@ -69,7 +69,6 @@ Toast.lua
 Streaks.lua
 Posse.lua
 Raids.lua
-Rally.lua
 Shard.lua
 UI.lua
 Setup.lua

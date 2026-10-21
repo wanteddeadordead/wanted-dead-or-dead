@@ -136,9 +136,7 @@ local OWN_TAGS = { H = true, V = true, N = true, R = true, F = true, E = true, S
 function private.OwnTag(tag) return OWN_TAGS[tag] == true end
 -- Retired: older versions' presence at a capture front's point, { p, s, c }. Dropped unread, the tag kept taken.
 local TAG_POINT = "C"
--- A rally leader's position (Rally): { c = claimed, z = zone, m = map id, x, y, k = class, f = faction, e = 1 when it
--- ended }. Passing news like sightings, sent by the leader's own client only (the game names the sender, which is the
--- leader): on the channel, and now and then to realm links; never stored, never passed on. Older versions ignore it.
+-- Retired: older versions' rally leader positions. Dropped unread, the tag kept taken.
 local TAG_RALLY = "L"
 local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player this often
 -- The game's own limit on channel addon messages, measured on WoW Forever (2026-09-26 dev log, 740 parts): about
@@ -1199,9 +1197,7 @@ function private.Send(tag, tbl, attempt, target)
 		end
 		tbl.r = wire
 	end
-	-- Rally positions go out while paused too, like sightings: a leader whose position stopped would be dropped by the
-	-- others, and one who couldn't answer a rival's claim would leave two rallies standing
-	if not target and not isSighting and tag ~= TAG_RALLY and now < private.pausedUntil then
+	if not target and not isSighting and now < private.pausedUntil then
 		private.Drop("paused", 1)
 		return false
 	end
@@ -1363,8 +1359,8 @@ function private.Enqueue(item)
 	private.Drain()
 end
 
----Where the next message to send is in the queue: the first one, except that in a fight only sightings, rally
----positions (and messages already part sent) go. Nil when everything left is held.
+---Where the next message to send is in the queue: the first one, except that in a fight only sightings (and messages
+---already part sent) go. Nil when everything left is held.
 ---@return number?
 function private.NextToSend()
 	local outbox = private.outbox
@@ -1372,7 +1368,7 @@ function private.NextToSend()
 		return outbox[1] and 1 or nil
 	end
 	for i, item in ipairs(outbox) do
-		if item.tag == TAG_SIGHTINGS or item.tag == TAG_RALLY or item.next > 1 then
+		if item.tag == TAG_SIGHTINGS or item.next > 1 then
 			return i
 		end
 	end
@@ -1400,10 +1396,10 @@ function private.Drain()
 			wipe(outbox)
 			private.outboxParts = 0
 			return
-		elseif (item.tag == TAG_SIGHTINGS or item.tag == TAG_RALLY) and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
+		elseif item.tag == TAG_SIGHTINGS and item.next == 1 and now - item.queued > SIGHTING_QUEUE_SECONDS then
 			tremove(outbox, at)
 			private.outboxParts = private.outboxParts - #item.parts
-			private.Drop(item.tag == TAG_RALLY and "stale rally" or "stale sightings", 1)
+			private.Drop("stale sightings", 1)
 		elseif private.tokens < 1 then
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
 		else
@@ -1987,12 +1983,11 @@ function private.OnAddonMessage(prefix, text, channel, sender, _, _, _, channelN
 		private.partial[key] = nil
 		payload = table.concat(partial.parts, "", 1, total)
 	end
-	if tag == TAG_POINT then
+	if tag == TAG_POINT or tag == TAG_RALLY then
 		return
 	end
-	-- Sightings and rally positions are news only while fresh; everything else waits out a fight (and any backlog, to
-	-- keep order)
-	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and tag ~= TAG_RALLY and not private.plugins[tag] and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
+	-- Sightings are news only while fresh; everything else waits out a fight (and any backlog, to keep order)
+	if tag ~= TAG_SIGHTINGS and tag ~= TAG_ENEMY and not private.plugins[tag] and (Wanted:InCombat() or Wanted:QueuedWork() > 0) then
 		-- Each player only gets a share of the room, so one flooding can't crowd out everyone else
 		local waiting = private.deferred[sender] or 0
 		if Wanted:QueuedWork() >= MAX_DEFERRED_MESSAGES or waiting >= MAX_DEFERRED_PER_SENDER then
@@ -2091,13 +2086,6 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		if taken and viaLink and private.links[sender] and tbl.fw == nil and not tbl.x and private.channelId then
 			tbl.fw = 1
 			private.Send(TAG_RAID, tbl)
-		end
-		return
-	end
-	-- A rally leader's position, from the leader: the sender is who the game says sent it, whichever way it came
-	if tag == TAG_RALLY then
-		if Wanted.Rally then
-			Wanted.Rally:OnMessage(tbl, sender)
 		end
 		return
 	end
@@ -2781,24 +2769,6 @@ function Sync:SendRaidAd(ad)
 	for name in pairs(private.links) do
 		private.Send(TAG_RAID, ad, nil, name)
 	end
-end
-
----Shares the rally we lead: on the channel, and with toLinks to each realm link heard lately too. Returns whether it
----went out on the channel (or to the guild while locked out of it).
----@param rally table
----@param toLinks boolean?
----@return boolean
-function Sync:SendRally(rally, toLinks)
-	local sent = private.Send(TAG_RALLY, rally)
-	if toLinks then
-		local now = GetTime()
-		for name, link in pairs(private.links) do
-			if now - (link.heard or 0) < LINK_TIMEOUT then
-				private.Send(TAG_RALLY, rally, nil, name)
-			end
-		end
-	end
-	return sent
 end
 
 ---Asks a raid's leader to invite us, or signs us up for a raid that hasn't started: kind "g" going, "i" interested,

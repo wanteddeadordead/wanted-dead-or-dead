@@ -406,14 +406,11 @@ function private.BuildSharing(column)
 	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
 	W:Explain(proofLink, "Disputed kill", format("Post the screenshot in %s on the Forever PvP Discord. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_CHANNEL))
 
-	column:Section("Layers and rally")
+	column:Section("Layers")
 	local Shard = function() return Wanted.Shard:Settings() end
 	private.Switch(column, Shard, "alerts", "Announce a big fight's layer", "When the fight in your zone is on a layer newly known, at most once in ten minutes, with Hop if you're not on it.")
-	private.Switch(column, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group or the rally you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later unless you lead the rally.")
+	private.Switch(column, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later.")
 	private.Switch(column, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.")
-	private.Switch(column, Root, "siege", "Rally leaders on this client (then /reload)", "A group's leader can lead the rally in their zone: your side sees them on the map and in Nearby, with Skull and Flare. A /reload applies the change.", function(checked)
-		Wanted:Print("Rally leaders %s. Type /reload to apply it.", checked and "on" or "off")
-	end)
 
 	column:Section("Guild wars")
 	private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",

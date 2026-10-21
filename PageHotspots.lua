@@ -200,7 +200,7 @@ UI:RegisterPage("hotspots", {
 		end)
 		private.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
 		private.hop:SetPoint("LEFT", private.layer, "RIGHT", 8, 0)
-		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
+		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay. One hop every ten minutes; not in a fight, while dead, or in a group.")
 
 		local headerBar = CreateFrame("Frame", nil, container)
 		headerBar:SetPoint("TOPLEFT", 0, -36)

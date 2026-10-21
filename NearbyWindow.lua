@@ -1,8 +1,8 @@
 -- Wanted: the Nearby window. A small movable list of enemy players with four views (Nearby, Last hour,
 -- Kill on Sight, Ignored). Left-click a row to target the player, right-click for the menu, Shift-click
 -- to toggle Kill on Sight. Rows are secure buttons (targeting needs one), so during combat the rows
--- keep their places and only their text updates; the list is laid out again when combat ends. The rally leader of
--- your faction in your zone (Rally), when there is one, has a line of their own above the list.
+-- keep their places and only their text updates; the list is laid out again when combat ends. The zone's fight
+-- layer (Shard), when one is known, has a line of its own above the list, with Hop while we're not on it.
 
 local _, Wanted = ...
 local Nearby = Wanted:NewModule("NearbyWindow")
@@ -24,7 +24,7 @@ local WIDTH = 260
 local HEADER = 58 -- title bar and tabs; the PvP status strip adds PVP_HEIGHT under them when shown
 local PVP_HEIGHT = 20
 local PVP_UPDATE_SECONDS = 0.5
-local RALLY_HEIGHT = 20
+local LAYER_HEIGHT = 20
 local ROW_HEIGHT = 32
 local COMPACT_HEIGHT = 20
 local MIN_ROWS = 3
@@ -404,41 +404,35 @@ function private.Create()
 	end)
 	private.pvp = pvp
 
-	-- The rally leader in this zone, under the PvP status: placed and shown at layout, out of combat
-	local rally = CreateFrame("Frame", nil, frame)
-	rally:SetPoint("TOPLEFT", 1, -HEADER + 2)
-	rally:SetPoint("TOPRIGHT", -1, -HEADER + 2)
-	rally:SetHeight(RALLY_HEIGHT)
-	Theme:Fill(rally, { C.gold[1], C.gold[2], C.gold[3], 0.12 })
-	rally.dot = rally:CreateTexture(nil, "ARTWORK")
-	rally.dot:SetSize(7, 7)
-	rally.dot:SetPoint("LEFT", 10, 0)
-	rally.dot:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
-	rally.text = Theme:Text(rally, "small", "")
-	rally.text:SetPoint("LEFT", rally.dot, "RIGHT", 7, 0)
-	rally.text:SetPoint("RIGHT", -8, 0)
-	rally.text:SetJustifyH("LEFT")
-	rally.text:SetWordWrap(false)
-	rally:EnableMouse(true)
-	W:AttachTooltip(rally, "Rally leader", "Your faction's rally leader in this zone, and where they are. They're marked on your world map. A group's leader can lead one: Call for help > Lead the rally here, or /wanted rally.")
-	-- The leader's own Skull and Flare (secure buttons: shown and hidden at layout, out of combat)
-	rally.skull, rally.flare = Wanted.Rally:CreateMarkButtons(rally)
-	rally.flare:SetPoint("RIGHT", -4, 0)
-	rally.skull:SetPoint("RIGHT", rally.flare, "LEFT", -4, 0)
+	-- The zone's fight layer, under the PvP status: placed and shown at layout, out of combat
+	local layer = CreateFrame("Frame", nil, frame)
+	layer:SetPoint("TOPLEFT", 1, -HEADER + 2)
+	layer:SetPoint("TOPRIGHT", -1, -HEADER + 2)
+	layer:SetHeight(LAYER_HEIGHT)
+	Theme:Fill(layer, { C.gold[1], C.gold[2], C.gold[3], 0.12 })
+	layer.dot = layer:CreateTexture(nil, "ARTWORK")
+	layer.dot:SetSize(7, 7)
+	layer.dot:SetPoint("LEFT", 10, 0)
+	layer.dot:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
+	layer.text = Theme:Text(layer, "small", "")
+	layer.text:SetPoint("LEFT", layer.dot, "RIGHT", 7, 0)
+	layer.text:SetPoint("RIGHT", -8, 0)
+	layer.text:SetJustifyH("LEFT")
+	layer.text:SetWordWrap(false)
 	-- Hop: onto the zone's target layer, the fight's, when we're not on it (Shard); Stay while holding
 	-- the hop's group
-	rally.hop = W:Button(rally, "Hop", "chip", 44, 16, function()
+	layer.hop = W:Button(layer, "Hop", "chip", 44, 16, function()
 		local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
 		if why then
 			Wanted:Print("%s", why)
 		end
 	end)
-	rally.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
-	rally.hop:SetPoint("RIGHT", -4, 0)
-	W:AttachTooltip(rally.hop, "Hop to the fight's layer", "The fight is on another copy of this zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
-	rally.hop:Hide()
-	rally:Hide()
-	private.rally = rally
+	layer.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
+	layer.hop:SetPoint("RIGHT", -4, 0)
+	W:AttachTooltip(layer.hop, "Hop to the fight's layer", "The fight is on another copy of this zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay. One hop every ten minutes; not in a fight, while dead, or in a group.")
+	layer.hop:Hide()
+	layer:Hide()
+	private.layer = layer
 
 	-- Scroll with the wheel (not in combat: the rows are secure and can't be re-pointed then)
 	frame:EnableMouseWheel(true)
@@ -491,37 +485,25 @@ end
 ---Places a row for normal (two lines) or compact (one line) layout. Out of combat only.
 ---Height above the first row: the title bar and tabs, and the PvP strip when it's shown.
 function private.Header()
-	return HEADER + (private.Show().pvp ~= false and PVP_HEIGHT or 0) + (private.rallyShown and RALLY_HEIGHT or 0)
+	return HEADER + (private.Show().pvp ~= false and PVP_HEIGHT or 0) + (private.layerShown and LAYER_HEIGHT or 0)
 end
 
 ---What a row's layout depends on, so a change re-lays it.
 function private.LayoutKey(compact)
-	return (compact and "c" or "n")..(private.Show().icon and "i" or "")..(private.Show().pvp ~= false and "p" or "")..(private.rallyShown and "r" or "")
+	return (compact and "c" or "n")..(private.Show().icon and "i" or "")..(private.Show().pvp ~= false and "p" or "")..(private.layerShown and "r" or "")
 end
 
----The rally line's text and its button: the hop under way, or the zone's target layer while we're not on it ("The
----fight is on layer 3, you're on 5" with Hop; leading the rally, "lead from layer 3"), else who leads the rally here
----and where, or that we're on the fight's layer; nil when there's none of that.
+---The layer line's text and its button: the hop under way, or the zone's target layer while we're not on it ("The
+---fight is on layer 3, you're on 5" with Hop), else that we're on the fight's layer; nil when there's none of that.
 ---@return string? text
 ---@return string? button "Hop" or "Stay"
-function private.RallyText()
+function private.LayerText()
 	local Shard = Wanted.Shard
-	local leader = Wanted.Rally:Here()
 	local text, button = Shard:Line(Shard:Zone())
 	if button then
-		if leader and leader.mine and not Shard:Hopping() then
-			-- The leader is told first: their group can't hop, the raid follows them
-			return Theme:Colorize(format("You lead the rally here: lead from %s", Shard:LayerText((Shard:Target(Shard:Zone())))), C.amber), nil
-		end
 		return Theme:Colorize(text, C.amber), button
 	end
-	if not leader then
-		return text and Theme:Colorize(text, C.faint) or nil, nil
-	end
-	if leader.mine then
-		return Theme:Colorize("You lead the rally here", C.gold), nil
-	end
-	return format("%s %s  %.0f, %.0f", Theme:Colorize("Rally:", C.gold), Theme:ClassName(leader.name, leader.class), leader.x, leader.y), nil
+	return text and Theme:Colorize(text, C.faint) or nil, nil
 end
 
 local function Readable(value)
@@ -756,10 +738,10 @@ function Nearby:Refresh()
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)
 	private.empty:SetText(#items == 0 and EMPTY_TEXT[view] or "")
-	local rallyText, hopButton = private.RallyText()
-	if private.rallyShown then
-		-- Shown until the next layout: in a fight it says the rally has ended rather than leave a gap
-		private.rally.text:SetText(rallyText or Theme:Colorize("The rally here has ended", C.faint))
+	local layerText, hopButton = private.LayerText()
+	if private.layerShown and layerText then
+		-- Shown until the next layout: in a fight the line keeps its last text rather than leave a gap
+		private.layer.text:SetText(layerText)
 	end
 
 	if inCombat then
@@ -822,21 +804,18 @@ function Nearby:Refresh()
 	end
 	footerHeight = footerHeight + private.LayoutEmotes(showHelp, footerHeight)
 	private.pvp:SetShown(private.Show().pvp ~= false)
-	private.rallyShown = rallyText ~= nil
-	private.rally:SetShown(private.rallyShown)
-	local leading = Wanted.Rally:Mine() ~= nil
-	private.rally.skull:SetShown(leading)
-	private.rally.flare:SetShown(leading)
-	local hopping = hopButton ~= nil and not leading
-	private.rally.hop:SetShown(hopping)
-	private.rally.hop:SetText(hopButton or "Hop")
-	local anchor = leading and private.rally.skull or hopping and private.rally.hop or private.rally
-	private.rally.text:SetPoint("RIGHT", anchor, anchor ~= private.rally and "LEFT" or "RIGHT", anchor ~= private.rally and -4 or -8, 0)
-	if rallyText then
-		private.rally:ClearAllPoints()
-		private.rally:SetPoint("TOPLEFT", 1, -private.Header() + RALLY_HEIGHT + 2)
-		private.rally:SetPoint("TOPRIGHT", -1, -private.Header() + RALLY_HEIGHT + 2)
-		private.rally.text:SetText(rallyText)
+	private.layerShown = layerText ~= nil
+	private.layer:SetShown(private.layerShown)
+	local hopping = hopButton ~= nil
+	private.layer.hop:SetShown(hopping)
+	private.layer.hop:SetText(hopButton or "Hop")
+	local anchor = hopping and private.layer.hop or private.layer
+	private.layer.text:SetPoint("RIGHT", anchor, anchor ~= private.layer and "LEFT" or "RIGHT", anchor ~= private.layer and -4 or -8, 0)
+	if layerText then
+		private.layer:ClearAllPoints()
+		private.layer:SetPoint("TOPLEFT", 1, -private.Header() + LAYER_HEIGHT + 2)
+		private.layer:SetPoint("TOPRIGHT", -1, -private.Header() + LAYER_HEIGHT + 2)
+		private.layer.text:SetText(layerText)
 	end
 	private.empty:ClearAllPoints()
 	private.empty:SetPoint("TOP", 0, -private.Header() - 14)

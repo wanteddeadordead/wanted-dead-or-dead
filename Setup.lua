@@ -1,6 +1,6 @@
 -- Wanted: the setup checklist. The four steps a player needs for Wanted to work in full, each with a green check or a
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
--- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle like the rally switch
+-- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle
 -- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks, each with its detail and fix as
 -- its tooltip (click for the Website & app page); the Website & app page shows every step with its address to copy;
 -- /wanted setup prints them.

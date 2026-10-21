@@ -3,7 +3,6 @@
 -- red for Kill on Sight, gold for bounty targets, class colour for everyone else. Enemies seen in the same
 -- spot (a sighting records where the watcher stood, so a group seen together lands on one point) share one
 -- bigger marker with a count. Hover a marker for who, when, and who saw them.
--- Rally leaders of your faction (Rally) have a marker of their own, shown with the enemy markers switched off too.
 --
 -- The markers go through the map's own data provider and pin system, the way Blizzard's icons and other
 -- map addons add theirs. The map places, scales and layers them, so they keep working with addons that
@@ -23,7 +22,6 @@ local PIN_TEMPLATE = "WantedDeadOrDeadEnemyPinTemplate"
 -- map refresh in combat ran tainted and the client blocked SetPassThroughButtons on each of the game's pins (a
 -- screen full of "The client blocked" lines, 2026-10-15).
 local FRAME_LEVEL, FRAME_LEVEL_INDEX = "PIN_FRAME_LEVEL_WORLD_QUEST", 400
-local RALLY_TEMPLATE = "WantedDeadOrDeadRallyPinTemplate"
 local MERGE_DISTANCE = 1.2 -- map percent: sightings closer than this share a marker
 local SIZE, MERGED_SIZE = 12, 18
 local TOOLTIP_NAMES = 12
@@ -129,35 +127,6 @@ function PinMixin:OnMouseLeave()
 	GameTooltip:Hide()
 end
 
--- A rally leader's marker (the template is in MapPins.xml too)
-WantedDeadOrDeadRallyPinMixin = CreateFromMixins(MapCanvasPinMixin)
-local RallyPinMixin = WantedDeadOrDeadRallyPinMixin
-RallyPinMixin.CheckMouseButtonPassthrough = PinMixin.CheckMouseButtonPassthrough
-RallyPinMixin.SetPassThroughButtons = PinMixin.SetPassThroughButtons
-RallyPinMixin.OnLoad = PinMixin.OnLoad
-RallyPinMixin.OnMouseLeave = PinMixin.OnMouseLeave
-
----@param leader table a Rally:OnMap entry { name, x, y, class, heard }
-function RallyPinMixin:OnAcquired(leader)
-	self.leader = leader
-	local classColor = leader.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[leader.class]
-	local color = classColor and { classColor.r, classColor.g, classColor.b } or C.green
-	self.Dot:SetColorTexture(color[1], color[2], color[3], 1)
-	self:SetPosition(leader.x / 100, leader.y / 100)
-end
-
-function RallyPinMixin:OnMouseEnter()
-	local leader = self.leader
-	if not leader then
-		return
-	end
-	GameTooltip:SetOwner(self, leader.x > 50 and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
-	GameTooltip:SetText(Theme:ClassName(leader.name, leader.class))
-	GameTooltip:AddLine("Rally leader in "..leader.zone, C.gold[1], C.gold[2], C.gold[3])
-	GameTooltip:AddLine("Here "..Theme:Ago(GetServerTime() - leader.heard), C.muted[1], C.muted[2], C.muted[3])
-	GameTooltip:Show()
-end
-
 
 
 -- ============================================================================
@@ -168,7 +137,6 @@ local Provider = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function Provider:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)
-	self:GetMap():RemoveAllPinsByTemplate(RALLY_TEMPLATE)
 end
 
 function Provider:RefreshAllData()
@@ -178,9 +146,6 @@ function Provider:RefreshAllData()
 	end
 	local map = self:GetMap()
 	local mapId = map:GetMapID()
-	for _, leader in ipairs(Wanted.Rally:OnMap(mapId)) do
-		map:AcquirePin(RALLY_TEMPLATE, leader)
-	end
 	if not Wanted.db.settings.detect.mapPins then
 		return
 	end

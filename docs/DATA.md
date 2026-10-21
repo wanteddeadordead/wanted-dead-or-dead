@@ -180,177 +180,32 @@ top-level table: no migration.
 written at logout and taken (then cleared) at the next load, so the game's late "No player named ... is currently
 playing" answers after a /reload stay hidden. A new top-level table: no migration.
 
-`WantedDB.presence` (capture fronts, from the release after 1.22.0) is the account's characters' time at capture points (`Captures.lua`):
-`presence["point:slot:guid"] = { g, n, f, p, s, c, l }` (GUID, name as the site names it, side "Horde" or "Alliance", point
-id, slot = game-server time / 300, samples 1-10, and `l`, the character's layer of the zone at the last sample as
-`Shard:Current()` reads it, left out while it isn't known; the app sends only entries on the side it catches up for). A sample is added every 30 s while the character stands in a point able to fight. Entries older
-than 3 days or malformed are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app sends them to
-wanteddeadordead.com, which takes them only for the account's own characters. Not records: never stored by other
-players (the `C` message tells the side's channel, shown only). `WantedDB.settings.captures` is `{ map, minimap, bar,
-alerts, autoTrack, siegeCall }`, each defaulted at load (autoTrack off). `WantedDB.captureSeen` is `{ week, [point id] = "Horde"|"Alliance" }`: who held each point as the addon last showed the site's holds this campaign week, so the next login can tell what changed (towers destroyed, inhibitors down); a new week starts it afresh. New tables with defaults: no migration. The catch-up's
-`points` (`{ [id] = { h = "H"|"A", s, r, t } }`: who holds each point and base, since when, when a taken inhibitor goes
-back, when the site worked it out) is only shown and isn't saved.
+`WantedDB.presence` (from the release after 1.22.0) is the account's characters' time at race and war points
+(`Presence.lua`): `presence["point:slot:guid"] = { g, n, f, p, s, c, l }` (GUID, name as the site names it, side
+"Horde" or "Alliance", point id, slot = game-server time / 300, samples 1-10, and `l`, the character's layer of the
+zone at the last sample as `Shard:Current()` reads it, left out while it isn't known; the app sends only entries on
+the side it catches up for). A sample is added every 30 s while the character stands on a race point while its race
+runs, or a war point in its war, able to fight. Entries older than 3 days or malformed (a point id that isn't
+lowercase letters, digits and dashes) are dropped at load, and at most 2,000 kept (the oldest go). The Wanted app
+sends them to wanteddeadordead.com, which takes them only for the account's own characters and only at points it
+knows. Not records: never stored by other players. Entries from 1.22-1.28 betas may carry `r = true` (a race point's,
+then): ignored. The catch-up carries `layers = { [zone name] = { active, deaths, since } }`, each zone's fight layer
+as the site worked it out from the last ten minutes' deaths and the Wanted players present (`Shard:TakeLayers`):
+only shown, read at every login, never saved, and trusted for a quarter hour from `since`; malformed zones are left
+out.
 
-Siege nights (the release after 1.23.3) add two fields to the catch-up beside `points`, only shown and not saved, every
-field optional and type-checked: `siege = { front, zone, start, end, round = { n, start, truceUntil, last } or nil,
-wins = { h, a }, nexusCost = { [Nexus id] = samples }, next = { front, zone, start, end } or nil, layer, layerSince }` (tonight's siege
-front by id "ah", "hb" or "av", its window as game-server times, the current round with its number, start, the truce
-it waits for or 0 and whether it's the last, tonight's wins a side, what each Nexus costs now, tomorrow's, and the
-layer the site picked for the siege, `layer` as `Shard:Current()` writes one or "" before it's picked, with
-`layerSince`, when it was picked) and
-`frontWins = { [front id] = { h, a } }` (this week's siege wins per front). The `C` message, `{ p, s, c, l }`, carries
-during a truce the Nexus fall that started it, `f` (the Nexus's point id) and `t` (the game-server time it fell), and
-a client that sees a Nexus reach its cost sends `{ f, t }` alone at once; a receiver in a round takes a fall since the
-round began, and in a truce moves its clock to a newer time for the same fall (the newest server-time fall wins ties).
-While the siege is on (from an hour before the window until it's over) it also carries the siege's layer as the sender
-last heard it, `sl` and `st` (= `layerSince`), so a client that reloads spreads the site's pick; a receiver takes a
-newer `st` than its own word (never one from the future), and a change is announced. Whether a player heard at a
-point attacks or defends it is worked out by the receiver from who holds the point. The catch-up also carries
-`layers = { [zone name] = { active, deaths, since } }`, each zone's fight layer as the site worked it out from the
-last ten minutes' deaths and the Wanted players present (`Shard:TakeLayers`): only shown, read at every login, never
-saved, and trusted for a quarter hour from `since`; malformed zones are left out.
+Retired with capture fronts and siege nights (1.28.0), left in saved data unread until the
+post-beta reset, no migration: `WantedDB.captureSeen`, `WantedDB.settings.captures` (`{ map, minimap, bar, alerts,
+autoTrack, siegeCall, scale }`), `settings.captureHudPos` and `settings.captureHudCollapsed`, and `presence` entries
+at capture front points (`ah-`, `hb-`, `av-` with a lane or a side: they age out after 3 days as any entry does).
+`settings.siege` stays in use as the rally leaders' switch (`Wanted:SiegeOn`). The catch-up's `points`, `siege` and
+`frontWins`, and the `C` message (capture point presence, from older versions: dropped unread), are no longer read.
 
-`WantedDB.guildKos` (from 1.7.0) is the guilds' own Kill on Sight lists, keyed `faction..":"..lower(guild)`:
-`{ guild, settings = { enabled, mode = "review"|"rank"|"open", rank, discord, t, by }, entries = { [id] = entry } }`.
-An entry's id is `"p:"..lower(guid)` for a player or `"g:"..lower(guild name)` for a whole guild; an entry is
-`{ kind = "player"|"guild", guid?, name, reason?, state = "pending"|"approved"|"denied"|"removed", by, at, dby?,
-eby, t }` (by: who added it; dby: who approved or denied it; eby: who made its last change; t: when). Denied and
-removed entries are dropped 30 days after their last change. A missing or malformed table starts empty. A book's
-optional `heard` (added after 1.18.2) is the time of the newest change taken from an officer (or the server, or made here as
-an officer): logging in asks guildmates for what's newer than it. No migration: a book without it asks for everything
-once.
-
-`WantedDB.faction` (from 1.2.7) is the account's side ("Horde" or "Alliance"), saved at login for the desktop app.
-`WantedDB.catchupT` (from 1.2.7) is the server time of the last catch-up taken in. The app sends the server the
-account's chains and side, and writes the answer into `!!WantedLink/Catchup.lua` as
-`WantedAppCatchup[mark] = { t, records = { ... }, notices = { ... } }`: this side's records past the chains held,
-and the other side's bounties on this side in the Bridge's notice form. At login `Catchup:Import` takes in an
-entry newer than `catchupT` in the background (as gap fills, never live, not forwarded to realm links), then the
-notices through the Bridge. No layout change: both fields are new and optional.
-
-Pruning (from 1.2.9): at login, `Store:Prune` drops `kill`, `death` and `assist` records older than
-`Store.KEEP_SECONDS`: 30 days until 1.2.20, 3 days from 1.2.21. Every other kind is kept. So are, whatever their age
-(from 1.2.21): records naming one of the account's characters as `victim` or `killer` (the assister, for an
-`assist`), and kills and assists one of them recorded; a death they only witnessed is pruned like anyone's; a kill some
-`claim` names in `data.kill`; a death of a claim's victim within the witness window of its `killT`; and, while the
-desktop app hasn't read the latest save (`catchupT` older than `savedAt`), everything since its last catch-up, for
-up to 30 days. It runs again every 24 hours of a session. A chain says how far this client has taken an origin's
-records, pruned or not, so a pruned record is never asked for again, and one a peer sends again (answering someone
-else's gap on the channel) is not taken back in. A pruned record held past a gap in its chain moves the chain past
-it (from 1.2.21): what the gap holds is older still. A record arriving already too old to keep (the app's catch-up or
-a fill of old records) that is next in its chain moves the chain on and isn't stored (from 1.2.21), so it isn't
-imported only to be pruned at the next login, and the app doesn't send it again. Chains also keep `first` (from
-1.2.21), the time of the origin's first record (seq 1), since that record may be pruned: a claim's witness counts as
-new to the network when their first record came less than a day before the kill. An optional new field: no migration. The website keeps the full archive (the app
-uploads records as they appear; one pruned before the app ever ran is lost to it). A fill (`F`) answering a request
-for records the sender pruned carries `p = { [origin] = firstSeqHeld }`; the receiver's chain for that origin moves
-on to `firstSeqHeld - 1` (`Store:SkipTo`), continuing from that record's `prev`, or from an unknown predecessor
-(`lastHash = "?"`, which the chain check accepts once), so it stops asking for records nobody holds. From 1.2.21 a
-fill also carries `g = { [origin] = { held1, next1, held2, next2, ... } }`, one pair per hole pruning left in the
-chain past the first record (the seq held before it and the one after it, or the sender's chain end + 1 for a pruned
-end); a receiver whose chain has reached `held` moves on to `next - 1` the same way. Older clients ignore `g` and keep
-asking for interior holes, as before. From 1.18.4 a skip from `p` or `g` never moves this client's own chain. It goes up
-to one past what the origin's own hello or have said its chain reaches in one go (a long pruned end crosses at once),
-and never past that once the origin has said. Before the origin has said, it goes no further than one past what two
-other players said or this client holds, and no more than 500 past the highest record held that checked out or the
-chain's seq, so two players together can still move an offline origin's chain 500 at a time. Odd numbers are
-ignored. No saved field changes.
-
-`WantedDB.characters` (from 1.2.21) is `guid -> { n = origin, t }`: this WoW account's characters, noted at each
-login and from every `link` record carrying the account's app link code (`WantedAppLinks[mark]`). Pruning keeps the
-kills, deaths and assists that name them. `WantedDB.savedAt` (from 1.2.21) is the server time of the last logout or `/reload`,
-when the game wrote the saved file. Both are new keys with defaults: no migration. The launch reset drops them.
-
-At the same pass, `players` entries not seen for 30 days are dropped, then the least recently seen past 5000,
-except bounty targets, Kill on Sight, Ignore, players with a history in `tracks`, enemies fought (wins or losses in
-`enemyStats`) and the account's characters. At load, `enemyStats` entries with no wins or losses (only seen), not on
-Kill on Sight and not seen for 30 days are dropped, then the least recently seen past 5000 (from 1.2.21).
-
-From 1.19.2 the same pass also drops bounties long finished with everything about them: a `bounty` whose expiry
-(raises count) passed more than 90 days ago, not one of this account's characters' and not owed (a claim the poster
-confirmed that no payment record pays), goes with the `raise`, `withdraw`, `pass`, `hunt` and `claim` records naming
-it and the `confirm` and `payment` records naming those claims; `notice` records older than 97 days go too. The
-reputation code gives a claim that old no weight. Records, chains and `sigChecked` are handled as for kills. No saved
-field changes.
-
-From 1.19.2 a `players` entry's `guild` is only ever what the game read on the unit (`GetGuildInfo`). The guild a
-shared sighting names is kept in `guildHint` (cleaned like a name, 64 bytes at most) and read nowhere that matters:
-Kill on Sight guilds, guild bounties, `victimGuild` on kills and deaths and the guild boards use `guild` alone. A
-new optional field: no migration. Entries written by shared sightings before 1.19.2 keep whatever `guild` they had.
-
-`WantedDB.recentPeers` (from 1.2.10) is `name -> seen` for the last 20 players heard on the sync channel. A client
-locked out of the channel (banned, a password set, or no answer after 12 join attempts) whispers them a hello
-with `x = 1`, and a peer accepts a same-realm whispered hello only when it carries `x`; sync then runs over
-whisper links until the channel can be joined again (tried every 5 minutes). Older clients ignore `x` and refuse
-same-realm whispers as before.
-
-Sex (from 1.2.14): kill, death and assist records carry `victimSex` and `killerSex` ("male" or "female", from
-`GetPlayerInfoByGUID` and `UnitSex`), and enemy entries in `players` carry `sex`. Optional fields; the site uses
-them for the posters' art.
-
-`WantedDB.names` (from 1.2.4) is the name book: `guid -> { n = "First Last", t }` for every player the addon sees,
-either side, stamped at most once an hour. The desktop app reads it (with `players`, which holds enemies) to put
-full names on the deaths it reads from the combat log, which names players by first name only. At load, names
-not seen for 30 days are dropped, then the oldest until it holds 5000. A new key with a default: no migration.
-The launch reset drops it with the other beta data.
-
-`WantedDB.names` entries also carry `class` and `sex` (from the GUID lookup, 1.2.17) and the guild the player was
-last seen in with its time, `g` and `gt` (`g = ""` when seen in none). A known guild is only replaced by "none"
-after two such readings 30 seconds apart.
-
-`WantedDB.addonVersions` (from 1.2.20) is the version book: `"Name" -> { v = "1.2.19", t }`, the Wanted version the
-player's last sync message carried and when, with any realm removed from the name. It includes this player's own
-version. The desktop app passes it to the website, which counts how many players run each version. At load,
-entries older than 14 days are dropped, then the oldest until it holds 500. A new key with a default: no migration.
-
-`WantedDB.posterShots` (from 1.2.17) lists the newest five poster pictures for the desktop app to upload:
-`{ t, who, l, top, r, b }`, when the game took the screenshot (server time), whose model it is, and where the model
-was on screen as fractions of the screen from its top left. The app finds the PNG in the game's Screenshots folder,
-cuts the model out and uploads it to wanteddeadordead.com. No migration: the field is filled in at load.
-
-`WantedDB.syncChannel` is `{ e, n, t }` from 1.4.0 (layout 2): the channel wanteddeadordead.com last pointed
-everyone to (epoch, name, when we took it), from the Wanted app's catch-up (`channel = { e, n }`) or whispered by a
-player whose app brought it. No password: every sync channel is joined without one. It can name WantedNet<Side>
-itself, when the server points everyone back. The app's pointer is followed when its epoch is newer, or the same with
-another name; a whispered one only when newer. The app's default, the main channel at epoch 0, and any pointer with a
-`p` (an app before 0.2.26) are ignored. Absent until a pointer comes; the addon then uses WantedNet<Side>.
-From 1.2.18 to 1.3.x it was `{ e, n, p, t }`, a channel the addons picked themselves after a takeover, with a
-password; the layout 2 migration drops it and keeps its name in `WantedDB.oldSyncChannel` (when it isn't
-WantedNet<Side>), which the addon leaves once at the next login and clears.
-
-`WantedDB.syncChannelState` (from 1.4.0) is `{ mainRefused, mainOpen, at, epoch }`. `mainRefused`: the channel this
-client follows (WantedNet<Side>, or the server's) turned it away: a password, a ban, moderation, or two kicks within
-10 minutes (the name is from when only the main channel was reported). `mainOpen`: WantedNet<Side> let us in, on it
-or on a quiet try while following the server's channel. `at`: the last server time the state was seen (refreshed at
-every join and try; the server counts only recent reports). `epoch`: the epoch of the server pointer followed (0 for
-none, so the main channel), which tells the server which channel the report is about. The Wanted app passes it to
-wanteddeadordead.com, which picks a new channel for a side once two accounts report the followed channel refused,
-and points everyone back once the main one is open. A new key with defaults; the migration starts it afresh.
-
-`WantedDB.homeCheck` is `{ wait, tried }` from 1.4.0: how long to wait between quiet tries of WantedNet<Side> while it
-turns us away or we're on the server's channel (5 minutes, doubled after each refusal up to 25 minutes, under the server's 30-minute window for reports, back to 5
-minutes once let in), and when it was last tried (server time). Up to 1.3.x it timed tries of the first channel
-after an addon-made move, with a `home` field; the layout 2 migration resets it. `settings.channelMoves` (the old
-moves' switch) is removed by the same migration.
-
-`WantedDB.channel` (from 1.2.15) is `{ name, realm, members, t }`, the sync channel's size as the game last said.
-
-`WantedDB.settings.streaks` (from 1.2.21) is `{ callout, sound, announce }`: the kill streak and multi-kill callout
-in the middle of the screen (default on), its sound (default on), and where a line about the streak goes:
-`"none"` (the default), `"party"` or `"guild"`, never a public channel (`Streaks.lua`). The counts themselves are
-not saved. A new key with defaults: no migration.
-
-`WantedDB.settings.detect.sounds` (from 1.2.26) is `{ enemy, important, stealth, targeted }`: each alert's sound,
-`"wanted"` (the addon's own beep, the default), `"none"`, `"kit:NAME"` (a game SOUNDKIT) or `"lsm:Name"` (a sound
-another addon registered with LibSharedMedia; Wanted's beep when it's gone). A new key with defaults: no migration.
-
-`WantedDB.settings.minimap` is the table LibDBIcon keeps for the minimap button (from 1.2.24): `hide`, and
 `minimapPos`, the button's angle in degrees, filled in at load from the older `angle` (which stays, for older
 versions). LibDBIcon may add `lock`. A new key filled in at load: no migration.
 
 Sizes (from 1.28.0, no migration: new keys, filled in from the defaults): `WantedDB.settings.uiScale` the window's
-size, `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's and
-`settings.captures.scale` the capture bar's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
+size, `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
 else read is put back in range (Theme:ClampScale). The window's size is also kept within what the screen has room for.
 
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
@@ -533,21 +388,21 @@ vault then ended with the crash, and every seat is owed what it had.
   end (`e`) drops only a claim no newer than its `c`. Older versions ignore the tag. Nothing saved: no migration.
 - Layers (`Shard.lua`, from the release after 1.22.0): a client's layer of its zone is `"server-map-zone instance"`
   from the creature GUIDs it looks at (`Shard:Current()`); the site shows the zone instance part as "layer N". It goes
-  out as `l` in the hello (with `lm`, the zone map it was read on), in rally positions (`L`, the zone is `m`) and in
-  point presence (`C`, the zone is the point's front). Each receiver keeps the sender's last word on it for ten
+  out as `l` in the hello (with `lm`, the zone map it was read on), and in rally positions (`L`, the zone is `m`). Each receiver keeps the sender's last word on it for ten
   minutes, never saved; a missing or malformed `l` forgets them. `kill`, `death` and `spotted` records carry the
   recorder's layer as `l` in their data, left out while it isn't known (an optional field: no migration), and so do
   the client's own entries in the `WantedDB.sightings` ring (shared sightings carry none: the sharer's layer isn't
   ours). A receiver counts the kills and deaths it hears with a zone and `l` from the last ten minutes, each death
   once, toward that zone's fight layer (`Shard:Target`): the busiest layer by deaths plus Wanted players of its side
-  heard in the zone, from five; the catch-up's `layers` overrides it for a quarter hour, and the siege's layer
-  overrides both at the siege front while the siege is on. A layer hop (`O`, whispers only): `{ a = 1 }` asks the
+  heard in the zone, from five; the catch-up's `layers` overrides it for a quarter hour. A layer hop (`O`, whispers only): `{ a = 1 }` asks the
   player for a group invite onto their layer (the zone's target layer, never a named one); their answer `{ r = "ok" }`
   says the invite is coming, any other `r` (`combat`, `dead`, `full`, `cant` (not the group's leader or an
   assistant), `off`, `instance`, `busy`) says why not. The hopper takes an invite only from the host it asked, within
   thirty seconds, and hops once in ten minutes. Older versions ignore the tag and the fields. `WantedDB.settings.shard`
-  is `{ host, accept }`: `host` defaults off (hosting is on anyway while the player leads a group or the rally),
-  `accept` on, both set at load: no migration.
+  is `{ host, accept, alerts }`: `host` defaults off (hosting is on anyway while the player leads a group or the
+  rally), `accept` and `alerts` (announce a big fight's layer, from 1.28.0) on, all set at load: no
+  migration. Layers are read and hops run on every client from 1.28.0 (before, only with
+  `settings.siege` on).
 - Records are immutable. A new record field must be optional: older code ignores fields it doesn't know,
   and newer code must cope with it missing. A new record kind is stored by older clients and ignored.
 - Because newer versions lock older ones, a release that changes what records mean doesn't have to be

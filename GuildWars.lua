@@ -985,7 +985,7 @@ function GuildWars:When(t, now)
 	return date("%a ", t)..GuildWars:Clock(t)
 end
 
----A zone map's size in yards: the game's, else the capture fronts' table.
+---A zone map's size in yards: the game's, else Presence.MAP_YARDS.
 function private.Yards(mapId)
 	if C_Map and C_Map.GetMapWorldSize then
 		local ok, w, h = pcall(C_Map.GetMapWorldSize, mapId)

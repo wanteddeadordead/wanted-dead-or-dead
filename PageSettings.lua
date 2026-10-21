@@ -425,7 +425,7 @@ function private.BuildSharing(column)
 	private.Switch(column, Root, "raceHud", "Race HUD", "In a race's zone while it runs: the time left, each side's influence and the three points.",
 		function() Wanted.RacesHUD:Update() end)
 	private.resetHuds = W:Button(content, "Reset HUD positions", "secondary", 160, 24, function() Wanted.HudKit:ResetPositions() end)
-	column:Row("HUD positions", private.resetHuds, "Puts the zone, race, war and capture HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
+	column:Row("HUD positions", private.resetHuds, "Puts the zone, race and war HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
 	private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, and who holds each zone, on the world map and OpenMap's.",
 		function() Wanted.WarMap:Refresh() end)
 	private.Switch(column, Root, "raceMap", "Races on the map", "Tonight's race points with their times on the zones' maps, in the holders' colours while a race runs.",

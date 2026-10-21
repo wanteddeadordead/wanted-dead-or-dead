@@ -83,7 +83,7 @@ function private.Snapshot()
 end
 
 ---Takes in the site's public data, from a catch-up or the snapshot: challenges, the calendar, ranks, badges, medals,
----the realm-link directory, the points' holders and the siege. All only shown, so read at every login.
+---the realm-link directory, the races and the guild wars. All only shown, so read at every login.
 ---@param src table
 ---@param fromSnapshot boolean the snapshot: no app is there (the challenges' "app seen" stays off)
 function private.TakePublic(src, fromSnapshot)

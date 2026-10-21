@@ -175,7 +175,7 @@ function private.Key(race)
 	return race.zone..":"..race.start
 end
 
----Whether the site runs races on this client's campaign: the catch-up named them (Siege steps aside then).
+---Whether the site runs races on this client's campaign: the catch-up named them.
 ---@return boolean
 function Races:On()
 	return private.state ~= nil
@@ -230,7 +230,7 @@ function Races:Phase(race, now)
 	return now < race.start and "upcoming" or now < race.stop and "live" or "ended"
 end
 
----A map's size in yards: the game's, else the capture fronts' table (Presence.MAP_YARDS).
+---A map's size in yards: the game's, else Presence.MAP_YARDS.
 function private.Yards(mapId)
 	if C_Map and C_Map.GetMapWorldSize then
 		local ok, w, h = pcall(C_Map.GetMapWorldSize, mapId)

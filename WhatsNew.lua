@@ -50,9 +50,8 @@ Wanted.WHATS_NEW = {
 			.."sees you only when they see you in the game. The fight layer is picked automatically, always the zone's most "
 			.."active Wanted PvP layer, and there is no choosing one.",
 		lines = {
-			"Join the group from Settings or the Siege page; the setup checklist on the Dashboard shows whether you're in.",
+			"Join the group from Settings; the setup checklist on the Dashboard shows whether you're in.",
 			"The fight layer now counts both sides' Wanted players, so Hop takes everyone to the same place.",
-			"Siege features still wait behind Settings > Capture fronts until the first public night.",
 		},
 	},
 	{
@@ -63,19 +62,13 @@ Wanted.WHATS_NEW = {
 			.."under each red mark.",
 		lines = {
 			"Your setup, on the Dashboard: addon up to date, the Wanted app running, in the Battle.net group, enemy nameplates on. Website & app has every address to copy and a Turn on button for the nameplates.",
-			"Join the Wanted Battle.net group from Settings or the Siege page: both sides, one layer. Members can see each other's BattleTag.",
+			"Join the Wanted Battle.net group from Settings: both sides, one layer. Members can see each other's BattleTag.",
 			"/wanted setup prints the checklist in chat.",
 		},
 	},
 	{
 		version = "1.24.0",
-		note = "Siege nights are coming: a capture front across the zone, three lanes of towers and inhibitors between two "
-			.."Nexus, fought on one layer, with a HUD, painted pieces on the maps and a way to hop layers. The first public "
-			.."night isn't set yet, so all of it ships switched off and nothing else changes for you. Want a look before "
-			.."then? /wanted siege on, then /reload.",
 		lines = {
-			"Settings > Capture fronts turns the siege features on or off (off until the first public siege night).",
-			"With it on: the capture HUD under the main window, the pieces on the world map and minimap, rally leaders and layer hops.",
 			"Layers: Wanted reads yours from the creatures around you; /wanted shard says yours and the fight's, and Hop gets you there by a group invite from a Wanted player already on it.",
 		},
 	},

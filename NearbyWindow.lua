@@ -425,7 +425,7 @@ function private.Create()
 	rally.skull, rally.flare = Wanted.Rally:CreateMarkButtons(rally)
 	rally.flare:SetPoint("RIGHT", -4, 0)
 	rally.skull:SetPoint("RIGHT", rally.flare, "LEFT", -4, 0)
-	-- Hop: onto the zone's target layer, the fight's or the siege's, when we're not on it (Shard); Stay while holding
+	-- Hop: onto the zone's target layer, the fight's, when we're not on it (Shard); Stay while holding
 	-- the hop's group
 	rally.hop = W:Button(rally, "Hop", "chip", 44, 16, function()
 		local why = Wanted.Shard:Holding() and Wanted.Shard:Stay() or Wanted.Shard:Hop()
@@ -435,7 +435,7 @@ function private.Create()
 	end)
 	rally.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
 	rally.hop:SetPoint("RIGHT", -4, 0)
-	W:AttachTooltip(rally.hop, "Hop to the fight's layer", "The fight (or tonight's siege) is on another copy of this zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
+	W:AttachTooltip(rally.hop, "Hop to the fight's layer", "The fight is on another copy of this zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 	rally.hop:Hide()
 	rally:Hide()
 	private.rally = rally

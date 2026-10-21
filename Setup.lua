@@ -1,6 +1,6 @@
 -- Wanted: the setup checklist. The four steps a player needs for Wanted to work in full, each with a green check or a
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
--- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle like the siege features
+-- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle like the rally switch
 -- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks, each with its detail and fix as
 -- its tooltip (click for the Website & app page); the Website & app page shows every step with its address to copy;
 -- /wanted setup prints them.
@@ -49,7 +49,7 @@ function Setup:Steps()
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "ok", detail = format("Version %s.", app) }
 	else
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "bad",
-			detail = "No Wanted app on this computer: your kills don't reach the website and the siege's layer doesn't reach you.",
+			detail = "No Wanted app on this computer: your kills don't reach the website and the fight layer doesn't reach you.",
 			fix = "Get it, start it, then /reload.", url = SITE.."/app" }
 	end
 	local inGroup = Wanted.Bridge ~= nil and Wanted.Bridge:InCommunity()

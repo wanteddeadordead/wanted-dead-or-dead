@@ -85,7 +85,7 @@ function private.UpdateRow(row, group)
 	else
 		sub = Theme:Colorize("PvP deaths only", C.faint)
 	end
-	-- The zone's fight (or siege) layer, when the site or this client's own estimate knows it
+	-- The zone's fight layer, when the site or this client's own estimate knows it
 	local layer = Wanted.Shard:Target(group.zone, group.mapId)
 	if layer then
 		sub = sub..Theme:Colorize("  on "..Wanted.Shard:LayerText(layer), C.amber)
@@ -200,7 +200,7 @@ UI:RegisterPage("hotspots", {
 		end)
 		private.hop.label:SetFontObject(Wanted.Theme.Fonts.small)
 		private.hop:SetPoint("LEFT", private.layer, "RIGHT", 8, 0)
-		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight (or tonight's siege) is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
+		W:AttachTooltip(private.hop, "Hop to the fight's layer", "The fight is on another copy of your zone. Hop asks a Wanted player of your side on that layer for a group invite: your addon accepts it, holds the group so the move sticks, then leaves it, unless you click Stay or the host leads the rally. One hop every ten minutes; not in a fight, while dead, or in a group.")
 
 		local headerBar = CreateFrame("Frame", nil, container)
 		headerBar:SetPoint("TOPLEFT", 0, -36)

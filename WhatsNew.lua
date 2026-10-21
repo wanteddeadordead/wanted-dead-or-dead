@@ -26,7 +26,7 @@ Wanted.WHATS_NEW = {
 			"Influence races every night at 7:00, 7:50 and 8:40 PM ET, under Guild Wars in the menu (needs the Wanted app): three points per zone, the middle one worth 20% more, your side's numbers live as you fight.",
 			"Guild wars: the top guild in a race takes an unclaimed zone. After a race, a guild on the other side can declare war on a held zone, and the defenders pick a half-hour slot over the next two evenings.",
 			"Wars are up to 40 a side: three lanes with a tower and an inhibitor each, and a keep at each end. The winner gets 3 days of peace. War Marks buy cosmetics only. Anyone in a war's zone can help: Wanted witnesses the war points for the site, even if your guild isn't fighting.",
-			"Zone, race and war HUDs you can drag, fold or hide (/wanted hud), and a Wanted button on the world map for what it draws there.",
+			"Zone, race and war HUDs you can drag, fold or hide (/wanted hud), and a Wanted button on the world map for what it draws there, and war and race points on the minimap.",
 		},
 	},
 	{

@@ -29,6 +29,8 @@ function MapButton:Layers()
 			set = function(on) Wanted.WarMap:SetShown(on) end },
 		{ key = "races", label = "Races", get = function() return Wanted.WarMap:RacesShown() end,
 			set = function(on) Wanted.WarMap:SetRacesShown(on) end },
+		{ key = "minimap", label = "War and race points on the minimap", get = function() return Wanted.MinimapPins:Shown() end,
+			set = function(on) Wanted.MinimapPins:SetShown(on) end },
 	}
 end
 

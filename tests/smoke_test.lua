@@ -15253,7 +15253,7 @@ end)()
 		for i, key in ipairs(KEYS) do if state[key] ~= want[i] or SETTING[key]() ~= want[i] then return false end end
 		return true
 	end
-	check(#ns.MapButton:Layers() == 4 and ns.MapButton:Layers()[3].label == "Guild wars" and ns.MapButton:Layers()[4].label == "Races", "four layers: sightings, stats, guild wars, races")
+	check(#ns.MapButton:Layers() == 5 and ns.MapButton:Layers()[3].label == "Guild wars" and ns.MapButton:Layers()[4].label == "Races" and ns.MapButton:Layers()[5].key == "minimap", "five layers: sightings, stats, guild wars, races, minimap")
 	check(Is(true, true, true, true) and mb._alpha == 1, "every layer starts on, each its own saved switch")
 	mb._scripts.OnClick(mb, "LeftButton")
 	check(Is(false, false, false, false) and mb._alpha == 0.5, "left click hides all four, in Settings' own switches, and dims the button")
@@ -17502,6 +17502,47 @@ end
 	ns.MapButton:Layers()[4].set(true)
 	ns.MapButton:Layers()[3].set(true)
 	check(ns.db.settings.warMap == true, "and shows it")
+	-- The minimap: the same points as small seals, in the zone you are in, hidden in instances and by the setting
+	do
+		local MP, realSize, realBest0, realIn, realZoom = ns.MinimapPins, C_Map.GetMapWorldSize, C_Map.GetBestMapForUnit, IsInInstance, Minimap.GetZoom
+		C_Map.GetMapWorldSize = function() return 400, 400 end
+		local realPos = C_Map.GetPlayerMapPosition
+		C_Map.GetPlayerMapPosition = function() return { x = 0.5, y = 0.4 } end
+		C_Map.GetBestMapForUnit = function() return 1424 end
+		local realBest = function() return 1424 end
+		Minimap.GetZoom = function() return 0 end
+		ns.db.settings.minimapWar = true
+		MP:Refresh()
+		check(MP:Count() == 7, "the minimap: the war's six seals and the keep in its zone (no rally): "..MP:Count())
+		ns.WarMap:SetShown(false)
+		MP:Refresh()
+		check(MP:Count() == 1, "the war off on the map: only the zone's race point is left: "..MP:Count())
+		ns.WarMap:SetShown(true)
+		C_Map.GetBestMapForUnit = function() return 1 end
+		MP:Refresh()
+		check(MP:Count() == 0, "in another zone: none")
+		C_Map.GetBestMapForUnit = realBest
+		IsInInstance = function() return true, "party" end
+		MP:Refresh()
+		check(MP:Count() == 0, "in an instance: none")
+		IsInInstance = realIn
+		MP:Refresh()
+		check(MP:Count() == 7, "and back outside: shown again")
+		MP:SetShown(false)
+		check(MP:Count() == 0 and ns.db.settings.minimapWar == false, "the setting off takes them off at once")
+		MP:SetShown(true)
+		check(MP:Count() == 7, "and on shows them")
+		-- A race zone with no war: its race's points while it runs
+		C_Map.GetBestMapForUnit = function() return 1417 end
+		MP:Refresh()
+		check(MP:Count() == 1 and MP:Count() == #ns.WarMap:MinimapPoints(1417), "a race zone shows the race's points: "..MP:Count())
+		ns.WarMap:SetRacesShown(false)
+		MP:Refresh()
+		check(MP:Count() == 0, "Races off: none")
+		ns.WarMap:SetRacesShown(true)
+		C_Map.GetBestMapForUnit, C_Map.GetMapWorldSize, C_Map.GetPlayerMapPosition, Minimap.GetZoom = realBest0, realSize, realPos, realZoom
+		MP:Refresh()
+	end
 	ns.db.settings.statsMap = nil
 	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown, C_Map.GetMapInfo, C_Map.GetMapRectOnMap = realCanvas, realMapId, realShown, realInfoMap, realRect
 	-- Live between catch-ups: our side's clients say where they stand each tick; the capture rule runs here as an

@@ -431,6 +431,8 @@ function private.BuildSharing(column)
 		function() Wanted.WarMap:Refresh() end)
 	private.Switch(column, Root, "raceMap", "Races on the map", "Tonight's race points with their times on the zones' maps, in the holders' colours while a race runs.",
 		function() Wanted.WarMap:Refresh() end)
+	private.Switch(column, Root, "minimapWar", "War and race points on the minimap", "The war's towers, inhibitors and keep, and tonight's race points, as small seals on the minimap while you are in their zone.",
+		function() Wanted.MinimapPins:Refresh() end)
 	private.Switch(column, Root, "statsMap", "Current stats on the map", "Each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now.",
 		function() Wanted.WarMap:Refresh() end)
 	private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")

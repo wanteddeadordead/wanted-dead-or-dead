@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-10-23
+
+- War and race points on the minimap: in the zone you are in, a war's towers, inhibitors and keep and tonight's race points show as small seals in the world map's colours, hidden in instances. On by default; Settings, map section, "War and race points on the minimap", or the Wanted button's menu on the world map. New file: restart the client after updating.
+
 ## [1.28.0] - 2026-10-23
 
 - A Show calling cards setting (Settings, Alerts), on by default: off removes the Calling card tab and its window, the toasts for new pieces and the card art on badge toasts, What's new and death cards, and drops the card data held in memory (your saved card picks stay). Off applies at once; turning it on brings your card back at the next /reload.

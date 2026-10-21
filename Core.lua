@@ -61,6 +61,7 @@ local DEFAULTS = {
 		hudHint = false, -- the one-time chat line on how to bring a hidden HUD back (HudKit)
 		warMap = true, -- guild wars on the world map (WarMap)
 		raceMap = true, -- tonight's races on the world map (WarMap)
+		minimapWar = true, -- war and race points on the minimap (MinimapPins)
 		statsMap = true, -- each zone's holder, kills and busyness on the world map (StatsMap)
 		warBanner = true, -- the holder's banner on coming into a campaign zone (WarBanner)
 		warToasts = true, -- guild war notifications: toasts, chat lines and the war's announcements (WarAlerts)

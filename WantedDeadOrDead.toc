@@ -121,6 +121,7 @@ MapPins.lua
 MapPins.xml
 StatsMap.lua
 WarMap.lua
+MinimapPins.lua
 RacesHUD.lua
 WarHUD.lua
 ZoneHUD.lua

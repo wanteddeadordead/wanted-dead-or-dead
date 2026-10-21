@@ -536,6 +536,41 @@ function private.DrawZone(zone, place, now)
 	end
 end
 
+---The pieces the minimap draws in a map: the war's towers, inhibitors and keep, and tonight's race points, as the
+---world map shows them (the same war, race and seal getters) and the same switches. { x, y (0 to 100), texture, title, px }.
+---@param mapId number the map the player is on
+---@param now number?
+function WarMap:MinimapPoints(mapId, now)
+	now = now or GetServerTime()
+	local out = {}
+	local zone = Wanted.WarZones.byMap[mapId]
+	local war = zone and private.WarShown(zone)
+	if war then
+		local attacker, defender = war.attacker or {}, war.defender or {}
+		local d, a = SIDE[defender.faction] or "alliance", SIDE[attacker.faction] or "horde"
+		local lanes, keep = private.Lanes(war)
+		for _, p in ipairs(GuildWars:Points(war, zone)) do
+			if p.role == "keep" then
+				tinsert(out, { x = p.x, y = p.y, texture = GuildWars:KeepFile(keep, d, a), title = "The keep · "..p.name, px = KEEP_PX })
+			elseif p.role ~= "rally" then
+				local state = type(lanes[p.lane]) == "table" and lanes[p.lane][p.role] or nil
+				tinsert(out, { x = p.x, y = p.y, texture = GuildWars:SealFile(state, p.role, d, a), px = SEAL_PX,
+					title = format("%s%s %s", strupper(strsub(p.lane, 1, 1)), strsub(p.lane, 2), p.role) })
+			end
+		end
+	end
+	for _, race in ipairs(WarMap:RacesShown() and Races:Tonight() or {}) do
+		if race.mapId == mapId and not (war and Races:Phase(race, now) == "ended") then
+			local phase = Races:Phase(race, now)
+			for _, point in ipairs(race.points) do
+				local holder = phase ~= "upcoming" and point.holder or nil
+				tinsert(out, { x = point.x, y = point.y, texture = GuildWars.MEDIA.."race-"..(SIDE[holder] or "neutral"), title = point.name, px = SEAL_PX })
+			end
+		end
+	end
+	return out
+end
+
 function private.DrawWar(war, zone, place, now)
 	local attacker, defender = war.attacker or {}, war.defender or {}
 	local d, a = SIDE[defender.faction] or "alliance", SIDE[attacker.faction] or "horde"

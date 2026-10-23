@@ -1105,6 +1105,7 @@ pin:OnMouseLeave()
 do
 ns.Store:NewRecord("death", { killer = "Player-9-FIGHT1", killerName = "Fight Ganker", killerClass = "HUNTER", killerLevel = 28, killerFaction = "Alliance",
 	victim = "Player-1-OURS5", victimName = "Our Five", victimFaction = "Horde", deathId = "fight-1", zone = "Durotar", mapId = 1, x = 90, y = 90 })
+RunTimers() -- the redraw waits a second for the rest of a burst of records
 local fightPin
 for _, p in ipairs(WorldMapFrame.pins) do
 	for _, m in ipairs(p.group.members) do
@@ -1119,8 +1120,9 @@ if fightPin then fightPin:OnMouseEnter() fightPin:OnMouseLeave() end
 GameTooltip.AddLine = origAdd
 check(table.concat(lines, "\n"):find("Killed Our Five here", 1, true), "its tooltip says who they killed here")
 end
--- Opening the map reads the records held once, not once per layer (the markers, the stats layer and the zone counts each
--- walked every record held)
+-- Opening the map reads the records held once, not once per layer, and a burst of records is drawn once (the markers,
+-- the stats layer and the zone counts each walked every record, and each record redrew the markers: a 1 s freeze on the
+-- beta client with a few thousand kills and deaths in the last hour)
 ;(function()
 	local walks, realIterator = 0, ns.Store.Iterator
 	ns.Store.Iterator = function(self, kind) if kind == "kill" or kind == "death" then walks = walks + 1 end return realIterator(self, kind) end
@@ -1134,6 +1136,16 @@ end
 	ns.Hotspots:Get()
 	check(walks <= 2, "a map open walks the kills and the deaths once between the layers: "..walks.." walks")
 	ns.Store.Iterator = realIterator
+	local refreshes, realRemove = 0, WorldMapFrame.RemoveAllPinsByTemplate -- once per redraw of the markers
+	WorldMapFrame.RemoveAllPinsByTemplate = function(...) refreshes = refreshes + 1 return realRemove(...) end
+	for i = 1, 20 do
+		ns.Store:NewRecord("death", { killer = "Player-9-BURST"..i, killerName = "Burst"..i, killerFaction = "Alliance", victim = "Player-1-OURS5", victimName = "Our Five",
+			victimFaction = "Horde", deathId = "burst-"..i, zone = "Durotar", mapId = 1, x = 10 + i, y = 20 })
+	end
+	check(refreshes == 0, "records arriving don't redraw the markers one by one: "..refreshes)
+	RunTimers()
+	check(refreshes == 1, "and the burst is drawn once, after it: "..refreshes)
+	WorldMapFrame.RemoveAllPinsByTemplate = realRemove
 	WorldMapFrame.GetMapID = savedMap
 	clock = savedClock
 end)()

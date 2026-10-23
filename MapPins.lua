@@ -25,6 +25,7 @@ local FRAME_LEVEL, FRAME_LEVEL_INDEX = "PIN_FRAME_LEVEL_WORLD_QUEST", 400
 local MERGE_DISTANCE = 1.2 -- map percent: sightings closer than this share a marker
 local SIZE, MERGED_SIZE = 12, 18
 local TOOLTIP_NAMES = 12
+local REFRESH_DELAY = 1 -- seconds records are gathered for before the markers are drawn again
 
 
 
@@ -217,10 +218,21 @@ end
 function MapPins:OnEnable()
 	C_Timer.After(2, private.Attach)
 	for _, kind in ipairs({ "sighting", "kill", "death" }) do
-		Store:OnRecord(kind, function()
-			MapPins:Refresh()
-		end)
+		Store:OnRecord(kind, private.RefreshSoon)
 	end
+end
+
+---A record arrived: redraw once the burst is over. A catch-up or a busy fight brings records by the dozen, and each
+---redraw reads every recent record, so a redraw for each kept the map's refresh running for as long as they came.
+function private.RefreshSoon()
+	if private.refreshPending or not (WorldMapFrame and WorldMapFrame:IsShown()) then
+		return
+	end
+	private.refreshPending = true
+	C_Timer.After(REFRESH_DELAY, function()
+		private.refreshPending = false
+		MapPins:Refresh()
+	end)
 end
 
 function private.Attach()

@@ -43,22 +43,20 @@ function private.Build(now)
 		return entry
 	end
 	local counted = {}
-	for _, kind in ipairs({ "kill", "death" }) do
-		for record in Store:Iterator(kind) do
-			local data = record.data
-			local key = data.deathId or record.id
-			if record.t and now - record.t <= HOUR and not counted[key] and not Store:IsTest(record) then
-				counted[key] = true
-				local mapId = type(data.mapId) == "number" and data.mapId
-					or type(data.zone) == "string" and Wanted.WarZones.byName[data.zone] and Wanted.WarZones.byName[data.zone].mapId
-				if mapId then
-					local known = type(data.killer) == "string" and Wanted.db.players[data.killer]
-					local side = data.killerFaction or (known and known.faction) or OPPOSITE[data.victimFaction]
-					local entry = Entry(mapId, data.zone)
-					entry.kills = entry.kills + 1
-					if COLORS[side] then
-						entry[side] = entry[side] + 1
-					end
+	for _, record in ipairs(Wanted.Hotspots:RecentFights(now)) do
+		local data = record.data
+		local key = data.deathId or record.id
+		if now - record.t <= HOUR and not counted[key] then
+			counted[key] = true
+			local mapId = type(data.mapId) == "number" and data.mapId
+				or type(data.zone) == "string" and Wanted.WarZones.byName[data.zone] and Wanted.WarZones.byName[data.zone].mapId
+			if mapId then
+				local known = type(data.killer) == "string" and Wanted.db.players[data.killer]
+				local side = data.killerFaction or (known and known.faction) or OPPOSITE[data.victimFaction]
+				local entry = Entry(mapId, data.zone)
+				entry.kills = entry.kills + 1
+				if COLORS[side] then
+					entry[side] = entry[side] + 1
 				end
 			end
 		end

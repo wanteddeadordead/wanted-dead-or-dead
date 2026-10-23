@@ -9,6 +9,7 @@ local Store = Wanted.Store
 local private = { surgeAlerted = {} } -- surgeAlerted: group key -> when we last warned about it
 local RECENT = 15 * 60 -- "now" means seen in the last 15 minutes
 local HOUR = 3600
+local FIGHTS_CACHE_SECONDS = 10
 local GUILD_MIN = 3 -- a guild is named once this many of its players are in the zone
 local TREND_MIN = 2 -- the count has to move by at least this much to count as rising or falling
 -- Rising fast: at least this many enemies seen there in the last 5 minutes, at least this many more than in
@@ -72,6 +73,29 @@ local function Wanted_(guid)
 	return type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and not Wanted.db.ignore[guid]
 end
 
+---The kills and deaths from the last hour, kills first, as the walks of Store:Iterator give them (not test ones). The map's
+---markers, its stats and the zone counts all read these, and each used to walk every record held, so a map open walked
+---them four times. Kept until a kill or death arrives, or ten seconds pass (a signature found bad takes a record out);
+---a reader still checks each record's age against its own window.
+---@param now number
+---@return table[] records
+function Hotspots:RecentFights(now)
+	local cache = private.fights
+	if cache and cache.records == Wanted.db.records and not cache.stale and now >= cache.built and now - cache.built < FIGHTS_CACHE_SECONDS then
+		return cache.list
+	end
+	local list = {}
+	for _, kind in ipairs({ "kill", "death" }) do
+		for record in Store:Iterator(kind) do
+			if record.t and now - record.t <= HOUR and type(record.data) == "table" and not Store:IsTest(record) then
+				tinsert(list, record)
+			end
+		end
+	end
+	private.fights = { records = Wanted.db.records, built = now, list = list }
+	return list
+end
+
 ---The enemies named in PvP deaths (kills and deaths, ours and other Wanted users') in the last `window` seconds,
 ---and where each fight was. The map marks them there and Hotspots counts them in the zone. `player` is the saved
 ---player, or what the record says of them; `fight` says what happened, "Killed Our Five" or "Killed by Thrall".
@@ -79,19 +103,39 @@ end
 ---@param window number seconds
 ---@return table[] { guid, t, mapId, zone, x, y, player, fight }
 function Hotspots:EnemiesInFights(now, window)
+	local fights, ignore = {}, Wanted.db.ignore
+	for _, fight in ipairs(private.FightSides(now)) do
+		if now - fight.t <= window and not ignore[fight.guid] then
+			tinsert(fights, fight)
+		end
+	end
+	return fights
+end
+
+---Every enemy named in the last hour's kills and deaths, as EnemiesInFights lists them, built once with the walk of
+---records above and kept as long as it. Those who are ignored are left out when read, so ignoring someone takes effect
+---at once.
+---@param now number
+---@return table[]
+function private.FightSides(now)
+	local records = Hotspots:RecentFights(now)
+	local cache = private.fights
+	if cache.sides then
+		return cache.sides
+	end
 	local myFaction = UnitFactionGroup("player")
-	local fights = {}
-	for _, kind in ipairs({ "kill", "death" }) do
-		for record in Store:Iterator(kind) do
-			local data = record.data
-			if record.t and now - record.t <= window and data.zone and not Store:IsTest(record) then
-				for _, side in ipairs({ "killer", "victim" }) do
-					local guid = data[side]
-					local known = Wanted_(guid) and Wanted.db.players[guid]
+	local sides = {}
+	for _, record in ipairs(records) do
+		local data = record.data
+		if data.zone then
+			for _, side in ipairs({ "killer", "victim" }) do
+				local guid = data[side]
+				if type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") then
+					local known = Wanted.db.players[guid]
 					local faction = data[side.."Faction"] or (known and known.faction)
-					if Wanted_(guid) and faction and faction ~= myFaction then
+					if faction and faction ~= myFaction then
 						local other = private.Readable(data[side == "killer" and "victimName" or "killerName"])
-						tinsert(fights, {
+						tinsert(sides, {
 							guid = guid, t = record.t, mapId = data.mapId, zone = data.zone, x = data.x, y = data.y,
 							player = known or { name = data[side.."Name"], class = data[side.."Class"], level = data[side.."Level"], guild = data[side.."Guild"] },
 							fight = (side == "killer" and "Killed " or "Killed by ")..(type(other) == "string" and other or "?"),
@@ -101,7 +145,8 @@ function Hotspots:EnemiesInFights(now, window)
 			end
 		end
 	end
-	return fights
+	cache.sides = sides
+	return sides
 end
 
 ---Where each enemy was last known to be in the last hour: guid -> { t, mapId, zone, player }. Seen by a Wanted user,
@@ -178,16 +223,14 @@ end
 ---Adds PvP deaths in the last hour (kills and witnessed deaths, each death once).
 function private.AddDeaths(groups, byName, now)
 	local counted = {}
-	for _, kind in ipairs({ "kill", "death" }) do
-		for record in Store:Iterator(kind) do
-			local data = record.data
-			local key = data.deathId or record.id
-			if record.t and now - record.t <= HOUR and data.zone and not counted[key] and not Store:IsTest(record) then
-				counted[key] = true
-				local group = private.GetGroup(groups, byName, data.mapId, data.zone)
-				group.deaths = group.deaths + 1
-				group.lastFight = max(group.lastFight or 0, record.t)
-			end
+	for _, record in ipairs(Hotspots:RecentFights(now)) do
+		local data = record.data
+		local key = data.deathId or record.id
+		if now - record.t <= HOUR and data.zone and not counted[key] then
+			counted[key] = true
+			local group = private.GetGroup(groups, byName, data.mapId, data.zone)
+			group.deaths = group.deaths + 1
+			group.lastFight = max(group.lastFight or 0, record.t)
 		end
 	end
 end
@@ -272,6 +315,13 @@ function Hotspots:CheckSurges()
 end
 
 function Hotspots:OnEnable()
+	for _, kind in ipairs({ "kill", "death" }) do
+		Store:OnRecord(kind, function()
+			if private.fights then
+				private.fights.stale = true
+			end
+		end)
+	end
 	C_Timer.NewTicker(SURGE_CHECK_SECONDS, Wanted:Timed("Hotspots surges", function() Hotspots:CheckSurges() end))
 end
 

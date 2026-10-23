@@ -1119,6 +1119,24 @@ if fightPin then fightPin:OnMouseEnter() fightPin:OnMouseLeave() end
 GameTooltip.AddLine = origAdd
 check(table.concat(lines, "\n"):find("Killed Our Five here", 1, true), "its tooltip says who they killed here")
 end
+-- Opening the map reads the records held once, not once per layer (the markers, the stats layer and the zone counts each
+-- walked every record held)
+;(function()
+	local walks, realIterator = 0, ns.Store.Iterator
+	ns.Store.Iterator = function(self, kind) if kind == "kill" or kind == "death" then walks = walks + 1 end return realIterator(self, kind) end
+	local savedClock = clock
+	clock = clock + 60 -- every cache expired, as a map opened after a quiet minute
+	local savedMap = WorldMapFrame.GetMapID
+	WorldMapFrame.GetMapID = function() return 1424 end
+	ns.MapPins:Refresh()
+	ns.WarMap:Refresh()
+	ns.StatsMap:OtherZones(clock)
+	ns.Hotspots:Get()
+	check(walks <= 2, "a map open walks the kills and the deaths once between the layers: "..walks.." walks")
+	ns.Store.Iterator = realIterator
+	WorldMapFrame.GetMapID = savedMap
+	clock = savedClock
+end)()
 -- Show / hide from the map's filter menu
 local checkbox
 local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = checkbox or { text = text, isSelected = isSelected, setSelected = setSelected } end }

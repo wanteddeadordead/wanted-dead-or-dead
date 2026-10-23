@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A Show calling cards setting (Settings, Alerts), on by default: off removes the Calling card tab and its window, the toasts for new pieces and the card art on badge toasts, What's new and death cards, and drops the card data held in memory (your saved card picks stay). Off applies at once; turning it on brings your card back at the next /reload.
+
 ## [1.28.0] - 2026-10-21
 
 - Capture fronts and siege nights are retired: the capture HUD and bar, the points on the world map and minimap, the Siege page and the Dashboard's Upcoming sieges card, their settings and /wanted points. Influence races and guild wars take their place. Rally leaders are retired too: Lead the rally here, Skull and Flare, the rally marker on the map and the rally line in Nearby (which keeps the fight layer and Hop). Layers are now read, shared and hopped to on every client, with no switch (they waited behind the siege switch); Settings, Layers, has the fight layer's announcement.

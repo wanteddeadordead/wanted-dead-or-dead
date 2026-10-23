@@ -44,6 +44,7 @@ Tour.SETS.first = {
 	{ title = "Progress", page = "challenges",
 		text = "Daily and weekly goals for both factions, for fun and a weekly score. Kills in today's hot zones count double. The calendar has the site's events." },
 	{ title = "You", page = "card",
+		textNoCards = "The Wanted poster shows the price the other faction has put on your head.",
 		text = "Your calling card: the banner on your website page and on the death card of anyone you kill, with the art your badges unlock. The Wanted poster next to it shows the price the other faction has put on your head." },
 	{ title = "Website & app", page = "web", mark = "yourpage",
 		text = "The game can't open a browser, so every address is a box to copy: click it, Ctrl+C, paste. The box bordered here is your own page on wanteddeadordead.com.\n\nThe desktop app puts your kills on the website and keeps your saved data safe. Without it you still see enemies and bounties, but your records don't count." },
@@ -243,7 +244,7 @@ function private.Go(page)
 	private.State(private.set).page = page
 	f.counter:SetText(format("%s · %d of %d", stops.label, page, #stops))
 	f.title:SetText(stop.title)
-	f.body:SetText(stop.text)
+	f.body:SetText(stop.textNoCards and not Wanted.CallingCard:On() and stop.textNoCards or stop.text)
 	f.back:SetEnabled(page > 1)
 	-- The sample war at the stop's stage; a stop without one ends it
 	if stop.sample then

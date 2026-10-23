@@ -167,6 +167,7 @@ end
 function private.BuildAlerts(column)
 	local content = column.content
 	column:Section("Enemy detection and alerts")
+	local function Root() return Wanted.db.settings end
 	private.Switch(column, Detect, "enabled", "Detect enemy players", "Watch nameplates, your target, focus and mouseover for enemy players.")
 	private.Switch(column, Detect, "sound", "Alert sounds", "Play a beep when an enemy appears (three for Kill on Sight and bounty targets).")
 	private.Switch(column, Detect, "stealth", "Stealth alarm", "Warn when a nearby enemy uses Stealth, Vanish, Prowl, Shadowmeld or Invisibility.")
@@ -176,6 +177,9 @@ function private.BuildAlerts(column)
 		Wanted.NearbyWindow:UpdateExposure()
 	end)
 	private.Switch(column, Detect, "deathCard", "Show a card when a player kills you", "Who killed you, your record against them and what's on their head, with Kill on Sight, Post a bounty and Where they've been.")
+	private.Switch(column, Root, "callingCards", "Show calling cards", "The Calling card tab, its window, the toasts for new pieces and the card art on badges and death cards. Off applies at once; turning it on brings your card back at the next /reload.", function()
+		Wanted.CallingCard:Apply()
+	end)
 	private.alerts = W:Segmented(content, {
 		{ key = "all", label = "Every enemy" },
 		{ key = "important", label = "KoS and bounties" },

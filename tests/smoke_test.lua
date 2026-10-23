@@ -8983,6 +8983,74 @@ end)()
 	ns.Model.GetActionCount, ns.Model.GetMyHunts = realActions, realHunts
 	ns.UI:GetFrame():Hide()
 end)()
+-- Calling cards switched off (Settings, Show calling cards): no Calling card tab or window, no piece toasts, no card
+-- data or art; saved picks stay; on again, everything as before
+;(function()
+	local UI, CC, T = ns.UI, ns.CallingCard, ns.Toast
+	local me = ns.Store:GetOrigin():match("^([^%-]+)")
+	local settings = ns.db.settings
+	local card = { plate = "starter-plate", border = "starter-border", background = "starter-bg" }
+	local starters = { "starter-plate", "starter-border", "starter-bg" }
+	local more = { "killer-plate", "killer-border", "mat-linen" }
+	for _, id in ipairs(starters) do more[#more + 1] = id end
+	local function take(unlocked) CC:TakeMine({ [me] = { card = card, unlocked = unlocked } }) end
+	local function labels() return table.concat(UI:Tabs().labels, ", ") end
+	local function entry()
+		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
+	end
+	local function toasts() return #T:Shown() + T:Pending() end
+	-- On (the default): the tab, the data and the art
+	check(settings.callingCards ~= false and CC:On(), "calling cards are on by default")
+	ns.db.cardsSeen = nil
+	take(starters)
+	CC:CheckNew()
+	take(more)
+	UI:Show("card")
+	check(labels():find("Calling card", 1, true) and CC:MyCard() and CC:Art("starter-plate"), "on: the tab, the card and its art")
+	local before = toasts()
+	CC:CheckNew()
+	check(toasts() > before, "on: new pieces raise toasts")
+	-- Off, with cards still held (the gate itself, before Apply drops them)
+	settings.callingCards = false
+	ns.db.cardsSeen = nil
+	before = toasts()
+	CC:CheckNew()
+	check(toasts() == before and ns.db.cardsSeen == nil, "off: CheckNew does nothing even with cards held")
+	settings.callingCards = true
+	-- Off
+	ns.db.cardPicks = { [me] = { t = 1, p = "starter-plate", b = "starter-border", e = "", g = "starter-bg" } }
+	settings.callingCards = false
+	CC:Apply()
+	check(CC:MyCard() == nil and #CC:UnlockedIds() == 0 and CC:CardOf("Anyone Name") == nil, "off: the cards held are dropped")
+	check(CC:Art("starter-plate") == nil, "off: no card art")
+	UI:Show("card")
+	check(UI:IsShown("poster") and entry() == "You", "off: the You entry opens on the next tab: "..tostring(entry()))
+	check(not labels():find("Calling card", 1, true) and labels():find("Wanted poster", 1, true), "off: the Card page isn't listed: "..labels())
+	local labelsOff = {}
+	for _, e in ipairs(UI:Menu()) do labelsOff[#labelsOff + 1] = e.label end
+	check(table.concat(labelsOff, ", "):find("You", 1, true), "off: the You entry stays in the menu")
+	CC:Show()
+	check(not (_G.WantedCallingCardFrame and _G.WantedCallingCardFrame._shown), "off: the card window doesn't open")
+	take(starters)
+	CC:CheckNew()
+	take(more)
+	check(CC:MyCard() == nil and #CC:UnlockedIds() == 0, "off: TakeMine keeps nothing")
+	ns.db.cardsSeen = nil
+	before = toasts()
+	CC:CheckNew()
+	check(toasts() == before and ns.db.cardsSeen == nil, "off: CheckNew raises no toast and notes nothing")
+	check(ns.db.cardPicks[me] and ns.db.cardPicks[me].p == "starter-plate", "off: saved picks stay")
+	-- On again: the card comes back with the next catch-up
+	settings.callingCards = true
+	UI:Show("card")
+	check(labels():find("Calling card", 1, true) and entry() == "You", "on again: the tab is back: "..labels())
+	take(more)
+	check(CC:MyCard() and CC:Art("starter-plate"), "on again: the next catch-up brings the card back")
+	CC:Hide()
+	ns.CallingCard:TakeMine(nil)
+	ns.db.cardPicks = nil
+	UI:GetFrame():Hide()
+end)()
 -- The live world numbers every chain from 1,000,000, so no live record shares an id with a beta one (the server keeps
 -- the beta's records, and a character can keep its beta name): our own first live record is past it (a fresh chain
 -- of our own starts by the clock), another player's first one is :1000001 and follows on with no gap to ask for, and

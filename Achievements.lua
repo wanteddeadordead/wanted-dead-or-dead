@@ -465,7 +465,7 @@ function Achievements:TakeCosmetics(looks)
 				frame = type(c.f) == "string" and Achievements.FRAME_COLORS[c.f] and c.f or nil,
 				stamp = private.Text(c.t, 40),
 				-- The calling card they designed (app 0.2.58), for their victims' death cards, and its stats' values
-				card = type(c.c) == "table" and Wanted.CallingCard and Wanted.CallingCard:CleanCard({ background = c.c.g,
+				card = type(c.c) == "table" and Wanted.CallingCard and Wanted.CallingCard:On() and Wanted.CallingCard:CleanCard({ background = c.c.g,
 					border = c.c.b, plate = c.c.p, emblem = c.c.e, stats = c.c.s }) or nil,
 			}
 			if kept.card then
@@ -483,6 +483,16 @@ function Achievements:TakeCosmetics(looks)
 				private.cosmetics[strlower(name)] = kept
 				holders = holders + 1
 			end
+		end
+	end
+end
+
+---Forgets the calling cards held with the cosmetics (calling cards switched off); the rest of a player's cosmetics stay.
+function Achievements:DropCards()
+	for name, kept in pairs(private.cosmetics or {}) do
+		kept.card, kept.values = nil, nil
+		if not (kept.emblem or kept.signature or kept.frame or kept.stamp) then
+			private.cosmetics[name] = nil
 		end
 	end
 end

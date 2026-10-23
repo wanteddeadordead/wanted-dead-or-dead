@@ -41,6 +41,8 @@ UI:RegisterPage("card", {
 	-- Pieces unlocked and not looked at yet
 	news = { kind = "card", ids = function() return CallingCard:UnlockedIds() end },
 	tabs = { "card", "poster", "web", "settings", "tools" },
+	-- Calling cards off: the tab goes, and the You entry opens on the next one
+	hidden = function() return not CallingCard:On() end,
 	build = function(container, width)
 		private.banner = CallingCard:Banner(container, min(width, BANNER_WIDTH))
 		private.banner:SetPoint("TOPLEFT", 0, -4)

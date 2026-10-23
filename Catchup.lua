@@ -151,7 +151,7 @@ function Catchup:Import()
 	else
 		private.TakePublic(entry, false)
 	end
-	Wanted.CallingCard:TakeMine(entry.myCards) -- your own characters' calling cards (app 0.2.37)
+	Wanted.CallingCard:TakeMine(entry.myCards) -- your own characters' calling cards (app 0.2.37); kept only when calling cards are on
 	Wanted.Achievements:CheckNew()
 	-- The guilds' Kill on Sight lists as the server keeps them: newer changes only, so taking them again is harmless
 	if Wanted.GuildKoS then

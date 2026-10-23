@@ -44,6 +44,7 @@ local DEFAULTS = {
 		boardSort = "amount", -- the board's order: amount, newest, name, zone or seen (Model.BOARD_SORTS)
 		minimap = { angle = 200, hide = false },
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
+		callingCards = true, -- the calling card: its tab and window, piece toasts, card art and card data (CallingCard)
 		showTools = false, -- the Tools page (network details, test data, debug log)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)

@@ -307,7 +307,7 @@ function private.Create()
 		nav.badge = W:Pill(nav)
 		nav.badge:SetPoint("RIGHT", -14, 0)
 		nav.key = def.key
-		nav:SetScript("OnClick", function() UI:Show(def.tabs and def.tabs[1] or def.key) end)
+		nav:SetScript("OnClick", function() UI:Show(private.FirstTab(def)) end)
 		nav:SetScript("OnEnter", function(self)
 			if (private.owner or private.current) ~= self.key then
 				self.bg:SetColorTexture(1, 1, 1, 0.03)
@@ -469,11 +469,28 @@ function UI:Show(key)
 	end
 end
 
----The page to show for a key: Home when there is no such page, or it's switched off.
+---The page a menu entry opens: its first tab that isn't switched off (the entry's own page when it has no tabs).
+---@param def table
+---@return string
+function private.FirstTab(def)
+	for _, key in ipairs(def.tabs or {}) do
+		local page = private.pageByKey[key]
+		if page and not (page.hidden and page.hidden()) then
+			return key
+		end
+	end
+	return def.key
+end
+
+---The page to show for a key: Home when there is no such page, or it's switched off. An entry whose own page is off
+---but has tabs left (You without the Calling card) shows its first tab.
 ---@param key string?
 ---@return string
 function private.UsablePage(key)
 	local def = key and private.pageByKey[key]
+	if def and def.hidden and def.hidden() and private.FirstTab(def) ~= def.key then
+		return private.FirstTab(def)
+	end
 	if not def or (def.hidden and def.hidden()) then
 		-- The main page: Guild Wars where the site runs races, else Home
 		local main = private.pageByKey[DEFAULT_PAGE]
@@ -492,7 +509,7 @@ function private.LayoutNav()
 	for _, def in ipairs(private.pages) do
 		local nav = private.navButtons[def.key]
 		nav:ClearAllPoints()
-		if def.under or (def.hidden and def.hidden()) then
+		if def.under or (def.hidden and def.hidden() and private.FirstTab(def) == def.key) then
 			nav:Hide()
 		elseif def.atFoot then
 			nav:SetPoint("BOTTOMLEFT", 0, FOOT_TOP)

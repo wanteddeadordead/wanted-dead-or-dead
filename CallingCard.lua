@@ -126,13 +126,34 @@ end
 -- Your cards, from the site
 -- ============================================================================
 
+---Whether calling cards are on (Settings, "Show calling cards"). Off, there is no Calling card tab, no card window, no
+---piece toasts, no card art and no card data kept; the saved picks (WantedDB.cardPicks) stay for when it's turned on.
+---@return boolean
+function CallingCard:On()
+	local settings = Wanted.db and Wanted.db.settings
+	return not settings or settings.callingCards ~= false
+end
+
+---Applies the setting at once: drops the cards held in memory and closes the window when it's off, and has the window
+---refresh the You entry's tabs. The cards come back with the next catch-up (a /reload).
+function CallingCard:Apply()
+	if not CallingCard:On() then
+		private.mine = {}
+		CallingCard:Hide()
+		Wanted.Achievements:DropCards()
+	end
+end
+
 ---Takes in the catch-up's cards of your own characters: by name, { card = { plate, border, emblem, background, stats },
 ---unlocked = { ids }, stats = { [id] = value } }. Pieces the catalogue doesn't know, unknown stats and malformed
 ---entries are dropped.
 ---@param cards table?
 function CallingCard:TakeMine(cards)
-	private.Parts() -- the catalogue by id: the catch-up comes at login, before the window has ever built it
 	private.mine = {}
+	if not CallingCard:On() then
+		return
+	end
+	private.Parts() -- the catalogue by id: the catch-up comes at login, before the window has ever built it
 	for name, c in pairs(type(cards) == "table" and cards or {}) do
 		local card = type(c) == "table" and type(c.card) == "table" and c.card
 		if type(name) == "string" and #name <= 40 and strfind(name, " ", 1, true) and not strfind(name, "|", 1, true) and card then
@@ -203,6 +224,9 @@ end
 ---@param name string?
 ---@return table? card, table? stats
 function CallingCard:CardOf(name)
+	if not CallingCard:On() then
+		return nil, nil
+	end
 	local looks = Wanted.Achievements:CosmeticsOf(name)
 	local card = looks.card
 	if not card then
@@ -231,6 +255,9 @@ end
 ---@param id string
 ---@return string?, number?
 function CallingCard:Art(id)
+	if not CallingCard:On() then
+		return nil
+	end
 	local item = CallingCard:Item(id)
 	if item then
 		return ART..item.id, PART_ASPECT[item.part]
@@ -242,6 +269,9 @@ end
 ---starters and playstyle pieces (which come and go with the season) never get one. The first time a character's
 ---pieces are seen they're only noted (WantedDB.cardsSeen).
 function CallingCard:CheckNew()
+	if not CallingCard:On() then
+		return
+	end
 	local me = private.MyName()
 	local mine = private.mine[me]
 	if not mine then
@@ -282,6 +312,9 @@ end
 ---with the season): their ids, for the You menu's count of new ones.
 ---@return string[]
 function CallingCard:UnlockedIds()
+	if not CallingCard:On() then
+		return {}
+	end
 	local mine = private.Mine()
 	local ids = {}
 	for _, item in ipairs(mine and Wanted.CardCatalogue or {}) do
@@ -467,6 +500,9 @@ end
 
 ---Shows the window: your card if the site has sent it, else the sample to try things on.
 function CallingCard:Show()
+	if not CallingCard:On() then
+		return
+	end
 	local frame = private.GetFrame()
 	private.trying = private.Mine() == nil
 	private.Load()
@@ -690,5 +726,9 @@ function private.GetFrame()
 end
 
 Wanted:RegisterCommand("card", "Your calling card: change it (pieces you've unlocked) or try any combination.", function()
+	if not CallingCard:On() then
+		Wanted:Print("Calling cards are off. Turn them on in Settings (Alerts).")
+		return
+	end
 	CallingCard:Show()
 end)

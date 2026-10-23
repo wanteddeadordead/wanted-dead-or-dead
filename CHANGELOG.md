@@ -2,10 +2,10 @@
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-10-23
+
 - A Show calling cards setting (Settings, Alerts), on by default: off removes the Calling card tab and its window, the toasts for new pieces and the card art on badge toasts, What's new and death cards, and drops the card data held in memory (your saved card picks stay). Off applies at once; turning it on brings your card back at the next /reload.
-
-## [1.28.0] - 2026-10-21
-
+- Opening the world map is lighter: the last hour's kills and deaths are read once for the markers, Current stats and the zone counts instead of once each, and kills and deaths that arrive while the map is open redraw it once after a second instead of once each.
 - Capture fronts and siege nights are retired: the capture HUD and bar, the points on the world map and minimap, the Siege page and the Dashboard's Upcoming sieges card, their settings and /wanted points. Influence races and guild wars take their place. Rally leaders are retired too: Lead the rally here, Skull and Flare, the rally marker on the map and the rally line in Nearby (which keeps the fight layer and Hop). Layers are now read, shared and hopped to on every client, with no switch (they waited behind the siege switch); Settings, Layers, has the fight layer's announcement.
 - Guild wars, where wanteddeadordead.com runs them, under the Guild Wars menu entry. Zones shows who holds each zone, since when, its protection and what's next. Each war of your guild gets its own tab, named by its zone: declare (the checklist, the stake and your chance in the draw), the draw, picking the time or accepting it, the roster, the battle and the result. War Marks shows your purse, today's earnings against the cap of 150, and the guild's treasury and tax. Guild lets the guild master choose the war officers. In a war's zone, a HUD shows both guilds, the clock, the lanes and the keep. The world map and OpenMap's map show the war's lanes and races' flags, a banner names the holder as you come into a zone, and toasts follow each step of the war. Needs the Wanted app; new files: restart the client after updating.
 - Zones on the world map, the zone banner and the HUD show the holding guild's own crest, and so do the war screens. A war's keep is the defending guild's crest, with a ring for sealed, open or fallen.

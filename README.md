@@ -1,8 +1,5 @@
 # Wanted: Dead or... Dead
 
-> **Under heavy development through the WoW Forever beta.** Expect frequent updates, and possible issues
-> while we work through the game's changes.
-
 > Found a problem? Press **Report a bug** at the foot of the addon's menu (or type `/wanted bug`): it sends your
 > report to the developers through the Wanted app. Have an idea? **Suggest a feature** above it (or `/wanted idea`)
 > sends it the same way.
@@ -98,7 +95,7 @@ second addon, "Wanted: Dead Man's Hand Poker", on by default.
 ## Install
 
 Install from CurseForge, or download the latest release zip and extract both folders, `WantedDeadOrDead` and
-`WantedDeadOrDead_Poker`, into `World of Warcraft\_classic_beta_\Interface\AddOns\` (the WoW Forever client).
+`WantedDeadOrDead_Poker`, into the WoW Forever client's `Interface\AddOns\` folder.
 
 Open it with `/wanted` or the minimap button. Right-click the minimap button for the Nearby window.
 

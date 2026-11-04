@@ -4861,19 +4861,20 @@ end)()
 	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" },
 		entries = { farAhead } } })
 	check(G:Current().settings.enabled and G:Match("Player-9-0FA2") == nil, "the server's copy dated far ahead is refused too")
-	-- The live world: the server keeps guilds' lists by name, the beta's too, so a copy dated before launch is the beta's
-	-- and never comes back (the launch dropped every list). One changed after launch is taken.
+	-- The live world: the server keeps guilds' lists by name, the beta's too, so a copy dated before the beta closed is
+	-- the beta's and never comes back (the launch dropped every list). One changed since is taken, even before the
+	-- launch's hour (realms that open early).
 	ns.WORLD = "live"
 	local realClock = clock
 	local betaEntry, liveEntry = {}, {}
 	for k, v in pairs(listed) do betaEntry[k], liveEntry[k] = v, v end
 	betaEntry.guid, betaEntry.name, betaEntry.at, betaEntry.t = "Player-9-0BE7A", "Beta Foe", clock, clock
-	clock = ns.LAUNCH_AT + 3600
+	clock = ns.LAUNCH_AT - 3600
 	liveEntry.guid, liveEntry.name, liveEntry.at, liveEntry.t = "Player-9-01FE", "Live Foe", clock - 60, clock - 60
 	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = realClock + 50, by = "Office Rman" }, entries = { betaEntry } } })
 	check(G:Current().settings.enabled and G:Match("Player-9-0BE7A") == nil, "in the live world the server's beta copy of the list is refused")
 	G:TakeServer({ { guild = "Blood Oath", entries = { liveEntry } } })
-	check(G:Match("Player-9-01FE"), "and one made after launch is taken")
+	check(G:Match("Player-9-01FE"), "and one made since the beta closed is taken")
 	G:Current().entries[G.EntryId("player", "Player-9-01FE")] = nil
 	clock, ns.WORLD = realClock, "beta"
 	local farAhead = {}
@@ -9185,15 +9186,15 @@ end)()
 	beta.hash = S:Hash(table.concat({ beta.kind, beta.id, beta.prev, tostring(beta.t), "target=Player-9-OLD" }, "\n"))
 	local taken, why = S:MergeRelayed(beta)
 	check(not taken and why == "beta" and not S:Get(beta.id), "a beta-numbered record is refused in the live world: "..tostring(why))
-	local realLaunch = ns.LAUNCH_AT
-	ns.LAUNCH_AT = clock + 3600
+	local realClosed = ns.BETA_CLOSED_AT
+	ns.BETA_CLOSED_AT = clock + 3600
 	local oldCatchup = { kind = "mark", id = "Old Timer:1000001", origin = "Old Timer", seq = 1000001, prev = "0", t = clock, data = { target = "Player-9-OLD2" } }
 	oldCatchup.hash = S:Hash(table.concat({ oldCatchup.kind, oldCatchup.id, oldCatchup.prev, tostring(oldCatchup.t), "target=Player-9-OLD2" }, "\n"))
 	WantedAppCatchup = { [ns.db.accountMark] = { t = clock, records = { oldCatchup } } }
 	ns.Catchup:Import()
 	RunFrames()
-	check(not S:Get(oldCatchup.id), "a catch-up written before launch brings nothing in")
-	ns.LAUNCH_AT = realLaunch
+	check(not S:Get(oldCatchup.id), "a catch-up written before the beta closed brings nothing in")
+	ns.BETA_CLOSED_AT = realClosed
 	WantedAppCatchup = nil
 	ns.WORLD = "beta"
 	S:FreshStart()
@@ -9201,7 +9202,7 @@ end)()
 -- The launch: in the live world a player still on a release from before it (1.28 on the live realms, on the beta's
 -- chains and bounties) is told to update and nothing it says is taken in: not its records, not what it holds (asking
 -- for that would ask every beta client on the channel), and nothing from a message that names no version. Over
--- Battle.net it isn't a bridge, and no bridge's notice of a bounty posted before launch comes in.
+-- Battle.net it isn't a bridge, and no bridge's notice of a bounty posted before the beta closed comes in.
 ;(function()
 	local realVersion = ns.VERSION
 	ns.VERSION, ns.WORLD = "1.29.0", "live"
@@ -9242,26 +9243,26 @@ end)()
 	RunTimers()
 	check(Notices() == before and Bridges() == bridges - 1, "a 1.28 friend isn't a bridge and its notices aren't taken: "..ns.Bridge:Status())
 	Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "1.29.0" }), "WHISPER", 101)
-	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wbeta2", ns.LAUNCH_AT - 60), "WHISPER", 101)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wbeta2", ns.BETA_CLOSED_AT - 60), "WHISPER", 101)
 	RunTimers()
-	check(Notices() == before and Bridges() == bridges, "once updated it's a bridge, but a bounty posted before launch is the beta's")
-	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wlive1", ns.LAUNCH_AT + 60), "WHISPER", 101)
+	check(Notices() == before and Bridges() == bridges, "once updated it's a bridge, but a bounty posted before the beta closed is the beta's")
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wlive1", ns.LAUNCH_AT - 3600), "WHISPER", 101)
 	RunTimers()
-	check(Notices() == before + 1, "one posted after launch comes in")
-	-- The app's catch-up on disk from before launch lists the beta characters' keys by name: none is taken, or one
+	check(Notices() == before + 1, "one posted since comes in, even before the launch's hour")
+	-- The app's catch-up on disk from the beta lists the beta characters' keys by name: none is taken, or one
 	-- would hold the name's live key out for days (the app's word on a name wins over a hello's while it's fresh)
 	local realClock = clock
-	clock = ns.LAUNCH_AT + 600
+	clock = ns.LAUNCH_AT - 60
 	local betaKey, liveKey = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopA", "QRSTUVWXYZabcdefghijklmnopABCDEFGHIJKLMNOPA"
 	ns.db.keys["Kept Name"] = nil
-	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey, t = ns.LAUNCH_AT - 86400 } }, ns.LAUNCH_AT - 3600)
-	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey } }, ns.LAUNCH_AT - 3600)
-	check(not ns.KeyBook:HasKeys("Kept Name"), "a catch-up written before launch binds none of the beta's keys")
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey, t = ns.BETA_CLOSED_AT - 86400 } }, ns.BETA_CLOSED_AT - 3600)
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey } }, ns.BETA_CLOSED_AT - 3600)
+	check(not ns.KeyBook:HasKeys("Kept Name"), "a catch-up written in the beta binds none of the beta's keys")
 	ns.KeyBook:FromHello({ k = liveKey, g = "Player-9-01F3E2" }, "Kept Name")
 	check(ns.KeyBook:Find("Kept Name", ns.Crypto:KeyId(ns.Crypto:FromBase64(liveKey))), "so the live character's key is learned from its hello")
 	ns.db.keys["Kept Name"] = nil
-	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-01F3E2", k = liveKey, t = ns.LAUNCH_AT + 60 } }, ns.LAUNCH_AT + 300)
-	check(ns.KeyBook:HasKeys("Kept Name"), "a key the server took after launch is taken")
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-01F3E2", k = liveKey, t = ns.LAUNCH_AT - 3600 } }, ns.LAUNCH_AT - 300)
+	check(ns.KeyBook:HasKeys("Kept Name"), "a key the server took since the beta closed is taken")
 	ns.db.keys["Kept Name"], clock = nil, realClock
 	ns.VERSION, ns.WORLD = realVersion, "beta"
 	clock = clock + 61 -- the channel's budget for this minute back for what follows

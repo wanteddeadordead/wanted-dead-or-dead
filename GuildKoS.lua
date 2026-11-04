@@ -256,9 +256,9 @@ local function cleanText(value, maxLen)
 end
 
 ---Whether a change's time is a number no further ahead of the server's clock than MAX_AHEAD. In the live world one from
----before launch is the beta's: the server keeps guilds' lists by name, so it would bring a beta guild's list back.
+---before the beta closed is the beta's: the server keeps guilds' lists by name, so it would bring a beta guild's list back.
 function private.Dated(t)
-	return type(t) == "number" and t <= GetServerTime() + MAX_AHEAD and (Wanted.WORLD ~= "live" or t >= Wanted.LAUNCH_AT)
+	return type(t) == "number" and t <= GetServerTime() + MAX_AHEAD and (Wanted.WORLD ~= "live" or t >= Wanted.BETA_CLOSED_AT)
 end
 
 ---An entry from a message, cleaned, or nil if it's malformed.

@@ -230,10 +230,11 @@ a player keeps their beta name. Other players' chains start at the base.
 In the live world nothing from a release before 1.29.0 (`Wanted.FIRST_LIVE_VERSION`), or from a message that names no
 version, is taken in (`Wanted:IsBetaRelease`): such a player is still on the beta's chains and bounties. On the
 channel they are told to update and the rest of the message is dropped, chains they hold included; over Battle.net
-they are not a bridge. A bounty notice posted before launch, a guild Kill on Sight change dated before launch (the
-server keeps guilds' lists by name, the beta's too), a signing key the server took before launch (a beta character's
-under the name, which would hold the live character's key out while the app's list is fresh) and a catch-up written
-before launch are the beta's and are left out.
+they are not a bridge. Anything dated before the beta closed (`Wanted.BETA_CLOSED_AT`, 2026-10-24 00:00 UTC; the beta
+servers closed 2026-10-23 at about 17:00 UTC) is the beta's and is left out: a bounty notice, a guild Kill on Sight
+change (the server keeps guilds' lists by name, the beta's too), a signing key the server took (a beta character's
+under the name, which would hold the live character's key out while the app's list is fresh) and a catch-up. The cut
+is the beta's close and not `LAUNCH_AT`, so realms that open early lose nothing.
 
 Chain restarts (from the release after 1.20.0): a client that has no saved chain of its own (a first install, or saved
 data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since

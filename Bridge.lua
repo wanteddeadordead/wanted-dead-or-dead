@@ -686,10 +686,10 @@ function private.Receive(notice, senderID)
 		Wanted:Log("!! Bridge: rejected a malformed bounty notice")
 		return
 	end
-	-- In the live world one posted before launch is a beta bounty
-	if Wanted.WORLD == "live" and notice.t < Wanted.LAUNCH_AT then
+	-- In the live world one posted before the beta closed is a beta bounty
+	if Wanted.WORLD == "live" and notice.t < Wanted.BETA_CLOSED_AT then
 		private.stats.skipped = private.stats.skipped + 1
-		Wanted:Log("Bridge: a bounty notice from before launch (the beta's); left out")
+		Wanted:Log("Bridge: a bounty notice from before the beta closed (the beta's); left out")
 		return
 	end
 	private.stats.noticesReceived = private.stats.noticesReceived + 1

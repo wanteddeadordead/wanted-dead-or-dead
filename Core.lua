@@ -28,6 +28,9 @@ Wanted.DB_VERSION = 3
 Wanted.WORLD = "live"
 -- WoW Forever's launch (2026-11-04 15:00 PST): the live world's data starts then
 Wanted.LAUNCH_AT = 1793833200
+-- The beta servers closed 2026-10-23 at about 17:00 UTC (the last beta record). In the live world anything dated before
+-- 2026-10-24 00:00 UTC is the beta's; anything since is live, so realms that open before LAUNCH_AT lose nothing.
+Wanted.BETA_CLOSED_AT = 1792800000
 -- The first release for the live world. One before it still holds the beta's characters, chains, keys and bounties
 -- (a player who hasn't updated): in the live world nothing it sends is taken in (Wanted:IsBetaRelease).
 Wanted.FIRST_LIVE_VERSION = "1.29.0"

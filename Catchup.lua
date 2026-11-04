@@ -165,9 +165,9 @@ function Catchup:Import()
 		Wanted:Log("Catch-up: already taken in")
 		return
 	end
-	-- In the live world, one the app wrote before launch holds the beta's records and notices: none of them come in
-	if Wanted.WORLD == "live" and entry.t < Wanted.LAUNCH_AT then
-		Wanted:Log("Catch-up: written before launch, so its records and notices are the beta's; left out")
+	-- In the live world, one the app wrote before the beta closed holds the beta's records and notices: none of them come in
+	if Wanted.WORLD == "live" and entry.t < Wanted.BETA_CLOSED_AT then
+		Wanted:Log("Catch-up: written before the beta closed, so its records and notices are the beta's; left out")
 		Wanted.db.catchupT = entry.t
 		return
 	end

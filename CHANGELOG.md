@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-04
+
+- WoW Forever is live, and this is Wanted's release for the live realms. Update before you log in.
+- The first time you log in with 1.29.0, the beta's data on your computer is cleared, once: records, bounties, the players and enemies you saw, sightings, your Kill on Sight and Ignore lists, the guilds you marked Kill on Sight, and guild Kill on Sight lists. Your settings stay, and so do your link to the website and the app.
+- The beta season stays on wanteddeadordead.com under past seasons. Season 1 starts at launch and nothing from the beta counts in it. Everyone who played Wanted in the beta keeps the Founding Hunter badge.
+- Players still on 1.28 or older are told to update, and nothing they share reaches you until they do: they are still on the beta's records and bounties.
+
 ## [1.28.1] - 2026-10-23
 
 - War and race points on the minimap: in the zone you are in, a war's towers, inhibitors and keep and tonight's race points show as small seals in the world map's colours, hidden in instances. On by default; Settings, map section, "War and race points on the minimap", or the Wanted button's menu on the world map. New file: restart the client after updating.

@@ -8173,6 +8173,15 @@ end)()
 	check(f.art._shown and tostring(f.art._texture):find("Media\\cards\\ach%-founding%-hunter%-emblem$") and f.body._text:find("archived", 1, true),
 		"the Founding Hunter crest above 1.17.1's note, and the launch paragraph")
 	f.ok:Click()
+	-- 1.29.0, the launch: the move to the live world keeps what's new seen, so a player who saw 1.28.0 gets 1.29.0's
+	-- notes and not the pinned 1.17.1 note again
+	ns.db.whatsNewSeen = "1.28.0"
+	ns.VERSION = "1.29.0"
+	Fire("LOADING_SCREEN_DISABLED")
+	RunTimers()
+	check(N:IsShown() and f.title._text == "What's new in Wanted 1.29.0" and f.body._text:find("WoW Forever is live", 1, true)
+		and not f.body._text:find("First, I want to thank", 1, true) and not f.body._text:find("Guild wars are here", 1, true), "the launch's notes, and only those")
+	f.ok:Click()
 	ns.VERSION = "1.16.0-dev"
 	-- In a fight it waits
 	ns.db.whatsNewSeen = "1.15.0"
@@ -16517,15 +16526,14 @@ end)()
 	check(poker and poker._point[1] == "BOTTOMLEFT" and safety._point[1] == "BOTTOMLEFT" and poker._point[3] == safety._point[3] + safety._h,
 		"Poker sits at the foot of the menu, directly above Safety: "..tostring(poker and poker._point[3]).." over "..tostring(safety and safety._point[3]))
 end)()
--- What's new 1.28.0 is signed in the maintainer's words: the sign-off is the note's last line, with no author line
--- under it; older notes keep theirs
+-- What's new 1.29.0, the launch, takes the default sign-off: the maintainers' line under the note
 ;(function()
 	local N = ns.WhatsNew
 	N:Show()
 	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
 	local text = body and body._text or ""
 	local note = ns.WHATS_NEW[1]
-	check(note.version == "1.28.0" and note.signed == nil and not text:find("aka", 1, true), "1.28.0's note uses the default sign-off")
+	check(note.version == "1.29.0" and note.signed == nil and not text:find("aka", 1, true), "1.29.0's note uses the default sign-off")
 	check(text:find("The maintainers of Wanted", 1, true), "with the maintainers' line under it")
 	_G.WantedWhatsNewFrame:Hide()
 end)()

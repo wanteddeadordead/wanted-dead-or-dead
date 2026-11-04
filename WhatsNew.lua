@@ -16,6 +16,19 @@ local private = {}
 -- who hasn't seen it, under the newest notes, even when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.29.0",
+		art = "ach-founding-hunter-emblem",
+		note = "WoW Forever is live, and so is Wanted. Your first login with this version clears the beta's data from your "
+			.."computer, once, and keeps your settings.",
+		lines = {
+			"Cleared once: records, bounties, enemies seen, Kill on Sight, Ignore and guild Kill on Sight lists.",
+			"Kept: your settings, and your link to the website and the app.",
+			"Season 1 starts now. The beta season stays on wanteddeadordead.com under past seasons.",
+			"Everyone who played Wanted in the beta keeps the Founding Hunter badge.",
+			"Players on older versions are asked to update. What they share reaches you once they do.",
+		},
+	},
+	{
 		version = "1.28.0",
 		note = "Thank you to everyone who helped test Wanted during the beta. Your bug reports, screenshots and ideas "
 			.."made this release. The beta ends on Friday, October 23, and this is the last beta release.\n\n"

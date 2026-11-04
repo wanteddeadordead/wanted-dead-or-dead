@@ -499,6 +499,10 @@ end
 Fire("ADDON_LOADED", "WantedDeadOrDead_Poker")
 Fire("PLAYER_LOGIN")
 RunTimers()
+-- This release is for the live game (Core.lua), and logs in there. The suite's hand-made records number their chains
+-- from 1, as in the beta, so it runs as the beta; each live-world rule is tested with ns.WORLD = "live" around it.
+assert(ns.WORLD == "live" and ns.db.world == "live", "this release logs in to the live world")
+ns.WORLD = "beta"
 
 local W = ns.Widgets
 local lastDialog
@@ -1320,41 +1324,88 @@ WantedDB = { records = {} }
 ns:LoadSavedData()
 check(WantedDB.version == ns.DB_VERSION and ns.db == WantedDB, "a table without a layout number loads as layout 1")
 -- Layout 2 (1.4.0): a channel 1.3.x moved to, with its password, is dropped, and remembered once to be left
-WantedDB = { version = 1, syncChannel = { e = 3, n = "WantedNetHordefsvltx", p = "wnt1", t = 5 }, homeCheck = { wait = 3600, tried = 9, home = 1 },
+WantedDB = { world = "live", version = 1, syncChannel = { e = 3, n = "WantedNetHordefsvltx", p = "wnt1", t = 5 }, homeCheck = { wait = 3600, tried = 9, home = 1 },
 	settings = { channelMoves = false } }
 ns:LoadSavedData()
 check(WantedDB.version == ns.DB_VERSION and WantedDB.syncChannel == nil and WantedDB.oldSyncChannel == "WantedNetHordefsvltx", "a 1.3.x channel is dropped on the upgrade")
 check(WantedDB.homeCheck.wait == 300 and WantedDB.homeCheck.home == nil and WantedDB.settings.channelMoves == nil
 	and WantedDB.syncChannelState.mainRefused == false and WantedDB.syncChannelState.epoch == 0, "with the main channel's tries and state starting afresh")
-WantedDB = { version = 1, syncChannel = { e = 4, n = "WantedNetHorde", p = "wnt1", t = 5 } }
+WantedDB = { world = "live", version = 1, syncChannel = { e = 4, n = "WantedNetHorde", p = "wnt1", t = 5 } }
 ns:LoadSavedData()
 check(WantedDB.syncChannel == nil and WantedDB.oldSyncChannel == nil, "a 1.3.x move back to the main channel is dropped, with nothing to leave")
 -- Layout 3 (1.19.0): what a signature check found is kept outside the records; sv and pre a 1.18 client stored with
 -- records (it kept whatever a peer's fill carried) are cleared
-WantedDB = { version = 2, records = { ["A:1"] = { kind = "confirm", data = {}, sv = true, pre = true }, ["A:2"] = { kind = "kill", data = {}, sv = false } } }
+WantedDB = { world = "live", version = 2, records = { ["A:1"] = { kind = "confirm", data = {}, sv = true, pre = true }, ["A:2"] = { kind = "kill", data = {}, sv = false } } }
 ns:LoadSavedData()
 check(WantedDB.version == 3 and WantedDB.records["A:1"].sv == nil and WantedDB.records["A:1"].pre == nil and WantedDB.records["A:2"].sv == nil
 	and WantedDB.records["A:1"].kind == "confirm" and next(WantedDB.sigChecked) == nil and next(WantedDB.sigPre) == nil, "sv and pre are cleared from held records")
 do
--- The launch: beta data keeps only its settings when the live world starts
-check(ns.WORLD == "beta", "this release is for the beta")
-WantedDB = { version = 1, settings = { minBounty = 500 }, welcomed = true, accountMark = "Mark123456789012", records = { ["A:1"] = {} }, kos = { g = {} },
-	ignore = { g = {} }, players = { g = {} }, chains = { A = {} }, tracks = { g = {} }, enemyStats = { g = {} } }
-ns:LoadSavedData()
-check(WantedDB.world == "beta" and next(WantedDB.records) and next(WantedDB.kos), "the beta keeps its data")
+-- The launch (1.29.0): a beta save loaded by the live release keeps the player's settings and drops everything that
+-- belonged to the beta's characters: records and chains, bounties, players, sightings, Kill on Sight (players, guilds,
+-- guild lists and imports waiting), Ignore, keys and the rest. A second load changes nothing, and live data is never
+-- dropped.
 ns.WORLD = "live"
-ns:LoadSavedData()
-check(WantedDB.world == "live" and WantedDB.settings.minBounty == 500 and WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012",
-	"the live world keeps settings and the account mark")
-local function empty(t) return t == nil or next(t) == nil end
-check(empty(WantedDB.records) and empty(WantedDB.kos) and empty(WantedDB.ignore) and empty(WantedDB.players)
-	and empty(WantedDB.chains) and empty(WantedDB.tracks) and empty(WantedDB.enemyStats), "and drops the beta's data")
-WantedDB.records = WantedDB.records or {}
-WantedDB.records["B:1"] = {}
-ns:LoadSavedData()
-check(WantedDB.records["B:1"], "live data is never dropped again")
+local function BetaSave()
+	return { version = ns.DB_VERSION, welcomed = true, accountMark = "Mark123456789012", devLog = { "a line" }, tour = { seen = true, done = true },
+		settings = { minBounty = 500, uiScale = 1.2, theme = "ember", detect = { alerts = "important", sound = false }, nearby = { sort = "nearest" },
+			ranks = { chat = true }, minimap = { angle = 90, hide = true } },
+		records = { ["Beta Guy:5"] = { kind = "bounty", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, data = {} } },
+		chains = { ["Beta Guy"] = { seq = 5, lastHash = "x" } }, players = { ["Player-9-BETA"] = { name = "Beta Foe" } },
+		sightings = { { g = "Player-9-BETA" } }, sightingsPos = { ["Player-9-BETA"] = { x = 1 } },
+		kos = { ["Player-9-BETA"] = { name = "Beta Foe" } }, kosGuilds = { ["Beta Gankers"] = { reason = "r" } },
+		kosPending = { ["beta foe"] = { name = "Beta Foe" } }, ignore = { ["Player-9-PAL"] = { name = "Beta Pal" } },
+		guildKos = { ["Horde:beta guild"] = { guild = "Beta Guild", settings = { enabled = true, t = 5 }, entries = { a = { name = "Beta Foe", t = 5 } } } },
+		enemyStats = { ["Player-9-BETA"] = { wins = 3 } }, tracks = { g = {} }, raids = { r = {} }, duels = { d = {} },
+		signing = { seed = string.rep("a", 64), source = "local", pub = { ["Beta Me"] = "pk" } }, keys = { ["Beta Guy"] = { list = {} } },
+		sigChecked = { ["Beta Guy:5"] = true }, sigPre = { ["Beta Guy:5"] = true }, catchupT = 1790000000, whatsNewSeen = "1.28.0",
+		requiredVersion = { version = "1.28.1", seen = 1, votes = 3 }, versionVotes = { ["1.28"] = {} }, addonVersions = { Old = { v = "1.28.1", t = 1 } },
+		cardPicks = { a = 1 }, hkBook = { a = 1 }, myPvp = { a = 1 }, warActions = { a = 1 }, presence = { a = 1 }, bountyRequests = { a = {} } }
 end
+WantedDB = BetaSave()
+ns:LoadSavedData()
+local s = WantedDB.settings
+check(WantedDB.world == "live" and s.minBounty == 500 and s.uiScale == 1.2 and s.theme == "ember" and s.detect.alerts == "important"
+	and s.detect.sound == false and s.nearby.sort == "nearest" and s.ranks.chat == true and s.minimap.angle == 90 and s.minimap.hide == true,
+	"the live world keeps the player's settings")
+check(WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012" and WantedDB.devLog[1] == "a line" and WantedDB.tour.done,
+	"and the welcome, the first steps done, the account mark (the app's link) and the debug log")
+check(s.detect.inSight == 60 and s.nearby.kos == true, "settings the beta save lacked get their defaults")
+local function empty(t) return t == nil or next(t) == nil end
+for _, key in ipairs({ "records", "chains", "players", "sightings", "sightingsPos", "kos", "kosGuilds", "kosPending", "ignore", "guildKos",
+	"enemyStats", "tracks", "raids", "duels", "keys", "sigChecked", "sigPre", "versionVotes", "addonVersions", "cardPicks", "hkBook", "myPvp",
+	"warActions", "presence", "bountyRequests" }) do
+	check(empty(WantedDB[key]), "the beta's "..key.." are dropped")
+end
+check(WantedDB.signing.seed == nil and empty(WantedDB.signing.pub) and WantedDB.catchupT == nil and WantedDB.whatsNewSeen == nil
+	and WantedDB.requiredVersion == nil, "with the beta's signing seed, the catch-up time, the version lock and what's new seen (1.29.0's shows)")
+-- A second load is the live world's: nothing changes, and what live play adds stays
+local function Copy(t) if type(t) ~= "table" then return t end local c = {} for k, v in pairs(t) do c[k] = Copy(v) end return c end
+local function Same(a, b)
+	if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+	for k, v in pairs(a) do if not Same(v, b[k]) then return false end end
+	for k in pairs(b) do if a[k] == nil then return false end end
+	return true
+end
+WantedDB.records = WantedDB.records or {}
+WantedDB.records["Live Guy:265000001"] = { kind = "kill", id = "Live Guy:265000001", origin = "Live Guy", seq = 265000001, data = {} }
+WantedDB.kos["Player-9-LIVE"] = { name = "Live Foe" }
+WantedDB.ignore["Player-9-LIVEPAL"] = { name = "Live Pal" }
+local before = Copy(WantedDB)
+ns:LoadSavedData()
+check(Same(before, WantedDB), "a second load changes nothing")
+check(WantedDB.records["Live Guy:265000001"] and WantedDB.kos["Player-9-LIVE"] and WantedDB.ignore["Player-9-LIVEPAL"], "live data is never dropped")
+-- A save with no world at all is the beta's (every release before the marker); a fresh install starts in the live world
+WantedDB = BetaSave()
+WantedDB.world = "beta"
+ns:LoadSavedData()
+check(WantedDB.world == "live" and empty(WantedDB.records) and WantedDB.settings.minBounty == 500, "a save marked beta is dropped the same way")
+local wasFresh = ns.freshInstall
+WantedDB, ns.freshInstall = nil, nil
+ns:LoadSavedData()
+check(WantedDB.world == "live" and ns.freshInstall, "a fresh install starts in the live world")
+ns.freshInstall = wasFresh
 ns.WORLD = "beta"
+end
 WantedDB = realDB
 ns:LoadSavedData()
 check(ns.db == realDB, "back on the real data")

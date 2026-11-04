@@ -24,8 +24,8 @@ Wanted.BETA = false
 -- The saved data layout. Bump it only together with an upgrade step in MIGRATIONS (see docs/DATA.md).
 Wanted.DB_VERSION = 3
 -- Which game world the saved data belongs to. The first time a release for the live game loads beta data,
--- it keeps the settings and drops the rest (docs/DATA.md). The launch release sets this to "live".
-Wanted.WORLD = "beta"
+-- it keeps the settings and drops the rest (docs/DATA.md). From 1.29.0, the launch release, it is "live".
+Wanted.WORLD = "live"
 -- WoW Forever's launch (2026-11-04 15:00 PST): the live world's data starts then
 Wanted.LAUNCH_AT = 1793833200
 
@@ -280,8 +280,9 @@ function Wanted:LoadSavedData()
 	private.CheckRequiredUpdate(db)
 end
 
--- What survives the move from the beta to the live game: the player's settings, not the beta's characters
-local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, accountMark = true, devLog = true }
+-- What survives the move from the beta to the live game: the player's settings, not the beta's characters. Kill on
+-- Sight and Ignore (kos, kosGuilds, kosPending, guildKos, ignore) are the beta's characters too, and go.
+local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, tour = true, accountMark = true, devLog = true }
 
 local MARK_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 

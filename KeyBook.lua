@@ -81,8 +81,9 @@ function KeyBook:FromApp(list, at)
 		if k and type(entry.n) == "string" and #entry.n <= MAX_NAME_BYTES and type(entry.g) == "string" and strfind(entry.g, GUID_PATTERN) then
 			local book = Wanted.db.keys[entry.n]
 			local t = type(entry.t) == "number" and entry.t or at
-			-- A key the owner reset away before the server heard of the reset
-			if not (book and book.resetAt and t < book.resetAt) then
+			-- A key the owner reset away before the server heard of the reset, or in the live world one the server took
+			-- before launch: a beta character's under the name, which would hold the live one's key out (Bind)
+			if not (book and book.resetAt and t < book.resetAt) and not (Wanted.WORLD == "live" and t < Wanted.LAUNCH_AT) then
 				origins[entry.n] = true
 				private.Bind(entry.n, k, entry.g, "app", at)
 			end

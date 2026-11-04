@@ -9241,6 +9241,21 @@ end)()
 	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wlive1", ns.LAUNCH_AT + 60), "WHISPER", 101)
 	RunTimers()
 	check(Notices() == before + 1, "one posted after launch comes in")
+	-- The app's catch-up on disk from before launch lists the beta characters' keys by name: none is taken, or one
+	-- would hold the name's live key out for days (the app's word on a name wins over a hello's while it's fresh)
+	local realClock = clock
+	clock = ns.LAUNCH_AT + 600
+	local betaKey, liveKey = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopA", "QRSTUVWXYZabcdefghijklmnopABCDEFGHIJKLMNOPA"
+	ns.db.keys["Kept Name"] = nil
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey, t = ns.LAUNCH_AT - 86400 } }, ns.LAUNCH_AT - 3600)
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey } }, ns.LAUNCH_AT - 3600)
+	check(not ns.KeyBook:HasKeys("Kept Name"), "a catch-up written before launch binds none of the beta's keys")
+	ns.KeyBook:FromHello({ k = liveKey, g = "Player-9-01F3E2" }, "Kept Name")
+	check(ns.KeyBook:Find("Kept Name", ns.Crypto:KeyId(ns.Crypto:FromBase64(liveKey))), "so the live character's key is learned from its hello")
+	ns.db.keys["Kept Name"] = nil
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-01F3E2", k = liveKey, t = ns.LAUNCH_AT + 60 } }, ns.LAUNCH_AT + 300)
+	check(ns.KeyBook:HasKeys("Kept Name"), "a key the server took after launch is taken")
+	ns.db.keys["Kept Name"], clock = nil, realClock
 	ns.VERSION, ns.WORLD = realVersion, "beta"
 	clock = clock + 61 -- the channel's budget for this minute back for what follows
 end)()

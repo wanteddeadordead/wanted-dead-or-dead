@@ -232,9 +232,10 @@ version, is taken in (`Wanted:IsBetaRelease`): such a player is still on the bet
 channel they are told to update and the rest of the message is dropped, chains they hold included; over Battle.net
 they are not a bridge. Anything dated before the beta closed (`Wanted.BETA_CLOSED_AT`, 2026-10-24 00:00 UTC; the beta
 servers closed 2026-10-23 at about 17:00 UTC) is the beta's and is left out: a bounty notice, a guild Kill on Sight
-change (the server keeps guilds' lists by name, the beta's too), a signing key the server took (a beta character's
-under the name, which would hold the live character's key out while the app's list is fresh) and a catch-up. The cut
-is the beta's close and not `LAUNCH_AT`, so realms that open early lose nothing.
+change (the server keeps guilds' lists by name, the beta's too) and a catch-up. The cut is the beta's close and not
+`LAUNCH_AT`, so realms that open early lose nothing. A signing key from the app's catch-up is the beta's when the
+server took it before `LAUNCH_AT` (beta apps uploaded after the beta closed): a beta character's key under the name
+would hold the live character's key out while the app's list is fresh.
 
 Chain restarts (from the release after 1.20.0): a client that has no saved chain of its own (a first install, or saved
 data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since

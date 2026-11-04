@@ -9252,17 +9252,21 @@ end)()
 	-- The app's catch-up on disk from the beta lists the beta characters' keys by name: none is taken, or one
 	-- would hold the name's live key out for days (the app's word on a name wins over a hello's while it's fresh)
 	local realClock = clock
-	clock = ns.LAUNCH_AT - 60
+	clock = ns.LAUNCH_AT + 600
 	local betaKey, liveKey = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopA", "QRSTUVWXYZabcdefghijklmnopABCDEFGHIJKLMNOPA"
 	ns.db.keys["Kept Name"] = nil
 	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey, t = ns.BETA_CLOSED_AT - 86400 } }, ns.BETA_CLOSED_AT - 3600)
 	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey } }, ns.BETA_CLOSED_AT - 3600)
 	check(not ns.KeyBook:HasKeys("Kept Name"), "a catch-up written in the beta binds none of the beta's keys")
+	-- The gate is when the server took the key, and a beta app's late upload reached it after the beta closed: before
+	-- the launch, it's the beta's
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-0BE7A1", k = betaKey, t = ns.BETA_CLOSED_AT + 2 * 86400 } }, ns.LAUNCH_AT + 60)
+	check(not ns.KeyBook:HasKeys("Kept Name"), "nor a key a beta app uploaded after the beta closed, before the launch")
 	ns.KeyBook:FromHello({ k = liveKey, g = "Player-9-01F3E2" }, "Kept Name")
 	check(ns.KeyBook:Find("Kept Name", ns.Crypto:KeyId(ns.Crypto:FromBase64(liveKey))), "so the live character's key is learned from its hello")
 	ns.db.keys["Kept Name"] = nil
-	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-01F3E2", k = liveKey, t = ns.LAUNCH_AT - 3600 } }, ns.LAUNCH_AT - 300)
-	check(ns.KeyBook:HasKeys("Kept Name"), "a key the server took since the beta closed is taken")
+	ns.KeyBook:FromApp({ { n = "Kept Name", g = "Player-9-01F3E2", k = liveKey, t = ns.LAUNCH_AT + 60 } }, ns.LAUNCH_AT + 300)
+	check(ns.KeyBook:HasKeys("Kept Name"), "a key the server took after the launch is taken")
 	ns.db.keys["Kept Name"], clock = nil, realClock
 	ns.VERSION, ns.WORLD = realVersion, "beta"
 	clock = clock + 61 -- the channel's budget for this minute back for what follows

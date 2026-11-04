@@ -303,10 +303,11 @@ function private.NewAccountMark()
 end
 
 ---Drops the beta's data the first time a release for the live game loads it, keeping the settings (decided
----with the maintainer 2026-09-26 for the launch reset). Data saved in the live world is never touched.
+---with the maintainer 2026-09-26 for the launch reset). Data saved in the live world is never touched: liveSince
+---says it was, as world alone can't (a beta release, rolled back to, writes world = "beta" over it).
 function private.EnterWorld(db)
 	local saved = db.world or "beta"
-	if saved == "beta" and Wanted.WORLD ~= "beta" then
+	if saved == "beta" and Wanted.WORLD ~= "beta" and not db.liveSince then
 		for key in pairs(db) do
 			if not KEPT_FOR_NEW_WORLD[key] then
 				db[key] = nil
@@ -314,6 +315,9 @@ function private.EnterWorld(db)
 		end
 	end
 	db.world = Wanted.WORLD
+	if Wanted.WORLD == "live" and type(db.liveSince) ~= "number" then
+		db.liveSince = GetServerTime()
+	end
 end
 
 ---Whether this session is running without saving because the saved data came from a newer version.

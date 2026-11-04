@@ -219,7 +219,9 @@ missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for
 `welcomed`, `tour`, `whatsNewSeen`, `accountMark` and `devLog` and drops everything else: records, chains, bounties,
 players, sightings, Kill on Sight (`kos`, `kosGuilds`, `kosPending`, `guildKos`), Ignore, keys, the signing seed and
 the rest belong to beta characters that no longer exist. A local signing seed is made again; the app's comes back
-through `accountMark`. Live data is never dropped this way, and a second load changes nothing. The network keeps the
+through `accountMark`. Live data is never dropped this way, and a second load changes nothing. `WantedDB.liveSince`
+(from 1.29.0) is when the save first loaded in the live world: a beta release rolled back to writes `world = "beta"`
+over a live save, and `liveSince` keeps the next live load from dropping it. The network keeps the
 beta's records (the beta season stays browsable on the website), so in the live world every record chain counts
 from 1,000,000 (`Store:SeqBase()`), and a record numbered at or under that is refused as the beta's. A character's
 own chain starts at the clock's number (below), past every beta id, which the server would refuse as a conflict when
@@ -229,8 +231,9 @@ In the live world nothing from a release before 1.29.0 (`Wanted.FIRST_LIVE_VERSI
 version, is taken in (`Wanted:IsBetaRelease`): such a player is still on the beta's chains and bounties. On the
 channel they are told to update and the rest of the message is dropped, chains they hold included; over Battle.net
 they are not a bridge. A bounty notice posted before launch, a guild Kill on Sight change dated before launch (the
-server keeps guilds' lists by name, the beta's too) and a catch-up written before launch are the beta's and are left
-out.
+server keeps guilds' lists by name, the beta's too), a signing key the server took before launch (a beta character's
+under the name, which would hold the live character's key out while the app's list is fresh) and a catch-up written
+before launch are the beta's and are left out.
 
 Chain restarts (from the release after 1.20.0): a client that has no saved chain of its own (a first install, or saved
 data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since

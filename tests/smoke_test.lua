@@ -1399,6 +1399,13 @@ WantedDB = BetaSave()
 WantedDB.world = "beta"
 ns:LoadSavedData()
 check(WantedDB.world == "live" and empty(WantedDB.records) and WantedDB.settings.minBounty == 500, "a save marked beta is dropped the same way")
+-- A live save that a 1.28 session marked "beta" again (a rollback: 1.28 writes its own world) was live first, and keeps
+-- everything when 1.29 loads it
+WantedDB.records = { ["Live Guy:265000001"] = { kind = "kill" } }
+WantedDB.kos["Player-9-LIVE"] = { name = "Live Foe" }
+WantedDB.world = "beta"
+ns:LoadSavedData()
+check(WantedDB.world == "live" and WantedDB.liveSince and (WantedDB.records or {})["Live Guy:265000001"] and WantedDB.kos["Player-9-LIVE"], "a live save marked beta by a rollback keeps its data")
 local wasFresh = ns.freshInstall
 WantedDB, ns.freshInstall = nil, nil
 ns:LoadSavedData()

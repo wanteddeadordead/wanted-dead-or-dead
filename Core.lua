@@ -28,6 +28,9 @@ Wanted.DB_VERSION = 3
 Wanted.WORLD = "live"
 -- WoW Forever's launch (2026-11-04 15:00 PST): the live world's data starts then
 Wanted.LAUNCH_AT = 1793833200
+-- The first release for the live world. One before it still holds the beta's characters, chains, keys and bounties
+-- (a player who hasn't updated): in the live world nothing it sends is taken in (Wanted:IsBetaRelease).
+Wanted.FIRST_LIVE_VERSION = "1.29.0"
 
 local DEFAULTS = {
 	version = Wanted.DB_VERSION,
@@ -517,6 +520,14 @@ function Wanted:ParseVersion(version)
 		stage, pre = 2, tonumber(beta)
 	end
 	return { tonumber(major), tonumber(minor), tonumber(patch), stage, pre }
+end
+
+---Whether a message saying it came from this version is, in the live world, from a beta release: one before
+---FIRST_LIVE_VERSION, or one that says no version. Never in the beta.
+---@param version any
+---@return boolean
+function Wanted:IsBetaRelease(version)
+	return Wanted.WORLD == "live" and (not Wanted:ParseVersion(version) or Wanted:IsNewerVersion(Wanted.FIRST_LIVE_VERSION, version))
 end
 
 ---Whether a version is a release (tagged and published) rather than a development build ("-dev"). Only

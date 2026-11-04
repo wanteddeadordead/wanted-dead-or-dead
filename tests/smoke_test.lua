@@ -9182,6 +9182,59 @@ end)()
 	ns.WORLD = "beta"
 	S:FreshStart()
 end)()
+-- The launch: in the live world a player still on a release from before it (1.28 on the live realms, on the beta's
+-- chains and bounties) is told to update and nothing it says is taken in: not its records, not what it holds (asking
+-- for that would ask every beta client on the channel), and nothing from a message that names no version. Over
+-- Battle.net it isn't a bridge, and no bridge's notice of a bounty posted before launch comes in.
+;(function()
+	local realVersion = ns.VERSION
+	ns.VERSION, ns.WORLD = "1.29.0", "live"
+	check(ns:IsBetaRelease("1.28.1") and ns:IsBetaRelease("1.28.1-dev") and ns:IsBetaRelease(nil) and ns:IsBetaRelease("junk")
+		and not ns:IsBetaRelease("1.29.0") and not ns:IsBetaRelease("1.29.0-dev") and not ns:IsBetaRelease("1.30.2"), "a release before 1.29.0, or none named, is the beta's")
+	ns.WORLD = "beta"
+	check(not ns:IsBetaRelease("1.28.1") and not ns:IsBetaRelease(nil), "never in the beta")
+	ns.WORLD = "live"
+	local function Asked(origin)
+		for _, m in ipairs(Sent("CHANNEL")) do
+			if m.tag == "N" and type(m.tbl.n) == "table" and m.tbl.n[origin] then return true end
+		end
+		return false
+	end
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { v = "1.28.1", c = { ["Kept Name"] = 265000123 } }), "CHANNEL", "Beta Holdout")
+	RunTimers()
+	local told = false
+	for _, m in ipairs(Sent("WHISPER", "Beta Holdout")) do told = told or m.tag == "U" end
+	check(told and not Asked("Kept Name"), "a 1.28 client is told to update, and the beta chain it holds isn't asked for")
+	local record = Sealed({ kind = "mark", id = "Beta Holdout:265000124", origin = "Beta Holdout", seq = 265000124, prev = "0", t = clock, data = { target = "Player-9-HOLD" } })
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("R", { v = "1.28.1", r = { record } }), "CHANNEL", "Beta Holdout")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("S", { s = { { g = "Player-9-NOVER", n = "No Version", z = "Durotar", m = 1, x = 1, y = 1 } } }), "CHANNEL", "Nameless")
+	RunTimers()
+	check(not ns.Store:Get(record.id) and ns.Store:GetPlayer("Player-9-NOVER") == nil, "nor its records, nor a message naming no version")
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { v = "1.29.0", c = { ["Live Name"] = 266000001 } }), "CHANNEL", "Live Player")
+	RunTimers()
+	check(Asked("Live Name"), "a live release's chains are asked for")
+	-- Battle.net: a 1.28 friend on the other faction isn't a bridge, and nothing it sends comes in
+	local function Notices() local n = 0 for _ in ns.Store:Iterator("notice") do n = n + 1 end return n end
+	local before = Notices()
+	local function Bridges() return tonumber(ns.Bridge:Status():match("^Bridge: (%d+) players") or 0) end
+	local bridges = Bridges()
+	local function Notice(b, t) return ns.Sync:Encode({ k = "N", n = { { b = b, g = "Player-1-LAUNCHNOTE", n = "Launch Note", a = 5000, t = t } } }) end
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "1.28.1" }), "WHISPER", 101)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wbeta1", ns.LAUNCH_AT + 60), "WHISPER", 101)
+	RunTimers()
+	check(Notices() == before and Bridges() == bridges - 1, "a 1.28 friend isn't a bridge and its notices aren't taken: "..ns.Bridge:Status())
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", ns.Sync:Encode({ k = "A", v = "1.29.0" }), "WHISPER", 101)
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wbeta2", ns.LAUNCH_AT - 60), "WHISPER", 101)
+	RunTimers()
+	check(Notices() == before and Bridges() == bridges, "once updated it's a bridge, but a bounty posted before launch is the beta's")
+	Fire("BN_CHAT_MSG_ADDON", "WNTDB", Notice("wlive1", ns.LAUNCH_AT + 60), "WHISPER", 101)
+	RunTimers()
+	check(Notices() == before + 1, "one posted after launch comes in")
+	ns.VERSION, ns.WORLD = realVersion, "beta"
+	clock = clock + 61 -- the channel's budget for this minute back for what follows
+end)()
 -- Our own chain, started fresh (lost saved data, a new PC), counts from a number the server's clock gives, not from
 -- the base: our old records are still on the network, and the server keeps the first record under an id, so a chain
 -- starting at the base again lost everything it made under the old ids. A chain we have goes on as it was; other

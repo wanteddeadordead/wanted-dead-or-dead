@@ -18,6 +18,7 @@ local Sync = Wanted.Sync
 local private = {
 	frame = CreateFrame("Frame"),
 	bridges = {}, -- gameAccountID -> { faction, character, since, version, parts }
+	betaSenders = {}, -- gameAccountID -> true: said it runs a release from before the live game (Wanted:IsBetaRelease)
 	targets = {}, -- gameAccountID -> { game, account, source } online on the other faction, from the last scan
 	runners = {}, -- Battle.net account id -> { version, parts } that answered as a bridge this session
 	pushedAt = {}, -- Battle.net account id -> when its notices were last pushed on appearing
@@ -543,6 +544,13 @@ function private.OnMessage(text, senderID)
 		return
 	end
 	if tbl.k == TAG_HELLO or tbl.k == TAG_ANSWER then
+		-- In the live world a release from before it holds the beta's bounties: not a bridge, and nothing it sends is taken
+		private.betaSenders[senderID] = Wanted:IsBetaRelease(tbl.v) or nil
+		if private.betaSenders[senderID] then
+			Wanted:Log("Bridge: %s runs Wanted %s, from before the live game; left out", tostring(game.characterName), tostring(tbl.v))
+			private.bridges[senderID] = nil
+			return
+		end
 		local isNew = not private.bridges[senderID]
 		-- f: reads messages in parts
 		local parts = tbl.f == 1
@@ -558,6 +566,8 @@ function private.OnMessage(text, senderID)
 			Wanted:Log("Bridge: %s (%s) runs Wanted %s", tostring(game.characterName), tostring(game.factionName), tostring(tbl.v))
 			private.SendBacklog(senderID)
 		end
+	elseif private.betaSenders[senderID] then
+		return
 	elseif tbl.k == TAG_NOTICES and type(tbl.n) == "table" then
 		for _, notice in ipairs(tbl.n) do
 			private.Receive(notice, senderID)
@@ -674,6 +684,12 @@ function private.Receive(notice, senderID)
 		or (notice.p ~= nil and not ValidText(notice.p, 16)) then
 		private.stats.skipped = private.stats.skipped + 1
 		Wanted:Log("!! Bridge: rejected a malformed bounty notice")
+		return
+	end
+	-- In the live world one posted before launch is a beta bounty
+	if Wanted.WORLD == "live" and notice.t < Wanted.LAUNCH_AT then
+		private.stats.skipped = private.stats.skipped + 1
+		Wanted:Log("Bridge: a bounty notice from before launch (the beta's); left out")
 		return
 	end
 	private.stats.noticesReceived = private.stats.noticesReceived + 1

@@ -2064,6 +2064,11 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			return
 		end
 	end
+	-- In the live world a release from before it is still on the beta's chains: told to update (above), and nothing it
+	-- says is taken in, not even what it holds (asking for those records would ask every beta client on the channel)
+	if Wanted:IsBetaRelease(tbl.v) then
+		return
+	end
 	-- Waiting for an update: take nothing in until this client can read what newer versions write
 	if Wanted:GetRequiredUpdate() then
 		return

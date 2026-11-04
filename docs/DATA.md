@@ -214,14 +214,23 @@ so a `/reload` still knows the logging is Wanted's to turn off; logging the play
 Both are new keys with defaults, so no migration.
 
 `WantedDB.world` (from 1.1.0) says which game world the data belongs to: `"beta"` (also assumed when it's
-missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for. The first time a release for
-the live game loads beta data, it keeps `settings` (and `welcomed`) and drops everything else: records,
-bounties, players, Kill on Sight, Ignore, chains, sightings and the rest belong to beta characters that no
-longer exist. Live data is never dropped this way. The network keeps the beta's records (the beta season stays
-browsable on the website), so in the live world every record chain counts from 1,000,000 (`Store:SeqBase()`):
-a character's first live record is `Name:1000001`, never the id of one of its beta records, which the server
-would refuse as a conflict when a player keeps their beta name. Other players' chains start at the same base, so
-their first live record follows on with nothing to ask for.
+missing) or `"live"`. `Wanted.WORLD` in `Core.lua` is the world a release is for; from 1.29.0 (the launch,
+2026-11-04) it is `"live"`. The first time a release for the live game loads beta data, it keeps `settings`,
+`welcomed`, `tour`, `whatsNewSeen`, `accountMark` and `devLog` and drops everything else: records, chains, bounties,
+players, sightings, Kill on Sight (`kos`, `kosGuilds`, `kosPending`, `guildKos`), Ignore, keys, the signing seed and
+the rest belong to beta characters that no longer exist. A local signing seed is made again; the app's comes back
+through `accountMark`. Live data is never dropped this way, and a second load changes nothing. The network keeps the
+beta's records (the beta season stays browsable on the website), so in the live world every record chain counts
+from 1,000,000 (`Store:SeqBase()`), and a record numbered at or under that is refused as the beta's. A character's
+own chain starts at the clock's number (below), past every beta id, which the server would refuse as a conflict when
+a player keeps their beta name. Other players' chains start at the base.
+
+In the live world nothing from a release before 1.29.0 (`Wanted.FIRST_LIVE_VERSION`), or from a message that names no
+version, is taken in (`Wanted:IsBetaRelease`): such a player is still on the beta's chains and bounties. On the
+channel they are told to update and the rest of the message is dropped, chains they hold included; over Battle.net
+they are not a bridge. A bounty notice posted before launch, a guild Kill on Sight change dated before launch (the
+server keeps guilds' lists by name, the beta's too) and a catch-up written before launch are the beta's and are left
+out.
 
 Chain restarts (from the release after 1.20.0): a client that has no saved chain of its own (a first install, or saved
 data lost to a reinstall or a new PC) starts it at `(GetServerTime() - 1767225600) * 10`, ten numbers a second since

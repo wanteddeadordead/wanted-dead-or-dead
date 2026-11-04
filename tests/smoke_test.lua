@@ -4854,6 +4854,21 @@ end)()
 	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = clock + 2 ^ 53, by = "Office Rman" },
 		entries = { farAhead } } })
 	check(G:Current().settings.enabled and G:Match("Player-9-0FA2") == nil, "the server's copy dated far ahead is refused too")
+	-- The live world: the server keeps guilds' lists by name, the beta's too, so a copy dated before launch is the beta's
+	-- and never comes back (the launch dropped every list). One changed after launch is taken.
+	ns.WORLD = "live"
+	local realClock = clock
+	local betaEntry, liveEntry = {}, {}
+	for k, v in pairs(listed) do betaEntry[k], liveEntry[k] = v, v end
+	betaEntry.guid, betaEntry.name, betaEntry.at, betaEntry.t = "Player-9-0BE7A", "Beta Foe", clock, clock
+	clock = ns.LAUNCH_AT + 3600
+	liveEntry.guid, liveEntry.name, liveEntry.at, liveEntry.t = "Player-9-01FE", "Live Foe", clock - 60, clock - 60
+	G:TakeServer({ { guild = "Blood Oath", settings = { enabled = false, mode = "open", rank = 4, t = realClock + 50, by = "Office Rman" }, entries = { betaEntry } } })
+	check(G:Current().settings.enabled and G:Match("Player-9-0BE7A") == nil, "in the live world the server's beta copy of the list is refused")
+	G:TakeServer({ { guild = "Blood Oath", entries = { liveEntry } } })
+	check(G:Match("Player-9-01FE"), "and one made after launch is taken")
+	G:Current().entries[G.EntryId("player", "Player-9-01FE")] = nil
+	clock, ns.WORLD = realClock, "beta"
 	local farAhead = {}
 	for k, v in pairs(listed) do farAhead[k] = v end
 	farAhead.guid, farAhead.name, farAhead.t = "Player-9-0FA2", "Far Ahead", clock + 2 ^ 53

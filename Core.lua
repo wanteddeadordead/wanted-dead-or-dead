@@ -284,8 +284,10 @@ function Wanted:LoadSavedData()
 end
 
 -- What survives the move from the beta to the live game: the player's settings, not the beta's characters. Kill on
--- Sight and Ignore (kos, kosGuilds, kosPending, guildKos, ignore) are the beta's characters too, and go.
-local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, tour = true, accountMark = true, devLog = true }
+-- Sight and Ignore (kos, kosGuilds, kosPending, guildKos, ignore) are the beta's characters too, and go. What's new
+-- seen stays, so the update shows the launch's notes and not again every pinned one already read.
+local KEPT_FOR_NEW_WORLD = { version = true, settings = true, welcomed = true, tour = true, whatsNewSeen = true,
+	accountMark = true, devLog = true }
 
 local MARK_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 

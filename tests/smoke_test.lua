@@ -1367,8 +1367,8 @@ local s = WantedDB.settings
 check(WantedDB.world == "live" and s.minBounty == 500 and s.uiScale == 1.2 and s.theme == "ember" and s.detect.alerts == "important"
 	and s.detect.sound == false and s.nearby.sort == "nearest" and s.ranks.chat == true and s.minimap.angle == 90 and s.minimap.hide == true,
 	"the live world keeps the player's settings")
-check(WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012" and WantedDB.devLog[1] == "a line" and WantedDB.tour.done,
-	"and the welcome, the first steps done, the account mark (the app's link) and the debug log")
+check(WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012" and WantedDB.devLog[1] == "a line" and WantedDB.tour.done
+	and WantedDB.whatsNewSeen == "1.28.0", "and the welcome, the first steps done, what's new seen, the account mark (the app's link) and the debug log")
 check(s.detect.inSight == 60 and s.nearby.kos == true, "settings the beta save lacked get their defaults")
 local function empty(t) return t == nil or next(t) == nil end
 for _, key in ipairs({ "records", "chains", "players", "sightings", "sightingsPos", "kos", "kosGuilds", "kosPending", "ignore", "guildKos",
@@ -1376,8 +1376,8 @@ for _, key in ipairs({ "records", "chains", "players", "sightings", "sightingsPo
 	"warActions", "presence", "bountyRequests" }) do
 	check(empty(WantedDB[key]), "the beta's "..key.." are dropped")
 end
-check(WantedDB.signing.seed == nil and empty(WantedDB.signing.pub) and WantedDB.catchupT == nil and WantedDB.whatsNewSeen == nil
-	and WantedDB.requiredVersion == nil, "with the beta's signing seed, the catch-up time, the version lock and what's new seen (1.29.0's shows)")
+check(WantedDB.signing.seed == nil and empty(WantedDB.signing.pub) and WantedDB.catchupT == nil and WantedDB.requiredVersion == nil,
+	"with the beta's signing seed, the catch-up time and the version lock")
 -- A second load is the live world's: nothing changes, and what live play adds stays
 local function Copy(t) if type(t) ~= "table" then return t end local c = {} for k, v in pairs(t) do c[k] = Copy(v) end return c end
 local function Same(a, b)

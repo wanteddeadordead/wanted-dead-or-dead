@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-11-04
+
+- The Wanted Battle.net group was lost with the beta, so there is a new one: join it from Settings (Sharing and display) or `/wanted community` (blizzard.com/invite/ZxKoEx3h9aV). It carries bounty notices and the fight layer between Horde and Alliance.
+
 ## [1.29.0] - 2026-11-04
 
 - WoW Forever is live, and this is Wanted's release for the live realms. Update before you log in.

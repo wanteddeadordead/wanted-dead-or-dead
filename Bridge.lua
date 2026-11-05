@@ -66,7 +66,7 @@ local MAX_TARGETS = 20
 local PUSH_SECONDS = 10 * 60 -- a bridge that comes back is sent the current notices at most this often
 -- The Wanted Battle.net community ("Wanted: Dead or... Dead"): its online members on the other faction are bridges
 -- too, as friends are. 0 turns it off. /wanted community lists the communities you're in, with their ids.
-local WANTED_CLUB_ID = 23053871
+local WANTED_CLUB_ID = 503871241
 -- Enum.ClubMemberPresence: in the game (Online, Away, Busy), not OnlineMobile (the phone app)
 local PRESENCE_IN_GAME = { [1] = true, [4] = true, [5] = true }
 -- Enum.PvPFaction
@@ -80,7 +80,7 @@ local ALERT_GATHER_SECONDS = 2 -- notices arriving together (a login's catch-up)
 -- The community in use (a field so the tests can set one)
 Bridge.clubId = WANTED_CLUB_ID
 -- Its invite link (never expires): shown in Settings and by /wanted community
-Bridge.INVITE_URL = "https://blizzard.com/invite/A33mYmik4b"
+Bridge.INVITE_URL = "https://blizzard.com/invite/ZxKoEx3h9aV"
 
 ---Values the game hides from addons for now (in a chat lockdown) can't be read or compared.
 local function IsSecret(value)

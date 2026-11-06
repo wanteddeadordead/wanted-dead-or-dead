@@ -17598,6 +17598,20 @@ end
 	for _, f in ipairs(Mock.created) do if rawget(f, "holder") and rawget(f, "lanes") and rawget(f, "crest") and f._shown and rawget(f, "now") then plate = f end end
 	check(plate and plate.holder._text == "Held by <Revenant>" and plate.now._text:find("EMPIRE attacks · 18:19 left", 1, true) and plate.lanes._text == "Top down · Mid 50% · keep open",
 		"the plate: the holder, the war's clock and the lanes: "..tostring(plate and plate.lanes._text))
+	-- The plates shrink on the windowed map and fade under the cursor
+	do
+		local container = plate:GetParent()
+		local function Scale(w) container._w = w ns.WarMap:Refresh() return plate._scale end
+		check(Scale(702) == 0.702 and Scale(400) == 0.6 and Scale(1600) == 1, "the plate scales with the map canvas, 0.6 to 1: "..tostring(plate._scale))
+		plate._mouseOver = true
+		plate._scripts.OnUpdate(plate, 0.2)
+		check(plate._alpha == 0.15, "the cursor over the plate fades it")
+		plate._mouseOver = false
+		plate._scripts.OnUpdate(plate, 0.05)
+		check(plate._alpha == 0.15, "the fade is checked every tenth of a second, not every frame")
+		plate._scripts.OnUpdate(plate, 0.1)
+		check(plate._alpha == 1, "the plate comes back when the cursor leaves")
+	end
 	local realSet, realPoint, set = C_Map.SetUserWaypoint, UiMapPoint, nil
 	C_Map.SetUserWaypoint = function(p) set = p return true end
 	UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { uiMapID = m, position = { x = x, y = y } } end }
@@ -17733,7 +17747,7 @@ end
 		for _, f in ipairs(Mock.created) do
 			if rawget(f, "kills") and rawget(f, "holder") and rawget(f, "busy") and f._shown then plate = f end
 		end
-		check(plate and plate.kills._text:find("Kills in the last hour: 1 (Horde 1, Alliance 0)", 1, true) and plate.kills._text:find("Horde ahead", 1, true),
+		check(plate and plate.kills._text:find("1 kill this hour  ·  Horde 1, Alliance 0", 1, true) and plate.kills._text:find("Horde ahead", 1, true),
 			"Current stats on: the zone map's plate has the kills and who is ahead: "..tostring(plate and plate.kills._text))
 		WorldMapFrame.GetMapID = function() return 1414 end
 		ns.StatsMap:SetShown(false)

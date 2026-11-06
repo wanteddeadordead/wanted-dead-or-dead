@@ -706,6 +706,31 @@ end
 -- The plate on a war zone's map
 -- ============================================================================
 
+local PLATE_FULL_WIDTH, PLATE_MIN_SCALE, PLATE_FADED, PLATE_POLL = 1000, 0.6, 0.15, 0.1
+
+---A plate's scale for a canvas container of this width: full size from PLATE_FULL_WIDTH up, 0.6 at the smallest.
+function private.PlateScale(width)
+	return min(1, max(PLATE_MIN_SCALE, (width or PLATE_FULL_WIDTH) / PLATE_FULL_WIDTH))
+end
+
+---Size a plate to the map's canvas (the windowed map is about 700 wide, the full-screen map over 1000).
+function private.ScalePlate(plate)
+	local container = plate:GetParent()
+	plate:SetScale(private.PlateScale(container and container:GetWidth()))
+end
+
+---Fade a plate while the cursor is over it, so the map and the pins under it show. Polls only while it is shown.
+function private.FadeOnHover(plate)
+	local since = 0
+	plate:SetScript("OnUpdate", function(self, elapsed)
+		since = since + elapsed
+		if since < PLATE_POLL then return end
+		since = 0
+		self:SetAlpha(self:IsMouseOver() and PLATE_FADED or 1)
+	end)
+	plate:SetScript("OnHide", function(self) self:SetAlpha(1) end)
+end
+
 function private.BuildPlate()
 	local container = WorldMapFrame.GetCanvasContainer and WorldMapFrame:GetCanvasContainer() or WorldMapFrame
 	local plate = CreateFrame("Frame", nil, container)
@@ -730,6 +755,7 @@ function private.BuildPlate()
 		GameTooltip:Show()
 	end)
 	plate:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	private.FadeOnHover(plate)
 	private.plate = plate
 	return plate
 end
@@ -738,6 +764,7 @@ function private.ShowPlate(zone, now)
 	local plate = private.plate or private.BuildPlate()
 	private.plateZone = zone
 	private.FillPlate(zone, now)
+	private.ScalePlate(plate)
 	plate:Show()
 end
 
@@ -815,6 +842,7 @@ function private.BuildStatsPlate()
 	plate.busy:SetPoint("TOPLEFT", 12, -44)
 	plate.busy:SetWidth(356)
 	plate.busy:SetWordWrap(false)
+	private.FadeOnHover(plate)
 	private.statsPlate = plate
 	return plate
 end
@@ -826,10 +854,15 @@ function private.ShowStatsPlate(zone, now)
 	local lines = Wanted.StatsMap:Lines(stats)
 	local color = Wanted.StatsMap:Color(stats)
 	plate.dot:SetVertexColor(color[1], color[2], color[3], 1)
-	local kills = stats.kills > 0 and { lines[2][1].."  ·  "..lines[3][1], C.text } or lines[2]
+	local kills = lines[2]
+	if stats.kills > 0 then
+		kills = { format("%d kill%s this hour  ·  Horde %d, Alliance %d  ·  %s", stats.kills, stats.kills == 1 and "" or "s", stats.Horde, stats.Alliance,
+			stats.ahead and (stats.ahead.." ahead") or "even"), C.text }
+	end
 	for field, line in pairs({ holder = lines[1], kills = kills, busy = lines[#lines] }) do
 		plate[field]:SetText(line[1])
 		plate[field]:SetTextColor(line[2][1], line[2][2], line[2][3])
 	end
+	private.ScalePlate(plate)
 	plate:Show()
 end

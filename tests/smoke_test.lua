@@ -17409,6 +17409,18 @@ end
 	end)
 	local closedCells = ShownCells()
 	check(closedCells[paris + 5 * 1800] and not closedCells[paris + 5 * 1800].open and not closedCells[paris + 4 * 1800].open and closedCells[paris + 3 * 1800].open, "a closed cell is closed on the server's grid too")
+	-- A set time with no starts (already scheduled, or an older server): no Eastern grid to pick from
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.state, war.start = "awaiting_answer", paris + 4 * 1800 end)
+	local setCells, setCount = ShownCells(), 0
+	for _ in pairs(setCells) do setCount = setCount + 1 end
+	check(setCount == 0 and not ns.GuildWars:Wars()[1].time.slots, "a set time without starts: no fallback grid")
+	-- Starts far from the draw (1, 2^40, a year out) never reach the page
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = { 1, 2 ^ 40, paris + 400 * 86400, paris, paris + 1800 } end)
+	local nearTime = ns.GuildWars:Wars()[1].time
+	check(#nearTime.slots == 1 and #nearTime.slots[1] == 2 and nearTime.slots[1][1] == paris, "starts beyond 30 days of the draw are dropped")
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.drawAt = nil; war.starts = { 1, 2 ^ 40, paris } end)
+	local nowTime = ns.GuildWars:Wars()[1].time
+	check(#nowTime.slots == 1 and #nowTime.slots[1] == 1, "without a draw time, within 30 days of now")
 	ns.db.warActions = {}
 	-- Time, the attackers: the time set, accept or withdraw (with a confirm)
 	local start = G:EasternAt(clock, 1, 19 * 3600)

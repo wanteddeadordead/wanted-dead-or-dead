@@ -193,6 +193,10 @@ Mock.fontStrings = {} -- every font string made, so tests can find text on scree
 function Methods:CreateFontString() local t = NewMock("FontString") t._parent = self Mock.fontStrings[#Mock.fontStrings + 1] = t return t end
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 function CreateFont() return NewMock("Font") end
+function Methods:SetFontHeight(height) self._fontHeight = height end
+-- The client's event bus, before the addon loads: Theme registers for Text Size changes at load
+TextSizeCallbacks = {}
+EventRegistry = { RegisterCallback = function(_, event, fn, owner) TextSizeCallbacks[event] = function(...) return fn(owner, ...) end end }
 UIParent, Minimap, GameTooltip, DEFAULT_CHAT_FRAME, MailFrame = NewMock(), NewMock(), NewMock(), NewMock(), NewMock()
 MailFrame._shown = false
 local printed = {}
@@ -6947,6 +6951,28 @@ end)()
 		"the font family: Inter SemiBold for Latin and Cyrillic: "..tostring(files.roman).." / "..tostring(files.russian))
 	check(files.korean == "Fonts\\2002.TTF" and files.simplifiedchinese == "Fonts\\ARKai_T.ttf" and files.traditionalchinese == "Fonts\\blei00d.TTF",
 		"and the client's fonts for Korean and Chinese")
+	-- Text Size: every Wanted font is its base height times the client's scale, at least 0.8, and 1 without the manager
+	local Theme = ns.Theme
+	local function Heights()
+		local out = {}
+		for key, font in pairs(Theme.Fonts) do out[key] = font._fontHeight end
+		return out
+	end
+	check(Theme.Fonts.body._fontHeight == 13 and Theme.Fonts.display._fontHeight == 19, "without a Text Size manager the fonts keep their base height")
+	local callback = TextSizeCallbacks["TextSizeManager.OnTextScaleUpdated"]
+	check(callback, "Theme listens for the client's Text Size event")
+	_G.TextSizeManager = { GetScale = function(_, scale) return math.max(scale or 0.8571, 0.8) end }
+	Theme:ApplyTextScale()
+	local h = Heights()
+	check(math.abs(h.body - 13 * 0.8571) < 1e-6 and math.abs(h.display - 19 * 0.8571) < 1e-6 and math.abs(h.title - 22 * 0.8571) < 1e-6,
+		"the fonts follow the Text Size setting: body "..tostring(h.body))
+	callback(0.5)
+	check(math.abs(Theme.Fonts.body._fontHeight - 13 * 0.8) < 1e-6, "and stop at 0.8")
+	callback(1.2)
+	check(math.abs(Theme.Fonts.stat._fontHeight - 24) < 1e-6, "and grow with the event's scale")
+	_G.TextSizeManager = nil
+	callback(1.2)
+	check(Theme.Fonts.body._fontHeight == 13, "and return to base when the manager is gone")
 	for _, name in ipairs({ "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-OFL.txt" }) do
 		local f = io.open(ADDON.."Media/fonts/"..name, "rb")
 		check(f, "the font ships: Media/fonts/"..name)

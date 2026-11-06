@@ -107,22 +107,22 @@ end
 function private.RefreshDefend(panel, war, ctx)
 	panel.war, panel.ctx = war, ctx
 	local t = type(war.time) == "table" and war.time or {}
-	local evenings = type(t.evenings) == "table" and t.evenings or {}
+	local slots = type(t.slots) == "table" and t.slots or {}
 	local pending = Data:Pending("time", war.id)
 	local set = tonumber(t.start) or (pending and pending.data.start)
 	panel.state.canPick = ctx.officer and not ctx.looking and not tonumber(t.start)
 	panel.state.picked = panel.state.picked or set
 	for i = 1, SLOTS do
-		local start = type(evenings[1]) == "number" and evenings[1] + (i - 1) * 1800 or nil
+		local start = type(slots[1]) == "table" and tonumber(slots[1][i]) or nil
 		panel.times[i]:SetText(start and gsub(GuildWars:Clock(start), " [AP]M$", "") or "")
 		local _, race = start and private.Cell(t, start)
 		panel.raceMarks[i]:SetShown(race ~= nil)
 	end
 	for d = 1, EVENINGS do
-		local base = type(evenings[d]) == "number" and evenings[d] or nil
-		panel.days[d]:SetText(base and date("%a %d %b", base) or "")
+		local evening = type(slots[d]) == "table" and slots[d] or nil
+		panel.days[d]:SetText(evening and evening[1] and date("%a %d %b", evening[1]) or "")
 		for i, cell in ipairs(panel.cells[d]) do
-			local start = base and base + (i - 1) * 1800 or nil
+			local start = evening and tonumber(evening[i]) or nil
 			cell:SetShown(start ~= nil)
 			if start then
 				local closed, race = private.Cell(t, start)

@@ -76,7 +76,7 @@ Tour.SETS.first = {
 		text = "When declaring closes, the site draws one declaring guild. Each guild's chance follows its share of the influence and its stake. The seed is published, so anyone can check the draw on the site.\n\n"
 			.."A guild that isn't drawn gets its stake back." },
 	{ title = "The time", page = "war1", mark = { "warbar", "warpanel-time" }, sample = "time",
-		text = "The holders pick the war's time: a half-hour start between 6 PM and midnight Eastern, on one of the next two evenings. This is the holders' side. The attackers then accept or withdraw, and a withdrawal returns their stake.\n\n"
+		text = "The holders pick the war's time: a half-hour start in your region's evening (6:00 to 11:30 PM), on one of the next two evenings. This is the holders' side. The attackers then accept or withdraw, and a withdrawal returns their stake.\n\n"
 			.."If the holders pick nothing within 12 hours of the draw, the war starts at 8 PM the next evening." },
 	{ title = "The roster", page = "war1", mark = { "warbar", "warpanel-roster" }, sample = "roster",
 		text = "Each guild picks up to 40 players. Only the roster takes and holds points. Players sign up first; the officers pick from the sign-ups, keep some on standby, and can invite allies from another guild of the same side.\n\n"

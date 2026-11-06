@@ -231,6 +231,9 @@ local FONT_FILES = {
 	{ "traditionalchinese", "Fonts\\blei00d.TTF" },
 }
 
+-- Wanted's font objects with the height each was made at, so Text Size (Options > Accessibility) can scale them
+local baseHeights = {}
+
 ---A font covering every alphabet the client ships, at a size and with optional flags ("OUTLINE").
 ---@param weight string? "semibold" for titles, labels and buttons; Medium otherwise
 function Theme:MakeFont(name, size, color, flags, weight)
@@ -248,6 +251,7 @@ function Theme:MakeFont(name, size, color, flags, weight)
 		font = CreateFont(name)
 		font:SetFont(roman, size, flags or "")
 	end
+	baseHeights[font] = size
 	font:SetShadowOffset(1, -1)
 	font:SetShadowColor(0, 0, 0, 0.85)
 	if color then
@@ -277,10 +281,40 @@ Theme.Fonts = {
 do
 	local display = CreateFont("WantedFontDisplay")
 	display:SetFont("Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\Rye.ttf", 19, "")
+	baseHeights[display] = 19
 	display:SetShadowOffset(1, -1)
 	display:SetShadowColor(0, 0, 0, 0.9)
 	display:SetTextColor(C.text[1], C.text[2], C.text[3])
 	Theme.Fonts.display = display
+end
+
+---The player's Text Size as the client applies it (Blizzard_AccessibilityTemplates/TextSizeManager.lua: the setting,
+---at least 0.8); 1 without the manager.
+---@param scale number? the scale the client's event passed
+---@return number
+function Theme:TextScale(scale)
+	local manager = _G.TextSizeManager
+	if type(manager) ~= "table" or not manager.GetScale then
+		return 1
+	end
+	local ok, value = pcall(manager.GetScale, manager, scale)
+	return ok and tonumber(value) or 1
+end
+
+---Sets every Wanted font to its base height times the Text Size, as the client does for its own fonts. Blizzard's
+---snapshot of font objects is taken before Wanted loads, so these do not follow the setting by themselves.
+---@param scale number? the scale the client's event passed
+function Theme:ApplyTextScale(scale)
+	scale = Theme:TextScale(scale)
+	for font, base in pairs(baseHeights) do
+		font:SetFontHeight(base * scale)
+	end
+end
+Theme:ApplyTextScale()
+if _G.EventRegistry and _G.EventRegistry.RegisterCallback then
+	_G.EventRegistry:RegisterCallback("TextSizeManager.OnTextScaleUpdated", function(_, scale)
+		Theme:ApplyTextScale(scale)
+	end, Theme)
 end
 
 -- Sizes (Settings): the main window, the Nearby window and the HUDs each have one, in percent

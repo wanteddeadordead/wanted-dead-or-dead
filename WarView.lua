@@ -290,8 +290,9 @@ function private.ServerEvenings(w)
 		return nil
 	end
 	local starts, seen = {}, {}
+	local around = type(w.drawAt) == "number" and w.drawAt or time()
 	for _, value in ipairs(w.starts) do
-		if type(value) == "number" and value > 0 and value < math.huge and not seen[value] and #starts < 48 then
+		if type(value) == "number" and abs(value - around) <= 30 * 86400 and not seen[value] and #starts < 48 then
 			seen[value] = true
 			tinsert(starts, value)
 		end
@@ -320,7 +321,7 @@ function private.Time(w, others)
 		withdrawn = w.answer == "withdraw" or w.state == "withdrawn", races = {}, closed = {} }
 	t.slots = private.ServerEvenings(w)
 	local fromServer = t.slots ~= nil
-	if not t.slots and type(w.drawAt) == "number" then
+	if not t.slots and type(w.start) ~= "number" and type(w.drawAt) == "number" then
 		t.slots = {}
 		for day = 1, 2 do
 			local base = GuildWars:EasternAt(w.drawAt, day, 18 * HOUR)

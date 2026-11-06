@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - The zone stats box and the war box on the world map are smaller on the windowed map and fade while your cursor is over them, so they no longer hide the map. The stats box's kills line is shorter and no longer cut off.
+- Wanted's text now follows the game's Text Size setting (Options > Accessibility), like the rest of the interface.
+- The Poker page's table card no longer draws its blinds and seats line under the Invite box.
 
 ## [1.29.1] - 2026-11-04
 

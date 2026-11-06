@@ -283,15 +283,63 @@ function private.Draw(w, faction)
 	return { at = w.drawAt, drawn = true, seed = w.seed, secret = w.secret, declarers = declarers }
 end
 
----The Time step: the two evenings to pick from (6 PM ET, the two days after the draw's), the default start, and the
----starts closed by the guild's other war that day (two wars at least an hour apart).
+---The server's start grid for a war awaiting its time: the numbers in `w.starts` (at most 48, sorted, no repeats)
+---grouped into evenings (a gap of more than an hour starts a new one), or nil when it sent none.
+function private.ServerEvenings(w)
+	if type(w.starts) ~= "table" then
+		return nil
+	end
+	local starts, seen = {}, {}
+	for _, value in ipairs(w.starts) do
+		if type(value) == "number" and value > 0 and value < math.huge and not seen[value] and #starts < 48 then
+			seen[value] = true
+			tinsert(starts, value)
+		end
+	end
+	if #starts == 0 then
+		return nil
+	end
+	table.sort(starts)
+	local evenings = {}
+	for _, value in ipairs(starts) do
+		local last = evenings[#evenings]
+		if last and value - last[#last] <= HOUR then
+			tinsert(last, value)
+		else
+			tinsert(evenings, { value })
+		end
+	end
+	return evenings
+end
+
+---The Time step: the evenings to pick from (the server's starts when it sends them, else 6 PM ET on the two days after
+---the draw's), the default start, and the starts closed by the guild's other war that day (two wars at least an hour
+---apart). `slots` is each evening's starts; `evenings` the first start of each.
 function private.Time(w, others)
 	local t = { deadline = w.timeDeadline, start = w.start, accepted = w.answer == "accept",
 		withdrawn = w.answer == "withdraw" or w.state == "withdrawn", races = {}, closed = {} }
-	if type(w.drawAt) == "number" then
-		t.evenings = { GuildWars:EasternAt(w.drawAt, 1, 18 * HOUR), GuildWars:EasternAt(w.drawAt, 2, 18 * HOUR) }
+	t.slots = private.ServerEvenings(w)
+	local fromServer = t.slots ~= nil
+	if not t.slots and type(w.drawAt) == "number" then
+		t.slots = {}
+		for day = 1, 2 do
+			local base = GuildWars:EasternAt(w.drawAt, day, 18 * HOUR)
+			local evening = {}
+			for slot = 1, 12 do
+				evening[slot] = base + (slot - 1) * 1800
+			end
+			tinsert(t.slots, evening)
+		end
 	end
-	if type(w.timeDeadline) == "number" then
+	if t.slots then
+		t.evenings = {}
+		for i, evening in ipairs(t.slots) do
+			t.evenings[i] = evening[1]
+		end
+	end
+	if fromServer and type(w.defaultStart) == "number" and w.defaultStart > 0 and w.defaultStart < math.huge then
+		t.defaultStart = w.defaultStart
+	elseif type(w.timeDeadline) == "number" then
 		local at = GuildWars:EasternAt(w.timeDeadline, 0, 20 * HOUR)
 		t.defaultStart = at > w.timeDeadline and at or GuildWars:EasternAt(w.timeDeadline, 1, 20 * HOUR)
 	end
@@ -300,9 +348,8 @@ function private.Time(w, others)
 			if type(w.start) == "number" and GuildWars:EasternAt(other.start, 0, 0) == GuildWars:EasternAt(w.start, 0, 0) then
 				t.otherWar = other.zone
 			end
-			for _, base in ipairs(t.evenings or {}) do
-				for slot = 0, 11 do
-					local start = base + slot * 1800
+			for _, evening in ipairs(t.slots or {}) do
+				for _, start in ipairs(evening) do
 					if abs(start - other.start) < HOUR then
 						tinsert(t.closed, { start = start, reason = format("Your war in %s starts %s.", other.zone or "?", GuildWars:Clock(other.start)) })
 					end

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Guild wars in Europe are fought on Europe's evening: the war time page offers Europe's half hours when the website sends them.
+
 ## [1.29.1] - 2026-11-04
 
 - The Wanted Battle.net group was lost with the beta, so there is a new one: join it from Settings (Sharing and display) or `/wanted community` (blizzard.com/invite/ZxKoEx3h9aV). It carries bounty notices and the fight layer between Horde and Alliance.

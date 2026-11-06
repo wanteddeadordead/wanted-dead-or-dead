@@ -17370,6 +17370,58 @@ end
 	set._scripts.OnClick(set)
 	check(G:Pending("time", "7") and G:Pending("time", "7").data.start == evening + 3600, "Set asks the site")
 	ns.db.warActions = {}
+	-- Time, the defenders, on the server's grid: two Paris evenings of 12 half hours, grouped by evening, the default from
+	-- defaultStart; bad input falls back to (or is filtered out of) the grid
+	local paris = clock + 5 * 86400
+	local function ParisStarts() local list = {} for d = 0, 1 do for i = 0, 11 do list[#list + 1] = paris + d * 86400 + i * 1800 end end return list end
+	local function ShownCells()
+		local shown = {}
+		for _, f in ipairs(Mock.created) do if rawget(f, "start") and rawget(f, "tick") and f._shown then shown[f.start] = f end end
+		return shown
+	end
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts, war.defaultStart = ParisStarts(), paris + 86400 + 4 * 1800 end)
+	local serverCells, serverCount = ShownCells(), 0
+	for _ in pairs(serverCells) do serverCount = serverCount + 1 end
+	check(serverCount == 24 and serverCells[paris] and serverCells[paris + 86400 + 11 * 1800] and not serverCells[evening], "the server's starts: 24 cells on its evenings, not the Eastern ones")
+	check(OnScreen("If no pick") and OnScreen(os.date("%a ", paris + 86400 + 4 * 1800)..ns.GuildWars:Clock(paris + 86400 + 4 * 1800)), "the default start comes from defaultStart")
+	local viewWar = ns.GuildWars:Wars()[1]
+	check(#viewWar.time.slots == 2 and #viewWar.time.slots[1] == 12 and viewWar.time.slots[2][1] == paris + 86400, "the starts are grouped in two evenings")
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = { paris, paris + 1800, paris + 86400 } end)
+	local shortCells, shortCount = ShownCells(), 0
+	for _ in pairs(shortCells) do shortCount = shortCount + 1 end
+	check(shortCount == 3 and shortCells[paris + 86400], "an evening with fewer starts draws just those")
+	for _, bad in ipairs({ "nope", { "a", "b" }, { 0 / 0 }, {} }) do
+		AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = bad end)
+		local fallbackCells = ShownCells()
+		check(fallbackCells[evening] and fallbackCells[evening + 86400 + 11 * 1800] and not fallbackCells[paris], "bad starts: the Eastern grid")
+	end
+	local many = {}
+	for i = 1, 60 do many[i] = paris + (i - 1) * 1800 end
+	many[#many + 1] = "x"
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = many end)
+	local manyTime = ns.GuildWars:Wars()[1].time
+	local kept = 0
+	for _, evening in ipairs(manyTime.slots) do kept = kept + #evening end
+	check(kept == 48, "more than 48 starts: the first 48 numbers only")
+	AtStep(function(war, s)
+		war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = ParisStarts()
+		s.wars[2] = { id = 8, zone = "Wetlands", side = "attack", attacker = "EMPIRE", defender = "Tea Party", state = "scheduled", stake = 300, start = paris + 5 * 1800 }
+	end)
+	local closedCells = ShownCells()
+	check(closedCells[paris + 5 * 1800] and not closedCells[paris + 5 * 1800].open and not closedCells[paris + 4 * 1800].open and closedCells[paris + 3 * 1800].open, "a closed cell is closed on the server's grid too")
+	-- A set time with no starts (already scheduled, or an older server): no Eastern grid to pick from
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.state, war.start = "awaiting_answer", paris + 4 * 1800 end)
+	local setCells, setCount = ShownCells(), 0
+	for _ in pairs(setCells) do setCount = setCount + 1 end
+	check(setCount == 0 and not ns.GuildWars:Wars()[1].time.slots, "a set time without starts: no fallback grid")
+	-- Starts far from the draw (1, 2^40, a year out) never reach the page
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.starts = { 1, 2 ^ 40, paris + 400 * 86400, paris, paris + 1800 } end)
+	local nearTime = ns.GuildWars:Wars()[1].time
+	check(#nearTime.slots == 1 and #nearTime.slots[1] == 2 and nearTime.slots[1][1] == paris, "starts beyond 30 days of the draw are dropped")
+	AtStep(function(war) war.side, war.attacker, war.defender = "defend", "Revenant", "EMPIRE"; war.drawAt = nil; war.starts = { 1, 2 ^ 40, paris } end)
+	local nowTime = ns.GuildWars:Wars()[1].time
+	check(#nowTime.slots == 1 and #nowTime.slots[1] == 1, "without a draw time, within 30 days of now")
+	ns.db.warActions = {}
 	-- Time, the attackers: the time set, accept or withdraw (with a confirm)
 	local start = G:EasternAt(clock, 1, 19 * 3600)
 	AtStep(function(war)

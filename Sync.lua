@@ -26,6 +26,7 @@ local private = {
 	partial = {}, -- sender..msgId -> { sender, parts = {}, total, count, t }
 	outbox = {}, -- channel messages waiting to go: { tag, parts, next, priority, queued, refusals }
 	outboxParts = 0, -- parts still to send in outbox
+	sinceFill = 0, -- channel parts sent since the last part of a fill
 	tokens = 0, -- channel parts we may send now (refilled with time; starts full, below)
 	tokensAt = 0,
 	drainScheduled = false,
@@ -150,6 +151,10 @@ private.tokens = CHANNEL_BURST
 -- The queue holds about two minutes of sending. Gap fills only take a share of it (MAX_QUEUED_FILL_PARTS parts of their own): the
 -- next resync asks for anything they leave out. A sighting still waiting after 15 seconds is old news.
 local MAX_QUEUED_PARTS = 48
+-- Fills are the lowest priority, so while needs and haves used the whole allowance no fill part ever left (measured
+-- 2026-11: 466 fills refused or waiting, none sent, on a channel with 953 needs and 8 fills heard). After this many
+-- other parts a fill's part goes: a fill gets one part in FILL_SHARE + 1.
+local FILL_SHARE = 2
 local MAX_QUEUED_FILL_PARTS = 16
 local SIGHTING_QUEUE_SECONDS = 15
 -- Messages received in a fight wait, unopened, until it's over; past this many (or this many from one player) the
@@ -1374,8 +1379,9 @@ function private.Enqueue(item)
 	local outbox = private.outbox
 	local at = #outbox + 1
 	for i = #outbox, 1, -1 do
-		-- A message already partly sent keeps its place, so its parts arrive close together
-		if outbox[i].priority <= item.priority or outbox[i].next > 1 then
+		-- A message already partly sent keeps its place, so its parts arrive close together. A fill's parts are
+		-- found wherever it waits (NextToSend), so it holds no place: records go ahead of it
+		if outbox[i].priority <= item.priority or (outbox[i].next > 1 and outbox[i].tag ~= TAG_FILL) then
 			break
 		end
 		at = i
@@ -1385,13 +1391,30 @@ function private.Enqueue(item)
 	private.Drain()
 end
 
----Where the next message to send is in the queue: the first one, except that in a fight only sightings (and messages
----already part sent) go. Nil when everything left is held.
+---Where the next message to send is in the queue: the first one, except that a fill is due after FILL_SHARE other parts
+---(never ahead of our own records), and that in a fight only sightings (and messages already part sent) go. Nil when everything left is held.
 ---@return number?
 function private.NextToSend()
 	local outbox = private.outbox
 	if not Wanted:InCombat() then
-		return outbox[1] and 1 or nil
+		if not outbox[1] then
+			return nil
+		end
+		if outbox[1].priority > 1 and private.sinceFill >= FILL_SHARE then
+			-- A fill's turn: one already part sent first, else the first waiting. Its parts are told apart by
+			-- sender and message id on the receiving side, so they may be mixed with another message's parts
+			local first
+			for i, item in ipairs(outbox) do
+				if item.tag == TAG_FILL then
+					if item.next > 1 then
+						return i
+					end
+					first = first or i
+				end
+			end
+			return first or 1
+		end
+		return 1
 	end
 	for i, item in ipairs(outbox) do
 		if item.tag == TAG_SIGHTINGS or item.next > 1 then
@@ -1475,6 +1498,7 @@ function private.Drain()
 				private.tokens = private.tokens - 1
 				private.stats.sent = private.stats.sent + 1
 				private.outboxParts = private.outboxParts - 1
+				private.sinceFill = item.tag == TAG_FILL and 0 or private.sinceFill + 1
 				item.next = part + 1
 				if item.next > total then
 					tremove(outbox, at)

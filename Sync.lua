@@ -58,6 +58,8 @@ local private = {
 	plugins = {}, -- tag -> handler(tbl, sender, channel): other addons' messages carried by this transport (Sync:RegisterPlugin)
 	pluginOptions = {}, -- tag -> { priority, relay } (Sync:RegisterPlugin)
 	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
+	heardNeeds = {}, -- origin -> { from, t }: the lowest seq another player asked the channel for, lately
+	askedNeeds = {}, -- origin -> { from, t }: what we last asked the channel for
 	linkAsked = {}, -- origin -> { from, t }: the records last asked of a realm link, so no other link is asked the same
 	lastChannelHave = nil, -- GetTime() we last said on the channel what we hold (hello or have)
 	greeted = {}, -- name -> when we last greeted them over a whisper
@@ -219,6 +221,13 @@ local LINK_TIMEOUT = 3 * 60 -- a link that misses a few resyncs is dropped (and 
 local LINK_FORWARD_SECONDS = 2
 local MAX_FORWARD_QUEUE = 200
 local MAX_NEED_ORIGINS_LINK = 40
+-- Every player that hears a have asks for what it lacks, so one missing origin was asked for 117 times in under three
+-- minutes by 39 players (1,087 needs, 2026-11 dev log), which filled the send queue and paused sync. One request is
+-- enough: the fill goes to the whole channel. A need heard from another player, from our seq or earlier, and our own
+-- last need, hold ours back this long.
+local NEED_REPEAT_SECONDS = 15
+local MAX_NEED_ORIGIN_BYTES = 64 -- an origin's name, as long as Store allows
+local MAX_HEARD_NEEDS = 200 -- needs remembered at once: the table is fed by other players
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
@@ -1331,6 +1340,12 @@ function private.MakeRoom(tag, total, now)
 		return true
 	end
 	Wanted:Log("!! Sync: send queue full, dropping %s", tag)
+	-- A dropped need or have is asked again at the next have anyone sends; the pause would delay the player's own
+	-- kills and bounties for ten minutes
+	if tag == TAG_NEED or tag == TAG_HAVE then
+		private.Drop("send queue full", 1)
+		return false
+	end
 	local minute = floor(now / 60)
 	if private.ceilingHitMinute and minute == private.ceilingHitMinute + 1 then
 		private.pausedUntil = now + PAUSE_SECONDS
@@ -2238,7 +2253,23 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 	elseif numNeed > 0 then
 		-- Spread requests so a busy channel is not hit by everyone at once
 		C_Timer.After(0.5 + math.random() * 2.5, function()
-			private.Send(TAG_NEED, { n = need })
+			local after = GetTime()
+			for origin, from in pairs(need) do
+				local heard, mine = private.heardNeeds[origin], private.askedNeeds[origin]
+				if Store:GetChainSeq(origin) + 1 > from
+					or (heard and after - heard.t < NEED_REPEAT_SECONDS and heard.from <= from)
+					or (mine and after - mine.t < NEED_REPEAT_SECONDS and mine.from == from) then
+					need[origin] = nil
+				end
+			end
+			if next(need) == nil then
+				return
+			end
+			if private.Send(TAG_NEED, { n = need }) then
+				for origin, from in pairs(need) do
+					private.askedNeeds[origin] = { from = from, t = after }
+				end
+			end
 		end)
 	end
 	if isHello then
@@ -2261,6 +2292,38 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 	end
 end
 
+---Remembers what another player asked the channel for, so our own request for the same records can wait
+---(HandleHave). Takes any well-formed entry, held here or not; the table holds the lowest seq heard in the window
+---and never more than MAX_HEARD_NEEDS origins, whatever the channel sends.
+---@param need table origin -> from seq, from another player
+function private.HearNeeds(need)
+	local heard, now = private.heardNeeds, GetTime()
+	local count = 0
+	for origin, entry in pairs(heard) do
+		if now - entry.t >= NEED_REPEAT_SECONDS then
+			heard[origin] = nil
+		else
+			count = count + 1
+		end
+	end
+	local taken = 0
+	for origin, from in pairs(need) do
+		if type(origin) == "string" and #origin <= MAX_NEED_ORIGIN_BYTES and Store:IsSeq(from) then
+			local entry = heard[origin]
+			if entry and entry.from <= from then
+				-- already covers it
+			elseif entry or count < MAX_HEARD_NEEDS then
+				heard[origin] = { from = from, t = now }
+				count = count + (entry and 0 or 1)
+			end
+			taken = taken + 1
+			if taken >= 5 then
+				break
+			end
+		end
+	end
+end
+
 ---A peer asked for records. Answer after a random delay unless someone else already filled that range (over a
 ---realm link nobody else can: answer that player straight away).
 function private.HandleNeed(need, sender, viaLink)
@@ -2268,6 +2331,9 @@ function private.HandleNeed(need, sender, viaLink)
 	-- walks an origin's records and sends them
 	local wanted, asked = {}, {}
 	local maxNeed = viaLink and MAX_NEED_ORIGINS_LINK or 5
+	if not viaLink then
+		private.HearNeeds(need)
+	end
 	for origin, fromSeq in pairs(need) do
 		if type(origin) == "string" and type(fromSeq) == "number" and fromSeq == floor(fromSeq) and fromSeq >= 1
 			and Wanted.db.chains[origin] and Store:GetChainSeq(origin) >= fromSeq then

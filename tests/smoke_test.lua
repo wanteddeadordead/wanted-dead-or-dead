@@ -2491,6 +2491,136 @@ do
 	check(#Sent("WHISPER", "Far Learned") == 1 and Sent("WHISPER", "Far Learned")[1].tag == "H", "a far-realm name from a peer's hello is greeted")
 	check(#Sent("WHISPER", "Same Realmer") == 0 and #Sent("WHISPER", "Bad|cff") == 0, "our own realm and junk aren't")
 end
+-- One need request per missing record: a request another player just made for the same origin from the same seq or
+-- earlier covers ours (the fill goes to the whole channel), our own request is not repeated within 15 seconds, and a
+-- need or have the full send queue drops never pauses sync
+;(function()
+	local private
+	for i = 1, 30 do
+		local name, value = debug.getupvalue(ns.Sync.GetInfo, i)
+		if name == "private" then private = value break end
+		if not name then break end
+	end
+	check(private and private.HandleHave and private.HandleNeed and private.MakeRoom, "the sync internals are reachable for the need tests")
+	local function Needs()
+		local out = {}
+		for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "N" then out[#out + 1] = m.tbl.n end end
+		return out
+	end
+	local function Fresh()
+		clock = clock + 120
+		ClearSent()
+		RunTimers()
+		ClearSent()
+		private.heardNeeds, private.askedNeeds = {}, {}
+	end
+	local function Count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+	-- The Send path needs no pause
+	private.pausedUntil = 0
+	Fresh()
+
+	-- Another player asked for it, from our seq, before our turn comes: we stay quiet
+	private.HandleHave({ ["Storm A"] = 3 }, "Have Sender", false, false)
+	private.HandleNeed({ ["Storm A"] = 1 }, "Other Asker")
+	RunTimers()
+	check(#Needs() == 0, "a need from another player for the same origin and seq covers ours")
+
+	-- From an earlier seq: still covers ours
+	Fresh()
+	private.HandleHave({ ["Storm A"] = 3 }, "Have Sender", false, false)
+	private.HandleNeed({ ["Storm A"] = 1 }, "Other Asker")
+	clock = clock + 5
+	RunTimers()
+	check(#Needs() == 0, "and it still does a few seconds later")
+
+	-- From a higher seq than ours: it covers nothing of what we lack
+	Fresh()
+	private.HandleHave({ ["Storm A"] = 9 }, "Have Sender", false, false)
+	private.HandleNeed({ ["Storm A"] = 5 }, "Further Asker")
+	RunTimers()
+	local sent = Needs()
+	check(#sent == 1 and sent[1]["Storm A"] == 1, "a need from a later seq doesn't stop ours, got "..#sent)
+
+	-- Two haves for the same missing origin within 15 seconds: one request, and another once the window has passed
+	Fresh()
+	private.HandleHave({ ["Storm B"] = 4 }, "Have Sender", false, false)
+	private.HandleHave({ ["Storm B"] = 4 }, "Second Sender", false, false)
+	RunTimers()
+	check(#Needs() == 1, "two haves for one missing origin send one need, got "..#Needs())
+	ClearSent()
+	clock = clock + 10
+	private.HandleHave({ ["Storm B"] = 4 }, "Third Sender", false, false)
+	RunTimers()
+	check(#Needs() == 0, "and a third inside the window sends none")
+	clock = clock + 6
+	private.HandleHave({ ["Storm B"] = 4 }, "Fourth Sender", false, false)
+	RunTimers()
+	check(#Needs() == 1, "once 15 seconds have passed it is asked again, got "..#Needs())
+
+	-- Two origins, one already asked by someone else: ours carries the other
+	Fresh()
+	private.HandleHave({ ["Storm C"] = 2, ["Storm D"] = 2 }, "Have Sender", false, false)
+	private.HandleNeed({ ["Storm C"] = 1 }, "Other Asker")
+	RunTimers()
+	sent = Needs()
+	check(#sent == 1 and sent[1]["Storm D"] == 1 and sent[1]["Storm C"] == nil, "only the origin nobody asked for is in our need")
+
+	-- The chain moved past our seq while we waited: the request is stale
+	Fresh()
+	private.HandleHave({ ["Storm E"] = 5 }, "Have Sender", false, false)
+	local db = ns.db
+	db.chains["Storm E"] = { seq = 3, lastHash = "x" }
+	RunTimers()
+	db.chains["Storm E"] = nil
+	check(#Needs() == 0, "a chain that advanced while we waited is not asked from the old seq")
+
+	-- What is heard is bounded and checked: untrusted input
+	Fresh()
+	local long = string.rep("x", 65)
+	private.HandleNeed({ [1] = 1, [long] = 1, ["Bad Zero"] = 0, ["Bad Neg"] = -2, ["Bad Frac"] = 1.5, ["Bad Nan"] = 0 / 0, ["Bad Str"] = "1", ["Bad Inf"] = math.huge, ["Good One"] = 2 }, "Other Asker")
+	check(Count(private.heardNeeds) == 1 and private.heardNeeds["Good One"] and private.heardNeeds["Good One"].from == 2, "only a well-formed entry is remembered, got "..Count(private.heardNeeds))
+	local many = {}
+	for i = 1, 20 do many["Many "..i] = i end
+	Fresh()
+	private.HandleNeed(many, "Other Asker")
+	check(Count(private.heardNeeds) == 5, "no more entries from one message than a request may ask for, got "..Count(private.heardNeeds))
+	Fresh()
+	for i = 1, 2000 do private.HandleNeed({ ["Flood "..i] = 1 }, "Flooder") end
+	local flooded = Count(private.heardNeeds)
+	check(flooded <= 300, "a flood of distinct origins stays bounded, got "..flooded)
+	clock = clock + 20
+	private.HandleNeed({ ["After Flood"] = 1 }, "Flooder")
+	check(Count(private.heardNeeds) == 1, "and what is past the window is dropped when the table is next touched, got "..Count(private.heardNeeds))
+	-- The lowest seq heard in the window stays
+	Fresh()
+	private.HandleNeed({ ["Low Seq"] = 4 }, "One")
+	private.HandleNeed({ ["Low Seq"] = 2 }, "Two")
+	private.HandleNeed({ ["Low Seq"] = 9 }, "Three")
+	check(private.heardNeeds["Low Seq"].from == 2, "the lowest seq heard is kept")
+
+	-- A realm link's need is answered, not remembered
+	Fresh()
+	private.HandleNeed({ ["Link Origin"] = 1 }, "Link Friend", true)
+	check(next(private.heardNeeds) == nil, "a need over a realm link isn't remembered as one heard on the channel")
+
+	-- A full queue dropping a need or a have never pauses sync; a live record still does
+	local printedBefore = #printed
+	private.ceilingHitMinute, private.pausedUntil = nil, 0
+	clock = clock + 120
+	for _, tag in ipairs({ "N", "V", "N", "V" }) do
+		check(private.MakeRoom(tag, 100, clock) == false, "a message that cannot fit is refused")
+		clock = clock + 60
+	end
+	check(private.pausedUntil == 0 and private.ceilingHitMinute == nil and #printed == printedBefore, "a dropped need or have, minute after minute, pauses nothing and prints nothing")
+	check((private.dropReasons["send queue full"] or 0) >= 4, "but the drops are still counted")
+	clock = clock + 120
+	private.MakeRoom("R", 100, clock)
+	clock = clock + 60
+	private.MakeRoom("R", 100, clock)
+	check(private.pausedUntil > clock and #printed == printedBefore + 1, "a live record dropped two minutes running still pauses sync and says so")
+	private.pausedUntil, private.ceilingHitMinute = 0, nil
+	Fresh()
+end)()
 -- A bounty carries what its poster knew about the target, so a client that never saw them (another realm, or
 -- offline at the time) still has their class, level, guild and where they were last seen, by the poster;
 -- it only fills gaps and never counts as this client seeing them

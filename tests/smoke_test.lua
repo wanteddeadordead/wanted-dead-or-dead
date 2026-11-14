@@ -2512,7 +2512,7 @@ end
 		ClearSent()
 		RunTimers()
 		ClearSent()
-		private.heardNeeds, private.askedNeeds = {}, {}
+		private.heardNeeds, private.askedNeeds, private.heldNeeds = {}, {}, {}
 	end
 	local function Count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
 	-- The Send path needs no pause
@@ -2587,7 +2587,7 @@ end
 	Fresh()
 	for i = 1, 2000 do private.HandleNeed({ ["Flood "..i] = 1 }, "Flooder") end
 	local flooded = Count(private.heardNeeds)
-	check(flooded <= 300, "a flood of distinct origins stays bounded, got "..flooded)
+	check(flooded <= 200, "a flood of distinct origins stays bounded, got "..flooded)
 	clock = clock + 20
 	private.HandleNeed({ ["After Flood"] = 1 }, "Flooder")
 	check(Count(private.heardNeeds) == 1, "and what is past the window is dropped when the table is next touched, got "..Count(private.heardNeeds))
@@ -2620,6 +2620,44 @@ end
 	RunTimers()
 	db.chains["Cover X"] = nil
 	check(#Needs() == 1, "a higher need heard after an equal one leaves us asking, got "..#Needs())
+
+	-- A heard need holds ours for one window only: an attacker repeating a near need cannot keep us silent
+	Fresh()
+	db.chains["Cover X"] = { seq = 899, lastHash = "x" }
+	local asked = 0
+	for _ = 1, 40 do
+		clock = clock + 16
+		ClearSent()
+		private.HandleNeed({ ["Cover X"] = 880 }, "Attacker")
+		private.HandleHave({ ["Cover X"] = 1000 }, "Have Sender", false, false)
+		RunTimers()
+		asked = asked + #Needs()
+	end
+	db.chains["Cover X"] = nil
+	check(asked >= 15 and asked <= 20, "a need heard every round holds ours back one window in two, not for ever, got "..asked)
+	-- A heard need is forgotten after 15 seconds, and hearing the same seq again doesn't extend it
+	Fresh()
+	private.HandleNeed({ ["Expire X"] = 1 }, "One")
+	clock = clock + 10
+	private.HandleNeed({ ["Expire X"] = 1 }, "Two")
+	clock = clock + 6
+	private.HandleHave({ ["Expire X"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	check(#Needs() == 1, "a heard need holds ours for 15 seconds from the first time it was heard, got "..#Needs())
+	-- A need the send refuses is not remembered as asked
+	Fresh()
+	private.pausedUntil = clock + 100
+	private.HandleHave({ ["Refused X"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	private.pausedUntil = 0
+	check(private.askedNeeds["Refused X"] == nil and #Needs() == 0, "a need the send refuses isn't counted as asked")
+	-- Our own asks and holds are swept
+	Fresh()
+	private.askedNeeds["Old Ask"] = { from = 1, t = clock - 100 }
+	private.heldNeeds["Old Hold"] = { from = 1, t = clock - 100 }
+	private.HandleHave({ ["Sweep X"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	check(private.askedNeeds["Old Ask"] == nil and private.heldNeeds["Old Hold"] == nil, "old asks and holds are dropped")
 
 	-- A realm link's need is answered, not remembered
 	Fresh()

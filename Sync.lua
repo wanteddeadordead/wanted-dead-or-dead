@@ -60,6 +60,7 @@ local private = {
 	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
 	heardNeeds = {}, -- origin -> { from, t }: the highest seq another player asked the channel for, lately
 	askedNeeds = {}, -- origin -> { from, t }: what we last asked the channel for
+	heldNeeds = {}, -- origin -> { from, t }: our need for that seq held back by another player's, since t
 	linkAsked = {}, -- origin -> { from, t }: the records last asked of a realm link, so no other link is asked the same
 	lastChannelHave = nil, -- GetTime() we last said on the channel what we hold (hello or have)
 	greeted = {}, -- name -> when we last greeted them over a whisper
@@ -2255,12 +2256,23 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 		-- Spread requests so a busy channel is not hit by everyone at once
 		C_Timer.After(0.5 + math.random() * 2.5, function()
 			local after = GetTime()
+			private.SweepNeeds(private.askedNeeds, after)
+			private.SweepNeeds(private.heldNeeds, after)
 			for origin, from in pairs(need) do
 				local heard, mine = private.heardNeeds[origin], private.askedNeeds[origin]
 				if Store:GetChainSeq(origin) + 1 > from
-					or (heard and after - heard.t < NEED_REPEAT_SECONDS and heard.from <= from and from - heard.from < NEED_COVERED_WITHIN)
 					or (mine and after - mine.t < NEED_REPEAT_SECONDS and mine.from == from) then
 					need[origin] = nil
+				elseif heard and after - heard.t < NEED_REPEAT_SECONDS and heard.from <= from and from - heard.from < NEED_COVERED_WITHIN then
+					-- Held for one window per seq: nothing says the other player's answer reached us, and it may
+					-- not (a busy holder, or a need made to hold ours back)
+					local held = private.heldNeeds[origin]
+					if not held or held.from ~= from then
+						private.heldNeeds[origin] = { from = from, t = after }
+						need[origin] = nil
+					elseif after - held.t < NEED_REPEAT_SECONDS then
+						need[origin] = nil
+					end
 				end
 			end
 			if next(need) == nil then
@@ -2269,6 +2281,7 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 			if private.Send(TAG_NEED, { n = need }) then
 				for origin, from in pairs(need) do
 					private.askedNeeds[origin] = { from = from, t = after }
+					private.heldNeeds[origin] = nil
 				end
 			end
 		end)
@@ -2289,6 +2302,15 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 					private.lastChannelHave = GetTime()
 				end
 			end)
+		end
+	end
+end
+
+---Drops what is older than twice the repeat window from a table of { from, t } needs, so it cannot grow.
+function private.SweepNeeds(list, now)
+	for origin, entry in pairs(list) do
+		if now - entry.t >= 2 * NEED_REPEAT_SECONDS then
+			list[origin] = nil
 		end
 	end
 end

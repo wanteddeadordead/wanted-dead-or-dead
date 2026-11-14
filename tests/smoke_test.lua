@@ -2798,7 +2798,8 @@ end
 		check(table.concat(sent, " ") == "V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 F1 F2 F3 F4 F5 F6 N1", "a have goes out whole, then the fill whole, then the need, got "..table.concat(sent, " "))
 		local widest = 0
 		for _, span in pairs(times) do widest = math.max(widest, span.last - span.first) end
-		check(widest < 30, "no message takes 30 seconds from its first part to its last, got "..widest)
+		local PARTIAL_TIMEOUT = 30 -- the receiver drops a message whose parts take longer than this (Sync.lua)
+		check(widest < PARTIAL_TIMEOUT, "no message takes PARTIAL_TIMEOUT from its first part to its last, got "..widest)
 		sent = Run({ Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("F", 6, 4) }, 30)
 		check(table.concat(sent, " ") == "N1 N1 F1 F2 F3 F4 F5 F6 N1 N1 N1", "while needs wait, a fill goes after two parts, got "..table.concat(sent, " "))
 		-- Our own records still go first

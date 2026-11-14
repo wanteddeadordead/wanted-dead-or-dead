@@ -6,6 +6,7 @@
 - Wanted's text now follows the game's Text Size setting (Options > Accessibility), like the rest of the interface.
 - The Poker page's table card no longer draws its blinds and seats line under the Invite box.
 - Sync no longer asks the channel for the same missing records over and over when many players are online, so it no longer fills its send queue and pauses itself for ten minutes.
+- A player who received someone's records earlier in the session now answers a request for them, unless another player's answer is heard first, so the request gets one answer.
 
 ## [1.29.1] - 2026-11-04
 

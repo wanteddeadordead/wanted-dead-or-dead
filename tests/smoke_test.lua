@@ -2664,6 +2664,73 @@ end
 	RunTimers()
 	check(private.askedNeeds["Old Ask"] == nil and private.heldNeeds["Old Hold"] == nil, "old asks and holds are dropped")
 
+	-- A need is answered by a holder unless another player's fill for it is heard first (records we already hold are
+	-- not new, so what is heard counts, not what is merged)
+	do
+		local savedRecords, savedChains = db.records, db.chains
+		local records, chains = {}, {}
+		for id, r in pairs(savedRecords) do records[id] = r end
+		for origin, c in pairs(savedChains) do chains[origin] = c end
+		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock - seq, data = {}, hash = "x" } end
+		for seq = 1, 50 do records["Fill X:"..seq] = Rec("Fill X", seq) end
+		chains["Fill X"] = { seq = 50, lastHash = "x" }
+		db.records, db.chains = records, chains
+		local channelName = ns.Sync:GetInfo().channelName
+		local function Hear(tag, tbl, sender)
+			Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channelName)
+			RunFrames()
+		end
+		local function FillFrom(origin, first, last)
+			local list = {}
+			for seq = first, last do list[#list + 1] = Rec(origin, seq) end
+			return { r = list }
+		end
+		local function Fills()
+			local n = 0
+			for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "F" then n = n + 1 end end
+			return n
+		end
+		local function Asked(origin, from)
+			Fresh()
+			private.pendingNeedAnswers = {}
+			Hear("N", { n = { [origin] = from } }, "Newcomer")
+		end
+		Asked("Fill X", 40)
+		RunTimers()
+		check(Fills() >= 1, "a need for records we hold, nobody else answering: we fill, got "..Fills())
+		Asked("Fill X", 40)
+		Hear("F", FillFrom("Fill X", 40, 45), "Other Holder")
+		RunTimers()
+		check(Fills() == 0, "another player's fill for it, heard while we wait (nothing new to us), stops ours, got "..Fills())
+		Asked("Fill X", 40)
+		Hear("F", FillFrom("Fill X", 1, 30), "Other Holder")
+		RunTimers()
+		check(Fills() >= 1, "a fill for lower seqs doesn't, got "..Fills())
+		Asked("Fill X", 40)
+		Hear("F", FillFrom("Far Origin", 1, 3), "Other Holder")
+		RunTimers()
+		check(Fills() >= 1, "nor does a fill for another origin, got "..Fills())
+		Asked("Fill X", 40)
+		Hear("F", FillFrom("Fill X", 40, 45), ns.Store:GetOrigin())
+		RunTimers()
+		check(Fills() >= 1, "our own fill coming back doesn't cancel our answer, got "..Fills())
+		Asked("Fill X", 40)
+		Hear("L", FillFrom("Fill X", 40, 45), "Other Holder")
+		RunTimers()
+		check(Fills() >= 1, "a live record isn't an answer, got "..Fills())
+		-- A second need for the origin from another seq before the delay ends replaces the first: only the newer is answered
+		Asked("Fill X", 40)
+		Hear("N", { n = { ["Fill X"] = 45 } }, "Another Newcomer")
+		RunTimers()
+		local from45 = 0
+		for _, m in ipairs(Sent("CHANNEL")) do
+			if m.tag == "F" and m.tbl.r and m.tbl.r[1] and m.tbl.r[1].seq == 45 then from45 = from45 + 1 end
+		end
+		check(Fills() >= 1 and from45 == Fills(), "a newer need for the origin replaces the pending one: the fill starts at 45")
+		db.records, db.chains = savedRecords, savedChains
+		private.pendingNeedAnswers = {}
+	end
+
 	-- A realm link's need is answered, not remembered
 	Fresh()
 	private.HandleNeed({ ["Link Origin"] = 1 }, "Link Friend", true)

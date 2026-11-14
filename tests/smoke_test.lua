@@ -2617,20 +2617,25 @@ end
 	db.chains["Cover X"] = nil
 	check(#Needs() == 1, "a higher need heard after an equal one leaves us asking, got "..#Needs())
 
-	-- A heard need holds ours for one window only: an attacker repeating a near need cannot keep us silent
+	-- A heard need holds ours at most once until our chain moves: a need from 1 to 23 below ours every 15 seconds for
+	-- 10 minutes cannot keep us silent
 	Fresh()
 	db.chains["Cover X"] = { seq = 899, lastHash = "x" }
-	local asked = 0
-	for _ = 1, 40 do
-		clock = clock + 16
+	local asked, firstAsk, lastAsk, widest = 0, nil, nil, 0
+	for round = 1, 40 do
+		clock = clock + 15
 		ClearSent()
-		private.HandleNeed({ ["Cover X"] = 880 }, "Attacker")
+		private.HandleNeed({ ["Cover X"] = 900 - (round % 23 + 1) }, "Attacker")
 		private.HandleHave({ ["Cover X"] = 1000 }, "Have Sender", false, false)
 		RunTimers()
-		asked = asked + #Needs()
+		if #Needs() > 0 then
+			asked = asked + 1
+			if lastAsk then widest = math.max(widest, clock - lastAsk) end
+			firstAsk, lastAsk = firstAsk or clock, clock
+		end
 	end
 	db.chains["Cover X"] = nil
-	check(asked >= 15 and asked <= 20, "a need heard every round holds ours back one window in two, not for ever, got "..asked)
+	check(asked >= 38 and widest <= 30, "our need still goes out at least every 30 seconds, got "..asked.." in 600 s, longest gap "..widest)
 	-- A heard need is forgotten after 15 seconds, and hearing the same seq again doesn't extend it
 	Fresh()
 	private.HandleNeed({ ["Expire X"] = 1 }, "One")
@@ -2650,7 +2655,7 @@ end
 	-- Our own asks and holds are swept
 	Fresh()
 	private.askedNeeds["Old Ask"] = { from = 1, t = clock - 100 }
-	private.heldNeeds["Old Hold"] = { from = 1, t = clock - 100 }
+	private.heldNeeds["Old Hold"] = { from = 1, t = clock - 1000 }
 	private.HandleHave({ ["Sweep X"] = 2 }, "Have Sender", false, false)
 	RunTimers()
 	check(private.askedNeeds["Old Ask"] == nil and private.heldNeeds["Old Hold"] == nil, "old asks and holds are dropped")

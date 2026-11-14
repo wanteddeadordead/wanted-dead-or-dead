@@ -60,7 +60,7 @@ local private = {
 	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
 	heardNeeds = {}, -- origin -> { from, t }: the highest seq another player asked the channel for, lately
 	askedNeeds = {}, -- origin -> { from, t }: what we last asked the channel for
-	heldNeeds = {}, -- origin -> { from, t }: our need for that seq held back by another player's, since t
+	heldNeeds = {}, -- origin -> { from, t }: our need for that seq was held back once by another player's, at t
 	linkAsked = {}, -- origin -> { from, t }: the records last asked of a realm link, so no other link is asked the same
 	lastChannelHave = nil, -- GetTime() we last said on the channel what we hold (hello or have)
 	greeted = {}, -- name -> when we last greeted them over a whisper
@@ -228,6 +228,7 @@ local MAX_NEED_ORIGINS_LINK = 40
 -- last need, hold ours back this long.
 local NEED_REPEAT_SECONDS = 15
 local NEED_COVERED_WITHIN = 3 * FILL_BATCH -- a fill answers from the asked seq on, a few messages deep: a need further below ours reaches nothing of ours
+local HELD_NEED_SECONDS = 10 * 60 -- a hold is remembered this long, so a need isn't held again for the same seq
 local MAX_NEED_ORIGIN_BYTES = 64 -- an origin's name, as long as Store allows
 local MAX_HEARD_NEEDS = 200 -- needs remembered at once: the table is fed by other players
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
@@ -2256,16 +2257,17 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 		-- Spread requests so a busy channel is not hit by everyone at once
 		C_Timer.After(0.5 + math.random() * 2.5, function()
 			local after = GetTime()
-			private.SweepNeeds(private.askedNeeds, after)
-			private.SweepNeeds(private.heldNeeds, after)
+			private.SweepNeeds(private.askedNeeds, after, 2 * NEED_REPEAT_SECONDS)
+			private.SweepNeeds(private.heldNeeds, after, HELD_NEED_SECONDS)
 			for origin, from in pairs(need) do
 				local heard, mine = private.heardNeeds[origin], private.askedNeeds[origin]
 				if Store:GetChainSeq(origin) + 1 > from
 					or (mine and after - mine.t < NEED_REPEAT_SECONDS and mine.from == from) then
 					need[origin] = nil
 				elseif heard and after - heard.t < NEED_REPEAT_SECONDS and heard.from <= from and from - heard.from < NEED_COVERED_WITHIN then
-					-- Held for one window per seq: nothing says the other player's answer reached us, and it may
-					-- not (a busy holder, or a need made to hold ours back)
+					-- Held once per seq, for one window: nothing says the other player's answer reached us, and it may
+					-- not (a busy holder, or a need made to hold ours back). Until the chain moves, our next need
+					-- for that seq goes out whatever is heard since
 					local held = private.heldNeeds[origin]
 					if not held or held.from ~= from then
 						private.heldNeeds[origin] = { from = from, t = after }
@@ -2281,7 +2283,6 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 			if private.Send(TAG_NEED, { n = need }) then
 				for origin, from in pairs(need) do
 					private.askedNeeds[origin] = { from = from, t = after }
-					private.heldNeeds[origin] = nil
 				end
 			end
 		end)
@@ -2306,10 +2307,10 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 	end
 end
 
----Drops what is older than twice the repeat window from a table of { from, t } needs, so it cannot grow.
-function private.SweepNeeds(list, now)
+---Drops what is older than a number of seconds from a table of { from, t } needs, so it cannot grow.
+function private.SweepNeeds(list, now, maxAge)
 	for origin, entry in pairs(list) do
-		if now - entry.t >= 2 * NEED_REPEAT_SECONDS then
+		if now - entry.t >= maxAge then
 			list[origin] = nil
 		end
 	end

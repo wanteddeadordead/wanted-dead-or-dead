@@ -37,7 +37,6 @@ local private = {
 	peers = {}, -- sender -> last message time
 	ownMessages = {}, -- tag:msgId -> time sent, to recognise our own echoes
 	pendingNeedAnswers = {}, -- origin -> { from, t } scheduled answers
-	recentFills = {}, -- origin -> highest seq seen filled by anyone recently
 	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
 	dropReasons = {}, -- why messages were dropped, reason -> count (shown in /wanted bug)
 	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
@@ -2176,6 +2175,14 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		local limits = {}
 		for _, record in ipairs(tbl.r) do
 			local isNew, why
+			-- Another player's fill for a need we were about to answer: heard, not merged (a holder already has
+			-- these records), so one answer reaches the channel instead of one from every holder
+			if tag == TAG_FILL and type(record) == "table" and type(record.origin) == "string" and Store:IsSeq(record.seq) then
+				local pending = private.pendingNeedAnswers[record.origin]
+				if pending and record.seq >= pending.from then
+					private.pendingNeedAnswers[record.origin] = nil
+				end
+			end
 			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
 			-- stamps the sender)
 			if not private.UnderRecordCap(sender) then
@@ -2192,9 +2199,6 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			if isNew or why == WAITING_CHECK then
 				private.NoteAccepted(sender)
 				private.stats.merged = private.stats.merged + 1
-				if type(record.origin) == "string" and type(record.seq) == "number" then
-					private.recentFills[record.origin] = max(private.recentFills[record.origin] or 0, record.seq)
-				end
 			end
 		end
 		if tag == TAG_FILL then
@@ -2384,10 +2388,6 @@ function private.HandleNeed(need, sender, viaLink)
 				return
 			end
 			private.pendingNeedAnswers[origin] = nil
-			if (private.recentFills[origin] or 0) >= fromSeq and GetTime() - pending.t < 10 then
-				-- Someone answered first
-				return
-			end
 			private.SendFill(origin, fromSeq)
 		end)
 	end

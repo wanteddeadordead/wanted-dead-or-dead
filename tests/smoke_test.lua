@@ -2754,6 +2754,64 @@ end
 		private.outbox, private.outboxParts = savedOutbox, savedParts
 	end
 
+	-- Fills get a share of the channel's sends: while needs and haves fill the allowance, one part in three is a fill's
+	do
+		local savedOutbox, savedParts = private.outbox, private.outboxParts
+		local function Item(tag, n, priority)
+			local parts = {}
+			for i = 1, n do parts[i] = tag..":qq"..tag..":"..i.."/"..n..":x" end
+			return { tag = tag, parts = parts, next = 1, priority = priority, queued = clock, refusals = 0 }
+		end
+		local function Reset()
+			private.outbox, private.outboxParts, private.tokens, private.tokensAt, private.drainScheduled, private.sinceFill = {}, 0, 0, clock, false, 0
+			ClearSent()
+		end
+		local function Sequence(steps)
+			local out = {}
+			for _ = 1, steps do
+				clock = clock + 3
+				RunTimers()
+			end
+			for _, m in ipairs(addonSent) do out[#out + 1] = m.text:match("^(%u):%w+:(%d+)/") ..m.text:match("^%u:%w+:(%d+)/") end
+			return out
+		end
+		Reset()
+		private.Enqueue(Item("V", 10, 3))
+		private.Enqueue(Item("F", 6, 4))
+		private.Enqueue(Item("N", 1, 3))
+		local sent = Sequence(30)
+		local fillsInFirstNine, fillParts = 0, {}
+		for i, s in ipairs(sent) do
+			if s:sub(1, 1) == "F" then
+				if i <= 9 then fillsInFirstNine = fillsInFirstNine + 1 end
+				fillParts[#fillParts + 1] = s
+			end
+		end
+		check(fillsInFirstNine >= 3, "a fill gets one part in three while a have is going out, got "..fillsInFirstNine.." in the first nine: "..table.concat(sent, " "))
+		check(table.concat(fillParts, " ") == "F1 F2 F3 F4 F5 F6" and #sent == 17, "the fill finishes in order and everything is sent, got "..table.concat(sent, " "))
+		-- Our own records still go first
+		Reset()
+		private.sinceFill = 5
+		private.Enqueue(Item("N", 1, 3))
+		private.Enqueue(Item("F", 3, 4))
+		private.Enqueue(Item("R", 1, 1))
+		sent = Sequence(3)
+		check(sent[1] == "R1", "our own record goes before a fill that is due, got "..table.concat(sent, " "))
+		-- In a fight nothing changes: nothing but sightings and parts already sent goes
+		Reset()
+		private.sinceFill = 5
+		private.outbox = { Item("N", 1, 3), Item("F", 3, 4) }
+		private.outboxParts = 4
+		local realInCombat = ns.InCombat
+		ns.InCombat = function() return true end
+		check(private.NextToSend() == nil, "in a fight a fill that is due doesn't go either")
+		private.outbox[2].next = 2
+		check(private.NextToSend() == 2, "but one already part sent finishes")
+		ns.InCombat = realInCombat
+		Reset()
+		private.outbox, private.outboxParts = savedOutbox, savedParts
+	end
+
 	-- A realm link's need is answered, not remembered
 	Fresh()
 	private.HandleNeed({ ["Link Origin"] = 1 }, "Link Friend", true)

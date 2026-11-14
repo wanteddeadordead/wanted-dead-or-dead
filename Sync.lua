@@ -59,6 +59,7 @@ local private = {
 	pluginOptions = {}, -- tag -> { priority, relay } (Sync:RegisterPlugin)
 	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
 	heardNeeds = {}, -- origin -> { from, t }: the highest seq another player asked the channel for, lately
+	havesHeard = {}, -- the last few haves heard on the channel: { sender, t }
 	lastNeedSent = nil, -- GetTime() our last need went on the channel
 	askedNeeds = {}, -- origin -> { from, t }: what we last asked the channel for
 	heldNeeds = {}, -- origin -> { from, t }: our need for that seq was held back once by another player's, at t
@@ -2178,6 +2179,12 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 		if type(tbl.c) ~= "table" then
 			return
 		end
+		if tag == TAG_HAVE then
+			tinsert(private.havesHeard, { sender = sender, t = GetTime() })
+			if #private.havesHeard > 8 then
+				tremove(private.havesHeard, 1)
+			end
+		end
 		private.HandleHave(tbl.c, sender, tag == TAG_HELLO, false, tbl.o)
 		if tag == TAG_HELLO then
 			private.PeerHello(sender, false)
@@ -2342,7 +2349,14 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 			end
 		end
 		if hasMore then
+			local helloAt = GetTime()
 			C_Timer.After(1 + math.random() * 3, function()
+				-- One have answers a hello for everyone: another player's, heard since the hello, has
+				for _, heard in ipairs(private.havesHeard) do
+					if heard.t >= helloAt and heard.sender ~= sender then
+						return
+					end
+				end
 				if private.Send(TAG_HAVE, mine) then
 					private.lastChannelHave = GetTime()
 				end

@@ -2829,6 +2829,34 @@ end
 	check(#Needs() == 2, "and another goes once ten seconds have passed, got "..#Needs())
 	private.lastNeedSent = nil
 
+	-- One have answers a newcomer's hello: ours is skipped when another player's have is heard while we wait
+	do
+		local channelName = ns.Sync:GetInfo().channelName
+		local function Haves()
+			local n = 0
+			for _, m in ipairs(Sent("CHANNEL")) do if m.tag == "V" then n = n + 1 end end
+			return n
+		end
+		local function HearHave(sender)
+			Fire("CHAT_MSG_ADDON", "WNTD", Message("V", { c = {} }), "CHANNEL", sender, nil, nil, nil, channelName)
+			RunFrames()
+		end
+		Fresh()
+		private.HandleHave({}, "Newcomer", true, false)
+		RunTimers()
+		check(Haves() >= 1, "a hello nobody else answers gets our have, got "..Haves())
+		Fresh()
+		private.HandleHave({}, "Newcomer", true, false)
+		HearHave("Other Holder")
+		RunTimers()
+		check(Haves() == 0, "another player's have heard while we wait answers it for us, got "..Haves())
+		Fresh()
+		private.HandleHave({}, "Newcomer", true, false)
+		HearHave("Newcomer")
+		RunTimers()
+		check(Haves() >= 1, "the newcomer's own have isn't an answer, got "..Haves())
+	end
+
 	-- A realm link's need is answered, not remembered
 	Fresh()
 	private.HandleNeed({ ["Link Origin"] = 1 }, "Link Friend", true)

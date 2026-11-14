@@ -2748,13 +2748,45 @@ end
 		end
 		Queue({ Item("V", 10, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3) })
 		check(private.MakeRoom("F", 5, clock) == true, "a fill is admitted beside a queued have and needs")
+		-- Room is judged by what fills already wait, not by the new fill's size: whatever its size it is admitted below
+		-- 16 queued fill parts (and may go past them by its own length), and refused at or above
 		Queue({ Item("V", 10, 3), Item("F", 6, 4), Item("F", 6, 4) })
-		check(private.MakeRoom("F", 5, clock) == false, "but not past 16 queued fill parts")
-		check(private.MakeRoom("F", 4, clock) == true, "up to them")
+		check(private.MakeRoom("F", 5, clock) == true and private.MakeRoom("F", 12, clock) == true, "with 12 fill parts queued a fill of any size is admitted")
+		Queue({ Item("V", 10, 3), Item("F", 6, 4), Item("F", 6, 4), Item("F", 4, 4) })
+		check(private.MakeRoom("F", 1, clock) == false, "but none at 16 queued fill parts")
 		Queue({ Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3) })
 		check(private.MakeRoom("F", 5, clock) == false, "or past the whole queue's 48 parts")
-		Queue({ Item("F", 10, 4, 6), Item("N", 1, 3) })
-		check(private.MakeRoom("F", 11, clock) == true and private.MakeRoom("F", 12, clock) == false, "a fill's parts already sent leave its room")
+		Queue({ Item("F", 10, 4, 6), Item("F", 10, 4, 1), Item("N", 1, 3) })
+		check(private.MakeRoom("F", 12, clock) == true, "a fill's parts already sent leave its room (5 + 10 queued)")
+		Queue({ Item("F", 10, 4, 6), Item("F", 12, 4, 1) })
+		check(private.MakeRoom("F", 1, clock) == false, "17 queued fill parts refuse")
+		-- Steady state: the fill room is full, a part leaves at a time, and fills of every size knock (small first, big
+		-- first, in turn). Each size gets in about as often as the others
+		Queue({ Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4), Item("F", 2, 4) })
+		local sizes, admitted, seed = { 2, 3, 4, 5 }, { [2] = 0, [3] = 0, [4] = 0, [5] = 0 }, 11
+		for _ = 1, 400 do
+			-- a part is sent
+			local first = private.outbox[1]
+			if first then
+				first.next = first.next + 1
+				private.outboxParts = private.outboxParts - 1
+				if first.next > #first.parts then tremove(private.outbox, 1) end
+			end
+			seed = (seed * 1103515245 + 12345) % 2147483648
+			local start = floor(seed / 65536) % 4
+			for k = 0, 3 do
+				local size = sizes[(start + k) % 4 + 1]
+				if private.MakeRoom("F", size, clock) then
+					admitted[size] = admitted[size] + 1
+					tinsert(private.outbox, Item("F", size, 4))
+					private.outboxParts = private.outboxParts + size
+					break
+				end
+			end
+		end
+		local least, most = math.huge, 0
+		for _, n in pairs(admitted) do least, most = math.min(least, n), math.max(most, n) end
+		check(least >= 10 and least * 2 >= most, "fills of 2, 3, 4 and 5 parts all get in, got "..admitted[2].." "..admitted[3].." "..admitted[4].." "..admitted[5])
 		private.outbox, private.outboxParts = savedOutbox, savedParts
 	end
 

@@ -1330,14 +1330,17 @@ function private.MakeRoom(tag, total, now)
 	if tag == TAG_FILL then
 		-- A fill has a room of its own: the fills queued (their parts not yet sent), not the whole queue, count
 		-- against MAX_QUEUED_FILL_PARTS. One have is 10 parts, so measured against everything queued no fill was
-		-- ever admitted while haves and needs waited. The whole queue's limit still holds.
+		-- ever admitted while haves and needs waited. A fill is admitted whatever its size while fewer than that
+		-- wait (it may go past the room by its own length): with room opening one part at a time, a size test let
+		-- 2-part fills take every opening and refused every larger one (7 admitted of 898, all of 2 parts). The
+		-- whole queue's limit still holds.
 		local fillParts = 0
 		for _, item in ipairs(private.outbox) do
 			if item.tag == TAG_FILL then
 				fillParts = fillParts + #item.parts - item.next + 1
 			end
 		end
-		if fillParts + total > MAX_QUEUED_FILL_PARTS or private.outboxParts + total > MAX_QUEUED_PARTS then
+		if fillParts >= MAX_QUEUED_FILL_PARTS or private.outboxParts + total > MAX_QUEUED_PARTS then
 			Wanted:Log("Sync: send queue busy, leaving the rest of a fill for the next resync")
 			private.stats.skipped = private.stats.skipped + 1
 			return false

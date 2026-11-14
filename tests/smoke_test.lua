@@ -2512,7 +2512,7 @@ end
 		ClearSent()
 		RunTimers()
 		ClearSent()
-		private.heardNeeds, private.askedNeeds, private.heldNeeds = {}, {}, {}
+		private.heardNeeds, private.askedNeeds, private.heldNeeds, private.lastNeedSent = {}, {}, {}, nil
 	end
 	local function Count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
 	-- The Send path needs no pause
@@ -2815,6 +2815,23 @@ end
 		Reset()
 		private.outbox, private.outboxParts = savedOutbox, savedParts
 	end
+
+	-- At most one need on the channel every ten seconds, whatever the haves name
+	Fresh()
+	private.HandleHave({ ["Min A"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	clock = clock + 4
+	private.HandleHave({ ["Min B"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	clock = clock + 4
+	private.HandleHave({ ["Min C"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	check(#Needs() == 1, "three haves in ten seconds send one need, got "..#Needs())
+	clock = clock + 3
+	private.HandleHave({ ["Min D"] = 2 }, "Have Sender", false, false)
+	RunTimers()
+	check(#Needs() == 2, "and another goes once ten seconds have passed, got "..#Needs())
+	private.lastNeedSent = nil
 
 	-- A realm link's need is answered, not remembered
 	Fresh()
@@ -4123,6 +4140,7 @@ end)()
 end)()
 ;(function()
 	-- A have naming the origins with open bounties (b): those chains are asked for first, within the five a request takes
+	clock = clock + 11 -- past the ten seconds between our needs
 	ClearSent()
 	local chains = {}
 	for _, name in ipairs({ "Chain A", "Chain B", "Chain C", "Chain D", "Chain E", "Chain F", "Chain G", "Chain H" }) do chains[name] = 3 end

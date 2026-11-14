@@ -2731,6 +2731,33 @@ end
 		private.pendingNeedAnswers = {}
 	end
 
+	-- Fills have a room of their own in the send queue: other messages waiting (one have is 10 parts) don't use it up
+	do
+		local savedOutbox, savedParts = private.outbox, private.outboxParts
+		local function Item(tag, n, priority, nextPart)
+			local parts = {}
+			for i = 1, n do parts[i] = tag..":qq:"..i.."/"..n..":x" end
+			return { tag = tag, parts = parts, next = nextPart or 1, priority = priority, queued = clock, refusals = 0 }
+		end
+		local function Queue(items)
+			private.outbox, private.outboxParts = {}, 0
+			for _, item in ipairs(items) do
+				tinsert(private.outbox, item)
+				private.outboxParts = private.outboxParts + #item.parts - item.next + 1
+			end
+		end
+		Queue({ Item("V", 10, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3) })
+		check(private.MakeRoom("F", 5, clock) == true, "a fill is admitted beside a queued have and needs")
+		Queue({ Item("V", 10, 3), Item("F", 6, 4), Item("F", 6, 4) })
+		check(private.MakeRoom("F", 5, clock) == false, "but not past 16 queued fill parts")
+		check(private.MakeRoom("F", 4, clock) == true, "up to them")
+		Queue({ Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3) })
+		check(private.MakeRoom("F", 5, clock) == false, "or past the whole queue's 48 parts")
+		Queue({ Item("F", 10, 4, 6), Item("N", 1, 3) })
+		check(private.MakeRoom("F", 11, clock) == true and private.MakeRoom("F", 12, clock) == false, "a fill's parts already sent leave its room")
+		private.outbox, private.outboxParts = savedOutbox, savedParts
+	end
+
 	-- A realm link's need is answered, not remembered
 	Fresh()
 	private.HandleNeed({ ["Link Origin"] = 1 }, "Link Friend", true)

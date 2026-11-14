@@ -147,7 +147,7 @@ local TELL_OUTDATED_SECONDS = 10 * 60 -- at most one update notice per player th
 local CHANNEL_BURST = 8
 local CHANNEL_PART_SECONDS = 2.5
 private.tokens = CHANNEL_BURST
--- The queue holds about two minutes of sending. Gap fills only take what room is left below their share: the
+-- The queue holds about two minutes of sending. Gap fills only take a share of it (MAX_QUEUED_FILL_PARTS parts of their own): the
 -- next resync asks for anything they leave out. A sighting still waiting after 15 seconds is old news.
 local MAX_QUEUED_PARTS = 48
 local MAX_QUEUED_FILL_PARTS = 16
@@ -1320,7 +1320,16 @@ end
 ---@return boolean
 function private.MakeRoom(tag, total, now)
 	if tag == TAG_FILL then
-		if private.outboxParts + total > MAX_QUEUED_FILL_PARTS then
+		-- A fill has a room of its own: the fills queued (their parts not yet sent), not the whole queue, count
+		-- against MAX_QUEUED_FILL_PARTS. One have is 10 parts, so measured against everything queued no fill was
+		-- ever admitted while haves and needs waited. The whole queue's limit still holds.
+		local fillParts = 0
+		for _, item in ipairs(private.outbox) do
+			if item.tag == TAG_FILL then
+				fillParts = fillParts + #item.parts - item.next + 1
+			end
+		end
+		if fillParts + total > MAX_QUEUED_FILL_PARTS or private.outboxParts + total > MAX_QUEUED_PARTS then
 			Wanted:Log("Sync: send queue busy, leaving the rest of a fill for the next resync")
 			private.stats.skipped = private.stats.skipped + 1
 			return false

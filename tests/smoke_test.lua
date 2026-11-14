@@ -2754,8 +2754,9 @@ end
 		private.outbox, private.outboxParts = savedOutbox, savedParts
 	end
 
-	-- Fills get a share of the channel's sends: while needs and haves fill the allowance, one part in three is a fill's
+	-- Fills get a share of the channel's sends: while needs and haves fill the allowance, a fill goes after every two parts
 	do
+		local clockBefore = clock
 		local savedOutbox, savedParts = private.outbox, private.outboxParts
 		local function Item(tag, n, priority)
 			local parts = {}
@@ -2775,20 +2776,31 @@ end
 			for _, m in ipairs(addonSent) do out[#out + 1] = m.text:match("^(%u):%w+:(%d+)/") ..m.text:match("^%u:%w+:(%d+)/") end
 			return out
 		end
-		Reset()
-		private.Enqueue(Item("V", 10, 3))
-		private.Enqueue(Item("F", 6, 4))
-		private.Enqueue(Item("N", 1, 3))
-		local sent = Sequence(30)
-		local fillsInFirstNine, fillParts = 0, {}
-		for i, s in ipairs(sent) do
-			if s:sub(1, 1) == "F" then
-				if i <= 9 then fillsInFirstNine = fillsInFirstNine + 1 end
-				fillParts[#fillParts + 1] = s
+		-- Messages are never mixed part by part: a receiver drops one whose parts take over 30 seconds
+		local function Run(items, steps)
+			Reset()
+			for _, item in ipairs(items) do private.Enqueue(item) end
+			local times, out = {}, {}
+			for _ = 1, steps do
+				local before = #addonSent
+				clock = clock + 2.5
+				RunTimers()
+				for i = before + 1, #addonSent do
+					local id, part = addonSent[i].text:match("^%u:(%w+):(%d+)/")
+					out[#out + 1] = addonSent[i].text:match("^(%u)")..part
+					times[id] = times[id] or { first = clock }
+					times[id].last = clock
+				end
 			end
+			return out, times
 		end
-		check(fillsInFirstNine >= 3, "a fill gets one part in three while a have is going out, got "..fillsInFirstNine.." in the first nine: "..table.concat(sent, " "))
-		check(table.concat(fillParts, " ") == "F1 F2 F3 F4 F5 F6" and #sent == 17, "the fill finishes in order and everything is sent, got "..table.concat(sent, " "))
+		local sent, times = Run({ Item("V", 10, 3), Item("F", 6, 4), Item("N", 1, 3) }, 30)
+		check(table.concat(sent, " ") == "V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 F1 F2 F3 F4 F5 F6 N1", "a have goes out whole, then the fill whole, then the need, got "..table.concat(sent, " "))
+		local widest = 0
+		for _, span in pairs(times) do widest = math.max(widest, span.last - span.first) end
+		check(widest < 30, "no message takes 30 seconds from its first part to its last, got "..widest)
+		sent = Run({ Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("F", 6, 4) }, 30)
+		check(table.concat(sent, " ") == "N1 N1 F1 F2 F3 F4 F5 F6 N1 N1 N1", "while needs wait, a fill goes after two parts, got "..table.concat(sent, " "))
 		-- Our own records still go first
 		Reset()
 		private.sinceFill = 5
@@ -2810,6 +2822,7 @@ end
 		ns.InCombat = realInCombat
 		Reset()
 		private.outbox, private.outboxParts = savedOutbox, savedParts
+		clock = clockBefore + 3
 	end
 
 	-- At most one need on the channel every ten seconds, whatever the haves name

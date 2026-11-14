@@ -155,7 +155,7 @@ private.tokens = CHANNEL_BURST
 local MAX_QUEUED_PARTS = 48
 -- Fills are the lowest priority, so while needs and haves used the whole allowance no fill part ever left (measured
 -- 2026-11: 466 fills refused or waiting, none sent, on a channel with 953 needs and 8 fills heard). After this many
--- other parts a fill's part goes: a fill gets one part in FILL_SHARE + 1.
+-- other parts the next message to start is a fill (messages are never mixed part by part: see NextToSend).
 local FILL_SHARE = 2
 local MAX_QUEUED_FILL_PARTS = 16
 local SIGHTING_QUEUE_SECONDS = 15
@@ -1382,9 +1382,8 @@ function private.Enqueue(item)
 	local outbox = private.outbox
 	local at = #outbox + 1
 	for i = #outbox, 1, -1 do
-		-- A message already partly sent keeps its place, so its parts arrive close together. A fill's parts are
-		-- found wherever it waits (NextToSend), so it holds no place: records go ahead of it
-		if outbox[i].priority <= item.priority or (outbox[i].next > 1 and outbox[i].tag ~= TAG_FILL) then
+		-- A message already partly sent keeps its place, so its parts arrive close together
+		if outbox[i].priority <= item.priority or outbox[i].next > 1 then
 			break
 		end
 		at = i
@@ -1394,8 +1393,9 @@ function private.Enqueue(item)
 	private.Drain()
 end
 
----Where the next message to send is in the queue: the first one, except that a fill is due after FILL_SHARE other parts
----(never ahead of our own records), and that in a fight only sightings (and messages already part sent) go. Nil when everything left is held.
+---Where the next message to send is in the queue: one already part sent, else the first, except that a fill starts
+---after FILL_SHARE other parts (never ahead of our own records); in a fight only sightings (and messages already part
+---sent) go. Nil when everything left is held.
 ---@return number?
 function private.NextToSend()
 	local outbox = private.outbox
@@ -1403,19 +1403,20 @@ function private.NextToSend()
 		if not outbox[1] then
 			return nil
 		end
+		-- A message already part sent goes on until it is done: a receiver drops a message whose parts take over
+		-- PARTIAL_TIMEOUT from the first to the last, so parts of two messages are never mixed
+		for i, item in ipairs(outbox) do
+			if item.next > 1 then
+				return i
+			end
+		end
 		if outbox[1].priority > 1 and private.sinceFill >= FILL_SHARE then
-			-- A fill's turn: one already part sent first, else the first waiting. Its parts are told apart by
-			-- sender and message id on the receiving side, so they may be mixed with another message's parts
-			local first
+			-- A fill's turn, at a message boundary: the first one waiting
 			for i, item in ipairs(outbox) do
 				if item.tag == TAG_FILL then
-					if item.next > 1 then
-						return i
-					end
-					first = first or i
+					return i
 				end
 			end
-			return first or 1
 		end
 		return 1
 	end

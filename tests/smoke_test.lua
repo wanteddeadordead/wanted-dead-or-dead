@@ -2821,6 +2821,14 @@ end
 			for i = before + 1, #addonSent do order[#order + 1] = addonSent[i].text:match("^(%u)")..addonSent[i].text:match("^%u:%w+:(%d+)/") end
 		end
 		check(table.concat(order, " ") == "F1 F2 F3 F4 F5 F6 R1 S1 V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 N1", "records and sightings queued while a fill goes out come right after it, got "..table.concat(order, " "))
+		-- A fill never starts ahead of a sighting at the front either
+		Reset()
+		private.sinceFill = 5
+		private.Enqueue(Item("N", 1, 3))
+		private.Enqueue(Item("F", 3, 4))
+		private.Enqueue(Item("S", 1, 2))
+		sent = Sequence(3)
+		check(sent[1] == "S1", "a fill that is due doesn't start ahead of a sighting, got "..table.concat(sent, " "))
 		-- Our own records still go first
 		Reset()
 		private.sinceFill = 5

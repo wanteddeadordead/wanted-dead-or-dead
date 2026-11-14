@@ -1395,7 +1395,7 @@ function private.Enqueue(item)
 end
 
 ---Where the next message to send is in the queue: one already part sent, else the first, except that a fill starts
----after FILL_SHARE other parts (never ahead of our own records); in a fight only sightings (and messages already part
+---after FILL_SHARE other parts (never ahead of our own records or sightings); in a fight only sightings (and messages already part
 ---sent) go. Nil when everything left is held.
 ---@return number?
 function private.NextToSend()
@@ -1411,8 +1411,8 @@ function private.NextToSend()
 				return i
 			end
 		end
-		if outbox[1].priority > 1 and private.sinceFill >= FILL_SHARE then
-			-- A fill's turn, at a message boundary: the first one waiting
+		if outbox[1].priority > SEND_PRIORITY.S and private.sinceFill >= FILL_SHARE then
+			-- A fill's turn, at a message boundary and never ahead of our records or sightings: the first one waiting
 			for i, item in ipairs(outbox) do
 				if item.tag == TAG_FILL then
 					return i

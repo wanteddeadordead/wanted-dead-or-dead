@@ -2591,12 +2591,35 @@ end
 	clock = clock + 20
 	private.HandleNeed({ ["After Flood"] = 1 }, "Flooder")
 	check(Count(private.heardNeeds) == 1, "and what is past the window is dropped when the table is next touched, got "..Count(private.heardNeeds))
-	-- The lowest seq heard in the window stays
+	-- The highest seq heard in the window stays: it is the one whose answer is nearest to our records
 	Fresh()
-	private.HandleNeed({ ["Low Seq"] = 4 }, "One")
-	private.HandleNeed({ ["Low Seq"] = 2 }, "Two")
-	private.HandleNeed({ ["Low Seq"] = 9 }, "Three")
-	check(private.heardNeeds["Low Seq"].from == 2, "the lowest seq heard is kept")
+	private.HandleNeed({ ["High Seq"] = 4 }, "One")
+	private.HandleNeed({ ["High Seq"] = 9 }, "Two")
+	private.HandleNeed({ ["High Seq"] = 2 }, "Three")
+	check(private.heardNeeds["High Seq"].from == 9, "the highest seq heard is kept")
+
+	-- A need covers ours only when its answer reaches our records: a fill is a few messages deep (3 x 8 records)
+	local function CoveredBy(heardFrom)
+		Fresh()
+		db.chains["Cover X"] = { seq = 899, lastHash = "x" } -- we ask from 900
+		private.HandleHave({ ["Cover X"] = 1000 }, "Have Sender", false, false)
+		private.HandleNeed({ ["Cover X"] = heardFrom }, "Other Asker")
+		RunTimers()
+		db.chains["Cover X"] = nil
+		return #Needs() == 0
+	end
+	check(CoveredBy(877), "a need 23 seqs below ours covers it")
+	check(not CoveredBy(876), "a need 24 below ours doesn't")
+	check(not CoveredBy(1), "a need from seq 1 doesn't cover a need from 900")
+	-- Accepted loss: only the highest heard need is kept, so a near need followed by a higher one leaves us asking
+	Fresh()
+	db.chains["Cover X"] = { seq = 899, lastHash = "x" }
+	private.HandleHave({ ["Cover X"] = 1000 }, "Have Sender", false, false)
+	private.HandleNeed({ ["Cover X"] = 900 }, "Near Asker")
+	private.HandleNeed({ ["Cover X"] = 950 }, "Far Asker")
+	RunTimers()
+	db.chains["Cover X"] = nil
+	check(#Needs() == 1, "a higher need heard after an equal one leaves us asking, got "..#Needs())
 
 	-- A realm link's need is answered, not remembered
 	Fresh()

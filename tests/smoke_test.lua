@@ -2806,6 +2806,25 @@ end
 		check(widest < PARTIAL_TIMEOUT, "no message takes PARTIAL_TIMEOUT from its first part to its last, got "..widest)
 		sent = Run({ Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("F", 6, 4) }, 30)
 		check(table.concat(sent, " ") == "N1 N1 F1 F2 F3 F4 F5 F6 N1 N1 N1", "while needs wait, a fill goes after two parts, got "..table.concat(sent, " "))
+		-- A fill part sent behind queued messages doesn't hold up what is queued meanwhile: our records and sightings go
+		-- right after its last part, ahead of the have and need that waited before it
+		Reset()
+		private.sinceFill = 5
+		private.Enqueue(Item("V", 10, 3))
+		private.Enqueue(Item("N", 1, 3))
+		private.Enqueue(Item("F", 6, 4))
+		local order = {}
+		for step = 1, 40 do
+			if step == 3 then
+				private.Enqueue(Item("S", 1, 2))
+				private.Enqueue(Item("R", 1, 1))
+			end
+			local before = #addonSent
+			clock = clock + 2.5
+			RunTimers()
+			for i = before + 1, #addonSent do order[#order + 1] = addonSent[i].text:match("^(%u)")..addonSent[i].text:match("^%u:%w+:(%d+)/") end
+		end
+		check(table.concat(order, " ") == "F1 F2 F3 F4 F5 F6 R1 S1 V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 N1", "records and sightings queued while a fill goes out come right after it, got "..table.concat(order, " "))
 		-- Our own records still go first
 		Reset()
 		private.sinceFill = 5

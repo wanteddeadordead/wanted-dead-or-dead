@@ -1382,8 +1382,9 @@ function private.Enqueue(item)
 	local outbox = private.outbox
 	local at = #outbox + 1
 	for i = #outbox, 1, -1 do
-		-- A message already partly sent keeps its place, so its parts arrive close together
-		if outbox[i].priority <= item.priority or outbox[i].next > 1 then
+		-- A message already partly sent keeps its place, so its parts arrive close together. A fill holds none:
+		-- NextToSend finds it wherever it waits, and what is queued meanwhile still goes ahead of what waits
+		if outbox[i].priority <= item.priority or (outbox[i].next > 1 and outbox[i].tag ~= TAG_FILL) then
 			break
 		end
 		at = i

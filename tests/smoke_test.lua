@@ -2750,6 +2750,8 @@ end
 		check(private.MakeRoom("F", 5, clock) == true and private.MakeRoom("F", 12, clock) == true, "with 12 fill parts queued a fill of any size is admitted")
 		Queue({ Item("V", 10, 3), Item("F", 6, 4), Item("F", 6, 4), Item("F", 4, 4) })
 		check(private.MakeRoom("F", 1, clock) == false, "but none at 16 queued fill parts")
+		Queue({})
+		check(private.MakeRoom("F", 12, clock) == true and private.MakeRoom("F", 13, clock) == false, "a fill of more than 12 parts is refused even with room: it would outlast the receiver's reassembly limit")
 		Queue({ Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("V", 10, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3) })
 		check(private.MakeRoom("F", 5, clock) == false, "or past the whole queue's 48 parts")
 		Queue({ Item("F", 10, 4, 6), Item("F", 10, 4, 1), Item("N", 1, 3) })

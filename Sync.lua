@@ -158,6 +158,9 @@ local MAX_QUEUED_PARTS = 48
 -- other parts the next message to start is a fill (messages are never mixed part by part: see NextToSend).
 local FILL_SHARE = 2
 local MAX_QUEUED_FILL_PARTS = 16
+-- A message goes out whole once started, at CHANNEL_PART_SECONDS a part, and a receiver drops one that takes over
+-- PARTIAL_TIMEOUT from first part to last: 12 parts span 27.5 s. A longer fill reaches nobody and holds up our own records.
+local MAX_FILL_MESSAGE_PARTS = 12
 local SIGHTING_QUEUE_SECONDS = 15
 -- Messages received in a fight wait, unopened, until it's over; past this many (or this many from one player) the
 -- rest are left to the resync
@@ -1340,7 +1343,7 @@ function private.MakeRoom(tag, total, now)
 				fillParts = fillParts + #item.parts - item.next + 1
 			end
 		end
-		if fillParts >= MAX_QUEUED_FILL_PARTS or private.outboxParts + total > MAX_QUEUED_PARTS then
+		if total > MAX_FILL_MESSAGE_PARTS or fillParts >= MAX_QUEUED_FILL_PARTS or private.outboxParts + total > MAX_QUEUED_PARTS then
 			Wanted:Log("Sync: send queue busy, leaving the rest of a fill for the next resync")
 			private.stats.skipped = private.stats.skipped + 1
 			return false

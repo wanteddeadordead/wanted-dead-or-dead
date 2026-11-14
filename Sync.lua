@@ -59,6 +59,7 @@ local private = {
 	pluginOptions = {}, -- tag -> { priority, relay } (Sync:RegisterPlugin)
 	peerHello = {}, -- functions told when a player says hello on the channel or a realm link forms (Sync:OnPeerHello)
 	heardNeeds = {}, -- origin -> { from, t }: the highest seq another player asked the channel for, lately
+	lastNeedSent = nil, -- GetTime() our last need went on the channel
 	askedNeeds = {}, -- origin -> { from, t }: what we last asked the channel for
 	heldNeeds = {}, -- origin -> { from, t }: our need for that seq was held back once by another player's, at t
 	linkAsked = {}, -- origin -> { from, t }: the records last asked of a realm link, so no other link is asked the same
@@ -231,6 +232,7 @@ local MAX_NEED_ORIGINS_LINK = 40
 -- enough: the fill goes to the whole channel. A need heard from another player, from our seq or earlier, and our own
 -- last need, hold ours back this long.
 local NEED_REPEAT_SECONDS = 15
+local NEED_MIN_SECONDS = 10 -- and we put at most one need on the channel this often, whatever the haves name
 local NEED_COVERED_WITHIN = 3 * FILL_BATCH -- a fill answers from the asked seq on, a few messages deep: a need further below ours reaches nothing of ours
 local HELD_NEED_SECONDS = 10 * 60 -- a hold is remembered this long, so a need isn't held again for the same seq
 local MAX_NEED_ORIGIN_BYTES = 64 -- an origin's name, as long as Store allows
@@ -2294,6 +2296,10 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 		-- Spread requests so a busy channel is not hit by everyone at once
 		C_Timer.After(0.5 + math.random() * 2.5, function()
 			local after = GetTime()
+			-- The next have heard asks again; about 20 are heard a minute
+			if private.lastNeedSent and after - private.lastNeedSent < NEED_MIN_SECONDS then
+				return
+			end
 			private.SweepNeeds(private.askedNeeds, after, 2 * NEED_REPEAT_SECONDS)
 			private.SweepNeeds(private.heldNeeds, after, HELD_NEED_SECONDS)
 			for origin, from in pairs(need) do
@@ -2318,6 +2324,7 @@ function private.HandleHave(chains, sender, isHello, viaLink, bounties)
 				return
 			end
 			if private.Send(TAG_NEED, { n = need }) then
+				private.lastNeedSent = after
 				for origin, from in pairs(need) do
 					private.askedNeeds[origin] = { from = from, t = after }
 				end

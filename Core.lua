@@ -681,6 +681,25 @@ function Wanted:AppNotRunningFor()
 	return GetServerTime() - seen
 end
 
+---Whether the Wanted app was running but waiting for this account's player to sign in when the game read its file: it
+---writes the accounts waiting into !!WantedLink (WantedAppSignIn, by account mark: since when). Nothing the account
+---holds reaches the website meanwhile. False without the app, when it wasn't running, or from an app that doesn't say.
+---@return boolean
+function Wanted:AppNeedsSignIn()
+	local waiting = type(WantedAppSignIn) == "table" and Wanted.db and WantedAppSignIn[Wanted.db.accountMark]
+	return type(waiting) == "number" and waiting > 0 and Wanted:AppVersion() ~= nil and not Wanted:AppNotRunningFor()
+end
+
+---The one line at login when the app waits for this account's sign-in (most players are in game, not at the tray).
+---@return boolean told
+function Wanted:TellAppSignIn()
+	if not Wanted:AppNeedsSignIn() then
+		return false
+	end
+	Wanted:Print("The Wanted app is running but not signed in, so your kills don't reach the website: open Wanted from the tray (the menu bar on a Mac) and sign in, then /reload.")
+	return true
+end
+
 ---Whether the Wanted app is on this computer: it says its version, or it wrote this account a catch-up.
 ---@return boolean
 function Wanted:HasApp()
@@ -1145,6 +1164,8 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		Wanted:CheckAppVersion()
 		-- A moment after the loading screen, so it isn't lost behind it
 		C_Timer.After(6, function() Wanted:PromptForApp() end)
+		-- After the popup, so the line isn't lost among the login lines
+		C_Timer.After(8, function() Wanted:TellAppSignIn() end)
 		-- Minutes in with no app detected: the one line on what it brings (PageWeb)
 		C_Timer.After(Wanted:AppNudgeSeconds(), function() Wanted:NudgeForApp() end)
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then

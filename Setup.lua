@@ -45,6 +45,10 @@ function Setup:Steps()
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "warn",
 			detail = format("Set up here (version %s), but it last ran %s ago.", app, Theme:Ago(notRunning)),
 			fix = "Start it: Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac." }
+	elseif app and Wanted:AppNeedsSignIn() then
+		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "bad",
+			detail = "The Wanted app is running but not signed in: your kills don't reach the website.",
+			fix = "Open Wanted from the tray (the menu bar on a Mac) and sign in, then /reload." }
 	elseif app then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "ok", detail = format("Version %s.", app) }
 	else

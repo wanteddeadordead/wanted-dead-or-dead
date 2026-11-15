@@ -7963,6 +7963,35 @@ end)()
 	A:Take(nil, nil)
 	A:TakeWeekly(nil, nil)
 end)()
+-- A pass with no achievement data (app closed, or only the stub snapshot) is not a character's first time
+;(function()
+	local A, me = ns.Achievements, ns.Store:GetOrigin()
+	local realAdd, warned = ns.Toast.Add, {}
+	ns.Toast.Add = function(_, t) warned[#warned + 1] = t.name end
+	local defs = { { id = "witness", name = "Witness", text = "See 50." }, { id = "founding-hunter", name = "Founding Hunter", text = "Beta." } }
+	-- (1) first pass with no data, then data holding badges the character already had: nothing announced
+	ns.db.badgesSeen = nil
+	A:Take(nil, nil)
+	A:TakeWeekly(nil, nil)
+	A:CheckNew()
+	check(#warned == 0 and (ns.db.badgesSeen == nil or ns.db.badgesSeen[me] == nil), "a pass with no data records nothing")
+	A:Take(defs, { [me:lower()] = { "founding-hunter" } })
+	A:CheckNew()
+	check(#warned == 0 and ns.db.badgesSeen[me]["founding-hunter"], "the first pass with data is quiet and records what is held")
+	-- (2) a recorded character, a pass with no data, then a genuinely new badge: one toast
+	A:Take(nil, nil)
+	A:CheckNew()
+	check(#warned == 0 and ns.db.badgesSeen[me]["founding-hunter"], "a pass with no data leaves the record alone")
+	A:Take(defs, { [me:lower()] = { "founding-hunter", "witness" } })
+	A:CheckNew()
+	check(#warned == 1 and warned[1] == "Witness", "a new badge after a pass with no data is announced once")
+	-- (3) later passes stay quiet
+	A:CheckNew()
+	check(#warned == 1, "and only once")
+	A:Take(nil, nil)
+	ns.db.badgesSeen = nil
+	ns.Toast.Add = realAdd
+end)()
 -- Cosmetics from the site: a player's signature badge leads their badges; their calling-card emblem goes before what
 -- they say in chat; the death card wears the killer's emblem, frame colour and stamp
 ;(function()

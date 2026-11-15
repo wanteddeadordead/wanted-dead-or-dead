@@ -385,10 +385,16 @@ end
 
 ---Announces this character's badges that are new since the last catch-up, a toast each with the badge's emblem crest,
 ---then their new calling-card pieces (CallingCard:CheckNew). The first catch-up a character sees only notes what they
----hold (WantedDB.badgesSeen).
+---hold (WantedDB.badgesSeen). A pass with no achievement definitions notes and announces nothing.
 function Achievements:CheckNew()
 	local me = Wanted.Store and Wanted.Store:GetOrigin() or UnitName("player")
 	if type(me) ~= "string" then
+		return
+	end
+	if not private.order or #private.order == 0 then
+		-- No achievement data this pass (the app is closed, or only the stub snapshot came): not a first time, so
+		-- nothing is recorded and nothing announced
+		Wanted.CallingCard:CheckNew()
 		return
 	end
 	Wanted.db.badgesSeen = type(Wanted.db.badgesSeen) == "table" and Wanted.db.badgesSeen or {}

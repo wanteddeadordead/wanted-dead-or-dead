@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - The race HUD no longer makes the game stutter every second in a zone where a race is running.
+- When one player asks the sync channel for missing records, about one player now answers instead of nearly everyone who holds them. Players wait longer to answer the more players are in the channel, an answer still waiting to be sent is dropped once another player's answer is heard, and an answer's parts are sent together so the others hear it sooner.
 
 ## [1.29.2] - 2026-11-14
 

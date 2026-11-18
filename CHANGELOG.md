@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 - Kill proof now points to the WoW: Forever [PvP] Discord (discord.gg/WoWForeverUS): post the screenshot in #bounty-board, in the post for that bounty, not in #pvp-salt.
-- Your setup has a fifth step, joining the WoW: Forever [PvP] Discord: it stays red until you click I've joined on the Website & app page, and "Your setup: all set" now needs it.
+- Your setup has an optional fifth step, joining the WoW: Forever [PvP] Discord: it stays grey until you click I've joined on the Website & app page, and doesn't stop "Your setup: all set".
 
 ## [1.29.3] - 2026-11-17
 

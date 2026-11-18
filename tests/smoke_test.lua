@@ -2837,6 +2837,10 @@ end
 		Hear("F", { r = { wrongId } }, "Other Holder")
 		Hear("F", { r = { noId } }, "Other Holder")
 		check(QueuedFills() == 2, "a copy of the first record under a wrong id or none leaves it, got "..QueuedFills())
+		-- A fill heard in the guild (a guildmate locked out of the channel) reached the guild, not the channel's asker
+		Fire("CHAT_MSG_ADDON", "WNTD", Message("F", FillFrom("Drop X", 40, 47)), "GUILD", "Guild Holder")
+		RunFrames()
+		check(QueuedFills() == 2, "a fill heard in the guild leaves our channel answer, got "..QueuedFills())
 		Hear("F", FillFrom("Drop X", 40, 40), "Other Holder")
 		check(QueuedFills() == 0, "a copy of the first record drops it, got "..QueuedFills())
 		Fresh()

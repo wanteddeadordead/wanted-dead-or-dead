@@ -258,7 +258,7 @@ UI:RegisterPage("warmarks", {
 			if GuildWars:Sampling() then
 				return
 			end
-			W:Dialog({ title = "Your War Marks on the site", input = { value = MARKS_PAGE }, confirmLabel = "Close" })
+			W:Dialog({ title = "Your War Marks on the site", input = { value = MARKS_PAGE, copy = true }, confirmLabel = "Close" })
 		end)
 		shop:SetPoint("BOTTOMRIGHT", 0, 4)
 		W:Explain(shop, "Open on the site", "Your purse, today by source and every movement, on wanteddeadordead.com. Copy the address. War Marks are never sold.")

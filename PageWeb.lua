@@ -142,7 +142,7 @@ function Wanted:PromptForApp()
 	W:Dialog({
 		title = "Get the Wanted app",
 		text = "The Wanted app isn't set up on this computer. It puts your kills on the website. Copy the address (Ctrl+C) into your browser:",
-		input = { value = SITE.."/app" },
+		input = { value = SITE.."/app", copy = true },
 		confirmLabel = "Close",
 		cancelLabel = "Don't remind me",
 		onConfirm = function() end,

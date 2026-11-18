@@ -237,7 +237,7 @@ function private.BuildRace(container, width, height)
 	private.asOf:SetPoint("BOTTOMLEFT", 14, 14)
 	-- The site's live numbers: the game can't open a browser, so the address to copy
 	private.copy = W:Button(card, "Copy address", "chip", 100, 20, function()
-		W:Dialog({ title = "Live race numbers", input = { value = SITE_RACES }, confirmLabel = "Close" })
+		W:Dialog({ title = "Live race numbers", input = { value = SITE_RACES, copy = true }, confirmLabel = "Close" })
 	end)
 	private.copy:SetPoint("LEFT", private.asOf, "RIGHT", 10, 0)
 	W:Explain(private.copy, "Live race numbers", "wanteddeadordead.com/races: click the address, Ctrl+C, and paste it into your browser.")

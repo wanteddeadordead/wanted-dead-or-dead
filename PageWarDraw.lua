@@ -18,7 +18,7 @@ function GuildWars:OpenOnSite(war)
 	if GuildWars:Sampling() then
 		return
 	end
-	W:Dialog({ title = "The war on the site", input = { value = SITE..tostring(war and war.id or "") }, confirmLabel = "Close" })
+	W:Dialog({ title = "The war on the site", input = { value = SITE..tostring(war and war.id or ""), copy = true }, confirmLabel = "Close" })
 end
 
 GuildWars.PANELS.draw = {

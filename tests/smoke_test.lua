@@ -80,6 +80,8 @@ function Methods:SetText(t)
 	if self._fs then self._fs._text = t end
 end
 function Methods:GetText() return self._text end
+function Methods:SetCursorPosition(p) self._cursor = p end
+function Methods:HighlightText() self._highlights = (self._highlights or 0) + 1 end
 -- Text width as the game draws it in the interface font, Inter: each printable ASCII character's advance in ems, from
 -- Inter SemiBold (Media\fonts\Inter-SemiBold.ttf; Medium is a little narrower), space to "~". Any other character
 -- (Cyrillic, accents) counts as 0.65 em, an inline texture as 1.12 em, colour codes as nothing.
@@ -17233,6 +17235,31 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns.db.settings.discordJoined = false
 	ns:RunCommand("setup", "")
 	check(printed[#printed]:find("[not yet] In the WoW: Forever [PvP] Discord (optional). ", 1, true), "/wanted setup: the unjoined Discord step reads not yet, optional once")
+	-- A copy-only dialog box: selected as it opens and on a click, typing can't change it; the next dialog without
+	-- the option has an ordinary box again
+	do
+		ns.Widgets:Dialog({ title = "Copy", input = { value = "https://example.test/x", copy = true } })
+		local box = _G.WantedDialog.frame.input
+		check(box:GetText() == "https://example.test/x" and (box._highlights or 0) >= 1, "a copy box is selected as the dialog opens")
+		check(box:GetWidth() == 390 - 40 and box._cursor == 0, "a copy box is as wide as the dialog less its margins and shows the start of the text")
+		local before = box._highlights
+		box._cursor = 9
+		box._scripts.OnMouseUp(box)
+		check(box._cursor == 0, "a click puts the start in view before selecting")
+		check(box._highlights == before + 1, "a click selects it all again")
+		box:SetText("typed over")
+		box._scripts.OnTextChanged(box, true)
+		check(box:GetText() == "https://example.test/x", "typing can't change a copy box")
+		_G.WantedDialog.frame.cancel:Click()
+		ns.Widgets:Dialog({ title = "Ask", input = { placeholder = "Name", value = "" } })
+		box = _G.WantedDialog.frame.input
+		local count = box._highlights
+		box:SetText("typed")
+		box._scripts.OnTextChanged(box, true)
+		box._scripts.OnMouseUp(box)
+		check(box:GetWidth() == 200 and box:GetText() == "typed" and box._highlights == count, "the next dialog's box is an ordinary one again")
+		_G.WantedDialog.frame.cancel:Click()
+	end
 	-- Put back
 	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId = saved.info, saved.newer, saved.club
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print

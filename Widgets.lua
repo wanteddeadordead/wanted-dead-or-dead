@@ -1043,6 +1043,7 @@ local waiting = {} -- { options, host } dialogs asked for while another was up: 
 local waitingForCombat = false -- the next waits for the fight to end
 local ShowNext -- below
 
+local INPUT_WIDTH = 200 -- the dialog box for a typed answer
 local function CreateDialog()
 	-- The dialog lives on UIParent so it shows from the Nearby window with the main window closed too. When
 	-- the main window is open, a dim layer over it keeps its buttons from being clicked meanwhile.
@@ -1071,7 +1072,31 @@ local function CreateDialog()
 	frame.message:SetWordWrap(true)
 	frame.message:SetJustifyH("CENTER")
 	frame.message:SetJustifyV("TOP")
-	frame.input = W:Input(frame, 200, "")
+	frame.input = W:Input(frame, INPUT_WIDTH, "")
+	-- A copy-only box (options.input.copy): all of it selected as it opens, on a click and on focus, and typing can't
+	-- change it, as W:CopyBox does. The frame is shared, so Dialog sets frame.copyText for each opening.
+	-- Selecting shows the start of the text (a long one is scrolled to its end otherwise), then all of it
+	local function SelectAll(box)
+		box:SetCursorPosition(0)
+		box:HighlightText()
+	end
+	frame.input:HookScript("OnEditFocusGained", function(self)
+		if frame.copyText then
+			SelectAll(self)
+		end
+	end)
+	-- A click on a box that already has focus moves the cursor and drops the selection: select it all again
+	frame.input:HookScript("OnMouseUp", function(self)
+		if frame.copyText then
+			SelectAll(self)
+		end
+	end)
+	frame.input:HookScript("OnTextChanged", function(self, userInput)
+		if userInput and frame.copyText then
+			self:SetText(frame.copyText)
+			SelectAll(self)
+		end
+	end)
 	frame.cancel = W:Button(frame, "Cancel", "secondary", 100, 27)
 	frame.cancel:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -8, 16)
 	frame.confirm = W:Button(frame, "OK", "primary", 100, 27)
@@ -1199,7 +1224,8 @@ ShowNext = function()
 end
 
 ---Shows a modal dialog over the Wanted window.
----@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), maxLetters
+---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), copy (a single box that is only for copying: selected as the dialog opens and
+---on a click, and typing can't change it), maxLetters
 ---(of a multiline box, default 255), tip = { title, body } (the box's tooltip: how to copy what's in it) }, over (a window to centre on, rather than the Wanted window or the screen), width
 ---(of the dialog, default 390), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
@@ -1291,6 +1317,9 @@ function W:Dialog(options)
 	else
 		frame.input:Hide()
 	end
+	frame.copyText = options.input and options.input.copy and options.input.value or false
+	-- A copy box shows the whole of what it holds, the dialog's width less its margins; any other is the usual width
+	frame.input:SetWidth(frame.copyText and (options.width or DIALOG_WIDTH) - 40 or INPUT_WIDTH)
 	local inputTip = options.input and options.input.tip
 	W:Explain(frame.input, inputTip and inputTip[1], inputTip and inputTip[2])
 	local choice = options.choice
@@ -1315,6 +1344,10 @@ function W:Dialog(options)
 		frame.area:SetFocus()
 	elseif options.input then
 		frame.input:SetFocus()
+		if frame.copyText then
+			frame.input:SetCursorPosition(0)
+			frame.input:HighlightText() -- also when the box already had focus, which fires no focus event
+		end
 	end
 end
 

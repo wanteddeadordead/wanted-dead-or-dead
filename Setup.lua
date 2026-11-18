@@ -157,8 +157,8 @@ end
 function private.AskDiscord(step)
 	W:Dialog({
 		title = "Join the WoW: Forever [PvP] Discord",
-		text = step.detail.."\n\nCopy the invite, join, then click I've joined.",
-		input = { value = Wanted.Proof.DISCORD_URL, tip = { "The invite", "Click the box, then Ctrl+C." } },
+		text = step.detail.."\n\nThe invite is selected: press Ctrl+C, join, then click I've joined.",
+		input = { value = Wanted.Proof.DISCORD_URL, copy = true },
 		confirmLabel = "I've joined",
 		cancelLabel = "Close",
 		onConfirm = function() private.MarkDone(step.confirm) end,

@@ -2720,15 +2720,22 @@ end
 		Hear("L", FillFrom("Fill X", 40, 45), "Other Holder")
 		RunTimers()
 		check(Fills() >= 1, "a live record isn't an answer, got "..Fills())
-		-- A second need for the origin from another seq before the delay ends replaces the first: only the newer is answered
-		Asked("Fill X", 40)
-		Hear("N", { n = { ["Fill X"] = 45 } }, "Another Newcomer")
-		RunTimers()
-		local from45 = 0
-		for _, m in ipairs(Sent("CHANNEL")) do
-			if m.tag == "F" and m.tbl.r and m.tbl.r[1] and m.tbl.r[1].seq == 45 then from45 = from45 + 1 end
+		-- Two needs for the origin from different seqs before the delay ends: the lower is answered, which serves both. A
+		-- need from the chain's head right after a newcomer's (anyone can send one) doesn't move the answer past what the
+		-- newcomer lacks
+		local function FirstSent()
+			for _, m in ipairs(Sent("CHANNEL")) do
+				if m.tag == "F" and m.tbl.r and m.tbl.r[1] then return m.tbl.r[1].seq end
+			end
 		end
-		check(Fills() >= 1 and from45 == Fills(), "a newer need for the origin replaces the pending one: the fill starts at 45")
+		Asked("Fill X", 40)
+		Hear("N", { n = { ["Fill X"] = 50 } }, "Head Asker")
+		RunTimers()
+		check(FirstSent() == 40, "a need from higher seqs heard after ours keeps the answer at the lower seq, got "..tostring(FirstSent()))
+		Asked("Fill X", 45)
+		Hear("N", { n = { ["Fill X"] = 40 } }, "Another Newcomer")
+		RunTimers()
+		check(FirstSent() == 40, "a need from lower seqs heard after moves the answer down to it, got "..tostring(FirstSent()))
 		db.records, db.chains = savedRecords, savedChains
 		private.pendingNeedAnswers = {}
 	end
@@ -2907,8 +2914,8 @@ end
 			if delay == 0.5 + 0.5 * 150 then waits = waits + 1 end
 		end
 		C_Timer.After = realAfter
-		check(waits == 1 and private.pendingNeedAnswers["Drop X"] and private.pendingNeedAnswers["Drop X"].from == 45,
-			"needs for an origin we are waiting to answer share one wait, the newest seq answered, got "..waits)
+		check(waits == 1 and private.pendingNeedAnswers["Drop X"] and private.pendingNeedAnswers["Drop X"].from == 40,
+			"needs for an origin we are waiting to answer share one wait, the lowest seq answered, got "..waits)
 		private.members = savedMembers
 		-- A realm link's answer is a whisper, never queued or dropped
 		Fresh()

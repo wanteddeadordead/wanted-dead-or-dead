@@ -1,7 +1,8 @@
--- Wanted: the setup checklist. The four steps a player needs for Wanted to work in full, each with a green check or a
+-- Wanted: the setup checklist. The five steps a player needs for Wanted to work in full, each with a green check or a
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
--- group joined, and enemy nameplates on (Wanted sees enemies through them). A feature toggle
--- is not setup and isn't listed (2026-10-17). The Dashboard shows one line of marks, each with its detail and fix as
+-- group joined, enemy nameplates on (Wanted sees enemies through them), and the WoW: Forever [PvP] Discord joined.
+-- A feature toggle is not setup and isn't listed (2026-10-17). The game can't see Discord, so that step is the
+-- player's own word: red until they click "I've joined" on the Website & app page (settings.discordJoined). The Dashboard shows one line of marks, each with its detail and fix as
 -- its tooltip (click for the Website & app page); the Website & app page shows every step with its address to copy;
 -- /wanted setup prints them.
 
@@ -25,11 +26,11 @@ local ICONS = {
 }
 local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
 -- The full card's step bar: each step's name, and what a dot's state reads under it
-local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates" }
+local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates", "In the Discord" }
 local BAR_NOTES = { bad = "Not yet", warn = "Nearly" }
 local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "off" }
 
----The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar? }.
+---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar?, confirm? }.
 ---@return table[]
 function Setup:Steps()
 	local steps = {}
@@ -63,6 +64,12 @@ function Setup:Steps()
 		detail = on and "Wanted sees enemies through them, out to 45 yards." or "Wanted sees enemies through their nameplates; with them off, only what you target or mouse over.",
 		fix = (not on) and "Press V, or Interface > Names > Enemy Players." or nil,
 		cvar = (not on) and "nameplateShowEnemies" or nil }
+	local joined = Wanted.db ~= nil and Wanted.db.settings.discordJoined == true
+	steps[5] = { key = "discord", title = "In the WoW: Forever [PvP] Discord", short = "In the Discord", state = joined and "ok" or "bad",
+		detail = joined and "Thanks for joining." or "Bounty posts, kill proof and world PvP news for both sides are there.",
+		fix = (not joined) and "Join it, then click I've joined:" or nil,
+		url = (not joined) and Wanted.Proof.DISCORD_URL or nil,
+		confirm = (not joined) and "discordJoined" or nil }
 	return steps
 end
 
@@ -79,8 +86,8 @@ function Setup:AllSet(steps)
 end
 
 ---A card of the steps. card.Refresh() lays it out for the current state and returns its height. brief: one line of
----the four marks, each explaining its step and fix on hover (the Dashboard); otherwise every step with its detail,
----and its address in a box to copy or a button to turn it on (the Website & app page).
+---the five marks, each explaining its step and fix on hover (the Dashboard); otherwise every step with its detail,
+---and its address in a box to copy or a button to turn it on or say it is done (the Website & app page).
 ---@param parent table
 ---@param width number
 ---@param brief boolean?
@@ -101,7 +108,7 @@ function Setup:BuildCard(parent, width, brief, onClick)
 		card.fix:SetWordWrap(true)
 		card.fix:SetWidth(width - 2 * PAD)
 	end
-	for i = 1, 4 do
+	for i = 1, #BAR_STEPS do
 		local row = {}
 		row.icon = card:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(ICON, ICON)
@@ -119,6 +126,12 @@ function Setup:BuildCard(parent, width, brief, onClick)
 			if row.cvar and SetCVar then
 				SetCVar(row.cvar, "1")
 				card.Refresh()
+			elseif row.confirm then
+				Wanted.db.settings[row.confirm] = true
+				-- Both cards (the Dashboard's marks too)
+				for _, other in pairs(Setup.cards) do
+					other.Refresh()
+				end
 			end
 		end)
 		card.rows[i] = row
@@ -197,7 +210,7 @@ function private.Layout(card, width, brief)
 		card.fix:ClearAllPoints()
 		card.fix:SetPoint("TOPLEFT", PAD, y)
 		y = y - card.fix:GetStringHeight() - 6
-		row.cvar = step.cvar
+		row.cvar, row.confirm = step.cvar, step.confirm
 		if step.url then
 			row.box:SetText(step.url)
 			row.box:ClearAllPoints()
@@ -205,7 +218,9 @@ function private.Layout(card, width, brief)
 			row.box:Show()
 			y = y - 28 - 4
 		end
-		if step.cvar then
+		if step.cvar or step.confirm then
+			row.button.label:SetText(step.confirm and "I've joined" or "Turn on")
+			row.button:SetWidth(step.confirm and 110 or 90)
 			row.button:ClearAllPoints()
 			row.button:SetPoint("TOPLEFT", PAD, y)
 			row.button:Show()

@@ -2875,6 +2875,10 @@ end
 		Hear("N", { n = { ["Drop X"] = 30 } }, "Newcomer")
 		RunTimers()
 		check(QueuedFills() > 2, "a need from earlier records than our queued answer has is answered, got "..QueuedFills())
+		-- A queued answer covers a need only as far as the records it queued: the fill room cut it short
+		Queued("Drop X", 1)
+		check(private.AnswerQueued("Drop X", 20) and not private.AnswerQueued("Drop X", 45),
+			"an answer queued from seq 1 covers a need from 20, not one from 45 past what the queue took")
 
 		-- The wait before answering grows with the channel: about one holder's answer starts in the time one is heard
 		local delays, realAfter = {}, C_Timer.After

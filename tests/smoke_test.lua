@@ -2831,6 +2831,12 @@ end
 		otherKind.kind, otherKind.data.extra = "pass", 1
 		Hear("F", { r = { otherKind } }, "Other Holder")
 		check(QueuedFills() == 2, "a record with our hash but other fields leaves it, got "..QueuedFills())
+		-- A copy the asker would turn away as malformed isn't an answer either: a wrong id or none
+		local wrongId, noId = Rec("Drop X", 40), Rec("Drop X", 40)
+		wrongId.id, noId.id = "nope", nil
+		Hear("F", { r = { wrongId } }, "Other Holder")
+		Hear("F", { r = { noId } }, "Other Holder")
+		check(QueuedFills() == 2, "a copy of the first record under a wrong id or none leaves it, got "..QueuedFills())
 		Hear("F", FillFrom("Drop X", 40, 40), "Other Holder")
 		check(QueuedFills() == 0, "a copy of the first record drops it, got "..QueuedFills())
 		Fresh()

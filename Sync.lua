@@ -2242,7 +2242,8 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			local isNew, why
 			-- Another player's fill for a need we were about to answer: heard, not merged (a holder already has
 			-- these records), so one answer reaches the channel instead of one from every holder
-			if tag == TAG_FILL and type(record) == "table" and type(record.origin) == "string" and Store:IsSeq(record.seq) then
+			-- (only a record the asker can take in: one it turns away as malformed answers nothing)
+			if tag == TAG_FILL and Store:IsWellFormed(record) then
 				local pending = private.pendingNeedAnswers[record.origin]
 				if pending and private.Answers(record, pending) then
 					private.pendingNeedAnswers[record.origin] = nil

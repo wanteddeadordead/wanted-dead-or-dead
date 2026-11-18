@@ -38,6 +38,7 @@ local private = {
 	peers = {}, -- sender -> last message time
 	ownMessages = {}, -- tag:msgId -> time sent, to recognise our own echoes
 	pendingNeedAnswers = {}, -- origin -> { from, t } scheduled answers
+	answers = {}, -- origin -> { from, dropped } our answer on its way to the channel (SendFill), its messages queued
 	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
 	dropReasons = {}, -- why messages were dropped, reason -> count (shown in /wanted bug)
 	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
@@ -1189,8 +1190,9 @@ end
 ---@param tbl table
 ---@param attempt number? how many times the game has throttled it already
 ---@param target string? a player to whisper instead of the channel
+---@param answer table? the answer to a need a fill belongs to (SendFill), so it can be dropped while queued
 ---@return boolean
-function private.Send(tag, tbl, attempt, target)
+function private.Send(tag, tbl, attempt, target, answer)
 	-- GUILD_ONLY: the guild's addon channel, whether or not we're on the sync channel
 	local guildOnly = target == GUILD_ONLY
 	if guildOnly then
@@ -1291,7 +1293,7 @@ function private.Send(tag, tbl, attempt, target)
 			end
 		end
 		local options = private.pluginOptions[tag]
-		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or (options and options.priority) or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0 })
+		private.Enqueue({ tag = tag, parts = parts, next = 1, priority = SEND_PRIORITY[tag] or (options and options.priority) or DEFAULT_SEND_PRIORITY, queued = now, refusals = 0, answer = answer })
 		return true
 	end
 	-- A plugin's whisper goes to a player at its table, who is online and sent to us moments ago, so the lockdown's
@@ -2232,6 +2234,11 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 				if pending and record.seq >= pending.from then
 					private.pendingNeedAnswers[record.origin] = nil
 				end
+				-- Our answer already queued goes the same way, all but a message already part sent
+				local answer = private.answers[record.origin]
+				if answer and record.seq >= answer.from then
+					private.DropAnswer(record.origin)
+				end
 			end
 			-- A record sent by its own origin was heard straight from it, live message or gap fill (the game
 			-- stamps the sender)
@@ -2456,8 +2463,14 @@ function private.HandleNeed(need, sender, viaLink)
 end
 
 ---Sends an origin's records from a seq on, on the channel or to one player. Every kind: notices and proofs
----too, which the first list here left out.
+---too, which the first list here left out. On the channel it is an answer another player's fill can drop while it
+---waits (DropAnswer).
 function private.SendFill(origin, fromSeq, target)
+	local answer = nil
+	if not target then
+		answer = { from = fromSeq }
+		private.answers[origin] = answer
+	end
 	local records = {}
 	local lowest = Store:GetChainSeq(origin) + 1
 	for record in Store:OriginIterator(origin) do
@@ -2493,7 +2506,31 @@ function private.SendFill(origin, fromSeq, target)
 	if count == #records and last < chainSeq then
 		AddGap(max(count - (count - 1) % FILL_BATCH, 1), chainSeq + 1)
 	end
-	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras)
+	private.SendInBatches(records, target, MAX_FILL_PER_REQUEST, extras, answer)
+end
+
+---Drops our answer for an origin that waits in the channel queue, another player's fill for it having been heard: the
+---messages not yet made are never made and the queued ones whose first part hasn't gone are taken out. One already
+---part sent finishes: its receivers hold its parts until the last comes.
+---@param origin string
+function private.DropAnswer(origin)
+	local answer = private.answers[origin]
+	if not answer then
+		return
+	end
+	private.answers[origin] = nil
+	answer.dropped = true
+	local outbox, dropped = private.outbox, 0
+	for i = #outbox, 1, -1 do
+		local item = outbox[i]
+		if item.answer == answer and item.next == 1 then
+			tremove(outbox, i)
+			private.outboxParts = private.outboxParts - #item.parts
+			dropped = dropped + 1
+		end
+	end
+	private.stats.skipped = private.stats.skipped + dropped
+	Wanted:Log("Sync: another player answered for %s; %d queued message(s) of ours dropped", origin, dropped)
 end
 
 -- How far players said each origin's chain reaches (hellos and haves), so a fill can't skip a chain past it: the
@@ -2667,22 +2704,26 @@ end
 ---@param max number?
 ---@param extras table? fields for a message, by the index of its first record ([1] is sent on its own when there
 ---are no records)
-function private.SendInBatches(records, target, max, extras)
+---@param answer table? the answer to a need these records are (SendFill): once dropped, nothing more is sent
+function private.SendInBatches(records, target, max, extras, answer)
 	local state = { stopped = false }
 	local count = min(#records, max or #records)
 	if count == 0 and extras and extras[1] then
 		Wanted:QueueWork(function()
+			if answer and answer.dropped then
+				return
+			end
 			local tbl = { r = {} }
 			for k, v in pairs(extras[1]) do
 				tbl[k] = v
 			end
-			private.Send(TAG_FILL, tbl, nil, target)
+			private.Send(TAG_FILL, tbl, nil, target, answer)
 		end)
 		return
 	end
 	for i = 1, count, FILL_BATCH do
 		Wanted:QueueWork(function()
-			if state.stopped then
+			if state.stopped or (answer and answer.dropped) then
 				return
 			end
 			local batch = {}
@@ -2695,7 +2736,7 @@ function private.SendInBatches(records, target, max, extras)
 					tbl[k] = v
 				end
 			end
-			if not private.Send(TAG_FILL, tbl, nil, target) then
+			if not private.Send(TAG_FILL, tbl, nil, target, answer) then
 				state.stopped = true
 			end
 		end)

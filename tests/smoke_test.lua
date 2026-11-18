@@ -17013,6 +17013,21 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	home.rows[2].hit._scripts.OnClick(home.rows[2].hit)
 	check(ns.db.settings.lastPage == "web", "a click on a mark opens Website & app")
 	ns.UI:Show("home")
+	-- The unjoined Discord mark asks for the invite in a dialog right there; I've joined sets it and turns the mark green
+	local realDialog, asked = ns.Widgets.Dialog, nil
+	ns.Widgets.Dialog = function(_, options) asked = options end
+	local discordMark = home.rows[5]
+	check(discordMark.hit.tooltipText:find("Click to get the invite link.", 1, true) and not discordMark.hit.tooltipText:find("I've joined", 1, true), "the Dashboard's Discord tooltip says what the click does")
+	discordMark.hit._scripts.OnClick(discordMark.hit)
+	check(asked and asked.title == "Join the WoW: Forever [PvP] Discord" and asked.input.value == ns.Proof.DISCORD_URL and asked.confirmLabel == "I've joined" and ns.db.settings.lastPage == "home",
+		"a click on the unjoined Discord mark opens the dialog with the invite, and stays on the Dashboard")
+	check(ns.db.settings.discordJoined == false, "the dialog alone changes nothing")
+	asked.onConfirm()
+	check(ns.db.settings.discordJoined == true and Setup:Steps()[5].state == "ok" and home.rows[5].icon._texture == "Interface\\RaidFrame\\ReadyCheck-Ready", "I've joined sets it and the mark turns green")
+	asked = nil
+	home.rows[5].hit._scripts.OnClick(home.rows[5].hit)
+	check(asked == nil and ns.db.settings.lastPage == "web", "joined: the mark's click opens Website & app like the others")
+	ns.Widgets.Dialog = realDialog
 	ns.db.settings.discordJoined = false
 	ns.UI:Show("home")
 	check(addonTip and not addonTip:find("\n\n", 1, true), "a green mark: its detail, no fix")

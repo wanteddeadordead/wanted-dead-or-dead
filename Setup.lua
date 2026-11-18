@@ -118,7 +118,9 @@ function Setup:BuildCard(parent, width, brief, onClick)
 		-- for the unjoined Discord step asks for the invite. It doesn't rely on clicks passing through to the card.
 		row.hit = CreateFrame("Button", nil, card)
 		row.hit:SetScript("OnClick", function()
-			if onClick then
+			if row.step and row.step.confirm then
+				private.AskDiscord(row.step)
+			elseif onClick then
 				onClick()
 			end
 		end)
@@ -151,6 +153,18 @@ function private.MarkDone(key)
 	end
 end
 
+---The Dashboard's click on the unjoined Discord mark: the invite to copy and the player's word that they joined.
+function private.AskDiscord(step)
+	W:Dialog({
+		title = "Join the WoW: Forever [PvP] Discord",
+		text = step.detail.."\n\nCopy the invite, join, then click I've joined.",
+		input = { value = Wanted.Proof.DISCORD_URL, tip = { "The invite", "Click the box, then Ctrl+C." } },
+		confirmLabel = "I've joined",
+		cancelLabel = "Close",
+		onConfirm = function() private.MarkDone(step.confirm) end,
+	})
+end
+
 ---Lays the card out (Setup:BuildCard) and returns its height.
 function private.Layout(card, width, brief)
 	local steps = Setup:Steps()
@@ -177,7 +191,10 @@ function private.Layout(card, width, brief)
 			row.hit:SetPoint("TOPLEFT", row.icon, "TOPLEFT")
 			row.hit:SetSize(ICON + 4 + row.name:GetStringWidth(), ICON)
 			row.hit:Show()
-			local fix, url = step.fix, step.url
+			row.step = step
+			-- The Discord mark opens its invite right here; the Website & app card's wording ("click I've joined") isn't true on this card
+			local fix = step.confirm and "Click to get the invite link." or step.fix
+			local url = (not step.confirm) and step.url or nil
 			W:Explain(row.hit, step.title, fix and step.detail.."\n\n"
 				..Theme:Colorize(fix..(url and " "..url:gsub("^https://", "") or ""), C.gold) or step.detail)
 			row.title:Hide()

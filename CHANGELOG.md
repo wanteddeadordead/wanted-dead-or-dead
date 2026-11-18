@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- When the Wanted app is running but not signed in, the setup's "Wanted app running" step is red and one line in chat at login says so: your kills don't reach the website until you open Wanted from the tray (the menu bar on a Mac) and sign in. Needs the app version that ships with this.
+
 ## [1.29.3] - 2026-11-17
 
 - The race HUD no longer makes the game stutter every second in a zone where a race is running.

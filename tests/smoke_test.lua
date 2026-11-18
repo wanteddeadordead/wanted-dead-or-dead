@@ -17011,6 +17011,25 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	check(Setup:Steps()[4].state == "ok", "plates on: green")
 	WantedAppInfo = { running = "0.2.54", latest = "0.2.54" }
 	check(Setup:Steps()[2].state == "ok", "the app running: green")
+	-- The app is running but waits for this account's player to sign in (WantedAppSignIn, by account mark): red, and
+	-- one line in chat at login
+	WantedAppSignIn = { [ns.db.accountMark] = clock - 600 }
+	local signIn = Setup:Steps()[2]
+	check(signIn.state == "bad" and signIn.detail == "The Wanted app is running but not signed in: your kills don't reach the website."
+		and signIn.fix == "Open Wanted from the tray (the menu bar on a Mac) and sign in, then /reload.", "an app waiting for sign-in: red, with how to sign in")
+	check(not Setup:AllSet(), "and not all set")
+	check(ns:TellAppSignIn() and tostring(printed[#printed]):find("not signed in", 1, true) and tostring(printed[#printed]):find("/reload", 1, true),
+		"the login line says so, got "..tostring(printed[#printed]))
+	WantedAppSignIn = { otherAccount1 = clock - 600 }
+	check(Setup:Steps()[2].state == "ok" and not ns:TellAppSignIn(), "another account's wait isn't this one's")
+	WantedAppSignIn = { [ns.db.accountMark] = "soon" }
+	check(Setup:Steps()[2].state == "ok", "a value that isn't a time is ignored")
+	WantedAppSignIn = { [ns.db.accountMark] = clock - 600 }
+	WantedAppInfo.stopped = 1
+	check(Setup:Steps()[2].state == "warn" and not ns:TellAppSignIn(), "an app that has quit: not running, and no sign-in line")
+	WantedAppInfo.stopped = nil
+	WantedAppSignIn = nil
+	check(Setup:Steps()[2].state == "ok" and not ns:TellAppSignIn(), "an app that doesn't say (older than this): as before")
 	C_Club = { GetSubscribedClubs = function() return { { clubId = "503871241", name = "Wanted", clubType = 0 } } end, GetClubMembers = function() return {} end }
 	ns.Bridge.clubId = "503871241"
 	check(Setup:Steps()[3].state == "ok", "in the group: green")

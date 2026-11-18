@@ -37,8 +37,8 @@ local private = {
 	pausedUntil = 0,
 	peers = {}, -- sender -> last message time
 	ownMessages = {}, -- tag:msgId -> time sent, to recognise our own echoes
-	pendingNeedAnswers = {}, -- origin -> { from, t } scheduled answers
-	answers = {}, -- origin -> { from, dropped } our answer on its way to the channel (SendFill), its messages queued
+	pendingNeedAnswers = {}, -- origin -> { from, first, t } scheduled answers
+	answers = {}, -- origin -> { from, first, dropped } our answer on its way to the channel (SendFill), its messages queued
 	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
 	dropReasons = {}, -- why messages were dropped, reason -> count (shown in /wanted bug)
 	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
@@ -2238,12 +2238,12 @@ function private.HandleMessage(tag, tbl, sender, viaLink, channel)
 			-- these records), so one answer reaches the channel instead of one from every holder
 			if tag == TAG_FILL and type(record) == "table" and type(record.origin) == "string" and Store:IsSeq(record.seq) then
 				local pending = private.pendingNeedAnswers[record.origin]
-				if pending and record.seq >= pending.from then
+				if pending and private.Answers(record, pending) then
 					private.pendingNeedAnswers[record.origin] = nil
 				end
 				-- Our answer already queued goes the same way, all but a message already part sent
 				local answer = private.answers[record.origin]
-				if answer and record.seq >= answer.from then
+				if answer and private.Answers(record, answer) then
 					private.DropAnswer(record.origin)
 				end
 			end
@@ -2461,9 +2461,11 @@ function private.HandleNeed(need, sender, viaLink)
 		if pending then
 			-- Already waiting to answer that origin: the newest seq asked is answered, and the wait doesn't start over
 			-- (each need drawing its own wait would make the first of several draws the answer's time)
-			pending.from = fromSeq
+			if pending.from ~= fromSeq then
+				pending.from, pending.first = fromSeq, private.FirstHeld(origin, fromSeq)
+			end
 		else
-			pending = { from = fromSeq, t = GetTime() }
+			pending = { from = fromSeq, first = private.FirstHeld(origin, fromSeq), t = GetTime() }
 			private.pendingNeedAnswers[origin] = pending
 			C_Timer.After(0.5 + math.random() * private.AnswerWindow(), function()
 				if private.pendingNeedAnswers[origin] ~= pending then
@@ -2494,6 +2496,37 @@ function private.AnswerWindow()
 		end
 	end
 	return min(MAX_ANSWER_WINDOW, max(MIN_ANSWER_WINDOW, members * ANSWER_SECONDS_PER_MEMBER))
+end
+
+---The first record an answer from a seq sends: that seq's, or past records pruned here the first one held after it.
+---@param origin string
+---@param fromSeq number
+---@return number?
+function private.FirstHeld(origin, fromSeq)
+	if Wanted.db.records[origin..":"..format("%d", fromSeq)] then
+		return fromSeq
+	end
+	local first = nil
+	for record in Store:OriginIterator(origin) do
+		if type(record.seq) == "number" and record.seq >= fromSeq and (not first or record.seq < first) and not Store:IsTest(record) then
+			first = record.seq
+		end
+	end
+	return first
+end
+
+---Whether a record in another player's fill shows they answered what we were going to: the first record our answer
+---sends, a copy of the one we hold. Anyone can put any origin and seq in a message, and holders wait long to answer,
+---so a made-up record, or a real one further on, would keep every answer back while the asker got nothing it could use.
+---@param record table with a string origin and a whole seq
+---@param entry table a waiting or queued answer: { first }
+---@return boolean
+function private.Answers(record, entry)
+	if record.seq ~= entry.first then
+		return false
+	end
+	local held = Wanted.db.records[record.origin..":"..format("%d", record.seq)]
+	return held ~= nil and held.hash == record.hash
 end
 
 ---Whether our answer for an origin from a seq or earlier still has a message in the channel queue.
@@ -2533,6 +2566,9 @@ function private.SendFill(origin, fromSeq, target)
 		end
 	end
 	sort(records, function(a, b) return a.seq < b.seq end)
+	if answer then
+		answer.first = records[1] and records[1].seq
+	end
 	-- Older records than they asked for were pruned here (Store:Prune): the answer says where our copy of the
 	-- chain starts, so they stop asking for what nobody has any more (1.2.9 to 1.2.20 read only this)
 	local extras = { [1] = lowest > fromSeq and { p = { [origin] = lowest } } or nil }

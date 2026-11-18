@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Kill proof now points to the WoW: Forever [PvP] Discord (discord.gg/WoWForeverUS): post the screenshot in the bounty's post on its bounty board, not in #pvp-salt.
+
 ## [1.29.3] - 2026-11-17
 
 - The race HUD no longer makes the game stutter every second in a zone where a race is running.

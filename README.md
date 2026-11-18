@@ -49,7 +49,7 @@ The addon works on its own. The app is optional: it puts your fights on the site
   payment, so paid and unpaid are facts, not claims.
 - **Kill proof:** when your kill claims a bounty, a stamp with who, where, when and the kill id goes on
   screen and the game saves a screenshot. Posters see you have proof; if a kill is disputed, post it in
-  [#pvp-salt on the Forever PvP Discord](https://discord.com/invite/wow-forever-pvp).
+  the bounty's post on the bounty board of the [WoW: Forever [PvP] Discord](https://discord.gg/WoWForeverUS).
 
 **Your wanted poster**
 - **The price on your head:** every bounty the other faction has ever posted on you, paid or not, adds up.

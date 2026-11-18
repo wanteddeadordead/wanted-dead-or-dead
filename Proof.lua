@@ -2,7 +2,7 @@
 -- whom, where, when, for which bounties, and the kill id every client holds for that death) and takes a
 -- screenshot. Once the game confirms it was saved, a proof record says so, and posters and other hunters
 -- see it on the claim. The picture itself stays on your computer: if the kill is disputed, post it in the
--- Forever PvP Discord. A screenshot can be edited, so it is evidence for people to weigh, not something
+-- WoW: Forever [PvP] Discord, in the bounty's post on its bounty board. A screenshot can be edited, so it is evidence for people to weigh, not something
 -- that changes anyone's trust by itself.
 --
 -- Saving a screenshot makes the game hitch for a moment, so none is taken in combat: a kill mid-fight
@@ -18,8 +18,8 @@ local private = {
 	queue = {}, -- kills waiting for their screenshot (combat, or another shot in flight)
 	shooting = nil, -- the entry whose screenshot is being taken
 }
-Proof.DISCORD_URL = "https://discord.com/invite/wow-forever-pvp"
-Proof.DISCORD_CHANNEL = "#pvp-salt"
+Proof.DISCORD_URL = "https://discord.gg/WoWForeverUS"
+Proof.DISCORD_PLACE = "the bounty's post on the bounty board of the WoW: Forever [PvP] Discord"
 local GATHER_SECONDS = 0.5 -- one kill can claim several bounties; they share one screenshot
 local STAMP_SECONDS = 3 -- the stamp comes down after this even if the game never answers
 local NEXT_SHOT_SECONDS = 0.5 -- between queued screenshots
@@ -160,7 +160,7 @@ function private.OnScreenshot(succeeded)
 	for _, claim in ipairs(entry.claims) do
 		Store:NewRecord("proof", { claim = claim.id, deathId = claim.data.deathId, at = savedAt })
 	end
-	Wanted:Print("Kill proof saved in your Screenshots folder (%s). If the kill is disputed, post it in %s on the Forever PvP Discord: %s", savedAt, Proof.DISCORD_CHANNEL, Proof.DISCORD_URL)
+	Wanted:Print("Kill proof saved in your Screenshots folder (%s). If the kill is disputed, post it in %s: %s", savedAt, Proof.DISCORD_PLACE, Proof.DISCORD_URL)
 end
 
 

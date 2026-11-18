@@ -106,7 +106,7 @@ function Rows:UpdateBounty(row, info)
 			local tip = def.tip
 			-- Deciding on a claim: say when the hunter has a screenshot of the kill
 			if (action == "confirm" or action == "dispute") and info.claim and Wanted.Proof:Get(info.claim.id) then
-				tip = tip..format("\n\n%s has a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL)
+				tip = tip..format("\n\n%s has a screenshot of the kill. Ask for it in %s.", info.hunter, Wanted.Proof.DISCORD_PLACE)
 			end
 			W:AttachTooltip(button, def.label, tip)
 			button:Show()
@@ -223,7 +223,7 @@ function Rows:ShowBountyTooltip(row, info)
 		GameTooltip:AddLine(#witnesses > 0 and ("Seen by "..table.concat(witnesses, ", ")) or "Nobody else saw the kill", C.muted[1], C.muted[2], C.muted[3], true)
 		Reputation:AddTrustLines("Bounty hunter trust", Reputation:GetHunterTrust(Reputation:GetTally(info.hunter)))
 		if Wanted.Proof:Get(info.claim.id) then
-			GameTooltip:AddLine(format("%s's client saved a screenshot of the kill. Ask for it in %s on the Forever PvP Discord.", info.hunter, Wanted.Proof.DISCORD_CHANNEL), C.green[1], C.green[2], C.green[3], true)
+			GameTooltip:AddLine(format("%s's client saved a screenshot of the kill. Ask for it in %s.", info.hunter, Wanted.Proof.DISCORD_PLACE), C.green[1], C.green[2], C.green[3], true)
 		end
 	end
 	-- Records about it whose signature failed are never read, so nothing else shows them
@@ -343,7 +343,7 @@ function Rows:DoAction(action, info)
 		W:Dialog({
 			title = "Dispute the claim",
 			text = format("%s's claim on %s goes on their record as disputed, and your bounty opens again. Only dispute a claim you believe is false.", info.hunter, Killed(info, name))
-				..(Wanted.Proof:Get(info.claim.id) and format("\n\n%s saved a screenshot of this kill. Check %s on the Forever PvP Discord first.", info.hunter, Wanted.Proof.DISCORD_CHANNEL) or ""),
+				..(Wanted.Proof:Get(info.claim.id) and format("\n\n%s saved a screenshot of this kill. Check %s first.", info.hunter, Wanted.Proof.DISCORD_PLACE) or ""),
 			confirmLabel = "Dispute",
 			confirmStyle = "danger",
 			onConfirm = function()

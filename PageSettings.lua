@@ -408,7 +408,7 @@ function private.BuildSharing(column)
 	column:Note("Disputed kill? Post the screenshot:")
 	column.y = column.y - 4
 	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
-	W:Explain(proofLink, "Disputed kill", format("Post the screenshot in %s on the Forever PvP Discord. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_CHANNEL))
+	W:Explain(proofLink, "Disputed kill", format("Post the screenshot in %s. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_PLACE))
 
 	column:Section("Layers")
 	local Shard = function() return Wanted.Shard:Settings() end

@@ -29,7 +29,7 @@ local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
 -- The full card's step bar: each step's name, and what a dot's state reads under it
 local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates", "In the Discord" }
 local BAR_NOTES = { bad = "Not yet", warn = "Nearly", off = "Optional" }
-local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "optional" }
+local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "not yet" }
 
 ---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar?, confirm? }.
 ---@return table[]

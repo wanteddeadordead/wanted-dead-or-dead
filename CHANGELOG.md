@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Kill proof now points to the WoW: Forever [PvP] Discord (discord.gg/WoWForeverUS): post the screenshot in the bounty's post on its bounty board, not in #pvp-salt.
+- Kill proof now points to the WoW: Forever [PvP] Discord (discord.gg/WoWForeverUS): post the screenshot in #bounty-board, in the post for that bounty, not in #pvp-salt.
 
 ## [1.29.3] - 2026-11-17
 

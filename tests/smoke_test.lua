@@ -17008,7 +17008,13 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	check(home.rows[2].hit:IsShown() and home.rows[2].hit.tooltipTitle == "Wanted app running" and appTip:find("Get it, start it, then /reload.", 1, true)
 		and appTip:find("wanteddeadordead.com/app", 1, true) and appTip:find("No Wanted app on this computer", 1, true), "the app's mark: its detail, then the fix with the address")
 	check(platesTip:find("Press V, or Interface > Names > Enemy Players.", 1, true), "the plates' mark: how to turn them on")
-	check(home.rows[2].hit._clicks == false, "a mark lets the click through to the card")
+	-- A click on a mark does what the card does, with no click-through to rely on
+	ns.UI:Show("home")
+	home.rows[2].hit._scripts.OnClick(home.rows[2].hit)
+	check(ns.db.settings.lastPage == "web", "a click on a mark opens Website & app")
+	ns.UI:Show("home")
+	ns.db.settings.discordJoined = false
+	ns.UI:Show("home")
 	check(addonTip and not addonTip:find("\n\n", 1, true), "a green mark: its detail, no fix")
 	-- Fixed one by one
 	cvars.nameplateShowEnemies = "1"

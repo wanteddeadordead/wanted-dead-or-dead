@@ -324,7 +324,7 @@ function Rows:DoAction(action, info)
 			text = format("You agree %s killed %s, and you owe them %s.%s%s\n\nEvery record of this death:",
 				info.hunter, killed, Theme:Money(info.amount), caution,
 				Wanted.Proof:Get(info.claim.id) and format("\n\n%s has a screenshot of the kill.", info.hunter) or ""),
-			input = { value = Bounties:DeathPageURL(info.claim), tip = DEATH_PAGE_TIP },
+			input = { value = Bounties:DeathPageURL(info.claim), copy = true, tip = DEATH_PAGE_TIP },
 			confirmLabel = "Confirm",
 			confirmStyle = "success",
 			onConfirm = function()
@@ -336,7 +336,7 @@ function Rows:DoAction(action, info)
 		W:Dialog({
 			title = "The death's page",
 			text = format("Every record of %s's death:", Killed(info, name)),
-			input = { value = Bounties:DeathPageURL(info.claim), tip = DEATH_PAGE_TIP },
+			input = { value = Bounties:DeathPageURL(info.claim), copy = true, tip = DEATH_PAGE_TIP },
 			confirmLabel = "Close",
 		})
 	elseif action == "dispute" then

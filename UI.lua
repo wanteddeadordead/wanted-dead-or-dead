@@ -532,7 +532,7 @@ function UI:ShowSafety()
 		title = "Safety",
 		text = "Wanted: Dead or... Dead takes online bullying seriously. No one should feel unsafe because of this addon. Misuse, griefing or bullying gets you banned from the system.\n\n"
 			.."If someone is making you feel unsafe: hide your character on the website, and write to admin@wanteddeadordead.com. The website's Safety page says what the addon shares and never does, and where to find help with online bullying. Copy the address:",
-		input = { value = "https://wanteddeadordead.com/safety" },
+		input = { value = "https://wanteddeadordead.com/safety", copy = true },
 		confirmLabel = "Close",
 		onConfirm = function() end,
 	})

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed lag on a busy sync channel: when one player asks for missing records, about one player now answers instead of nearly everyone who holds them. Players wait longer to answer the more players are in the channel, an answer still waiting to be sent is dropped once another player's answer is heard, and an answer's parts are sent together so the others hear it sooner.
+
 ## [1.29.2] - 2026-11-14
 
 - The zone stats box and the war box on the world map are smaller on the windowed map and fade while your cursor is over them, so they no longer hide the map. The stats box's kills line is shorter and no longer cut off.

@@ -2671,7 +2671,9 @@ end
 		local records, chains = {}, {}
 		for id, r in pairs(savedRecords) do records[id] = r end
 		for origin, c in pairs(savedChains) do chains[origin] = c end
-		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock - seq, data = {}, hash = "x" } end
+		-- The same record whenever it is made: a copy heard is compared field for field with the one held
+		local madeAt = clock
+		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = madeAt - seq, data = {}, hash = "x" } end
 		for seq = 1, 50 do records["Fill X:"..seq] = Rec("Fill X", seq) end
 		chains["Fill X"] = { seq = 50, lastHash = "x" }
 		db.records, db.chains = records, chains
@@ -2750,7 +2752,8 @@ end
 			end
 			return table.concat(out)
 		end
-		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock - seq, data = { note = Noise(seq) }, hash = "x" } end
+		local madeAt = clock
+		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = madeAt - seq, data = { note = Noise(seq) }, hash = "x" } end
 		for seq = 1, 50 do records["Drop X:"..seq] = Rec("Drop X", seq) end
 		chains["Drop X"] = { seq = 50, lastHash = "x" }
 		db.records, db.chains = records, chains
@@ -2820,6 +2823,14 @@ end
 		check(QueuedFills() == 2, "a record under the first seq that isn't the one we hold leaves our answer, got "..QueuedFills())
 		Hear("F", FillFrom("Drop X", 41, 48), "Other Holder")
 		check(QueuedFills() == 2, "a fill without the first record leaves it, got "..QueuedFills())
+		-- The hash is a field like any other: one copied onto made-up content isn't a copy
+		local copiedHash = Rec("Drop X", 40)
+		copiedHash.data.note = "made up"
+		Hear("F", { r = { copiedHash } }, "Other Holder")
+		local otherKind = Rec("Drop X", 40)
+		otherKind.kind, otherKind.data.extra = "pass", 1
+		Hear("F", { r = { otherKind } }, "Other Holder")
+		check(QueuedFills() == 2, "a record with our hash but other fields leaves it, got "..QueuedFills())
 		Hear("F", FillFrom("Drop X", 40, 40), "Other Holder")
 		check(QueuedFills() == 0, "a copy of the first record drops it, got "..QueuedFills())
 		Fresh()

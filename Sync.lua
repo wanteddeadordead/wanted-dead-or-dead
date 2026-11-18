@@ -2532,7 +2532,30 @@ function private.Answers(record, entry)
 		return false
 	end
 	local held = Wanted.db.records[record.origin..":"..format("%d", record.seq)]
-	return held ~= nil and held.hash == record.hash
+	return held ~= nil and private.SameRecord(record, held)
+end
+
+---Whether a record heard is the one we hold, field for field: a hash is a field like any other, and one copied onto
+---made-up content would pass a check of the hash alone.
+---@param record table
+---@param held table
+---@return boolean
+function private.SameRecord(record, held)
+	if record.kind ~= held.kind or record.prev ~= held.prev or record.t ~= held.t or record.hash ~= held.hash
+		or type(record.data) ~= "table" or type(held.data) ~= "table" then
+		return false
+	end
+	for key, value in pairs(record.data) do
+		if held.data[key] ~= value then
+			return false
+		end
+	end
+	for key in pairs(held.data) do
+		if record.data[key] == nil then
+			return false
+		end
+	end
+	return true
 end
 
 ---Whether our answer for an origin from a seq or earlier still has a message in the channel queue.

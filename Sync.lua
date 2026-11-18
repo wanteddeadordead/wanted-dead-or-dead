@@ -2467,9 +2467,10 @@ function private.HandleNeed(need, sender, viaLink)
 	for origin, fromSeq in pairs(need) do
 		local pending = private.pendingNeedAnswers[origin]
 		if pending then
-			-- Already waiting to answer that origin: the newest seq asked is answered, and the wait doesn't start over
-			-- (each need drawing its own wait would make the first of several draws the answer's time)
-			if pending.from ~= fromSeq then
+			-- Already waiting to answer that origin: the lowest seq asked is answered, which serves every asker (a need
+			-- from the chain's head, which anyone can send, can't move it past what a newcomer lacks), and the wait
+			-- doesn't start over (each need drawing its own wait would make the first of several draws the answer's time)
+			if fromSeq < pending.from then
 				pending.from, pending.first = fromSeq, private.FirstHeld(origin, fromSeq)
 			end
 		else

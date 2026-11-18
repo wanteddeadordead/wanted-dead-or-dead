@@ -16980,10 +16980,10 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	local steps = Setup:Steps()
 	local by = {}
 	for _, step in ipairs(steps) do by[step.key] = step end
-	check(#steps == 5 and by.addon.state == "ok" and by.app.state == "bad" and by.group.state == "bad" and by.nameplates.state == "bad" and by.discord.state == "bad" and by.siege == nil,
-		"nothing set up: the app, the group, the plates and the Discord red, the addon ok; the siege toggle is no setup step")
+	check(#steps == 5 and by.addon.state == "ok" and by.app.state == "bad" and by.group.state == "bad" and by.nameplates.state == "bad" and by.discord.state == "off" and by.siege == nil,
+		"nothing set up: the app, the group and the plates red, the Discord optional (grey), the addon ok; the siege toggle is no setup step")
 	check(by.discord.url == ns.Proof.DISCORD_URL and by.discord.confirm == "discordJoined" and by.discord.short == "In the Discord" and by.discord.fix:find("I've joined", 1, true),
-		"the Discord step: the invite from Proof, red until the player says they joined")
+		"the Discord step: the invite from Proof, grey until the player says they joined")
 	check(by.app.url == "https://wanteddeadordead.com/app" and by.group.url == ns.Bridge.INVITE_URL and by.nameplates.cvar == "nameplateShowEnemies" and by.app.fix and by.group.fix and by.nameplates.fix,
 		"each red step says how to fix it and where")
 	check(not Setup:AllSet(steps), "not all set")
@@ -17018,9 +17018,10 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	C_Club = { GetSubscribedClubs = function() return { { clubId = "503871241", name = "Wanted", clubType = 0 } } end, GetClubMembers = function() return {} end }
 	ns.Bridge.clubId = "503871241"
 	check(Setup:Steps()[3].state == "ok", "in the group: green")
-	check(not Setup:AllSet(), "the Discord not joined: not all set")
+	check(Setup:AllSet(), "the Discord not joined: still all set, it is optional")
 	ns.db.settings.discordJoined = true
 	check(Setup:Steps()[5].state == "ok" and Setup:Steps()[5].fix == nil and Setup:AllSet(), "joined: the Discord step green, all set")
+	ns.db.settings.discordJoined = false
 	ns.newerVersion = "9.9.9"
 	local addon = Setup:Steps()[1]
 	check(addon.state == "bad" and addon.url == "https://wanteddeadordead.com/addon" and addon.detail:find("9.9.9", 1, true), "a newer version out: the addon step red, with the site's addon page")
@@ -17048,10 +17049,10 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	web.Refresh()
 	check(turnOn:IsShown() and turnOn._scripts.OnClick and not web.rows[3].box:IsShown() and dots[3].mark._texture:find("tick$"), "in the group: the nameplates step, with Turn on")
 	turnOn._scripts.OnClick(turnOn)
-	check(not turnOn:IsShown() and web.fix:IsShown() and dots[4].mark._texture:find("tick$") and web.fix._text:find("^In the WoW: Forever %[PvP%] Discord: Join it"), "the button goes, the step is ticked, the Discord step is next")
+	check(not turnOn:IsShown() and web.fix:IsShown() and dots[4].mark._texture:find("tick$") and web.fix._text:find("^In the WoW: Forever %[PvP%] Discord %(optional%): Join it"), "the button goes, the step is ticked, the Discord step is next")
 	-- The Discord step: the invite to copy and "I've joined", which ticks it on both cards
 	local joined = web.rows[5].button
-	check(web.rows[5].box:IsShown() and web.rows[5].box._text == ns.Proof.DISCORD_URL and joined:IsShown() and joined.label._text == "I've joined" and dots[5].mark._texture:find("cross$"),
+	check(web.rows[5].box:IsShown() and web.rows[5].box._text == ns.Proof.DISCORD_URL and joined:IsShown() and joined.label._text == "I've joined" and not dots[5].mark:IsShown() and dots[5].sub._text == "Optional",
 		"the Discord step: the invite in the box and an I've joined button")
 	joined._scripts.OnClick(joined)
 	check(ns.db.settings.discordJoined == true and not joined:IsShown() and not web.fix:IsShown() and dots[5].mark._texture:find("tick$") and web.label._text == "Your setup: all set",
@@ -17207,7 +17208,7 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	-- /wanted setup prints the steps
 	ns:RunCommand("setup", "")
 	check(#printed >= 6 and printed[#printed - 5]:find("Your setup", 1, true) and printed[#printed - 2]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed - 1]:find("[ok] Enemy nameplates on", 1, true)
-		and printed[#printed]:find("[ok] In the WoW: Forever [PvP] Discord. Thanks for joining.", 1, true), "/wanted setup prints each step with its mark")
+		and printed[#printed]:find("[ok] In the WoW: Forever [PvP] Discord (optional). Thanks for joining.", 1, true), "/wanted setup prints each step with its mark")
 	-- Put back
 	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId = saved.info, saved.newer, saved.club
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print

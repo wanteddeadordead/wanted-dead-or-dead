@@ -2,7 +2,8 @@
 -- red X (amber for "nearly") and how to fix it: the addon up to date, the Wanted app running, the Wanted Battle.net
 -- group joined, enemy nameplates on (Wanted sees enemies through them), and the WoW: Forever [PvP] Discord joined.
 -- A feature toggle is not setup and isn't listed (2026-10-17). The game can't see Discord, so that step is the
--- player's own word: red until they click "I've joined" on the Website & app page (settings.discordJoined). The Dashboard shows one line of marks, each with its detail and fix as
+-- player's own word, and optional: grey until they click "I've joined" on the Website & app page
+-- (settings.discordJoined), never red, so it doesn't keep "all set" away. The Dashboard shows one line of marks, each with its detail and fix as
 -- its tooltip (click for the Website & app page); the Website & app page shows every step with its address to copy;
 -- /wanted setup prints them.
 
@@ -27,8 +28,8 @@ local ICONS = {
 local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
 -- The full card's step bar: each step's name, and what a dot's state reads under it
 local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates", "In the Discord" }
-local BAR_NOTES = { bad = "Not yet", warn = "Nearly" }
-local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "off" }
+local BAR_NOTES = { bad = "Not yet", warn = "Nearly", off = "Optional" }
+local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "optional" }
 
 ---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar?, confirm? }.
 ---@return table[]
@@ -65,7 +66,7 @@ function Setup:Steps()
 		fix = (not on) and "Press V, or Interface > Names > Enemy Players." or nil,
 		cvar = (not on) and "nameplateShowEnemies" or nil }
 	local joined = Wanted.db ~= nil and Wanted.db.settings.discordJoined == true
-	steps[5] = { key = "discord", title = "In the WoW: Forever [PvP] Discord", short = "In the Discord", state = joined and "ok" or "bad",
+	steps[5] = { key = "discord", title = "In the WoW: Forever [PvP] Discord (optional)", short = "In the Discord", state = joined and "ok" or "off",
 		detail = joined and "Thanks for joining." or "Bounty posts, kill proof and world PvP news for both sides are there.",
 		fix = (not joined) and "Join it, then click I've joined:" or nil,
 		url = (not joined) and Wanted.Proof.DISCORD_URL or nil,

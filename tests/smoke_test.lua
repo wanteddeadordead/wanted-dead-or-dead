@@ -2731,6 +2731,99 @@ end
 		private.pendingNeedAnswers = {}
 	end
 
+	-- Every holder answering one need was a storm (2026-11 dev log: one record heard from 19 players, 99% of fill records
+	-- already held): an answer of ours still in the queue is dropped when another player's fill for it is heard first.
+	-- A message already part sent finishes, since the receiver waits for its other parts
+	do
+		local savedRecords, savedChains = db.records, db.chains
+		local savedOutbox, savedParts = private.outbox, private.outboxParts
+		local savedTokens, savedTokensAt, savedDrain, clockBefore = private.tokens, private.tokensAt, private.drainScheduled, clock
+		local records, chains = {}, {}
+		for id, r in pairs(savedRecords) do records[id] = r end
+		for origin, c in pairs(savedChains) do chains[origin] = c end
+		-- Records big enough that a message of eight takes several parts
+		local function Noise(seed)
+			local out = {}
+			for i = 1, 120 do
+				seed = (seed * 1103515245 + 12345) % 2147483648
+				out[i] = string.char(65 + floor(seed / 65536) % 26)
+			end
+			return table.concat(out)
+		end
+		local function Rec(origin, seq) return { kind = "death", id = origin..":"..seq, origin = origin, seq = seq, prev = "0", t = clock - seq, data = { note = Noise(seq) }, hash = "x" } end
+		for seq = 1, 50 do records["Drop X:"..seq] = Rec("Drop X", seq) end
+		chains["Drop X"] = { seq = 50, lastHash = "x" }
+		db.records, db.chains = records, chains
+		local channelName = ns.Sync:GetInfo().channelName
+		local function Hear(tag, tbl, sender)
+			Fire("CHAT_MSG_ADDON", "WNTD", Message(tag, tbl), "CHANNEL", sender, nil, nil, nil, channelName)
+			RunFrames()
+		end
+		local function FillFrom(origin, first, last)
+			local list = {}
+			for seq = first, last do list[#list + 1] = Rec(origin, seq) end
+			return { r = list }
+		end
+		local function QueuedFills()
+			local n = 0
+			for _, item in ipairs(private.outbox) do if item.tag == "F" then n = n + 1 end end
+			return n
+		end
+		local function SentFills()
+			local n = 0
+			for _, m in ipairs(addonSent) do if m.text:match("^F:") then n = n + 1 end end
+			return n
+		end
+		-- Asked, and our answer waits in the queue: the channel's allowance is used up for now
+		local function Queued(origin, from)
+			Fresh()
+			private.pendingNeedAnswers, private.answers, private.outbox, private.outboxParts = {}, {}, {}, 0
+			private.tokens, private.tokensAt, private.drainScheduled = 0, clock, false
+			Hear("N", { n = { [origin] = from } }, "Newcomer")
+			RunTimers()
+		end
+		Queued("Drop X", 40)
+		check(QueuedFills() == 2 and SentFills() == 0, "our answer (11 records, two messages) waits in the queue, got "..QueuedFills())
+		Hear("F", FillFrom("Drop X", 40, 47), "Other Holder")
+		check(QueuedFills() == 0, "another player's fill for it, heard before ours starts, drops our queued answer, got "..QueuedFills())
+		check(private.outboxParts == 0, "and the queue's part count goes down with it, got "..private.outboxParts)
+		clock = clock + 60
+		RunTimers()
+		check(SentFills() == 0, "nothing of the dropped answer goes later, got "..SentFills())
+		Queued("Drop X", 40)
+		Hear("F", FillFrom("Drop X", 1, 30), "Other Holder")
+		Hear("F", FillFrom("Far Origin", 40, 47), "Other Holder")
+		check(QueuedFills() == 2, "a fill for lower seqs or another origin leaves it, got "..QueuedFills())
+		-- Part sent: it finishes, and only what hasn't started is dropped
+		Queued("Drop X", 40)
+		local first = private.outbox[1]
+		check(first and first.tag == "F" and #first.parts > 1, "the first message of the answer takes several parts")
+		first.next = 2
+		private.outboxParts = private.outboxParts - 1
+		Hear("F", FillFrom("Drop X", 40, 47), "Other Holder")
+		check(QueuedFills() == 1 and private.outbox[1] == first, "a message of ours already part sent stays to finish, got "..QueuedFills())
+		check(private.outboxParts == #first.parts - 1, "and its parts left still count, got "..private.outboxParts)
+		-- Heard before the answer's messages are even made (they are made one per piece of background work)
+		Queued("Drop X", 40)
+		private.outbox, private.outboxParts = {}, 0
+		private.SendFill("Drop X", 40)
+		private.HandleMessage("F", FillFrom("Drop X", 40, 47), "Other Holder", false, "CHANNEL")
+		RunFrames()
+		check(QueuedFills() == 0, "messages of a dropped answer not yet made are never made, got "..QueuedFills())
+		-- A later need is answered again
+		Queued("Drop X", 40)
+		check(QueuedFills() == 2, "a need heard after a drop is answered again, got "..QueuedFills())
+		-- A realm link's answer is a whisper, never queued or dropped
+		Fresh()
+		private.HandleNeed({ ["Drop X"] = 40 }, "Link Friend", true)
+		RunFrames()
+		check(#Sent("WHISPER", "Link Friend") >= 1, "a realm link's need is still answered straight away")
+		db.records, db.chains = savedRecords, savedChains
+		private.outbox, private.outboxParts, private.pendingNeedAnswers, private.answers = savedOutbox, savedParts, {}, {}
+		private.tokens, private.tokensAt, private.drainScheduled = savedTokens, savedTokensAt, savedDrain
+		clock = clockBefore + 3
+	end
+
 	-- Fills have a room of their own in the send queue: other messages waiting (one have is 10 parts) don't use it up
 	do
 		local savedOutbox, savedParts = private.outbox, private.outboxParts
@@ -3477,6 +3570,9 @@ end)()
 	end
 	check(#parts >= 2 and parts[1] == "1/"..parts[1]:match("/(%d+)") and parts[2] == "2/"..parts[1]:match("/(%d+)"), "after a refusal the next part is the refused one, got "..table.concat(parts, " "))
 	throttleSkip, throttleNext = nil, nil
+	-- What is left of the message goes now, so the next test starts with an empty queue (signed records take more parts)
+	clock = clock + 60
+	RunTimers()
 end)()
 ;(function()
 	-- Our own new records go out in batches, a few seconds' worth to one message, and every kind goes out

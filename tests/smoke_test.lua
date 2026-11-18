@@ -17209,6 +17209,9 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns:RunCommand("setup", "")
 	check(#printed >= 6 and printed[#printed - 5]:find("Your setup", 1, true) and printed[#printed - 2]:find("[NO] In the Wanted Battle.net group", 1, true) and printed[#printed - 1]:find("[ok] Enemy nameplates on", 1, true)
 		and printed[#printed]:find("[ok] In the WoW: Forever [PvP] Discord (optional). Thanks for joining.", 1, true), "/wanted setup prints each step with its mark")
+	ns.db.settings.discordJoined = false
+	ns:RunCommand("setup", "")
+	check(printed[#printed]:find("[not yet] In the WoW: Forever [PvP] Discord (optional). ", 1, true), "/wanted setup: the unjoined Discord step reads not yet, optional once")
 	-- Put back
 	WantedAppInfo, ns.newerVersion, ns.Bridge.clubId = saved.info, saved.newer, saved.club
 	cvars.nameplateShowEnemies, C_Club, IsSecret, ns.Print = saved.plates, saved.C_Club, saved.IsSecret, saved.Print

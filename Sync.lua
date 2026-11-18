@@ -38,7 +38,7 @@ local private = {
 	peers = {}, -- sender -> last message time
 	ownMessages = {}, -- tag:msgId -> time sent, to recognise our own echoes
 	pendingNeedAnswers = {}, -- origin -> { from, first, t } scheduled answers
-	answers = {}, -- origin -> { from, first, dropped } our answer on its way to the channel (SendFill), its messages queued
+	answers = {}, -- origin -> { from, first, last, dropped } our answer on its way to the channel (SendFill), its messages queued
 	stats = { sent = 0, received = 0, echoed = 0, dropped = 0, merged = 0, invalid = 0, throttled = 0, skipped = 0 },
 	dropReasons = {}, -- why messages were dropped, reason -> count (shown in /wanted bug)
 	sightingTimes = {}, -- outbound sighting message times in the last minute (their own budget)
@@ -2560,13 +2560,14 @@ function private.SameRecord(record, held)
 	return true
 end
 
----Whether our answer for an origin from a seq or earlier still has a message in the channel queue.
+---Whether our answer for an origin still has a message in the channel queue and reaches a seq: from it or earlier,
+---and as far as it (the fill room may have cut the answer short).
 ---@param origin string
 ---@param fromSeq number
 ---@return boolean
 function private.AnswerQueued(origin, fromSeq)
 	local answer = private.answers[origin]
-	if not answer or answer.from > fromSeq then
+	if not answer or answer.from > fromSeq or not answer.last or answer.last < fromSeq then
 		return false
 	end
 	for _, item in ipairs(private.outbox) do
@@ -2856,6 +2857,8 @@ function private.SendInBatches(records, target, max, extras, answer)
 			end
 			if not private.Send(TAG_FILL, tbl, nil, target, answer) then
 				state.stopped = true
+			elseif answer then
+				answer.last = batch[#batch].seq
 			end
 		end)
 	end

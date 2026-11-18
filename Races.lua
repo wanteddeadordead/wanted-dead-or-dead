@@ -35,7 +35,7 @@ local LIVE_TAG = "K"
 local SEND_SECONDS = 60
 local HERE_SECONDS = 150 -- a peer said they're on a point this recently: still there
 local MAX_PEERS = 200
--- The player's kills in a race are counted from the whole activity list (every kill, death and sighting, sorted), which
+-- The player's kills in a race are counted from the activity list of kills (sorted), which
 -- is slow, and the HUD and the sampler ask each second: reuse a count this young. A kill shows up this late at most.
 local KILL_COUNT_SECONDS = 5
 Races.KILL_COUNT_SECONDS = KILL_COUNT_SECONDS
@@ -316,7 +316,7 @@ function Races:Mine(race)
 	local cached = private.kills[key]
 	if not cached or now - cached.at >= KILL_COUNT_SECONDS or now < cached.at then
 		local n = 0
-		for _, item in ipairs(Wanted.Model:GetActivity()) do
+		for _, item in ipairs(Wanted.Model:GetActivity("kill")) do
 			if item.kind == "kill" and item.who == "You" and item.zone == race.zone and item.t >= race.start and item.t < race.stop then
 				n = n + 1
 			end

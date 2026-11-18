@@ -17204,12 +17204,13 @@ print("wanted smoke: layer checks pass")
 	check(R:LiveSide(race) == nil and R:SideInfluence(race, "Horde") == 812, "nobody else heard: the catch-up's number stands")
 	-- The kill count is worked out at most once every few seconds per race, not on every look
 	do
-		local realActivity, calls, rows = ns.Model.GetActivity, 0, {}
-		ns.Model.GetActivity = function() calls = calls + 1 return rows end
+		local realActivity, calls, rows, asked = ns.Model.GetActivity, 0, {}, nil
+		ns.Model.GetActivity = function(_, kind) calls = calls + 1 asked = kind return rows end
 		local other = { zone = race.zone, start = race.start + 7200, stop = race.stop + 7200 }
 		clock = clock + R.KILL_COUNT_SECONDS + 1
 		for _ = 1, 20 do R:Mine(race) R:LiveSide(race) end
 		check(calls == 1, "many looks inside the cache period read the activity once: "..calls)
+		check(asked == "kill", "Mine asks for the kill rows only")
 		rows[1] = { kind = "kill", who = "You", zone = race.zone, t = race.start + 1 }
 		check(R:Mine(race) == 0 and calls == 1, "a kill made inside the period shows after it")
 		clock = clock + R.KILL_COUNT_SECONDS + 1

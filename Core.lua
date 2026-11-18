@@ -52,6 +52,7 @@ local DEFAULTS = {
 		iconStyle = "crest", -- class icon style (Theme.ICON_STYLES)
 		callingCards = true, -- the calling card: its tab and window, piece toasts, card art and card data (CallingCard)
 		showTools = false, -- the Tools page (network details, test data, debug log)
+		discordJoined = false, -- the player said they joined the WoW: Forever [PvP] Discord, for the setup checklist (Setup)
 		proofShots = true, -- a stamped screenshot when your kill claims a bounty (Proof)
 		liveLog = true, -- combat logging on in the open world, written out during fights, for the app (LiveLog)
 		appPrompt = true, -- the popup at login offering the desktop app when it isn't set up (PageWeb)

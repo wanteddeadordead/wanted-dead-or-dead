@@ -83,6 +83,10 @@ learned; `resetAt` when it last sent `kr = 1`. Pruned at login:
 origins not heard for 60 days with no authority record held go, then the least recently heard until 2,000 remain (about
 0.5 MB at most). New table with a default: no migration.
 
+`WantedDB.settings.discordJoined` (default false): the player's own word that they joined the WoW: Forever [PvP] Discord, for
+the setup checklist's fifth step (Website & app, "I've joined"). A plain boolean in the settings table, which gets its
+defaults copied in at login: no migration.
+
 `WantedDB.settings.sigBackground` (from 1.19.0, default on): check held records' signatures in the background, one a
 second, out of combat (Settings, Display). Off, only records a page shows or an authority decision reads are checked.
 

@@ -242,6 +242,13 @@ local NEED_COVERED_WITHIN = 3 * FILL_BATCH -- a fill answers from the asked seq 
 local HELD_NEED_SECONDS = 10 * 60 -- a hold is remembered this long, so a need isn't held again for the same seq
 local MAX_NEED_ORIGIN_BYTES = 64 -- an origin's name, as long as Store allows
 local MAX_HEARD_NEEDS = 200 -- needs remembered at once: the table is fed by other players
+-- Every holder answered a need within 3 seconds, before any answer could be heard (a 5-part fill takes 10 s at the
+-- channel's pace), so one record came from 19 players (2026-11 dev log: 99% of fill records already held). A holder
+-- waits a random time in a window 3 s a member wide, so about one answer starts in the time one takes to be heard;
+-- the first comes after about 3 s however big the channel. Capped, so a channel of alts can't hold answers back long.
+local ANSWER_SECONDS_PER_MEMBER = 3
+local MIN_ANSWER_WINDOW = 3
+local MAX_ANSWER_WINDOW = 180
 local GREET_SECONDS = 5 * 60 -- the same player is greeted at most this often
 local MAX_REMEMBERED_LINKS = 20
 local REMEMBER_LINK_SECONDS = 7 * 24 * 60 * 60
@@ -2450,16 +2457,60 @@ function private.HandleNeed(need, sender, viaLink)
 		return
 	end
 	for origin, fromSeq in pairs(need) do
-		private.pendingNeedAnswers[origin] = { from = fromSeq, t = GetTime() }
-		C_Timer.After(0.5 + math.random() * 2.5, function()
-			local pending = private.pendingNeedAnswers[origin]
-			if not pending or pending.from ~= fromSeq then
-				return
-			end
-			private.pendingNeedAnswers[origin] = nil
-			private.SendFill(origin, fromSeq)
-		end)
+		local pending = private.pendingNeedAnswers[origin]
+		if pending then
+			-- Already waiting to answer that origin: the newest seq asked is answered, and the wait doesn't start over
+			-- (each need drawing its own wait would make the first of several draws the answer's time)
+			pending.from = fromSeq
+		else
+			pending = { from = fromSeq, t = GetTime() }
+			private.pendingNeedAnswers[origin] = pending
+			C_Timer.After(0.5 + math.random() * private.AnswerWindow(), function()
+				if private.pendingNeedAnswers[origin] ~= pending then
+					return
+				end
+				private.pendingNeedAnswers[origin] = nil
+				-- Asked again while our answer still waits in the queue: it answers this too
+				if not private.AnswerQueued(origin, pending.from) then
+					private.SendFill(origin, pending.from)
+				end
+			end)
+		end
 	end
+end
+
+---How many seconds a holder may wait before answering a need on the channel (HandleNeed): 3 for each member, as the
+---game last counted them, or each player heard on the channel lately until it has.
+---@return number
+function private.AnswerWindow()
+	local members = private.members
+	if not members then
+		members = 1
+		local now = GetTime()
+		for _, heard in pairs(private.peers) do
+			if now - heard < PEER_TIMEOUT then
+				members = members + 1
+			end
+		end
+	end
+	return min(MAX_ANSWER_WINDOW, max(MIN_ANSWER_WINDOW, members * ANSWER_SECONDS_PER_MEMBER))
+end
+
+---Whether our answer for an origin from a seq or earlier still has a message in the channel queue.
+---@param origin string
+---@param fromSeq number
+---@return boolean
+function private.AnswerQueued(origin, fromSeq)
+	local answer = private.answers[origin]
+	if not answer or answer.from > fromSeq then
+		return false
+	end
+	for _, item in ipairs(private.outbox) do
+		if item.answer == answer then
+			return true
+		end
+	end
+	return false
 end
 
 ---Sends an origin's records from a seq on, on the channel or to one player. Every kind: notices and proofs

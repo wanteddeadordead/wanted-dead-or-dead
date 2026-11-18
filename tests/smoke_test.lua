@@ -2813,6 +2813,44 @@ end
 		-- A later need is answered again
 		Queued("Drop X", 40)
 		check(QueuedFills() == 2, "a need heard after a drop is answered again, got "..QueuedFills())
+		-- but not while our answer for it still waits in the queue
+		Hear("N", { n = { ["Drop X"] = 40 } }, "Newcomer")
+		RunTimers()
+		check(QueuedFills() == 2, "the same need again while our answer is queued adds nothing, got "..QueuedFills())
+		Hear("N", { n = { ["Drop X"] = 30 } }, "Newcomer")
+		RunTimers()
+		check(QueuedFills() > 2, "a need from earlier records than our queued answer has is answered, got "..QueuedFills())
+
+		-- The wait before answering grows with the channel: about one holder's answer starts in the time one is heard
+		local delays, realAfter = {}, C_Timer.After
+		C_Timer.After = function(delay, f) delays[#delays + 1] = delay realAfter(delay, f) end
+		local savedMembers, savedPeers = private.members, private.peers
+		local function Window(members)
+			private.members = members
+			return private.AnswerWindow()
+		end
+		check(Window(1) == 3 and Window(20) == 60 and Window(50) == 150 and Window(100) == 180 and Window(400) == 180,
+			"the window is 3 s a member, 3 s at least and 3 minutes at most, got "..Window(1).." "..Window(20).." "..Window(50).." "..Window(100))
+		private.members, private.peers = nil, { ["Peer A"] = clock, ["Peer B"] = clock - 60, ["Gone"] = clock - 3600 }
+		check(private.AnswerWindow() == 9, "before the game says how many are in the channel, the players heard lately count, got "..private.AnswerWindow())
+		private.members, private.peers = 50, savedPeers
+		Fresh()
+		private.pendingNeedAnswers, private.answers = {}, {}
+		delays = {}
+		local realRandom = math.random
+		math.random = function(...) if select("#", ...) == 0 then return 0.5 end return realRandom(...) end
+		Hear("N", { n = { ["Drop X"] = 40 } }, "Newcomer")
+		Hear("N", { n = { ["Drop X"] = 40 } }, "Second Newcomer")
+		Hear("N", { n = { ["Drop X"] = 45 } }, "Third Newcomer")
+		math.random = realRandom
+		local waits = 0
+		for _, delay in ipairs(delays) do
+			if delay == 0.5 + 0.5 * 150 then waits = waits + 1 end
+		end
+		C_Timer.After = realAfter
+		check(waits == 1 and private.pendingNeedAnswers["Drop X"] and private.pendingNeedAnswers["Drop X"].from == 45,
+			"needs for an origin we are waiting to answer share one wait, the newest seq answered, got "..waits)
+		private.members = savedMembers
 		-- A realm link's answer is a whisper, never queued or dropped
 		Fresh()
 		private.HandleNeed({ ["Drop X"] = 40 }, "Link Friend", true)

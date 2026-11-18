@@ -2810,6 +2810,40 @@ end
 		private.HandleMessage("F", FillFrom("Drop X", 40, 47), "Other Holder", false, "CHANNEL")
 		RunFrames()
 		check(QueuedFills() == 0, "messages of a dropped answer not yet made are never made, got "..QueuedFills())
+		-- What counts as their answer: the first record ours would send, a copy of the one we hold. Anyone can put any
+		-- origin and seq in a message, and our wait is long now, so a made-up record or one far into the chain would
+		-- hold every holder's answer back while the asker gets nothing it can use
+		Queued("Drop X", 40)
+		local forged = Rec("Drop X", 40)
+		forged.hash = "forged"
+		Hear("F", { r = { forged } }, "Other Holder")
+		check(QueuedFills() == 2, "a record under the first seq that isn't the one we hold leaves our answer, got "..QueuedFills())
+		Hear("F", FillFrom("Drop X", 41, 48), "Other Holder")
+		check(QueuedFills() == 2, "a fill without the first record leaves it, got "..QueuedFills())
+		Hear("F", FillFrom("Drop X", 40, 40), "Other Holder")
+		check(QueuedFills() == 0, "a copy of the first record drops it, got "..QueuedFills())
+		Fresh()
+		private.pendingNeedAnswers, private.answers = {}, {}
+		private.HandleNeed({ ["Drop X"] = 40 }, "Newcomer")
+		Hear("F", { r = { forged } }, "Other Holder")
+		Hear("F", FillFrom("Drop X", 45, 48), "Other Holder")
+		check(private.pendingNeedAnswers["Drop X"] ~= nil, "the same goes for an answer still waiting its turn")
+		Hear("F", FillFrom("Drop X", 40, 41), "Other Holder")
+		check(private.pendingNeedAnswers["Drop X"] == nil, "which a copy of the first record ends")
+		-- Records pruned here from the seq asked: the first one held is the first one sent, and its copy counts
+		for seq = 40, 42 do records["Drop X:"..seq] = nil end
+		Queued("Drop X", 40)
+		check(QueuedFills() >= 1, "an answer from past a pruned stretch is queued, got "..QueuedFills())
+		Hear("F", FillFrom("Drop X", 44, 46), "Other Holder")
+		check(QueuedFills() >= 1, "a fill from past our first held record leaves it, got "..QueuedFills())
+		Hear("F", FillFrom("Drop X", 43, 46), "Other Holder")
+		check(QueuedFills() == 0, "one from our first held record drops it, got "..QueuedFills())
+		Fresh()
+		private.pendingNeedAnswers, private.answers = {}, {}
+		private.HandleNeed({ ["Drop X"] = 40 }, "Newcomer")
+		Hear("F", FillFrom("Drop X", 43, 44), "Other Holder")
+		check(private.pendingNeedAnswers["Drop X"] == nil, "and ends a waiting answer")
+		for seq = 40, 42 do records["Drop X:"..seq] = Rec("Drop X", seq) end
 		-- A later need is answered again
 		Queued("Drop X", 40)
 		check(QueuedFills() == 2, "a need heard after a drop is answered again, got "..QueuedFills())

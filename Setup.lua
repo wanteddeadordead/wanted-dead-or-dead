@@ -114,9 +114,14 @@ function Setup:BuildCard(parent, width, brief, onClick)
 		row.icon = card:CreateTexture(nil, "ARTWORK")
 		row.icon:SetSize(ICON, ICON)
 		row.name = Theme:Text(card, "small", "")
-		-- The brief card's mark and name, explained on hover; clicks go through to the card
+		-- The brief card's mark and name, explained on hover; a click does what the card does (opens Website & app), or
+		-- for the unjoined Discord step asks for the invite. It doesn't rely on clicks passing through to the card.
 		row.hit = CreateFrame("Button", nil, card)
-		row.hit:SetMouseClickEnabled(false)
+		row.hit:SetScript("OnClick", function()
+			if onClick then
+				onClick()
+			end
+		end)
 		row.hit:Hide()
 		row.title = Theme:Text(card, "body", "", C.text)
 		row.detail = Theme:Text(card, "small", "", C.muted)
@@ -128,11 +133,7 @@ function Setup:BuildCard(parent, width, brief, onClick)
 				SetCVar(row.cvar, "1")
 				card.Refresh()
 			elseif row.confirm then
-				Wanted.db.settings[row.confirm] = true
-				-- Both cards (the Dashboard's marks too)
-				for _, other in pairs(Setup.cards) do
-					other.Refresh()
-				end
+				private.MarkDone(row.confirm)
 			end
 		end)
 		card.rows[i] = row
@@ -140,6 +141,14 @@ function Setup:BuildCard(parent, width, brief, onClick)
 	card.Refresh = function() return private.Layout(card, width, brief) end
 	Setup.cards[brief and "home" or "web"] = card
 	return card
+end
+
+---Records a step the player confirms (settings[key]) and refreshes both cards (the Dashboard's marks too).
+function private.MarkDone(key)
+	Wanted.db.settings[key] = true
+	for _, other in pairs(Setup.cards) do
+		other.Refresh()
+	end
 end
 
 ---Lays the card out (Setup:BuildCard) and returns its height.
@@ -168,8 +177,9 @@ function private.Layout(card, width, brief)
 			row.hit:SetPoint("TOPLEFT", row.icon, "TOPLEFT")
 			row.hit:SetSize(ICON + 4 + row.name:GetStringWidth(), ICON)
 			row.hit:Show()
-			W:Explain(row.hit, step.title, step.fix and step.detail.."\n\n"
-				..Theme:Colorize(step.fix..(step.url and " "..step.url:gsub("^https://", "") or ""), C.gold) or step.detail)
+			local fix, url = step.fix, step.url
+			W:Explain(row.hit, step.title, fix and step.detail.."\n\n"
+				..Theme:Colorize(fix..(url and " "..url:gsub("^https://", "") or ""), C.gold) or step.detail)
 			row.title:Hide()
 			row.box:Hide()
 			row.button:Hide()

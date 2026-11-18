@@ -21,6 +21,7 @@ local private = {
 	blocked = nil, -- why the player's presence didn't count there, or nil
 	peers = {}, -- sender -> { key, k = kills, n = samples, w = weighted samples, p = point id or nil, at = GetTime() }
 	sentAt = nil, -- when we last told our side
+	kills = {}, -- race key -> { n = the player's kills in the race, at = GetTime() it was counted }
 }
 local SAMPLE_SECONDS = 30
 local MAX_RACES, MAX_GUILDS = 6, 20
@@ -34,6 +35,10 @@ local LIVE_TAG = "K"
 local SEND_SECONDS = 60
 local HERE_SECONDS = 150 -- a peer said they're on a point this recently: still there
 local MAX_PEERS = 200
+-- The player's kills in a race are counted from the whole activity list (every kill, death and sighting, sorted), which
+-- is slow, and the HUD and the sampler ask each second: reuse a count this young. A kill shows up this late at most.
+local KILL_COUNT_SECONDS = 5
+Races.KILL_COUNT_SECONDS = KILL_COUNT_SECONDS
 -- The site's worth of a kill and of a minute on a point (server stats/raceinfluence.go: KillInfluence, HoldPerMinute)
 local KILL_INFLUENCE, HOLD_PER_MINUTE = 10, 4
 
@@ -307,12 +312,19 @@ end
 ---@return number minutes
 function Races:Mine(race)
 	local samples = Wanted.db.raceSamples and Wanted.db.raceSamples[private.Key(race)] or 0
-	local kills = 0
-	for _, item in ipairs(Wanted.Model:GetActivity()) do
-		if item.kind == "kill" and item.who == "You" and item.zone == race.zone and item.t >= race.start and item.t < race.stop then
-			kills = kills + 1
+	local key, now = private.Key(race), GetTime()
+	local cached = private.kills[key]
+	if not cached or now - cached.at >= KILL_COUNT_SECONDS or now < cached.at then
+		local n = 0
+		for _, item in ipairs(Wanted.Model:GetActivity()) do
+			if item.kind == "kill" and item.who == "You" and item.zone == race.zone and item.t >= race.start and item.t < race.stop then
+				n = n + 1
+			end
 		end
+		cached = { n = n, at = now }
+		private.kills[key] = cached
 	end
+	local kills = cached.n
 	return kills, floor(samples * SAMPLE_SECONDS / 60)
 end
 

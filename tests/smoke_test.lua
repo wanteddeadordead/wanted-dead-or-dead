@@ -17202,6 +17202,24 @@ print("wanted smoke: layer checks pass")
 		check(told[i].at - told[i - 1].at >= 60, "at most once a minute")
 	end
 	check(R:LiveSide(race) == nil and R:SideInfluence(race, "Horde") == 812, "nobody else heard: the catch-up's number stands")
+	-- The kill count is worked out at most once every few seconds per race, not on every look
+	do
+		local realActivity, calls, rows = ns.Model.GetActivity, 0, {}
+		ns.Model.GetActivity = function() calls = calls + 1 return rows end
+		local other = { zone = race.zone, start = race.start + 7200, stop = race.stop + 7200 }
+		clock = clock + R.KILL_COUNT_SECONDS + 1
+		for _ = 1, 20 do R:Mine(race) R:LiveSide(race) end
+		check(calls == 1, "many looks inside the cache period read the activity once: "..calls)
+		rows[1] = { kind = "kill", who = "You", zone = race.zone, t = race.start + 1 }
+		check(R:Mine(race) == 0 and calls == 1, "a kill made inside the period shows after it")
+		clock = clock + R.KILL_COUNT_SECONDS + 1
+		check(R:Mine(race) == 1 and calls == 2, "after the period the activity is read again and the kill counted")
+		local before = calls
+		R:Mine(other)
+		check(calls == before + 1 and R:Mine(other) == 0 and R:Mine(race) == 1, "another race does not reuse a race's count")
+		ns.Model.GetActivity = realActivity
+		clock = clock + R.KILL_COUNT_SECONDS + 1
+	end
 	-- What others of our side say
 	local most = (race.stop - race.start) / R.SAMPLE_SECONDS
 	for _, bad in ipairs({ "x", { z = "Arathi Highlands", s = race.start, k = 1, n = 1, w = 1 }, { z = race.zone, s = race.start + 1, k = 1, n = 1, w = 1 },

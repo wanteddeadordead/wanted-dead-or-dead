@@ -3006,24 +3006,43 @@ end
 		sent = Run({ Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("N", 1, 3), Item("F", 6, 4) }, 30)
 		check(table.concat(sent, " ") == "N1 N1 F1 F2 F3 F4 F5 F6 N1 N1 N1", "while needs wait, a fill goes after two parts, got "..table.concat(sent, " "))
 		-- A fill part sent behind queued messages doesn't hold up what is queued meanwhile: our records and sightings go
-		-- right after its last part, ahead of the have and need that waited before it
-		Reset()
-		private.sinceFill = 5
-		private.Enqueue(Item("V", 10, 3))
-		private.Enqueue(Item("N", 1, 3))
-		private.Enqueue(Item("F", 6, 4))
-		local order = {}
-		for step = 1, 40 do
-			if step == 3 then
-				private.Enqueue(Item("S", 1, 2))
-				private.Enqueue(Item("R", 1, 1))
+		-- right after its last part, ahead of the have and need that waited before it. A fill of more parts than a burst
+		-- goes on part by part after the burst
+		local function Order(fillParts, extrasAt)
+			Reset()
+			private.sinceFill = 5
+			private.Enqueue(Item("V", 10, 3))
+			private.Enqueue(Item("N", 1, 3))
+			private.Enqueue(Item("F", fillParts, 4))
+			local order = {}
+			for step = 1, 50 do
+				local before = #addonSent
+				if step == extrasAt then
+					private.Enqueue(Item("S", 1, 2))
+					private.Enqueue(Item("R", 1, 1))
+				end
+				clock = clock + 2.5
+				RunTimers()
+				for i = before + 1, #addonSent do order[#order + 1] = addonSent[i].text:match("^(%u)")..addonSent[i].text:match("^%u:%w+:(%d+)/") end
 			end
-			local before = #addonSent
-			clock = clock + 2.5
-			RunTimers()
-			for i = before + 1, #addonSent do order[#order + 1] = addonSent[i].text:match("^(%u)")..addonSent[i].text:match("^%u:%w+:(%d+)/") end
+			return table.concat(order, " ")
 		end
-		check(table.concat(order, " ") == "F1 F2 F3 F4 F5 F6 R1 S1 V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 N1", "records and sightings queued while a fill goes out come right after it, got "..table.concat(order, " "))
+		local got = Order(10, 9)
+		check(got == "F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 R1 S1 V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 N1", "records and sightings queued while a fill goes out come right after it, got "..got)
+		-- A fill waits for the allowance to send its parts together: other holders hear an answer whole moments after it
+		-- starts, before theirs starts. Our records and sightings queued meanwhile go ahead of it
+		got = Order(6, 3)
+		check(got == "S1 R1 F1 F2 F3 F4 F5 F6 V1 V2 V3 V4 V5 V6 V7 V8 V9 V10 N1", "records and sightings go ahead of a fill waiting for its burst, got "..got)
+		local sent
+		sent, times = Run({ Item("F", 5, 4) }, 6)
+		check(table.concat(sent, " ") == "F1 F2 F3 F4 F5", "a 5-part fill goes whole, got "..table.concat(sent, " "))
+		local span = 0
+		for _, t in pairs(times) do span = math.max(span, t.last - t.first) end
+		check(span == 0, "with its parts sent together, got "..span.." s from the first to the last")
+		sent, times = Run({ Item("F", 12, 4) }, 20)
+		span = 0
+		for _, t in pairs(times) do span = math.max(span, t.last - t.first) end
+		check(#sent == 12 and span == 4 * 2.5, "a 12-part fill goes 8 together then one a part's time, got "..#sent.." parts over "..span.." s")
 		-- A fill never starts ahead of a sighting at the front either
 		Reset()
 		private.sinceFill = 5

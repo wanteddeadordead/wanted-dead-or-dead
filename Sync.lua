@@ -1471,6 +1471,12 @@ function private.Drain()
 			private.Drop("stale sightings", 1)
 		elseif private.tokens < 1 then
 			wait = (1 - private.tokens) * CHANNEL_PART_SECONDS
+		elseif item.tag == TAG_FILL and item.next == 1 and private.tokens < min(#item.parts, CHANNEL_BURST) then
+			-- A fill starts once the allowance has room for all its parts (a burst's worth at most), so they go out
+			-- together: other holders hear it whole seconds after its first part instead of 10 s for 5 parts, before
+			-- their own answer to the same need starts (DropAnswer). What waits meanwhile isn't sent: the allowance
+			-- builds up for the burst, and our records and sightings still go first (NextToSend)
+			wait = (min(#item.parts, CHANNEL_BURST) - private.tokens) * CHANNEL_PART_SECONDS
 		else
 			-- The channel's number, asked again every time: the game renumbers channels as they're left and joined
 			-- (zone changes, loading screens, a rejoin), and a number kept from the join once pointed at General

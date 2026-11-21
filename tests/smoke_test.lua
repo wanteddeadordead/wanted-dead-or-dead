@@ -17058,6 +17058,29 @@ check(#forbiddenRegistrations == 0, "a forbidden event was registered: "..table.
 	ns.newerVersion = nil
 	ns.UI:Show("home")
 	check(home.label._text == "Your setup: all set" and home:GetHeight() <= 70, "all set: the Dashboard's card says so in one line")
+	-- A hunter without the app: the game sends the addon nothing for a pet's killing blow (no PARTY_KILL), so their pet's
+	-- kills count as assists; the app step says so, red, and the card is never "all set"
+	local realUnitClass = UnitClass
+	UnitClass = function(unit) if unit == "player" then return "Hunter", "HUNTER" end return realUnitClass(unit) end
+	local appInfo = WantedAppInfo
+	WantedAppInfo = nil
+	local hunterApp = Setup:Steps()[2]
+	check(hunterApp.state == "bad" and hunterApp.fix == "Your pet's killing blows count as assists without the Wanted app. The app reads them from the combat log. Get it, start it, then /reload."
+		and hunterApp.url == "https://wanteddeadordead.com/app" and not Setup:AllSet(), "a hunter with no app: the app step red, its fix saying their pet's kills count as assists: "..tostring(hunterApp.fix))
+	ns.UI:Show("home")
+	check(home.label._text == "Your setup" and home.rows[2].hit.tooltipText:find("Your pet's killing blows", 1, true), "and the Dashboard's card isn't all set, its app mark saying why")
+	ns.UI:Show("web")
+	check(Setup.cards.web.fix:IsShown() and Setup.cards.web.fix._text:find("^Wanted app running: Your pet's killing blows count as assists"), "the Website & app page says it under the step bar: "..tostring(Setup.cards.web.fix._text))
+	WantedAppInfo = { running = "0.2.54", latest = "0.2.54", seen = 1 }
+	hunterApp = Setup:Steps()[2]
+	check(hunterApp.state == "warn" and hunterApp.fix:find("^Your pet's killing blows count as assists.+Start it:") and not Setup:AllSet(), "an app set up but not running: amber, the same words")
+	WantedAppInfo = appInfo
+	check(Setup:Steps()[2].state == "ok" and Setup:Steps()[2].fix == nil and Setup:AllSet(), "the app running: green, nothing about pets")
+	UnitClass = realUnitClass
+	WantedAppInfo = nil
+	check(Setup:Steps()[2].fix == "Get it, start it, then /reload.", "anyone else with no app: nothing about pets")
+	WantedAppInfo = appInfo
+	ns.UI:Show("home")
 	-- The Website & app page: every step, the invite to copy when not in the group, and Turn on sets the plates
 	ns.Bridge.clubId = 0
 	cvars.nameplateShowEnemies = "0"

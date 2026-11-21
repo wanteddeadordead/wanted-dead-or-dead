@@ -43,16 +43,21 @@ function Setup:Steps()
 		url = newer and SITE.."/addon" or nil,
 	}
 	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
+	-- The game tells the addon nothing of a pet's killing blow (no PARTY_KILL for it), so a hunter's pet kills come in
+	-- as assists (an HK credit) unless the app reads them from the combat log. Said first in the fix, which the Website &
+	-- app page shows under the step bar
+	local _, class = UnitClass("player")
+	local pets = class == "HUNTER" and "Your pet's killing blows count as assists without the Wanted app. The app reads them from the combat log. " or ""
 	if app and notRunning then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "warn",
 			detail = format("Set up here (version %s), but it last ran %s ago.", app, Theme:Ago(notRunning)),
-			fix = "Start it: Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac." }
+			fix = pets.."Start it: Wanted Dead or Dead in the Start menu, or Wanted in Applications on a Mac." }
 	elseif app then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "ok", detail = format("Version %s.", app) }
 	else
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "bad",
 			detail = "No Wanted app on this computer: your kills don't reach the website and the fight layer doesn't reach you.",
-			fix = "Get it, start it, then /reload.", url = SITE.."/app" }
+			fix = pets.."Get it, start it, then /reload.", url = SITE.."/app" }
 	end
 	local inGroup = Wanted.Bridge ~= nil and Wanted.Bridge:InCommunity()
 	steps[3] = { key = "group", title = "In the Wanted Battle.net group", short = "In the group", state = inGroup and "ok" or "bad",

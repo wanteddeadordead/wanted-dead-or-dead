@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Hunters without the Wanted app: Your setup now says that your pet's killing blows count as assists without the app, which reads them from the combat log.
+- Hunters, warlocks and shamans without the Wanted app: Your setup now says that killing blows by your pet or summons (totems included) count as assists without the app, which reads them from the combat log.
 - Enter in the box of a bug report, a feature idea or a tip report starts a new line instead of sending it. Press Send to send.
 
 ## [1.29.4] - 2026-11-18

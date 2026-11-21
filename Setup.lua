@@ -30,6 +30,8 @@ local COLORS = { ok = C.green, bad = C.red, warn = C.amber, off = C.faint }
 local BAR_STEPS = { "Addon up to date", "Wanted app running", "In the group", "Enemy nameplates", "In the Discord" }
 local BAR_NOTES = { bad = "Not yet", warn = "Nearly", off = "Optional" }
 local WORDS = { ok = "ok", bad = "NO", warn = "nearly", off = "not yet" }
+-- The classes whose pet or summons can land a killing blow (see the app step)
+local PET_CLASSES = { HUNTER = true, WARLOCK = true, SHAMAN = true }
 
 ---The steps, in order: { key, title, short (for the one-line card), state ("ok", "bad", "warn", "off"), detail, fix?, url?, cvar?, confirm? }.
 ---@return table[]
@@ -43,11 +45,12 @@ function Setup:Steps()
 		url = newer and SITE.."/addon" or nil,
 	}
 	local app, notRunning = Wanted:AppVersion(), Wanted:AppNotRunningFor()
-	-- The game tells the addon nothing of a pet's killing blow (no PARTY_KILL for it), so a hunter's pet kills come in
-	-- as assists (an HK credit) unless the app reads them from the combat log. Said first in the fix, which the Website &
-	-- app page shows under the step bar
+	-- The game tells the addon nothing of a pet's or summon's killing blow (no PARTY_KILL for it), so those kills come in
+	-- as assists (an HK credit) unless the app reads them from the combat log: a hunter's pet, a warlock's demon, a
+	-- shaman's totems (no other class summons anything in this client). Said first in the fix, which the Website & app
+	-- page shows under the step bar
 	local _, class = UnitClass("player")
-	local pets = class == "HUNTER" and "Your pet's killing blows count as assists without the Wanted app. The app reads them from the combat log. " or ""
+	local pets = PET_CLASSES[class] and "Killing blows by your pet or summons count as assists without the Wanted app. The app reads them from the combat log. " or ""
 	if app and notRunning then
 		steps[2] = { key = "app", title = "Wanted app running", short = "App running", state = "warn",
 			detail = format("Set up here (version %s), but it last ran %s ago.", app, Theme:Ago(notRunning)),

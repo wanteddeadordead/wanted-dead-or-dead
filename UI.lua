@@ -29,7 +29,6 @@ local TAB_ROW = 38 -- a page without a header that has tabs: they take this much
 -- The menu is one short list (Dashboard, Guild Wars, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
 -- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
 local GROUPS = {}
-local DEFAULT_PAGE = "guildwars"
 
 
 
@@ -450,13 +449,9 @@ function UI:Show(key)
 	if key and private.pageByKey[key] then
 		private.current = key
 	end
-	-- The first open since login goes to the page remembered, except that Home, the Dashboard now, gives way to the
-	-- window's main page (the Dashboard is one click away, and opens by its key as ever)
-	local remembered = Wanted.db.settings.lastPage
-	if remembered == "home" then
-		remembered = DEFAULT_PAGE
-	end
-	private.current = private.UsablePage(private.current or remembered)
+	-- The first open since login goes to the page remembered, the Dashboard (Home) when there's none: the window opens
+	-- on the Dashboard, races or not (the maintainer, 2026-11-21: "open on dash")
+	private.current = private.UsablePage(private.current or Wanted.db.settings.lastPage)
 	Wanted.db.settings.lastPage = private.current
 	for _, def in ipairs(private.pages) do
 		def.container:SetShown(def.key == private.current)
@@ -492,11 +487,7 @@ function private.UsablePage(key)
 		return private.FirstTab(def)
 	end
 	if not def or (def.hidden and def.hidden()) then
-		-- The main page: Guild Wars where the site runs races, else Home
-		local main = private.pageByKey[DEFAULT_PAGE]
-		if key ~= DEFAULT_PAGE and main and not (main.hidden and main.hidden()) then
-			return DEFAULT_PAGE
-		end
+		-- The main page: the Dashboard
 		return "home"
 	end
 	return key

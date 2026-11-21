@@ -6405,8 +6405,7 @@ end)()
 	check(moneyLine, "no zero amounts on the bounty money card")
 	ns.Challenges:SetDemo(nil)
 
-	-- The window remembers its page; a page switched off falls back to the window's main page: Guild Wars where the
-	-- site runs races, else Home
+	-- The window remembers its page; a page switched off falls back to the Dashboard (Home), races or not
 	ns.UI:Show("hotspots")
 	check(db.settings.lastPage == "hotspots", "the page shown is remembered")
 	db.settings.showTools = false
@@ -17607,10 +17606,12 @@ print("wanted smoke: layer checks pass")
 	-- The race points' samples survive the book's tidy at login
 	ns.Presence:OnLoad()
 	check(db.presence[key] ~= nil, "a race point's sample is kept in the book at login")
-	-- The Guild Wars page, the window's main page with races on, with the race live
+	-- The Guild Wars page with the race live; with races on a hidden page still gives way to the Dashboard (the
+	-- maintainer: "open on dash", 2026-11-21)
 	db.settings.showTools = false
 	ns.UI:Show("tools")
-	check(ns.UI:IsShown("guildwars"), "with races on, a hidden page gives way to Guild Wars")
+	check(ns.UI:IsShown("home") and db.settings.lastPage == "home", "with races on, a hidden page gives way to the Dashboard")
+	ns.UI:Show("guildwars")
 	local function OnScreen(text)
 		for _, f in ipairs(Mock.fontStrings) do
 			if tostring(f._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then

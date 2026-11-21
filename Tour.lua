@@ -50,9 +50,9 @@ Tour.SETS.first = {
 		text = "The game can't open a browser, so every address is a box to copy: click it, Ctrl+C, paste. The box bordered here is your own page on wanteddeadordead.com.\n\nThe desktop app puts your kills on the website and keeps your saved data safe. Without it you still see enemies and bounties, but your records don't count." },
 	{ title = "Settings", page = "settings", mark = "invite",
 		text = "Alerts, what the Nearby window shows, and what Wanted shares with other players.\n\nThe Wanted Battle.net group is a data link, not a chat: through its members your addon learns which layer the other side is fighting on. Its invite is the box bordered here." },
-	-- Guild Wars: where the site runs races its page tops the menu; before then these stops show the main page
+	-- Guild Wars: where the site runs races its page is in the menu under the Dashboard; before then these stops show the main page
 	{ title = "Tonight's races", page = "guildwars", mark = "racetonight",
-		text = "Every night there are three races, 45 minutes each, in zones picked the evening before. Each is open to everyone in its zone, Horde against Alliance. When the site runs races, Guild Wars sits at the top of the menu.\n\n"
+		text = "Every night there are three races, 45 minutes each, in zones picked the evening before. Each is open to everyone in its zone, Horde against Alliance. When the site runs races, Guild Wars is in the menu, just under the Dashboard.\n\n"
 			.."Tonight lists each race's start, its zone and both sides' influence. Tomorrow's zones are under them." },
 	{ title = "Influence", page = "guildwars", mark = "racecard",
 		text = "A race is won on influence. Kills on the other faction in the zone earn it, once a witness backs them, and so do minutes standing on the zone's three points. The middle point counts 20% more.\n\n"

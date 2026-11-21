@@ -582,7 +582,7 @@ end
 UI:RegisterPage("home", {
 	title = "Home",
 	menuLabel = "Dashboard",
-	order = 0,
+	order = -3, -- the top of the menu, over Guild Wars (-2)
 	noHeader = true,
 	build = function(container, width)
 		private.hot = {}

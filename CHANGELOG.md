@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- The Dashboard is now the first entry in the menu, with Guild Wars under it. The window still opens on Guild Wars where the site runs races.
+- The Dashboard is now the first entry in the menu, with Guild Wars under it, and the window opens on the Dashboard again after login (or on the page you left it on, if that was another), races or not.
 
 - Hunters, warlocks and shamans without the Wanted app: Your setup now says that killing blows by your pet or summons (totems included) count as assists without the app, which reads them from the combat log.
 - Enter in the box of a bug report, a feature idea or a tip report starts a new line instead of sending it. Press Send to send.

@@ -18172,6 +18172,10 @@ end
 	local menuBadge
 	for _, entry in ipairs(ns.UI:Menu()) do if entry.key == "guildwars" then menuBadge = entry.badge end end
 	check(G:Badge(G:War(1)) == "!" and menuBadge == "!", "an officer must act: ! on the tab and the menu: "..tostring(menuBadge))
+	-- With Guild Wars on, the Dashboard still heads the menu and Guild Wars comes next (the maintainer, 2026-11-21)
+	local menuKeys = {}
+	for _, entry in ipairs(ns.UI:Menu()) do menuKeys[#menuKeys + 1] = entry.key end
+	check(menuKeys[1] == "home" and menuKeys[2] == "guildwars", "the menu: Dashboard first, then Guild Wars: "..table.concat(menuKeys, ", "))
 	ns.Races.Live = realLive
 	declare._scripts.OnClick(declare)
 	local declareId = "race:na:pvp:"..(clock - 3600)

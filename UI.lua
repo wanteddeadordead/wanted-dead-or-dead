@@ -26,7 +26,7 @@ local NAV_HEIGHT = 34
 local FOOT_TOP = 136 -- the top of the menu's foot (Safety, Suggest a feature, Report a bug): a page at the foot sits on it
 local GROUP_HEIGHT = 26
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
--- The menu is one short list (Guild Wars, Dashboard, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
+-- The menu is one short list (Dashboard, Guild Wars, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
 -- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
 local GROUPS = {}
 local DEFAULT_PAGE = "guildwars"

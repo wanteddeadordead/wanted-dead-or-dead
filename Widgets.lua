@@ -1156,7 +1156,7 @@ local function CreateDialog()
 		frame.confirm:Click()
 	end
 	-- A box for a longer text (input.multiline): the dialog's full width, wrapping over a few lines and scrolling past
-	-- them (the game's scrolling edit box functions keep the cursor in view); Enter still confirms
+	-- them (the game's scrolling edit box functions keep the cursor in view); Enter confirms unless input.newLines
 	local areaBox = CreateFrame("Frame", nil, frame)
 	Theme:Skin(areaBox, C.input, C.border)
 	areaBox:Hide()
@@ -1174,7 +1174,7 @@ local function CreateDialog()
 	areaScroll:SetScrollChild(area)
 	area:SetScript("OnCursorChanged", ScrollingEdit_OnCursorChanged)
 	area:SetScript("OnUpdate", function(self, elapsed) ScrollingEdit_OnUpdate(self, elapsed, areaScroll) end)
-	area:SetScript("OnEnterPressed", function() frame.confirm:Click() end)
+	frame.areaConfirm = function() frame.confirm:Click() end
 	area:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 		blocker:Hide()
@@ -1226,7 +1226,7 @@ end
 ---Shows a modal dialog over the Wanted window.
 ---@param options table title, text, input = { placeholder, value, multiline (a wide box wrapping a longer text), copy (a single box that is only for copying: selected as the dialog opens and
 ---on a click, and typing can't change it), maxLetters
----(of a multiline box, default 255), tip = { title, body } (the box's tooltip: how to copy what's in it) }, over (a window to centre on, rather than the Wanted window or the screen), width
+---(of a multiline box, default 255), newLines (Enter in a multiline box starts a new line rather than confirming), tip = { title, body } (the box's tooltip: how to copy what's in it) }, over (a window to centre on, rather than the Wanted window or the screen), width
 ---(of the dialog, default 390), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
@@ -1303,6 +1303,8 @@ function W:Dialog(options)
 		-- The dialog's width less its margins and the scroll bar's room
 		frame.area:SetWidth((options.width or DIALOG_WIDTH) - 40 - 24)
 		frame.area:SetMaxLetters(options.input.maxLetters or 255)
+		-- With no script of its own, Enter in a multiline box starts a new line
+		frame.area:SetScript("OnEnterPressed", not options.input.newLines and frame.areaConfirm or nil)
 		-- At the top, whatever the last dialog's box was scrolled to
 		frame.areaScroll:SetVerticalScroll(0)
 		frame.area:SetText(options.input.value or "")

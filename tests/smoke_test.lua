@@ -14113,6 +14113,13 @@ end)()
 	check(OnScreen("What should Wanted do?"), "the menu's Suggest a feature asks the same")
 	dialog.cancel:Click()
 	check(Report:CountQueued() == queuedBefore + 1, "Cancel queues nothing")
+	-- Enter in a report's box starts a new line, never sends: a player pasting a table and pressing Enter for the next
+	-- line sent it half written, twice
+	ideaButton:Click()
+	dialog.area:SetText("First line")
+	check(dialog.area._scripts.OnEnterPressed == nil, "Enter in a report's box doesn't press Send")
+	dialog.cancel:Click()
+	check(Report:CountQueued() == queuedBefore + 1, "so it queues nothing")
 	-- Saved data from before reports gets an empty queue (a new key: no layout change)
 	local realDB = WantedDB
 	WantedDB = { version = 3, settings = {} }

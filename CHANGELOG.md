@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Enter in the box of a bug report, a feature idea or a tip report starts a new line instead of sending it. Press Send to send.
+
 ## [1.29.4] - 2026-11-18
 
 - Address boxes in dialogs select their text when they open and on a click, so Ctrl+C copies it.

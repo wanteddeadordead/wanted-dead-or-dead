@@ -542,7 +542,7 @@ function private.Ask(options)
 		text = options.text,
 		width = 440,
 		over = options.over,
-		input = { multiline = true, maxLetters = MAX_TEXT },
+		input = { multiline = true, maxLetters = MAX_TEXT, newLines = true },
 		confirmLabel = "Send",
 		validate = options.validate,
 		onConfirm = function(text)

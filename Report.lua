@@ -308,18 +308,17 @@ end
 -- Reports for the developers, sent on by the Wanted app
 -- ============================================================================
 
----Text as it's sent: on one line, without control characters or the game's escape codes (a link pasted in keeps
----its "[Name]"; icons, atlases and the like go whole, and any other "|"), at most maxLetters letters (UTF-8, as the
----app and the server count them, never cut inside one).
----@return string
-function private.Clip(text, maxLetters)
-	if type(text) ~= "string" then
-		return ""
-	end
+---Takes the game's escape codes out of text (a link pasted in keeps its "[Name]"; icons, atlases and the like go
+---whole, and any other "|").
+local function StripCodes(text)
 	text = gsub(gsub(text, "|c%x%x%x%x%x%x%x%x", ""), "|r", "")
 	text = gsub(gsub(text, "|H.-|h(.-)|h", "%1"), "|T.-|t", "")
 	text = gsub(gsub(text, "|A.-|a", ""), "|K.-|k", "")
-	text = strtrim((gsub(gsub(gsub(text, "|", ""), "[\r\n]+", " "), "%c", "")))
+	return (gsub(text, "|", ""))
+end
+
+---At most maxLetters letters of text (UTF-8, as the app and the server count them, never cut inside one).
+local function CutLetters(text, maxLetters)
 	-- Each letter starts with a byte that isn't a UTF-8 continuation byte
 	local letters = 0
 	for at in gmatch(text, "()[^\128-\191]") do
@@ -329,6 +328,31 @@ function private.Clip(text, maxLetters)
 		end
 	end
 	return text
+end
+
+---Text as it's sent: on one line, without control characters or the game's escape codes, at most maxLetters letters.
+---@return string
+function private.Clip(text, maxLetters)
+	if type(text) ~= "string" then
+		return ""
+	end
+	text = strtrim((gsub(gsub(StripCodes(text), "[\r\n]+", " "), "%c", "")))
+	return CutLetters(text, maxLetters)
+end
+
+---The player's own words as they're sent: like Clip, but the line breaks stay (as "\n"). Other control characters and
+---each line's trailing spaces go, a run of empty lines becomes one, and the text is trimmed. A line break counts as
+---one letter toward maxLetters.
+---@return string
+function private.ClipLines(text, maxLetters)
+	if type(text) ~= "string" then
+		return ""
+	end
+	text = gsub(gsub(StripCodes(text), "\r\n", "\n"), "\r", "\n")
+	text = gsub(text, "[%c]", function(c) return c == "\n" and c or "" end)
+	text = gsub(text, " +\n", "\n")
+	text = gsub(text, "\n\n\n+", "\n\n")
+	return CutLetters(strtrim(text), maxLetters)
 end
 
 ---How many reports are waiting for the app.
@@ -361,7 +385,7 @@ function Report:Queue(report)
 	end
 	local id = character..":report:"..at
 	report.at, report.character, report.addonVersion = at, character, tostring(Wanted.VERSION)
-	report.text = private.Clip(report.text, MAX_TEXT)
+	report.text = private.ClipLines(report.text, MAX_TEXT)
 	queue[id] = report
 	Wanted:Log("Report %s waiting for the Wanted app (%d waiting)", id, Report:CountQueued())
 	return id
@@ -479,6 +503,10 @@ end
 -- The first desktop app that sends reports on
 Report.MIN_APP = "0.2.46"
 
+-- Where a report is followed once the app has sent it
+local REPORTS_URL = "https://wanteddeadordead.com/me/reports"
+local REPORTS_NOTE = "You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."
+
 ---What happens to a report now, by whether the app is set up, new enough and running.
 function private.SentText()
 	local version = Wanted:AppVersion()
@@ -493,10 +521,44 @@ function private.SentText()
 	return "Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."
 end
 
+---The address that follows a queued report on the website, and the paragraph that leads to it. The report's time
+---is in its id; the website finds the ticket the app makes from it.
+---@param id string a queued report's id, "<character>:report:<at>"
+---@return string paragraph
+---@return string url
+function private.FollowText(id)
+	local at = type(id) == "string" and id:match(":report:(%d+)$") or ""
+	local url = REPORTS_URL.."?sent="..at
+	if Wanted:AppVersion() then
+		return "The developers answer on the website. Once it's sent, follow it there, signed in with the account the Wanted app is connected to (click the address, Ctrl+C, paste into a browser):", url
+	end
+	return "Reports reach the website only through the Wanted app, signed in to your account. Once it's sent, follow it there:", url
+end
+
+---Tells the player where the report they just queued goes, and where to follow it.
+---@param id string
+---@param title string
+function private.ShowSent(id, title)
+	local paragraph, url = private.FollowText(id)
+	W:Dialog({
+		title = title,
+		text = private.SentText().."\n\n"..paragraph,
+		width = 480,
+		input = { value = url, copy = true, tip = { "Follow your report", "Click the address, Ctrl+C, and paste it into a browser. It shows your report once the Wanted app has sent it." } },
+		confirmLabel = "OK",
+	})
+end
+
 ---Where a bug report goes from here, for the report window: whether the app sends it, or what it waits for.
 ---@return string text
 ---@return table color
 function private.AppText()
+	local text, color = private.AppState()
+	return text..(text ~= "" and "\n" or "")..REPORTS_NOTE, color
+end
+
+---The report window's note on what the app does with a report: empty when it sends them.
+function private.AppState()
 	local version = Wanted:AppVersion()
 	if not version then
 		return "A report waits until the Wanted app is running on this PC. Get it at wanteddeadordead.com/app.", C.amber
@@ -546,11 +608,12 @@ function private.Ask(options)
 		confirmLabel = "Send",
 		validate = options.validate,
 		onConfirm = function(text)
-			if not options.queue(text) then
+			local id = options.queue(text)
+			if not id then
 				private.ShowFull()
 				return
 			end
-			W:Dialog({ title = options.savedTitle or "Report saved", text = private.SentText(), confirmLabel = "OK" })
+			private.ShowSent(id, options.savedTitle or "Report saved")
 		end,
 	})
 end
@@ -573,7 +636,7 @@ function Report:AskAboutBug()
 		over = private.frame,
 		text = "What happened, and what did you expect? Wanted's recent log goes with it, with your game and settings, other players' names left out.",
 		validate = function(text)
-			return private.Clip(text, MAX_TEXT) == "" and "Say what happened first." or nil
+			return private.ClipLines(text, MAX_TEXT) == "" and "Say what happened first." or nil
 		end,
 		queue = function(text) return Report:QueueBug(text) end,
 	})
@@ -585,7 +648,7 @@ function Report:AskAboutIdea()
 		title = "Suggest a feature",
 		text = "What should Wanted do? It goes to the developers through the Wanted app.",
 		validate = function(text)
-			return private.Clip(text, MAX_TEXT) == "" and "Say what Wanted should do first." or nil
+			return private.ClipLines(text, MAX_TEXT) == "" and "Say what Wanted should do first." or nil
 		end,
 		queue = function(text) return Report:QueueIdea(text) end,
 		savedTitle = "Idea saved",
@@ -643,6 +706,8 @@ function Report:Show()
 	local text, color = private.AppText()
 	private.frame.appNote:SetText(text)
 	private.frame.appNote:SetTextColor(color[1], color[2], color[3])
+	-- Tall enough for the whole note beside the button
+	private.frame:SetHeight(max(104, 56 + ceil(private.frame.appNote:GetStringHeight() or 0) + 16))
 	private.frame:Show()
 end
 

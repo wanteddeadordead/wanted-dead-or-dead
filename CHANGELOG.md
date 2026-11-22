@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Bug reports, feature ideas and tip reports keep the line breaks you type; before, they were joined into one line.
+- After a bug report, feature idea or tip report is saved, the dialog shows an address on wanteddeadordead.com/me/reports where you can follow it once the Wanted app has sent it. The Report a bug window says the same.
+
 ## [1.29.6] - 2026-11-22
 
 - Short freezes when other players share sightings are gone: the list of outlaws was worked out again from every kill and death held, in one go, inside whatever asked for it (around 30 ms with 11,000 records). It is now worked out a little each frame, and the last list stands until the new one is ready. The first list is still worked out at login, so an outlaw you meet right away is announced.

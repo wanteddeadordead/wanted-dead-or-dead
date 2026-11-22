@@ -14174,7 +14174,7 @@ end)()
 	local r = db.reports[id]
 	check(id == "Alt Char:report:"..clock and r and r.kind == "tip" and r.at == clock and r.character == "Alt Char"
 		and r.addonVersion == tostring(ns.VERSION) and r.id == nil, "a tip report is queued under the duel's <character>:report:<at>: "..tostring(id))
-	check(r.text == "The tip is wrong about [Thunderfury]", "the player's words lose the game's escape codes: "..tostring(r.text))
+	check(r.text == "The tip is\nwrong about [Thunderfury]", "the player's words lose the game's escape codes and keep their line break: "..tostring(r.text))
 	check(r.duelId == duel.id and r.rule == "pws" and r.tip == "Save Kick for the shield." and r.finding == "Their Power Word: Shield absorbed 400."
 		and r.myClass == "ROGUE" and r.mySpec == "Combat" and r.theirClass == "PRIEST" and r.theirSpec == "Shadow" and r.myLevel == 24 and r.log == nil,
 		"the tip report carries the duel, the rule, the tip and finding, and both sides' classes and specs")
@@ -14189,6 +14189,18 @@ end)()
 		"the text is held to 500 letters, whole letters only, the tip and finding to 1000: "..#long.text)
 	-- A duel id that doesn't name its character: the tip goes in this one's
 	check(Report:QueueTip({ id = "odd", me = {}, them = {} }, { text = "x" }, "") == "Test Player:report:"..clock, "a duel id without a character falls back to this one")
+	-- Line breaks stay in the player's words: CRLF and CR become one, other control characters and trailing spaces go,
+	-- five blank lines become one, the ends are trimmed
+	local idLines = Report:QueueTip(duel, finding, "\n\nFirst  \t\r\nsecond\r\r\r\r\r\rthird\1\127 \n\n")
+	check(db.reports[idLines].text == "First\nsecond\n\nthird", "two lines keep their break and five blank lines become one: "..db.reports[idLines].text:gsub("\n", "/"))
+	-- The 500-letter limit counts a line break as one letter
+	local idLimit = Report:QueueIdea(string.rep("a\n", 400))
+	local limited = db.reports[idLimit].text
+	check(#limited == 500 and select(2, limited:gsub("\n", "")) == 250, "the 500-letter limit counts a line break as one letter: "..#limited)
+	-- The rule, tip and finding stay on one line
+	local idOne = Report:QueueTip(duel, { rule = "a\nb", tip = "tip\r\nline\ntwo", text = "find\ning" }, "x")
+	local one = db.reports[idOne]
+	check(one.rule == "a b" and one.tip == "tip line two" and one.finding == "find ing", "the rule, tip and finding stay on one line")
 	-- A bug: the player's words and the last 40 log lines, oldest first, held to 8 KB
 	local problems = ns:GetProblems()
 	local earlierProblems = { unpack(problems) }
@@ -14330,7 +14342,52 @@ end)()
 	check(Report:CountQueued() == queuedBefore + 1 and idea and idea.text == "Let me pin a bounty to the map" and idea.log == nil and idea.duelId == nil
 		and idea.character == "Test Player" and type(idea.at) == "number" and idea.addonVersion == tostring(ns.VERSION), "Send queues the idea with the player's words alone")
 	check(OnScreen("Idea saved") and OnScreen("Thanks. It goes to the developers next time the Wanted app syncs (after a /reload or logout)."), "and says it goes at the app's next sync")
+	local ideaAt = idea.at
+	local function Address(at) return "https://wanteddeadordead.com/me/reports?sent="..at end
+	check(OnScreen("The developers answer on the website. Once it's sent, follow it there, signed in with the account the Wanted app is connected to (click the address, Ctrl+C, paste into a browser):")
+		and dialog.input:GetText() == Address(ideaAt) and dialog.copyText == Address(ideaAt), "and shows the address, with the report's time, in a copy box")
 	dialog.confirm:Click()
+	-- Every state adds the paragraph and the address; no app has its own paragraph
+	local function SentFor(info, text)
+		WantedAppInfo = info
+		ns:RunCommand("idea", "")
+		dialog.area:SetText(text)
+		dialog.confirm:Click()
+		local at
+		for _, r in pairs(db.reports) do if r.text == text then at = r.at end end
+		return at
+	end
+	local atOld = SentFor({ running = "0.2.45", seen = GetServerTime() }, "old app")
+	check(OnScreen("update it from its tray menu, then it goes to the developers") and OnScreen("The developers answer on the website.") and dialog.input:GetText() == Address(atOld), "an app too old: its text, then the paragraph and address")
+	dialog.confirm:Click()
+	local atStopped = SentFor({ running = "0.2.46", seen = 1 }, "stopped app")
+	check(OnScreen("The Wanted app isn't running, so it waits") and OnScreen("The developers answer on the website.") and dialog.input:GetText() == Address(atStopped), "an app not running: its text, then the paragraph and address")
+	dialog.confirm:Click()
+	local atNone = SentFor(nil, "no app")
+	check(OnScreen("waits until the Wanted app runs on this PC") and OnScreen("Reports reach the website only through the Wanted app, signed in to your account. Once it's sent, follow it there:")
+		and not OnScreen("The developers answer on the website.") and dialog.input:GetText() == Address(atNone), "no app: the other paragraph, then the address")
+	dialog.confirm:Click()
+	-- The tip dialog gets the same paragraph
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	Report:AskAboutTip(duel, finding)
+	dialog.area:SetText("tip words")
+	dialog.confirm:Click()
+	check(OnScreen("Report saved") and OnScreen("The developers answer on the website.") and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$"), "the tip dialog gets the paragraph and address")
+	dialog.confirm:Click()
+	-- A full queue shows no address
+	local keptQueue = db.reports
+	db.reports = {}
+	for i = 1, 20 do db.reports["A:report:"..i] = { kind = "bug", at = clock } end
+	ns:RunCommand("idea", "")
+	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
+	dialog.confirm:Click()
+	db.reports = keptQueue
+	queuedBefore = queuedBefore + 4
+	-- The report window's note carries the line about following reports
+	ns.Report:Show()
+	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")
+	_G.WantedBugReport:Hide()
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	local ideaButton
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Suggest a feature" and f._scripts.OnClick then ideaButton = f break end end
 	ideaButton:Click()

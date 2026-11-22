@@ -14319,7 +14319,8 @@ end)()
 	local send
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
 	send:Click()
-	check(OnScreen("What happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
+	check(OnScreen("what happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
+	check(OnScreen("First, turn Wanted off in the addon list, /reload, and check if the problem is still there."), "the bug dialog first asks to try with Wanted off")
 	local realDialog, asked = ns.Widgets.Dialog, 0
 	ns.Widgets.Dialog = function(...) asked = asked + 1 return realDialog(...) end
 	send:Click()
@@ -14333,6 +14334,7 @@ end)()
 	local queuedBefore = Report:CountQueued()
 	ns:RunCommand("idea", "")
 	check(OnScreen("Suggest a feature") and OnScreen("What should Wanted do? It goes to the developers through the Wanted app."), "/wanted idea asks what Wanted should do")
+	check(not OnScreen("turn Wanted off in the addon list"), "the idea dialog has no try-with-Wanted-off step")
 	dialog.confirm:Click()
 	check(Report:CountQueued() == queuedBefore and OnScreen("Say what Wanted should do first."), "an empty idea queues nothing")
 	dialog.area:SetText("Let me |cff00ff00pin|r a bounty to the map\n")

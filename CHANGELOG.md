@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The bug report dialog first asks you to turn Wanted off in the addon list, /reload and check whether the problem is still there, before you describe it.
 - Bug reports, feature ideas and tip reports keep the line breaks you type; before, they were joined into one line.
 - After a bug report, feature idea or tip report is saved, the dialog shows an address on wanteddeadordead.com/me/reports where you can follow it once the Wanted app has sent it. The Report a bug window says the same.
 

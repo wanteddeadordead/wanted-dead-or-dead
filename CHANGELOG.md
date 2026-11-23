@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- After a bug report, feature idea or tip report is saved and the Wanted app is running, the dialog has a Reload now button that sends it at once, and says it is otherwise sent at your next /reload or logout. Where a reload would send nothing (no app, an old app, the app not running) it has no such button.
+
 ## [1.30.1] - 2026-11-27
 
 - In a battleground, Wanted no longer causes "The client blocked ListChannelByName()" and "Interface action failed because of an AddOn": it asks for its sync channel's member count once the game lifts its chat lockdown.

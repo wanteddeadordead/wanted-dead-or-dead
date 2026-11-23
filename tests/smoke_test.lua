@@ -14709,6 +14709,9 @@ end)()
 ;(function()
 	local db, Report, Duels = ns.db, ns.Report, ns.Duels
 	local keptDuels, keptReports, keptAppInfo = db.duels, db.duelReports, WantedAppInfo
+	-- Reload now in the "saved" dialog calls ReloadUI: counted here, never run
+	local reloads, realReload = 0, ReloadUI
+	ReloadUI = function() reloads = reloads + 1 end
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	db.reports = {}
 	-- A duel another of the account's characters fought: the tip goes in its name
@@ -14918,6 +14921,37 @@ end)()
 	check(OnScreen("waits until the Wanted app runs on this PC") and OnScreen("Reports reach the website only through the Wanted app, signed in to your account. Once it's sent, follow it there:")
 		and not OnScreen("The developers answer on the website.") and dialog.input:GetText() == Address(atNone), "no app: the other paragraph, then the address")
 	dialog.confirm:Click()
+	-- Only where a reload would send the report: the dialog offers Reload now and says it is otherwise sent at the next
+	-- /reload or logout, with the address kept; in the other states there is no reload button
+	reloads = 0
+	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload me")
+	dialog.confirm:Click()
+	check(dialog.confirm:GetText() == "Reload now" and dialog.cancel:GetText() == "Not now" and OnScreen("Reload now to send it at once. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent.")
+		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$") and reloads == 0, "app running: Reload now is offered with the address and the plain statement")
+	dialog.cancel:Click()
+	check(reloads == 0, "Not now reloads nothing")
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload me too")
+	dialog.confirm:Click()
+	dialog.confirm:Click()
+	check(reloads == 1, "Reload now reloads the UI")
+	for _, info in ipairs({ { running = "0.2.45", seen = GetServerTime() }, { running = "0.2.46", seen = 1 } }) do
+		WantedAppInfo = info
+		ns:RunCommand("idea", "")
+		dialog.area:SetText("no reload "..info.running..info.seen)
+		dialog.confirm:Click()
+		check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now to send it at once"), "old or stopped app: no reload button")
+		dialog.confirm:Click()
+	end
+	WantedAppInfo = nil
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("no app at all")
+	dialog.confirm:Click()
+	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now to send it at once"), "no app: no reload button")
+	dialog.confirm:Click()
+	check(reloads == 1, "no reload in those states")
 	-- The tip dialog gets the same paragraph
 	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	Report:AskAboutTip(duel, finding)
@@ -14933,7 +14967,7 @@ end)()
 	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
 	dialog.confirm:Click()
 	db.reports = keptQueue
-	queuedBefore = queuedBefore + 4
+	queuedBefore = queuedBefore + 9
 	-- The report window's note carries the line about following reports
 	ns.Report:Show()
 	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")
@@ -14961,6 +14995,7 @@ end)()
 	ns:LoadSavedData()
 	db.reports = {}
 	db.duels, db.duelReports, WantedAppInfo = keptDuels, keptReports, keptAppInfo
+	ReloadUI = realReload
 end)()
 -- Poker: the hold'em engine and the provably random deal (Poker/Engine.lua, Poker/Deal.lua), pure Lua with no game
 -- calls, so every rule is checked here. Cards are 1..52: rank 2..14 (ace high) and suit 1..4.

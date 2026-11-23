@@ -100,6 +100,12 @@ function private.Refresh()
 	if not private.list then
 		return
 	end
+	-- The rows stand through a refresh nothing the player did asked for (UI:IsPassiveRefresh): they're built when
+	-- the page is opened, and at a new filter, sort or search
+	if private.built and UI:IsPassiveRefresh() then
+		return
+	end
+	private.built = true
 	private.RefreshNemeses()
 	local items = Enemies:GetAll(private.filter)
 	local search = strlower(strtrim(private.search:GetText() or ""))

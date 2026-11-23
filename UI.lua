@@ -81,23 +81,55 @@ end
 
 function UI:OnEnable()
 	-- Enemies appearing, leaving and list changes (not the once-a-second updates of ones already listed)
+	-- A list change (Kill on Sight, ignored) is the player's doing; the rest arrives by itself (IsPassiveRefresh)
 	Wanted.Enemies:OnChange(function(event)
 		if event ~= "update" then
-			private.QueueRefresh()
+			private.QueueRefresh(event ~= "lists")
 		end
 	end)
 	for _, kind in ipairs({ "bounty", "claim", "confirm", "payment", "raise", "pass", "death", "kill", "mark", "withdraw", "hunt", "sighting" }) do
-		Wanted.Store:OnRecord(kind, private.QueueRefresh)
+		Wanted.Store:OnRecord(kind, function() private.QueueRefresh(true) end)
 	end
 end
 
-function private.QueueRefresh()
-	if private.refreshQueued or not private.frame or not private.frame:IsShown() then
+---Whether the refresh under way is one nothing the player did asked for: the 15-second tick, or a record or an enemy
+---arriving. A page whose rows are costly to build (Enemies: every enemy known, described and sorted, over 100 ms with
+---3,000 of them) keeps the rows it has through these, and builds them when it's opened or the player changes
+---something.
+---@return boolean
+function UI:IsPassiveRefresh()
+	return private.passive == true
+end
+
+function private.PassiveRefresh()
+	private.passive = true
+	local ok, err = pcall(UI.Refresh, UI)
+	private.passive = nil
+	if not ok then
+		error(err, 0)
+	end
+end
+
+---@param passive boolean? nothing the player did asks for it (IsPassiveRefresh); one that isn't, queued with it, wins
+function private.QueueRefresh(passive)
+	if not private.frame or not private.frame:IsShown() then
+		return
+	end
+	if not passive then
+		private.queuedActive = true
+	end
+	if private.refreshQueued then
 		return
 	end
 	private.refreshQueued = true
 	C_Timer.After(0.15, Wanted:Timed("Window refresh", function()
 		private.refreshQueued = false
+		local active = private.queuedActive
+		private.queuedActive = nil
+		if not active then
+			private.PassiveRefresh()
+			return
+		end
 		UI:Refresh()
 	end))
 end
@@ -165,7 +197,7 @@ function private.Create()
 	frame:SetScript("OnShow", function()
 		UI:Refresh(true)
 		-- Keep "4m ago" style times and the connection state current while the window is open
-		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", function() UI:Refresh() end))
+		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", private.PassiveRefresh))
 	end)
 	frame:SetScript("OnHide", function()
 		if private.ticker then

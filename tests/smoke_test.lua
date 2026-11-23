@@ -4730,6 +4730,36 @@ end)()
 	check(#Sent("GUILD") == 0 and #Sent("CHANNEL") >= 1, "with the channel back, records go on the channel only")
 end)()
 ;(function()
+	-- The Enemies page describes and sorts every enemy known: it builds its rows when it's opened or the player
+	-- changes something, not at a refresh that a record arriving or the 15-second tick asked for
+	local builds, realGetAll = 0, ns.Enemies.GetAll
+	ns.Enemies.GetAll = function(...) builds = builds + 1 return realGetAll(...) end
+	ns.UI:Show("enemies")
+	RunTimers()
+	builds = 0
+	ns.Store:AddSighting("Player-9-PASSIVE", "Durotar", 40, 40, 1, "Some Peer")
+	RunTimers()
+	check(builds == 0, "a sighting arriving doesn't rebuild the Enemies rows, got "..builds)
+	check(not ns.UI:IsPassiveRefresh(), "the passive mark is gone once the refresh is done")
+	ns.UI:Toggle()
+	local ticking = #tickers
+	ns.UI:Toggle()
+	builds = 0
+	check(#tickers == ticking + 1, "the window's own ticker starts when it opens, got "..(#tickers - ticking))
+	tickers[#tickers]()
+	check(builds == 0, "the 15-second refresh doesn't rebuild them, got "..builds)
+	ns.Enemies:SetKoS("Player-9-PASSIVE", "Passive Peer", true)
+	RunTimers()
+	check(builds >= 1, "a Kill on Sight change does rebuild them")
+	builds = 0
+	ns.UI:Show("hotspots")
+	ns.UI:Show("enemies")
+	check(builds >= 1, "opening the page builds them")
+	ns.Enemies:SetKoS("Player-9-PASSIVE", "Passive Peer", false)
+	RunTimers()
+	ns.Enemies.GetAll = realGetAll
+end)()
+;(function()
 	-- Outlaws: four kills within twenty minutes, each backed by another record, make a player Wanted in game
 	local now = clock
 	local function Kill(i, killerGuid, killerName, victim, t, backed)

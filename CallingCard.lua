@@ -63,6 +63,10 @@ local NO_EMBLEM = "none"
 local MAX_UNLOCKED = 400
 local MAX_VALUE = 32
 local BANNER_WIDTH = 720
+-- The Browse view: each part's cell width (its height follows the art's shape), the gap between cells, and the grid's room
+local BROWSE_CELL_WIDTH = { background = 168, border = 156, plate = 168, emblem = 92 }
+local BROWSE_GAP, BROWSE_WIDTH, BROWSE_HEIGHT = 10, 708, 340
+local BROWSE_PANEL = { BROWSE_WIDTH + 12 + 40, BROWSE_HEIGHT + 100 }
 
 
 
@@ -732,6 +736,212 @@ function private.Save()
 	private.Refresh()
 end
 
+-- ============================================================================
+-- Browse: one part's pieces as small pictures
+-- ============================================================================
+
+---The pieces the Browse view lists for a part: no emblem first (emblems only), then the ones you own, then the locked
+---ones (left out with onlyEarned). Without your own card (no app) nothing is claimed earned or locked: every piece, in
+---the catalogue's order.
+---@param part string
+---@param onlyEarned boolean?
+---@return table[] entries { index (into the part's pieces; 0 for no emblem), item, earned }
+---@return number earned how many pieces you own, or nil without your card
+---@return number total
+function private.BrowseItems(part, onlyEarned)
+	local items, claims = private.Parts()[part], private.Mine() ~= nil
+	local entries, locked, earned = {}, {}, 0
+	if part == "emblem" then
+		entries[1] = { index = 0, earned = true }
+	end
+	for i, item in ipairs(items) do
+		if not claims then
+			tinsert(entries, { index = i, item = item, earned = true })
+		elseif private.Unlocked(item.id) then
+			earned = earned + 1
+			tinsert(entries, { index = i, item = item, earned = true })
+		elseif not onlyEarned then
+			tinsert(locked, { index = i, item = item, earned = false })
+		end
+	end
+	for _, entry in ipairs(locked) do
+		tinsert(entries, entry)
+	end
+	return entries, claims and earned or nil, #items
+end
+
+---Puts a piece on the card from the Browse view: yours if you own it, any in "Try anything"; a locked one on your own
+---card does nothing.
+function private.BrowsePick(entry)
+	if not entry or not (entry.earned or private.trying) then
+		return
+	end
+	private.at[private.browse.part] = entry.index
+	private.browse:Hide()
+	private.Changed()
+end
+
+---Draws the grid: only the cells in view, reused as it scrolls and for every part.
+function private.DrawBrowse()
+	local browse = private.browse
+	local part = browse.part
+	local width = BROWSE_CELL_WIDTH[part]
+	local height = floor(width / PART_ASPECT[part])
+	local cols = floor((BROWSE_WIDTH + BROWSE_GAP) / (width + BROWSE_GAP))
+	local rows = floor((BROWSE_HEIGHT + BROWSE_GAP) / (height + BROWSE_GAP))
+	local claims = private.Mine() ~= nil
+	local onlyEarned = claims and Wanted.db.cardOnlyEarned == true
+	local entries, earned, total = private.BrowseItems(part, onlyEarned)
+	browse.entries, browse.cols, browse.rows = entries, cols, rows
+	browse.title:SetText(private.Title(part))
+	browse.count:SetText(claims and format("%d of %d earned", earned, total) or format("%d pieces", total))
+	browse.only:SetShown(claims)
+	browse.only:SetChecked(onlyEarned)
+	local lastRow = max(ceil(#entries / cols) - rows, 0)
+	browse.offset = max(0, min(browse.offset, lastRow))
+	local current = private.at[part]
+	for slot = 1, max(#browse.cells, rows * cols) do
+		local cell, entry = browse.cells[slot], nil
+		if slot <= rows * cols then
+			entry = entries[browse.offset * cols + slot]
+		end
+		if entry then
+			if not cell then
+				cell = private.BrowseCell(slot)
+			end
+			cell.entry = entry
+			cell:SetSize(width, height)
+			cell:ClearAllPoints()
+			cell:SetPoint("TOPLEFT", ((slot - 1) % cols) * (width + BROWSE_GAP), -floor((slot - 1) / cols) * (height + BROWSE_GAP))
+			local item, shut = entry.item, claims and not entry.earned
+			if item then
+				cell.art:SetTexture((CallingCard:Art(item.id)))
+				cell.art:SetDesaturated(shut)
+				cell.art:SetVertexColor(shut and 0.55 or 1, shut and 0.55 or 1, shut and 0.6 or 1)
+				cell.art:Show()
+			else
+				cell.art:SetTexture(nil)
+				cell.art:Hide()
+			end
+			cell.name:SetText(item and "" or "No emblem")
+			cell.lock:SetShown(shut)
+			Theme:SetBorderColor(cell, entry.index == current and { 0.95, 0.70, 0.30, 1 } or { 1, 1, 1, 0.10 })
+			local title = item and item.name or "No emblem"
+			local body = item and (shut and "Locked: "..item.unlock or item.unlock) or "Show the card without an emblem."
+			W:Explain(cell, title, body)
+			cell:Show()
+		elseif cell then
+			-- Art is only held for the part shown
+			cell.entry = nil
+			cell.art:SetTexture(nil)
+			cell:Hide()
+		end
+	end
+	-- The scroll bar
+	if lastRow > 0 then
+		local thumb = max(BROWSE_HEIGHT * rows / (lastRow + rows), 24)
+		browse.thumb:SetHeight(thumb)
+		browse.thumb:ClearAllPoints()
+		browse.thumb:SetPoint("TOPRIGHT", browse.grid, "TOPRIGHT", -2, -(browse.offset / lastRow) * (BROWSE_HEIGHT - thumb))
+	end
+	browse.thumb:SetShown(lastRow > 0)
+	browse.track:SetShown(lastRow > 0)
+end
+
+---A part's title ("Background").
+function private.Title(part)
+	for _, p in ipairs(PARTS) do
+		if p.part == part then
+			return p.title
+		end
+	end
+	return part
+end
+
+---One cell of the grid, made when first needed.
+function private.BrowseCell(slot)
+	local browse = private.browse
+	local cell = CreateFrame("Button", nil, browse.grid)
+	Theme:Skin(cell, { 0.05, 0.05, 0.07, 1 }, { 1, 1, 1, 0.10 })
+	cell.art = cell:CreateTexture(nil, "ARTWORK")
+	cell.art:SetPoint("TOPLEFT", 1, -1)
+	cell.art:SetPoint("BOTTOMRIGHT", -1, 1)
+	cell.name = Theme:Text(cell, "small", "", { 0.6, 0.62, 0.68 })
+	cell.name:SetPoint("CENTER")
+	cell.lock = CreateFrame("Frame", nil, cell)
+	cell.lock:SetSize(54, 14)
+	cell.lock:SetPoint("BOTTOMRIGHT", -3, 3)
+	Theme:Fill(cell.lock, { 0, 0, 0, 0.75 })
+	cell.lock.text = Theme:Text(cell.lock, "small", "LOCKED", { 0.95, 0.45, 0.35 })
+	cell.lock.text:SetPoint("CENTER")
+	cell:SetScript("OnClick", function(self) private.BrowsePick(self.entry) end)
+	browse.cells[slot] = cell
+	return cell
+end
+
+---Opens the Browse view for a part.
+---@param part string
+function private.OpenBrowse(part)
+	local browse = private.browse
+	if not browse then
+		browse = CreateFrame("Frame", "WantedCallingCardBrowse", private.frame)
+		private.browse = browse
+		browse.cells, browse.offset = {}, 0
+		browse:SetAllPoints(private.frame)
+		browse:SetFrameLevel(private.frame:GetFrameLevel() + 20)
+		browse:EnableMouse(true)
+		Theme:Fill(browse, { 0, 0, 0, 0.6 })
+		browse:Hide()
+		-- Escape closes this before the window: the key stops here while it is open
+		browse:SetScript("OnShow", function(self) self:EnableKeyboard(true) end)
+		browse:SetScript("OnHide", function(self) self:EnableKeyboard(false) end)
+		browse:SetScript("OnKeyDown", function(self, key)
+			if key == "ESCAPE" then
+				self:SetPropagateKeyboardInput(false)
+				self:Hide()
+			else
+				self:SetPropagateKeyboardInput(true)
+			end
+		end)
+		local panel = CreateFrame("Frame", nil, browse)
+		panel:SetSize(BROWSE_PANEL[1], BROWSE_PANEL[2])
+		panel:SetPoint("CENTER")
+		Theme:Skin(panel, { 0.07, 0.08, 0.10, 1 }, { 1, 1, 1, 0.10 })
+		browse.title = Theme:Text(panel, "title", "", { 0.95, 0.70, 0.30 })
+		browse.title:SetPoint("TOPLEFT", 20, -16)
+		browse.count = Theme:Text(panel, "small", "", { 0.6, 0.62, 0.68 })
+		browse.count:SetPoint("TOPLEFT", browse.title, "BOTTOMLEFT", 0, -4)
+		local close = W:Button(panel, "Done", "secondary", 80, 28, function() browse:Hide() end)
+		close:SetPoint("TOPRIGHT", -20, -16)
+		browse.only = W:Toggle(panel, "Only show earned", function(on)
+			Wanted.db.cardOnlyEarned = on or nil
+			browse.offset = 0
+			private.DrawBrowse()
+		end)
+		browse.only:SetPoint("RIGHT", close, "LEFT", -20, 0)
+		W:Explain(browse.only, "Only show earned", "Hide the pieces you haven't unlocked.")
+		browse.grid = CreateFrame("Frame", nil, panel)
+		browse.grid:SetSize(BROWSE_WIDTH + 12, BROWSE_HEIGHT)
+		browse.grid:SetPoint("TOPLEFT", 20, -70)
+		browse.grid:EnableMouseWheel(true)
+		browse.grid:SetScript("OnMouseWheel", function(_, delta)
+			browse.offset = browse.offset - delta
+			private.DrawBrowse()
+		end)
+		browse.track = browse.grid:CreateTexture(nil, "BORDER")
+		browse.track:SetPoint("TOPRIGHT", -2, 0)
+		browse.track:SetPoint("BOTTOMRIGHT", -2, 0)
+		browse.track:SetWidth(4)
+		browse.track:SetColorTexture(1, 1, 1, 0.02)
+		browse.thumb = browse.grid:CreateTexture(nil, "ARTWORK")
+		browse.thumb:SetWidth(4)
+		browse.thumb:SetColorTexture(1, 1, 1, 0.27)
+	end
+	browse.part, browse.offset = part, 0
+	private.DrawBrowse()
+	browse:Show()
+end
+
 function private.GetFrame()
 	if private.frame then
 		return private.frame
@@ -780,6 +990,9 @@ function private.GetFrame()
 		row.unlock = Theme:Text(row, "small", "", { 0.6, 0.62, 0.68 })
 		row.unlock:SetPoint("BOTTOMRIGHT", forward, "BOTTOMLEFT", -12, 2)
 		row.back, row.forward = back, forward
+		row.browse = W:Button(row, "Browse", "secondary", 80, 28, function() private.OpenBrowse(p.part) end)
+		row.browse:SetPoint("LEFT", row, "RIGHT", 8, 0)
+		W:Explain(row.browse, "Browse "..strlower(p.title).."s", "See every one as a picture, the ones you own first.")
 		frame.rows[p.part] = row
 		previous = row
 	end
@@ -803,6 +1016,11 @@ function private.GetFrame()
 	-- What a save did, under the buttons it came from
 	frame.saved = Theme:Text(frame, "small", "", { 0.45, 0.78, 0.50 })
 	frame.saved:SetPoint("TOP", buttons, "BOTTOM", 0, -8)
+	frame:SetScript("OnHide", function()
+		if private.browse then
+			private.browse:Hide()
+		end
+	end)
 	private.frame = frame
 	return frame
 end

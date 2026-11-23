@@ -514,7 +514,7 @@ function private.RefreshStrip()
 		private.topZone.sub:SetText("")
 	end
 
-	local latest = Wanted.Model:GetActivity()[1]
+	local latest = Wanted.Model:GetLatestActivity()
 	if latest then
 		local player = latest.player or (latest.guid and Wanted.Store:GetPlayer(latest.guid))
 		local name = Theme:ClassName(latest.name or "?", player and player.class)

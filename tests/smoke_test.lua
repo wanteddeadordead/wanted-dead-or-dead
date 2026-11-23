@@ -711,6 +711,23 @@ check(#hunters == 2 and hunters[1].origin == "Rhea Stormtide" and hunters[1].kil
 check(#posters == 2, "two posters")
 check(ns.Model:GetGoingRate(22, 10000), "going rate text")
 check(#ns.Model:GetActivity() > 0, "activity has entries")
+-- The Dashboard's strip shows the newest activity without building and sorting a row for every record (70 ms with
+-- 11,000): the same row GetActivity puts first, kept a few seconds, and a newer one that arrives takes its place at once
+do
+	local function Same(a, b) return a and b and a.kind == b.kind and a.t == b.t and a.guid == b.guid end
+	check(Same(ns.Model:GetLatestActivity(), ns.Model:GetActivity()[1]), "the newest activity is GetActivity's first row")
+	clock = clock + 1
+	ns.Store:AddSighting("Player-9-LATEST", "Durotar", 50, 50, 1, "Some Peer")
+	local walks, realIterator = 0, ns.Store.Iterator
+	ns.Store.Iterator = function(...) walks = walks + 1 return realIterator(...) end
+	local latest = ns.Model:GetLatestActivity()
+	check(latest and latest.kind == "seen" and latest.guid == "Player-9-LATEST", "a newer sighting is the newest at once")
+	walks = 0
+	check(ns.Model:GetLatestActivity() == latest and walks == 0, "read again inside a few seconds: nothing walked, got "..walks)
+	clock = clock + 10
+	check(Same(ns.Model:GetLatestActivity(), ns.Model:GetActivity()[1]) and walks > 0, "ten seconds on it's looked for again")
+	ns.Store.Iterator = realIterator
+end
 for _, key in ipairs({ "board", "mine", "hunters", "activity", "tools" }) do
 	ns.UI:Show(key)
 end

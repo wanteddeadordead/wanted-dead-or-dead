@@ -8,6 +8,8 @@ local Bounties = Wanted.Bounties
 local Payments = Wanted.Payments
 local Reputation = Wanted.Reputation
 local LEVEL_BAND = 5
+local LATEST_ACTIVITY_SECONDS = 10 -- how long the newest activity is kept (GetLatestActivity)
+local private = {}
 
 -- Bounty states, from the viewer's point of view
 Model.STATE = {
@@ -605,6 +607,23 @@ end
 -- Activity
 -- ============================================================================
 
+---An activity row for a kill record, a death record or a sighting (GetActivity, GetLatestActivity).
+local function KillItem(record, me)
+	local data = record.data
+	return { kind = "kill", t = record.t, who = record.origin == me and "You" or record.origin, name = data.victimName, guid = data.victim, guild = data.victimGuild, zone = data.zone, x = data.x, y = data.y, test = Store:IsTest(record) }
+end
+
+local function DeathItem(record, me)
+	local data = record.data
+	return { kind = "death", t = record.t, who = record.origin == me and "you" or record.origin, name = data.victimName, guid = data.victim, guild = data.victimGuild, zone = data.zone, x = data.x, y = data.y, test = Store:IsTest(record) }
+end
+
+local function SeenItem(sighting)
+	local guid = sighting.guid
+	local player = Store:GetPlayer(guid)
+	return { kind = "seen", t = sighting.t, name = player and player.name or "?", guid = guid, player = player, guild = player and player.guild or nil, zone = sighting.zone, x = sighting.x, y = sighting.y, test = strsub(guid, 1, 12) == "Player-TEST-" }
+end
+
 ---Kills, deaths and sightings, newest first.
 ---@param kind string? "kill" | "death" | "seen" | nil for everything
 ---@return table[]
@@ -613,14 +632,12 @@ function Model:GetActivity(kind)
 	local me = Store:GetOrigin()
 	if not kind or kind == "kill" then
 		for record in Store:Iterator("kill") do
-			local data = record.data
-			tinsert(items, { kind = "kill", t = record.t, who = record.origin == me and "You" or record.origin, name = data.victimName, guid = data.victim, guild = data.victimGuild, zone = data.zone, x = data.x, y = data.y, test = Store:IsTest(record) })
+			tinsert(items, KillItem(record, me))
 		end
 	end
 	if not kind or kind == "death" then
 		for record in Store:Iterator("death") do
-			local data = record.data
-			tinsert(items, { kind = "death", t = record.t, who = record.origin == me and "you" or record.origin, name = data.victimName, guid = data.victim, guild = data.victimGuild, zone = data.zone, x = data.x, y = data.y, test = Store:IsTest(record) })
+			tinsert(items, DeathItem(record, me))
 		end
 	end
 	if not kind or kind == "seen" then
@@ -630,13 +647,62 @@ function Model:GetActivity(kind)
 				latest[sighting.guid] = sighting
 			end
 		end
-		for guid, sighting in pairs(latest) do
-			local player = Store:GetPlayer(guid)
-			tinsert(items, { kind = "seen", t = sighting.t, name = player and player.name or "?", guid = guid, player = player, guild = player and player.guild or nil, zone = sighting.zone, x = sighting.x, y = sighting.y, test = strsub(guid, 1, 12) == "Player-TEST-" })
+		for _, sighting in pairs(latest) do
+			tinsert(items, SeenItem(sighting))
 		end
 	end
 	sort(items, function(a, b) return a.t > b.t end)
 	return items
+end
+
+---The newest of GetActivity's rows, or nil: the one the Dashboard's strip shows. It makes no list (one row for each
+---of 11,000 records, then sorted, took around 70 ms at every refresh of the window); the newest is kept for a few
+---seconds, and a kill, death or sighting that arrives is compared with it.
+---@return table?
+function Model:GetLatestActivity()
+	local now = GetServerTime()
+	local cache = private.latestActivity
+	if cache and cache.records == Wanted.db.records and now >= cache.at and now - cache.at < LATEST_ACTIVITY_SECONDS then
+		return cache.item
+	end
+	local me = Store:GetOrigin()
+	local best, bestKind
+	for record in Store:Iterator("kill") do
+		if not best or record.t > best.t then
+			best, bestKind = record, "kill"
+		end
+	end
+	for record in Store:Iterator("death") do
+		if not best or record.t > best.t then
+			best, bestKind = record, "death"
+		end
+	end
+	for sighting in Store:SightingIterator() do
+		if not best or sighting.t > best.t then
+			best, bestKind = sighting, "seen"
+		end
+	end
+	local item = best and (bestKind == "kill" and KillItem(best, me) or bestKind == "death" and DeathItem(best, me) or SeenItem(best)) or nil
+	private.latestActivity = { records = Wanted.db.records, at = now, item = item }
+	return item
+end
+
+function Model:OnEnable()
+	for _, kind in ipairs({ "kill", "death", "sighting" }) do
+		Store:OnRecord(kind, private.OnActivity)
+	end
+end
+
+---A kill, death or sighting arrived: it's the newest activity when it's newer than the one kept.
+function private.OnActivity(record)
+	local cache = private.latestActivity
+	if not cache then
+		return
+	end
+	local t = record.kind == "sighting" and record.sighting and record.sighting.t or record.t
+	if type(t) == "number" and (not cache.item or t >= cache.item.t) then
+		private.latestActivity = nil
+	end
 end
 
 

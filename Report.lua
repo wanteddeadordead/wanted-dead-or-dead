@@ -309,12 +309,12 @@ end
 -- ============================================================================
 
 ---Takes the game's escape codes out of text (a link pasted in keeps its "[Name]"; icons, atlases and the like go
----whole, and any other "|").
-local function StripCodes(text)
+---whole, and any other "|"). "|n", the game's line break, becomes lineBreak.
+local function StripCodes(text, lineBreak)
 	text = gsub(gsub(text, "|c%x%x%x%x%x%x%x%x", ""), "|r", "")
 	text = gsub(gsub(text, "|H.-|h(.-)|h", "%1"), "|T.-|t", "")
 	text = gsub(gsub(text, "|A.-|a", ""), "|K.-|k", "")
-	return (gsub(text, "|", ""))
+	return (gsub(gsub(text, "|n", lineBreak), "|", ""))
 end
 
 ---At most maxLetters letters of text (UTF-8, as the app and the server count them, never cut inside one).
@@ -336,7 +336,7 @@ function private.Clip(text, maxLetters)
 	if type(text) ~= "string" then
 		return ""
 	end
-	text = strtrim((gsub(gsub(StripCodes(text), "[\r\n]+", " "), "%c", "")))
+	text = strtrim((gsub(gsub(StripCodes(text, " "), "[\r\n]+", " "), "%c", "")))
 	return CutLetters(text, maxLetters)
 end
 
@@ -348,7 +348,7 @@ function private.ClipLines(text, maxLetters)
 	if type(text) ~= "string" then
 		return ""
 	end
-	text = gsub(gsub(StripCodes(text), "\r\n", "\n"), "\r", "\n")
+	text = gsub(gsub(StripCodes(text, "\n"), "\r\n", "\n"), "\r", "\n")
 	text = gsub(text, "[%c]", function(c) return c == "\n" and c or "" end)
 	text = gsub(text, " +\n", "\n")
 	text = gsub(text, "\n\n\n+", "\n\n")

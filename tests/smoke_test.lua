@@ -9074,6 +9074,17 @@ end)()
 	for _, name in ipairs(UISpecialFrames) do if name == "WantedCallingCardFrame" or name == "WantedCallingCardBrowse" then listed = listed + 1 end end
 	check(listed == 1, "one of the two is on the Escape list at a time: "..listed)
 	check(not b._scripts.OnKeyDown, "no keyboard capture")
+	-- Swapped in place: another window opened meanwhile keeps its slot, so the walk of the list skips none
+	b:Hide()
+	local at
+	for i, name in ipairs(UISpecialFrames) do if name == "WantedCallingCardFrame" then at = i end end
+	f.rows.plate.browse:Click()
+	table.insert(UISpecialFrames, "SomeOtherWindow")
+	check(UISpecialFrames[at] == "WantedCallingCardBrowse", "Browse took the editor's slot")
+	b:Hide()
+	check(UISpecialFrames[at] == "WantedCallingCardFrame" and UISpecialFrames[#UISpecialFrames] == "SomeOtherWindow", "and gave it back, the other window untouched")
+	table.remove(UISpecialFrames)
+	f.rows.plate.browse:Click()
 	b:Hide()
 	-- Another part draws its own pieces; the cells of the last are let go
 	ns.db.cardOnlyEarned = nil

@@ -892,17 +892,20 @@ function private.BrowseCell(slot)
 	return cell
 end
 
----Puts a frame's name on the list of frames Escape closes, in place of another's.
+---Puts a frame's name on the list of frames Escape closes, in place of another's. Done in the same slot: the game walks
+---the list hiding frames, and a hide that moved other entries would skip one or close the window in the same press.
 function private.EscapeFor(add, remove)
-	local have = false
-	for i = #UISpecialFrames, 1, -1 do
-		if UISpecialFrames[i] == remove then
-			tremove(UISpecialFrames, i)
-		elseif UISpecialFrames[i] == add then
+	local have, at = false, nil
+	for i, name in ipairs(UISpecialFrames) do
+		if name == remove then
+			at = at or i
+		elseif name == add then
 			have = true
 		end
 	end
-	if not have then
+	if at and not have then
+		UISpecialFrames[at] = add
+	elseif not have then
 		tinsert(UISpecialFrames, add)
 	end
 end

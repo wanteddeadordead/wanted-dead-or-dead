@@ -8930,13 +8930,18 @@ end)()
 	check(f.banner.plate._texture:find("mat%-silk$") and not f.banner.emblem._shown, "your card: the Silk plate, no emblem")
 	check(f.banner.stats[2].value._text == "295TInterface\\evil:64t", "the game's escape character taken out of a value: "..f.banner.stats[2].value._text)
 	check(f.save._shown and f.save._enabled, "all unlocked: Save on")
+	-- The arrows stop at what you own: the Silk plate is the last of three, so forward goes round to the first, back to Linen
 	f.rows.plate.forward:Click()
-	check(f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate: marked, Save off")
+	check(f.rows.plate.name._text == "Rough Wood" and not f.rows.plate.unlock._text:find("^Locked"), "forward from the last owned plate goes round to the first: "..f.rows.plate.name._text)
+	check(f.rows.plate.count._text == "1 of 3 unlocked", "the count is among the unlocked: "..f.rows.plate.count._text)
 	f.rows.plate.back:Click()
-	f.rows.emblem.forward:Click() -- killer-emblem, the catalogue's first: locked
-	check(not f.save._enabled, "a locked emblem: Save off")
-	for _ = 1, 8 do f.rows.emblem.forward:Click() end -- witness-emblem: cell 8 of the catalogue's emblems, unlocked
-	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled, "an unlocked emblem: Save on: "..f.rows.emblem.name._text)
+	check(f.rows.plate.name._text == "Silk" and f.rows.plate.count._text == "3 of 3 unlocked", "back again: "..f.rows.plate.name._text)
+	check(f.save._enabled, "all unlocked: Save on")
+	f.rows.emblem.forward:Click() -- the one emblem you own
+	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled and f.rows.emblem.count._text == "1 of 1 unlocked", "an unlocked emblem: "..f.rows.emblem.name._text)
+	f.rows.emblem.forward:Click()
+	check(f.rows.emblem.name._text == "No emblem", "no emblem is a stop of its own: "..f.rows.emblem.name._text)
+	f.rows.emblem.forward:Click()
 	f.banner.stats[1]._scripts.OnMouseUp(f.banner.stats[1])
 	check(f.banner.stats[1].label._text == "HONORABLE KILLS", "a click moves a stat to the next one not shown: "..f.banner.stats[1].label._text)
 	f.save:Click()
@@ -8949,6 +8954,57 @@ end)()
 	CC:Hide()
 	CC:TakeMine(nil)
 	ns.db.cardPicks = nil
+end)()
+-- Stepping and shuffling on your own card stay among what you own; a locked piece shown (a saved card whose piece went
+-- away) moves to the nearest owned one in the direction asked; "Try anything" steps through everything
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	CC:TakeMine({ [me] = { card = { plate = "mat-copper", border = "witness-border", emblem = "killer-emblem", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-linen", "mat-silk", "witness-border", "witness-bg", "witness-emblem" }, stats = {} } })
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.rows.plate.name._text == "Copper" and f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate shown: marked, Save off")
+	check(f.rows.plate.count._text == "3 unlocked" and f.rows.emblem.count._text == "1 unlocked", "a locked piece has no place among the unlocked: "..f.rows.plate.count._text.." / "..f.rows.emblem.count._text)
+	f.rows.plate.forward:Click()
+	check(f.rows.plate.name._text == "Silk", "forward from a locked plate: the next one owned: "..f.rows.plate.name._text)
+	CC:Show()
+	f.rows.plate.back:Click()
+	check(f.rows.plate.name._text == "Linen", "back from a locked plate: the previous one owned: "..f.rows.plate.name._text)
+	-- A locked emblem: forward goes to the next owned (Watchful Eye), back to no emblem
+	CC:Show()
+	f.rows.emblem.forward:Click()
+	check(f.rows.emblem.name._text == "Watchful Eye", "forward from a locked emblem: "..f.rows.emblem.name._text)
+	CC:Show()
+	f.rows.emblem.back:Click()
+	check(f.rows.emblem.name._text == "No emblem", "back from a locked emblem: no emblem: "..f.rows.emblem.name._text)
+	-- Shuffle picks only what you own
+	for _ = 1, 60 do
+		f.shuffle:Click()
+		check(f.rows.plate.unlock._text:sub(1, 6) ~= "Locked" and f.rows.border.unlock._text:sub(1, 6) ~= "Locked" and f.rows.background.unlock._text:sub(1, 6) ~= "Locked"
+			and f.rows.emblem.unlock._text:sub(1, 6) ~= "Locked" and f.save._enabled, "a shuffle on your own card keeps to unlocked pieces")
+	end
+	-- Try anything: every piece, the count over all of them, a shuffle from all
+	f.mode:Click()
+	check(f.rows.plate.count._text:find("^%d+ of %d+$") and not f.rows.plate.count._text:find("unlocked"), "trying anything: the count as before: "..f.rows.plate.count._text)
+	local total = tonumber(f.rows.plate.count._text:match("of (%d+)"))
+	check(total > 3, "every plate is counted: "..total)
+	local seen = {}
+	for _ = 1, total do
+		f.rows.plate.forward:Click()
+		seen[f.rows.plate.name._text] = true
+	end
+	local names = 0
+	for _ in pairs(seen) do names = names + 1 end
+	check(names == total, "trying anything steps through every plate: "..names.." of "..total)
+	local lockedSeen = false
+	for _ = 1, 200 do
+		f.shuffle:Click()
+		local n = f.rows.plate.name._text
+		lockedSeen = lockedSeen or (n ~= "Rough Wood" and n ~= "Linen" and n ~= "Silk")
+	end
+	check(lockedSeen, "trying anything: a shuffle picks from all pieces")
+	CC:Hide()
+	CC:TakeMine(nil)
 end)()
 -- Unlock toasts: up to three at once, the rest summed up; only out of combat; a click opens your calling card
 ;(function()

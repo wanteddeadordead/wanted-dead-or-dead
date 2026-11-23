@@ -1,8 +1,8 @@
 -- Wanted: your calling card. The banner players build on wanteddeadordead.com from the art their badges unlock: a
 -- background inside a border, an emblem, and a plate with their name, with three stats under it. This window shows
--- yours (from the site, through the app's catch-up) and steps through every piece of each part: the ones you haven't
--- unlocked are marked locked, and Save keeps a card of unlocked pieces for the app to send (WantedDB.cardPicks; the
--- site checks it again). "Try anything" shows any combination, to see how it would look.
+-- yours (from the site, through the app's catch-up) and steps through the pieces of each part you have unlocked (all of
+-- them in "Try anything"; a locked piece shown is marked locked). Save keeps a card of unlocked pieces for the app to
+-- send (WantedDB.cardPicks; the site checks it again). "Try anything" shows any combination, to see how it would look.
 -- The art is Media/cards/<id>.blp; the catalogue (each piece's part, name and what unlocks it) is CardCatalogue.lua.
 -- Card data only ever comes from the site's catch-up, never from other players, and only ids the catalogue knows are
 -- drawn: anything else is dropped.
@@ -565,7 +565,7 @@ function private.Refresh()
 		row.name:SetText(item and item.name or "No emblem")
 		row.unlock:SetText(item and (open and item.unlock or "Locked: "..item.unlock) or "")
 		row.unlock:SetTextColor(unpack(open and { 0.6, 0.62, 0.68 } or { 0.95, 0.45, 0.35 }))
-		row.count:SetText(format("%d of %d", max(private.at[p.part], 0), #parts[p.part]))
+		row.count:SetText(private.CountText(p.part))
 	end
 	frame.mode:SetText(private.trying and "Show my card" or "Try anything")
 	frame.mode:SetShown(mine ~= nil)
@@ -590,15 +590,78 @@ function private.Refresh()
 	end
 end
 
----Steps a part to its next (1) or previous (-1) piece, round the end; the emblem has "no emblem" before the first.
+---The places the arrows stop at in a part, as indexes into its pieces (0 for no emblem, which the emblem always has):
+---every piece in "Try anything", the unlocked ones on your own card.
+---@param part string
+---@return number[]
+function private.Stops(part)
+	local stops = {}
+	if part == "emblem" then
+		stops[1] = 0
+	end
+	for i, item in ipairs(private.Parts()[part]) do
+		if private.trying or private.Unlocked(item.id) then
+			tinsert(stops, i)
+		end
+	end
+	return stops
+end
+
+---The count beside a part's arrows: "3 of 12 unlocked" on your own card (the shown piece's place among the unlocked
+---ones, and how many there are), "36 of 119" in "Try anything".
+---@param part string
+---@return string
+function private.CountText(part)
+	local items, at = private.Parts()[part], private.at[part]
+	if private.trying then
+		return format("%d of %d", max(at, 0), #items)
+	end
+	local count, place = 0, at == 0 and 0 or nil
+	for i, item in ipairs(items) do
+		if private.Unlocked(item.id) then
+			count = count + 1
+			if i == at then
+				place = count
+			end
+		end
+	end
+	-- A piece you don't own (a seasonal one that went away) has no place among them
+	return place and format("%d of %d unlocked", place, count) or format("%d unlocked", count)
+end
+
+---Steps a part to its next (1) or previous (-1) stop, round the end. A piece shown that isn't a stop (a locked one on
+---your own card) goes to the nearest stop in that direction.
 function private.Step(part, by)
-	local n = #private.Parts()[part]
-	if n == 0 then
+	local stops = private.Stops(part)
+	if #stops == 0 then
 		return
 	end
-	local low = part == "emblem" and 0 or 1
-	local span = n - low + 1
-	private.at[part] = (private.at[part] - low + by) % span + low
+	local at, here, to = private.at[part], nil, nil
+	for i, stop in ipairs(stops) do
+		if stop == at then
+			here = i
+		end
+	end
+	if here then
+		to = stops[(here - 1 + by) % #stops + 1]
+	elseif by > 0 then
+		to = stops[1]
+		for _, stop in ipairs(stops) do
+			if stop > at then
+				to = stop
+				break
+			end
+		end
+	else
+		to = stops[#stops]
+		for i = #stops, 1, -1 do
+			if stops[i] < at then
+				to = stops[i]
+				break
+			end
+		end
+	end
+	private.at[part] = to
 	private.Refresh()
 end
 
@@ -626,9 +689,14 @@ end
 
 function private.Shuffle()
 	for _, p in ipairs(PARTS) do
-		local n = #private.Parts()[p.part]
-		if n > 0 then
-			private.at[p.part] = random(n)
+		local pool = {}
+		for _, stop in ipairs(private.Stops(p.part)) do
+			if stop > 0 then
+				tinsert(pool, stop)
+			end
+		end
+		if #pool > 0 then
+			private.at[p.part] = pool[random(#pool)]
 		end
 	end
 	private.Refresh()

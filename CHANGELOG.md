@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Short freezes when other players share sightings are gone: the list of outlaws was worked out again from every kill and death held, in one go, inside whatever asked for it (around 30 ms with 11,000 records). It is now worked out a little each frame, and the last list stands until the new one is ready. The first list is still worked out at login, so an outlaw you meet right away is announced.
+- The check for zones getting busier (every 30 seconds) no longer reads every record held to find the last hour's kills and deaths (9 to 16 ms with 11,000 records): the list is kept up as kills and deaths arrive. The map's markers and stats read the same list.
 
 ## [1.29.5] - 2026-11-21
 

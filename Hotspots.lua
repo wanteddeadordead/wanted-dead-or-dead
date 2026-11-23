@@ -10,6 +10,7 @@ local private = { surgeAlerted = {} } -- surgeAlerted: group key -> when we last
 local RECENT = 15 * 60 -- "now" means seen in the last 15 minutes
 local HOUR = 3600
 local FIGHTS_CACHE_SECONDS = 10
+local FIGHT_KINDS = { "kill", "death" }
 local GUILD_MIN = 3 -- a guild is named once this many of its players are in the zone
 local TREND_MIN = 2 -- the count has to move by at least this much to count as rising or falling
 -- Rising fast: at least this many enemies seen there in the last 5 minutes, at least this many more than in
@@ -73,27 +74,54 @@ local function Wanted_(guid)
 	return type(guid) == "string" and strfind(guid, "^Player%-") and not strfind(guid, "^Player%-TEST%-") and not Wanted.db.ignore[guid]
 end
 
----The kills and deaths from the last hour, kills first, as the walks of Store:Iterator give them (not test ones). The map's
----markers, its stats and the zone counts all read these, and each used to walk every record held, so a map open walked
----them four times. Kept until a kill or death arrives, or ten seconds pass (a signature found bad takes a record out);
----a reader still checks each record's age against its own window.
+---The kills and deaths from the last hour, kills first (not test ones, nor altered ones). The map's markers, its stats
+---and the zone counts all read these. Every record held is walked once (and again when the saved data is another
+---table, or the clock went back): after that the list is kept up as kills and deaths arrive (OnEnable), and looked
+---over when one has arrived or ten seconds have passed, to drop what has aged out, was removed or was found altered.
+---Walking every record each time took 9 to 16 ms with 11,000 held, and the surge check asks every 30 seconds. A reader
+---still checks each record's age against its own window.
 ---@param now number
 ---@return table[] records
 function Hotspots:RecentFights(now)
 	local cache = private.fights
-	if cache and cache.records == Wanted.db.records and not cache.stale and now >= cache.built and now - cache.built < FIGHTS_CACHE_SECONDS then
+	if not cache or cache.records ~= Wanted.db.records or now < cache.checked then
+		local ids = {}
+		for _, kind in ipairs(FIGHT_KINDS) do
+			for record in Store:Iterator(kind) do
+				if private.IsRecentFight(record, kind, now) then
+					tinsert(ids, record.id)
+				end
+			end
+		end
+		cache = { records = Wanted.db.records, ids = ids, added = {} }
+		private.fights = cache
+	elseif not cache.stale and now - cache.checked < FIGHTS_CACHE_SECONDS then
 		return cache.list
 	end
-	local list = {}
-	for _, kind in ipairs({ "kill", "death" }) do
-		for record in Store:Iterator(kind) do
-			if record.t and now - record.t <= HOUR and type(record.data) == "table" and not Store:IsTest(record) then
-				tinsert(list, record)
+	-- Those held and those that arrived since, each once: kills first, as the walk gives them
+	local records = Wanted.db.records
+	local ids, list, seen = {}, {}, {}
+	for _, kind in ipairs(FIGHT_KINDS) do
+		for _, source in ipairs({ cache.ids, cache.added }) do
+			for _, id in ipairs(source) do
+				local record = records[id]
+				if record and not seen[id] and private.IsRecentFight(record, kind, now) then
+					seen[id] = true
+					tinsert(ids, id)
+					tinsert(list, record)
+				end
 			end
 		end
 	end
-	private.fights = { records = Wanted.db.records, built = now, list = list }
+	cache.ids, cache.added, cache.list, cache.sides, cache.stale, cache.checked = ids, {}, list, nil, nil, now
 	return list
+end
+
+---Whether a record is a kill or death (kind) of the last hour that a walk of its kind would give and the readers
+---count: not altered, not test data.
+function private.IsRecentFight(record, kind, now)
+	return record.kind == kind and not record.tampered and record.t ~= nil and now - record.t <= HOUR
+		and type(record.data) == "table" and not Store:IsTest(record)
 end
 
 ---The enemies named in PvP deaths (kills and deaths, ours and other Wanted users') in the last `window` seconds,
@@ -315,13 +343,20 @@ function Hotspots:CheckSurges()
 end
 
 function Hotspots:OnEnable()
-	for _, kind in ipairs({ "kill", "death" }) do
-		Store:OnRecord(kind, function()
-			if private.fights then
-				private.fights.stale = true
+	-- A kill or death that arrives joins the last hour's (RecentFights) at its next read
+	for _, kind in ipairs(FIGHT_KINDS) do
+		Store:OnRecord(kind, function(record)
+			local cache = private.fights
+			if cache then
+				if record.id then
+					tinsert(cache.added, record.id)
+				end
+				cache.stale = true
 			end
 		end)
 	end
+	-- The one walk of every record is done at login, with the other work of loading, not at the first read in play
+	Wanted:QueueWork(function() Hotspots:RecentFights(GetServerTime()) end)
 	C_Timer.NewTicker(SURGE_CHECK_SECONDS, Wanted:Timed("Hotspots surges", function() Hotspots:CheckSurges() end))
 end
 

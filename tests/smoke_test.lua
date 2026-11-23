@@ -1178,6 +1178,40 @@ end
 	WorldMapFrame.GetMapID = savedMap
 	clock = savedClock
 end)()
+-- The last hour's kills and deaths are walked from every record once, then kept up as they arrive: the surge check
+-- read every record held every 30 seconds (9 to 16 ms with 11,000)
+;(function()
+	local walks, realIterator = 0, ns.Store.Iterator
+	ns.Store.Iterator = function(self, kind) if kind == "kill" or kind == "death" then walks = walks + 1 end return realIterator(self, kind) end
+	local savedClock = clock
+	local function Has(id)
+		for _, record in ipairs(ns.Hotspots:RecentFights(clock)) do if record.id == id then return true end end
+		return false
+	end
+	ns.Hotspots:RecentFights(clock)
+	walks = 0
+	clock = clock + 60
+	local fresh = ns.Store:NewRecord("death", { killer = "Player-9-KEPT1", killerName = "Kept Ganker", killerFaction = "Alliance", victim = "Player-1-OURS6",
+		victimName = "Our Six", victimFaction = "Horde", deathId = "kept-1", zone = "Durotar", mapId = 1, x = 30, y = 30 })
+	check(Has(fresh.id) and walks == 0, "a death that arrives is in the last hour's without a walk of every record: "..walks.." walks")
+	local count = #ns.Hotspots:RecentFights(clock)
+	check(#ns.Hotspots:RecentFights(clock) == count and walks == 0, "read again, nothing walked: "..walks)
+	fresh.tampered = true
+	clock = clock + 11
+	check(not Has(fresh.id) and walks == 0, "one found altered goes at the next look, ten seconds on")
+	fresh.tampered = nil
+	clock = clock + 3600
+	check(#ns.Hotspots:RecentFights(clock) == 0 and walks == 0, "an hour on, every one has aged out, still without a walk")
+	clock = savedClock + 60
+	check(#ns.Hotspots:RecentFights(clock) == count and walks == 2, "the clock going back walks every record again: "..walks)
+	local realRecords = ns.db.records
+	ns.db.records = {}
+	check(#ns.Hotspots:RecentFights(clock) == 0 and walks == 4, "other saved data is walked afresh: "..walks)
+	ns.db.records = realRecords
+	check(#ns.Hotspots:RecentFights(clock) == count, "and so is the old again")
+	ns.Store.Iterator = realIterator
+	clock = savedClock
+end)()
 -- Show / hide from the map's filter menu
 local checkbox
 local root = { CreateDivider = function() end, CreateTitle = function() end, CreateCheckbox = function(_, text, isSelected, setSelected) checkbox = checkbox or { text = text, isSelected = isSelected, setSelected = setSelected } end }

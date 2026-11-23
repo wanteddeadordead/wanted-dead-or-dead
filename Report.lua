@@ -350,6 +350,8 @@ function private.ClipLines(text, maxLetters)
 	end
 	text = gsub(gsub(StripCodes(text, "\n"), "\r\n", "\n"), "\r", "\n")
 	text = gsub(text, "[%c]", function(c) return c == "\n" and c or "" end)
+	-- No-break spaces count as spaces, and zero-width characters go, so text of those alone is empty
+	text = gsub(gsub(gsub(text, "\194\160", " "), "\226\128[\139-\141]", ""), "\239\187\191", "")
 	text = gsub(text, " +\n", "\n")
 	text = gsub(text, "\n\n\n+", "\n\n")
 	-- A cut can leave the text ending in a break or a space

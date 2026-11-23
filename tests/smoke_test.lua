@@ -14199,6 +14199,7 @@ end)()
 	check(#limited == 500 and select(2, limited:gsub("\n", "")) == 166, "the 500-letter limit counts a line break as one letter: "..#limited)
 	check(db.reports[Report:QueueIdea("line1|nline2")].text == "line1\nline2" and Report:QueueTip(duel, { rule = "a|nb", text = "x" }, "y") ~= nil and db.reports[Report:QueueIdea("p|n")].text == "p", "the game's |n is a line break")
 	check(db.reports[Report:QueueIdea(string.rep("a", 499).."\n\nb")].text == string.rep("a", 499), "a cut at the limit leaves no trailing line break")
+	check(db.reports[Report:QueueIdea("\226\128\139\194\160\239\187\191")].text == "" and db.reports[Report:QueueIdea("x\194\160\n\226\128\139y")].text == "x\ny", "no-break spaces are spaces and zero-width characters go")
 	-- The rule, tip and finding stay on one line
 	local idOne = Report:QueueTip(duel, { rule = "a\nb", tip = "tip\r\nline\ntwo", text = "find\ning" }, "x")
 	local one = db.reports[idOne]

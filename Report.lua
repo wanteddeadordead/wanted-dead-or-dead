@@ -637,7 +637,7 @@ function Report:AskAboutBug()
 	private.Ask({
 		title = "Send to the developers",
 		over = private.frame,
-		text = "First, turn Wanted off in the addon list, /reload, and check if the problem is still there. If it is, it is probably not Wanted's code; you can still tell us. If it goes away, turn Wanted back on and tell us here: what happened, and what did you expect? Wanted's recent log goes with it, with your game and settings, other players' names left out.",
+		text = "First, turn Wanted off in the addon list, /reload, and check if the problem is still there. If it is, it's probably not Wanted (tell us anyway if you think it is). If it goes away, turn Wanted back on, make the problem happen again, and tell us here: what happened, and what did you expect? Wanted's recent log goes with it, with your game and settings, other players' names left out.",
 		validate = function(text)
 			return private.ClipLines(text, MAX_TEXT) == "" and "Say what happened first." or nil
 		end,

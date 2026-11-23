@@ -14323,7 +14323,7 @@ end)()
 	for _, f in ipairs(Mock.created) do local l = rawget(f, "label") if type(l) == "table" and l._text == "Send to the developers" and f._scripts.OnClick then send = f end end
 	send:Click()
 	check(OnScreen("what happened, and what did you expect?"), "Report a bug's Send to the developers asks what happened")
-	check(OnScreen("First, turn Wanted off in the addon list, /reload, and check if the problem is still there."), "the bug dialog first asks to try with Wanted off")
+	check(OnScreen("First, turn Wanted off in the addon list, /reload, and check if the problem is still there. If it is, it's probably not Wanted (tell us anyway if you think it is). If it goes away, turn Wanted back on, make the problem happen again, and tell us here:"), "the bug dialog first asks to try with Wanted off")
 	local realDialog, asked = ns.Widgets.Dialog, 0
 	ns.Widgets.Dialog = function(...) asked = asked + 1 return realDialog(...) end
 	send:Click()

@@ -165,8 +165,9 @@ an older report comes back from the app without them, so the saved file holds at
 character, text, addonVersion }`, where `at` is whole server seconds (`GetServerTime()`; a second report in the same
 second takes the next free one), `character` the key's prefix: for a tip the character who fought the duel (its `id`
 before `":duel:"`, as the app's own tip reports name it; `Store:GetOrigin()` if the id doesn't parse), for a bug or an
-idea the character logged in. `text` is the player's words on one line without the game's escape codes (at most 500 letters,
-counted in UTF-8 as the app and the server count them) and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
+idea the character logged in. `text` is the player's words without the game's escape codes (at most 500 letters,
+counted in UTF-8 as the app and the server count them, a line break counting as one). `text` keeps its line breaks, as `"\n"`: no
+control characters, no trailing spaces on a line, at most one empty line in a row, trimmed; a tip's `rule`, `tip` and `finding` stay on one line. A report queued by an older addon is one line and `addonVersion` `Wanted.VERSION`. A `"tip"` (Something not right? on a fight card)
 adds `duelId`, the finding's `rule` (at most 64 letters), `tip` (the finding's tip, or its text without one) and
 `finding` (its text), each at most 1,000 letters, and `myClass`, `mySpec`, `theirClass`, `theirSpec` (as the card shows them) and `myLevel`. A
 `"bug"` (Report a bug, Send to the developers) adds `log = { line, ... }`: a 4-line header (game client, build, locale,

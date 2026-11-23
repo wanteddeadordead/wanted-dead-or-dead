@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Short freezes when other players share sightings are gone: the list of outlaws was worked out again from every kill and death held, in one go, inside whatever asked for it (around 30 ms with 11,000 records). It is now worked out a little each frame, and the last list stands until the new one is ready. The first list is still worked out at login, so an outlaw you meet right away is announced.
+
 ## [1.29.5] - 2026-11-21
 
 - The Dashboard is now the first entry in the menu, with Guild Wars under it. The window opens on the page you left it on, or on the Dashboard when there is none; it no longer switches to Guild Wars.

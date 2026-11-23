@@ -232,6 +232,24 @@ function RunFrames()
 			end
 		end
 	end
+	-- The outlaws being worked out again (Reputation), a slice a frame
+	RunWork("outlaws")
+end
+
+-- A frame the addon shows while it has work of one kind (its wantedWork field): frames pass until it's done
+function WorkFrame(name)
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "wantedWork") == name then return f end
+	end
+end
+function RunWork(name)
+	local f = WorkFrame(name)
+	for _ = 1, 100000 do
+		if not (f and f:IsShown()) then
+			break
+		end
+		f._scripts.OnUpdate(f, 0.016)
+	end
 end
 
 local function RunTimers()
@@ -504,6 +522,7 @@ for line in io.lines(ADDON.."Poker/WantedDeadOrDead_Poker.toc") do
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead_Poker")
 Fire("PLAYER_LOGIN")
+assert(not WorkFrame("outlaws"):IsShown(), "CHECK FAILED: the first list of outlaws is worked out at login, not over the frames after it")
 RunTimers()
 -- This release is for the live game (Core.lua), and logs in there. The suite's hand-made records number their chains
 -- from 1, as in the beta, so it runs as the beta; each live-world rule is tested with ns.WORLD = "live" around it.
@@ -4669,18 +4688,54 @@ end)()
 			ns.Store:InsertTest("death", "Some Witness", { victim = victim, victimName = "Victim "..i, deathId = deathId, zone = "Durotar" }, t + 1)
 		end
 	end
+	-- Worked out over the next frames, not inside whatever asked: the last answer stands until then
+	local function Outlaw(guid)
+		ns.Reputation:GetOutlaws()
+		RunFrames()
+		return ns.Reputation:GetOutlaw(guid)
+	end
+	Outlaw("Player-9-GANK")
 	for i = 1, 4 do Kill(i, "Player-9-GANK", "Gank Lord", "Player-9-V"..i, now - 1200 + i * 200, true) end
-	local o = ns.Reputation:GetOutlaw("Player-9-GANK")
+	check(ns.Reputation:GetOutlaw("Player-9-GANK") == nil and WorkFrame("outlaws"):IsShown(), "new kills start a rebuild; the last answer stands while it runs")
+	local o = Outlaw("Player-9-GANK")
 	check(o and o.rank == "Wanted" and o.kills == 4, "four backed kills in twenty minutes: Wanted, got "..tostring(o and o.rank))
 	for i = 5, 8 do Kill(i, "Player-9-GANK", "Gank Lord", "Player-9-W"..i, now - 300 + i * 30, false) end
-	check(ns.Reputation:GetOutlaw("Player-9-GANK").kills == 4, "kills only the killer recorded don't count")
+	check(Outlaw("Player-9-GANK").kills == 4, "kills only the killer recorded don't count")
 	for i = 1, 4 do Kill(i, "Player-9-SLOW", "Slow Poke", "Player-9-S"..i, now - 3000 + i * 500, true) end
-	check(ns.Reputation:GetOutlaw("Player-9-SLOW") == nil, "four kills over twenty-five minutes: not an outlaw")
+	check(Outlaw("Player-9-SLOW") == nil, "four kills over twenty-five minutes: not an outlaw")
 	for i = 1, 5 do Kill(i, "Player-9-CAMP", "Camp Lord", "Player-9-SAME", now - 600 + i * 60, true) end
-	check(ns.Reputation:GetOutlaw("Player-9-CAMP") == nil, "camping one player counts as one kill")
+	check(Outlaw("Player-9-CAMP") == nil, "camping one player counts as one kill")
 	-- The victim's own record naming the killer counts as a backed kill too
 	for i = 1, 4 do ns.Store:InsertTest("death", "Poor Victim "..i, { victim = "Player-9-PV"..i, victimName = "Poor Victim "..i, killer = "Player-9-RECAP", killerName = "Recap Killer", deathId = "rc"..i, zone = "Durotar" }, now - 900 + i * 100) end
-	check(ns.Reputation:GetOutlaw("Player-9-RECAP") ~= nil, "kills named by the victims' own records count")
+	check(Outlaw("Player-9-RECAP") ~= nil, "kills named by the victims' own records count")
+	-- A slow clock: the rebuild takes several frames, a kill arriving meanwhile doesn't start it again (a steady
+	-- stream of them can't keep it from finishing), and the next read after it works the newcomers in
+	do
+		local realStop, frames, frame = debugprofilestop, 0, WorkFrame("outlaws")
+		local ms = 0
+		debugprofilestop = function() ms = ms + 1 return ms end
+		for i = 1, 4 do Kill(i, "Player-9-LATE", "Late Lord", "Player-9-L"..i, now - 800 + i * 100, true) end
+		ns.Reputation:GetOutlaws()
+		while frame:IsShown() and frames < 10000 do
+			frames = frames + 1
+			ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BY"..frames, victimName = "Bystander", deathId = "by"..frames, zone = "Durotar" }, now)
+			ns.Reputation:GetOutlaws()
+			frame._scripts.OnUpdate(frame, 0.016)
+		end
+		debugprofilestop = realStop
+		check(frames > 1 and frames < 10000, "a rebuild runs a slice a frame and finishes under a stream of records, took "..frames.." frames")
+		check(not frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") ~= nil, "its answer is taken once it's done")
+		check(frame:IsShown(), "records that came meanwhile start the next one at that read")
+		RunFrames()
+	end
+	-- Saved data that is another table: the outlaws of the old one go at the next rebuild, a kill or not
+	do
+		local realRecords = ns.db.records
+		ns.db.records = {}
+		check(Outlaw("Player-9-GANK") == nil, "another records table: its outlaws are worked out again")
+		ns.db.records = realRecords
+		check(Outlaw("Player-9-GANK") ~= nil, "and again when it's back")
+	end
 	-- Nearby, the alert and Call for help say so
 	local warnings = {}
 	local realWarn = ns.Alerts.Warn

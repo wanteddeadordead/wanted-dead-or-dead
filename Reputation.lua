@@ -10,7 +10,10 @@ local Payments = Wanted.Payments
 local private = {
 	frame = CreateFrame("Frame"),
 	whispered = {}, -- sender -> true once told about this session
-	deathOrigins = {}, -- deathId -> who recorded it (GetOutlaws), kept between rebuilds
+	deathOrigins = {}, -- deathId -> who recorded it (BuildOutlaws), kept between rebuilds
+	outlaws = {}, -- the outlaws as last worked out (GetOutlaws); empty until the first rebuild is done
+	outlawsStale = true, -- a kill or death came since, or nothing was worked out yet
+	outlawFrame = CreateFrame("Frame"), -- shown while a rebuild is under way: a slice of it every frame
 }
 -- Rank points per event; a level is every RANK_POINTS_PER_LEVEL points
 local WEIGHTS = {
@@ -39,6 +42,11 @@ local OUTLAW_BURST, OUTLAW_WINDOW_SECONDS = 4, 20 * 60
 local OUTLAW_KEEP_SECONDS = 7 * 86400
 local OUTLAW_CAMP_SECONDS = 300
 local OUTLAW_CACHE_SECONDS = 30
+-- A rebuild reads every kill and death held: with 11,000 records it took around 30 ms in one go, inside whatever
+-- asked (taking in a batch of shared sightings, most often). So it runs a slice a frame, and the last answer stands
+-- until it's done.
+local OUTLAW_SLICE_MS = 2
+local OUTLAW_STEPS_PER_LOOK = 25 -- records between two looks at the clock
 Reputation.OUTLAW_RANKS = {
 	{ name = "Wanted", kills = 4 },
 	{ name = "Notorious", kills = 10 },
@@ -49,8 +57,12 @@ Reputation.OUTLAW_RANKS = {
 
 function Reputation:OnEnable()
 	-- A new kill or death can make or break an outlaw
-	Store:OnRecord("kill", function() private.outlaws = nil end)
-	Store:OnRecord("death", function() private.outlaws = nil end)
+	Store:OnRecord("kill", private.OutlawsChanged)
+	Store:OnRecord("death", private.OutlawsChanged)
+	-- The first list is worked out now, in one go behind the loading screen, so it's there before the first enemy is
+	-- described: one started by that enemy would miss them, and the alert for an outlaw comes once
+	Reputation:GetOutlaws()
+	private.RunOutlawJob(math.huge)
 	if TooltipDataProcessor and Enum and Enum.TooltipDataType then
 		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, private.OnTooltipUnit)
 	end
@@ -519,12 +531,75 @@ end)
 -- Outlaws
 -- ============================================================================
 
----Every outlaw right now, by GUID: { name, rank, kills (this week), since, lastKill }. Cached for a short while.
+---Every outlaw by GUID: { name, rank, kills (this week), since, lastKill }, as last worked out. Once that's older
+---than a short while, or a kill or death has come since, a rebuild starts in the background (a slice a frame) and
+---this answer stands until it's done. The first is worked out at login (OnEnable). Saved data that is another table
+---(a fresh start) starts one too.
 ---@return table<string, table>
 function Reputation:GetOutlaws()
 	local now = GetServerTime()
-	if private.outlaws and now - (private.outlawsAt or 0) < OUTLAW_CACHE_SECONDS then
-		return private.outlaws
+	local stale = private.outlawsStale or private.outlawsFor ~= Wanted.db.records or now - (private.outlawsAt or 0) >= OUTLAW_CACHE_SECONDS
+	if not private.outlawJob and stale then
+		local job = { now = now, records = Wanted.db.records }
+		job.co = coroutine.create(function() return private.BuildOutlaws(now) end)
+		private.outlawJob = job
+		private.outlawsStale = nil
+		private.outlawFrame:Show()
+	end
+	return private.outlaws
+end
+
+---A kill or death came: the outlaws are worked out again (after the rebuild under way, when there's one).
+function private.OutlawsChanged()
+	private.outlawsStale = true
+end
+
+---One slice of the rebuild under way, of up to ms milliseconds; its answer is taken once it's done.
+---@param ms number
+function private.RunOutlawJob(ms)
+	local job = private.outlawJob
+	if not job then
+		private.outlawFrame:Hide()
+		return
+	end
+	local start, steps = debugprofilestop(), 0
+	private.outlawStep = function()
+		steps = steps + 1
+		if steps >= OUTLAW_STEPS_PER_LOOK then
+			steps = 0
+			if debugprofilestop() - start >= ms then
+				coroutine.yield()
+			end
+		end
+	end
+	local resumed, result = coroutine.resume(job.co)
+	private.outlawStep = nil
+	if resumed and coroutine.status(job.co) ~= "dead" then
+		return
+	end
+	private.outlawJob = nil
+	private.outlawFrame:Hide()
+	-- One that failed keeps the last answer until the next rebuild is due
+	private.outlawsAt, private.outlawsFor = job.now, job.records
+	if resumed then
+		private.outlaws = result
+	else
+		Wanted:Log("!! Reputation: working out the outlaws failed: %s", tostring(result))
+	end
+end
+
+-- The smoke test finds the frame by this field to let its frames pass
+private.outlawFrame.wantedWork = "outlaws"
+private.outlawFrame:Hide()
+private.outlawFrame:SetScript("OnUpdate", function() private.RunOutlawJob(OUTLAW_SLICE_MS) end)
+
+---Works out the outlaws from every kill and death held, pausing through private.outlawStep (RunOutlawJob).
+---@param now number
+---@return table<string, table>
+function private.BuildOutlaws(now)
+	-- Each slice sets its own step (it holds the slice's start)
+	local function Step()
+		private.outlawStep()
 	end
 	-- Who recorded each death, so a kill record can be checked against another origin's record of it: the one
 	-- origin, or true once two have (a set per death was thousands of tables at every rebuild). One table, emptied
@@ -532,6 +607,7 @@ function Reputation:GetOutlaws()
 	local deathOrigins = private.deathOrigins
 	wipe(deathOrigins)
 	for death in Store:Iterator("death") do
+		Step()
 		local id = death.data.deathId
 		if type(id) == "string" then
 			local seen = deathOrigins[id]
@@ -561,6 +637,7 @@ function Reputation:GetOutlaws()
 	end
 	-- A kill record another origin's death record backs
 	for kill in Store:Iterator("kill") do
+		Step()
 		local d = kill.data
 		local seen = deathOrigins[d.deathId]
 		if seen == true or (seen ~= nil and seen ~= kill.origin) then
@@ -569,6 +646,7 @@ function Reputation:GetOutlaws()
 	end
 	-- A death record that names its killer: the victim's own recap, or a party kill (witnessed by its nature)
 	for death in Store:Iterator("death") do
+		Step()
 		local d = death.data
 		if type(d.killer) == "string" and d.killer ~= "" then
 			Note(d.killer, d.killerName, d.victim, d.deathId or death.id, death.t)
@@ -576,6 +654,7 @@ function Reputation:GetOutlaws()
 	end
 	local outlaws = {}
 	for guid, k in pairs(killers) do
+		Step()
 		sort(k.entries, function(a, b) return a.t < b.t end)
 		local times, lastByVictim = {}, {}
 		for _, e in ipairs(k.entries) do
@@ -611,7 +690,6 @@ function Reputation:GetOutlaws()
 			outlaws[guid] = { name = k.name, rank = rank, kills = recent, since = since, lastKill = last }
 		end
 	end
-	private.outlaws, private.outlawsAt = outlaws, now
 	return outlaws
 end
 

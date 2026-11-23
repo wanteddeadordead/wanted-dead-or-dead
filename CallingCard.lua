@@ -1,8 +1,8 @@
 -- Wanted: your calling card. The banner players build on wanteddeadordead.com from the art their badges unlock: a
 -- background inside a border, an emblem, and a plate with their name, with three stats under it. This window shows
--- yours (from the site, through the app's catch-up) and steps through every piece of each part: the ones you haven't
--- unlocked are marked locked, and Save keeps a card of unlocked pieces for the app to send (WantedDB.cardPicks; the
--- site checks it again). "Try anything" shows any combination, to see how it would look.
+-- yours (from the site, through the app's catch-up) and steps through the pieces of each part you have unlocked (all of
+-- them in "Try anything"; a locked piece shown is marked locked). Save keeps a card of unlocked pieces for the app to
+-- send (WantedDB.cardPicks; the site checks it again). "Try anything" shows any combination, to see how it would look.
 -- The art is Media/cards/<id>.blp; the catalogue (each piece's part, name and what unlocks it) is CardCatalogue.lua.
 -- Card data only ever comes from the site's catch-up, never from other players, and only ids the catalogue knows are
 -- drawn: anything else is dropped.
@@ -19,6 +19,7 @@ local private = {
 	stats = {}, -- the three stats shown: ids
 	mine = {}, -- your characters' cards from the site, by name: { card, unlocked = { [id] = true }, stats = { [id] = value } }
 	trying = false, -- "Try anything": any combination, nothing to save
+	saved = false, -- the card shown is the one just saved (until the next change to it)
 }
 local ART = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\cards\\"
 -- Rye (SIL Open Font License, see THIRD_PARTY_NOTICES.md), as on the site's plates
@@ -62,6 +63,10 @@ local NO_EMBLEM = "none"
 local MAX_UNLOCKED = 400
 local MAX_VALUE = 32
 local BANNER_WIDTH = 720
+-- The Browse view: each part's cell width (its height follows the art's shape), the gap between cells, and the grid's room
+local BROWSE_CELL_WIDTH = { background = 168, border = 156, plate = 168, emblem = 92 }
+local BROWSE_GAP, BROWSE_WIDTH, BROWSE_HEIGHT = 10, 708, 340
+local BROWSE_PANEL = { BROWSE_WIDTH + 12 + 40, BROWSE_HEIGHT + 100 }
 
 
 
@@ -504,6 +509,9 @@ function CallingCard:Show()
 		return
 	end
 	local frame = private.GetFrame()
+	if private.browse then
+		private.browse:Hide()
+	end
 	private.trying = private.Mine() == nil
 	private.Load()
 	private.Refresh()
@@ -522,6 +530,7 @@ end
 
 ---Puts the card to start from in the window: yours, or the sample when trying anything.
 function private.Load()
+	private.saved = false
 	local mine = private.Mine()
 	local card = (not private.trying and mine) and mine.card or SAMPLE
 	for _, p in ipairs(PARTS) do
@@ -565,12 +574,14 @@ function private.Refresh()
 		row.name:SetText(item and item.name or "No emblem")
 		row.unlock:SetText(item and (open and item.unlock or "Locked: "..item.unlock) or "")
 		row.unlock:SetTextColor(unpack(open and { 0.6, 0.62, 0.68 } or { 0.95, 0.45, 0.35 }))
-		row.count:SetText(format("%d of %d", max(private.at[p.part], 0), #parts[p.part]))
+		row.count:SetText(private.CountText(p.part))
 	end
 	frame.mode:SetText(private.trying and "Show my card" or "Try anything")
 	frame.mode:SetShown(mine ~= nil)
 	frame.save:SetShown(not private.trying and mine ~= nil)
 	frame.save:SetEnabled(allUnlocked)
+	frame.save.label:SetText(private.saved and "Saved" or "Save")
+	frame.saved:SetText(private.saved and not private.trying and "Saved. It goes up at your next /reload or logout." or "")
 	if private.trying then
 		-- Without the app nothing carries the unlocks down or a card up: say so, instead of a Save that never comes
 		if mine then
@@ -590,15 +601,84 @@ function private.Refresh()
 	end
 end
 
----Steps a part to its next (1) or previous (-1) piece, round the end; the emblem has "no emblem" before the first.
+---The places the arrows stop at in a part, as indexes into its pieces (0 for no emblem, which the emblem always has):
+---every piece in "Try anything", the unlocked ones on your own card.
+---@param part string
+---@return number[]
+function private.Stops(part)
+	local stops = {}
+	if part == "emblem" then
+		stops[1] = 0
+	end
+	for i, item in ipairs(private.Parts()[part]) do
+		if private.trying or private.Unlocked(item.id) then
+			tinsert(stops, i)
+		end
+	end
+	return stops
+end
+
+---The count beside a part's arrows: "3 of 12 unlocked" on your own card (the shown piece's place among the unlocked
+---ones, and how many there are), "36 of 119" in "Try anything".
+---@param part string
+---@return string
+function private.CountText(part)
+	local items, at = private.Parts()[part], private.at[part]
+	if private.trying then
+		return format("%d of %d", max(at, 0), #items)
+	end
+	local count, place = 0, at == 0 and 0 or nil
+	for i, item in ipairs(items) do
+		if private.Unlocked(item.id) then
+			count = count + 1
+			if i == at then
+				place = count
+			end
+		end
+	end
+	-- A piece you don't own (a seasonal one that went away) has no place among them
+	return place and format("%d of %d unlocked", place, count) or format("%d unlocked", count)
+end
+
+---Steps a part to its next (1) or previous (-1) stop, round the end. A piece shown that isn't a stop (a locked one on
+---your own card) goes to the nearest stop in that direction.
 function private.Step(part, by)
-	local n = #private.Parts()[part]
-	if n == 0 then
+	local stops = private.Stops(part)
+	if #stops == 0 then
 		return
 	end
-	local low = part == "emblem" and 0 or 1
-	local span = n - low + 1
-	private.at[part] = (private.at[part] - low + by) % span + low
+	local at, here, to = private.at[part], nil, nil
+	for i, stop in ipairs(stops) do
+		if stop == at then
+			here = i
+		end
+	end
+	if here then
+		to = stops[(here - 1 + by) % #stops + 1]
+	elseif by > 0 then
+		to = stops[1]
+		for _, stop in ipairs(stops) do
+			if stop > at then
+				to = stop
+				break
+			end
+		end
+	else
+		to = stops[#stops]
+		for i = #stops, 1, -1 do
+			if stops[i] < at then
+				to = stops[i]
+				break
+			end
+		end
+	end
+	private.at[part] = to
+	private.Changed()
+end
+
+---The card shown changed: what was saved no longer is.
+function private.Changed()
+	private.saved = false
 	private.Refresh()
 end
 
@@ -621,17 +701,22 @@ function private.NextStat(slot)
 			break
 		end
 	end
-	private.Refresh()
+	private.Changed()
 end
 
 function private.Shuffle()
 	for _, p in ipairs(PARTS) do
-		local n = #private.Parts()[p.part]
-		if n > 0 then
-			private.at[p.part] = random(n)
+		local pool = {}
+		for _, stop in ipairs(private.Stops(p.part)) do
+			if stop > 0 then
+				tinsert(pool, stop)
+			end
+		end
+		if #pool > 0 then
+			private.at[p.part] = pool[random(#pool)]
 		end
 	end
-	private.Refresh()
+	private.Changed()
 end
 
 ---Keeps your card for the app to send to wanteddeadordead.com (which checks it against what you've unlocked).
@@ -650,7 +735,238 @@ function private.Save()
 		s1 = private.stats[1], s2 = private.stats[2], s3 = private.stats[3] }
 	mine.card = { plate = card.plate, border = card.border, emblem = card.emblem, background = card.background,
 		stats = { private.stats[1], private.stats[2], private.stats[3] } }
-	private.frame.note:SetText("Saved. It goes up at your next /reload or logout.")
+	private.saved = true
+	private.Refresh()
+end
+
+-- ============================================================================
+-- Browse: one part's pieces as small pictures
+-- ============================================================================
+
+---The pieces the Browse view lists for a part: no emblem first (emblems only), then the ones you own, then the locked
+---ones (left out with onlyEarned). Without your own card (no app) nothing is claimed earned or locked: every piece, in
+---the catalogue's order.
+---@param part string
+---@param onlyEarned boolean?
+---@return table[] entries { index (into the part's pieces; 0 for no emblem), item, earned }
+---@return number earned how many pieces you own, or nil without your card
+---@return number total
+function private.BrowseItems(part, onlyEarned)
+	local items, claims = private.Parts()[part], private.Mine() ~= nil
+	local entries, locked, earned = {}, {}, 0
+	if part == "emblem" then
+		entries[1] = { index = 0, earned = true }
+	end
+	for i, item in ipairs(items) do
+		if not claims then
+			tinsert(entries, { index = i, item = item, earned = true })
+		elseif private.Unlocked(item.id) then
+			earned = earned + 1
+			tinsert(entries, { index = i, item = item, earned = true })
+		elseif not onlyEarned then
+			tinsert(locked, { index = i, item = item, earned = false })
+		end
+	end
+	for _, entry in ipairs(locked) do
+		tinsert(entries, entry)
+	end
+	return entries, claims and earned or nil, #items
+end
+
+---Puts a piece on the card from the Browse view: yours if you own it, any in "Try anything"; a locked one on your own
+---card does nothing.
+function private.BrowsePick(entry)
+	-- Judged now, not by how the grid was drawn: your card may have arrived since
+	if not entry or not (private.trying or private.Unlocked(entry.item and entry.item.id or NO_EMBLEM)) then
+		return
+	end
+	private.at[private.browse.part] = entry.index
+	private.browse:Hide()
+	private.Changed()
+end
+
+---Works out what the view lists (for the part, your card and the filter as they are now), and the header.
+function private.BuildBrowse()
+	local browse = private.browse
+	local claims = private.Mine() ~= nil
+	local onlyEarned = claims and Wanted.db.cardOnlyEarned == true
+	local entries, earned, total = private.BrowseItems(browse.part, onlyEarned)
+	browse.entries, browse.claims = entries, claims
+	browse.title:SetText(private.Title(browse.part))
+	browse.count:SetText(claims and format("%d of %d earned", earned, total) or format("%d pieces", total))
+	browse.only:SetShown(claims)
+	browse.only:SetChecked(onlyEarned)
+	browse.offset = 0
+end
+
+---Draws the grid: only the cells in view, reused as it scrolls and for every part.
+function private.DrawBrowse()
+	local browse = private.browse
+	local part = browse.part
+	local width = BROWSE_CELL_WIDTH[part]
+	local height = floor(width / PART_ASPECT[part])
+	local cols = floor((BROWSE_WIDTH + BROWSE_GAP) / (width + BROWSE_GAP))
+	local rows = floor((BROWSE_HEIGHT + BROWSE_GAP) / (height + BROWSE_GAP))
+	local claims, entries = browse.claims, browse.entries
+	browse.cols, browse.rows = cols, rows
+	browse.empty:SetShown(#entries == 0)
+	local lastRow = max(ceil(#entries / cols) - rows, 0)
+	browse.offset = max(0, min(browse.offset, lastRow))
+	local current = private.at[part]
+	for slot = 1, max(#browse.cells, rows * cols) do
+		local cell, entry = browse.cells[slot], nil
+		if slot <= rows * cols then
+			entry = entries[browse.offset * cols + slot]
+		end
+		if entry then
+			if not cell then
+				cell = private.BrowseCell(slot)
+			end
+			cell.entry = entry
+			cell:SetSize(width, height)
+			cell:ClearAllPoints()
+			cell:SetPoint("TOPLEFT", ((slot - 1) % cols) * (width + BROWSE_GAP), -floor((slot - 1) / cols) * (height + BROWSE_GAP))
+			local item, shut = entry.item, claims and not entry.earned
+			if item then
+				cell.art:SetTexture((CallingCard:Art(item.id)))
+				cell.art:SetDesaturated(shut)
+				cell.art:SetVertexColor(shut and 0.55 or 1, shut and 0.55 or 1, shut and 0.6 or 1)
+				cell.art:Show()
+			else
+				cell.art:SetTexture(nil)
+				cell.art:Hide()
+			end
+			cell.name:SetText(item and "" or "No emblem")
+			cell.lock:SetShown(shut)
+			Theme:SetBorderColor(cell, entry.index == current and { 0.95, 0.70, 0.30, 1 } or { 1, 1, 1, 0.10 })
+			local title = item and item.name or "No emblem"
+			local body = item and (shut and "Locked: "..item.unlock or item.unlock) or "Show the card without an emblem."
+			W:Explain(cell, title, body)
+			cell:Show()
+		elseif cell then
+			-- Art is only held for the part shown
+			cell.entry = nil
+			cell.art:SetTexture(nil)
+			cell:Hide()
+		end
+	end
+	-- The scroll bar
+	if lastRow > 0 then
+		local thumb = max(BROWSE_HEIGHT * rows / (lastRow + rows), 24)
+		browse.thumb:SetHeight(thumb)
+		browse.thumb:ClearAllPoints()
+		browse.thumb:SetPoint("TOPRIGHT", browse.grid, "TOPRIGHT", -2, -(browse.offset / lastRow) * (BROWSE_HEIGHT - thumb))
+	end
+	browse.thumb:SetShown(lastRow > 0)
+	browse.track:SetShown(lastRow > 0)
+end
+
+---A part's title ("Background").
+function private.Title(part)
+	for _, p in ipairs(PARTS) do
+		if p.part == part then
+			return p.title
+		end
+	end
+	return part
+end
+
+---One cell of the grid, made when first needed.
+function private.BrowseCell(slot)
+	local browse = private.browse
+	local cell = CreateFrame("Button", nil, browse.grid)
+	Theme:Skin(cell, { 0.05, 0.05, 0.07, 1 }, { 1, 1, 1, 0.10 })
+	cell.art = cell:CreateTexture(nil, "ARTWORK")
+	cell.art:SetPoint("TOPLEFT", 1, -1)
+	cell.art:SetPoint("BOTTOMRIGHT", -1, 1)
+	cell.name = Theme:Text(cell, "small", "", { 0.6, 0.62, 0.68 })
+	cell.name:SetPoint("CENTER")
+	cell.lock = CreateFrame("Frame", nil, cell)
+	cell.lock:SetSize(54, 14)
+	cell.lock:SetPoint("BOTTOMRIGHT", -3, 3)
+	Theme:Fill(cell.lock, { 0, 0, 0, 0.75 })
+	cell.lock.text = Theme:Text(cell.lock, "small", "LOCKED", { 0.95, 0.45, 0.35 })
+	cell.lock.text:SetPoint("CENTER")
+	cell:SetScript("OnClick", function(self) private.BrowsePick(self.entry) end)
+	browse.cells[slot] = cell
+	return cell
+end
+
+---Puts a frame's name on the list of frames Escape closes, in place of another's. Done in the same slot: the game walks
+---the list hiding frames, and a hide that moved other entries would skip one or close the window in the same press.
+function private.EscapeFor(add, remove)
+	local have, at = false, nil
+	for i, name in ipairs(UISpecialFrames) do
+		if name == remove then
+			at = at or i
+		elseif name == add then
+			have = true
+		end
+	end
+	if at and not have then
+		UISpecialFrames[at] = add
+	elseif not have then
+		tinsert(UISpecialFrames, add)
+	end
+end
+
+---Opens the Browse view for a part.
+---@param part string
+function private.OpenBrowse(part)
+	local browse = private.browse
+	if not browse then
+		browse = CreateFrame("Frame", "WantedCallingCardBrowse", private.frame)
+		private.browse = browse
+		browse.cells, browse.offset = {}, 0
+		browse:SetAllPoints(private.frame)
+		browse:SetFrameLevel(private.frame:GetFrameLevel() + 20)
+		browse:EnableMouse(true)
+		Theme:Fill(browse, { 0, 0, 0, 0.6 })
+		browse:Hide()
+		-- Escape closes this before the window: while it is open it takes the window's place on the list Escape closes
+		-- (no keyboard capture, which is restricted in combat)
+		browse:SetScript("OnShow", function() private.EscapeFor("WantedCallingCardBrowse", "WantedCallingCardFrame") end)
+		browse:SetScript("OnHide", function() private.EscapeFor("WantedCallingCardFrame", "WantedCallingCardBrowse") end)
+		local panel = CreateFrame("Frame", nil, browse)
+		panel:SetSize(BROWSE_PANEL[1], BROWSE_PANEL[2])
+		panel:SetPoint("CENTER")
+		Theme:Skin(panel, { 0.07, 0.08, 0.10, 1 }, { 1, 1, 1, 0.10 })
+		browse.title = Theme:Text(panel, "title", "", { 0.95, 0.70, 0.30 })
+		browse.title:SetPoint("TOPLEFT", 20, -16)
+		browse.count = Theme:Text(panel, "small", "", { 0.6, 0.62, 0.68 })
+		browse.count:SetPoint("TOPLEFT", browse.title, "BOTTOMLEFT", 0, -4)
+		local close = W:Button(panel, "Done", "secondary", 80, 28, function() browse:Hide() end)
+		close:SetPoint("TOPRIGHT", -20, -16)
+		browse.only = W:Toggle(panel, "Only show earned", function(on)
+			Wanted.db.cardOnlyEarned = on or nil
+			private.BuildBrowse()
+			private.DrawBrowse()
+		end)
+		browse.only:SetPoint("RIGHT", close, "LEFT", -20, 0)
+		W:Explain(browse.only, "Only show earned", "Hide the pieces you haven't unlocked.")
+		browse.grid = CreateFrame("Frame", nil, panel)
+		browse.grid:SetSize(BROWSE_WIDTH + 12, BROWSE_HEIGHT)
+		browse.grid:SetPoint("TOPLEFT", 20, -70)
+		browse.grid:EnableMouseWheel(true)
+		browse.grid:SetScript("OnMouseWheel", function(_, delta)
+			browse.offset = browse.offset - delta
+			private.DrawBrowse()
+		end)
+		browse.empty = Theme:Text(browse.grid, "body", "Nothing earned in this part yet.", { 0.6, 0.62, 0.68 })
+		browse.empty:SetPoint("CENTER")
+		browse.track = browse.grid:CreateTexture(nil, "BORDER")
+		browse.track:SetPoint("TOPRIGHT", -2, 0)
+		browse.track:SetPoint("BOTTOMRIGHT", -2, 0)
+		browse.track:SetWidth(4)
+		browse.track:SetColorTexture(1, 1, 1, 0.02)
+		browse.thumb = browse.grid:CreateTexture(nil, "ARTWORK")
+		browse.thumb:SetWidth(4)
+		browse.thumb:SetColorTexture(1, 1, 1, 0.27)
+	end
+	browse.part = part
+	private.BuildBrowse()
+	private.DrawBrowse()
+	browse:Show()
 end
 
 function private.GetFrame()
@@ -701,6 +1017,9 @@ function private.GetFrame()
 		row.unlock = Theme:Text(row, "small", "", { 0.6, 0.62, 0.68 })
 		row.unlock:SetPoint("BOTTOMRIGHT", forward, "BOTTOMLEFT", -12, 2)
 		row.back, row.forward = back, forward
+		row.browse = W:Button(row, "Browse", "secondary", 80, 28, function() private.OpenBrowse(p.part) end)
+		row.browse:SetPoint("LEFT", row, "RIGHT", 8, 0)
+		W:Explain(row.browse, "Browse "..strlower(p.title).."s", "See every one as a picture, the ones you own first.")
 		frame.rows[p.part] = row
 		previous = row
 	end
@@ -721,6 +1040,14 @@ function private.GetFrame()
 	frame.shuffle:SetPoint("LEFT", frame.mode, "RIGHT", 8, 0)
 	local close = W:Button(buttons, "Close", "secondary", 100, 28, function() frame:Hide() end)
 	close:SetPoint("RIGHT")
+	-- What a save did, under the buttons it came from
+	frame.saved = Theme:Text(frame, "small", "", { 0.45, 0.78, 0.50 })
+	frame.saved:SetPoint("TOP", buttons, "BOTTOM", 0, -8)
+	frame:SetScript("OnHide", function()
+		if private.browse then
+			private.browse:Hide()
+		end
+	end)
 	private.frame = frame
 	return frame
 end

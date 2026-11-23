@@ -52,6 +52,9 @@ character, for the menu's counts of new things (`UI:NewCount`, `UI:MarkViewed`).
 A kind's first count takes in everything there, so nothing old shows as new. Raids keep their own in
 `WantedDB.raids[character].viewed`.
 
+`WantedDB.cardOnlyEarned` (from 1.29.7) is `true` when the calling card's Browse view lists only the pieces you own (its "Only
+show earned" box), and absent otherwise. A plain optional key: nothing reads anything else from it, so there is no migration.
+
 `WantedDB.signing` (from 1.19.0) is this WoW account's signing seed and its characters' public keys (`Signing.lua`):
 `{ seed, source, pub = { [origin] = { k, g } }, resetAt, krSent, appDropped, pending = { [origin] = { { kind,
 data, t, pending } } } }`. `seed` is the account seed as 64 lower-case hex digits (32 bytes); `source` is `"app"` (the

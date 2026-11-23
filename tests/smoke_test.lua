@@ -8930,18 +8930,34 @@ end)()
 	check(f.banner.plate._texture:find("mat%-silk$") and not f.banner.emblem._shown, "your card: the Silk plate, no emblem")
 	check(f.banner.stats[2].value._text == "295TInterface\\evil:64t", "the game's escape character taken out of a value: "..f.banner.stats[2].value._text)
 	check(f.save._shown and f.save._enabled, "all unlocked: Save on")
+	-- The arrows stop at what you own: the Silk plate is the last of three, so forward goes round to the first, back to Linen
 	f.rows.plate.forward:Click()
-	check(f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate: marked, Save off")
+	check(f.rows.plate.name._text == "Rough Wood" and not f.rows.plate.unlock._text:find("^Locked"), "forward from the last owned plate goes round to the first: "..f.rows.plate.name._text)
+	check(f.rows.plate.count._text == "1 of 3 unlocked", "the count is among the unlocked: "..f.rows.plate.count._text)
 	f.rows.plate.back:Click()
-	f.rows.emblem.forward:Click() -- killer-emblem, the catalogue's first: locked
-	check(not f.save._enabled, "a locked emblem: Save off")
-	for _ = 1, 8 do f.rows.emblem.forward:Click() end -- witness-emblem: cell 8 of the catalogue's emblems, unlocked
-	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled, "an unlocked emblem: Save on: "..f.rows.emblem.name._text)
+	check(f.rows.plate.name._text == "Silk" and f.rows.plate.count._text == "3 of 3 unlocked", "back again: "..f.rows.plate.name._text)
+	check(f.save._enabled, "all unlocked: Save on")
+	f.rows.emblem.forward:Click() -- the one emblem you own
+	check(f.rows.emblem.name._text == "Watchful Eye" and f.save._enabled and f.rows.emblem.count._text == "1 of 1 unlocked", "an unlocked emblem: "..f.rows.emblem.name._text)
+	f.rows.emblem.forward:Click()
+	check(f.rows.emblem.name._text == "No emblem", "no emblem is a stop of its own: "..f.rows.emblem.name._text)
+	f.rows.emblem.forward:Click()
 	f.banner.stats[1]._scripts.OnMouseUp(f.banner.stats[1])
 	check(f.banner.stats[1].label._text == "HONORABLE KILLS", "a click moves a stat to the next one not shown: "..f.banner.stats[1].label._text)
 	f.save:Click()
 	local pick = ns.db.cardPicks[me]
 	check(pick and pick.p == "mat-silk" and pick.e == "witness-emblem" and pick.g == "witness-bg" and pick.s1 == "honor" and pick.s2 == "score" and pick.t, "Save keeps the card for the app")
+	check(f.save.label._text == "Saved" and f.saved._text == "Saved. It goes up at your next /reload or logout.", "after a save: the button reads Saved, the line sits by the buttons")
+	check(f.note._text == "", "the top note keeps to the mode notes: "..f.note._text)
+	f.rows.plate.forward:Click()
+	check(f.save.label._text == "Save" and f.saved._text == "", "a change to the card: back to Save, the line gone")
+	f.rows.plate.back:Click()
+	f.save:Click()
+	check(f.save.label._text == "Saved", "saved again")
+	f.banner.stats[2]._scripts.OnMouseUp(f.banner.stats[2])
+	check(f.save.label._text == "Save", "a changed stat: back to Save")
+	f.shuffle:Click()
+	check(f.save.label._text == "Save" and f.saved._text == "", "a shuffle too")
 	-- Try anything: the sample, nothing to save
 	f.mode:Click()
 	check(not f.save._shown and f.banner.background._texture:find("killer%-legend$"), "trying anything: the sample, no Save")
@@ -8949,6 +8965,199 @@ end)()
 	CC:Hide()
 	CC:TakeMine(nil)
 	ns.db.cardPicks = nil
+end)()
+-- Stepping and shuffling on your own card stay among what you own; a locked piece shown (a saved card whose piece went
+-- away) moves to the nearest owned one in the direction asked; "Try anything" steps through everything
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	CC:TakeMine({ [me] = { card = { plate = "mat-copper", border = "witness-border", emblem = "killer-emblem", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-linen", "mat-silk", "witness-border", "witness-bg", "witness-emblem" }, stats = {} } })
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	check(f.rows.plate.name._text == "Copper" and f.rows.plate.unlock._text:find("^Locked: ") and not f.save._enabled, "a locked plate shown: marked, Save off")
+	check(f.rows.plate.count._text == "3 unlocked" and f.rows.emblem.count._text == "1 unlocked", "a locked piece has no place among the unlocked: "..f.rows.plate.count._text.." / "..f.rows.emblem.count._text)
+	f.rows.plate.forward:Click()
+	check(f.rows.plate.name._text == "Silk", "forward from a locked plate: the next one owned: "..f.rows.plate.name._text)
+	CC:Show()
+	f.rows.plate.back:Click()
+	check(f.rows.plate.name._text == "Linen", "back from a locked plate: the previous one owned: "..f.rows.plate.name._text)
+	-- A locked emblem: forward goes to the next owned (Watchful Eye), back to no emblem
+	CC:Show()
+	f.rows.emblem.forward:Click()
+	check(f.rows.emblem.name._text == "Watchful Eye", "forward from a locked emblem: "..f.rows.emblem.name._text)
+	CC:Show()
+	f.rows.emblem.back:Click()
+	check(f.rows.emblem.name._text == "No emblem", "back from a locked emblem: no emblem: "..f.rows.emblem.name._text)
+	-- Shuffle picks only what you own
+	for _ = 1, 60 do
+		f.shuffle:Click()
+		check(f.rows.plate.unlock._text:sub(1, 6) ~= "Locked" and f.rows.border.unlock._text:sub(1, 6) ~= "Locked" and f.rows.background.unlock._text:sub(1, 6) ~= "Locked"
+			and f.rows.emblem.unlock._text:sub(1, 6) ~= "Locked" and f.save._enabled, "a shuffle on your own card keeps to unlocked pieces")
+	end
+	-- Try anything: every piece, the count over all of them, a shuffle from all
+	f.mode:Click()
+	check(f.rows.plate.count._text:find("^%d+ of %d+$") and not f.rows.plate.count._text:find("unlocked"), "trying anything: the count as before: "..f.rows.plate.count._text)
+	local total = tonumber(f.rows.plate.count._text:match("of (%d+)"))
+	check(total > 3, "every plate is counted: "..total)
+	local seen = {}
+	for _ = 1, total do
+		f.rows.plate.forward:Click()
+		seen[f.rows.plate.name._text] = true
+	end
+	local names = 0
+	for _ in pairs(seen) do names = names + 1 end
+	check(names == total, "trying anything steps through every plate: "..names.." of "..total)
+	local lockedSeen = false
+	for _ = 1, 200 do
+		f.shuffle:Click()
+		local n = f.rows.plate.name._text
+		lockedSeen = lockedSeen or (n ~= "Rough Wood" and n ~= "Linen" and n ~= "Silk")
+	end
+	check(lockedSeen, "trying anything: a shuffle picks from all pieces")
+	CC:Hide()
+	CC:TakeMine(nil)
+end)()
+-- Browse: a part's pieces as pictures, the ones you own first; a pick goes on the card; Escape closes it before the window
+;(function()
+	local CC, me = ns.CallingCard, ns.Store:GetOrigin():match("^([^%-]+)")
+	local plates = 0
+	for _, item in ipairs(ns.CardCatalogue) do if item.part == "plate" then plates = plates + 1 end end
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-linen", "mat-silk", "witness-border", "witness-bg", "witness-emblem" }, stats = {} } })
+	ns.db.cardOnlyEarned = nil
+	CC:Show()
+	local f = _G.WantedCallingCardFrame
+	f.rows.plate.browse:Click()
+	local b = _G.WantedCallingCardBrowse
+	check(b._shown and b.title._text == "Plate", "Browse opens for the part: "..tostring(b.title._text))
+	check(b.count._text == "3 of "..plates.." earned", "the header counts what you own: "..b.count._text)
+	local c = b.cells
+	check(c[1].entry.item.id == "starter-plate" and c[2].entry.item.id == "mat-linen" and c[3].entry.item.id == "mat-silk"
+		and c[1].entry.earned and c[3].entry.earned and not c[4].entry.earned, "earned pieces first")
+	check(c[1].art._texture:find("Media\\cards\\starter%-plate$") and not c[1].art._desaturated and not c[1].lock._shown, "an owned piece in full colour")
+	check(c[4].art._desaturated and c[4].lock._shown and c[4].art._vertexColor[1] < 1, "a locked piece dimmed, desaturated and marked")
+	check(c[4].tooltipTitle == "Light Leather" and c[4].tooltipText == "Locked: Light Leather rank", "a locked piece's tooltip: "..tostring(c[4].tooltipText))
+	check(c[1].tooltipTitle == "Rough Wood" and c[1].tooltipText == "Everyone", "an owned piece's tooltip: "..tostring(c[1].tooltipText))
+	check(b.only._shown, "the earned filter is offered with your card")
+	-- Cells are made for what is in view only, not one for each piece
+	check(#c == 16, "cells for the view only (4 by 4 plates), not a hundred: "..#c)
+	-- A locked piece does nothing on your own card
+	c[4]:Click()
+	check(b._shown and f.rows.plate.name._text == "Silk", "a locked piece: nothing happens")
+	-- The filter, and that the choice is kept
+	b.only:Click()
+	check(ns.db.cardOnlyEarned == true and #b.entries == 3 and not c[4]._shown and c[4].art._texture == nil, "only earned: just the three, the rest hidden")
+	b.only:Click()
+	check(ns.db.cardOnlyEarned == nil and #b.entries == plates and c[4]._shown, "the filter off again")
+	b.only:Click()
+	b:Hide()
+	f.rows.plate.browse:Click()
+	check(b.only.checked and #b.entries == 3, "the choice is remembered")
+	-- An owned piece goes on the card and the view closes
+	f.save:Click()
+	check(f.save.label._text == "Saved", "saved before the pick")
+	c[2]:Click()
+	check(not b._shown and f.rows.plate.name._text == "Linen" and f.banner.plate._texture:find("mat%-linen$"), "an owned piece goes on the card, the view closes")
+	check(f.save.label._text == "Save" and f._shown, "the pick is a change: Save again; the window stays")
+	-- Escape: the view first, then the window
+	f.rows.plate.browse:Click()
+	local function Escape() -- what the game does for Escape: hides every shown frame on the list
+		for _, name in ipairs({ unpack(UISpecialFrames) }) do local fr = _G[name] if fr and fr._shown then fr:Hide() end end
+	end
+	Escape()
+	check(not b._shown and f._shown, "Escape closes the view, not the window")
+	Escape()
+	check(not f._shown, "Escape again closes the window")
+	CC:Show()
+	f.rows.plate.browse:Click()
+	local listed = 0
+	for _, name in ipairs(UISpecialFrames) do if name == "WantedCallingCardFrame" or name == "WantedCallingCardBrowse" then listed = listed + 1 end end
+	check(listed == 1, "one of the two is on the Escape list at a time: "..listed)
+	check(not b._scripts.OnKeyDown, "no keyboard capture")
+	-- Swapped in place: another window opened meanwhile keeps its slot, so the walk of the list skips none
+	b:Hide()
+	local at
+	for i, name in ipairs(UISpecialFrames) do if name == "WantedCallingCardFrame" then at = i end end
+	f.rows.plate.browse:Click()
+	table.insert(UISpecialFrames, "SomeOtherWindow")
+	check(UISpecialFrames[at] == "WantedCallingCardBrowse", "Browse took the editor's slot")
+	b:Hide()
+	check(UISpecialFrames[at] == "WantedCallingCardFrame" and UISpecialFrames[#UISpecialFrames] == "SomeOtherWindow", "and gave it back, the other window untouched")
+	table.remove(UISpecialFrames)
+	f.rows.plate.browse:Click()
+	b:Hide()
+	-- Another part draws its own pieces; the cells of the last are let go
+	ns.db.cardOnlyEarned = nil
+	f.rows.emblem.browse:Click()
+	check(b.title._text == "Emblem" and b.entries[1].index == 0 and b.cells[1].name._text == "No emblem" and not b.cells[1].art._shown, "emblems: no emblem first")
+	check(b.cells[2].entry.item.id == "witness-emblem" and b.cells[2].entry.earned, "then the ones you own")
+	local cols, rows = b.cols, b.rows
+	check(cols == 7 and rows == 3, "emblems are square cells: "..cols.." by "..rows)
+	b.grid._scripts.OnMouseWheel(b.grid, -1)
+	check(b.offset == 1 and b.cells[1].entry == b.entries[cols + 1], "the wheel scrolls a row: "..b.offset.." "..tostring(b.cells[1].entry.index).." "..tostring(b.entries[cols + 1].index))
+	b.grid._scripts.OnMouseWheel(b.grid, 1000)
+	check(b.offset == 0, "back to the top")
+	b:Hide()
+	f.rows.plate.browse:Click()
+	check(b.cells[17] and not b.cells[17]._shown and b.cells[17].art._texture == nil, "the emblems' extra cells let go of their art")
+	-- Nothing earned in a part: a line says so
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	ns.db.cardOnlyEarned = true
+	b:Hide()
+	f.rows.border.browse:Click()
+	check(#b.entries == 1 and not b.empty._shown, "a part with something earned: no empty line")
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "starter-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	b:Hide()
+	f.rows.emblem.browse:Click()
+	check(#b.entries == 1 and b.entries[1].index == 0 and b.cells[2] and not b.cells[2]._shown, "emblems with nothing earned: just no emblem")
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "starter-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "mat-silk" }, stats = {} } })
+	b:Hide()
+	f.rows.border.browse:Click()
+	check(#b.entries == 0 and b.empty._shown and b.cells[1] and not b.cells[1]._shown, "a part with nothing earned: an empty grid says so")
+	ns.db.cardOnlyEarned = nil
+	-- The window closing takes the view with it
+	CC:Hide()
+	check(not b._shown, "closing the window closes the view")
+	-- Try anything: a locked piece previews, nothing is claimed away
+	CC:Show()
+	f.mode:Click()
+	f.rows.plate.browse:Click()
+	check(b.entries[4].earned == false, "trying anything with your card: locked pieces are still marked")
+	b.cells[4]:Click()
+	check(not b._shown and f.rows.plate.name._text == "Light Leather" and f.rows.plate.unlock._text == "Light Leather rank", "trying anything: a locked piece previews")
+	CC:Hide()
+	-- Your card arriving with the view left open from before it: /card closes the view, and a stale 'earned' can't put a locked piece on
+	CC:TakeMine(nil)
+	CC:Show()
+	f.rows.plate.browse:Click()
+	local stale = b.cells[5]
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	CC:Show()
+	check(not b._shown, "/card closes the view")
+	stale.entry = { index = 5, item = ns.CardCatalogue[5], earned = true }
+	b.part = "plate"
+	local before = f.rows.plate.name._text
+	stale:Click()
+	check(f.rows.plate.name._text == before, "a stale 'earned' doesn't put a locked piece on your card")
+	CC:Hide()
+	-- No card from the app: every piece, nothing marked earned or locked
+	CC:TakeMine(nil)
+	CC:Show()
+	f.rows.background.browse:Click()
+	local entries, earned, total = b.entries, nil, nil
+	check(b.title._text == "Background" and b.count._text:find("^%d+ pieces$") and not b.only._shown, "no card: a plain count, no filter: "..b.count._text)
+	local shut = false
+	for _, cell in ipairs(b.cells) do shut = shut or (cell._shown and (cell.lock._shown or cell.art._desaturated == true)) end
+	check(not shut and b.cells[1].entry.item.id == ns.CardCatalogue[3].id, "no card: nothing dimmed or locked, the catalogue's order")
+	check(#entries == total or #entries == 119, "no card: every piece listed despite the filter being on: "..#entries)
+	b.cells[2]:Click()
+	check(not b._shown and f.rows.background.name._text == entries[2].item.name, "no card: a piece previews")
+	CC:Hide()
+	ns.db.cardOnlyEarned = nil
 end)()
 -- Unlock toasts: up to three at once, the rest summed up; only out of combat; a click opens your calling card
 ;(function()

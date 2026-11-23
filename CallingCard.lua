@@ -19,6 +19,7 @@ local private = {
 	stats = {}, -- the three stats shown: ids
 	mine = {}, -- your characters' cards from the site, by name: { card, unlocked = { [id] = true }, stats = { [id] = value } }
 	trying = false, -- "Try anything": any combination, nothing to save
+	saved = false, -- the card shown is the one just saved (until the next change to it)
 }
 local ART = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\cards\\"
 -- Rye (SIL Open Font License, see THIRD_PARTY_NOTICES.md), as on the site's plates
@@ -522,6 +523,7 @@ end
 
 ---Puts the card to start from in the window: yours, or the sample when trying anything.
 function private.Load()
+	private.saved = false
 	local mine = private.Mine()
 	local card = (not private.trying and mine) and mine.card or SAMPLE
 	for _, p in ipairs(PARTS) do
@@ -571,6 +573,8 @@ function private.Refresh()
 	frame.mode:SetShown(mine ~= nil)
 	frame.save:SetShown(not private.trying and mine ~= nil)
 	frame.save:SetEnabled(allUnlocked)
+	frame.save.label:SetText(private.saved and "Saved" or "Save")
+	frame.saved:SetText(private.saved and not private.trying and "Saved. It goes up at your next /reload or logout." or "")
 	if private.trying then
 		-- Without the app nothing carries the unlocks down or a card up: say so, instead of a Save that never comes
 		if mine then
@@ -662,6 +666,12 @@ function private.Step(part, by)
 		end
 	end
 	private.at[part] = to
+	private.Changed()
+end
+
+---The card shown changed: what was saved no longer is.
+function private.Changed()
+	private.saved = false
 	private.Refresh()
 end
 
@@ -684,7 +694,7 @@ function private.NextStat(slot)
 			break
 		end
 	end
-	private.Refresh()
+	private.Changed()
 end
 
 function private.Shuffle()
@@ -699,7 +709,7 @@ function private.Shuffle()
 			private.at[p.part] = pool[random(#pool)]
 		end
 	end
-	private.Refresh()
+	private.Changed()
 end
 
 ---Keeps your card for the app to send to wanteddeadordead.com (which checks it against what you've unlocked).
@@ -718,7 +728,8 @@ function private.Save()
 		s1 = private.stats[1], s2 = private.stats[2], s3 = private.stats[3] }
 	mine.card = { plate = card.plate, border = card.border, emblem = card.emblem, background = card.background,
 		stats = { private.stats[1], private.stats[2], private.stats[3] } }
-	private.frame.note:SetText("Saved. It goes up at your next /reload or logout.")
+	private.saved = true
+	private.Refresh()
 end
 
 function private.GetFrame()
@@ -789,6 +800,9 @@ function private.GetFrame()
 	frame.shuffle:SetPoint("LEFT", frame.mode, "RIGHT", 8, 0)
 	local close = W:Button(buttons, "Close", "secondary", 100, 28, function() frame:Hide() end)
 	close:SetPoint("RIGHT")
+	-- What a save did, under the buttons it came from
+	frame.saved = Theme:Text(frame, "small", "", { 0.45, 0.78, 0.50 })
+	frame.saved:SetPoint("TOP", buttons, "BOTTOM", 0, -8)
 	private.frame = frame
 	return frame
 end

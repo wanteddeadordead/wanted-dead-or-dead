@@ -531,9 +531,9 @@ end)
 -- Outlaws
 -- ============================================================================
 
----Every outlaw by GUID: { name, rank, kills (this week), since, lastKill }, as last worked out. Once that's older
----than a short while, or a kill or death has come since, a rebuild starts in the background (a slice a frame) and
----this answer stands until it's done. The first is worked out at login (OnEnable). Saved data that is another table
+---Every outlaw by GUID: { name, rank, kills (this week), since, lastKill }, as last worked out. A kill or death that
+---arrives starts a rebuild in the background (a slice a frame), as does a read once the answer is a short while old,
+---and this answer stands until it's done. The first is worked out at login (OnEnable). Saved data that is another table
 ---(a fresh start) starts one too.
 ---@return table<string, table>
 function Reputation:GetOutlaws()
@@ -549,9 +549,11 @@ function Reputation:GetOutlaws()
 	return private.outlaws
 end
 
----A kill or death came: the outlaws are worked out again (after the rebuild under way, when there's one).
+---A kill or death came: the outlaws are worked out again now, or after the rebuild under way. Not left for the next
+---read: that read is an enemy appearing, and it would get the list from before the kill (the alert comes once).
 function private.OutlawsChanged()
 	private.outlawsStale = true
+	Reputation:GetOutlaws()
 end
 
 ---One slice of the rebuild under way, of up to ms milliseconds; its answer is taken once it's done.
@@ -579,12 +581,21 @@ function private.RunOutlawJob(ms)
 	end
 	private.outlawJob = nil
 	private.outlawFrame:Hide()
-	-- One that failed keeps the last answer until the next rebuild is due
+	-- One that failed keeps the last answer until the next rebuild is due; the first failure goes to the game's
+	-- error handler too, so a list that has stopped changing doesn't go unseen
 	private.outlawsAt, private.outlawsFor = job.now, job.records
 	if resumed then
 		private.outlaws = result
+		-- Kills or deaths that came while it ran: the next one starts now
+		if private.outlawsStale then
+			Reputation:GetOutlaws()
+		end
 	else
 		Wanted:Log("!! Reputation: working out the outlaws failed: %s", tostring(result))
+		if not private.outlawFailureShown and geterrorhandler then
+			private.outlawFailureShown = true
+			geterrorhandler()("Wanted: working out the outlaws failed: "..tostring(result))
+		end
 	end
 end
 

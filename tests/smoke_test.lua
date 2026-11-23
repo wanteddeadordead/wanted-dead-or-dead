@@ -4789,26 +4789,33 @@ end)()
 	-- The victim's own record naming the killer counts as a backed kill too
 	for i = 1, 4 do ns.Store:InsertTest("death", "Poor Victim "..i, { victim = "Player-9-PV"..i, victimName = "Poor Victim "..i, killer = "Player-9-RECAP", killerName = "Recap Killer", deathId = "rc"..i, zone = "Durotar" }, now - 900 + i * 100) end
 	check(Outlaw("Player-9-RECAP") ~= nil, "kills named by the victims' own records count")
-	-- A slow clock: the rebuild takes several frames, a kill arriving meanwhile doesn't start it again (a steady
-	-- stream of them can't keep it from finishing), and the next read after it works the newcomers in
+	-- A slow clock: the rebuild takes several frames, and a kill arriving meanwhile doesn't start it again, so a steady
+	-- stream of them can't keep it from finishing; those that came start the next one when it's done
 	do
-		local realStop, frames, frame = debugprofilestop, 0, WorkFrame("outlaws")
+		local realStop, frame = debugprofilestop, WorkFrame("outlaws")
 		local ms = 0
 		debugprofilestop = function() ms = ms + 1 return ms end
 		for i = 1, 4 do Kill(i, "Player-9-LATE", "Late Lord", "Player-9-L"..i, now - 800 + i * 100, true) end
-		ns.Reputation:GetOutlaws()
+		frame._scripts.OnUpdate(frame, 0.016)
+		check(frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") == nil, "a rebuild runs a slice a frame")
+		for i = 1, 300 do
+			ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BY"..i, victimName = "Bystander", deathId = "by"..i, zone = "Durotar" }, now)
+			frame._scripts.OnUpdate(frame, 0.016)
+		end
+		check(frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") ~= nil, "under a stream of records, rebuilds finish and their answers are taken")
+		local frames = 0
 		while frame:IsShown() and frames < 10000 do
 			frames = frames + 1
-			ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BY"..frames, victimName = "Bystander", deathId = "by"..frames, zone = "Durotar" }, now)
-			ns.Reputation:GetOutlaws()
 			frame._scripts.OnUpdate(frame, 0.016)
 		end
 		debugprofilestop = realStop
-		check(frames > 1 and frames < 10000, "a rebuild runs a slice a frame and finishes under a stream of records, took "..frames.." frames")
-		check(not frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") ~= nil, "its answer is taken once it's done")
-		check(frame:IsShown(), "records that came meanwhile start the next one at that read")
-		RunFrames()
+		check(not frame:IsShown(), "once the records stop, the last rebuild finishes and none follows, took "..frames.." frames")
 	end
+	-- Kills that make an outlaw while nothing reads the list: it's worked out anyway, so the first read (an enemy
+	-- appearing, whose alert comes once) has them
+	for i = 1, 4 do Kill(i, "Player-9-QUIET", "Quiet Lord", "Player-9-Q"..i, now - 700 + i * 100, true) end
+	RunFrames()
+	check(ns.Reputation:GetOutlaw("Player-9-QUIET") ~= nil, "kills that came with nothing reading are in the first read after them")
 	-- Saved data that is another table: the outlaws of the old one go at the next rebuild, a kill or not
 	do
 		local realRecords = ns.db.records

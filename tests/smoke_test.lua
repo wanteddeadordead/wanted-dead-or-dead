@@ -14928,28 +14928,34 @@ end)()
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("reload me")
 	dialog.confirm:Click()
-	check(dialog.confirm:GetText() == "Reload now" and dialog.cancel:GetText() == "Not now" and OnScreen("Reload now to send it at once. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent.")
+	check(dialog.cancel:GetText() == "Reload now" and dialog.confirm:GetText() == "Not now" and OnScreen("Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload.")
 		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$") and reloads == 0, "app running: Reload now is offered with the address and the plain statement")
-	dialog.cancel:Click()
-	check(reloads == 0, "Not now reloads nothing")
+	-- Enter in the address box, Escape and Not now never reload
+	dialog.input.onEnter()
+	check(reloads == 0, "Enter in the address box does not reload")
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("reload me too")
 	dialog.confirm:Click()
+	_G.WantedDialog:Hide()
+	check(reloads == 0, "Escape does not reload")
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload me three")
 	dialog.confirm:Click()
+	dialog.cancel:Click()
 	check(reloads == 1, "Reload now reloads the UI")
 	for _, info in ipairs({ { running = "0.2.45", seen = GetServerTime() }, { running = "0.2.46", seen = 1 } }) do
 		WantedAppInfo = info
 		ns:RunCommand("idea", "")
 		dialog.area:SetText("no reload "..info.running..info.seen)
 		dialog.confirm:Click()
-		check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now to send it at once"), "old or stopped app: no reload button")
+		check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once"), "old or stopped app: no reload button")
 		dialog.confirm:Click()
 	end
 	WantedAppInfo = nil
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("no app at all")
 	dialog.confirm:Click()
-	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now to send it at once"), "no app: no reload button")
+	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once"), "no app: no reload button")
 	dialog.confirm:Click()
 	check(reloads == 1, "no reload in those states")
 	-- The tip dialog gets the same paragraph
@@ -14967,7 +14973,7 @@ end)()
 	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
 	dialog.confirm:Click()
 	db.reports = keptQueue
-	queuedBefore = queuedBefore + 9
+	queuedBefore = queuedBefore + 10
 	-- The report window's note carries the line about following reports
 	ns.Report:Show()
 	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")

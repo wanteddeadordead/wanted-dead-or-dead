@@ -546,7 +546,8 @@ end
 
 ---Tells the player where the report they just queued goes, and where to follow it. Where a reload would send it, the
 ---dialog offers one (ReloadUI is the game's own /reload, with no restriction in combat) and says it is otherwise sent
----at the next /reload or logout; the address stays until the player chooses.
+---at the next /reload or logout; the address stays until the player chooses. Reload now is the dialog's Cancel button:
+---Enter (the copy box has the focus) and Escape never reload.
 ---@param id string
 ---@param title string
 function private.ShowSent(id, title)
@@ -554,16 +555,17 @@ function private.ShowSent(id, title)
 	local reload = private.CanReloadToSend()
 	local text = private.SentText().."\n\n"
 	if reload then
-		text = text.."Reload now to send it at once. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent.\n\n"
+		text = text.."Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload.\n\n"
 	end
 	W:Dialog({
 		title = title,
 		text = text..paragraph,
 		width = 480,
 		input = { value = url, copy = true, tip = { "Follow your report", "Click the address, Ctrl+C, and paste it into a browser. It shows your report once the Wanted app has sent it." } },
-		confirmLabel = reload and "Reload now" or "OK",
-		cancelLabel = reload and "Not now" or nil,
-		onConfirm = reload and function() ReloadUI() end or nil,
+		-- Reload now is the Cancel button, the only one Enter and Escape never press (Enter in the copy box confirms)
+		confirmLabel = reload and "Not now" or "OK",
+		cancelLabel = reload and "Reload now" or nil,
+		onCancel = reload and function() ReloadUI() end or nil,
 	})
 end
 

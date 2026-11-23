@@ -9061,10 +9061,20 @@ end)()
 	check(f.save.label._text == "Save" and f._shown, "the pick is a change: Save again; the window stays")
 	-- Escape: the view first, then the window
 	f.rows.plate.browse:Click()
-	b._scripts.OnKeyDown(b, "A")
-	check(b._shown, "another key leaves it open")
-	b._scripts.OnKeyDown(b, "ESCAPE")
+	local function Escape() -- what the game does for Escape: hides every shown frame on the list
+		for _, name in ipairs({ unpack(UISpecialFrames) }) do local fr = _G[name] if fr and fr._shown then fr:Hide() end end
+	end
+	Escape()
 	check(not b._shown and f._shown, "Escape closes the view, not the window")
+	Escape()
+	check(not f._shown, "Escape again closes the window")
+	CC:Show()
+	f.rows.plate.browse:Click()
+	local listed = 0
+	for _, name in ipairs(UISpecialFrames) do if name == "WantedCallingCardFrame" or name == "WantedCallingCardBrowse" then listed = listed + 1 end end
+	check(listed == 1, "one of the two is on the Escape list at a time: "..listed)
+	check(not b._scripts.OnKeyDown, "no keyboard capture")
+	b:Hide()
 	-- Another part draws its own pieces; the cells of the last are let go
 	ns.db.cardOnlyEarned = nil
 	f.rows.emblem.browse:Click()
@@ -9076,9 +9086,27 @@ end)()
 	check(b.offset == 1 and b.cells[1].entry == b.entries[cols + 1], "the wheel scrolls a row: "..b.offset.." "..tostring(b.cells[1].entry.index).." "..tostring(b.entries[cols + 1].index))
 	b.grid._scripts.OnMouseWheel(b.grid, 1000)
 	check(b.offset == 0, "back to the top")
-	b._scripts.OnKeyDown(b, "ESCAPE")
+	b:Hide()
 	f.rows.plate.browse:Click()
 	check(b.cells[17] and not b.cells[17]._shown and b.cells[17].art._texture == nil, "the emblems' extra cells let go of their art")
+	-- Nothing earned in a part: a line says so
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	ns.db.cardOnlyEarned = true
+	b:Hide()
+	f.rows.border.browse:Click()
+	check(#b.entries == 1 and not b.empty._shown, "a part with something earned: no empty line")
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "starter-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	b:Hide()
+	f.rows.emblem.browse:Click()
+	check(#b.entries == 1 and b.entries[1].index == 0 and b.cells[2] and not b.cells[2]._shown, "emblems with nothing earned: just no emblem")
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "starter-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "mat-silk" }, stats = {} } })
+	b:Hide()
+	f.rows.border.browse:Click()
+	check(#b.entries == 0 and b.empty._shown and b.cells[1] and not b.cells[1]._shown, "a part with nothing earned: an empty grid says so")
+	ns.db.cardOnlyEarned = nil
 	-- The window closing takes the view with it
 	CC:Hide()
 	check(not b._shown, "closing the window closes the view")
@@ -9089,6 +9117,21 @@ end)()
 	check(b.entries[4].earned == false, "trying anything with your card: locked pieces are still marked")
 	b.cells[4]:Click()
 	check(not b._shown and f.rows.plate.name._text == "Light Leather" and f.rows.plate.unlock._text == "Light Leather rank", "trying anything: a locked piece previews")
+	CC:Hide()
+	-- Your card arriving with the view left open from before it: /card closes the view, and a stale 'earned' can't put a locked piece on
+	CC:TakeMine(nil)
+	CC:Show()
+	f.rows.plate.browse:Click()
+	local stale = b.cells[5]
+	CC:TakeMine({ [me] = { card = { plate = "mat-silk", border = "witness-border", emblem = "none", background = "witness-bg", stats = { "kills", "score", "rank" } },
+		unlocked = { "starter-plate", "starter-border", "starter-bg", "mat-silk" }, stats = {} } })
+	CC:Show()
+	check(not b._shown, "/card closes the view")
+	stale.entry = { index = 5, item = ns.CardCatalogue[5], earned = true }
+	b.part = "plate"
+	local before = f.rows.plate.name._text
+	stale:Click()
+	check(f.rows.plate.name._text == before, "a stale 'earned' doesn't put a locked piece on your card")
 	CC:Hide()
 	-- No card from the app: every piece, nothing marked earned or locked
 	CC:TakeMine(nil)

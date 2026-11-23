@@ -509,6 +509,9 @@ function CallingCard:Show()
 		return
 	end
 	local frame = private.GetFrame()
+	if private.browse then
+		private.browse:Hide()
+	end
 	private.trying = private.Mine() == nil
 	private.Load()
 	private.Refresh()
@@ -773,12 +776,27 @@ end
 ---Puts a piece on the card from the Browse view: yours if you own it, any in "Try anything"; a locked one on your own
 ---card does nothing.
 function private.BrowsePick(entry)
-	if not entry or not (entry.earned or private.trying) then
+	-- Judged now, not by how the grid was drawn: your card may have arrived since
+	if not entry or not (private.trying or private.Unlocked(entry.item and entry.item.id or NO_EMBLEM)) then
 		return
 	end
 	private.at[private.browse.part] = entry.index
 	private.browse:Hide()
 	private.Changed()
+end
+
+---Works out what the view lists (for the part, your card and the filter as they are now), and the header.
+function private.BuildBrowse()
+	local browse = private.browse
+	local claims = private.Mine() ~= nil
+	local onlyEarned = claims and Wanted.db.cardOnlyEarned == true
+	local entries, earned, total = private.BrowseItems(browse.part, onlyEarned)
+	browse.entries, browse.claims = entries, claims
+	browse.title:SetText(private.Title(browse.part))
+	browse.count:SetText(claims and format("%d of %d earned", earned, total) or format("%d pieces", total))
+	browse.only:SetShown(claims)
+	browse.only:SetChecked(onlyEarned)
+	browse.offset = 0
 end
 
 ---Draws the grid: only the cells in view, reused as it scrolls and for every part.
@@ -789,14 +807,9 @@ function private.DrawBrowse()
 	local height = floor(width / PART_ASPECT[part])
 	local cols = floor((BROWSE_WIDTH + BROWSE_GAP) / (width + BROWSE_GAP))
 	local rows = floor((BROWSE_HEIGHT + BROWSE_GAP) / (height + BROWSE_GAP))
-	local claims = private.Mine() ~= nil
-	local onlyEarned = claims and Wanted.db.cardOnlyEarned == true
-	local entries, earned, total = private.BrowseItems(part, onlyEarned)
-	browse.entries, browse.cols, browse.rows = entries, cols, rows
-	browse.title:SetText(private.Title(part))
-	browse.count:SetText(claims and format("%d of %d earned", earned, total) or format("%d pieces", total))
-	browse.only:SetShown(claims)
-	browse.only:SetChecked(onlyEarned)
+	local claims, entries = browse.claims, browse.entries
+	browse.cols, browse.rows = cols, rows
+	browse.empty:SetShown(#entries == 0)
 	local lastRow = max(ceil(#entries / cols) - rows, 0)
 	browse.offset = max(0, min(browse.offset, lastRow))
 	local current = private.at[part]
@@ -879,6 +892,21 @@ function private.BrowseCell(slot)
 	return cell
 end
 
+---Puts a frame's name on the list of frames Escape closes, in place of another's.
+function private.EscapeFor(add, remove)
+	local have = false
+	for i = #UISpecialFrames, 1, -1 do
+		if UISpecialFrames[i] == remove then
+			tremove(UISpecialFrames, i)
+		elseif UISpecialFrames[i] == add then
+			have = true
+		end
+	end
+	if not have then
+		tinsert(UISpecialFrames, add)
+	end
+end
+
 ---Opens the Browse view for a part.
 ---@param part string
 function private.OpenBrowse(part)
@@ -892,17 +920,10 @@ function private.OpenBrowse(part)
 		browse:EnableMouse(true)
 		Theme:Fill(browse, { 0, 0, 0, 0.6 })
 		browse:Hide()
-		-- Escape closes this before the window: the key stops here while it is open
-		browse:SetScript("OnShow", function(self) self:EnableKeyboard(true) end)
-		browse:SetScript("OnHide", function(self) self:EnableKeyboard(false) end)
-		browse:SetScript("OnKeyDown", function(self, key)
-			if key == "ESCAPE" then
-				self:SetPropagateKeyboardInput(false)
-				self:Hide()
-			else
-				self:SetPropagateKeyboardInput(true)
-			end
-		end)
+		-- Escape closes this before the window: while it is open it takes the window's place on the list Escape closes
+		-- (no keyboard capture, which is restricted in combat)
+		browse:SetScript("OnShow", function() private.EscapeFor("WantedCallingCardBrowse", "WantedCallingCardFrame") end)
+		browse:SetScript("OnHide", function() private.EscapeFor("WantedCallingCardFrame", "WantedCallingCardBrowse") end)
 		local panel = CreateFrame("Frame", nil, browse)
 		panel:SetSize(BROWSE_PANEL[1], BROWSE_PANEL[2])
 		panel:SetPoint("CENTER")
@@ -915,7 +936,7 @@ function private.OpenBrowse(part)
 		close:SetPoint("TOPRIGHT", -20, -16)
 		browse.only = W:Toggle(panel, "Only show earned", function(on)
 			Wanted.db.cardOnlyEarned = on or nil
-			browse.offset = 0
+			private.BuildBrowse()
 			private.DrawBrowse()
 		end)
 		browse.only:SetPoint("RIGHT", close, "LEFT", -20, 0)
@@ -928,6 +949,8 @@ function private.OpenBrowse(part)
 			browse.offset = browse.offset - delta
 			private.DrawBrowse()
 		end)
+		browse.empty = Theme:Text(browse.grid, "body", "Nothing earned in this part yet.", { 0.6, 0.62, 0.68 })
+		browse.empty:SetPoint("CENTER")
 		browse.track = browse.grid:CreateTexture(nil, "BORDER")
 		browse.track:SetPoint("TOPRIGHT", -2, 0)
 		browse.track:SetPoint("BOTTOMRIGHT", -2, 0)
@@ -937,7 +960,8 @@ function private.OpenBrowse(part)
 		browse.thumb:SetWidth(4)
 		browse.thumb:SetColorTexture(1, 1, 1, 0.27)
 	end
-	browse.part, browse.offset = part, 0
+	browse.part = part
+	private.BuildBrowse()
 	private.DrawBrowse()
 	browse:Show()
 end

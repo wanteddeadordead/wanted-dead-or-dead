@@ -4746,8 +4746,17 @@ end)()
 	ns.UI:Toggle()
 	builds = 0
 	check(#tickers == ticking + 1, "the window's own ticker starts when it opens, got "..(#tickers - ticking))
+	local row
+	for _, f in ipairs(Mock.created) do
+		local item = rawget(f, "item")
+		if not row and rawget(f, "last") and rawget(f, "losses") and type(item) == "table" and item.lastSeen then row = f end
+	end
+	local before = row and row.last:GetText()
+	clock = clock + 100000 -- past every time the rows show (some tests left them ahead of the clock)
 	tickers[#tickers]()
 	check(builds == 0, "the 15-second refresh doesn't rebuild them, got "..builds)
+	check(row and row.last:GetText() ~= before, "but the rows on screen are drawn again, their times current: "..tostring(before).." -> "..tostring(row and row.last:GetText()))
+	clock = clock - 100000
 	ns.Enemies:SetKoS("Player-9-PASSIVE", "Passive Peer", true)
 	RunTimers()
 	check(builds >= 1, "a Kill on Sight change does rebuild them")

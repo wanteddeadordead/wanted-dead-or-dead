@@ -101,8 +101,9 @@ function private.Refresh()
 		return
 	end
 	-- The rows stand through a refresh nothing the player did asked for (UI:IsPassiveRefresh): they're built when
-	-- the page is opened, and at a new filter, sort or search
+	-- the page is opened, and at a new filter, sort or search. Those on screen are drawn again, so "4m ago" stays true.
 	if private.built and UI:IsPassiveRefresh() then
+		private.list:Draw()
 		return
 	end
 	private.built = true

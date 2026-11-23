@@ -14194,10 +14194,11 @@ end)()
 	local idLines = Report:QueueTip(duel, finding, "\n\nFirst  \t\r\nsecond\r\r\r\r\r\rthird\1\127 \n\n")
 	check(db.reports[idLines].text == "First\nsecond\n\nthird", "two lines keep their break and five blank lines become one: "..db.reports[idLines].text:gsub("\n", "/"))
 	-- The 500-letter limit counts a line break as one letter
-	local idLimit = Report:QueueIdea(string.rep("a\n", 400))
+	local idLimit = Report:QueueIdea(string.rep("ab\n", 200))
 	local limited = db.reports[idLimit].text
-	check(#limited == 500 and select(2, limited:gsub("\n", "")) == 250, "the 500-letter limit counts a line break as one letter: "..#limited)
+	check(#limited == 500 and select(2, limited:gsub("\n", "")) == 166, "the 500-letter limit counts a line break as one letter: "..#limited)
 	check(db.reports[Report:QueueIdea("line1|nline2")].text == "line1\nline2" and Report:QueueTip(duel, { rule = "a|nb", text = "x" }, "y") ~= nil and db.reports[Report:QueueIdea("p|n")].text == "p", "the game's |n is a line break")
+	check(db.reports[Report:QueueIdea(string.rep("a", 499).."\n\nb")].text == string.rep("a", 499), "a cut at the limit leaves no trailing line break")
 	-- The rule, tip and finding stay on one line
 	local idOne = Report:QueueTip(duel, { rule = "a\nb", tip = "tip\r\nline\ntwo", text = "find\ning" }, "x")
 	local one = db.reports[idOne]

@@ -352,7 +352,8 @@ function private.ClipLines(text, maxLetters)
 	text = gsub(text, "[%c]", function(c) return c == "\n" and c or "" end)
 	text = gsub(text, " +\n", "\n")
 	text = gsub(text, "\n\n\n+", "\n\n")
-	return CutLetters(strtrim(text), maxLetters)
+	-- A cut can leave the text ending in a break or a space
+	return (gsub(CutLetters(strtrim(text), maxLetters), "%s+$", ""))
 end
 
 ---How many reports are waiting for the app.

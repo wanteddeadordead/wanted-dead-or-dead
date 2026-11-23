@@ -1227,6 +1227,25 @@ end)()
 	ns.db.records = realRecords
 	check(#ns.Hotspots:RecentFights(clock) == count, "and so is the old again")
 	ns.Store.Iterator = realIterator
+	-- Kept up, it holds what a walk of every record would find: here with one that arrived dated over an hour back
+	-- and one taken out again
+	local old = ns.Store:NewRecord("kill", { killer = "Player-1-OURS7", killerName = "Our Seven", killerFaction = "Horde", victim = "Player-9-KEPT2",
+		victimName = "Old Ganker", victimFaction = "Alliance", deathId = "kept-2", zone = "Durotar", mapId = 1, x = 31, y = 31 })
+	old.t = clock - 7200
+	local gone = ns.Store:NewRecord("death", { killer = "Player-9-KEPT3", killerName = "Gone Ganker", killerFaction = "Alliance", victim = "Player-1-OURS8",
+		victimName = "Our Eight", victimFaction = "Horde", deathId = "kept-3", zone = "Durotar", mapId = 1, x = 32, y = 32 })
+	ns.Hotspots:RecentFights(clock)
+	ns.db.records[gone.id] = nil
+	clock = clock + 11
+	local walked, kept = {}, {}
+	for _, kind in ipairs({ "kill", "death" }) do
+		for record in ns.Store:Iterator(kind) do
+			if record.t and clock - record.t <= 3600 and type(record.data) == "table" and not ns.Store:IsTest(record) then walked[#walked + 1] = record.id end
+		end
+	end
+	for _, record in ipairs(ns.Hotspots:RecentFights(clock)) do kept[#kept + 1] = record.id end
+	check(#walked > 0 and table.concat(walked, ",") == table.concat(kept, ","), "the kept list is what a walk finds: "..#walked.." walked, "..#kept.." kept")
+	ns.db.records[old.id] = nil
 	clock = savedClock
 end)()
 -- Show / hide from the map's filter menu

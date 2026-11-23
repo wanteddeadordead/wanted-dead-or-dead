@@ -4821,16 +4821,32 @@ end)()
 	-- stream of them can't keep it from finishing; those that came start the next one when it's done
 	do
 		local realStop, frame = debugprofilestop, WorkFrame("outlaws")
-		local ms = 0
+		local ms, bulk = 0, {}
+		-- Enough records that a rebuild takes many frames
+		for i = 1, 1500 do
+			bulk[i] = ns.Store:InsertTest("death", "Crowd", { victim = "Player-9-CR"..i, victimName = "Crowd", deathId = "cr"..i, zone = "Durotar" }, now - 4000).id
+		end
+		RunWork("outlaws")
 		debugprofilestop = function() ms = ms + 1 return ms end
 		for i = 1, 4 do Kill(i, "Player-9-LATE", "Late Lord", "Player-9-L"..i, now - 800 + i * 100, true) end
 		frame._scripts.OnUpdate(frame, 0.016)
 		check(frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") == nil, "a rebuild runs a slice a frame")
-		for i = 1, 300 do
-			ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BY"..i, victimName = "Bystander", deathId = "by"..i, zone = "Durotar" }, now)
-			frame._scripts.OnUpdate(frame, 0.016)
+		-- A death every frame: each rebuild still finishes, and the list is at most one rebuild behind
+		local by = 0
+		local function Frames(guid)
+			local n = 0
+			while not ns.Reputation:GetOutlaw(guid) and n < 5000 do
+				n, by = n + 1, by + 1
+				ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BY"..by, victimName = "Bystander", deathId = "by"..by, zone = "Durotar" }, now)
+				frame._scripts.OnUpdate(frame, 0.016)
+			end
+			return n
 		end
-		check(frame:IsShown() and ns.Reputation:GetOutlaw("Player-9-LATE") ~= nil, "under a stream of records, rebuilds finish and their answers are taken")
+		local first = Frames("Player-9-LATE")
+		check(first > 20 and first < 5000, "under a stream of records, a rebuild finishes and its answer is taken, in "..first.." frames")
+		for i = 1, 4 do Kill(i, "Player-9-STREAM", "Stream Lord", "Player-9-ST"..i, now - 800 + i * 100, true) end
+		local behind = Frames("Player-9-STREAM")
+		check(frame:IsShown() and behind <= 2 * first + 5, "kills that came mid-stream are in within two rebuilds: "..behind.." frames, a rebuild takes "..first)
 		local frames = 0
 		while frame:IsShown() and frames < 10000 do
 			frames = frames + 1
@@ -4838,12 +4854,8 @@ end)()
 		end
 		debugprofilestop = realStop
 		check(not frame:IsShown(), "once the records stop, the last rebuild finishes and none follows, took "..frames.." frames")
+		for _, id in ipairs(bulk) do ns.db.records[id] = nil end
 	end
-	-- Kills that make an outlaw while nothing reads the list: it's worked out anyway, so the first read (an enemy
-	-- appearing, whose alert comes once) has them
-	for i = 1, 4 do Kill(i, "Player-9-QUIET", "Quiet Lord", "Player-9-Q"..i, now - 700 + i * 100, true) end
-	RunFrames()
-	check(ns.Reputation:GetOutlaw("Player-9-QUIET") ~= nil, "kills that came with nothing reading are in the first read after them")
 	-- Saved data that is another table: the outlaws of the old one go at the next rebuild, a kill or not
 	do
 		local realRecords = ns.db.records
@@ -4867,6 +4879,48 @@ end)()
 	end
 	local text = ns.EnemyMenu:BuildHelpText()
 	check(text:find("Gank Lord", 1, true) and text:find("OUTLAW", 1, true), "Call for help names the outlaw: "..text)
+	-- Kills that make an outlaw while nothing reads the list: it's worked out anyway, so when they appear later (the
+	-- first read, and the alert comes once) they're announced
+	check(ns.Enemies:ShouldAlert(), "alerts are on for the checks below")
+	local frame, alertClock = WorkFrame("outlaws"), clock
+	for i = 1, 4 do Kill(i, "Player-9-QUIET", "Quiet Lord", "Player-9-Q"..i, now - 700 + i * 100, true) end
+	clock = clock + 600
+	RunWork("outlaws")
+	enemyUnits.nameplate2 = { guid = "Player-9-QUIET", name = "Quiet Lord", class = "ROGUE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate2")
+	check(warnings[#warnings] == "OUTLAW: Quiet Lord", "an outlaw made while nothing read is announced on appearing, got "..tostring(warnings[#warnings]))
+	-- And kills that arrive while a rebuild is under way, with no read after them: the next rebuild starts when it's done
+	do
+		local realStop, ms = debugprofilestop, 0
+		debugprofilestop = function() ms = ms + 1 return ms end
+		ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BYMID", victimName = "Bystander", deathId = "by-mid", zone = "Durotar" }, now)
+		frame._scripts.OnUpdate(frame, 0.016)
+		check(frame:IsShown(), "a rebuild is under way")
+		for i = 1, 4 do Kill(i, "Player-9-MID", "Mid Lord", "Player-9-M"..i, now - 700 + i * 100, true) end
+		debugprofilestop = realStop
+	end
+	clock = clock + 600
+	RunWork("outlaws")
+	enemyUnits.nameplate3 = { guid = "Player-9-MID", name = "Mid Lord", class = "ROGUE", level = 30 }
+	Fire("NAME_PLATE_UNIT_ADDED", "nameplate3")
+	check(warnings[#warnings] == "OUTLAW: Mid Lord", "an outlaw made during a rebuild is announced on appearing, got "..tostring(warnings[#warnings]))
+	enemyUnits.nameplate2, enemyUnits.nameplate3 = nil, nil
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate2")
+	Fire("NAME_PLATE_UNIT_REMOVED", "nameplate3")
+	-- What these checks added goes again: their records, then the outlaws they made (a death arriving starts the
+	-- rebuild), and the clock
+	for id, record in pairs(ns.db.records) do
+		local deathId = type(record.data) == "table" and record.data.deathId
+		if type(deathId) == "string" and (deathId == "by-mid" or deathId:find("^od%-Player%-9%-STREAM%-") or deathId:find("^od%-Player%-9%-QUIET%-")
+			or deathId:find("^od%-Player%-9%-MID%-")) then
+			ns.db.records[id] = nil
+		end
+	end
+	local trigger = ns.Store:InsertTest("death", "Bystander", { victim = "Player-9-BYEND", victimName = "Bystander", deathId = "by-end", zone = "Durotar" }, now)
+	RunWork("outlaws")
+	ns.db.records[trigger.id] = nil
+	check(not ns.Reputation:GetOutlaw("Player-9-QUIET") and not ns.Reputation:GetOutlaw("Player-9-MID") and not ns.Reputation:GetOutlaw("Player-9-STREAM"), "the outlaws made for these checks are gone again")
+	clock = alertClock
 	ns.Alerts.Warn = realWarn
 	ns.db.settings.detect.onlyWhenExposed = exposedBefore
 	enemyUnits.nameplate1 = nil

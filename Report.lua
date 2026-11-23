@@ -508,6 +508,7 @@ Report.MIN_APP = "0.2.46"
 
 -- Where a report is followed once the app has sent it
 local REPORTS_URL = "https://wanteddeadordead.com/me/reports"
+local RELOAD_DELAY = 0.5 -- seconds a new "Reload now" ignores clicks
 local REPORTS_NOTE = "You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."
 
 ---What happens to a report now, by whether the app is set up, new enough and running.
@@ -555,8 +556,10 @@ function private.ShowSent(id, title)
 	local reload = private.CanReloadToSend()
 	local text = private.SentText().."\n\n"
 	if reload then
-		text = text.."Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload.\n\n"
+		text = text.."Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).\n\n"
 	end
+	-- A second click on Send must not land on Reload now as the dialog opens: it ignores clicks for half a second
+	local shownAt = GetTime()
 	W:Dialog({
 		title = title,
 		text = text..paragraph,
@@ -565,7 +568,11 @@ function private.ShowSent(id, title)
 		-- Reload now is the Cancel button, the only one Enter and Escape never press (Enter in the copy box confirms)
 		confirmLabel = reload and "Not now" or "OK",
 		cancelLabel = reload and "Reload now" or nil,
-		onCancel = reload and function() ReloadUI() end or nil,
+		onCancel = reload and function()
+			if GetTime() - shownAt >= RELOAD_DELAY then
+				ReloadUI()
+			end
+		end or nil,
 	})
 end
 

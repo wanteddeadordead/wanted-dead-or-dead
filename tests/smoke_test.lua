@@ -14928,7 +14928,7 @@ end)()
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("reload me")
 	dialog.confirm:Click()
-	check(dialog.cancel:GetText() == "Reload now" and dialog.confirm:GetText() == "Not now" and OnScreen("Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload.")
+	check(dialog.cancel:GetText() == "Reload now" and dialog.confirm:GetText() == "Not now" and OnScreen("Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).")
 		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$") and reloads == 0, "app running: Reload now is offered with the address and the plain statement")
 	-- Enter in the address box, Escape and Not now never reload
 	dialog.input.onEnter()
@@ -14941,7 +14941,16 @@ end)()
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("reload me three")
 	dialog.confirm:Click()
+	-- A click as the dialog opens (the second click of a double click on Send) is ignored; a later one reloads
 	dialog.cancel:Click()
+	check(reloads == 0, "a click on Reload now within half a second of the dialog opening is ignored")
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload me four")
+	dialog.confirm:Click()
+	local realGetTime = GetTime
+	GetTime = function() return realGetTime() + 1 end
+	dialog.cancel:Click()
+	GetTime = realGetTime
 	check(reloads == 1, "Reload now reloads the UI")
 	for _, info in ipairs({ { running = "0.2.45", seen = GetServerTime() }, { running = "0.2.46", seen = 1 } }) do
 		WantedAppInfo = info
@@ -14973,7 +14982,7 @@ end)()
 	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
 	dialog.confirm:Click()
 	db.reports = keptQueue
-	queuedBefore = queuedBefore + 10
+	queuedBefore = queuedBefore + 11
 	-- The report window's note carries the line about following reports
 	ns.Report:Show()
 	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")

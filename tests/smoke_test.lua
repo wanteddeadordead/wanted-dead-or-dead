@@ -17921,14 +17921,14 @@ end)()
 	check(poker and poker._point[1] == "BOTTOMLEFT" and safety._point[1] == "BOTTOMLEFT" and poker._point[3] == safety._point[3] + safety._h,
 		"Poker sits at the foot of the menu, directly above Safety: "..tostring(poker and poker._point[3]).." over "..tostring(safety and safety._point[3]))
 end)()
--- What's new 1.29.0, the launch, takes the default sign-off: the maintainers' line under the note
+-- What's new 1.30.0, the newest, takes the default sign-off: the maintainers' line under the note
 ;(function()
 	local N = ns.WhatsNew
 	N:Show()
 	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
 	local text = body and body._text or ""
 	local note = ns.WHATS_NEW[1]
-	check(note.version == "1.29.0" and note.signed == nil and not text:find("aka", 1, true), "1.29.0's note uses the default sign-off")
+	check(note.version == "1.30.0" and note.signed == nil and not text:find("aka", 1, true), "1.30.0's note uses the default sign-off")
 	check(text:find("The maintainers of Wanted", 1, true), "with the maintainers' line under it")
 	_G.WantedWhatsNewFrame:Hide()
 end)()
@@ -19894,6 +19894,10 @@ print("wanted smoke: layers off checks pass")
 	ns.RACES_ON, ns.WARS_ON = true, false
 	check(#Tour:Stops("first") > #stops and #Tour:Stops("first") < #Tour.STOPS and Tour:Stops("first")[#Tour:Stops("first")].page == "guildwars", "races alone: the race stops, no war stop")
 	ns.RACES_ON, ns.WARS_ON = false, false
+	-- What's new: an update from 1.29.7 shows the new entry, once
+	local since = ns.WhatsNew:Since("1.29.7", "1.30.0")
+	check(#since == 1 and since[1].version == "1.30.0" and #since[1].lines == 4 and since[1].note:find("switched off", 1, true), "an update from 1.29.7 shows the 1.30.0 entry")
+	check(#ns.WhatsNew:Since("1.30.0", "1.30.0") == 0, "and not again")
 	-- Put back: both on for the rest
 	ns.RACES_ON, ns.WARS_ON = true, true
 	WantedAppCatchup = nil

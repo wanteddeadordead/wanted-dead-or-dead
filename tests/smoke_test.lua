@@ -19876,6 +19876,24 @@ print("wanted smoke: layers off checks pass")
 	ns:RunCommand("hud", "war")
 	ns.Print = realPrint
 	check(#printed == 2 and printed[1] == "Races and guild wars are switched off, so there are no HUDs. /wanted new says why.", "/wanted hud says so: "..tostring(printed[1]))
+	-- The tour: no race or war stop, no sample, and the last stop on the Dashboard
+	local Tour = ns.Tour
+	local stops = Tour:Stops("first")
+	local pages = {}
+	for _, stop in ipairs(stops) do pages[stop.page or "-"] = true end
+	check(#stops > 0 and #stops < #Tour.STOPS and not (pages.guildwars or pages.warzones or pages.war1 or pages.war2 or pages.war3 or pages.warmarks or pages.warguild),
+		"off: the tour has no Guild Wars, race or war stop ("..#stops.." of "..#Tour.STOPS..")")
+	check(stops[#stops].page == "home" and not stops[1].text:find("daily races", 1, true) and Tour.STOPS[1].text:find("daily races", 1, true), "off: the last stop is on the Dashboard, the first loses daily races")
+	local sampled = false
+	for _ = 1, #stops do
+		Tour:Start("first", _)
+		sampled = sampled or G:Sampling()
+	end
+	Tour:Close()
+	check(not sampled, "off: the sample war never runs")
+	ns.RACES_ON, ns.WARS_ON = true, false
+	check(#Tour:Stops("first") > #stops and #Tour:Stops("first") < #Tour.STOPS and Tour:Stops("first")[#Tour:Stops("first")].page == "guildwars", "races alone: the race stops, no war stop")
+	ns.RACES_ON, ns.WARS_ON = false, false
 	-- Put back: both on for the rest
 	ns.RACES_ON, ns.WARS_ON = true, true
 	WantedAppCatchup = nil

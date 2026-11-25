@@ -38,7 +38,7 @@ Tour.SETS.first = {
 	{ title = "The Board", page = "board", mark = "post",
 		text = "Bounties on enemy players. Post one on an enemy you've met, or hunt one someone else posted. Kill the target and the claim files itself; a witness confirms it; the poster pays by mail.\n\nYour bounties and your hunts have their own tabs here." },
 	{ title = "Find the fight", page = "hotspots",
-		text = "Hotspots: where enemy players are right now, from what you and other Wanted players have seen, busiest first. Each zone says which layer the fight is on when it's known." },
+		text = "Hotspots: where enemy players are right now, from what you and other Wanted players have seen, busiest first." },
 	{ title = "Raids", page = "raids",
 		text = "Form a world PvP raid, or join one. Everyone with Wanted on your faction sees it, and the leader invites you. A raid can be announced to a chat channel from here." },
 	{ title = "Progress", page = "challenges",
@@ -49,57 +49,101 @@ Tour.SETS.first = {
 	{ title = "Website & app", page = "web", mark = "yourpage",
 		text = "The game can't open a browser, so every address is a box to copy: click it, Ctrl+C, paste. The box bordered here is your own page on wanteddeadordead.com.\n\nThe desktop app puts your kills on the website and keeps your saved data safe. Without it you still see enemies and bounties, but your records don't count." },
 	{ title = "Settings", page = "settings", mark = "invite",
-		text = "Alerts, what the Nearby window shows, and what Wanted shares with other players.\n\nThe Wanted Battle.net group is a data link, not a chat: through its members your addon learns which layer the other side is fighting on. Its invite is the box bordered here." },
+		text = "Alerts, what the Nearby window shows, and what Wanted shares with other players.\n\nThe Wanted Battle.net group is a data link, not a chat: through its members the two sides' addons trade hidden game data. Its invite is the box bordered here." },
 	-- Guild Wars: where the site runs races its page is in the menu under the Dashboard; before then these stops show the Dashboard
-	{ title = "Tonight's races", page = "guildwars", mark = "racetonight",
+	{ title = "Tonight's races", feature = "races", page = "guildwars", mark = "racetonight",
 		text = "Every night there are three races, 45 minutes each, in zones picked the evening before. Each is open to everyone in its zone, Horde against Alliance. When the site runs races, Guild Wars is in the menu, just under the Dashboard.\n\n"
 			.."Tonight lists each race's start, its zone and both sides' influence. Tomorrow's zones are under them." },
-	{ title = "Influence", page = "guildwars", mark = "racecard",
+	{ title = "Influence", feature = "races", page = "guildwars", mark = "racecard",
 		text = "A race is won on influence. Kills on the other faction in the zone earn it, once a witness backs them, and so do minutes standing on the zone's three points. The middle point counts 20% more.\n\n"
 			.."Influence is all a race gives: nothing is captured or owned. The site counts the result. Hover a number to see where it comes from." },
-	{ title = "The race HUD", page = "guildwars",
+	{ title = "The race HUD", feature = "races", page = "guildwars",
 		text = "In a race's zone while it runs, a small frame at the top of the screen shows the time left, both sides' influence, the three points in their holders' colours, and your own kills and minutes.\n\n"
 			.."Your minutes count while you stand on a point and aren't mounted, stealthed or away. A line under the frame says when they don't." },
-	{ title = "Live numbers", page = "guildwars", mark = "racecard",
+	{ title = "Live numbers", feature = "races", page = "guildwars", mark = "racecard",
 		text = "During a race, the Wanted players of your side tell each other what they've counted, once a minute. Your side's influence then shows as live: a provisional count until the site's result.\n\n"
 			.."The other side's number is the site's, as of your last /reload." },
 	-- Guild wars: one sample war ("Sample" against "Sample", WarSample.lua) is walked through its life, the sample moving
 	-- to each stop's stage (sample = stage); the player's own guild's data shows instead where it has some for that screen.
 	-- Every sampled screen is tagged SAMPLE. hud = the sample war HUD shows too.
-	{ title = "Zones", page = "warzones", mark = "warzones", sample = "battle",
+	{ title = "Zones", feature = "wars", page = "warzones", mark = "warzones", sample = "battle",
 		text = "After a race, a guild can win a zone. Zones lists every zone of the campaign: who holds it, since when, whether it is protected, and what comes next there, a race or a war. A zone is protected for 3 days after a war.\n\n"
 			.."The next stops walk one war through its life. Every guild in the sample is called Sample; none of it is real." },
-	{ title = "Declare", page = "war1", mark = { "warbar", "warpanel-declare" }, sample = "declare",
+	{ title = "Declare", feature = "wars", page = "war1", mark = { "warbar", "warpanel-declare" }, sample = "declare",
 		text = "A war starts with a declaration. When a race ends, an officer of a guild on the side that didn't hold the zone has 15 minutes to declare, with a stake: a multiple of 50, from the zone's minimum to twice it.\n\n"
 			.."The checks list what the guild may still lack: 10% of its side's influence, 5 members with the app, a treasury that holds the stake." },
-	{ title = "The draw", page = "war1", mark = { "warbar", "warpanel-draw" }, sample = "draw",
+	{ title = "The draw", feature = "wars", page = "war1", mark = { "warbar", "warpanel-draw" }, sample = "draw",
 		text = "When declaring closes, the site draws one declaring guild. Each guild's chance follows its share of the influence and its stake. The seed is published, so anyone can check the draw on the site.\n\n"
 			.."A guild that isn't drawn gets its stake back." },
-	{ title = "The time", page = "war1", mark = { "warbar", "warpanel-time" }, sample = "time",
+	{ title = "The time", feature = "wars", page = "war1", mark = { "warbar", "warpanel-time" }, sample = "time",
 		text = "The holders pick the war's time: a half-hour start in your region's evening (6:00 to 11:30 PM), on one of the next two evenings. This is the holders' side. The attackers then accept or withdraw, and a withdrawal returns their stake.\n\n"
 			.."If the holders pick nothing within 12 hours of the draw, the war starts at 8 PM the next evening." },
-	{ title = "The roster", page = "war1", mark = { "warbar", "warpanel-roster" }, sample = "roster",
+	{ title = "The roster", feature = "wars", page = "war1", mark = { "warbar", "warpanel-roster" }, sample = "roster",
 		text = "Each guild picks up to 40 players. Only the roster takes and holds points. Players sign up first; the officers pick from the sign-ups, keep some on standby, and can invite allies from another guild of the same side.\n\n"
 			.."The roster locks when the battle starts." },
-	{ title = "The battle", page = "war1", mark = "warlanes", sample = "battle", hud = true, map = true,
+	{ title = "The battle", feature = "wars", page = "war1", mark = "warlanes", sample = "battle", hud = true, map = true,
 		text = "15 minutes of prep, then 30 of battle. The attackers take each lane's tower, then its inhibitor. One inhibitor down opens the keep, and taking the keep wins. If the defenders hold it for the 30 minutes, they win.\n\n"
 			.."Turnout counts each guild's players here; friends are on neither roster. The frame at the top of the screen (shown now) is the war HUD, and the world map shows the same war." },
-	{ title = "The result", page = "war1", mark = { "warbar", "warpanel-result" }, sample = "result",
+	{ title = "The result", feature = "wars", page = "war1", mark = { "warbar", "warpanel-result" }, sample = "result",
 		text = "The site counts the result. The winner holds the zone, protected for 3 days. If the attackers win, their stake comes back; if the defenders hold, the stake is theirs.\n\n"
 			.."The site pays War Marks to the roster players who were there." },
-	{ title = "War Marks", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, sample = "battle",
+	{ title = "War Marks", feature = "wars", page = "warmarks", mark = { "warpurse", "warmarkstoday", "wartax" }, sample = "battle",
 		text = "War Marks buy cosmetics, never power. You earn them from races, wars, bounties and weekly boards, up to 150 a day.\n\n"
 			.."The guild's leader sets a tax from 0 to 25%. It sends part of each earning to the guild's treasury first, and the whole earning still counts toward the 150. The treasury pays the stake a guild puts on a war." },
-	{ title = "Guild", page = "warguild", mark = { "warranks", "warofficers" }, sample = "battle",
+	{ title = "Guild", feature = "wars", page = "warguild", mark = { "warranks", "warofficers" }, sample = "battle",
 		text = "War officers declare, pick the time, accept or withdraw, and set the roster. By default they are the guild master and every rank that can invite. The guild master adds or leaves out people; everyone sees the list.\n\n"
 			.."To declare, a guild needs 10% of its side's influence in the race, 5 members with the app, and a treasury that holds the stake." },
-	{ title = "Bystanders and witnesses", page = "warzones", mark = "warzones", sample = "battle", zoneHud = true,
+	{ title = "Bystanders and witnesses", feature = "wars", page = "warzones", mark = "warzones", sample = "battle", zoneHud = true,
 		text = "Anyone in a campaign zone sees the zone HUD (shown now), whatever their guild; while a war is on there, the war HUD takes its place. Wanted also witnesses the war points for the site: it reports the players it sees there, even if your guild isn't fighting.\n\n"
 			.."The site counts a roster player in full only when another computer saw them at the point, so witnesses keep the count honest." },
-	{ title = "That's the tour", page = "guildwars",
+	{ title = "That's the tour", feature = "either", page = "guildwars",
 		text = "That's the tour. /wanted tour brings it back. The menu has more: Poker, your guild's Kill on Sight list, your PvP rank and gear. Safety is at the foot of the menu." },
 }
 Tour.STOPS = Tour.SETS.first
+
+---The stops of a set that apply now: a stop with feature = "races" or "wars" is left out while that feature is off (Core:
+---RACES_ON, WARS_ON); feature = "either" stays, on the Dashboard instead of Guild Wars while both are off; and the first
+---stop's "daily races" goes with the races. A set with no such stop is returned as it is.
+---@param name string
+---@return table? stops
+function Tour:Stops(name)
+	local set = Tour.SETS[name]
+	if not set then
+		return nil
+	end
+	local races, wars = Wanted.RACES_ON, Wanted.WARS_ON
+	if races and wars then
+		return set
+	end
+	local key = (races and "r" or "-")..(wars and "w" or "-")
+	private.filtered = private.filtered or {}
+	local cached = private.filtered[name]
+	if cached and cached.key == key and cached.set == set then
+		return cached.stops
+	end
+	local stops = { label = set.label }
+	for _, stop in ipairs(set) do
+		local feature = stop.feature
+		if feature == nil or (feature == "races" and races) or (feature == "wars" and wars) then
+			tinsert(stops, stop)
+		elseif feature == "either" then
+			local copy = {}
+			for k, v in pairs(stop) do copy[k] = v end
+			if not (races or wars) then
+				copy.page = "home"
+			end
+			tinsert(stops, copy)
+		end
+	end
+	if not races and stops[1] and stops[1].text then
+		local copy = {}
+		for k, v in pairs(stops[1]) do copy[k] = v end
+		copy.text = gsub(copy.text, ", daily races", "")
+		stops[1] = copy
+	end
+	private.filtered[name] = { key = key, set = set, stops = stops }
+	return stops
+end
 
 ---Registers a set of stops under a name (/wanted tour <name>; Tour:Start(name)).
 ---@param name string
@@ -148,7 +192,7 @@ function Tour:Start(name, page)
 	if Wanted:InCombat() then
 		return
 	end
-	local stops, state = Tour.SETS[name], private.State(name)
+	local stops, state = Tour:Stops(name), private.State(name)
 	page = tonumber(page) or state.page or 1
 	page = max(1, min(#stops, page))
 	local f = private.frame or private.Create()
@@ -238,7 +282,7 @@ end
 
 ---Shows a page: the window's page behind, the marks bordered, the text and the buttons.
 function private.Go(page)
-	local f, stops = private.frame, Tour.SETS[private.set]
+	local f, stops = private.frame, Tour:Stops(private.set)
 	local stop = stops[page]
 	private.page = page
 	private.State(private.set).page = page
@@ -266,7 +310,7 @@ end
 
 ---Next waits for a stop's condition (stop.wait), saying so on the button, and looks again every WAIT_SECONDS.
 function private.Wait(stop)
-	local f, stops = private.frame, Tour.SETS[private.set]
+	local f, stops = private.frame, Tour:Stops(private.set)
 	if private.waitTicker then
 		private.waitTicker:Cancel()
 		private.waitTicker = nil
@@ -372,7 +416,7 @@ function private.Create()
 	f.skip = W:Button(f, "Skip the tour", "chip", 110, 24, function() Tour:Close(true) end)
 	f.skip:SetPoint("BOTTOMLEFT", PAD, 16)
 	f.next = W:Button(f, "Next", "primary", 150, 26, function()
-		if private.page >= #Tour.SETS[private.set] then
+		if private.page >= #Tour:Stops(private.set) then
 			Tour:Close(true)
 		else
 			private.Go(private.page + 1)

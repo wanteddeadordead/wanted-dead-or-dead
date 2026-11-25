@@ -1185,13 +1185,8 @@ function GuildWars:Sight()
 		or type(mark) ~= "string" or not strmatch(mark, "^%w+$") or type(me) ~= "string" or secret(me) then
 		return
 	end
-	local layer = Wanted.Shard and Wanted.Shard:Current()
-	layer = type(layer) == "string" and strmatch(layer, "^[%w%-]+$") and layer or "-"
-	-- Only on the war's layer, once the site has fixed it
-	local warLayer = type(war.battle) == "table" and war.battle.layer or nil
-	if type(warLayer) == "string" and layer ~= "-" and layer ~= warLayer then
-		return
-	end
+	-- No layer in the lines since the game scrambled creature layers (2026-11-20): always "-", whatever the war says
+	local layer = "-"
 	GuildWars:LookActive()
 	-- Both rosters counted too: the site takes off the roster members it counted at the points
 	local counts, seen, active = { Horde = 0, Alliance = 0 }, {}, private.active or {}

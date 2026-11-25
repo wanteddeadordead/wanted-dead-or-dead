@@ -19431,16 +19431,13 @@ end
 	check(bpresence[1] and bpresence[1]:find(" hb-mid-a-tower ", 1, true), "a bystander's presence on the war's point: "..tostring(bpresence[1]))
 	C_Log, ns.Presence.Blocked = realLogB, realBlockedB
 	AtStep(function(war) war.state, war.start, war.answer = "battle", clock - 300, "accept" war.roster = { { guid = ME, name = "Test Player", place = 1 } } end)
-	-- Only on the war's layer once it's fixed
+	-- No layer gate: a war an old server gives a layer, and a client that reads another, still get census and witness lines, written with "-"
 	local realLayer = ns.Shard.Current
 	G:War(1).battle.layer = "1-1424-3"
 	ns.Shard.Current = function() return "1-1424-9" end
 	sights = {}
 	ns.GuildWars:Sight()
-	check(#sights == 0, "another layer: no census or witness")
-	ns.Shard.Current = function() return "1-1424-3" end
-	ns.GuildWars:Sight()
-	check(sights[1] and sights[1]:sub(-9) == " 1424-3" or (sights[1] and sights[1]:find(" 1%-1424%-3$")), "the war's layer: written with it")
+	check(sights[1] and sights[1]:sub(-2) == " -" and sights[2] and sights[2]:find(" witness ", 1, true), "an old server's war layer: census and witness lines are still written, with -")
 	ns.Shard.Current, G:War(1).battle.layer = realLayer, nil
 	clock = savedClock
 	GetUnitSpeed, UnitAffectingCombat, UnitIsAFK = realSpeed, realCombat, realAFK

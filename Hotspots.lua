@@ -348,7 +348,7 @@ function private.PassesRisingFilters(group, detect)
 	end
 	if detect.risingNearOnly == true and not IsInInstance() then
 		local own = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
-		if own then
+		if own and Wanted.ZoneLinks:Known(own) then -- on a boat the map is a continent: unknown, so no filtering
 			return Wanted.ZoneLinks:Near(group.mapId, own) or (private.MapName(own) or "?") == group.zone
 		end
 	end

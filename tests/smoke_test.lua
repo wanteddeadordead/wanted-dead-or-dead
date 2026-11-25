@@ -1936,7 +1936,9 @@ ownMap = 1429 -- Elwynn Forest
 check(Warned("Elwynn Forest", 1429, "NEARA"), "near-only: your own zone warns")
 check(Warned("Westfall", 1436, "NEARB"), "near-only: a neighbouring zone warns")
 check(not Warned("The Barrens", 1413, "NEARC"), "near-only: a far zone does not warn")
-check(not Warned("Riverglades", 2548, "NEARD"), "near-only: a zone missing from the table does not warn")
+check(not Warned("Nowhere", 9999, "NEARD"), "near-only: a zone missing from the table does not warn")
+ownMap = 1414 -- a continent map, as on a boat
+check(Warned("Duskwood", 1431, "NEARG"), "near-only: a continent map is an unknown own zone and warns")
 ownMap = nil
 check(Warned("Tanaris", 1446, "NEARE"), "near-only: an unknown own zone warns as if off")
 ns.db.settings.detect.risingNearOnly = false

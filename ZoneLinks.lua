@@ -77,6 +77,13 @@ function ZoneLinks:IsCity(mapId, name)
 	return (mapId and ZoneLinks.CITY_MAPS[mapId]) or (name and ZoneLinks.CITY_NAMES[name]) or false
 end
 
+---Whether a map is one the table knows (a zone or city with borders). A continent, a boat or an instance is not.
+---@param mapId number?
+---@return boolean
+function ZoneLinks:Known(mapId)
+	return mapId ~= nil and (links[mapId] ~= nil or ZoneLinks.CITY_MAPS[mapId] == true)
+end
+
 ---Whether a zone is the player's own or touches it. A zone not in the table is not near.
 ---@param mapId number? the zone being asked about
 ---@param ownMapId number? where the player is

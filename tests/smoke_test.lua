@@ -19839,6 +19839,43 @@ print("wanted smoke: layers off checks pass")
 	end
 	RunFrames()
 	check(#R:Tonight() == 0 and Same(db.presence, before[5]), "and changes nothing")
+	-- The window: a remembered or asked-for Guild Wars page opens the Dashboard; the map button and Settings leave the rows out
+	db.settings.lastPage = "guildwars"
+	ns.UI:Show()
+	check(ns.UI:IsShown("home") and db.settings.lastPage == "home", "a window remembered on Guild Wars opens on the Dashboard: "..tostring(db.settings.lastPage))
+	ns.UI:Show("guildwars")
+	check(ns.UI:IsShown("home"), "/wanted show guildwars opens the Dashboard")
+	ns.UI:GetFrame():Hide()
+	local keys = {}
+	for _, layer in ipairs(ns.MapButton:Layers()) do keys[layer.key] = true end
+	check(keys.sightings and keys.stats and not keys.war and not keys.races and not keys.minimap, "the map button has no Guild wars, Races or war minimap entry")
+	local UIprivate, settingsDef
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.UI.RegisterPage, i) if name == "private" then UIprivate = value break end if not name then break end end
+	for _, def in ipairs(UIprivate.pages) do if def.key == "settings" then settingsDef = def end end
+	local function SettingsTexts()
+		local texts, Row, Section = {}, ns.Widgets.Row, ns.Widgets.SectionLabel
+		ns.Widgets.Row = function(self, parent, width, label, ...) texts[tostring(label)] = true return Row(self, parent, width, label, ...) end
+		ns.Widgets.SectionLabel = function(self, parent, title, ...) texts[tostring(title)] = true return Section(self, parent, title, ...) end
+		settingsDef.build(NewMock(), 700, 900)
+		ns.Widgets.Row, ns.Widgets.SectionLabel = Row, Section
+		return texts
+	end
+	local labelsOff = SettingsTexts()
+	ns.RACES_ON, ns.WARS_ON = true, true
+	local labelsOn = SettingsTexts()
+	ns.RACES_ON, ns.WARS_ON = false, false
+	check(labelsOn["War HUD"] and labelsOn["Race HUD"] and labelsOn["Current stats on the map"], "control: with both on, Settings has the war and race rows")
+	check(not labelsOff["War HUD"] and not labelsOff["Race HUD"] and not labelsOff["Zone HUD"] and not labelsOff["Guild wars on the map"] and not labelsOff["Races on the map"]
+		and not labelsOff["Zone banner"] and not labelsOff["Guild war notifications"] and not labelsOff["HUD positions"], "off: Settings has no war or race rows")
+	check(labelsOff["Current stats on the map"], "off: Settings keeps Current stats on the map")
+	-- /wanted hud
+	local printed = {}
+	local realPrint = ns.Print
+	ns.Print = function(_, fmt, ...) printed[#printed + 1] = format(fmt, ...) end
+	ns:RunCommand("hud", "")
+	ns:RunCommand("hud", "war")
+	ns.Print = realPrint
+	check(#printed == 2 and printed[1] == "Races and guild wars are switched off, so there are no HUDs. /wanted new says why.", "/wanted hud says so: "..tostring(printed[1]))
 	-- Put back: both on for the rest
 	ns.RACES_ON, ns.WARS_ON = true, true
 	WantedAppCatchup = nil

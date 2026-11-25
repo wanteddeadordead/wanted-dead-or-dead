@@ -20,18 +20,26 @@ end
 ---The layers Wanted draws on the map: { key, label, get, set }. Their switches are the ones Settings shows.
 ---@return table[]
 function MapButton:Layers()
-	return {
+	local layers = {
 		{ key = "sightings", label = "Enemy sightings", get = function() return Wanted.MapPins:IsShown() end,
 			set = function(on) Wanted.MapPins:SetShown(on) end },
 		{ key = "stats", label = "Current stats", get = function() return Wanted.StatsMap:Shown() end,
 			set = function(on) Wanted.StatsMap:SetShown(on) end },
-		{ key = "war", label = "Guild wars", get = function() return Wanted.WarMap:Shown() end,
-			set = function(on) Wanted.WarMap:SetShown(on) end },
-		{ key = "races", label = "Races", get = function() return Wanted.WarMap:RacesShown() end,
-			set = function(on) Wanted.WarMap:SetRacesShown(on) end },
-		{ key = "minimap", label = "War and race points on the minimap", get = function() return Wanted.MinimapPins:Shown() end,
-			set = function(on) Wanted.MinimapPins:SetShown(on) end },
 	}
+	-- The war and race layers only while those features are on (Core: WARS_ON, RACES_ON)
+	if Wanted.WARS_ON then
+		tinsert(layers, { key = "war", label = "Guild wars", get = function() return Wanted.WarMap:Shown() end,
+			set = function(on) Wanted.WarMap:SetShown(on) end })
+	end
+	if Wanted.RACES_ON then
+		tinsert(layers, { key = "races", label = "Races", get = function() return Wanted.WarMap:RacesShown() end,
+			set = function(on) Wanted.WarMap:SetRacesShown(on) end })
+	end
+	if Wanted.WARS_ON or Wanted.RACES_ON then
+		tinsert(layers, { key = "minimap", label = "War and race points on the minimap", get = function() return Wanted.MinimapPins:Shown() end,
+			set = function(on) Wanted.MinimapPins:SetShown(on) end })
+	end
+	return layers
 end
 
 ---Whether any layer shows: the button is dimmed when none does.

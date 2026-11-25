@@ -933,7 +933,7 @@ end
 -- Commands
 -- ============================================================================
 
-Wanted:RegisterCommand("show", "Opens the window: /wanted show [guildwars|home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
+Wanted:RegisterCommand("show", "Opens the window: /wanted show [home|board|mine|hunts|hotspots|enemies|hunters|activity|challenges|web|settings].", function(args)
 	local key = strtrim(args or "")
 	UI:Show(key ~= "" and key or nil)
 end)

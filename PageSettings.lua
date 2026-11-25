@@ -421,33 +421,60 @@ function private.BuildSharing(column)
 	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
 	W:Explain(proofLink, "Disputed kill", format("Join the WoW: Forever [PvP] Discord, then post the screenshot in %s, in the post for that bounty. Click the link, then Ctrl+C.", Wanted.Proof.DISCORD_CHANNEL))
 
-	column:Section("Layers")
-	local Shard = function() return Wanted.Shard:Settings() end
-	private.Switch(column, Shard, "alerts", "Announce a big fight's layer", "When the fight in your zone is on a layer newly known, at most once in ten minutes, with Hop if you're not on it.")
-	private.Switch(column, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later.")
-	private.Switch(column, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.")
+	-- Layers are off while the game scrambles them (Shard), and races and guild wars while either is off (Core): their
+	-- rows are left out
+	if not Wanted.Shard.layersOff then
+		column:Section("Layers")
+		local Shard = function() return Wanted.Shard:Settings() end
+		private.Switch(column, Shard, "alerts", "Announce a big fight's layer", "When the fight in your zone is on a layer newly known, at most once in ten minutes, with Hop if you're not on it.")
+		private.Switch(column, Shard, "host", "Host layer hops", "Invite Wanted players of your side who ask to hop onto your copy of the zone, whether or not you lead anything. While you lead a group you host anyway: the group follows your layer. Never while dead, in a fight, in an instance, in a full group, or in a raid you can't invite to. Hoppers leave your group twenty seconds later.")
+		private.Switch(column, Shard, "accept", "Auto-accept my hops", "When you hop to the fight's layer, accept the invite from the player you asked by yourself. Off: the game's invite popup shows and you accept it.")
+	end
 
-	column:Section("Guild wars")
-	private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",
-		function() Wanted.WarHUD:Update() end)
-	private.Switch(column, Root, "zoneHud", "Zone HUD", "In a campaign zone: who holds it, how long it's protected and what comes next there. The war and race HUDs take its place when they show.",
-		function() Wanted.ZoneHUD:Update() end)
-	column:Row("Zone HUD size", private.SizeSlider(content, function() return Root().zoneHudScale end, function(scale) Wanted.ZoneHUD:SetScale(scale) end),
-		"The zone HUD's size. Drag the HUD to move it.")
-	private.Switch(column, Root, "raceHud", "Race HUD", "In a race's zone while it runs: the time left, each side's influence and the three points.",
-		function() Wanted.RacesHUD:Update() end)
-	private.resetHuds = W:Button(content, "Reset HUD positions", "secondary", 160, 24, function() Wanted.HudKit:ResetPositions() end)
-	column:Row("HUD positions", private.resetHuds, "Puts the zone, race and war HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
-	private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, and who holds each zone, on the world map and OpenMap's.",
-		function() Wanted.WarMap:Refresh() end)
-	private.Switch(column, Root, "raceMap", "Races on the map", "Tonight's race points with their times on the zones' maps, in the holders' colours while a race runs.",
-		function() Wanted.WarMap:Refresh() end)
-	private.Switch(column, Root, "minimapWar", "War and race points on the minimap", "The war's towers, inhibitors and keep, and tonight's race points, as small seals on the minimap while you are in their zone.",
-		function() Wanted.MinimapPins:Refresh() end)
+	local wars, races = Wanted.WARS_ON, Wanted.RACES_ON
+	if wars or races then
+		column:Section("Guild wars")
+	end
+	if wars then
+		private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",
+			function() Wanted.WarHUD:Update() end)
+	end
+	if wars or races then
+		private.Switch(column, Root, "zoneHud", "Zone HUD", "In a campaign zone: who holds it, how long it's protected and what comes next there. The war and race HUDs take its place when they show.",
+			function() Wanted.ZoneHUD:Update() end)
+		column:Row("Zone HUD size", private.SizeSlider(content, function() return Root().zoneHudScale end, function(scale) Wanted.ZoneHUD:SetScale(scale) end),
+			"The zone HUD's size. Drag the HUD to move it.")
+	end
+	if races then
+		private.Switch(column, Root, "raceHud", "Race HUD", "In a race's zone while it runs: the time left, each side's influence and the three points.",
+			function() Wanted.RacesHUD:Update() end)
+	end
+	if wars or races then
+		private.resetHuds = W:Button(content, "Reset HUD positions", "secondary", 160, 24, function() Wanted.HudKit:ResetPositions() end)
+		column:Row("HUD positions", private.resetHuds, "Puts the zone, race and war HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
+	end
+	if wars then
+		private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, and who holds each zone, on the world map and OpenMap's.",
+			function() Wanted.WarMap:Refresh() end)
+	end
+	if races then
+		private.Switch(column, Root, "raceMap", "Races on the map", "Tonight's race points with their times on the zones' maps, in the holders' colours while a race runs.",
+			function() Wanted.WarMap:Refresh() end)
+	end
+	if wars or races then
+		private.Switch(column, Root, "minimapWar", "War and race points on the minimap", "The war's towers, inhibitors and keep, and tonight's race points, as small seals on the minimap while you are in their zone.",
+			function() Wanted.MinimapPins:Refresh() end)
+	end
+	-- The stats map stays whatever the toggles say
+	if not (wars or races) then
+		column:Section("Map")
+	end
 	private.Switch(column, Root, "statsMap", "Current stats on the map", "Each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now.",
 		function() Wanted.WarMap:Refresh() end)
-	private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")
-	private.Switch(column, Root, "warToasts", "Guild war notifications", "The draw, the time set and the answer, the reminder an hour before, the war's start, the keep opening and the result.")
+	if wars then
+		private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")
+		private.Switch(column, Root, "warToasts", "Guild war notifications", "The draw, the time set and the answer, the reminder an hour before, the war's start, the keep opening and the result.")
+	end
 end
 
 

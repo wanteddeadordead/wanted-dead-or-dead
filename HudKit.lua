@@ -174,7 +174,9 @@ end
 
 Wanted:RegisterCommand("hud", "Shows or hides the HUDs: /wanted hud for all, /wanted hud zone, race or war for one.", function(args)
 	local key = strlower(strtrim(args or ""))
-	if key == "" then
+	if not (Wanted.RACES_ON or Wanted.WARS_ON) then
+		Wanted:Print("Races and guild wars are switched off, so there are no HUDs. /wanted new says why.")
+	elseif key == "" then
 		HudKit:ToggleAll()
 	elseif specs[key] then
 		local hinted = Wanted.db.settings.hudHint

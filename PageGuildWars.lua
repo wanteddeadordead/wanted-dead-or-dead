@@ -449,7 +449,8 @@ UI:RegisterPage("guildwars", {
 	tabs = { "guildwars", "warzones", "war1", "war2", "war3", "warmarks", "warguild" },
 	order = -2,
 	-- Where the site runs races or guild wars (the catch-up names them)
-	hidden = function() return not (Races:On() or Wanted.GuildWars.Page:On()) end,
+	-- (and only while the features are on: Core's RACES_ON and WARS_ON)
+	hidden = function() return not (Wanted.RACES_ON or Wanted.WARS_ON) or not (Races:On() or Wanted.GuildWars.Page:On()) end,
 	-- LIVE while a race is run
 	badge = function()
 		if Races:Live() then

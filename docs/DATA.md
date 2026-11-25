@@ -299,6 +299,11 @@ channel's path to a player of our realm, which merging drops. The catch-up's `li
 (from the app) the same way. Realms are compared by number when both sides have one, by name only when both are known,
 and never match when either is unknown.
 
+Layers (1.29.8): the game has scrambled creature GUIDs per session since 2026-11-20, so no layer is read, shown or
+sent. Records, sightings, presence samples, race numbers, war samples and hellos carry no `l` or `lm` (what older
+clients send is ignored), the catch-up's `layers` is ignored, no "Big fight" alert is made and every hop ask is
+refused with `off`. `Shard.layersOff` turns it back on; nothing is saved either way.
+
 `WantedDB.appNudgedAt` (server time, or nil) is when the addon last said, minutes into a session, that no Wanted app
 was detected; the line comes once a day (1.23.5, PageWeb).
 

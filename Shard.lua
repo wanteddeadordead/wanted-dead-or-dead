@@ -99,6 +99,11 @@ local UNIT_EVENTS = {
 	PLAYER_SOFT_FRIEND_CHANGED = "softfriend",
 	PLAYER_SOFT_INTERACT_CHANGED = "softinteract",
 }
+-- Layers off (2026-11-20): the game scrambles creature GUIDs per session, so a layer read from one means nothing. While
+-- Shard.layersOff is true no layer is read, shown, sent or acted on, no fight is announced and no hop is made. The code
+-- stays for the day the game gives a stable layer back (the tests turn the switch off to keep it covered).
+Shard.layersOff = true
+local OFF_TEXT = "Layers can't be read since the game's 2026-11-20 change, so there are no hops."
 -- GUID kinds that carry a layer. Players' don't (Player-<realm>-<id>); pets are left out, a player's own summons.
 local GUID_KINDS = { Creature = true, Vehicle = true }
 local MAP_ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3
@@ -122,12 +127,15 @@ function Shard:OnLoad()
 end
 
 function Shard:OnEnable()
-	for event in pairs(UNIT_EVENTS) do
-		private.Register(event)
-	end
-	for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "PARTY_INVITE_REQUEST", "GROUP_ROSTER_UPDATE",
-		"SHARD_TRANSFER_IMMINENT", "SHARD_TRANSFER", "SHARD_TRANSFER_CANCELLED" }) do
-		private.Register(event)
+	-- With layers off nothing is read from the creatures around, so none of their events are listened to
+	if not Shard.layersOff then
+		for event in pairs(UNIT_EVENTS) do
+			private.Register(event)
+		end
+		for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "PARTY_INVITE_REQUEST", "GROUP_ROSTER_UPDATE",
+			"SHARD_TRANSFER_IMMINENT", "SHARD_TRANSFER", "SHARD_TRANSFER_CANCELLED" }) do
+			private.Register(event)
+		end
 	end
 	private.frame:SetScript("OnEvent", Wanted:Timed("Shard events", private.OnEvent))
 	-- The deaths our side hears of (both sides' kills and deaths reach the channel) say where the fight is, by layer
@@ -223,7 +231,7 @@ end
 ---Counts the layer of the creature on a unit, once per creature. One counted before still confirms the layer is
 ---current: standing among the same guards for a long while keeps it known.
 function private.Look(unit)
-	if not unit then
+	if not unit or Shard.layersOff then
 		return
 	end
 	local guid = UnitGUID(unit)
@@ -289,6 +297,9 @@ end
 ---Our layer of the zone we're in ("server-map-zone instance"), or nil while it isn't known.
 ---@return string?
 function Shard:Current()
+	if Shard.layersOff then
+		return nil
+	end
 	local votes = private.votes
 	if not votes[1] or GetTime() - (private.seenAt or 0) > STALE_SECONDS then
 		return nil
@@ -377,7 +388,7 @@ end
 ---@param key any their layer
 ---@param mapId any the zone map they were on
 function Shard:Note(name, key, mapId)
-	if type(name) ~= "string" then
+	if type(name) ~= "string" or Shard.layersOff then
 		return
 	end
 	if not private.IsKey(key) or type(mapId) ~= "number" then
@@ -434,7 +445,7 @@ end
 ---@param list table?
 function Shard:TakeLayers(list)
 	wipe(private.site)
-	if type(list) ~= "table" then
+	if type(list) ~= "table" or Shard.layersOff then
 		return
 	end
 	for zone, entry in pairs(list) do
@@ -448,6 +459,9 @@ end
 ---A kill or death record, ours or heard: one with a layer and a zone, from the last ten minutes, is counted toward
 ---that zone's fight layer, each death once (a kill and a death record can tell of the same one).
 function private.OnDeath(record)
+	if Shard.layersOff then
+		return
+	end
 	local data = record.data
 	local now = GetServerTime()
 	if type(data) ~= "table" or not private.IsKey(data.l) or type(data.zone) ~= "string" or type(record.t) ~= "number"
@@ -536,6 +550,9 @@ end
 ---@return table[]
 function Shard:FarSummary()
 	local list = {}
+	if Shard.layersOff then
+		return list
+	end
 	local now, counts = GetTime(), {}
 	local function Add(mapId, key)
 		counts[mapId] = counts[mapId] or {}
@@ -574,7 +591,7 @@ end
 ---@param sender string who it came from (a Battle.net game account, or the channel peer passing it on)
 ---@param list any
 function Shard:NoteFar(sender, list)
-	if type(sender) ~= "string" or type(list) ~= "table" then
+	if type(sender) ~= "string" or type(list) ~= "table" or Shard.layersOff then
 		return
 	end
 	local kept, count = {}, 0
@@ -624,7 +641,7 @@ end
 ---@return string? key
 ---@return string? kind
 function Shard:Target(zone, mapId)
-	if type(zone) ~= "string" then
+	if type(zone) ~= "string" or Shard.layersOff then
 		return nil, nil
 	end
 	local site = private.site[zone]
@@ -717,6 +734,9 @@ end
 ---Why we can't hop now, or nil.
 ---@return string?
 function Shard:HopWhyNot()
+	if Shard.layersOff then
+		return OFF_TEXT
+	end
 	if private.hop then
 		return format("You're already hopping to %s.", Shard:LayerText(private.hop.target))
 	end
@@ -1014,6 +1034,9 @@ end
 ---@return string? text
 ---@return string? button "Hop" or "Stay"
 function Shard:Line(zone, mapId)
+	if Shard.layersOff then
+		return nil, nil
+	end
 	if private.hop then
 		return Shard:HopText(), Shard:Holding() and "Stay" or nil
 	end
@@ -1052,7 +1075,7 @@ end
 
 ---Why we can't invite a player onto our layer now, or nil.
 function private.HostWhyNot(name)
-	if not Shard:Hosting() then
+	if Shard.layersOff or not Shard:Hosting() then
 		return "off"
 	end
 	if Wanted:InInstance() then
@@ -1099,6 +1122,10 @@ Wanted:RegisterCommand("hop", "Hops to the fight's layer in your zone (/wanted h
 end)
 
 Wanted:RegisterCommand("shard", "Says which layer of your zone you're on and which the fight is on.", function()
+	if Shard.layersOff then
+		Wanted:Print("Layers can't be read since the game's 2026-11-20 change.")
+		return
+	end
 	local mine = Shard:Current()
 	Wanted:Print("Your layer: %s%s.", Shard:Short(mine), mine and (Shard:IsFresh() and " (confirmed in the last minute)" or "") or " (look at a creature nearby to read it)")
 	local text = Shard:TargetText(Shard:Zone())

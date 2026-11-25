@@ -521,6 +521,10 @@ for line in io.lines(ADDON.."Poker/WantedDeadOrDead_Poker.toc") do
 	end
 end
 Fire("ADDON_LOADED", "WantedDeadOrDead_Poker")
+-- Layers are off in the release (Shard.layersOff, since the game's 2026-11-20 change). The layer suites below test the
+-- layer code itself, so they run with it on; "layers off" turns it off again for its own checks.
+assert(ns.Shard.layersOff == true, "layers are off in the release")
+ns.Shard.layersOff = false
 Fire("PLAYER_LOGIN")
 assert(not WorkFrame("outlaws"):IsShown(), "CHECK FAILED: the first list of outlaws is worked out at login, not over the frames after it")
 RunTimers()
@@ -19664,6 +19668,68 @@ end)()
 	ns.UI:GetFrame():Hide()
 end)()
 print("wanted smoke: guild wars checks pass")
+-- Layers off (the game's 2026-11-20 change scrambles creature GUIDs per session): no layer is read, shown, sent or acted on
+;(function()
+	local Shard, Store = ns.Shard, ns.Store
+	local shardPrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(Shard.FarSummary, i) if name == "private" then shardPrivate = value break end if not name then break end end
+	local real = { C_Map = C_Map, GetZoneText = GetZoneText, Warn = ns.Alerts.Warn, off = Shard.layersOff }
+	C_Map = { GetBestMapForUnit = function() return 1424 end, GetPlayerMapPosition = function() return { x = 0.523, y = 0.309 } end,
+		GetMapInfo = function(id) if id == 1415 then return { mapType = 2 } end return { mapType = 3, parentMapID = 1415 } end }
+	GetZoneText = function() return "Hillsbrad Foothills" end
+	local warned = {}
+	ns.Alerts.Warn = function(_, title) warned[#warned + 1] = title end
+	Shard.layersOff = true
+	Fire("ZONE_CHANGED_NEW_AREA")
+	for i = 1, 6 do
+		enemyUnits.mouseover = { guid = format("Creature-0-30181-0-13834424-%d-1BAF502CAC", 1797 + i), npc = true }
+		Fire("UPDATE_MOUSEOVER_UNIT", "mouseover")
+		enemyUnits.mouseover = nil
+	end
+	check(Shard:Current() == nil and not Shard:IsFresh(), "layers off: no layer is read from creatures")
+	local r = Store:NewRecord("kill", { killer = "Player-1-ME", killerName = Store:GetOrigin(), victim = "Player-9-LO", victimName = "Layer Off", deathId = "layeroff-1", zone = "Hillsbrad Foothills", honor = true })
+	check(r.data.l == nil, "a kill carries no l")
+	r = Store:NewRecord("spotted", { target = "Player-9-LO", zone = "Hillsbrad Foothills" })
+	check(r.data.l == nil, "nor does a spotted record")
+	ns.db.presence = {}
+	clock = clock + 30
+	ns.Presence:Count("hb-r2", clock)
+	local key = next(ns.db.presence)
+	check(key and ns.db.presence[key].l == nil, "nor a presence sample")
+	ns.db.presence = {}
+	local syncPrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Sync.GetInfo, i) if name == "private" then syncPrivate = value break end if not name then break end end
+	local hello = syncPrivate.HelloFields()
+	check(hello.l == nil and hello.lm == nil, "the channel hello carries neither l nor lm")
+	clock = clock + 700
+	ClearSent()
+	ns.Sync:Greet("Layer Off Greeted", "Elsewhere")
+	hello = Sent("WHISPER", "Layer Off Greeted")[1]
+	check(hello and hello.tbl.l == nil and hello.tbl.lm == nil, "the link hello carries neither")
+	-- Peers' layers and the site's are ignored, so a burst of deaths with l (1.29.7 peers) is no big fight
+	Shard:Settings().alerts = true
+	Shard:Note("Old Peer", "4615-1-497", 1424)
+	Shard:NoteFar("bnet:9", { { m = 1424, l = "4615-1-902", n = 3 } })
+	Shard:TakeLayers({ ["Hillsbrad Foothills"] = { active = "4615-1-541", since = clock } })
+	for i = 1, 12 do
+		shardPrivate.OnDeath({ id = "lo-"..i, t = GetServerTime(), data = { l = "4615-1-541", zone = "Hillsbrad Foothills", deathId = "lo-"..i } })
+	end
+	check(#warned == 0 and Shard:Target("Hillsbrad Foothills") == nil and Shard:Of("Old Peer") == nil and #Shard:FarSummary() == 0, "Big fight never fires, no target, no peer layers, no summary")
+	check(Shard:Line("Hillsbrad Foothills") == nil, "no layer line and no Hop button")
+	check(Shard:Hop() == "Layers can't be read since the game's 2026-11-20 change, so there are no hops.", "Hop says why not: "..tostring(Shard:Hop()))
+	-- A hop ask is refused with off, hosting or not
+	Shard:Settings().host = true
+	ClearSent()
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("O", { a = 1 }), "WHISPER", "Hopper Off")
+	local answer = Sent("WHISPER", "Hopper Off")[1]
+	check(answer and answer.tag == "O" and answer.tbl.r == "off", "a hop ask is refused with off")
+	Shard:Settings().host = false
+	-- Put back
+	Shard.layersOff = real.off
+	C_Map, GetZoneText, ns.Alerts.Warn = real.C_Map, real.GetZoneText, real.Warn
+	Fire("ZONE_CHANGED_NEW_AREA")
+end)()
+print("wanted smoke: layers off checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

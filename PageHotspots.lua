@@ -153,6 +153,8 @@ function private.Refresh()
 	local Shard = Wanted.Shard
 	local text, button = Shard:Line(Shard:Zone())
 	private.layer:SetText(text and Theme:Colorize(text, C.amber) or Theme:Colorize("Fight layer: unknown", C.faint))
+	-- No layer line at all while layers can't be read (Shard)
+	private.layer:SetShown(not Shard.layersOff)
 	private.hop:SetText(button or "Hop")
 	private.hop:SetShown(button ~= nil)
 	private.list:SetItems(groups, "No enemies seen in the last hour.", "Zones fill in as you and other Wanted users spot enemy players.")

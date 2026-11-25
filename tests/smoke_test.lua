@@ -2690,7 +2690,6 @@ do
 	check(ns:RealmID() == 6932, "the realm number is the player GUID's when GetRealmID() is 0: "..tostring(ns:RealmID()))
 	check(ns:RealmName() == nil, "no name is known anywhere")
 	-- 3: nothing known but the number
-	check(ns:RealmText() == "Realm 6932", "the player sees Realm 6932, got "..ns:RealmText())
 	ClearSent()
 	clock = clock + 700
 	ns.Sync:Greet("Realm Hello", "Elsewhere")
@@ -2699,7 +2698,7 @@ do
 	-- 2: a saved name is kept for the same number, and never carried to another
 	ns.db.realm = { id = 6932, name = "Doomhowl" }
 	check(corePrivate.LoginRuleset() == "pvp" and ns.db.realm.id == 6932 and ns.db.realm.name == "Doomhowl", "a blank login keeps the name saved for the same number")
-	check(ns:RealmName() == "Doomhowl" and ns:RealmText() == "Doomhowl", "and it is the realm's name")
+	check(ns:RealmName() == "Doomhowl", "and it is the realm's name")
 	ClearSent()
 	clock = clock + 700
 	ns.Sync:Greet("Realm Hello Two", "Elsewhere")

@@ -941,13 +941,6 @@ function Wanted:RealmName()
 	return nil
 end
 
----What a player is shown for our realm: its name, else "Realm 6932", else "your realm".
----@return string
-function Wanted:RealmText()
-	local id = Wanted:RealmID()
-	return Wanted:RealmName() or (id and "Realm "..id) or "your realm"
-end
-
 ---The ruleset of the character logging in, noting its realm for the app (the server learns realm names from it).
 ---The saved name is kept while the number is the same one, so a blank answer never wipes it.
 function private.LoginRuleset()

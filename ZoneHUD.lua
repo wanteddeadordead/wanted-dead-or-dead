@@ -18,6 +18,9 @@ local WIDTH, HEIGHT = 280, 112
 local MINUTE = 60
 
 function ZoneHUD:OnEnable()
+	if not (Wanted.WARS_ON or Wanted.RACES_ON) then
+		return
+	end
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")

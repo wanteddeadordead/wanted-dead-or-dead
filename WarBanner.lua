@@ -13,6 +13,9 @@ local HOLD, FADE = 6, 1.5
 local COLORS = { Horde = { 0.82, 0.24, 0.2 }, Alliance = { 0.24, 0.48, 0.92 } }
 
 function WarBanner:OnEnable()
+	if not Wanted.WARS_ON then
+		return
+	end
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")

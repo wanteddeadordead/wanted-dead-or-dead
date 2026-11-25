@@ -34,6 +34,11 @@ Wanted.BETA_CLOSED_AT = 1792800000
 -- The first release for the live world. One before it still holds the beta's characters, chains, keys and bounties
 -- (a player who hasn't updated): in the live world nothing it sends is taken in (Wanted:IsBetaRelease).
 Wanted.FIRST_LIVE_VERSION = "1.29.0"
+-- Feature toggles, not settings. Since 2026-11-20 the game scrambles creature layers, so influence races and guild wars
+-- can't be judged fairly: both are switched off, whatever the site sends. Off means nothing of the feature runs, shows,
+-- writes a line for the app or answers a sync message; what is saved for them is kept as it is.
+Wanted.RACES_ON = false
+Wanted.WARS_ON = false
 
 local DEFAULTS = {
 	version = Wanted.DB_VERSION,

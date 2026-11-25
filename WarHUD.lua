@@ -22,6 +22,9 @@ local SIDE = { Horde = "horde", Alliance = "alliance" }
 local RED = { 0.9, 0.3, 0.25 }
 
 function WarHUD:OnEnable()
+	if not Wanted.WARS_ON then
+		return
+	end
 	C_Timer.NewTicker(1, Wanted:Timed("War HUD", function() WarHUD:Update() end))
 	GuildWars:OnChange(function() WarHUD:Update() end)
 end

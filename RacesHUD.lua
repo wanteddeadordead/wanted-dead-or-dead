@@ -22,6 +22,9 @@ local MEDIA = "Interface\\AddOns\\"..Wanted.FOLDER.."\\Media\\"
 local SIDE_COLORS = { Horde = { 0.82, 0.24, 0.2 }, Alliance = { 0.24, 0.48, 0.92 } }
 
 function RacesHUD:OnEnable()
+	if not Wanted.RACES_ON then
+		return
+	end
 	C_Timer.NewTicker(UPDATE_SECONDS, Wanted:Timed("Races HUD", function() RacesHUD:Update() end))
 	Races:OnChange(function() RacesHUD:Update() end)
 end

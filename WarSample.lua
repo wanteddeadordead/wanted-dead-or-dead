@@ -119,6 +119,9 @@ end
 ---Turns the sample on at a stage of the war's life ("battle" when left out), or moves it to that stage.
 ---@param stage string?
 function GuildWars:StartSample(stage)
+	if not Wanted.WARS_ON then
+		return
+	end
 	stage = stage or "battle"
 	if private.view and private.stage == stage then
 		return

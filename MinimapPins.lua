@@ -16,6 +16,9 @@ local INDOOR = { [0] = 300, 240, 180, 120, 80, 50 }
 local SCALE = 0.5 -- a seal's size on the minimap, against the world map's
 
 function MinimapPins:OnEnable()
+	if not (Wanted.WARS_ON or Wanted.RACES_ON) then
+		return
+	end
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")

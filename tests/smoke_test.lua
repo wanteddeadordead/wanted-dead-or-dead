@@ -525,6 +525,10 @@ Fire("ADDON_LOADED", "WantedDeadOrDead_Poker")
 -- layer code itself, so they run with it on; "layers off" turns it off again for its own checks.
 assert(ns.Shard.layersOff == true, "layers are off in the release")
 ns.Shard.layersOff = false
+-- Races and guild wars are off in the release (Wanted.RACES_ON, WARS_ON: Core.lua). Their suites test the code for the day
+-- they come back, so they run with both on; "races and guild wars off" turns them off for its own checks.
+assert(ns.RACES_ON == false and ns.WARS_ON == false, "races and guild wars are off in the release")
+ns.RACES_ON, ns.WARS_ON = true, true
 Fire("PLAYER_LOGIN")
 assert(not WorkFrame("outlaws"):IsShown(), "CHECK FAILED: the first list of outlaws is worked out at login, not over the frames after it")
 RunTimers()
@@ -19738,6 +19742,113 @@ print("wanted smoke: guild wars checks pass")
 	Fire("ZONE_CHANGED_NEW_AREA")
 end)()
 print("wanted smoke: layers off checks pass")
+-- Races and guild wars off (Wanted.RACES_ON, WARS_ON): nothing of either runs, shows, writes a line for the app or answers
+-- a sync message, and what is saved for them is kept as it is
+;(function()
+	local G, R = ns.GuildWars, ns.Races
+	local function Same(a, b)
+		if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+		for k, v in pairs(a) do if not Same(v, b[k]) then return false end end
+		for k in pairs(b) do if a[k] == nil then return false end end
+		return true
+	end
+	local function Copy(v)
+		if type(v) ~= "table" then return v end
+		local out = {}
+		for k, x in pairs(v) do out[k] = Copy(x) end
+		return out
+	end
+	local real = { logged = C_Log, ticker = C_Timer.NewTicker, timed = ns.Timed, plugin = ns.Sync.RegisterPlugin, frame = CreateFrame,
+		GetCanvas = WorldMapFrame.GetCanvas, GetMapID = WorldMapFrame.GetMapID, IsShown = WorldMapFrame.IsShown, statsMap = ns.db.settings.statsMap }
+	-- The modules' OnEnable with the toggles as given: the tickers (by name), event registrations and sync plugins they make
+	local function Enabled(races, wars)
+		ns.RACES_ON, ns.WARS_ON = races, wars
+		local names, events, plugins = {}, {}, {}
+		ns.Timed = function(self, name, func) names[#names + 1] = name return real.timed(self, name, func) end
+		C_Timer.NewTicker = function() return NewMock() end
+		ns.Sync.RegisterPlugin = function(_, tag) plugins[#plugins + 1] = tag end
+		_G.CreateFrame = function(...)
+			local f = real.frame(...)
+			f.RegisterEvent = function(_, event) events[#events + 1] = event end
+			return f
+		end
+		for _, name in ipairs({ "Races", "GuildWars", "WarLive", "WarHUD", "WarBanner", "WarAlerts", "RacesHUD", "ZoneHUD", "MinimapPins" }) do
+			ns[name]:OnEnable()
+		end
+		ns.Timed, C_Timer.NewTicker, ns.Sync.RegisterPlugin, _G.CreateFrame = real.timed, real.ticker, real.plugin, real.frame
+		return names, events, plugins
+	end
+	local names, events, plugins = Enabled(true, true)
+	check(#names >= 8 and #events >= 1 and #plugins == 2, "with both on, the modules make their tickers, events and plugins ("..#names.." tickers)")
+	names, events, plugins = Enabled(false, false)
+	check(#names == 0, "off: no ticker: "..table.concat(names, ", "))
+	check(#events == 0, "off: no event registered: "..table.concat(events, ", "))
+	check(#plugins == 0, "off: no K or war-live sync plugin")
+	names, events = Enabled(true, false)
+	local joined = table.concat(names, ", ")
+	check(joined:find("Races sample", 1, true) and joined:find("Races HUD", 1, true) and not joined:find("War", 1, true), "races on alone: the races' tickers and no war one: "..joined)
+	local roster = false
+	for _, event in ipairs(events) do roster = roster or event == "GUILD_ROSTER_UPDATE" end
+	check(roster, "and the roster event")
+	-- Saved data is kept through a catch-up that holds races and wars
+	ns.RACES_ON, ns.WARS_ON = false, false
+	local db = ns.db
+	db.warActions = { { id = "a1", kind = "declare", war = 5, t = clock - 100000, data = {} } }
+	db.warSeen = { ["5"] = { told = true } }
+	db.raceSamples = { ["Old Zone:1"] = 4 }
+	db.raceWeight = { ["Old Zone:1"] = 4.8 }
+	db.presence = { ["hb-r2:1"] = { p = "hb-r2", n = 2 } }
+	local before = { Copy(db.warActions), Copy(db.warSeen), Copy(db.raceSamples), Copy(db.raceWeight), Copy(db.presence) }
+	local fixture = GuildWarsSample(clock)
+	fixture.races = GuildWarsRaces(clock)
+	fixture.warLive = { ["9"] = { zone = "Hillsbrad Foothills", start = clock - 600, phase = "battle", endsAt = clock + 1200, points = {}, turnout = { att = 12, def = 15 } } }
+	WantedAppCatchup = { [db.accountMark] = { t = clock + 10, records = {}, races = fixture.races, guild = fixture.guild, guilds = fixture.guilds, declare = fixture.declare,
+		owners = fixture.owners, marks = fixture.marks, warLive = fixture.warLive, actions = { a1 = { ok = true } } } }
+	R:OnLoad() G:OnLoad() ns.WarAlerts:OnLoad()
+	ns.Catchup:Import()
+	RunTimers()
+	check(not R:On() and not G:On() and #R:Tonight() == 0 and #G:Wars() == 0, "a catch-up with races and wars: the site runs neither")
+	check(Same(db.warActions, before[1]) and Same(db.warSeen, before[2]) and Same(db.raceSamples, before[3]) and Same(db.raceWeight, before[4]) and Same(db.presence, before[5]),
+		"warActions, warSeen, raceSamples, raceWeight and presence are as they were")
+	-- Map pieces: none for the war or the races
+	local canvas = NewMock()
+	canvas._w, canvas._h = 1002, 668
+	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown = function() return canvas end, function() return 1424 end, function() return true end
+	db.settings.statsMap = false
+	ns.WarMap:Refresh()
+	local pieces = 0
+	for _, f in ipairs(Mock.created) do
+		local spec = rawget(f, "spec")
+		if type(spec) == "table" and f._shown then pieces = pieces + 1 end
+	end
+	check(pieces == 0, "no war or race pieces on the map: "..pieces)
+	-- Standing where a race point or a war would be, for several ticks: no line for the app, no presence
+	local lines = {}
+	C_Log = { LogMessage = function(t) lines[#lines + 1] = t end }
+	for _ = 1, 5 do
+		clock = clock + 30
+		R:Sample() ns.WarLive:Step() G:Sight() G:LookActive() G:ReportRoster()
+	end
+	check(#lines == 0 and Same(db.presence, before[5]), "several ticks on a point: no WANTEDC1, WANTEDG1 or WANTEDP1 line and no presence: "..tostring(lines[1]))
+	C_Log = real.logged
+	-- A K and a war-live message from a 1.29.7 peer
+	local channelName = ns.Sync:GetInfo().channelName
+	for _, msg in ipairs({ Message("K", { w = 1, z = "Hillsbrad Foothills", s = clock, h = 2 }), Message("G", { w = 9, t = clock, p = "hb-mid-a-tower", e = 3 }) }) do
+		local ok, err = pcall(Fire, "CHAT_MSG_ADDON", "WNTD", msg, "CHANNEL", "Old Peer Two", nil, nil, nil, channelName)
+		check(ok, "a message from a 1.29.7 peer is ignored without error: "..tostring(err))
+	end
+	RunFrames()
+	check(#R:Tonight() == 0 and Same(db.presence, before[5]), "and changes nothing")
+	-- Put back: both on for the rest
+	ns.RACES_ON, ns.WARS_ON = true, true
+	WantedAppCatchup = nil
+	db.warActions, db.warSeen, db.raceSamples, db.raceWeight, db.presence = {}, {}, {}, {}, {}
+	WorldMapFrame.GetCanvas, WorldMapFrame.GetMapID, WorldMapFrame.IsShown = real.GetCanvas, real.GetMapID, real.IsShown
+	db.settings.statsMap = real.statsMap
+	G:Take(nil)
+	R:Take(nil)
+end)()
+print("wanted smoke: races and guild wars off checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

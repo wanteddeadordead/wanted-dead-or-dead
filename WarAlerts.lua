@@ -24,6 +24,9 @@ function WarAlerts:OnLoad()
 end
 
 function WarAlerts:OnEnable()
+	if not Wanted.WARS_ON then
+		return
+	end
 	GuildWars:OnChange(function() WarAlerts:Check() end)
 	C_Timer.NewTicker(5, Wanted:Timed("War alerts", function() WarAlerts:Tick() end))
 	WarAlerts:Check()

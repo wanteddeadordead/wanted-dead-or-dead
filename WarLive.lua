@@ -24,6 +24,9 @@ local function Cost(n, keep)
 end
 
 function WarLive:OnEnable()
+	if not Wanted.WARS_ON then
+		return
+	end
 	Wanted.Sync:RegisterPlugin(TAG, function(tbl, sender) WarLive:OnPeer(tbl, sender) end, { priority = 3 })
 	C_Timer.NewTicker(5, Wanted:Timed("War live", function() WarLive:Step() end))
 end

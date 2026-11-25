@@ -56,6 +56,9 @@ function Races:OnLoad()
 end
 
 function Races:OnEnable()
+	if not Wanted.RACES_ON then
+		return
+	end
 	C_Timer.NewTicker(SAMPLE_SECONDS, Wanted:Timed("Races sample", function() Races:Sample() end))
 	Wanted.Sync:RegisterPlugin(LIVE_TAG, function(tbl, sender) Races:OnPeer(tbl, sender) end, { priority = 3 })
 end
@@ -154,6 +157,11 @@ end
 ---Takes in the races from a catch-up (or nil: none). Only shown, so read at every login.
 ---@param src table?
 function Races:Take(src)
+	if not Wanted.RACES_ON then
+		-- Switched off: no races, and the saved minutes are kept as they are
+		private.state = nil
+		return
+	end
 	private.state = private.Clean(src)
 	-- The HUD's minutes are kept for tonight's races only
 	local keep = {}

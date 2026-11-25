@@ -45,9 +45,15 @@ function GuildWars:OnLoad()
 end
 
 function GuildWars:OnEnable()
+	if not (Wanted.WARS_ON or Wanted.RACES_ON) then
+		return
+	end
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 	frame:SetScript("OnEvent", function() GuildWars:ReportRoster() end)
+	if not Wanted.WARS_ON then
+		return
+	end
 	C_Timer.NewTicker(SIGHT_SECONDS, Wanted:Timed("War census", function() GuildWars:Sight() end))
 	C_Timer.NewTicker(ACTIVE_LOOK, Wanted:Timed("War census activity", function() GuildWars:LookActive() end))
 end
@@ -87,6 +93,11 @@ local FIELDS = { "guild", "guilds", "declare", "wars", "warLive", "marks", "owne
 ---none. Only shown, so read at every login.
 ---@param src table?
 function GuildWars:Take(src)
+	if not Wanted.WARS_ON then
+		-- Switched off: no wars, and what the player asked for is kept as it is
+		private.state = nil
+		return
+	end
 	local raw
 	for _, field in ipairs(FIELDS) do
 		local value = type(src) == "table" and src[field] or nil
@@ -736,6 +747,9 @@ end
 ---guild wars yet: the site reads rosters under a switch of its own, before wars are on.
 ---"WANTEDG1 <mark> reporter=<GUID>&at=<time>&realm=<id>&guild=<name>&leader=<GUID>&ranks=<1|0><name>,..[&tabard=<bg>.<border>.<emblem>.<style>.<file>]&members=<GUID>.<rank>,..[&part=i/n]"
 function GuildWars:ReportRoster()
+	if not (Wanted.WARS_ON or Wanted.RACES_ON) then
+		return
+	end
 	local now = GetServerTime()
 	local mark, me = Wanted.db.accountMark, UnitGUID("player")
 	if now - (private.reportRead or 0) < REPORT_SECONDS or not (C_Log and C_Log.LogMessage)

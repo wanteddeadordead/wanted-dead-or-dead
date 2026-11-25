@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Realm links work again. The game stopped giving addons the realm's name and number on 2026-11-20, so Wanted did not know which realm you are on: links to players on other realms were not made, and characters on a Normal realm were not idle. Wanted now takes the realm number from your own character and shows "Realm 1234" where it has no name.
+- The layer number, the "Big fight on layer" alert and the Hop button are gone. Since 2026-11-20 the game no longer lets an addon tell layers apart, so a layer shown now would be wrong. Hops are refused, and your sightings, kills and deaths no longer carry a layer.
+- Characters on a Normal realm are idle again (Wanted starts nothing there) once the Wanted app has run.
+
 ## [1.29.7] - 2026-11-25
 
 - The RISING FAST warning now starts at 10 enemies in 5 minutes instead of 5, and Settings has a "Warn from" choice of 5, 10, 15 or 25, a switch to skip enemy capital cities (on) and a switch to warn only about your zone and the zones next to it (off).

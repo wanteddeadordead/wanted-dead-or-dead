@@ -25,36 +25,35 @@ local BORDERS = {
 	-- Eastern Kingdoms
 	{ 1420, 1421 }, { 1420, 1422 }, { 1420, 1458 }, -- Tirisfal Glades: Silverpine, Western Plaguelands, Undercity
 	{ 1421, 1424 }, -- Silverpine Forest: Hillsbrad Foothills
-	{ 1422, 1424 }, { 1422, 1423 }, { 1422, 1425 }, -- Western Plaguelands: Hillsbrad, Eastern Plaguelands, The Hinterlands
-	{ 1423, 1425 }, -- Eastern Plaguelands: The Hinterlands
+	{ 1422, 1423 }, { 1422, 1425 }, { 1422, 1416 }, -- Western Plaguelands: Eastern Plaguelands, The Hinterlands, Alterac Mountains
 	{ 1424, 1416 }, { 1424, 1417 }, { 1424, 1425 }, -- Hillsbrad Foothills: Alterac, Arathi, The Hinterlands
-	{ 1416, 1417 }, -- Alterac Mountains: Arathi Highlands
-	{ 1417, 1425 }, { 1417, 1437 }, -- Arathi Highlands: The Hinterlands, Wetlands
-	{ 1437, 1426 }, { 1437, 1432 }, -- Wetlands: Dun Morogh, Loch Modan
+	{ 1417, 1437 }, -- Arathi Highlands: Wetlands
+	{ 1437, 1432 }, -- Wetlands: Loch Modan
 	{ 1426, 1432 }, { 1426, 1455 }, -- Dun Morogh: Loch Modan, Ironforge
 	{ 1432, 1418 }, -- Loch Modan: Badlands
 	{ 1418, 1427 }, -- Badlands: Searing Gorge
 	{ 1427, 1428 }, -- Searing Gorge: Burning Steppes
 	{ 1428, 1433 }, -- Burning Steppes: Redridge Mountains
-	{ 1433, 1429 }, { 1433, 1431 }, { 1433, 1435 }, -- Redridge: Elwynn Forest, Duskwood, Swamp of Sorrows
+	{ 1433, 1429 }, { 1433, 1431 }, -- Redridge Mountains: Elwynn Forest, Duskwood
 	{ 1429, 1436 }, { 1429, 1431 }, { 1429, 1453 }, -- Elwynn Forest: Westfall, Duskwood, Stormwind City
 	{ 1436, 1431 }, -- Westfall: Duskwood
-	{ 1431, 1434 }, { 1431, 1435 }, -- Duskwood: Stranglethorn Vale, Swamp of Sorrows
+	{ 1431, 1434 }, { 1431, 1430 }, -- Duskwood: Stranglethorn Vale, Deadwind Pass
+	{ 1430, 1435 }, -- Deadwind Pass: Swamp of Sorrows
 	{ 1435, 1419 }, -- Swamp of Sorrows: Blasted Lands
 	-- Kalimdor
 	{ 1411, 1454 }, { 1411, 1413 }, -- Durotar: Orgrimmar, The Barrens
 	{ 1412, 1456 }, { 1412, 1413 }, -- Mulgore: Thunder Bluff, The Barrens
 	{ 1413, 1440 }, { 1413, 1442 }, { 1413, 1441 }, { 1413, 1445 }, -- The Barrens: Ashenvale, Stonetalon, Thousand Needles, Dustwallow Marsh
-	{ 1440, 1442 }, { 1440, 1439 }, { 1440, 1448 }, { 1440, 1447 }, { 1440, 1443 }, -- Ashenvale: Stonetalon, Darkshore, Felwood, Azshara, Desolace
+	{ 1440, 1442 }, { 1440, 1439 }, { 1440, 1448 }, { 1440, 1447 }, -- Ashenvale: Stonetalon, Darkshore, Felwood, Azshara
 	{ 1442, 1443 }, -- Stonetalon Mountains: Desolace
 	{ 1443, 1444 }, -- Desolace: Feralas
 	{ 1444, 1441 }, -- Feralas: Thousand Needles
-	{ 1441, 1445 }, { 1441, 1446 }, -- Thousand Needles: Dustwallow Marsh, Tanaris
-	{ 1446, 1449 }, { 1446, 1451 }, -- Tanaris: Un'Goro Crater, Silithus
+	{ 1441, 1446 }, -- Thousand Needles: Tanaris
+	{ 1446, 1449 }, -- Tanaris: Un'Goro Crater
 	{ 1449, 1451 }, -- Un'Goro Crater: Silithus
 	{ 1438, 1457 }, { 1438, 1439 }, -- Teldrassil: Darnassus, Darkshore (by boat)
 	{ 1448, 1452 }, { 1448, 1450 }, -- Felwood: Winterspring, Moonglade
-	{ 1452, 1450 }, { 1452, 1447 }, -- Winterspring: Moonglade, Azshara
+	{ 1452, 1450 }, -- Winterspring: Moonglade
 }
 
 local links = {}

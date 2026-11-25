@@ -337,6 +337,24 @@ function Hotspots:GetSurging()
 	return surging
 end
 
+---Whether a surging zone passes the player's two filters: capital cities skipped, and only zones near them. An unknown
+---own zone (loading, an instance) lets every zone through; a zone missing from the neighbour table counts as not near.
+---@param group table
+---@param detect table settings.detect
+---@return boolean
+function private.PassesRisingFilters(group, detect)
+	if detect.risingSkipCities ~= false and Wanted.ZoneLinks:IsCity(group.mapId, group.zone) then
+		return false
+	end
+	if detect.risingNearOnly == true and not IsInInstance() then
+		local own = C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+		if own then
+			return Wanted.ZoneLinks:Near(group.mapId, own) or (private.MapName(own) or "?") == group.zone
+		end
+	end
+	return true
+end
+
 ---Warns about zones filling up fast, when that alert is on. Each zone at most once a quarter hour.
 function Hotspots:CheckSurges()
 	local detect = Wanted.db and Wanted.db.settings.detect
@@ -346,7 +364,7 @@ function Hotspots:CheckSurges()
 	local now = GetServerTime()
 	for _, group in ipairs(Hotspots:GetSurging()) do
 		local last = private.surgeAlerted[group.key]
-		if not last or now - last >= SURGE_COOLDOWN then
+		if (not last or now - last >= SURGE_COOLDOWN) and private.PassesRisingFilters(group, detect) then
 			private.surgeAlerted[group.key] = now
 			Wanted.Alerts:Warn("RISING FAST: "..group.zone, format("%d enemies in the last 5 minutes, up from %d", group.recent, group.earlier), Wanted.Theme.C.amber)
 			Wanted.Alerts:Sound("enemy")

@@ -1913,6 +1913,37 @@ ns.db.settings.detect.risingMin = nil
 Crowd("Elwynn Forest", 37, "ELWA", 4, 7 * 60)
 Crowd("Elwynn Forest", 37, "ELWB", 10, 60)
 check(Surging("Elwynn Forest"), "10 up from 4 warns at 10")
+-- Filters: capital cities are skipped unless switched off; near-only keeps the player's zone and its neighbours
+local realSound = ns.Alerts.Sound
+ns.Alerts.Sound = function() end -- these checks jump the clock far ahead; the sound throttle must not remember it
+local function Warned(zone, mapId, tag)
+	clock = clock + 60 * 60
+	warnings = {}
+	Crowd(zone, mapId, tag, 10, 60)
+	ns.Hotspots:CheckSurges()
+	return #warnings == 1 and warnings[1] == "RISING FAST: "..zone
+end
+ns.db.settings.detect.risingMin = nil
+ns.db.settings.detect.risingSkipCities = nil
+check(ns.db.settings.detect.risingSkipCities == nil and not Warned("Orgrimmar", 1454, "CITA"), "a capital city is skipped by default")
+ns.db.settings.detect.risingSkipCities = false
+check(Warned("Stormwind City", 1453, "CITB"), "a capital city warns with the switch off")
+ns.db.settings.detect.risingSkipCities = true
+local ownMap = 1
+C_Map.GetBestMapForUnit = function() return ownMap end
+ns.db.settings.detect.risingNearOnly = true
+ownMap = 1429 -- Elwynn Forest
+check(Warned("Elwynn Forest", 1429, "NEARA"), "near-only: your own zone warns")
+check(Warned("Westfall", 1436, "NEARB"), "near-only: a neighbouring zone warns")
+check(not Warned("The Barrens", 1413, "NEARC"), "near-only: a far zone does not warn")
+check(not Warned("Riverglades", 2548, "NEARD"), "near-only: a zone missing from the table does not warn")
+ownMap = nil
+check(Warned("Tanaris", 1446, "NEARE"), "near-only: an unknown own zone warns as if off")
+ns.db.settings.detect.risingNearOnly = false
+ownMap = 1429
+check(Warned("Silithus", 1451, "NEARF"), "near-only off: a far zone warns")
+C_Map.GetBestMapForUnit = function() return 1 end
+ns.Alerts.Sound = realSound
 end
 clock = surgeClock
 ns.Alerts.Warn = realWarn

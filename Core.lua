@@ -117,6 +117,8 @@ local DEFAULTS = {
 			timeout = 30, -- then seconds they stay on the Nearby list, shaded, before leaving it
 			risingAlerts = true, -- warn when a zone fills up with enemies fast (Hotspots)
 			risingMin = 10, -- enemies in 5 minutes a zone needs for that warning: 5, 10, 15 or 25 (Hotspots:GetRisingMin)
+			risingSkipCities = true, -- no rising warning for capital cities (ZoneLinks:IsCity)
+			risingNearOnly = false, -- rising warnings only for your zone and the zones next to it (ZoneLinks:Near)
 			onlyWhenExposed = false, -- quiet mode: alerts and the Nearby window only while you can be attacked
 			quietTipShown = false, -- the one-time tip offering quiet mode after the first encounter
 			autoHide = 300, -- seconds with no enemies before the Nearby window hides (0 = never)

@@ -19746,6 +19746,8 @@ print("wanted smoke: layers off checks pass")
 -- a sync message, and what is saved for them is kept as it is
 ;(function()
 	local G, R = ns.GuildWars, ns.Races
+	local syncPrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Sync.GetInfo, i) if name == "private" then syncPrivate = value break end if not name then break end end
 	local function Same(a, b)
 		if type(a) ~= "table" or type(b) ~= "table" then return a == b end
 		for k, v in pairs(a) do if not Same(v, b[k]) then return false end end
@@ -19833,11 +19835,16 @@ print("wanted smoke: layers off checks pass")
 	C_Log = real.logged
 	-- A K and a war-live message from a 1.29.7 peer
 	local channelName = ns.Sync:GetInfo().channelName
+	-- The release registers no plugin for K or G (the harness does, with the toggles on): take theirs out, as in the release
+	local plugins = syncPrivate.plugins
+	local savedPlugins = { K = plugins.K, G = plugins.G }
+	plugins.K, plugins.G = nil, nil
 	for _, msg in ipairs({ Message("K", { w = 1, z = "Hillsbrad Foothills", s = clock, h = 2 }), Message("G", { w = 9, t = clock, p = "hb-mid-a-tower", e = 3 }) }) do
 		local ok, err = pcall(Fire, "CHAT_MSG_ADDON", "WNTD", msg, "CHANNEL", "Old Peer Two", nil, nil, nil, channelName)
 		check(ok, "a message from a 1.29.7 peer is ignored without error: "..tostring(err))
 	end
 	RunFrames()
+	plugins.K, plugins.G = savedPlugins.K, savedPlugins.G
 	check(#R:Tonight() == 0 and Same(db.presence, before[5]), "and changes nothing")
 	-- The window: a remembered or asked-for Guild Wars page opens the Dashboard; the map button and Settings leave the rows out
 	db.settings.lastPage = "guildwars"

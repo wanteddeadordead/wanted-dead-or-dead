@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.29.7] - 2026-11-25
+
 - The RISING FAST warning now starts at 10 enemies in 5 minutes instead of 5, and Settings has a "Warn from" choice of 5, 10, 15 or 25, a switch to skip enemy capital cities (on) and a switch to warn only about your zone and the zones next to it (off).
 - The bug report dialog first asks you to turn Wanted off in the addon list, /reload and check whether the problem is still there, before you describe it.
 - Bug reports, feature ideas and tip reports keep the line breaks you type; before, they were joined into one line.

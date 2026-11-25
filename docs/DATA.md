@@ -35,9 +35,15 @@ code under it in the `!!WantedLink` addon (`WantedAppLinks[mark] = code`). At lo
 The same file also holds `WantedAppInfo = { running, latest }` (from 1.1.3): the app's version and the newest
 one out. When the app is behind, the addon says so in chat once a login.
 
-`WantedDB.realm` (from 1.6.0) is `{ id, name }`: the realm the account last logged in on, `GetRealmID()` and
-`GetRealmName()`, written at every login. The Wanted app sends it to wanteddeadordead.com, which learns realm names
-from it. Nothing reads it back; a missing or malformed one changes nothing.
+`WantedDB.realm` (from 1.6.0) is `{ id, name }`: the realm the account last logged in on, written at every login. The
+Wanted app sends it to wanteddeadordead.com, which learns realm names from it. From 1.29.8 `id` is the realm number in
+the player's own GUID (`Player-<realm>-<id>`), because the game has answered `GetRealmID()` with 0 and `GetRealmName()`
+with "" since 2026-11-20. `name` is `GetRealmName()` when it isn't empty, else the name the app's catch-up gives for that
+same number (`realm = { id, name }`, name of 64 bytes or less, may be ""), else the previous `name` when the previous `id`
+is the same number, else "". A blank never replaces a name saved for the same number, and a name never carries over to
+another number. From 1.29.8 it is read back (`Wanted:RealmName()`, the Report scrub, the realm links); a missing or
+malformed one changes nothing. No migration: older saves load as they are, and an `id` of 0 or nil is replaced at the
+next login.
 
 `WantedDB.raids` (from 1.18.1) is `{ [character] = { mine, joined, seen } }`, by `Name-Realm`: the world PvP raid the
 character leads (`{ id, title, guild, exclusive, where, startAt, size, minLevel, created, signups = { [name] = "going" or
@@ -278,8 +284,20 @@ fills its player notes from them (never overwriting its own), marked as seen by 
 minutes per client. Clients put them into the target's history (`WantedDB.tracks`) and drop spotted records
 older than 30 days at login (the history's length). Kill on Sight sightings are never shared.
 
-`WantedDB.farPeers` (name -> `{ realm, seen }`, the last 20, a week) remembers realm links: players on another
-realm name of the same world, synced by hidden whisper (Sync). They're greeted again at login.
+`WantedDB.farPeers` (name -> `{ realm, ri, seen }`, the last 20, a week) remembers realm links: players on another
+realm of the same world, synced by hidden whisper (Sync). They're greeted again at login. `ri` (from 1.29.8) is their
+realm's number; `realm` is their name for it, "#<number>" or "". Entries from before have no `ri` and are compared by
+name only when both names are known, else greeted. No migration.
+
+`WantedDB.channel` (`{ name, realm, ri, members, t }`) is the sync channel's member count, for the app to send. From
+1.29.8 `realm` is "" when no name is known, and `ri` is our realm's number; the app accepts either one.
+
+Realm links across versions (1.29.8): the link hello's `r` is our realm's name, else "#<number>", else "?" (never "": a
+1.29.7 peer whose own name is blank takes "" for its own realm), and `ri` is our realm's number, left out when unknown.
+A hello from 1.29.7 (`r` = "" and no `ri`) is taken as another realm, so a link is made; at worst it duplicates the
+channel's path to a player of our realm, which merging drops. The catch-up's `links = { { n, r, t, ri } }` carries `ri`
+(from the app) the same way. Realms are compared by number when both sides have one, by name only when both are known,
+and never match when either is unknown.
 
 `WantedDB.appNudgedAt` (server time, or nil) is when the addon last said, minutes into a session, that no Wanted app
 was detected; the line comes once a day (1.23.5, PageWeb).

@@ -172,14 +172,26 @@ function private.IsOwnFaction(name)
 	return name == english or name == localized
 end
 
----Realm names compared without spaces, dashes, apostrophes or case (the ruleset on Forever).
-local function NormalizeRealm(name)
-	return type(name) == "string" and strlower((gsub(name, "[%s%-']", ""))) or nil
+---A game account's realm as the Battle.net info tells it: its number (realmID, else the one in playerGuid) and its
+---name when it has one. Either may be nil.
+---@param game table BNetGameAccountInfo
+---@return number? id
+---@return string? name
+function private.RealmOf(game)
+	local id = type(game.realmID) == "number" and game.realmID > 0 and game.realmID or nil
+	if not id and type(game.playerGuid) == "string" and not (issecretvalue and issecretvalue(game.playerGuid)) then
+		id = tonumber(strmatch(game.playerGuid, "^Player%-(%d+)%-"))
+	end
+	local name = type(game.realmName) == "string" and game.realmName ~= "" and game.realmName or nil
+	return id, name
 end
 
-function private.IsOwnRealm(name)
-	local mine = NormalizeRealm(GetNormalizedRealmName and GetNormalizedRealmName() or GetRealmName())
-	return mine ~= nil and NormalizeRealm(name) == mine
+---Whether a game account is on our realm. Nothing known about its realm is not ours.
+---@param game table BNetGameAccountInfo
+---@return boolean
+function private.IsOwnRealm(game)
+	local id, name = private.RealmOf(game)
+	return Sync:IsOwnRealm(name, id)
 end
 
 ---Whether a game account is in WoW on this client's game version, as Blizzard's friends list tells (wowProjectID).
@@ -204,7 +216,7 @@ function private.IsCandidate(game)
 	if not private.InForever(game) or not game.factionName or private.IsOwnFaction(game.factionName) then
 		return false
 	end
-	return private.IsOwnRealm(game.realmName)
+	return private.IsOwnRealm(game)
 end
 
 ---A friend's game account on our faction but another realm name: a realm link for the sync (Sync:Greet).
@@ -217,7 +229,8 @@ function private.IsRealmLinkCandidate(game)
 	if not private.InForever(game) or not game.factionName or not private.IsOwnFaction(game.factionName) then
 		return false
 	end
-	return type(game.realmName) == "string" and not private.IsOwnRealm(game.realmName)
+	local id, name = private.RealmOf(game)
+	return (id ~= nil or name ~= nil) and not private.IsOwnRealm(game)
 end
 
 ---Whether this player is in the Wanted community (Setup).
@@ -326,7 +339,8 @@ function private.Scan()
 		local game = account and account.gameAccountInfo
 		if private.IsRealmLinkCandidate(game) then
 			-- Our faction on another realm name: can't hear our channel, but a hidden whisper reaches them (Sync)
-			Wanted.Sync:Greet(game.characterName, game.realmName)
+			local id, name = private.RealmOf(game)
+			Wanted.Sync:Greet(game.characterName, name, id)
 		elseif account and private.Enabled() then
 			room = private.AddFriendTargets(i, account, found, room)
 		end
@@ -521,7 +535,7 @@ function private.ValidSender(senderID)
 	if not game and private.targets[senderID] then
 		game = private.targets[senderID].game
 	end
-	if not game or not game.factionName or private.IsOwnFaction(game.factionName) or not private.IsOwnRealm(game.realmName)
+	if not game or not game.factionName or private.IsOwnFaction(game.factionName) or not private.IsOwnRealm(game)
 		or (game.clientProgram and not private.InForever(game)) then
 		private.stats.skipped = private.stats.skipped + 1
 		Wanted:Log("!! Bridge: ignored a message from %s (%s, %s): not the other faction on this ruleset",

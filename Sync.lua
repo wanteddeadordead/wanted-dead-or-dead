@@ -68,6 +68,7 @@ local private = {
 	lastChannelHave = nil, -- GetTime() we last said on the channel what we hold (hello or have)
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
+	greetedID = {}, -- name -> the realm number they were greeted on, when known
 	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
 	whispered = {}, -- name -> when we last whispered them addon data (any kind: the game's "not online" stays hidden)
 	offline = {}, -- name -> when the game said they weren't online (no more whispers to them for a while)
@@ -737,6 +738,13 @@ function private.RequestMembers(attempt)
 	ListChannelByName(private.channelName)
 end
 
+---Remembers the channel's member count for the app: with our realm's name (blank while the game and the app give
+---none) and its number, which the app sends to the site when there is no name.
+---@param members number
+function private.SaveChannel(members)
+	Wanted.db.channel = { name = private.channelName, realm = Wanted:RealmName() or "", ri = Wanted:RealmID(), members = members, t = GetServerTime() }
+end
+
 ---The game's answer to a member list request: the names, comma-separated. Counted when no count update came
 ---(arg9 is the channel's base name).
 function private.OnChannelList(text, _, _, _, _, _, _, _, baseName)
@@ -752,7 +760,7 @@ function private.OnChannelList(text, _, _, _, _, _, _, _, baseName)
 	if n > 0 and n ~= private.members then
 		Wanted:Log("Sync: %d in %s (from its member list)", n, private.channelName)
 		private.members = n
-		Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = n, t = GetServerTime() }
+		private.SaveChannel(n)
 	end
 end
 
@@ -773,7 +781,7 @@ function private.ReadMembers(updatedIndex, updatedCount)
 	if type(count) == "number" and count > 0 and count ~= private.members then
 		Wanted:Log("Sync: %d in %s", count, private.channelName)
 		private.members = count
-		Wanted.db.channel = { name = private.channelName, realm = GetRealmName(), members = count, t = GetServerTime() }
+		private.SaveChannel(count)
 	end
 end
 
@@ -1761,8 +1769,10 @@ function private.HelloFields()
 	end
 	-- This character's signing key and GUID (1.19.0); kr = 1 once after /wanted key reset
 	Wanted.Signing:AddToHello(fields)
-	-- l, lm: our layer of the zone and the zone's map (Shard), so peers know which copy of it we're on
-	fields.l, fields.lm = Wanted.Shard:Current(), Wanted.Shard:ZoneMap()
+	-- l, lm: our layer of the zone and the zone's map (Shard), so peers know which copy of it we're on; none while
+	-- layers can't be read
+	fields.l = Wanted.Shard:Current()
+	fields.lm = fields.l and Wanted.Shard:ZoneMap() or nil
 	-- fl: a few of our live realm links, so a peer with no directory (no Wanted app) can greet them too
 	local far = private.FarLinks()
 	if #far > 0 then
@@ -1775,8 +1785,9 @@ end
 function private.FarLinks()
 	local now, list = GetTime(), {}
 	for name, link in pairs(private.links) do
-		if type(link.realm) == "string" and link.realm ~= "" and not Sync:IsOwnRealm(link.realm) and now - (link.heard or 0) < LINK_TIMEOUT then
-			tinsert(list, { n = name, r = link.realm, h = link.heard or 0 })
+		local text = private.RealmField(link.realm, link.ri)
+		if text and not Sync:IsOwnRealm(link.realm, link.ri) and now - (link.heard or 0) < LINK_TIMEOUT then
+			tinsert(list, { n = name, r = text, ri = link.ri, h = link.heard or 0 })
 		end
 	end
 	sort(list, function(a, b) return a.h > b.h end)
@@ -1802,9 +1813,10 @@ function private.LearnFarLinks(list)
 			break
 		end
 		local name, realm = type(entry) == "table" and entry.n, type(entry) == "table" and entry.r
+		local ri = type(entry) == "table" and private.CleanRealmID(entry.ri) or nil
 		if type(name) == "string" and type(realm) == "string" and name ~= "" and #name <= 48 and realm ~= "" and #realm <= 64
-			and not strfind(name, "|", 1, true) and not strfind(realm, "|", 1, true) and name ~= me and not Sync:IsOwnRealm(realm) then
-			private.learned[name] = { name = name, realm = realm, at = now }
+			and not strfind(name, "|", 1, true) and not strfind(realm, "|", 1, true) and name ~= me and not Sync:IsOwnRealm(realm, ri) then
+			private.learned[name] = { name = name, realm = realm, ri = ri, at = now }
 		end
 	end
 	local count, oldest = 0, nil
@@ -2871,24 +2883,81 @@ end
 -- Realm links
 -- ============================================================================
 
+---A realm name compared without spaces, dashes, apostrophes or case (the ruleset on Forever). Nil for no name, the
+---stand-ins "?" and "#<number>", and "".
 local function NormalizeRealm(name)
-	return type(name) == "string" and strlower((gsub(name, "[%s%-']", ""))) or nil
+	if type(name) ~= "string" or name == "" or name == "?" or strfind(name, "^#%d+$") then
+		return nil
+	end
+	return strlower((gsub(name, "[%s%-']", "")))
 end
 
----Whether a realm name (as the game or Battle.net gives it) is this player's.
----@param name string?
+---A realm number a peer or the app gave: a whole number from 1 up, else nil.
+---@param id any
+---@return number?
+function private.CleanRealmID(id)
+	if type(id) == "number" and id >= 1 and id < 1e9 and id == floor(id) then
+		return id
+	end
+	return nil
+end
+
+---The realm number a name and a number tell: the number, else the one in a "#6932" stand-in name.
+---@param name any
+---@param id any
+---@return number?
+function private.RealmNumber(name, id)
+	local number = private.CleanRealmID(id)
+	if number then
+		return number
+	end
+	return type(name) == "string" and private.CleanRealmID(tonumber(strmatch(name, "^#(%d+)$"))) or nil
+end
+
+---How a realm is told in a hello's r: its name, else "#6932", else nothing (never "": a 1.29.7 peer whose own realm
+---name is blank takes "" for its own realm).
+---@param name any
+---@param id any
+---@return string?
+function private.RealmField(name, id)
+	if type(name) == "string" and name ~= "" and name ~= "?" and #name <= 64 then
+		return name
+	end
+	local number = private.RealmNumber(nil, id)
+	return number and "#"..number or nil
+end
+
+---What a realm link or directory entry is keyed by: its number when known, else its normalized name; nil for neither.
+---@param name any
+---@param id any
+---@return string?
+function private.RealmKey(name, id)
+	local number = private.RealmNumber(name, id)
+	return number and "#"..number or NormalizeRealm(name)
+end
+
+---Whether a realm (a name, a number, or both) is this player's. Numbers decide when both sides have one; names only
+---when both are known; anything unknown is not ours.
+---@param name string? the realm's name, or "#6932"
+---@param id number? the realm's number
 ---@return boolean
-function Sync:IsOwnRealm(name)
-	local mine = NormalizeRealm(GetRealmName())
-	return mine ~= nil and NormalizeRealm(name) == mine
+function Sync:IsOwnRealm(name, id)
+	local theirs, mine = private.RealmNumber(name, id), Wanted:RealmID()
+	if theirs and mine then
+		return theirs == mine
+	end
+	local ours, other = NormalizeRealm(Wanted:RealmName()), NormalizeRealm(name)
+	return ours ~= nil and other ~= nil and ours == other
 end
 
 ---Greets a player on another realm name by hidden whisper. A Wanted client answers, and the two become a realm
 ---link: they catch each other up and forward new records both ways from then on.
 ---@param name string the player's name as a whisper takes it
 ---@param realm string? where they are, if known
-function Sync:Greet(name, realm)
-	if type(name) ~= "string" or name == "" or name == Store:GetOrigin() or (realm and Sync:IsOwnRealm(realm) and not private.lockedOut) then
+---@param ri number? their realm's number, if known
+function Sync:Greet(name, realm, ri)
+	if type(name) ~= "string" or name == "" or name == Store:GetOrigin()
+		or ((realm or ri) and Sync:IsOwnRealm(realm, ri) and not private.lockedOut) then
 		return
 	end
 	local now = GetTime()
@@ -2899,32 +2968,37 @@ function Sync:Greet(name, realm)
 	end
 	private.greeted[name] = now
 	private.greetedRealm[name] = realm
-	Wanted:Log("Sync: greeting %s (%s) as a realm link", name, tostring(realm))
+	private.greetedID[name] = ri
+	Wanted:Log("Sync: greeting %s (%s) as a realm link", name, tostring(realm or ri))
 	private.SendLinkHello(name, false)
 end
 
 function private.SendLinkHello(name, isAnswer)
 	-- x: locked out of the channel, so a player on this very realm should link by whisper too
-	private.Send(TAG_HELLO, private.HaveFields({ r = GetRealmName(), a = isAnswer or nil, x = private.lockedOut and 1 or nil,
-		l = Wanted.Shard:Current(), lm = Wanted.Shard:ZoneMap() }), nil, name)
+	-- r: our realm's name, else "#<number>", else "?"; ri: its number (omitted when unknown)
+	local id = Wanted:RealmID()
+	local fields = { r = private.RealmField(Wanted:RealmName(), id) or "?", ri = id, a = isAnswer or nil, x = private.lockedOut and 1 or nil }
+	fields.l = Wanted.Shard:Current()
+	fields.lm = fields.l and Wanted.Shard:ZoneMap() or nil
+	private.Send(TAG_HELLO, private.HaveFields(fields), nil, name)
 end
 
-function private.AddLink(name, realm)
+function private.AddLink(name, realm, ri)
 	local now = GetTime()
 	local link = private.links[name]
 	if not link then
 		link = { realm = realm, since = now, sent = 0, received = 0 }
 		private.links[name] = link
-		Wanted:Log("Sync: realm link with %s on %s", name, tostring(realm))
+		Wanted:Log("Sync: realm link with %s on %s", name, tostring(realm or ri))
 	end
-	link.realm, link.heard = realm, now
+	link.realm, link.ri, link.heard = realm, ri, now
 	-- Remember them for next time: the most recent few, for a week. Not a player on this very realm (the
 	-- channel covers them) or one whose realm isn't known: greeting those at every login goes unanswered
 	local far = Wanted.db.farPeers
-	if type(realm) ~= "string" or realm == "?" or Sync:IsOwnRealm(realm) then
+	if not private.RealmKey(realm, ri) or Sync:IsOwnRealm(realm, ri) then
 		return link
 	end
-	far[name] = { realm = realm, seen = GetServerTime() }
+	far[name] = { realm = realm, ri = ri, seen = GetServerTime() }
 	local names = {}
 	for other in pairs(far) do
 		tinsert(names, other)
@@ -2946,11 +3020,12 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		-- this answers a greeting we sent them (while locked out ourselves)
 		local greeted = private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS
 		local wanted = tbl.x or (tbl.a and greeted)
-		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r) and not wanted) or type(tbl.c) ~= "table" then
+		local ri = private.CleanRealmID(tbl.ri)
+		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r, ri) and not wanted) or type(tbl.c) ~= "table" then
 			Wanted:Log("!! Sync: %s greeted us by whisper from our own realm or without one; ignored", tostring(sender))
 			return
 		end
-		link = private.AddLink(sender, tbl.r)
+		link = private.AddLink(sender, tbl.r, ri)
 		link.received = link.received + 1
 		if not tbl.a then
 			private.SendLinkHello(sender, true)
@@ -2961,7 +3036,7 @@ function private.HandleLinkMessage(tag, tbl, sender)
 	end
 	if not link and private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS then
 		-- We greeted them and their answer's parts are still on the way: their shorter messages can arrive first
-		link = private.AddLink(sender, private.greetedRealm[sender] or "?")
+		link = private.AddLink(sender, private.greetedRealm[sender] or "?", private.greetedID[sender])
 	end
 	if not link then
 		Wanted:Log("!! Sync: %s whispered a %s without being a realm link; ignored", tostring(sender), tag)
@@ -3199,7 +3274,7 @@ function private.LinkTick()
 			private.links[name] = nil
 			Wanted:Log("Sync: realm link with %s went quiet; dropped", name)
 		else
-			local realm = NormalizeRealm(link.realm) or name
+			local realm = private.RealmKey(link.realm, link.ri) or name
 			local other = turn[realm]
 			if not other or (link.resyncAt or 0) < (private.links[other].resyncAt or 0) or ((link.resyncAt or 0) == (private.links[other].resyncAt or 0) and name < other) then
 				turn[realm] = name
@@ -3229,10 +3304,10 @@ end
 function private.GreetRemembered()
 	local cutoff = GetServerTime() - REMEMBER_LINK_SECONDS
 	for name, info in pairs(Wanted.db.farPeers) do
-		if type(info) ~= "table" or info.realm == "?" or Sync:IsOwnRealm(info.realm) then
+		if type(info) ~= "table" or not private.RealmKey(info.realm, info.ri) or Sync:IsOwnRealm(info.realm, info.ri) then
 			Wanted.db.farPeers[name] = nil -- remembered by earlier versions; nobody to greet there
 		elseif (info.seen or 0) >= cutoff then
-			Sync:Greet(name, info.realm)
+			Sync:Greet(name, info.realm, info.ri)
 		end
 	end
 end
@@ -3247,9 +3322,14 @@ function Sync:TakeDirectory(list)
 	local kept, me = {}, Store:GetOrigin()
 	for _, entry in ipairs(list) do
 		local name, realm = type(entry) == "table" and entry.n, type(entry) == "table" and entry.r
-		if type(name) == "string" and type(realm) == "string" and name ~= "" and #name <= 48 and realm ~= "" and #realm <= 64
-			and not strfind(name, "|", 1, true) and not strfind(realm, "|", 1, true) and name ~= me and not Sync:IsOwnRealm(realm) then
-			tinsert(kept, { name = name, realm = realm })
+		local ri = type(entry) == "table" and private.CleanRealmID(entry.ri) or nil
+		if type(realm) ~= "string" then
+			realm = nil
+		end
+		if type(name) == "string" and name ~= "" and #name <= 48 and (ri or (realm and realm ~= "")) and (not realm or #realm <= 64)
+			and not strfind(name, "|", 1, true) and not (realm and strfind(realm, "|", 1, true)) and name ~= me
+			and not Sync:IsOwnRealm(realm, ri) then
+			tinsert(kept, { name = name, realm = realm or "", ri = ri })
 			if #kept >= MAX_DIRECTORY then
 				break
 			end
@@ -3259,11 +3339,11 @@ function Sync:TakeDirectory(list)
 	Wanted:Log("Sync: %d realm-link names from the app", #kept)
 end
 
----The realm names (normalized) with a live realm link now.
+---The realms (by number, else normalized name) with a live realm link now.
 function private.LinkedRealms()
 	local now, realms = GetTime(), {}
 	for _, link in pairs(private.links) do
-		local realm = NormalizeRealm(link.realm)
+		local realm = private.RealmKey(link.realm, link.ri)
 		if realm and now - (link.heard or 0) < LINK_TIMEOUT then
 			realms[realm] = true
 		end
@@ -3289,12 +3369,12 @@ function Sync:GreetDirectory()
 	end
 	local now, linked, greets = GetTime(), private.LinkedRealms(), {}
 	for _, entry in ipairs(entries) do
-		local realm = NormalizeRealm(entry.realm)
+		local realm = private.RealmKey(entry.realm, entry.ri) or entry.name
 		local recent = private.greeted[entry.name] and now - private.greeted[entry.name] < GREET_SECONDS
 		local offline = private.offline[entry.name] and now - private.offline[entry.name] < OFFLINE_SECONDS
 		if not linked[realm] and (greets[realm] or 0) < DIRECTORY_GREETS and not recent and not offline then
 			greets[realm] = (greets[realm] or 0) + 1
-			Sync:Greet(entry.name, entry.realm)
+			Sync:Greet(entry.name, entry.realm ~= "" and entry.realm or nil, entry.ri)
 		end
 	end
 end
@@ -3317,7 +3397,7 @@ end
 function Sync:GetDirectory()
 	local linked, realms, out = private.LinkedRealms(), {}, { names = #private.directory, realms = 0, linked = 0 }
 	for _, entry in ipairs(private.directory) do
-		local realm = NormalizeRealm(entry.realm)
+		local realm = private.RealmKey(entry.realm, entry.ri) or entry.name
 		if not realms[realm] then
 			realms[realm] = true
 			out.realms = out.realms + 1

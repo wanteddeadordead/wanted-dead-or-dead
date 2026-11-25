@@ -225,8 +225,8 @@ function private.Scrub(line, names)
 	line = gsub(line, "[%w\128-\255']+%-[%u\128-\255][%w\128-\255']*", function(token)
 		return strfind(token, "^Player%-") and token or "<name>"
 	end)
-	local realm = GetRealmName and GetRealmName()
-	if type(realm) == "string" and realm ~= "" then
+	local realm = Wanted:RealmName()
+	if realm then
 		line = gsub(line, "%f[%w]"..gsub(realm, "%p", "%%%0").."%f[%W]", "<realm>")
 	end
 	return line

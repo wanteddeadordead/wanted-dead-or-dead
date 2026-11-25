@@ -2666,6 +2666,134 @@ do
 	check(#Sent("WHISPER", "Far Learned") == 1 and Sent("WHISPER", "Far Learned")[1].tag == "H", "a far-realm name from a peer's hello is greeted")
 	check(#Sent("WHISPER", "Same Realmer") == 0 and #Sent("WHISPER", "Bad|cff") == 0, "our own realm and junk aren't")
 end
+-- Realm numbers and names since the game's 2026-11-20 change (GetRealmName() is "", GetRealmID() is 0, the player's GUID
+-- still names the realm): the number comes from the GUID, a saved name is never blanked, and realms are compared by number
+-- first and by name only when both are known
+do
+	local realName, realGUID, realNorm, realID = GetRealmName, UnitGUID, GetNormalizedRealmName, GetRealmID
+	local savedRealm, savedCatchup = ns.db.realm, WantedAppCatchup
+	local guid = "Player-6932-0A1B2C3D"
+	GetRealmName, GetRealmID, GetNormalizedRealmName = function() return "" end, function() return 0 end, function() return nil end
+	UnitGUID = function(unit) if unit == "player" then return guid end return realGUID(unit) end
+	local corePrivate, syncPrivate, bridgePrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.NoteAppRealm, i) if name == "private" then corePrivate = value break end if not name then break end end
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Sync.GetInfo, i) if name == "private" then syncPrivate = value break end if not name then break end end
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Bridge.InCommunity, i) if name == "private" then bridgePrivate = value break end if not name then break end end
+	check(corePrivate and syncPrivate and bridgePrivate, "the realm internals are reachable for the realm tests")
+	ns:NoteAppRealm(nil)
+	ns.db.realm, WantedAppCatchup = nil, nil
+	-- 1: the number comes from the player's GUID
+	check(ns:RealmID() == 6932, "the realm number is the player GUID's when GetRealmID() is 0: "..tostring(ns:RealmID()))
+	check(ns:RealmName() == nil, "no name is known anywhere")
+	-- 3: nothing known but the number
+	check(ns:RealmText() == "Realm 6932", "the player sees Realm 6932, got "..ns:RealmText())
+	ClearSent()
+	clock = clock + 700
+	ns.Sync:Greet("Realm Hello", "Elsewhere")
+	local hello = Sent("WHISPER", "Realm Hello")[1]
+	check(hello and hello.tbl.r == "#6932" and hello.tbl.ri == 6932, "the link hello says #6932 and ri 6932 when no name is known: "..tostring(hello and hello.tbl.r))
+	-- 2: a saved name is kept for the same number, and never carried to another
+	ns.db.realm = { id = 6932, name = "Doomhowl" }
+	check(corePrivate.LoginRuleset() == "pvp" and ns.db.realm.id == 6932 and ns.db.realm.name == "Doomhowl", "a blank login keeps the name saved for the same number")
+	check(ns:RealmName() == "Doomhowl" and ns:RealmText() == "Doomhowl", "and it is the realm's name")
+	ClearSent()
+	clock = clock + 700
+	ns.Sync:Greet("Realm Hello Two", "Elsewhere")
+	hello = Sent("WHISPER", "Realm Hello Two")[1]
+	check(hello and hello.tbl.r == "Doomhowl" and hello.tbl.ri == 6932, "the hello carries the name and the number")
+	guid = "Player-7000-0A1B2C3D"
+	corePrivate.LoginRuleset()
+	check(ns.db.realm.id == 7000 and ns.db.realm.name == "" and ns:RealmName() == nil, "a login on another number saves it without a name")
+	guid = "Player-6932-0A1B2C3D"
+	-- The app's name for this number is used and saved; a malformed one is left out
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, realm = { id = 6932, name = "From App" } } }
+	corePrivate.LoginRuleset()
+	check(ns:RealmName() == "From App" and ns.db.realm.name == "From App", "the app's realm name counts for the same number")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, realm = { id = 6932, name = string.rep("x", 65) } } }
+	ns.db.realm = nil
+	corePrivate.LoginRuleset()
+	check(ns:RealmName() == nil and ns.db.realm.name == "", "a name over 64 bytes is left out")
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, realm = { id = 7000, name = "Other" } } }
+	corePrivate.LoginRuleset()
+	check(ns:RealmName() == nil, "the app's name for another number isn't ours")
+	-- 4: a Normal realm number idles the character again
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, rulesets = { ["6932"] = "normal" } } }
+	check(corePrivate.LoginRuleset() == "normal", "the app's ruleset for the GUID's realm number makes the character idle")
+	check(ns.RulesetFor(6932, nil, { ["6932"] = "normal" }) == "normal", "RulesetFor with the GUID's number")
+	WantedAppCatchup = nil
+	-- 5: IsOwnRealm
+	for _, normalized in ipairs({ false, "Doomhowl" }) do
+		GetNormalizedRealmName = function() return normalized or nil end
+		ns.db.realm = { id = 6932, name = "Doomhowl" }
+		local own = function(name, id) return ns.Sync:IsOwnRealm(name, id) end
+		check(own("Whatever", 6932) and own(nil, 6932), "the same number is ours whatever the name")
+		check(not own("Doomhowl", 7000), "another number isn't ours even when the names match")
+		check(own("#6932") and not own("#7000"), "a #number name is compared by number")
+		check(not own("") and not own(nil) and not own("?"), "no realm known is not ours")
+		check(own("doom howl") and not own("Elsewhere"), "names compare when both are known")
+		ns.db.realm = { id = 6932, name = "" }
+		check(not own("Doomhowl") and not own("") and own("x", 6932), "our name unknown: names never match, the number still does")
+	end
+	GetNormalizedRealmName = function() return nil end
+	-- 6: hellos by whisper
+	ns.db.realm = { id = 6932, name = "Doomhowl" }
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "" }), "WHISPER", "Old Peer")
+	RunFrames()
+	check(ns.Sync:GetLinks()["Old Peer"], "a 1.29.7 hello (r blank, no ri) makes a link")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Elsewhere", ri = 6932 }), "WHISPER", "Same Peer")
+	RunFrames()
+	check(not ns.Sync:GetLinks()["Same Peer"], "a hello with our number and no x is ignored")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "#6932" }), "WHISPER", "Same Peer Two")
+	RunFrames()
+	check(not ns.Sync:GetLinks()["Same Peer Two"], "so is one that says #6932")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Far Land", ri = 7000 }), "WHISPER", "Far Peer")
+	RunFrames()
+	check(ns.Sync:GetLinks()["Far Peer"] and ns.db.farPeers["Far Peer"] and ns.db.farPeers["Far Peer"].ri == 7000, "a hello from another number links and is remembered with ri")
+	-- 9: remembered links without ri are greeted
+	ns.db.farPeers["Old Remembered"] = { realm = "Some Realm", seen = GetServerTime() }
+	ClearSent()
+	clock = clock + 700
+	syncPrivate.GreetRemembered()
+	check(#Sent("WHISPER", "Old Remembered") == 1, "an old farPeers entry without ri is greeted")
+	ns.db.realm = { id = 6932, name = "" }
+	ns.db.farPeers["Old Remembered"] = { realm = "Some Realm", seen = GetServerTime() }
+	ClearSent()
+	clock = clock + 700
+	syncPrivate.GreetRemembered()
+	check(#Sent("WHISPER", "Old Remembered") == 1, "and so is it when our own realm name is unknown")
+	ns.db.farPeers["Same Number"] = { realm = "#6932", ri = 6932, seen = GetServerTime() }
+	syncPrivate.GreetRemembered()
+	check(ns.db.farPeers["Same Number"] == nil, "an entry on our own number is dropped")
+	-- The directory keys on the number when it has one
+	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, links = { { n = "Id Only", r = "", ri = 7100, t = clock }, { n = "Id Same", r = "", ri = 6932, t = clock }, { n = "Id Name", r = "Named", ri = 7100, t = clock } } } }
+	ns.Catchup:Import()
+	check(ns.Sync:GetDirectory().names == 2 and ns.Sync:GetDirectory().realms == 1, "directory links with a number: ours is dropped, a blank name is allowed")
+	-- 7: the Bridge reads the realm from the game account's number or GUID
+	local faction = UnitFactionGroup("player")
+	local other = faction == "Horde" and "Alliance" or "Horde"
+	local function Game(fields, sameFaction)
+		local game = { isOnline = true, gameAccountID = 5, clientProgram = BNET_CLIENT_WOW or "WoW", factionName = sameFaction and faction or other, characterName = "Bridge Pal" }
+		for k, v in pairs(fields) do game[k] = v end
+		return game
+	end
+	ns.db.realm = { id = 6932, name = "Doomhowl" }
+	check(bridgePrivate.IsCandidate(Game({ playerGuid = "Player-6932-0000AAAA", realmName = "" })), "a playerGuid on our number with a blank realmName is a candidate")
+	check(bridgePrivate.IsCandidate(Game({ realmID = 6932 })), "so is a realmID on our number")
+	check(not bridgePrivate.IsCandidate(Game({})) and not bridgePrivate.IsCandidate(Game({ realmName = "" })), "nothing known about their realm: rejected")
+	check(not bridgePrivate.IsCandidate(Game({ playerGuid = "Player-7000-0000AAAA", realmName = "Doomhowl" })), "a different number is rejected even when the names match")
+	check(bridgePrivate.IsCandidate(Game({ realmName = "Doomhowl" })), "a name match counts when no number is known")
+	check(not bridgePrivate.IsRealmLinkCandidate(Game({}, true)) and not bridgePrivate.IsRealmLinkCandidate(Game({ realmName = "" }, true)),
+		"a same-faction friend with an unknown realm is not greeted")
+	check(bridgePrivate.IsRealmLinkCandidate(Game({ playerGuid = "Player-7000-0000AAAA" }, true)), "one on another number is")
+	check(not bridgePrivate.IsRealmLinkCandidate(Game({ realmID = 6932 }, true)), "one on our number is not")
+	ns.db.realm = { id = 6932, name = "" }
+	check(not bridgePrivate.IsCandidate(Game({ realmName = "Doomhowl" })), "our name unknown and no number for them: rejected")
+	-- Put back
+	GetRealmName, GetRealmID, GetNormalizedRealmName, UnitGUID = realName, realID, realNorm, realGUID
+	ns:NoteAppRealm(nil)
+	ns.db.realm, WantedAppCatchup = savedRealm, savedCatchup
+	ns.db.farPeers = {}
+end
 -- One need request per missing record: a request another player just made for the same origin from the same seq or
 -- earlier covers ours (the fill goes to the whole channel), our own request is not repeated within 15 seconds, and a
 -- need or have the full send queue drops never pauses sync

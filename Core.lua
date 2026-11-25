@@ -867,7 +867,7 @@ local IDLE_MESSAGE = "Wanted is for the PvP ruleset. This character plays on Nor
 
 ---A realm's ruleset, "pvp" or "normal": by the app's map from wanteddeadordead.com (realm number to ruleset), else by
 ---the realm's name ("PvE" in it means Normal). Anything unknown is PvP.
----@param id number? GetRealmID()
+---@param id number? the realm number (Wanted:RealmID())
 ---@param name string? the realm's name
 ---@param map table? the catch-up's rulesets
 ---@return string
@@ -882,13 +882,88 @@ function Wanted.RulesetFor(id, name, map)
 	return "pvp"
 end
 
+---The realm number in a player GUID ("Player-6932-0A1B2C3D"), or nil.
+---@param guid any
+---@return number?
+function private.RealmOfGUID(guid)
+	if (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" then
+		return nil
+	end
+	local id = tonumber(strmatch(guid, "^Player%-(%d+)%-"))
+	return id and id > 0 and id or nil
+end
+
+---A realm name that can be used: a non-empty string of at most MAX_REALM_BYTES.
+local MAX_REALM_BYTES = 64
+function private.CleanRealmName(name)
+	if (issecretvalue and issecretvalue(name)) or type(name) ~= "string" or name == "" or #name > MAX_REALM_BYTES then
+		return nil
+	end
+	return name
+end
+
+---Our realm's number. Since 2026-11-20 the game answers GetRealmID() with 0 and GetRealmName() with "", but the
+---player's own GUID still names the realm, so that is where the number comes from.
+---@return number? id
+function Wanted:RealmID()
+	return private.RealmOfGUID(UnitGUID("player"))
+end
+
+---Takes in the realm the app's catch-up says this account is on ({ id, name }; the name may be ""), kept for RealmName
+---while the catch-up's own table is let go. Anything malformed is left out.
+---@param realm any
+function Wanted:NoteAppRealm(realm)
+	private.appRealm = nil
+	if type(realm) == "table" and type(realm.id) == "number" and realm.id > 0 and realm.id < 1e9 then
+		private.appRealm = { id = realm.id, name = private.CleanRealmName(realm.name) }
+	end
+end
+
+---Our realm's name when anything knows it: the game's, else the app's for this realm number, else the one saved for it
+---(a blank never replaces a name saved for the same number). Nil when unknown.
+---@return string?
+function Wanted:RealmName()
+	local name = private.CleanRealmName(GetRealmName and GetRealmName())
+	if name then
+		return name
+	end
+	local id = Wanted:RealmID()
+	if not id then
+		return nil
+	end
+	local app, saved = private.appRealm, Wanted.db and Wanted.db.realm
+	if app and app.id == id and app.name then
+		return app.name
+	end
+	if type(saved) == "table" and saved.id == id then
+		return private.CleanRealmName(saved.name)
+	end
+	return nil
+end
+
+---What a player is shown for our realm: its name, else "Realm 6932", else "your realm".
+---@return string
+function Wanted:RealmText()
+	local id = Wanted:RealmID()
+	return Wanted:RealmName() or (id and "Realm "..id) or "your realm"
+end
+
 ---The ruleset of the character logging in, noting its realm for the app (the server learns realm names from it).
+---The saved name is kept while the number is the same one, so a blank answer never wipes it.
 function private.LoginRuleset()
-	local id = type(GetRealmID) == "function" and GetRealmID() or nil
-	local name = GetRealmName()
-	Wanted.db.realm = { id = id, name = name }
+	local id = Wanted:RealmID()
 	local catchup = type(WantedAppCatchup) == "table" and WantedAppCatchup[Wanted.db.accountMark]
-	return Wanted.RulesetFor(id, name, type(catchup) == "table" and catchup.rulesets or nil)
+	Wanted:NoteAppRealm(type(catchup) == "table" and catchup.realm or nil)
+	local saved = type(Wanted.db.realm) == "table" and Wanted.db.realm or {}
+	local name
+	if id then
+		name = Wanted:RealmName() or ""
+		Wanted.db.realm = { id = id, name = name }
+	else
+		name = private.CleanRealmName(GetRealmName and GetRealmName()) or private.CleanRealmName(saved.name) or ""
+		Wanted.db.realm = { id = saved.id, name = name }
+	end
+	return Wanted.RulesetFor(id or saved.id, name, type(catchup) == "table" and catchup.rulesets or nil)
 end
 
 function private.OnSlashCommand(input)

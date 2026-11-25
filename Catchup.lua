@@ -132,6 +132,8 @@ function Catchup:Import()
 		end
 		return
 	end
+	-- The realm the app judged this account on (id, and its name when the app knows it): the game no longer says ours
+	Wanted:NoteAppRealm(entry.realm)
 	-- Fight reports the app made of this account's duels, read at every login like the challenges
 	Wanted.Duels:TakeReports(entry.duelReports, entry.t)
 	-- Reports the app has sent on to the developers, read at every login: they leave the queue

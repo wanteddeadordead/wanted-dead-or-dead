@@ -116,6 +116,7 @@ local DEFAULTS = {
 			inSight = 60, -- seconds an enemy who drops out of view still shows as in sight (they're likely still around)
 			timeout = 30, -- then seconds they stay on the Nearby list, shaded, before leaving it
 			risingAlerts = true, -- warn when a zone fills up with enemies fast (Hotspots)
+			risingMin = 10, -- enemies in 5 minutes a zone needs for that warning: 5, 10, 15 or 25 (Hotspots:GetRisingMin)
 			onlyWhenExposed = false, -- quiet mode: alerts and the Nearby window only while you can be attacked
 			quietTipShown = false, -- the one-time tip offering quiet mode after the first encounter
 			autoHide = 300, -- seconds with no enemies before the Nearby window hides (0 = never)

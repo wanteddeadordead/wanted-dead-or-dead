@@ -1857,6 +1857,7 @@ local realWarn = ns.Alerts.Warn
 ns.Alerts.Warn = function(self, title, ...) warnings[#warnings + 1] = title return realWarn(self, title, ...) end
 local surgeClock = clock
 clock = clock + 11 * 60
+ns.db.settings.detect.risingMin = 5
 for i = 1, 6 do
 	local guid = "Player-9-SURGE"..i
 	ns.Store:UpdatePlayer(guid, { name = "Surger"..i, class = "WARRIOR", level = 25, faction = "Alliance", zone = "The Barrens", mapId = 10, x = 50, y = 50 })
@@ -1879,6 +1880,41 @@ end
 ns.Hotspots:CheckSurges()
 check(#warnings == 0, "no rising warning when switched off")
 ns.db.settings.detect.risingAlerts = true
+-- The warning starts at the chosen number of enemies (10 unless set), with a rise of max(4, half of it)
+ns.db.settings.detect.risingMin = nil
+check(ns.Hotspots:GetRisingMin() == 10, "no saved value reads as 10")
+ns.db.settings.detect.risingMin = 7
+check(ns.Hotspots:GetRisingMin() == 10, "an invalid value reads as 10")
+do
+local function Crowd(zone, mapId, tag, count, ago)
+	local saved = clock
+	clock = clock - ago
+	for i = 1, count do
+		local guid = "Player-9-"..tag..i
+		ns.Store:UpdatePlayer(guid, { name = tag..i, class = "MAGE", level = 25, faction = "Alliance", zone = zone, mapId = mapId })
+		ns.Store:AddSighting(guid, zone, 50, 50, mapId)
+	end
+	clock = saved
+end
+local function Surging(zone)
+	for _, g in ipairs(ns.Hotspots:GetSurging()) do if g.zone == zone then return true end end
+	return false
+end
+clock = clock + 60 * 60
+ns.db.settings.detect.risingMin = nil
+Crowd("Tirisfal Glades", 18, "TIRA", 9, 60)
+check(not Surging("Tirisfal Glades"), "9 up from 0 does not warn at 10")
+ns.db.settings.detect.risingMin = 5
+check(Surging("Tirisfal Glades"), "9 up from 0 warns at 5")
+ns.db.settings.detect.risingMin = 7
+check(not Surging("Tirisfal Glades"), "an invalid value behaves as 10")
+clock = clock + 60 * 60
+ns.db.settings.detect.risingMin = nil
+Crowd("Elwynn Forest", 37, "ELWA", 4, 7 * 60)
+Crowd("Elwynn Forest", 37, "ELWB", 10, 60)
+check(Surging("Elwynn Forest"), "10 up from 4 warns at 10")
+end
+clock = surgeClock
 ns.Alerts.Warn = realWarn
 ns.UI:Show("hotspots")
 ns.UI:Show("settings")

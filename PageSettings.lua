@@ -172,7 +172,16 @@ function private.BuildAlerts(column)
 	private.Switch(column, Detect, "sound", "Alert sounds", "Play a beep when an enemy appears (three for Kill on Sight and bounty targets).")
 	private.Switch(column, Detect, "stealth", "Stealth alarm", "Warn when a nearby enemy uses Stealth, Vanish, Prowl, Shadowmeld or Invisibility.")
 	private.Switch(column, Detect, "autoShow", "Open the Nearby window when an enemy appears", "Otherwise open it with right-click on the minimap button, the Enemies page or /wanted nearby.")
-	private.Switch(column, Detect, "risingAlerts", "Warn when a zone fills up with enemies fast", "A warning like RISING FAST: The Barrens when many more enemies show up there than 5 minutes before. From your sightings and other Wanted users'.")
+	private.Switch(column, Detect, "risingAlerts", "Warn when a zone fills up with enemies fast", "A warning like RISING FAST: The Barrens when many more enemies show up there than 5 minutes before, from the number chosen below. From your sightings and other Wanted users'.")
+	private.risingMin = W:Segmented(content, {
+		{ key = "5", label = "5" },
+		{ key = "10", label = "10" },
+		{ key = "15", label = "15" },
+		{ key = "25", label = "25" },
+	}, function(key)
+		Detect().risingMin = tonumber(key)
+	end, 56)
+	column:Row("Warn from", private.risingMin, "How many enemies in the last 5 minutes a zone needs for the warning. They must also be at least double the 5 minutes before.")
 	private.Switch(column, Detect, "onlyWhenExposed", "Only when I can be attacked", "Alerts, the TARGETED warning and the Nearby window stay quiet while you're not PvP flagged or are in a sanctuary. Enemies are still seen and shared.", function()
 		Wanted.NearbyWindow:UpdateExposure()
 	end)
@@ -735,6 +744,7 @@ function private.Refresh()
 	local detect = Detect()
 	private.alerts:Select(detect.alerts or "all", true)
 	private.inSight:Select(tostring(detect.inSight or 60), true)
+	private.risingMin:Select(tostring(Wanted.Hotspots:GetRisingMin()), true)
 	private.autoHide:Select(tostring(detect.autoHide or 300), true)
 	private.timeout:Select(tostring(detect.timeout or 30), true)
 	private.layout:Select(NearbyShow().layout or "auto", true)

@@ -16,8 +16,9 @@ local TREND_MIN = 2 -- the count has to move by at least this much to count as r
 -- Rising fast: at least this many enemies seen there in the last 5 minutes, at least this many more than in
 -- the 5 minutes before, and at least twice as many. One alert per zone per quarter hour.
 local SURGE_WINDOW = 5 * 60
-local SURGE_MIN = 5
-local SURGE_JUMP = 4
+local SURGE_MIN_DEFAULT = 10 -- settings.detect.risingMin: 5, 10, 15 or 25
+local SURGE_MIN_CHOICES = { [5] = true, [10] = true, [15] = true, [25] = true }
+local SURGE_JUMP_LEAST = 4
 local SURGE_COOLDOWN = 15 * 60
 local SURGE_CHECK_SECONDS = 30
 
@@ -310,12 +311,26 @@ function Hotspots:Get(recentSeconds)
 	return list
 end
 
----Zones filling up fast: many more enemies in the last 5 minutes than in the 5 before.
+---Enemies in the last 5 minutes a zone needs before it counts as rising fast. A missing or invalid setting reads as 10.
+---@return number
+function Hotspots:GetRisingMin()
+	local detect = Wanted.db and Wanted.db.settings and Wanted.db.settings.detect
+	local min = detect and detect.risingMin
+	if SURGE_MIN_CHOICES[min] then
+		return min
+	end
+	return SURGE_MIN_DEFAULT
+end
+
+---Zones filling up fast: at least the chosen number of enemies in the last 5 minutes, double the 5 before and up by
+---max(4, half the number) or more.
 ---@return table[]
 function Hotspots:GetSurging()
 	local surging = {}
+	local min = Hotspots:GetRisingMin()
+	local jump = math.max(SURGE_JUMP_LEAST, math.floor(min / 2))
 	for _, group in ipairs(Hotspots:Get(SURGE_WINDOW)) do
-		if group.trendKnown and group.recent >= SURGE_MIN and group.recent - group.earlier >= SURGE_JUMP and group.recent >= 2 * group.earlier then
+		if group.trendKnown and group.recent >= min and group.recent - group.earlier >= jump and group.recent >= 2 * group.earlier then
 			tinsert(surging, group)
 		end
 	end

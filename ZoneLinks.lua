@@ -1,6 +1,7 @@
 -- Wanted: which open-world zones touch which, and which maps are capital cities, for the RISING FAST warning's two
 -- filters (Hotspots). Map ids are the client's uiMapIDs. Written from map knowledge, not read from the client, which
--- has no adjacency data: a zone missing here counts as not near anything.
+-- has no adjacency data: a zone missing here counts as not near anything. The classic borders are from map knowledge;
+-- the four Forever zones' are from published zone guides (walkable entrances only).
 
 local _, Wanted = ...
 local ZoneLinks = {}
@@ -54,6 +55,10 @@ local BORDERS = {
 	{ 1438, 1457 }, { 1438, 1439 }, -- Teldrassil: Darnassus, Darkshore (by boat)
 	{ 1448, 1452 }, { 1448, 1450 }, -- Felwood: Winterspring, Moonglade
 	{ 1452, 1450 }, -- Winterspring: Moonglade
+	-- Forever zones
+	{ 2548, 1433 }, { 2548, 1418 }, -- Riverglades: Redridge Mountains, Badlands
+	{ 2652, 1443 }, -- Shen'dralas: Desolace (through the Valley of Bones)
+	{ 2482, 1452 }, -- Mount Hyjal: Winterspring (through Darkwhisper Gorge)
 }
 
 local links = {}

@@ -181,6 +181,7 @@ function private.RealmOf(game)
 	local id = type(game.realmID) == "number" and game.realmID > 0 and game.realmID or nil
 	if not id and type(game.playerGuid) == "string" and not (issecretvalue and issecretvalue(game.playerGuid)) then
 		id = tonumber(strmatch(game.playerGuid, "^Player%-(%d+)%-"))
+		id = id and id > 0 and id or nil
 	end
 	local name = type(game.realmName) == "string" and game.realmName ~= "" and game.realmName or nil
 	return id, name

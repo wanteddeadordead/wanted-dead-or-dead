@@ -2886,7 +2886,7 @@ end
 ---A realm name compared without spaces, dashes, apostrophes or case (the ruleset on Forever). Nil for no name, the
 ---stand-ins "?" and "#<number>", and "".
 local function NormalizeRealm(name)
-	if type(name) ~= "string" or name == "" or name == "?" or strfind(name, "^#%d+$") then
+	if type(name) ~= "string" or name == "" or name == "?" or strfind(name, "^#") then
 		return nil
 	end
 	return strlower((gsub(name, "[%s%-']", "")))
@@ -3021,11 +3021,16 @@ function private.HandleLinkMessage(tag, tbl, sender)
 		local greeted = private.greeted[sender] and GetTime() - private.greeted[sender] < GREET_SECONDS
 		local wanted = tbl.x or (tbl.a and greeted)
 		local ri = private.CleanRealmID(tbl.ri)
-		if type(tbl.r) ~= "string" or (Sync:IsOwnRealm(tbl.r, ri) and not wanted) or type(tbl.c) ~= "table" then
+		if type(tbl.r) ~= "string" or #tbl.r > 64 or strfind(tbl.r, "|", 1, true) or (Sync:IsOwnRealm(tbl.r, ri) and not wanted) or type(tbl.c) ~= "table" then
 			Wanted:Log("!! Sync: %s greeted us by whisper from our own realm or without one; ignored", tostring(sender))
 			return
 		end
-		link = private.AddLink(sender, tbl.r, ri)
+		-- A 1.29.7 answer names no realm: keep the one we greeted them on
+		local theirRealm = tbl.r
+		if not private.RealmKey(tbl.r, ri) and greeted then
+			theirRealm, ri = private.greetedRealm[sender] or tbl.r, ri or private.greetedID[sender]
+		end
+		link = private.AddLink(sender, theirRealm, ri)
 		link.received = link.received + 1
 		if not tbl.a then
 			private.SendLinkHello(sender, true)

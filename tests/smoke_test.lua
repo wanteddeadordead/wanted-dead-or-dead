@@ -2753,6 +2753,17 @@ do
 	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "Far Land", ri = 7000 }), "WHISPER", "Far Peer")
 	RunFrames()
 	check(ns.Sync:GetLinks()["Far Peer"] and ns.db.farPeers["Far Peer"] and ns.db.farPeers["Far Peer"].ri == 7000, "a hello from another number links and is remembered with ri")
+	-- A 1.29.7 answer (r blank) to a greeting keeps the realm we greeted; oversized or piped names are refused
+	clock = clock + 700
+	ns.Sync:Greet("Greeted Far", "Far Land", 7100)
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "", a = 1 }), "WHISPER", "Greeted Far")
+	RunFrames()
+	local kept = ns.Sync:GetLinks()["Greeted Far"]
+	check(kept and kept.ri == 7100 and kept.realm == "Far Land" and ns.db.farPeers["Greeted Far"], "a blank answer keeps the realm we greeted them on")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = string.rep("x", 65) }), "WHISPER", "Long Realm")
+	Fire("CHAT_MSG_ADDON", "WNTD", Message("H", { c = {}, r = "a|cffff0000b" }), "WHISPER", "Pipe Realm")
+	RunFrames()
+	check(not ns.Sync:GetLinks()["Long Realm"] and not ns.Sync:GetLinks()["Pipe Realm"], "a hello with an oversized or piped realm is refused")
 	-- 9: remembered links without ri are greeted
 	ns.db.farPeers["Old Remembered"] = { realm = "Some Realm", seen = GetServerTime() }
 	ClearSent()
@@ -2790,6 +2801,7 @@ do
 		"a same-faction friend with an unknown realm is not greeted")
 	check(bridgePrivate.IsRealmLinkCandidate(Game({ playerGuid = "Player-7000-0000AAAA" }, true)), "one on another number is")
 	check(not bridgePrivate.IsRealmLinkCandidate(Game({ realmID = 6932 }, true)), "one on our number is not")
+	check(not bridgePrivate.IsRealmLinkCandidate(Game({ playerGuid = "Player-0-0000AAAA" }, true)), "a Player-0 guid is no realm")
 	ns.db.realm = { id = 6932, name = "" }
 	check(not bridgePrivate.IsCandidate(Game({ realmName = "Doomhowl" })), "our name unknown and no number for them: rejected")
 	-- Put back

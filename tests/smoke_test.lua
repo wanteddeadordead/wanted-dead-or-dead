@@ -1947,6 +1947,11 @@ check(not Warned("The Barrens", 1413, "NEARC"), "near-only: a far zone does not 
 check(not Warned("Nowhere", 9999, "NEARD"), "near-only: a zone missing from the table does not warn")
 ownMap = 1414 -- a continent map, as on a boat
 check(Warned("Duskwood", 1431, "NEARG"), "near-only: a continent map is an unknown own zone and warns")
+ownMap = 1429
+local realInstance = IsInInstance
+IsInInstance = function() return true end
+check(Warned("Silithus", 1451, "NEARI"), "near-only: inside an instance warns as if off")
+IsInInstance = realInstance
 ownMap = 9999 -- a map the table does not have
 check(Warned("Silithus", 1451, "NEARH"), "near-only: an own map not in the table warns")
 ownMap = nil

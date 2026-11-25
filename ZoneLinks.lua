@@ -7,18 +7,18 @@ local _, Wanted = ...
 local ZoneLinks = {}
 Wanted.ZoneLinks = ZoneLinks
 
--- Capital cities by map id, and by name for a record that carries no map id
+-- Capital cities and their side, by map id, and by name for a record that carries no map id
 ZoneLinks.CITY_MAPS = {
-	[1454] = true, -- Orgrimmar
-	[1456] = true, -- Thunder Bluff
-	[1458] = true, -- Undercity
-	[1453] = true, -- Stormwind City
-	[1455] = true, -- Ironforge
-	[1457] = true, -- Darnassus
+	[1454] = "Horde", -- Orgrimmar
+	[1456] = "Horde", -- Thunder Bluff
+	[1458] = "Horde", -- Undercity
+	[1453] = "Alliance", -- Stormwind City
+	[1455] = "Alliance", -- Ironforge
+	[1457] = "Alliance", -- Darnassus
 }
 ZoneLinks.CITY_NAMES = {
-	["Orgrimmar"] = true, ["Thunder Bluff"] = true, ["Undercity"] = true,
-	["Stormwind City"] = true, ["Ironforge"] = true, ["Darnassus"] = true,
+	["Orgrimmar"] = "Horde", ["Thunder Bluff"] = "Horde", ["Undercity"] = "Horde",
+	["Stormwind City"] = "Alliance", ["Ironforge"] = "Alliance", ["Darnassus"] = "Alliance",
 }
 
 -- One line per border, each listed once; Near() reads it both ways.
@@ -69,19 +69,25 @@ for _, border in ipairs(BORDERS) do
 	links[a][b], links[b][a] = true, true
 end
 
----Whether a map is a capital city, by map id or by name.
+---Whether a map is a capital of the other side than the player's. Enemy crowds are normal in their own capital; in
+---yours they are a raid. With no usable faction for the player, no city counts.
 ---@param mapId number?
 ---@param name string?
+---@param myFaction string? "Alliance" or "Horde"
 ---@return boolean
-function ZoneLinks:IsCity(mapId, name)
-	return (mapId and ZoneLinks.CITY_MAPS[mapId]) or (name and ZoneLinks.CITY_NAMES[name]) or false
+function ZoneLinks:IsEnemyCity(mapId, name, myFaction)
+	if myFaction ~= "Alliance" and myFaction ~= "Horde" then
+		return false
+	end
+	local side = (mapId and ZoneLinks.CITY_MAPS[mapId]) or (name and ZoneLinks.CITY_NAMES[name])
+	return side ~= nil and side ~= false and side ~= myFaction
 end
 
 ---Whether a map is one the table knows (a zone or city with borders). A continent, a boat or an instance is not.
 ---@param mapId number?
 ---@return boolean
 function ZoneLinks:Known(mapId)
-	return mapId ~= nil and (links[mapId] ~= nil or ZoneLinks.CITY_MAPS[mapId] == true)
+	return mapId ~= nil and (links[mapId] ~= nil or ZoneLinks.CITY_MAPS[mapId] ~= nil)
 end
 
 ---Whether a zone is the player's own or touches it. A zone not in the table is not near.

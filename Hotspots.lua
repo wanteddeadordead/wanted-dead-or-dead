@@ -343,7 +343,7 @@ end
 ---@param detect table settings.detect
 ---@return boolean
 function private.PassesRisingFilters(group, detect)
-	if detect.risingSkipCities ~= false and Wanted.ZoneLinks:IsCity(group.mapId, group.zone) then
+	if detect.risingSkipCities ~= false and Wanted.ZoneLinks:IsEnemyCity(group.mapId, group.zone, UnitFactionGroup("player")) then
 		return false
 	end
 	if detect.risingNearOnly == true and not IsInInstance() then

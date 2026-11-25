@@ -1925,10 +1925,18 @@ local function Warned(zone, mapId, tag)
 end
 ns.db.settings.detect.risingMin = nil
 ns.db.settings.detect.risingSkipCities = nil
-check(ns.db.settings.detect.risingSkipCities == nil and not Warned("Orgrimmar", 1454, "CITA"), "a capital city is skipped by default")
+-- The player is Horde here: only Alliance capitals are skipped
+check(not Warned("Stormwind City", 1453, "CITA"), "an enemy capital is skipped by default")
+check(not Warned("Ironforge", nil, "CITC"), "an enemy capital known only by name is skipped")
+check(Warned("Orgrimmar", 1454, "CITD"), "the player's own capital still warns")
+check(Warned("Undercity", nil, "CITE"), "the player's own capital known only by name still warns")
 ns.db.settings.detect.risingSkipCities = false
-check(Warned("Stormwind City", 1453, "CITB"), "a capital city warns with the switch off")
+check(Warned("Darnassus", 1457, "CITB"), "an enemy capital warns with the switch off")
 ns.db.settings.detect.risingSkipCities = true
+local realFaction = UnitFactionGroup
+UnitFactionGroup = function() return nil end
+check(Warned("Stormwind City", 1453, "CITF"), "no usable faction skips no city")
+UnitFactionGroup = realFaction
 local ownMap = 1
 C_Map.GetBestMapForUnit = function() return ownMap end
 ns.db.settings.detect.risingNearOnly = true
@@ -1939,6 +1947,8 @@ check(not Warned("The Barrens", 1413, "NEARC"), "near-only: a far zone does not 
 check(not Warned("Nowhere", 9999, "NEARD"), "near-only: a zone missing from the table does not warn")
 ownMap = 1414 -- a continent map, as on a boat
 check(Warned("Duskwood", 1431, "NEARG"), "near-only: a continent map is an unknown own zone and warns")
+ownMap = 9999 -- a map the table does not have
+check(Warned("Silithus", 1451, "NEARH"), "near-only: an own map not in the table warns")
 ownMap = nil
 check(Warned("Tanaris", 1446, "NEARE"), "near-only: an unknown own zone warns as if off")
 ns.db.settings.detect.risingNearOnly = false

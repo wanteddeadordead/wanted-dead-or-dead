@@ -348,7 +348,17 @@ end
 ---@param scale any a size setting (Theme:ClampScale)
 ---@return table?
 function Theme:SetFrameScale(frame, scale)
-	scale = Theme:ClampScale(scale)
+	return Theme:ScaleAbout(frame, Theme:ClampScale(scale))
+end
+
+---Sets a frame's scale on UIParent as it is given (no size setting's range), keeping one point of it where it is on
+---screen and the whole of it on screen as SetFrameScale does. Returns where it now is, as SetFrameScale does.
+---@param frame Frame
+---@param scale number the frame's scale
+---@param pinX number? the point that stays put, in UIParent's units; the frame's centre when not given
+---@param pinY number?
+---@return table?
+function Theme:ScaleAbout(frame, scale, pinX, pinY)
 	local old = frame:GetScale()
 	local left, top = frame:GetLeft(), frame:GetTop()
 	frame:SetScale(scale)
@@ -357,9 +367,14 @@ function Theme:SetFrameScale(frame, scale)
 	end
 	-- In UIParent's units: the frame's own are its scale times smaller
 	local width, height = frame:GetWidth(), frame:GetHeight()
-	local centreX, centreY = (left + width / 2) * old, (top - height / 2) * old
+	left, top = left * old, top * old
+	if type(pinX) ~= "number" or type(pinY) ~= "number" then
+		pinX, pinY = left + width * old / 2, top - height * old / 2
+	end
+	-- The pin's place on the frame, in the frame's own units, is the same at the new scale
+	local fromLeft, fromTop = (pinX - left) / old, (top - pinY) / old
 	local screenWidth, screenHeight = UIParent:GetWidth(), UIParent:GetHeight()
-	left, top = Theme:OnScreen(centreX - width * scale / 2, centreY + height * scale / 2, width * scale, height * scale,
+	left, top = Theme:OnScreen(pinX - fromLeft * scale, pinY + fromTop * scale, width * scale, height * scale,
 		screenWidth, screenHeight)
 	local x, y = left / scale, (top - screenHeight) / scale
 	frame:ClearAllPoints()

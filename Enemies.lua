@@ -416,6 +416,7 @@ function private.Scan(unit)
 			mapId = mapId,
 			x = x,
 			y = y,
+			ownSeen = GetServerTime(), -- this client's own sighting (a shared one never sets it)
 		})
 	end
 	if isNew then
@@ -1023,9 +1024,9 @@ function Enemies:GetNearby(order)
 	return list
 end
 
----When this client itself saw each enemy in the last hour: guid -> server time. Own sightings are the entries of the
----sightings ring without a sharer (`by`), and whoever is on the Nearby list now; a sighting shared by another Wanted
----user never counts, even when it is newer than ours and has replaced the saved player's lastSeen.
+---When this client itself saw each enemy in the last hour, from the sightings ring and the Nearby list: guid -> server
+---time. Own ring entries have no sharer (`by`); a sighting shared by another Wanted user never counts, even when it
+---is newer than ours and has replaced the saved player's lastSeen. (The saved `ownSeen` is read by GetLastHour.)
 ---@return table<string, number>
 function private.OwnLastHour()
 	local own = {}
@@ -1056,7 +1057,9 @@ function Enemies:GetLastHour(mineOnly)
 	for guid, player in pairs(Wanted.db.players) do
 		local at = player.lastSeen
 		if own then
-			at = own[guid]
+			local saved = type(player.ownSeen) == "number" and player.ownSeen <= now and player.ownSeen or nil
+			at = max(own[guid] or 0, saved or 0)
+			at = at > 0 and at or nil
 		end
 		if at and now - at <= LAST_HOUR and player.faction and player.faction ~= private.playerFaction and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") then
 			seen[guid] = true

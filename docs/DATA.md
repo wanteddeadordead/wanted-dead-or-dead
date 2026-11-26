@@ -221,8 +221,13 @@ else read is put back in range (Theme:ClampScale). The window's size is also kep
 
 `WantedDB.settings.nearby.hourScope` (from 1.31.0, default `"mine"`): whose sightings the Nearby window's Last hour tab lists,
 `"mine"` (enemies this client saw itself in the last hour) or `"everyone"` (shared sightings too); anything else is read as
-`"mine"`. "Mine" is worked out from the `WantedDB.sightings` ring (entries without `by` are this client's own) and the
-Nearby list, so no player field was added. A new key filled in at load: no migration.
+`"mine"`. A new key filled in at load: no migration.
+
+`WantedDB.players[guid].ownSeen` (from 1.31.0, optional): server time this client itself last saw the player, written
+where the client's own detection (`Enemies`, `Recorder`) sets `lastSeen`, never by a shared sighting, a bounty or a
+catch-up (`lastSeen` is overwritten by those). Read only by the Last hour tab's Mine view, together with the client's own
+`WantedDB.sightings` entries (no `by`) and the Nearby list, so records without it (older saves) still work: they fill in
+as enemies are seen again. A number at or before now, else ignored. An additive field: no migration.
 
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,

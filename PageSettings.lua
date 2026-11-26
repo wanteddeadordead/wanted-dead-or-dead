@@ -116,31 +116,13 @@ function private.Switch(column, getTable, key, label, tip, onChange)
 	return column:Row(label, switch, tip), switch
 end
 
----A size slider for a row, 80% to 150% in 5% steps. A drag applies the size when the thumb is let go, so what it sizes
----(the window it sits in, even) doesn't change under the mouse; a number typed in its box applies at once.
+---A size slider for a row, 80% to 150% in 5% steps (W:SizeSlider: a drag applies when the thumb is let go).
 ---@param get fun(): number? the size saved
 ---@param apply fun(scale: number)
-function private.SizeSlider(parent, get, apply)
-	local holder
-	local function Percent(value) return format("%d%%", value) end
-	local function Dragging() return holder.slider.IsDraggingThumb and holder.slider:IsDraggingThumb() == true end
-	holder = W:Slider(parent, "", 200, Theme.SIZE_LOW, Theme.SIZE_HIGH, Theme.SIZE_STEP, Percent, function(value)
-		if not Dragging() then
-			apply(value / 100)
-			return
-		end
-		holder.pending = value
-		holder:SetScript("OnUpdate", function(self)
-			if not Dragging() then
-				self:SetScript("OnUpdate", nil)
-				apply(self.pending / 100)
-				self.pending = nil
-			end
-		end)
-	end)
-	-- No label over it: the row's label names it, so the track and box sit on the row's middle
-	holder:SetHeight(26)
-	tinsert(private.sizeSliders, { slider = holder, get = get })
+---@param show (fun(): number)? the percent it shows, when not the saved size within 80% to 150% (the main window's)
+function private.SizeSlider(parent, get, apply, show, low, high)
+	local holder = W:SizeSlider(parent, 200, low or Theme.SIZE_LOW, high or Theme.SIZE_HIGH, apply)
+	tinsert(private.sizeSliders, { slider = holder, get = get, show = show })
 	return holder
 end
 
@@ -552,8 +534,16 @@ function private.BuildLook(panel, width)
 	end
 
 	card = private.Card(panel, -416, 92, "Size", width)
-	local size = W:Row(card, width, "UI size", private.SizeSlider(card, function() return Wanted.db.settings.uiScale end, function(scale) UI:SetScale(scale) end),
-		"This window's size, with its popups and menus. Saved for every character on the account. The Nearby window and the HUDs have their own sizes in their tabs.")
+	-- The window's size: the same as the control in its title bar, and Shift + mouse wheel (UI:SetScale)
+	local windowSize = private.SizeSlider(card, nil, function(scale, slider) UI:SetScale(scale, slider.thumb) end,
+		function() return UI:GetScalePercent() end, UI.SCALE_LOW, UI.SCALE_HIGH)
+	UI:OnScaleChanged(function(percent)
+		if not windowSize.pending then
+			windowSize:SetValue(percent)
+		end
+	end)
+	local size = W:Row(card, width, "UI size", windowSize,
+		"This window's size, with its popups and menus, the same at any game UI scale. Also in the window's title bar, and Shift + mouse wheel over the window changes it in 5% steps. Saved for every character on the account. The Nearby window and the HUDs have their own sizes in their tabs.")
 	size:SetPoint("TOPLEFT", 0, -36)
 end
 
@@ -755,7 +745,7 @@ function private.Refresh()
 	-- Not while a drag waits to apply
 	for _, entry in ipairs(private.sizeSliders) do
 		if not entry.slider.pending then
-			entry.slider:SetValue(floor(Theme:ClampScale(entry.get()) * 100 + 0.5))
+			entry.slider:SetValue(entry.show and entry.show() or floor(Theme:ClampScale(entry.get()) * 100 + 0.5))
 		end
 	end
 	-- The rank layouts are in cog popups, built on first opening

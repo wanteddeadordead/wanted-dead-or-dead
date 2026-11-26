@@ -322,6 +322,9 @@ function hooksecurefunc(name, f, post)
 end
 function GetInboxNumItems() return 0 end
 function GetCursorPosition() return 0, 0 end
+-- The screen in pixels: UIParent's size (one unit a pixel) unless a test sets screenPixels = { width, height }
+screenPixels = nil
+function GetPhysicalScreenSize() if screenPixels then return screenPixels[1], screenPixels[2] end return UIParent._w, UIParent._h end
 -- An enemy on nameplate1 and, when set, as the target
 enemyUnits = {}
 local function enemy(unit) return enemyUnits[unit] end
@@ -1482,6 +1485,7 @@ check(WantedDB.world == "live" and s.minBounty == 500 and s.uiScale == 1.2 and s
 check(WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012" and WantedDB.devLog[1] == "a line" and WantedDB.tour.done
 	and WantedDB.whatsNewSeen == "1.28.0", "and the welcome, the first steps done, what's new seen, the account mark (the app's link) and the debug log")
 check(s.detect.inSight == 60 and s.nearby.kos == true, "settings the beta save lacked get their defaults")
+check(s.windowScale == nil, "the window's old size (uiScale) waits for the window to be made to convert: no windowScale from loading")
 local function empty(t) return t == nil or next(t) == nil end
 for _, key in ipairs({ "records", "chains", "players", "sightings", "sightingsPos", "kos", "kosGuilds", "kosPending", "ignore", "guildKos",
 	"enemyStats", "tracks", "raids", "duels", "keys", "sigChecked", "sigPre", "versionVotes", "addonVersions", "cardPicks", "hkBook", "myPvp",
@@ -7882,7 +7886,7 @@ end)()
 	-- The window, 1090 by 795 at 400 from the left of a 1920 by 900 screen, made 150%: too tall for the screen, so
 	-- its top goes to the screen's top; its centre stays across
 	local frame = ns.UI:GetFrame()
-	local savedScale, savedWindow = ns.db.settings.uiScale, ns.db.settings.window
+	local savedScale, savedWindow = ns.db.settings.windowScale, ns.db.settings.window
 	local realW, realH = UIParent._w, UIParent._h
 	UIParent._w, UIParent._h = 1920, 900
 	frame:SetScale(1)
@@ -7891,7 +7895,7 @@ end)()
 	frame.GetTop = function(self) return self._scale == 1 and 847.5 or nil end
 	ns.UI:SetScale(1.5)
 	-- Never larger than the screen has room for: at 150% it ran off the bottom, and with it the slider to undo it
-	check(frame:GetScale() == 1.1 and ns.db.settings.uiScale == 1.1, "UI size 150% on a 900-high screen: as large as fits on the slider's steps (110%), and that is saved: "..frame:GetScale())
+	check(frame:GetScale() == 1.1 and ns.db.settings.windowScale == 1.1, "UI size 150% on a 900-high screen: as large as fits on the slider's steps (110%), and that is saved: "..frame:GetScale())
 	frame:SetScale(1)
 	ns.UI:SetScale(0.8)
 	check(frame:GetScale() == 0.8, "smaller sizes are as asked")
@@ -7915,7 +7919,7 @@ end)()
 	-- From here a screen with room for 150%
 	UIParent._h = 1400
 	ns.UI:SetScale(9)
-	check(ns.db.settings.uiScale == 1.5, "a size past 150% saves as 150% on a screen with room for it")
+	check(ns.db.settings.windowScale == 1.5, "a size past 150% saves as 150% on a screen with room for it")
 	frame.GetLeft, frame.GetTop = nil, nil
 
 	-- The Settings slider: a typed size applies at once; a drag waits for the thumb to be let go
@@ -7927,19 +7931,19 @@ end)()
 	check(row and row.control.slider, "Settings, Theme has a UI size row with a slider")
 	local slider = row.control.slider
 	slider._scripts.OnValueChanged(slider, 120)
-	check(ns.db.settings.uiScale == 1.2 and frame:GetScale() == 1.2, "the slider at 120% sizes the window: "..ns.db.settings.uiScale)
+	check(ns.db.settings.windowScale == 1.2 and frame:GetScale() == 1.2, "the slider at 120% sizes the window: "..ns.db.settings.windowScale)
 	check(row.control.box._text == "120%", "and its box reads 120%: "..row.control.box._text)
 	local dragging = true
 	slider.IsDraggingThumb = function() return dragging end
 	slider._scripts.OnValueChanged(slider, 90)
-	check(ns.db.settings.uiScale == 1.2, "mid-drag, nothing changes size yet")
+	check(ns.db.settings.windowScale == 1.2, "mid-drag, nothing changes size yet")
 	row.control._scripts.OnUpdate(row.control)
-	check(ns.db.settings.uiScale == 1.2, "nor while the thumb is still held")
+	check(ns.db.settings.windowScale == 1.2, "nor while the thumb is still held")
 	dragging = false
 	row.control._scripts.OnUpdate(row.control)
-	check(ns.db.settings.uiScale == 0.9 and frame:GetScale() == 0.9 and not row.control._scripts.OnUpdate, "let go: 90% applies, once")
+	check(ns.db.settings.windowScale == 0.9 and frame:GetScale() == 0.9 and not row.control._scripts.OnUpdate, "let go: 90% applies, once")
 	slider.IsDraggingThumb = nil
-	ns.db.settings.uiScale = 1.25
+	ns.db.settings.windowScale = 1.25
 	ns.UI:Refresh(true)
 	check(row.control.box._text == "125%", "the slider shows the saved size: "..row.control.box._text)
 
@@ -7973,9 +7977,221 @@ end)()
 	check(cog.popup and math.abs(cog.popup:GetScale() - 1.3) < 1e-9, "and so is a cog's popup")
 	cog.popup:Hide()
 
-	ns.db.settings.uiScale, ns.db.settings.window = savedScale, savedWindow
-	frame:SetScale(Theme:ClampScale(savedScale))
+	ns.db.settings.windowScale, ns.db.settings.window = savedScale, savedWindow
 	UIParent._w, UIParent._h = realW, realH
+	frame:SetScale(ns.UI:GetScale())
+end)()
+-- The window's size in screen pixels (after 1.30.0): a size is a share of the window at one unit a pixel, 75% to 150%
+-- in 5% steps from its controls; the old setting (uiScale, a scale on UIParent) is converted once so the window keeps
+-- its size on screen; never larger than fits
+;(function()
+	local UI, W, Theme = ns.UI, ns.Widgets, ns.Theme
+	local settings = ns.db.settings
+	local frame = UI:GetFrame()
+	local saved = { windowScale = settings.windowScale, uiScale = settings.uiScale, window = settings.window, w = UIParent._w,
+		h = UIParent._h, shift = IsShiftKeyDown, cursor = GetCursorPosition }
+	local function near(a, b) return math.abs(a - b) < 1e-6 end
+	-- A screen of width by height pixels at a game UI scale: UIParent is 768 units high at a UI scale of 1
+	local function Screen(width, height, uiScale)
+		screenPixels = { width, height }
+		UIParent._h = 768 / uiScale
+		UIParent._w = UIParent._h * width / height
+	end
+	local function Convert(uiScale)
+		settings.windowScale, settings.uiScale = nil, uiScale
+		return UI:GetScale()
+	end
+	frame.GetLeft, frame.GetTop = nil, nil
+
+	-- The base: at 1440 pixels high and a UI scale of 0.64 (1.2 pixels a unit, the size the window was drawn at), 120%
+	-- is the old 100%
+	Screen(2560, 1440, 0.64)
+	settings.windowScale = 1.2
+	frame:Show()
+	check(near(frame:GetScale(), 1), "120% at 1440p and a UI scale of 0.64 is a scale of 1 on UIParent: "..frame:GetScale())
+	-- The same size at another UI scale is the same in pixels
+	Screen(2560, 1440, 1)
+	frame:Hide()
+	frame:Show()
+	check(near(frame:GetScale() * 1440 / 768, 1.2), "and the same 120% at a UI scale of 1 is still 1.2 pixels a unit: "..frame:GetScale())
+
+	-- Converted once: the window keeps the size it had on screen, at several screens and UI scales, off the steps and
+	-- out of 75% to 150% if need be
+	local cases = {
+		{ 2560, 1440, 0.64, 1, 1.2 },
+		{ 2560, 1440, 0.64, 1.25, 1.5 },
+		{ 1920, 1080, 0.65, 0.8, 0.8 * 1080 * 0.65 / 768 }, -- under 75%: kept
+		{ 3840, 2160, 0.65, 1.25, 1.25 * 2160 * 0.65 / 768 }, -- 228.5%: kept, it fits
+		{ 1920, 1080, 0.7111, 1.1, 1.1 * 1080 * 0.7111 / 768 },
+	}
+	for _, case in ipairs(cases) do
+		Screen(case[1], case[2], case[3])
+		local shown = Convert(case[4])
+		check(near(settings.windowScale, case[5]) and near(shown, case[5]),
+			format("uiScale %.2f at %dp, UI scale %.4f: %.4f, got %s", case[4], case[2], case[3], case[5], tostring(settings.windowScale)))
+		frame:SetScale(0)
+		frame:Hide()
+		frame:Show()
+		check(near(frame:GetScale(), case[4]), "and the window is as large on screen as before: "..frame:GetScale())
+	end
+	-- Junk in the old setting reads as it did (100%)
+	Screen(2560, 1440, 0.64)
+	check(near(Convert("junk"), 1.2), "an old setting that isn't a number converts as 100% did")
+	-- Once: windowScale marks it done, and the old setting is no longer read (it stays, for older versions)
+	settings.uiScale = 1.5
+	check(near(UI:GetScale(), 1.2) and settings.uiScale == 1.5, "converted once: a later uiScale changes nothing and stays saved")
+	-- At the game's own UI scale of 1 on 1080p the old 100% ran off the screen (795 of 768 units): it keeps as much of
+	-- that as fits
+	Screen(1920, 1080, 1)
+	check(near(Convert(1), 1.35) and near(settings.windowScale, 1.40625), "1080p at UI scale 1: 140.6% saved, shown at 135%, which fits: "..UI:GetScale())
+	check(UI:GetScale() * 795 <= 1080, "the window fits the screen's height in pixels")
+
+	-- A fresh install: by the screen's height, the drawn size's share of it, 100% to 150%
+	for _, case in ipairs({ { 1080, 1 }, { 1440, 1.2 }, { 1600, 1.35 }, { 2160, 1.5 } }) do
+		Screen(case[1] * 16 / 9, case[1], 1)
+		settings.windowScale, settings.uiScale = nil, nil
+		check(near(UI:GetScale(), case[2]), "a fresh install at "..case[1].."p is "..case[2]..": "..UI:GetScale())
+	end
+
+	-- The controls' range: 75% to 150%, and never larger than fits
+	Screen(2560, 1440, 1)
+	UI:SetScale(0.5)
+	check(near(settings.windowScale, 0.75), "the smallest is 75%: "..settings.windowScale)
+	UI:SetScale(3)
+	check(near(settings.windowScale, 1.5), "the largest is 150% on a screen with room: "..settings.windowScale)
+	Screen(1366, 768, 1)
+	UI:SetScale(1.5)
+	check(near(settings.windowScale, 0.95) and frame:GetScale() * 795 <= UIParent._h, "on a 768-pixel screen 150% is as large as fits: 95%, got "..settings.windowScale)
+	screenPixels = { 1024, 500 }
+	UIParent._w, UIParent._h = 1024, 500
+	UI:SetScale(1)
+	check(near(settings.windowScale, 0.75), "never made smaller than 75% to fit: "..settings.windowScale)
+
+	-- Steps of 5%: from a size off the steps to the next one, and from one outside the range only back toward it
+	Screen(3840, 2160, 1)
+	local function StepFrom(scale, delta)
+		settings.windowScale = scale
+		local changed = UI:StepScale(delta)
+		return changed, settings.windowScale
+	end
+	local changed, now = StepFrom(1.40625, 1)
+	check(changed and near(now, 1.45), "140.6% steps up to 145%: "..now)
+	changed, now = StepFrom(1.40625, -1)
+	check(changed and near(now, 1.4), "and down to 140%: "..now)
+	changed, now = StepFrom(1.2, 1)
+	check(changed and near(now, 1.25), "120% up is 125%: "..now)
+	changed, now = StepFrom(1.5, 1)
+	check(not changed and near(now, 1.5), "150% up stays at 150%")
+	changed, now = StepFrom(0.75, -1)
+	check(not changed and near(now, 0.75), "75% down stays at 75%")
+	changed, now = StepFrom(2.285, 1)
+	check(not changed and near(now, 2.285), "228.5% up stays where it is")
+	changed, now = StepFrom(2.285, -1)
+	check(changed and near(now, 2.25), "228.5% down is 225%: "..now)
+	changed, now = StepFrom(0.731, -1)
+	check(not changed and near(now, 0.731), "73.1% down stays where it is")
+	changed, now = StepFrom(0.731, 1)
+	check(changed and near(now, 0.75), "73.1% up is 75%: "..now)
+	Screen(1920, 1080, 1)
+	changed, now = StepFrom(1.35, 1)
+	check(not changed and near(now, 1.35), "no step past what fits (135% at 1080p)")
+
+	-- Shift + mouse wheel anywhere on the window: a step about the mouse, which stays over the same point of the window
+	Screen(1920, 1080, 1) -- UIParent 1365.3 by 768
+	settings.windowScale = 1
+	frame:Hide()
+	frame:Show()
+	local base = 768 / 1080
+	check(near(frame:GetScale(), base), "100% at 1080p, UI scale 1: one unit a pixel")
+	frame.GetLeft = function(self) return 100 / self._scale end
+	frame.GetTop = function(self) return 700 / self._scale end
+	GetCursorPosition = function() return 300, 600 end -- UIParent's scale is 1 here
+	frame._scripts.OnMouseWheel(frame, 1)
+	check(near(settings.windowScale, 1), "without Shift the wheel doesn't size it")
+	IsShiftKeyDown = function() return true end
+	frame._scripts.OnMouseWheel(frame, 1)
+	check(near(settings.windowScale, 1.05) and near(frame:GetScale(), base * 1.05), "Shift + wheel up: 105%: "..settings.windowScale)
+	local point = frame._point
+	local scale = frame:GetScale()
+	local left, top = point[4] * scale, UIParent._h + point[5] * scale
+	check(point[1] == "TOPLEFT" and near((300 - left) / scale, (300 - 100) / base) and near((top - 600) / scale, (700 - 600) / base),
+		"the point under the mouse stays under it: "..left..", "..top)
+	frame.GetLeft, frame.GetTop = nil, nil
+	frame._scripts.OnMouseWheel(frame, -1)
+	check(near(settings.windowScale, 1), "Shift + wheel down: back to 100%")
+	-- Over a scrolling area in the window it sizes the window and doesn't scroll; over one outside, nothing
+	local inside = W:Scroll(frame, 200, 100)
+	inside:Fit(400)
+	inside._scripts.OnMouseWheel(inside, -1)
+	check(near(settings.windowScale, 0.95) and inside:GetVerticalScroll() == 0, "Shift + wheel over a scrolling page sizes the window, no scroll")
+	local outside = W:Scroll(UIParent, 200, 100)
+	outside:Fit(400)
+	outside._scripts.OnMouseWheel(outside, -1)
+	check(near(settings.windowScale, 0.95) and outside:GetVerticalScroll() == 44, "and over one outside the window it scrolls as ever")
+	IsShiftKeyDown = saved.shift
+	inside._scripts.OnMouseWheel(inside, -1)
+	check(near(settings.windowScale, 0.95) and inside:GetVerticalScroll() == 44, "without Shift a page scrolls")
+	GetCursorPosition = saved.cursor
+
+	-- The title bar's control and Settings, Theme: UI size show the same size and both set it
+	settings.windowScale = 1
+	UI:Show("settings")
+	local titleSlider, settingsRow
+	for _, f in ipairs(Mock.created) do
+		if rawget(f, "tooltipTitle") == "Window size" and f._kind == "Slider" then titleSlider = f end
+	end
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "UI size" and rawget(fs._parent, "control") then settingsRow = fs._parent end
+	end
+	check(titleSlider and settingsRow, "the title bar has a size control, and Settings its UI size row")
+	local title, row = titleSlider._parent, settingsRow.control
+	check(title:GetParent() ~= row:GetParent(), "two controls")
+	titleSlider._scripts.OnValueChanged(titleSlider, 110)
+	check(near(settings.windowScale, 1.1) and row.box._text == "110%" and title.box._text == "110%", "the title bar's control at 110%: Settings shows 110%: "..row.box._text)
+	row.slider._scripts.OnValueChanged(row.slider, 85)
+	check(near(settings.windowScale, 0.85) and title.box._text == "85%", "Settings at 85%: the title bar shows 85%: "..title.box._text)
+	IsShiftKeyDown = function() return true end
+	frame._scripts.OnMouseWheel(frame, 1)
+	IsShiftKeyDown = saved.shift
+	check(title.box._text == "90%" and row.box._text == "90%", "Shift + wheel: both show 90%")
+	-- A converted size off the steps shows as it is
+	Screen(1920, 1080, 1)
+	settings.windowScale = 1.30625
+	UI:Refresh(true)
+	frame:Hide()
+	frame:Show()
+	check(row.box._text == "131%", "a converted 130.6% shows as 131% in Settings: "..row.box._text)
+	-- A drag waits for the thumb to be let go, then the window sizes about the thumb
+	local dragging = true
+	titleSlider.IsDraggingThumb = function() return dragging end
+	titleSlider._scripts.OnValueChanged(titleSlider, 120)
+	check(near(settings.windowScale, 1.30625), "mid-drag in the title bar nothing changes size yet")
+	dragging = false
+	title._scripts.OnUpdate(title)
+	check(near(settings.windowScale, 1.2) and not title._scripts.OnUpdate and row.box._text == "120%", "let go: 120%, and Settings follows")
+	titleSlider.IsDraggingThumb = nil
+
+	-- The title bar: the tagline gives way to the size control when the text is larger (Text Size)
+	local tagline
+	for _, fs in ipairs(Mock.fontStrings) do
+		if fs._text == "World PvP bounties, player to player" then tagline = fs end
+	end
+	UI:Refresh(true)
+	check(tagline:IsShown() and title:IsShown(), "at the usual text size the tagline and the size control fit")
+	local small = Theme.Fonts.small
+	local realSize = small._size
+	small._size = realSize * 2
+	UI:Refresh(true)
+	check(not tagline:IsShown() and title:IsShown(), "with twice the text the tagline goes and the size control stays")
+	small._size = realSize
+	UI:Refresh(true)
+	check(tagline:IsShown(), "and comes back")
+
+	screenPixels = nil
+	UIParent._w, UIParent._h = saved.w, saved.h
+	settings.windowScale, settings.uiScale, settings.window = saved.windowScale, saved.uiScale, saved.window
+	frame:Hide()
+	frame:SetScale(UI:GetScale())
 end)()
 -- Themes apply live: choosing one re-tints what's drawn in its colours, with no /reload; text on the accent reads
 ;(function()

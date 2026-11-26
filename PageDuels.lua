@@ -316,6 +316,7 @@ function private.BuildGearPanel(card, width)
 	-- Scrolls inside the card when the card is shorter than the doll
 	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	frame.scrollBarHideable = true
+	W:PassShiftWheel(frame)
 	frame:SetPoint("TOPLEFT", 0, -38)
 	frame:SetPoint("BOTTOMRIGHT", -26, 8)
 	frame:Hide()
@@ -510,6 +511,7 @@ local TIMELINE_TOP = 34
 function private.BuildTimelinePanel(card, width)
 	local frame = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	frame.scrollBarHideable = true
+	W:PassShiftWheel(frame)
 	frame:SetPoint("TOPLEFT", 0, -38)
 	frame:SetPoint("BOTTOMRIGHT", -26, 8)
 	frame:Hide()
@@ -736,6 +738,7 @@ function private.BuildCard(container, width)
 	-- Everything under the title scrolls together: the opener, both lanes and the findings with their tips
 	card.scroll = CreateFrame("ScrollFrame", nil, card, "UIPanelScrollFrameTemplate")
 	card.scroll.scrollBarHideable = true
+	W:PassShiftWheel(card.scroll)
 	card.scroll:SetPoint("TOPLEFT", 0, -38)
 	card.scroll:SetPoint("BOTTOMRIGHT", -26, 8)
 	local body = CreateFrame("Frame", nil, card.scroll)

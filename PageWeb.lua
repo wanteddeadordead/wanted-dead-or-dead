@@ -184,6 +184,7 @@ UI:RegisterPage("web", {
 		-- Everything in a scroll frame: with the setup steps on top, the cards run past the window (2026-10-17)
 		local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
 		scroll.scrollBarHideable = true
+		W:PassShiftWheel(scroll)
 		scroll:SetPoint("TOPLEFT")
 		scroll:SetPoint("BOTTOMRIGHT", -26, 0)
 		local body = CreateFrame("Frame", nil, scroll)

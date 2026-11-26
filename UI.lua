@@ -25,6 +25,8 @@ local FOOTER_HEIGHT = 30
 local NAV_HEIGHT = 34
 local FOOT_TOP = 136 -- the top of the menu's foot (Safety, Suggest a feature, Report a bug): a page at the foot sits on it
 local GROUP_HEIGHT = 26
+local SIZE_CONTROL_WIDTH = 130 -- the title bar's size slider and its box
+local TITLE_GAP = 16 -- between the title bar's brand, tagline, size control and lights
 local TAB_ROW = 38 -- a page without a header that has tabs: they take this much off its top
 -- The menu is one short list (Dashboard, Guild Wars, Bounties, Enemies, Raids, Progress, You): every other page is a tab of one of
 -- them (under), so the menu has no group headings. A page's group is kept only as a note of where it belongs.
@@ -184,8 +186,8 @@ function private.Create()
 		end
 	end
 	private.theme = theme
-	-- Its size (Settings, Theme) first: the saved place is in the window's own units at that size
-	frame:SetScale(private.FitScale(Wanted.db.settings.uiScale))
+	-- Its size first: the saved place is in the window's own units at that size
+	frame:SetScale(private.PixelBase() * UI:GetScale())
 	local saved = Wanted.db.settings.window
 	if saved and saved.point then
 		frame:SetPoint(saved.point, UIParent, saved.point, saved.x, saved.y)
@@ -195,6 +197,8 @@ function private.Create()
 	frame:Hide()
 	tinsert(UISpecialFrames, "WantedFrame")
 	frame:SetScript("OnShow", function()
+		-- The game's UI scale or the screen may have changed since: the same size in screen pixels
+		private.ApplyScale()
 		UI:Refresh(true)
 		-- Keep "4m ago" style times and the connection state current while the window is open
 		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", private.PassiveRefresh))
@@ -206,6 +210,18 @@ function private.Create()
 		end
 	end)
 	private.frame = frame
+	frame:RegisterEvent("UI_SCALE_CHANGED")
+	frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	frame:SetScript("OnEvent", function(self)
+		if self:IsShown() then
+			private.ApplyScale()
+		end
+	end)
+	-- Shift + mouse wheel anywhere on it sizes it (its lists and scrolling areas pass it on: W:PassShiftWheel)
+	frame:EnableMouseWheel(true)
+	frame:SetScript("OnMouseWheel", function(self, delta)
+		private.ShiftWheel(self, delta)
+	end)
 
 	-- Title bar
 	local titleBar = CreateFrame("Frame", nil, frame)
@@ -244,12 +260,14 @@ function private.Create()
 	brand:SetPoint("LEFT", mark, "RIGHT", 8, 1)
 	-- Under heavy development through the WoW Forever beta (Wanted.BETA): a tag beside the brand says so, its tooltip how
 	local anchor = brand
+	private.betaWidth = 0
 	if Wanted.BETA then
 		local beta = W:Pill(titleBar)
 		beta:Set("BETA", C.amber)
 		beta:SetPoint("LEFT", brand, "RIGHT", 10, 0)
 		W:Explain(beta, "Beta", "Wanted is under heavy development through the WoW Forever beta. Expect frequent updates, and possible issues while we work through the game's changes.", "ANCHOR_BOTTOM")
 		anchor = beta
+		private.betaWidth = 10 + beta:GetWidth()
 	end
 	local tagline = Theme:Text(titleBar, "small", "World PvP bounties, player to player")
 	tagline:SetPoint("LEFT", anchor, "RIGHT", 12, -1)
@@ -285,6 +303,19 @@ function private.Create()
 	private.netStatus:SetPoint("RIGHT", close, "LEFT", -10, 0)
 	private.appStatus = Indicator(140, function() UI:Show("web") end)
 	private.appStatus:SetPoint("RIGHT", private.netStatus, "LEFT", -6, 0)
+	-- The window's size, left of the lights; the same as Settings, Theme: UI size
+	local size = W:SizeSlider(titleBar, SIZE_CONTROL_WIDTH, UI.SCALE_LOW, UI.SCALE_HIGH, function(scale, slider)
+		UI:SetScale(scale, slider.thumb)
+	end)
+	size:SetPoint("RIGHT", private.appStatus, "LEFT", -TITLE_GAP, 0)
+	size:SetValue(UI:GetScalePercent())
+	W:Explain(size.slider, "Window size", "This window's size, with its popups and menus. Shift + mouse wheel over the window changes it too, in 5% steps; Settings, Theme has it as UI size.", "ANCHOR_BOTTOM")
+	UI:OnScaleChanged(function(percent)
+		if not size.pending then
+			size:SetValue(percent)
+		end
+	end)
+	private.sizeControl, private.brand, private.tagline, private.close = size, brand, tagline, close
 
 	-- Sidebar
 	local sidebar = CreateFrame("Frame", nil, frame)
@@ -895,6 +926,19 @@ function private.UpdateConnection()
 		Set(private.appStatus, C.red, "Get the app", "No Wanted app on this computer",
 			"The desktop app puts your kills on wanteddeadordead.com and confirms other players' kills. Click for the link.")
 	end
+	private.FitTitle()
+end
+
+---The title bar's tagline goes when it would run into the size control (a raised Text Size, longer status lights), and
+---the size control when even the brand would; Settings and Shift + mouse wheel still size the window then.
+function private.FitTitle()
+	local brandEnd = 12 + 32 + 8 + private.brand:GetStringWidth() + private.betaWidth
+	local lights = 10 + private.close:GetWidth() + 10 + private.netStatus:GetWidth() + 6 + private.appStatus:GetWidth()
+	local room = WIDTH - 2 - lights - TITLE_GAP
+	local sizeShown = brandEnd + TITLE_GAP + SIZE_CONTROL_WIDTH <= room
+	private.sizeControl:SetShown(sizeShown)
+	local sizeTakes = sizeShown and SIZE_CONTROL_WIDTH + TITLE_GAP or 0
+	private.tagline:SetShown(brandEnd + 12 + private.tagline:GetStringWidth() + sizeTakes <= room)
 end
 
 ---Shows the result of an action under the page, fading after a while.
@@ -942,26 +986,208 @@ Wanted:RegisterCommand("hotspots", "Opens the Hotspots page: where enemy players
 	UI:Show("hotspots")
 end)
 
----A window size that keeps the whole window on screen: larger than 100% only as far as the screen has room for. At
----150% the window ran off the bottom of most screens, and with it the slider to size it back.
----@param scale any a size setting (Theme:ClampScale)
+-- ============================================================================
+-- Size
+-- ============================================================================
+
+-- The window's size (settings.windowScale) is a share of its size at one unit to one screen pixel, so a size looks
+-- the same at any game UI scale and text is drawn on whole pixels at 100%. The player picks 75% to 150% in 5% steps
+-- (the title bar's control, Settings and Shift + mouse wheel); a size converted from the old setting can be anything,
+-- and is kept until the player changes it.
+UI.SCALE_LOW, UI.SCALE_HIGH = 75, 150
+local scaleListeners = {}
+
+---The window's scale on UIParent at which one of its units is one screen pixel.
 ---@return number
-function private.FitScale(scale)
-	local room = min(UIParent:GetWidth() / WIDTH, UIParent:GetHeight() / HEIGHT)
-	-- On the slider's steps, rounded down so it still fits
-	room = floor(room * 100 / Theme.SIZE_STEP) * Theme.SIZE_STEP / 100
-	return min(Theme:ClampScale(scale), max(1, room))
+function private.PixelBase()
+	local _, physicalHeight = GetPhysicalScreenSize()
+	local height = UIParent:GetHeight()
+	if type(physicalHeight) ~= "number" or physicalHeight <= 0 or type(height) ~= "number" or height <= 0 then
+		return 1
+	end
+	return height / physicalHeight
 end
 
----Sizes the window (Settings, Theme: UI size), saved for the account; its cog popups and menus follow it. The window
----keeps its centre and stays on screen.
----@param scale number 0.8 to 1.5
-function UI:SetScale(scale)
-	scale = private.FitScale(scale)
-	Wanted.db.settings.uiScale = scale
-	if private.frame then
-		Wanted.db.settings.window = Theme:SetFrameScale(private.frame, scale) or Wanted.db.settings.window
+---A saved size as it can be used: a number from 25% to 400%, else nil.
+function private.SaneScale(scale)
+	scale = tonumber(scale)
+	if not scale or scale ~= scale or scale < 0.25 or scale > 4 then
+		return nil
 	end
+	return scale
+end
+
+---A fresh install's size: the window's look at the size it was drawn for (1440 pixels high at a UI scale of 0.64,
+---1.2 screen pixels a unit: 120%), as the same share of a taller or shorter screen, from 100% (so text is never drawn
+---smaller than its size) to 150%.
+function private.DefaultScale()
+	local _, physicalHeight = GetPhysicalScreenSize()
+	if type(physicalHeight) ~= "number" or physicalHeight <= 0 then
+		return 1
+	end
+	local percent = floor(physicalHeight / 1200 * 100 / Theme.SIZE_STEP + 0.5) * Theme.SIZE_STEP
+	return max(100, min(UI.SCALE_HIGH, percent)) / 100
+end
+
+---The size the window had before sizes were in screen pixels (up to 1.30.0): settings.uiScale on UIParent, 80% to
+---150%, and never made smaller than 100% to fit the screen.
+function private.OldScale(uiScale)
+	local room = min(UIParent:GetWidth() / WIDTH, UIParent:GetHeight() / HEIGHT)
+	room = floor(room * 100 / Theme.SIZE_STEP) * Theme.SIZE_STEP / 100
+	return min(Theme:ClampScale(uiScale), max(1, room))
+end
+
+---The size saved for the window. Once, the first time the window is made after the update: the old setting
+---(settings.uiScale, a scale on UIParent) is turned into the size that keeps the window as large on screen as it was;
+---a save without one (a fresh install) takes DefaultScale. settings.windowScale being there marks it done.
+---@return number
+function private.SavedScale()
+	local settings = Wanted.db.settings
+	if settings.windowScale == nil then
+		if tonumber(settings.uiScale) then
+			settings.windowScale = private.OldScale(settings.uiScale) / private.PixelBase()
+		else
+			settings.windowScale = private.DefaultScale()
+		end
+	end
+	return private.SaneScale(settings.windowScale) or private.DefaultScale()
+end
+
+---A size that keeps the whole window on screen: no larger than the screen has room for (on the 5% steps, rounded down
+---so it still fits), but not made smaller than 75% for it, where its title bar stays on screen. At 150% the window ran
+---off the bottom of most screens, and with it the control to size it back.
+---@param scale number a size (SavedScale)
+---@return number
+function private.FitScale(scale)
+	local room = min(UIParent:GetWidth() / WIDTH, UIParent:GetHeight() / HEIGHT) / private.PixelBase()
+	room = floor(room * 100 / Theme.SIZE_STEP + 1e-6) * Theme.SIZE_STEP / 100
+	return min(scale, max(UI.SCALE_LOW / 100, room))
+end
+
+---The window's size as it is shown: 1.2 for 120%.
+---@return number
+function UI:GetScale()
+	return private.FitScale(private.SavedScale())
+end
+
+---The window's size in percent, for the controls that show it.
+---@return number
+function UI:GetScalePercent()
+	return UI:GetScale() * 100
+end
+
+---Calls fn(percent) whenever the window's size changes (the Settings row follows the title bar's control).
+function UI:OnScaleChanged(fn)
+	tinsert(scaleListeners, fn)
+end
+
+---Where a region's centre is, in UIParent's units, for a pin.
+function private.RegionPin(region)
+	local x, y = region:GetCenter()
+	if type(x) ~= "number" or type(y) ~= "number" then
+		return nil
+	end
+	local ratio = region:GetEffectiveScale() / UIParent:GetEffectiveScale()
+	return { x * ratio, y * ratio }
+end
+
+---Where the mouse is, in UIParent's units, for a pin.
+function private.CursorPin()
+	local x, y = GetCursorPosition()
+	local scale = UIParent:GetEffectiveScale()
+	return { x / scale, y / scale }
+end
+
+---Sizes the window frame to the size shown (UI:GetScale), keeping the pin where it is on screen and the window on
+---screen; the place is saved. Popups and the menu over it follow.
+---@param pin table? { x, y } in UIParent's units; the window's centre when nil
+function private.ApplyScale(pin)
+	local frame = private.frame
+	if not frame then
+		return
+	end
+	local scale = private.PixelBase() * UI:GetScale()
+	if math.abs(frame:GetScale() - scale) < 1e-9 then
+		return
+	end
+	Wanted.db.settings.window = Theme:ScaleAbout(frame, scale, pin and pin[1], pin and pin[2]) or Wanted.db.settings.window
+	W:HideMenu()
+	W:RescalePopups()
+end
+
+---Sizes the window (the title bar's control, Settings, Theme: UI size, and Shift + mouse wheel), saved for the
+---account; its cog popups and menus follow it. What's under the pin (the control being used, or the mouse) stays where
+---it is on screen, and the window stays on screen. The size saved is the one that fits (FitScale).
+---@param scale number 0.75 to 1.5 from the controls
+---@param pin (table|Region)? a region of the window, { x, y } in UIParent's units, or nil for the window's centre
+function UI:SetScale(scale, pin)
+	scale = tonumber(scale)
+	if not scale or scale ~= scale then
+		return
+	end
+	private.SetSize(max(UI.SCALE_LOW / 100, min(UI.SCALE_HIGH / 100, scale)), pin)
+end
+
+---UI:SetScale without its range, for a step from a size outside it.
+function private.SetSize(scale, pin)
+	Wanted.db.settings.windowScale = private.FitScale(private.SaneScale(scale) or private.DefaultScale())
+	if type(pin) == "table" and pin.GetCenter then
+		pin = private.RegionPin(pin)
+	end
+	private.ApplyScale(pin)
+	local percent = UI:GetScalePercent()
+	for _, fn in ipairs(scaleListeners) do
+		fn(percent)
+	end
+end
+
+---One 5% step bigger (delta > 0) or smaller, from the size shown: a size off the steps goes to the next step, and
+---one outside 75% to 150% (converted from before) only steps back toward that range. True when the size changed.
+---@param delta number
+---@param pin (table|Region)? as UI:SetScale
+---@return boolean
+function UI:StepScale(delta, pin)
+	local step = Theme.SIZE_STEP
+	local current = UI:GetScalePercent()
+	local percent
+	if delta > 0 then
+		percent = min(floor(current / step + 1e-6) * step + step, max(current, UI.SCALE_HIGH))
+	else
+		percent = max(ceil(current / step - 1e-6) * step - step, min(current, UI.SCALE_LOW))
+	end
+	if math.abs(percent - current) < 1e-6 then
+		return false
+	end
+	private.SetSize(percent / 100, pin)
+	return math.abs(UI:GetScalePercent() - current) > 1e-6
+end
+
+---Shift + mouse wheel over the window: one step about the mouse. True when the wheel was used for it (Shift held,
+---over the open window).
+---@param frame Frame what the wheel turned over
+---@param delta number
+---@return boolean
+function private.ShiftWheel(frame, delta)
+	if not IsShiftKeyDown() or not private.frame or not private.frame:IsShown() or not private.InWindow(frame) then
+		return false
+	end
+	UI:StepScale(delta, private.CursorPin())
+	return true
+end
+W.shiftWheel = private.ShiftWheel
+
+---Whether a frame is the window or inside it.
+function private.InWindow(frame)
+	for _ = 1, 40 do
+		if frame == private.frame then
+			return true
+		end
+		if type(frame) ~= "table" or not frame.GetParent then
+			return false
+		end
+		frame = frame:GetParent()
+	end
+	return false
 end
 
 ---Shows a theme's felt behind the window at once, before the /reload that applies its colours (Settings).

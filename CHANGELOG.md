@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The main window has a size control in its title bar, and Shift + mouse wheel over the window changes its size in 5% steps. Sizes now go from 75% to 150% and look the same at any game UI scale. Your window keeps the size it has now, unless it was larger than the screen: then it shrinks to fit.
+
 ## [1.30.1] - 2026-11-27
 
 - In a battleground, Wanted no longer causes "The client blocked ListChannelByName()" and "Interface action failed because of an AddOn": it asks for its sync channel's member count once the game lifts its chat lockdown.

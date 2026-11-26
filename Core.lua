@@ -144,7 +144,10 @@ local DEFAULTS = {
 			tab = "nearby",
 		},
 		window = nil, -- { point, x, y }
-		uiScale = 1, -- the window's size, 0.8 to 1.5 (Settings, Theme); its popups and menus follow it
+		-- The window's size (UI): windowScale, in screen pixels, made once from uiScale (up to 1.30.0, kept for older
+		-- versions) when the window is first made. No defaults: a save without either is a fresh install's.
+		windowScale = nil,
+		uiScale = nil,
 		lastPage = nil, -- the window's page when last open (UI); Home when there's none
 	},
 	kos = {}, -- guid -> { name, reason, t }

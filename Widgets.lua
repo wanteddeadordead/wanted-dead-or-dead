@@ -554,6 +554,34 @@ function W:Slider(parent, label, width, low, high, step, format, onChange)
 	return holder
 end
 
+---A size slider without a label, in percent on 5% steps (Theme.SIZE_STEP). A drag applies the size when the thumb is
+---let go, so what it sizes (the window it sits in, even) doesn't change under the mouse; a number typed in its box
+---applies at once. holder.pending is the size a drag waits to apply.
+---@param apply fun(scale: number, holder: table) the size as a scale (1.2 for 120%)
+function W:SizeSlider(parent, width, low, high, apply)
+	local holder
+	local function Percent(value) return format("%d%%", floor(value + 0.5)) end
+	local function Dragging() return holder.slider.IsDraggingThumb and holder.slider:IsDraggingThumb() == true end
+	holder = W:Slider(parent, "", width, low, high, Theme.SIZE_STEP, Percent, function(value)
+		if not Dragging() then
+			apply(value / 100, holder)
+			return
+		end
+		holder.pending = value
+		holder:SetScript("OnUpdate", function(self)
+			if not Dragging() then
+				self:SetScript("OnUpdate", nil)
+				local pending = self.pending
+				self.pending = nil
+				apply(pending / 100, self)
+			end
+		end)
+	end)
+	-- No label over it: the track and box sit on its middle
+	holder:SetHeight(26)
+	return holder
+end
+
 ---EllesmereUI's dropdown: a field showing the current choice with a chevron, opening a menu of all of them with the
 ---current one in the accent. SetChoice(key) shows one.
 ---@param choices table[] { key, label }
@@ -985,6 +1013,7 @@ function W:List(parent, rowHeight, numRows, createRow, updateRow)
 		self.offset = max(0, min(self.offset - delta * 2, maxOffset))
 		self:Draw()
 	end)
+	W:PassShiftWheel(list)
 	function list:SetItems(items, emptyText, emptyHint)
 		self.items = items or {}
 		self.emptyText = emptyText
@@ -1554,6 +1583,24 @@ function W:HideMenu()
 	end
 end
 
+-- What Shift + mouse wheel over a list or scrolling area does first (the main window's size, UI.lua): fun(frame,
+-- delta) -> true when it used the wheel
+W.shiftWheel = nil
+
+---Shift + mouse wheel over a frame that scrolls goes to W.shiftWheel first, and scrolls it only when that didn't use
+---it.
+function W:PassShiftWheel(frame)
+	local own = frame:GetScript("OnMouseWheel")
+	frame:SetScript("OnMouseWheel", function(self, delta)
+		if IsShiftKeyDown() and W.shiftWheel and W.shiftWheel(self, delta) then
+			return
+		end
+		if own then
+			own(self, delta)
+		end
+	end)
+end
+
 
 
 -- ============================================================================
@@ -1739,6 +1786,16 @@ local function Popup(opener, fill, border)
 		self:Raise()
 	end
 	return popup
+end
+
+---Puts the cog popups that are up at their openers' scale again (the main window was just sized).
+function W:RescalePopups()
+	for i = 1, popupCount do
+		local popup = _G["WantedPopup"..i]
+		if popup and popup:IsShown() then
+			popup:Open()
+		end
+	end
 end
 
 -- EllesmereUI's cog: faint, brighter under the mouse or while its popup is open, fainter still when disabled
@@ -1962,6 +2019,7 @@ function W:Scroll(parent, width, height)
 	scroll:SetScript("OnMouseWheel", function(self, delta)
 		Place(self:GetVerticalScroll() - delta * 44)
 	end)
+	W:PassShiftWheel(scroll)
 	function scroll:Fit(contentHeight)
 		content.fitHeight = contentHeight
 		content:SetHeight(contentHeight)

@@ -202,23 +202,33 @@ function private.Create()
 		UI:Refresh(true)
 		-- Keep "4m ago" style times and the connection state current while the window is open
 		private.ticker = C_Timer.NewTicker(15, Wanted:Timed("Window refresh", private.PassiveRefresh))
+		-- It takes the mouse wheel only while Shift is held, so the plain wheel over it still zooms the camera
+		frame:RegisterEvent("MODIFIER_STATE_CHANGED")
+		frame:EnableMouseWheel(IsShiftKeyDown())
 	end)
 	frame:SetScript("OnHide", function()
 		if private.ticker then
 			private.ticker:Cancel()
 			private.ticker = nil
 		end
+		frame:UnregisterEvent("MODIFIER_STATE_CHANGED")
+		frame:EnableMouseWheel(false)
 	end)
 	private.frame = frame
 	frame:RegisterEvent("UI_SCALE_CHANGED")
 	frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
-	frame:SetScript("OnEvent", function(self)
-		if self:IsShown() then
+	frame:SetScript("OnEvent", function(self, event)
+		if event == "MODIFIER_STATE_CHANGED" then
+			-- Either Shift: asked of the game rather than read from the key, so letting go of one while the other is
+			-- held keeps it
+			self:EnableMouseWheel(IsShiftKeyDown())
+		elseif self:IsShown() then
 			private.ApplyScale()
 		end
 	end)
-	-- Shift + mouse wheel anywhere on it sizes it (its lists and scrolling areas pass it on: W:PassShiftWheel)
-	frame:EnableMouseWheel(true)
+	-- Shift + mouse wheel anywhere on it sizes it (its lists and scrolling areas pass it on: W:PassShiftWheel). The
+	-- window isn't protected (no secure frames in it), so turning its wheel on and off works in combat too.
+	frame:EnableMouseWheel(false)
 	frame:SetScript("OnMouseWheel", function(self, delta)
 		private.ShiftWheel(self, delta)
 	end)

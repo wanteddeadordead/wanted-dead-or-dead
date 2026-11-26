@@ -174,6 +174,8 @@ function Methods:IsMouseOver() return self._mouseOver == true end
 -- Mouse settings, so tests can see what a frame takes
 function Methods:SetMouseMotionEnabled(v) self._motion = v end
 function Methods:SetMouseClickEnabled(v) self._clicks = v end
+function Methods:EnableMouseWheel(v) self._wheel = v and true or false end
+function Methods:IsMouseWheelEnabled() return self._wheel == true end
 function Methods:SetMotionScriptsWhileDisabled(v) self._motionWhileDisabled = v end
 function Methods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a } end
 function Methods:SetTexCoord(...) self._coords = { ... } end
@@ -8106,6 +8108,27 @@ end)()
 	frame.GetLeft = function(self) return 100 / self._scale end
 	frame.GetTop = function(self) return 700 / self._scale end
 	GetCursorPosition = function() return 300, 600 end -- UIParent's scale is 1 here
+	-- The window takes the wheel only while Shift is down, so the plain wheel over it still zooms the camera
+	check(not frame:IsMouseWheelEnabled(), "without Shift the window doesn't take the mouse wheel")
+	IsShiftKeyDown = function() return true end
+	Fire("MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+	check(frame:IsMouseWheelEnabled(), "Shift down: it does")
+	IsShiftKeyDown = saved.shift
+	Fire("MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+	check(not frame:IsMouseWheelEnabled(), "Shift up: it doesn't again")
+	IsShiftKeyDown = function() return true end
+	Fire("MODIFIER_STATE_CHANGED", "RSHIFT", 1)
+	frame:Hide()
+	check(not frame:IsMouseWheelEnabled(), "hidden with Shift held: off")
+	Fire("MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+	check(not frame:IsMouseWheelEnabled(), "and Shift while hidden doesn't turn it on")
+	frame:Show()
+	check(frame:IsMouseWheelEnabled(), "shown with Shift held: on")
+	IsShiftKeyDown = saved.shift
+	Fire("MODIFIER_STATE_CHANGED", "RSHIFT", 0)
+	check(not frame:IsMouseWheelEnabled(), "and off once it's let go")
+	local inner = W:Scroll(frame, 200, 100)
+	check(inner:IsMouseWheelEnabled(), "a scrolling area in the window takes the wheel without Shift, as before")
 	frame._scripts.OnMouseWheel(frame, 1)
 	check(near(settings.windowScale, 1), "without Shift the wheel doesn't size it")
 	IsShiftKeyDown = function() return true end

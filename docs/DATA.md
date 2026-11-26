@@ -219,6 +219,11 @@ Sizes (from 1.28.0, no migration: new keys, filled in from the defaults): `Wante
 size, `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
 else read is put back in range (Theme:ClampScale). The window's size is also kept within what the screen has room for.
 
+`WantedDB.settings.nearby.hourScope` (from 1.31.0, default `"mine"`): whose sightings the Nearby window's Last hour tab lists,
+`"mine"` (enemies this client saw itself in the last hour) or `"everyone"` (shared sightings too); anything else is read as
+`"mine"`. "Mine" is worked out from the `WantedDB.sightings` ring (entries without `by` are this client's own) and the
+Nearby list, so no player field was added. A new key filled in at load: no migration.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

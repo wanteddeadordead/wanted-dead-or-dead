@@ -44,6 +44,7 @@ local VIEWS = {
 local EMPTY_TEXT = {
 	nearby = "No enemies nearby.",
 	hour = "No enemies in the last hour.",
+	hourMine = "You have seen no enemies in the last hour.",
 	kos = "Nobody on Kill on Sight yet.",
 	ignore = "Nobody ignored.",
 }
@@ -362,6 +363,13 @@ function private.Create()
 		Nearby:Refresh()
 	end)
 	private.sort:SetPoint("RIGHT", clear, "LEFT", -2, 0)
+	-- Whose sightings the Last hour tab lists: Mine or Everyone, a click switches, remembered
+	private.scope = W:Button(header, "", "ghost", 62, 22, function()
+		private.Show().hourScope = private.HourMine() and "everyone" or "mine"
+		Nearby:Refresh()
+	end)
+	private.scope:SetPoint("RIGHT", clear, "LEFT", -2, 0)
+	W:AttachTooltip(private.scope, "Whose sightings", "Mine: enemies you saw yourself in the last hour. Everyone: those other Wanted users shared with you too. Click to switch.")
 	W:AttachTooltip(private.sort, "Sort", "Threat: Kill on Sight and bounties first, then who's fighting, then who's in sight. Nearest: within about 28 yards, then on screen, then in sight (the game gives addons no exact distance). Last seen: most recently seen first. Click for the next.")
 	-- The title stops at the buttons, whatever its length
 	private.title:SetPoint("RIGHT", private.sort, "LEFT", -4, 0)
@@ -683,9 +691,14 @@ end
 -- Drawing
 -- ============================================================================
 
+---Whether the Last hour tab shows only what this client saw itself (the default) or everyone's sightings.
+function private.HourMine()
+	return private.Show().hourScope ~= "everyone"
+end
+
 function private.GetItems(view)
 	if view == "hour" then
-		return Enemies:GetLastHour()
+		return Enemies:GetLastHour(private.HourMine())
 	elseif view == "kos" then
 		return Enemies:GetKoSList()
 	elseif view == "ignore" then
@@ -717,7 +730,11 @@ function Nearby:Refresh()
 	if private.sort then
 		private.sort:SetText((private.Sorts()).label)
 		private.sort:SetShown(view == "nearby")
-		private.title:SetPoint("RIGHT", view == "nearby" and private.sort or private.clear, "LEFT", -4, 0)
+		private.title:SetPoint("RIGHT", view == "nearby" and private.sort or (view == "hour" and private.scope or private.clear), "LEFT", -4, 0)
+	end
+	if private.scope then
+		private.scope:SetText(private.HourMine() and "Mine" or "Everyone")
+		private.scope:SetShown(view == "hour")
 	end
 	local t0 = Wanted.DEV and debugprofilestop()
 	local items = private.GetItems(view)
@@ -737,7 +754,7 @@ function Nearby:Refresh()
 	private.mute:SetText(Wanted.Alerts:IsMuted() and "Muted" or "Sound")
 	private.mute:SetStyle(Wanted.Alerts:IsMuted() and "danger" or "ghost")
 	private.tabs:Select(view, true)
-	private.empty:SetText(#items == 0 and EMPTY_TEXT[view] or "")
+	private.empty:SetText(#items == 0 and EMPTY_TEXT[view == "hour" and private.HourMine() and "hourMine" or view] or "")
 	local layerText, hopButton = private.LayerText()
 	if private.layerShown and layerText then
 		-- Shown until the next layout: in a fight the line keeps its last text rather than leave a gap

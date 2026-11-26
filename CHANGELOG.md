@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Nearby window's Last hour tab has a Mine / Everyone switch. Mine, the default, lists only the enemies you saw yourself in the last hour; Everyone also lists those other Wanted users shared with you, as before.
+
 ## [1.30.1] - 2026-11-27
 
 - In a battleground, Wanted no longer causes "The client blocked ListChannelByName()" and "Interface action failed because of an AddOn": it asks for its sync channel's member count once the game lifts its chat lockdown.

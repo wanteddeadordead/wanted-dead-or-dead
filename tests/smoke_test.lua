@@ -2679,7 +2679,7 @@ end
 -- first and by name only when both are known
 do
 	local realName, realGUID, realNorm, realID = GetRealmName, UnitGUID, GetNormalizedRealmName, GetRealmID
-	local savedRealm, savedCatchup = ns.db.realm, WantedAppCatchup
+	local savedRealm, savedCatchup, startClock = ns.db.realm, WantedAppCatchup, clock
 	local guid = "Player-6932-0A1B2C3D"
 	GetRealmName, GetRealmID, GetNormalizedRealmName = function() return "" end, function() return 0 end, function() return nil end
 	UnitGUID = function(unit) if unit == "player" then return guid end return realGUID(unit) end
@@ -2812,6 +2812,8 @@ do
 	ns:NoteAppRealm(nil)
 	ns.db.realm, WantedAppCatchup = savedRealm, savedCatchup
 	ns.db.farPeers = {}
+	-- Later suites place wars and races on Eastern days by the clock: leave it where it was
+	clock = startClock
 end
 -- One need request per missing record: a request another player just made for the same origin from the same seq or
 -- earlier covers ours (the fill goes to the whole channel), our own request is not repeated within 15 seconds, and a

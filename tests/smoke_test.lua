@@ -1064,6 +1064,25 @@ do
 	local same = #everyone == #old
 	for i, d in ipairs(old) do same = same and everyone[i].guid == d.guid and everyone[i].lastSeen == d.lastSeen end
 	check(same, "Everyone is the old list, and no argument still gives it")
+	-- the saved ownSeen: set by our own detection, never by a shared sighting
+	check(type(ns.Store:GetPlayer("Player-9-ENEMY").ownSeen) == "number", "our own detection writes ownSeen")
+	check(ns.Store:GetPlayer("Player-9-OTHER").ownSeen == nil and ns.Store:GetPlayer("Player-9-HRSHARED").ownSeen == nil
+		and ns.Store:GetPlayer("Player-9-HR50").ownSeen == nil, "a shared sighting never sets ownSeen")
+	-- saw them 50 minutes ago (ownSeen only, no ring entry), then the ring fills with shared sightings
+	clock = base - 3000
+	ns.Store:UpdatePlayer("Player-9-HRSAVED", { name = "Saved Own", faction = "Alliance", zone = "Ashenvale", ownSeen = clock })
+	clock = base - 60
+	ns.Enemies:OnSharedSighting({ g = "Player-9-HRSAVED", n = "Saved Own", c = "MAGE", l = 20, z = "Ashenvale", m = 10, x = 54, y = 54 }, "Some Friend")
+	clock = base
+	for i = 1, ns.Store.MAX_SIGHTINGS + 5 do ns.Store:AddSighting("Player-9-HRFILL", "Ashenvale", 50, 50, 10, "Some Friend") end
+	local saved = ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSAVED")
+	check(saved and saved.lastSeen == base - 3000, "with the ring full of shared sightings, one I saw 50 minutes ago still shows under Mine, at my time")
+	check(ns.Store:GetPlayer("Player-9-HRSAVED").ownSeen == base - 3000, "a shared sighting leaves ownSeen alone")
+	check(not ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSHARED"), "a record without ownSeen and no own entry stays out of Mine")
+	ns.Store:GetPlayer("Player-9-HRSAVED").ownSeen = base - 7200
+	check(not ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSAVED") and ListHas(ns.Enemies:GetLastHour(false), "Player-9-HRSAVED"), "an ownSeen older than an hour does not count")
+	ns.Store:GetPlayer("Player-9-HRSAVED").ownSeen = "junk"
+	check(not ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSAVED"), "an ownSeen that is not a time is ignored")
 	-- the window follows the saved choice
 	ns.db.settings.detect.tab = "hour"
 	ns.db.settings.nearby.hourScope = "mine"
@@ -1076,7 +1095,7 @@ do
 		local sighting = ns.db.sightings[i]
 		if sighting and sighting.guid:find("^Player%-9%-HR") then ns.db.sightings[i] = nil end
 	end
-	for _, g in ipairs({ "Player-9-HROWN", "Player-9-HR50", "Player-9-HROLD", "Player-9-HRSHARED" }) do ns.db.players[g] = nil end
+	for _, g in ipairs({ "Player-9-HROWN", "Player-9-HR50", "Player-9-HROLD", "Player-9-HRSHARED", "Player-9-HRSAVED" }) do ns.db.players[g] = nil end
 end
 ns.db.players["Player-9-OLDEVIL"], ns.db.players["Player-9-EVIL"] = nil, nil
 ns.db.sightings[ns.db.sightingsPos], ns.db.sightingsPos = nil, ns.db.sightingsPos - 1

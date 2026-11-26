@@ -512,6 +512,7 @@ function private.Track(unit)
 		mapId = mapId,
 		x = x,
 		y = y,
+		ownSeen = GetServerTime(), -- this client's own sighting (a shared one never sets it)
 	})
 	Store:AddSighting(guid, zone, x, y, mapId)
 end

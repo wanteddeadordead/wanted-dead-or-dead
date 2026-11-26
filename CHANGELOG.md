@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-25
+
 - Races and guild wars are switched off, with their HUDs, map points, settings, tour stops and the Guild Wars page, until there is a fair way to run them: since 2026-11-20 the game no longer lets an addon tell layers apart. Bounties, kills, sightings, enemies, Kill on Sight, raids and duels work as before, and War Marks you have earned are kept. /wanted new says why.
 - Realm links work again. The game stopped giving addons the realm's name and number on 2026-11-20, so Wanted did not know which realm you are on: links to players on other realms were not made, and characters on a Normal realm were not idle. Wanted now takes the realm number from your own character.
 - The layer number, the "Big fight on layer" alert and the Hop button are gone. Since 2026-11-20 the game no longer lets an addon tell layers apart, so a layer shown now would be wrong. Hops are refused, and your sightings, kills and deaths no longer carry a layer.

@@ -235,6 +235,11 @@ install gets `windowScale` as its saved data loads (`UI:OnLoad`): 1 to 1.5 by th
 unchanged and unread, so an older version goes on with the size it had. Junk in `windowScale` (not a number from
 0.25 to 4) reads as the fresh install's size and is not converted again.
 
+`WantedDB.settings.nearby.hourScope` (from 1.31.0, default `"mine"`): whose sightings the Nearby window's Last hour tab lists,
+`"mine"` (enemies this client saw itself in the last hour) or `"everyone"` (shared sightings too); anything else is read as
+`"mine"`. "Mine" is worked out from the `WantedDB.sightings` ring (entries without `by` are this client's own) and the
+Nearby list, so no player field was added. A new key filled in at load: no migration.
+
 `WantedDB.settings.liveLog` (from 1.2.0, default on) turns combat logging on in the open world for the app's live
 battle reports (`LiveLog.lua`). `WantedDB.liveLogOn` is `true` while logging is on because Wanted turned it on,
 so a `/reload` still knows the logging is Wanted's to turn off; logging the player started is never turned off.

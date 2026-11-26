@@ -111,6 +111,7 @@ local DEFAULTS = {
 			pvp = true, -- your own PvP status under the tabs
 			opacity = 1,
 			sort = "threat", -- "threat" (Kill on Sight and bounties, then who's fighting), "nearest" or "seen"
+			hourScope = "mine", -- the Last hour tab: "mine" (enemies this client saw itself) or "everyone" (shared sightings too)
 			scale = 1, -- its size, 0.8 to 1.5 (Theme:ClampScale)
 		},
 		detect = {

@@ -1023,15 +1023,48 @@ function Enemies:GetNearby(order)
 	return list
 end
 
----Enemies seen in the last hour (own and shared sightings), newest first.
+---When this client itself saw each enemy in the last hour: guid -> server time. Own sightings are the entries of the
+---sightings ring without a sharer (`by`), and whoever is on the Nearby list now; a sighting shared by another Wanted
+---user never counts, even when it is newer than ours and has replaced the saved player's lastSeen.
+---@return table<string, number>
+function private.OwnLastHour()
+	local own = {}
+	local now = GetServerTime()
+	for sighting in Store:SightingIterator() do
+		local t = sighting.t
+		if not sighting.by and sighting.guid and type(t) == "number" and now - t <= LAST_HOUR and t > (own[sighting.guid] or 0) then
+			own[sighting.guid] = t
+		end
+	end
+	for guid, entry in pairs(private.nearby) do
+		local t = now - (GetTime() - entry.lastSeen)
+		if t > (own[guid] or 0) then
+			own[guid] = t
+		end
+	end
+	return own
+end
+
+---Enemies seen in the last hour, newest first. Own and shared sightings, or with mineOnly just the enemies this client
+---saw itself (each listed with the time it saw them).
+---@param mineOnly boolean?
 ---@return table[]
-function Enemies:GetLastHour()
+function Enemies:GetLastHour(mineOnly)
 	local list, seen = {}, {}
 	local now = GetServerTime()
+	local own = mineOnly and private.OwnLastHour() or nil
 	for guid, player in pairs(Wanted.db.players) do
-		if player.lastSeen and now - player.lastSeen <= LAST_HOUR and player.faction and player.faction ~= private.playerFaction and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") then
+		local at = player.lastSeen
+		if own then
+			at = own[guid]
+		end
+		if at and now - at <= LAST_HOUR and player.faction and player.faction ~= private.playerFaction and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") then
 			seen[guid] = true
-			tinsert(list, Enemies:Describe(guid))
+			local d = Enemies:Describe(guid)
+			if own and not d.nearby then
+				d.lastSeen = at
+			end
+			tinsert(list, d)
 		end
 	end
 	for guid in pairs(private.nearby) do

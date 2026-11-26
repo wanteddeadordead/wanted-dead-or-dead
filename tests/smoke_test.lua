@@ -1030,6 +1030,54 @@ for _, f in ipairs(Mock.created) do
 end
 check(macros >= 2, "Nearby rows carry target macros, got "..macros)
 end
+-- Last hour: Mine (the default) is what this client saw itself; Everyone is today's list
+do
+	check(ns.db.settings.nearby.hourScope == "mine", "the Last hour tab defaults to Mine")
+	local base = clock
+	local function ListHas(list, guid) for _, d in ipairs(list) do if d.guid == guid then return d end end end
+	local function Own(guid, name, at)
+		clock = at
+		ns.Store:UpdatePlayer(guid, { name = name, faction = "Alliance", zone = "Ashenvale" })
+		ns.Store:AddSighting(guid, "Ashenvale", 50, 50, 10)
+		clock = base
+	end
+	Own("Player-9-HROWN", "Mine Only", base - 120)
+	-- seen by us 50 minutes ago, shared by a friend a minute ago: the shared one replaces the saved lastSeen
+	Own("Player-9-HR50", "Mine Then Shared", base - 3000)
+	clock = base - 60
+	ns.Enemies:OnSharedSighting({ g = "Player-9-HR50", n = "Mine Then Shared", c = "MAGE", l = 20, z = "Ashenvale", m = 10, x = 51, y = 51 }, "Some Friend")
+	clock = base
+	-- seen by us two hours ago, shared a minute ago: ours is too old
+	Own("Player-9-HROLD", "Too Old", base - 7200)
+	clock = base - 60
+	ns.Enemies:OnSharedSighting({ g = "Player-9-HROLD", n = "Too Old", c = "MAGE", l = 20, z = "Ashenvale", m = 10, x = 52, y = 52 }, "Some Friend")
+	clock = base
+	clock = base - 30
+	ns.Enemies:OnSharedSighting({ g = "Player-9-HRSHARED", n = "Shared Only", c = "MAGE", l = 20, z = "Ashenvale", m = 10, x = 53, y = 53 }, "Some Friend")
+	clock = base
+	check(ns.Store:GetPlayer("Player-9-HR50").lastSeen == base - 60, "a shared sighting does replace the saved lastSeen")
+	local mine, everyone, old = ns.Enemies:GetLastHour(true), ns.Enemies:GetLastHour(false), ns.Enemies:GetLastHour()
+	check(ListHas(mine, "Player-9-HROWN") and not ListHas(mine, "Player-9-HRSHARED"), "Mine shows one I saw and hides one only others saw")
+	check(ListHas(mine, "Player-9-HR50") and ListHas(mine, "Player-9-HR50").lastSeen == base - 3000, "Mine keeps one I saw 50 minutes ago though others saw it a minute ago, at my time")
+	check(not ListHas(mine, "Player-9-HROLD"), "Mine drops one I saw two hours ago though others saw it a minute ago")
+	check(ListHas(everyone, "Player-9-HRSHARED") and ListHas(everyone, "Player-9-HROLD") and ListHas(everyone, "Player-9-HR50").lastSeen == base - 60, "Everyone lists shared sightings at their newest time")
+	local same = #everyone == #old
+	for i, d in ipairs(old) do same = same and everyone[i].guid == d.guid and everyone[i].lastSeen == d.lastSeen end
+	check(same, "Everyone is the old list, and no argument still gives it")
+	-- the window follows the saved choice
+	ns.db.settings.detect.tab = "hour"
+	ns.db.settings.nearby.hourScope = "mine"
+	ns.NearbyWindow:Refresh()
+	ns.db.settings.nearby.hourScope = "everyone"
+	ns.NearbyWindow:Refresh()
+	ns.db.settings.nearby.hourScope = "mine"
+	ns.db.settings.detect.tab = "nearby"
+	for i = 1, ns.Store.MAX_SIGHTINGS do
+		local sighting = ns.db.sightings[i]
+		if sighting and sighting.guid:find("^Player%-9%-HR") then ns.db.sightings[i] = nil end
+	end
+	for _, g in ipairs({ "Player-9-HROWN", "Player-9-HR50", "Player-9-HROLD", "Player-9-HRSHARED" }) do ns.db.players[g] = nil end
+end
 ns.db.players["Player-9-OLDEVIL"], ns.db.players["Player-9-EVIL"] = nil, nil
 ns.db.sightings[ns.db.sightingsPos], ns.db.sightingsPos = nil, ns.db.sightingsPos - 1
 -- Menus, lists, ignore, and every page again
@@ -1464,7 +1512,7 @@ do
 ns.WORLD = "live"
 local function BetaSave()
 	return { version = ns.DB_VERSION, welcomed = true, accountMark = "Mark123456789012", devLog = { "a line" }, tour = { seen = true, done = true },
-		settings = { minBounty = 500, uiScale = 1.2, theme = "ember", detect = { alerts = "important", sound = false }, nearby = { sort = "nearest" },
+		settings = { minBounty = 500, uiScale = 1.2, theme = "ember", detect = { alerts = "important", sound = false }, nearby = { sort = "nearest", hourScope = "everyone" },
 			ranks = { chat = true }, minimap = { angle = 90, hide = true } },
 		records = { ["Beta Guy:5"] = { kind = "bounty", id = "Beta Guy:5", origin = "Beta Guy", seq = 5, data = {} } },
 		chains = { ["Beta Guy"] = { seq = 5, lastHash = "x" } }, players = { ["Player-9-BETA"] = { name = "Beta Foe" } },
@@ -1482,11 +1530,11 @@ WantedDB = BetaSave()
 ns:LoadSavedData()
 local s = WantedDB.settings
 check(WantedDB.world == "live" and s.minBounty == 500 and s.uiScale == 1.2 and s.theme == "ember" and s.detect.alerts == "important"
-	and s.detect.sound == false and s.nearby.sort == "nearest" and s.ranks.chat == true and s.minimap.angle == 90 and s.minimap.hide == true,
+	and s.detect.sound == false and s.nearby.sort == "nearest" and s.nearby.hourScope == "everyone" and s.ranks.chat == true and s.minimap.angle == 90 and s.minimap.hide == true,
 	"the live world keeps the player's settings")
 check(WantedDB.welcomed and WantedDB.accountMark == "Mark123456789012" and WantedDB.devLog[1] == "a line" and WantedDB.tour.done
 	and WantedDB.whatsNewSeen == "1.28.0", "and the welcome, the first steps done, what's new seen, the account mark (the app's link) and the debug log")
-check(s.detect.inSight == 60 and s.nearby.kos == true, "settings the beta save lacked get their defaults")
+check(s.detect.inSight == 60 and s.nearby.kos == true and s.nearby.hourScope == "everyone", "settings the beta save lacked get their defaults")
 check(s.windowScale == nil, "the window's old size (uiScale) waits for the window to be made to convert: no windowScale from loading")
 local function empty(t) return t == nil or next(t) == nil end
 for _, key in ipairs({ "records", "chains", "players", "sightings", "sightingsPos", "kos", "kosGuilds", "kosPending", "ignore", "guildKos",

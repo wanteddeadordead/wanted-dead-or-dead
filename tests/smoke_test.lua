@@ -10798,17 +10798,17 @@ end)()
 	UI:Show("home")
 	local labels = {}
 	for _, e in ipairs(UI:Menu()) do labels[#labels + 1] = e.label end
-	check(table.concat(labels, ", ") == "Dashboard, Bounties, Enemies, Raids, Poker, Progress, You", "the menu entries, Home as Dashboard, and Poker from the poker addon: "..table.concat(labels, ", "))
+	check(table.concat(labels, ", ") == "Dashboard, Bounties, Enemies, Raids, Poker, Progress, You, Settings", "the menu entries, Home as Dashboard, Poker from the poker addon, and Settings at the foot: "..table.concat(labels, ", "))
 	local function selected()
 		for _, e in ipairs(UI:Menu()) do if e.selected then return e.label end end
 	end
 	for key, entry in pairs({ board = "Bounties", mine = "Bounties", hunts = "Bounties", enemies = "Enemies", hotspots = "Enemies",
 		guildkos = "Enemies", activity = "Enemies", raids = "Raids", challenges = "Progress", hunters = "Progress", calendar = "Progress",
-		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "You", home = "Dashboard", poker = "Poker" }) do
+		rank = "Progress", gear = "Progress", duels = "Progress", card = "You", poster = "You", web = "You", settings = "Settings", home = "Dashboard", poker = "Poker" }) do
 		UI:Show(key)
 		check(UI:IsShown(key) and selected() == entry, key.." opens under "..entry..": "..tostring(selected()))
 		local tabs = UI:Tabs()
-		if entry ~= "Dashboard" and entry ~= "Raids" and entry ~= "Poker" then
+		if entry ~= "Dashboard" and entry ~= "Raids" and entry ~= "Poker" and entry ~= "Settings" then
 			check(tabs and tabs.selected == key, key.."'s tab is selected")
 		end
 	end
@@ -10821,11 +10821,11 @@ end)()
 	-- Tools only when it's switched on
 	local showTools = ns.db.settings.showTools
 	ns.db.settings.showTools = false
-	UI:Show("settings")
-	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app, Settings", "no Tools tab when it's off: "..table.concat(UI:Tabs().labels, ", "))
+	UI:Show("card")
+	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app", "no Tools tab when it's off: "..table.concat(UI:Tabs().labels, ", "))
 	ns.db.settings.showTools = true
 	UI:Refresh(true)
-	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app, Settings, Tools", "the Tools tab when it's on")
+	check(table.concat(UI:Tabs().labels, ", ") == "Calling card, Wanted poster, Website & app, Tools", "the Tools tab when it's on")
 	-- You opens on your calling card: the sample before the app brings yours, then yours, with the editor a click away
 	local function shows(text)
 		for _, f in ipairs(Mock.fontStrings) do
@@ -18500,6 +18500,24 @@ end)()
 	end
 	check(poker and poker._point[1] == "BOTTOMLEFT" and safety._point[1] == "BOTTOMLEFT" and poker._point[3] == safety._point[3] + safety._h,
 		"Poker sits at the foot of the menu, directly above Safety: "..tostring(poker and poker._point[3]).." over "..tostring(safety and safety._point[3]))
+	local settingsNav
+	for _, f in ipairs(Mock.created) do
+		local label = rawget(f, "label")
+		if f._kind == "Button" and type(label) == "table" and label._text == "Settings" and rawget(f, "key") == "settings" then settingsNav = f end
+	end
+	check(settingsNav and settingsNav._point[1] == "BOTTOMLEFT" and settingsNav._point[3] == poker._point[3] + poker._h,
+		"Settings sits at the foot of the menu, directly above Poker: "..tostring(settingsNav and settingsNav._point[3]))
+	local inMenu = false
+	for _, e in ipairs(ns.UI:Menu()) do if e.key == "settings" then inMenu = true end end
+	ns.UI:Show("card")
+	local cardTabs = table.concat(ns.UI:Tabs().labels, ", ")
+	check(inMenu and not cardTabs:find("Settings", 1, true) and cardTabs:find("Wanted poster", 1, true),
+		"Settings is a menu entry of its own, not a tab of You: "..cardTabs)
+	ns.UI:Show("settings")
+	local selectedEntry
+	for _, e in ipairs(ns.UI:Menu()) do if e.selected then selectedEntry = e.key end end
+	check(selectedEntry == "settings" and ns.UI:IsShown("settings"), "Settings opens as its own entry")
+	ns.db.settings.lastPage = "settings"
 end)()
 -- What's new 1.30.0, the newest, takes the default sign-off: the maintainers' line under the note
 ;(function()

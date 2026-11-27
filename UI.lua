@@ -46,7 +46,7 @@ local GROUPS = {}
 ---the header, the first opened from the menu), under (the page whose menu entry and tabs this page is one of, kept
 ---out of the menu itself), tabLabel (its tab's label, or a function returning it for a tab named by what it shows), tabTip = { title, body } (its tab's tooltip: what the page is, now
 ---that pages have no subtitle), menuLabel (its menu entry's label, when not its title), atFoot (its menu entry at the
----foot of the menu, above Safety, rather than in the list)
+---foot of the menu, above Safety, rather than in the list; several stack upward in page order)
 ---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
 ---that count, in blue, unless it has its own.
 function UI:RegisterPage(key, def)
@@ -575,14 +575,16 @@ end
 ---that are switched off.
 function private.LayoutNav()
 	local y = -12
+	local foot = FOOT_TOP -- the next foot entry's place: they stack upward from Safety, in page order
 	for _, def in ipairs(private.pages) do
 		local nav = private.navButtons[def.key]
 		nav:ClearAllPoints()
 		if def.under or (def.hidden and def.hidden() and private.FirstTab(def) == def.key) then
 			nav:Hide()
 		elseif def.atFoot then
-			nav:SetPoint("BOTTOMLEFT", 0, FOOT_TOP)
+			nav:SetPoint("BOTTOMLEFT", 0, foot)
 			nav:Show()
+			foot = foot + NAV_HEIGHT
 		else
 			nav:SetPoint("TOPLEFT", 0, y)
 			nav:Show()

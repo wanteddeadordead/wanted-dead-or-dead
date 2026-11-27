@@ -788,9 +788,9 @@ end
 UI:RegisterPage("settings", {
 	group = "You",
 	title = "Settings",
-	order = 6,
-	under = "card",
-	tabLabel = "Settings",
+	order = 7,
+	-- Its own menu entry at the foot of the menu, above Poker's (when that's there) and Safety
+	atFoot = true,
 	build = function(container, width, height)
 		local tabs = W:Tabs(container, {
 			{ key = "alerts", label = "Alerts" },

@@ -22,11 +22,9 @@ local MAX_LINES = 20
 local MIN_APP = "0.2.66"
 -- Seconds after the loading screen before the chat line, as What's new waits
 local SETTLE_SECONDS = 4
--- Whole numbers the app writes stay below this (a double holds them exactly)
-local MAX_ID = 2 ^ 53
--- Ticket numbers stay within a 32-bit whole number (what format's %d prints exactly on every client); times stay
+-- Ticket numbers and message ids stay within a 32-bit whole number (what format's %d prints exactly on every client); times stay
 -- before the year 2100, where the game's date() works on every system
-local MAX_N = 2 ^ 31 - 1
+local MAX_N = 2 ^ 31 - 1 -- also the most for a message id
 local MAX_TIME = 4102444800
 
 ReportAnswers.KINDS = { bug = "Bug report", idea = "Feature idea", tip = "Tip" }
@@ -109,7 +107,7 @@ function private.CleanTicket(t)
 	if type(t) ~= "table" then
 		return nil
 	end
-	local n, m = WholeNumber(t.n, MAX_N), WholeNumber(t.m, MAX_ID)
+	local n, m = WholeNumber(t.n, MAX_N), WholeNumber(t.m, MAX_N)
 	if not n or not m or not ReportAnswers.KINDS[t.kind] or not ReportAnswers.STATUSES[t.status] then
 		return nil
 	end
@@ -285,7 +283,7 @@ function ReportAnswers:DialogText(t)
 		if t.said ~= "" then
 			tinsert(parts, "You said: "..t.said)
 		end
-		tinsert(parts, format("The developers, %s:\n%s", date("%Y-%m-%d", t.replyAt > 0 and t.replyAt or t.at), t.reply))
+		tinsert(parts, format("The developers, %s:\n%s", (date("%Y-%m-%d", t.replyAt > 0 and t.replyAt or t.at) or "an unknown date"), t.reply))
 		tinsert(parts, "Status: "..status)
 	else
 		tinsert(parts, "The developers set it to "..status..".")
@@ -311,13 +309,15 @@ function ReportAnswers:Open(n)
 		confirmLabel = "Got it",
 		cancelLabel = "Close",
 		onConfirm = function() end,
+		-- Read only once it is up: waiting behind another dialog, or dropped when the window closes, it isn't
+		onShow = function()
+			db.reportsRead[t.n] = max(db.reportsRead[t.n] or 0, t.m)
+			db.reportsTold[t.n] = max(db.reportsTold[t.n] or 0, t.m)
+			if Wanted.UI then
+				Wanted.UI:Refresh(true)
+			end
+		end,
 	})
-	-- After the dialog is built: an error making it never marks the answer read
-	db.reportsRead[t.n] = max(db.reportsRead[t.n] or 0, t.m)
-	db.reportsTold[t.n] = max(db.reportsTold[t.n] or 0, t.m)
-	if Wanted.UI then
-		Wanted.UI:Refresh(true)
-	end
 end
 
 Wanted:RegisterCommand("reports", "Opens Website & app, where the developers' answers to your reports are.", function()

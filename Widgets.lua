@@ -1264,6 +1264,7 @@ end
 ---(of the dialog, default 390), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
 ---cancelFirst (onCancel runs before the dialog hides, the first thing the click does, and returning false turns the click down; for a reload),
+---onShow (called once the dialog is actually up: not while it waits behind another, never if it is dropped),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
 ---Whether a dialog is up (one at a time).
 function W:IsDialogShown()
@@ -1377,6 +1378,9 @@ function W:Dialog(options)
 	dialog:Show()
 	-- In front of anything else full screen (the wanted poster)
 	dialog:Raise()
+	if options.onShow then
+		options.onShow()
+	end
 	if area then
 		frame.area:SetFocus()
 	elseif options.input then

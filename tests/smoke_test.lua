@@ -20921,6 +20921,36 @@ print("wanted smoke: races and guild wars off checks pass")
 	RA:Open(999)
 	check(not _G.WantedDialog:IsShown(), "a ticket not in the list opens nothing")
 
+	-- Queued behind another dialog: not read until it is up; dropped with its window: never read
+	RA:Take({ Ticket(60, 5) })
+	-- (the harness's wrapper closes the open dialog for the next: the real one queues)
+	local harnessDialog = W.Dialog
+	W.Dialog = origDialog
+	W:Dialog({ title = "Other", text = "x", onConfirm = function() end })
+	RA:Open(60)
+	check(db.reportsRead[60] == nil and #RA:Unread() == 1, "waiting behind another dialog it isn't read yet "..tostring(db.reportsRead[60])..#RA:Unread())
+	_G.WantedDialog:Hide()
+	RunTimers()
+	check(_G.WantedDialog:IsShown() and _G.WantedDialog.frame.title._text == "Report #60 · Bug report" and db.reportsRead[60] == 5 and #RA:Unread() == 0, "read once it is up")
+	_G.WantedDialog:Hide()
+	RunTimers()
+	RA:Take({ Ticket(61, 5) })
+	ns.UI:Show("home")
+	W:Dialog({ title = "Other", text = "x", onConfirm = function() end })
+	RA:Open(61)
+	ns.UI:GetFrame():Hide()
+	_G.WantedDialog:Hide()
+	RunTimers()
+	check(db.reportsRead[61] == nil and #RA:Unread() == 1 and not _G.WantedDialog:IsShown(), "dropped with its window: still unread")
+	W.Dialog = function(self, options)
+		lastDialog = options
+		local up = _G.WantedDialog
+		if up and up:IsShown() then up.frame.decided = true up:Hide() end
+		return origDialog(self, options)
+	end
+	ns.UI:Show("home")
+	RA:Take({ Ticket(62, 2 ^ 31) })
+	check(#RA:List() == 0, "a message id past 2^31-1 is skipped")
 	-- Website & app: a row per ticket, the new ones marked, and the card's states
 	RA:Take({ Ticket(16, 414), Ticket(15, 3, { seen = true, kind = "tip", status = "closed", said = "|cffff0000x" }) })
 	ns.UI:Show("web")

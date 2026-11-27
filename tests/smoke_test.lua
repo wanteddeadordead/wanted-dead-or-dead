@@ -6612,6 +6612,55 @@ end)()
 	end
 	Drain()
 	check(#SentTo(101) == 30, "only 30 messages a minute are taken from one sender, got "..#SentTo(101))
+	-- In an encounter or a chat lockdown the club calls answer with a secret value (truthy, can't be iterated or indexed): the
+	-- round is skipped without an error, and secret fields on a member or a game account skip that one
+	-- A secret that fails the way the game's does: indexing, iterating and comparing it is an error
+	local hard = setmetatable({}, { __index = function() error("secret value indexed") end, __eq = function() error("secret value compared") end, __len = function() error("secret value measured") end })
+	local realSecretValue = issecretvalue
+	issecretvalue = function(v) return rawequal(v, hard) end
+	local bridgePrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Bridge.InCommunity, i) if name == "private" then bridgePrivate = value break end if not name then break end end
+	local realMembers, realClubs, realInfo = C_Club.GetClubMembers, C_Club.GetSubscribedClubs, C_Club.GetMemberInfo
+	clubMembers[1].presence = 1
+	C_Club.GetClubMembers = function() return hard end
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.community.members == 0 and bridgePrivate.community.added == 0, "a secret member list: the round is skipped, counts left at 0")
+	C_Club.GetClubMembers = realMembers
+	C_Club.GetSubscribedClubs = function() return hard end
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	local hiddenReport = table.concat(ns.Bridge:CommunityReport(), "\n")
+	check(not ns.Bridge:InCommunity() and hiddenReport:find("none (or hidden for now)", 1, true), "a secret list of communities: none known, no error: "..hiddenReport)
+	C_Club.GetSubscribedClubs = function() return { hard, { clubId = hard, name = "Wanted" }, { clubId = "77", name = "Wanted", clubType = hard, memberCount = 6 } } end
+	check(ns.Bridge:InCommunity(), "a secret entry among the communities is skipped, the readable one found")
+	check(not table.concat(ns.Bridge:CommunityReport(), "\n"):find("id 77, ", 1, true), "an entry whose type is secret is left out of the report")
+	C_Club.GetSubscribedClubs = realClubs
+	C_Club.GetMemberInfo = function() return hard end
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.community.members == 6 and bridgePrivate.community.inGame == 0, "secret member info: each member counted, none read")
+	C_Club.GetMemberInfo = function(_, id) return { isSelf = hard, memberId = id, presence = 1, bnetAccountId = 201, faction = hard } end
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.community.inGame == 0, "secret fields on a member: skipped")
+	C_Club.GetMemberInfo = realInfo
+	local plain = { isOnline = true, gameAccountID = 9, clientProgram = BNET_CLIENT_WOW or "WoW", factionName = "Alliance", realmName = "Realm", characterName = "Pal" }
+	for _, field in ipairs({ "gameAccountID", "isOnline", "clientProgram", "factionName", "realmName", "playerGuid", "realmID", "characterName" }) do
+		local game = {}
+		for k, v in pairs(plain) do game[k] = v end
+		game[field] = hard
+		check(not bridgePrivate.IsCandidate(game) and not bridgePrivate.IsRealmLinkCandidate(game), "a game account with a secret "..field.." is neither a bridge nor a realm link")
+	end
+	check(not bridgePrivate.IsCandidate(hard) and not bridgePrivate.IsRealmLinkCandidate(hard), "a secret game account is skipped")
+	local realByID = C_BattleNet.GetGameAccountInfoByID
+	C_BattleNet.GetGameAccountInfoByID = function() return hard end
+	check(bridgePrivate.ValidSender(777) == nil, "a message whose sender's game account is secret is ignored")
+	C_BattleNet.GetGameAccountInfoByID = realByID
+	-- And the ordinary round still finds the member
+	clubMembers[1].presence = 1
+	bnSent = {}
+	ns.Bridge.clubId = "77"
+	bridgePrivate.helloSent = {}
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.community.members == 6 and bridgePrivate.community.inGame >= 1, "readable again: the round runs as before")
+	issecretvalue = realSecretValue
 	ns.Bridge.clubId = wantedClub
 	bnFriends[#bnFriends] = nil
 	C_Club = nil

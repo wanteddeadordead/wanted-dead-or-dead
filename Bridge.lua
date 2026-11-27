@@ -87,6 +87,31 @@ local function IsSecret(value)
 	return issecretvalue and issecretvalue(value) or false
 end
 
+---A table the game gave that can be read: not secret, and a table (in an encounter or a chat lockdown the club calls
+---answer with a secret value, which is truthy and can't be iterated or indexed).
+local function Open(value)
+	return type(value) == "table" and not IsSecret(value)
+end
+
+-- The fields of a game account that are read (compared, used as a key, or sent on)
+local GAME_FIELDS = { "gameAccountID", "isOnline", "isAppearOffline", "clientProgram", "wowProjectID", "factionName", "realmID",
+	"realmName", "playerGuid", "characterName" }
+
+---Whether a game account can be read: a table, and none of the fields read is secret.
+---@param game any
+---@return boolean
+function private.Readable(game)
+	if not Open(game) then
+		return false
+	end
+	for _, field in ipairs(GAME_FIELDS) do
+		if IsSecret(game[field]) then
+			return false
+		end
+	end
+	return true
+end
+
 
 
 -- ============================================================================
@@ -211,7 +236,7 @@ end
 ---@param game table? BNetGameAccountInfo
 ---@return boolean
 function private.IsCandidate(game)
-	if not game or not game.isOnline or game.isAppearOffline or not game.gameAccountID then
+	if not private.Readable(game) or not game.isOnline or game.isAppearOffline or not game.gameAccountID then
 		return false
 	end
 	if not private.InForever(game) or not game.factionName or private.IsOwnFaction(game.factionName) then
@@ -224,7 +249,7 @@ end
 ---@param game table? BNetGameAccountInfo
 ---@return boolean
 function private.IsRealmLinkCandidate(game)
-	if not game or not game.isOnline or game.isAppearOffline or type(game.characterName) ~= "string" then
+	if not private.Readable(game) or not game.isOnline or game.isAppearOffline or type(game.characterName) ~= "string" then
 		return false
 	end
 	if not private.InForever(game) or not game.factionName or not private.IsOwnFaction(game.factionName) then
@@ -247,8 +272,12 @@ function private.CommunityClub()
 	if not wanted or wanted == 0 or not C_Club or not C_Club.GetSubscribedClubs or not C_Club.GetClubMembers then
 		return nil
 	end
-	for _, club in ipairs(C_Club.GetSubscribedClubs() or {}) do
-		if not IsSecret(club.clubId) and tostring(club.clubId) == tostring(wanted) then
+	local clubs = C_Club.GetSubscribedClubs()
+	if not Open(clubs) then
+		return nil
+	end
+	for _, club in ipairs(clubs) do
+		if Open(club) and not IsSecret(club.clubId) and tostring(club.clubId) == tostring(wanted) then
 			return club.clubId
 		end
 	end
@@ -273,18 +302,24 @@ function private.AddCommunityTargets(found, room)
 		C_Club.FocusMembers(clubId)
 	end
 	local ownFaction = PVP_FACTION[UnitFactionGroup("player") or ""]
-	for _, memberId in ipairs(C_Club.GetClubMembers(clubId) or {}) do
-		local info = C_Club.GetMemberInfo(clubId, memberId)
+	local members = C_Club.GetClubMembers(clubId)
+	if not Open(members) then
+		-- The game hides the member list in an encounter or a chat lockdown: nothing to scan this round
+		Wanted:Log("Bridge: community %s: member list not readable now; skipped", tostring(clubId))
+		return
+	end
+	for _, memberId in ipairs(members) do
+		local info = not IsSecret(memberId) and C_Club.GetMemberInfo(clubId, memberId) or nil
 		seen.members = seen.members + 1
-		if info and not info.isSelf and not IsSecret(info.presence) and PRESENCE_IN_GAME[info.presence]
+		if Open(info) and not IsSecret(info.isSelf) and not info.isSelf and not IsSecret(info.faction) and not IsSecret(info.presence) and PRESENCE_IN_GAME[info.presence]
 			and type(info.bnetAccountId) == "number" and not IsSecret(info.bnetAccountId) then
 			seen.inGame = seen.inGame + 1
 			-- The community may say the faction (character communities); a Battle.net one leaves it to the game info
 			if info.faction == nil or info.faction ~= ownFaction then
 				seen.otherFaction = seen.otherFaction + 1
 				local account = C_BattleNet.GetAccountInfoByID and C_BattleNet.GetAccountInfoByID(info.bnetAccountId)
-				local game = account and account.gameAccountInfo
-				if not game or not game.gameAccountID then
+				local game = Open(account) and account.gameAccountInfo or nil
+				if not private.Readable(game) or not game.gameAccountID then
 					seen.hidden = seen.hidden + 1
 				elseif not private.IsCandidate(game) then
 					seen.elsewhere = seen.elsewhere + 1
@@ -304,6 +339,9 @@ end
 ---@return number room left
 function private.AddFriendTargets(i, account, found, room)
 	local numGames = C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo and C_BattleNet.GetFriendNumGameAccounts(i) or 0
+	if type(numGames) ~= "number" or IsSecret(numGames) or IsSecret(account.bnetAccountID) then
+		return room
+	end
 	local games = {}
 	for j = 1, numGames do
 		games[j] = C_BattleNet.GetFriendGameAccountInfo(i, j)
@@ -335,8 +373,13 @@ function private.Scan()
 	end
 	private.lastScan = now
 	local found, room = {}, MAX_TARGETS
-	for i = 1, BNGetNumFriends() do
+	local friends = BNGetNumFriends()
+	if type(friends) ~= "number" or IsSecret(friends) then
+		friends = 0
+	end
+	for i = 1, friends do
 		local account = C_BattleNet.GetFriendAccountInfo(i)
+		account = Open(account) and account or nil
 		local game = account and account.gameAccountInfo
 		if private.IsRealmLinkCandidate(game) then
 			-- Our faction on another realm name: can't hear our channel, but a hidden whisper reaches them (Sync)
@@ -533,6 +576,9 @@ end
 ---@return table? game BNetGameAccountInfo
 function private.ValidSender(senderID)
 	local game = C_BattleNet.GetGameAccountInfoByID and C_BattleNet.GetGameAccountInfoByID(senderID)
+	if not private.Readable(game) then
+		game = nil
+	end
 	if not game and private.targets[senderID] then
 		game = private.targets[senderID].game
 	end
@@ -895,8 +941,9 @@ function Bridge:CommunityReport()
 	if not C_Club or not C_Club.GetSubscribedClubs then
 		return { "Communities aren't available on this client." }
 	end
-	for _, club in ipairs(C_Club.GetSubscribedClubs() or {}) do
-		if not IsSecret(club.clubId) and not IsSecret(club.name) then
+	local clubs = C_Club.GetSubscribedClubs()
+	for _, club in ipairs(Open(clubs) and clubs or {}) do
+		if Open(club) and not IsSecret(club.clubId) and not IsSecret(club.name) and not IsSecret(club.clubType) and not IsSecret(club.memberCount) then
 			local kind = club.clubType == 0 and "Battle.net" or club.clubType == 1 and "character" or club.clubType == 2 and "guild" or "other"
 			tinsert(lines, format("  %s: id %s, %s community, %s members%s", tostring(club.name), tostring(club.clubId), kind,
 				tostring(club.memberCount or "?"), tostring(club.clubId) == tostring(Bridge.clubId) and " (Wanted's)" or ""))

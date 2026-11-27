@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- An error in boss fights for players in the Wanted community is gone: the game hides the community's member list during an encounter, and the cross-faction bridge now skips that round instead of failing.
+
 ## [1.30.0] - 2026-11-25
 
 - Races and guild wars are switched off, with their HUDs, map points, settings, tour stops and the Guild Wars page, until there is a fair way to run them: since 2026-11-20 the game no longer lets an addon tell layers apart. Bounties, kills, sightings, enemies, Kill on Sight, raids and duels work as before, and War Marks you have earned are kept. /wanted new says why.

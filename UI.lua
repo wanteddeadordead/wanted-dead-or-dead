@@ -1134,6 +1134,16 @@ function private.ApplyScale(pin)
 	Wanted.db.settings.window = Theme:ScaleAbout(frame, scale, pin and pin[1], pin and pin[2]) or Wanted.db.settings.window
 	W:HideMenu()
 	W:RescalePopups()
+	-- The size shown can change here too (a smaller screen or UI scale fits less): the controls show it
+	private.NotifyScale()
+end
+
+---Tells the controls (UI:OnScaleChanged) the size shown.
+function private.NotifyScale()
+	local percent = UI:GetScalePercent()
+	for _, fn in ipairs(scaleListeners) do
+		fn(percent)
+	end
 end
 
 ---Sizes the window (the title bar's control, Settings, Theme: UI size, and Shift + mouse wheel), saved for the
@@ -1156,10 +1166,8 @@ function private.SetSize(scale, pin)
 		pin = private.RegionPin(pin)
 	end
 	private.ApplyScale(pin)
-	local percent = UI:GetScalePercent()
-	for _, fn in ipairs(scaleListeners) do
-		fn(percent)
-	end
+	-- Also when the frame's scale didn't change (a size typed past what fits shows what it got)
+	private.NotifyScale()
 end
 
 ---One 5% step bigger (delta > 0) or smaller, from the size shown: a size off the steps goes to the next step, and

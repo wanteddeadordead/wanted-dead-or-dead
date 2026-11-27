@@ -8193,6 +8193,16 @@ end)()
 	frame._scripts.OnMouseWheel(frame, 1)
 	IsShiftKeyDown = saved.shift
 	check(title.box._text == "90%" and row.box._text == "90%", "Shift + wheel: both show 90%")
+	-- A smaller screen at the next opening fits less: the controls show the size it got
+	Screen(2560, 1440, 1)
+	settings.windowScale = 1.5
+	frame:Hide()
+	frame:Show()
+	check(title.box._text == "150%", "150% on a 1440p screen: "..title.box._text)
+	Screen(1920, 1080, 1)
+	frame:Hide()
+	frame:Show()
+	check(title.box._text == "135%" and row.box._text == "135%", "the screen goes to 1080p: shown at 135%, and both controls say so: "..title.box._text)
 	-- A converted size off the steps shows as it is
 	Screen(1920, 1080, 1)
 	settings.windowScale = 1.30625

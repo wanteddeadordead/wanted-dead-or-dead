@@ -5657,10 +5657,16 @@ end)()
 	GetChannelName = function(name) for i = 1, 10 do if slots[i] == name then return i, name end end return 0 end
 	local swaps = 0
 	C_ChatInfo.SwapChatChannelsByChannelIndex = function(a, b) swaps = swaps + 1 slots[a], slots[b] = slots[b], slots[a] end
+	-- The game's chat colours, as it keeps them (an empty table over a proxy): a write from an addon taints the slot,
+	-- and a channel line read through it in a chat lockdown is dropped
+	local colourWrites = {}
+	ChatTypeInfo = setmetatable({}, { __index = { CHANNEL1 = {}, CHANNEL2 = {}, CHANNEL3 = {}, CHANNEL4 = {}, CHANNEL5 = {} },
+		__newindex = function(t, k, v) colourWrites[#colourWrites + 1] = k rawset(t, k, v) end })
 	Fire("CHANNEL_UI_UPDATE")
 	RunTimers()
 	check(slots[1] == "General - Durotar" and slots[2] == "Trade - City" and slots[3] == "LocalDefense - Durotar" and slots[4] == netName,
 		"the sync channel moves to the end, and the others keep their order")
+	check(#colourWrites == 0, "moving it writes nothing into the game's chat colours, got "..table.concat(colourWrites, " "))
 	check(ns.Sync:GetInfo().channelId == 4, "and the addon knows its new number")
 	local before = swaps
 	Fire("CHANNEL_UI_UPDATE")
@@ -5670,6 +5676,8 @@ end)()
 	Fire("CHANNEL_UI_UPDATE")
 	RunTimers()
 	check(slots[4] == "MyChannel" and slots[5] == netName, "a channel joined after it goes ahead of it")
+	check(#colourWrites == 0, "nor does moving it again")
+	ChatTypeInfo = nil
 	GetChannelName, GetChannelList, C_ChatInfo.SwapChatChannelsByChannelIndex = realName, realList, realSwap
 	RunTimers()
 end)()

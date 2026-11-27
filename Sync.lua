@@ -664,7 +664,13 @@ end
 
 ---Moves the sync channel to the end of the channel list. The game numbers channels in the order they're joined,
 ---so a sync channel joined first took /1 and pushed General and Trade down (player report, 2026-10-05). It goes
----one slot at a time, as the chat settings' Move Down does, so the other channels keep their order and colours.
+---one slot at a time, as the chat settings' Move Down does, so the other channels keep their order.
+---Only the game's own swap is called: the chat settings also swap ChatTypeInfo["CHANNELn"], but from an addon that
+---write taints the slot, and in a chat lockdown (a battleground, a boss fight) the chat window can drop every line of a
+---channel whose colour it reads through a tainted slot. Read from the UI source (1.60.1 build 70425), not seen in the
+---client: no Lua code re-reads the colours after SwapChatChannelsByChannelIndex (the docs list no event for it; only
+---UPDATE_CHAT_COLOR writes them, and the chat settings move the colour tables by hand), so a moved channel may show
+---the colour of its old number until a /reload.
 function private.MoveToEnd()
 	local id = private.CurrentChannelId()
 	if not id or not GetChannelList or not C_ChatInfo.SwapChatChannelsByChannelIndex then
@@ -677,10 +683,6 @@ function private.MoveToEnd()
 		end
 	end
 	for i = id, last - 1 do
-		if ChatTypeInfo then
-			local a, b = "CHANNEL"..i, "CHANNEL"..(i + 1)
-			ChatTypeInfo[a], ChatTypeInfo[b] = ChatTypeInfo[b], ChatTypeInfo[a]
-		end
 		C_ChatInfo.SwapChatChannelsByChannelIndex(i, i + 1)
 	end
 	if last > id then

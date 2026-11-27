@@ -2213,12 +2213,12 @@ ReloadUI = function() reloads = reloads + 1 end
 inCombat = true
 local posterLines = ns:CapturePrints(function() upload:GetScript("OnClick")(upload) end)
 inCombat = false
-check(reloads == 0 and screenshots == shotsBefore + 1 and posterLines[1] == "The game didn't allow a reload here. Type /reload.",
+check(reloads == 0 and screenshots == shotsBefore + 1 and posterLines[1] == "A button can't reload in a fight or inside an instance. Type /reload.",
 	"in combat it doesn't reload and says to type /reload: "..tostring(posterLines[1]))
 IsInInstance = function() return true end
 posterLines = ns:CapturePrints(function() upload:GetScript("OnClick")(upload) end)
 IsInInstance = function() return false end
-check(reloads == 0 and posterLines[1] == "The game didn't allow a reload here. Type /reload.", "in an instance neither")
+check(reloads == 0 and posterLines[1] == "A button can't reload in a fight or inside an instance. Type /reload.", "in an instance neither")
 upload:GetScript("OnClick")(upload)
 check(reloads == 1 and screenshots == shotsBefore + 1, "clicking it reloads, and takes no second picture")
 ReloadUI = realReload
@@ -14457,12 +14457,12 @@ end)()
 	inCombat = true
 	local lines = ns:CapturePrints(function() Reload()._scripts.OnClick(Reload()) end)
 	inCombat = false
-	check(reloads == 0 and lines[1] == "The game didn't allow a reload here. Type /reload.", "in combat the button doesn't reload and says to type /reload: "..tostring(lines[1]))
+	check(reloads == 0 and lines[1] == "A button can't reload in a fight or inside an instance. Type /reload.", "in combat the button doesn't reload and says to type /reload: "..tostring(lines[1]))
 	local realInstance = IsInInstance
 	IsInInstance = function() return true end
 	lines = ns:CapturePrints(function() Reload()._scripts.OnClick(Reload()) end)
 	IsInInstance = realInstance
-	check(reloads == 0 and lines[1] == "The game didn't allow a reload here. Type /reload.", "in an instance neither")
+	check(reloads == 0 and lines[1] == "A button can't reload in a fight or inside an instance. Type /reload.", "in an instance neither")
 	Reload()._scripts.OnClick(Reload())
 	check(reloads == 1, "the button reloads the UI")
 	Duels:TakeReports({}, clock)
@@ -15005,7 +15005,7 @@ end)()
 	local lines = ns:CapturePrints(function() dialog.cancel:Click() end)
 	GetTime = realGetTime
 	inCombat = false
-	check(reloads == 1 and lines[1] == "The game didn't allow a reload here. Type /reload.", "a click once a fight started does not reload and says to type /reload: "..tostring(lines[1]))
+	check(reloads == 1 and lines[1] == "A button can't reload in a fight or inside an instance. Type /reload.", "a click once a fight started does not reload and says to type /reload: "..tostring(lines[1]))
 	-- A reload the client blocks anyway, right after a click: the plain line once (noted for a bug report), not the
 	-- generic one; a later block, or one with no click before it, gets the generic line
 	ns:RunCommand("idea", "")

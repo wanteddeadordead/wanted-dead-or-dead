@@ -1097,8 +1097,10 @@ function Wanted:InInstance()
 	return IsInInstance() == true
 end
 
--- What a refused or blocked reload says: a typed /reload runs from the game's own chat code
+-- What a reload the game blocked says (a typed /reload runs from the game's own chat code), and what a button says
+-- where it doesn't ask for one at all
 local RELOAD_REFUSED = "The game didn't allow a reload here. Type /reload."
+local RELOAD_NOT_BY_BUTTON = "A button can't reload in a fight or inside an instance. Type /reload."
 -- How long after a reload button's click a blocked Reload() is that click's (Core's ADDON_ACTION_BLOCKED branch)
 local RELOAD_BLOCK_SECONDS = 2
 
@@ -1116,7 +1118,7 @@ end
 ---@return boolean asked whether the reload was asked for
 function Wanted:Reload(reload)
 	if not Wanted:CanReload() then
-		Wanted:Print(RELOAD_REFUSED)
+		Wanted:Print(RELOAD_NOT_BY_BUTTON)
 		return false
 	end
 	private.reloadAskedAt = GetTime()

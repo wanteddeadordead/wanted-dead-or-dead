@@ -1097,6 +1097,33 @@ function Wanted:InInstance()
 	return IsInInstance() == true
 end
 
+-- What a refused or blocked reload says: a typed /reload runs from the game's own chat code
+local RELOAD_REFUSED = "The game didn't allow a reload here. Type /reload."
+-- How long after a reload button's click a blocked Reload() is that click's (Core's ADDON_ACTION_BLOCKED branch)
+local RELOAD_BLOCK_SECONDS = 2
+
+---Whether a reload button may reload now. On 2026-11-26 the client blocked the report dialog's Reload now (ReloadUI)
+---inside a dungeon, out of combat ("The client blocked Reload()"); C_UI.Reload's API documentation lists no
+---restriction, so this goes by what was seen: not in combat and not in an instance.
+---@return boolean
+function Wanted:CanReload()
+	return not InCombatLockdown() and not Wanted:InInstance()
+end
+
+---Reloads the UI for a button the player clicked: where CanReload says no, it says to type /reload instead. A
+---blocked reload right after (ADDON_ACTION_BLOCKED for Reload()) says the same, rather than the generic line.
+---@param reload function? ReloadUI or C_UI.Reload (C_UI.Reload when nil)
+---@return boolean asked whether the reload was asked for
+function Wanted:Reload(reload)
+	if not Wanted:CanReload() then
+		Wanted:Print(RELOAD_REFUSED)
+		return false
+	end
+	private.reloadAskedAt = GetTime()
+	;(reload or C_UI.Reload)()
+	return true
+end
+
 ---Whether the player is in a battleground or arena: the game blocks addon messages and hides chat text from addons
 ---there, and world PvP (kills, sightings, bounties, alerts) doesn't count.
 ---@return boolean
@@ -1230,7 +1257,14 @@ private.frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		if arg1 == ADDON_NAME then
 			Wanted:NoteProblem(format("%s: %s (%s) from %s; last: %s", event, tostring(arg2), private.BlockContext(),
 				private.BlockedFrom(), private.TrailText()))
-			Wanted:Print("The client blocked %s. /wanted bug makes a report you can send.", tostring(arg2))
+			-- A reload one of our buttons just asked for (Wanted:Reload): the plain answer, once
+			local asked = private.reloadAskedAt
+			if asked and GetTime() - asked <= RELOAD_BLOCK_SECONDS and tostring(arg2):find("Reload", 1, true) then
+				private.reloadAskedAt = nil
+				Wanted:Print(RELOAD_REFUSED)
+			else
+				Wanted:Print("The client blocked %s. /wanted bug makes a report you can send.", tostring(arg2))
+			end
 		end
 	end
 end)

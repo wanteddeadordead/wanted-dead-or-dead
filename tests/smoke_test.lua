@@ -2213,8 +2213,12 @@ ReloadUI = function() reloads = reloads + 1 end
 inCombat = true
 local posterLines = ns:CapturePrints(function() upload:GetScript("OnClick")(upload) end)
 inCombat = false
-check(reloads == 0 and screenshots == shotsBefore + 1 and posterLines[1] and posterLines[1]:find("Type /reload after it to send your poster.", 1, true),
-	"in combat it doesn't reload (the client blocks it) and says to /reload after the fight")
+check(reloads == 0 and screenshots == shotsBefore + 1 and posterLines[1] == "The game didn't allow a reload here. Type /reload.",
+	"in combat it doesn't reload and says to type /reload: "..tostring(posterLines[1]))
+IsInInstance = function() return true end
+posterLines = ns:CapturePrints(function() upload:GetScript("OnClick")(upload) end)
+IsInInstance = function() return false end
+check(reloads == 0 and posterLines[1] == "The game didn't allow a reload here. Type /reload.", "in an instance neither")
 upload:GetScript("OnClick")(upload)
 check(reloads == 1 and screenshots == shotsBefore + 1, "clicking it reloads, and takes no second picture")
 ReloadUI = realReload
@@ -14453,7 +14457,12 @@ end)()
 	inCombat = true
 	local lines = ns:CapturePrints(function() Reload()._scripts.OnClick(Reload()) end)
 	inCombat = false
-	check(reloads == 0 and lines[1] and lines[1]:find("Type /reload after it.", 1, true), "in combat the button doesn't reload (the client blocks it) and says to /reload after the fight")
+	check(reloads == 0 and lines[1] == "The game didn't allow a reload here. Type /reload.", "in combat the button doesn't reload and says to type /reload: "..tostring(lines[1]))
+	local realInstance = IsInInstance
+	IsInInstance = function() return true end
+	lines = ns:CapturePrints(function() Reload()._scripts.OnClick(Reload()) end)
+	IsInInstance = realInstance
+	check(reloads == 0 and lines[1] == "The game didn't allow a reload here. Type /reload.", "in an instance neither")
 	Reload()._scripts.OnClick(Reload())
 	check(reloads == 1, "the button reloads the UI")
 	Duels:TakeReports({}, clock)
@@ -14961,15 +14970,28 @@ end)()
 	dialog.cancel:Click()
 	GetTime = realGetTime
 	check(reloads == 1, "Reload now reloads the UI")
-	-- In combat the client blocks an addon's reload: no Reload now, and the dialog says to type /reload
+	-- In combat or an instance (the client blocked it in a dungeon): no Reload now, sent at the next /reload or logout
 	inCombat = true
 	ns:RunCommand("idea", "")
 	dialog.area:SetText("reload in a fight")
 	dialog.confirm:Click()
-	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once") and OnScreen("It is sent at your next /reload or logout. The game doesn't let Wanted reload during a fight, but typing /reload works. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).")
-		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$"), "in combat: no Reload now, the dialog says to type /reload, and the address is kept")
+	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once") and OnScreen("It is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).")
+		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$"), "in combat: no Reload now, sent at the next /reload or logout, and the address is kept")
 	dialog.confirm:Click()
 	check(reloads == 1, "OK in combat does not reload")
+	inCombat = false
+	-- The reports these next checks queue are taken out again after them, so the queue doesn't fill
+	local queuedKeys = {}
+	for key in pairs(db.reports) do queuedKeys[key] = true end
+	local realInstance = IsInInstance
+	IsInInstance = function() return true end
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload in a dungeon")
+	dialog.confirm:Click()
+	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once") and OnScreen("It is sent at your next /reload or logout. The address below"),
+		"in an instance, out of combat: no Reload now either")
+	dialog.confirm:Click()
+	IsInInstance = realInstance
 	-- A fight starting after the dialog opened: the click says to /reload after it, and doesn't reload
 	inCombat = false
 	ns:RunCommand("idea", "")
@@ -14981,7 +15003,33 @@ end)()
 	local lines = ns:CapturePrints(function() dialog.cancel:Click() end)
 	GetTime = realGetTime
 	inCombat = false
-	check(reloads == 1 and lines[1] and lines[1]:find("Type /reload after it to send your report.", 1, true), "a click once a fight started does not reload and says to /reload after it: "..tostring(lines[1]))
+	check(reloads == 1 and lines[1] == "The game didn't allow a reload here. Type /reload.", "a click once a fight started does not reload and says to type /reload: "..tostring(lines[1]))
+	-- A reload the client blocks anyway, right after a click: the plain line once (noted for a bug report), not the
+	-- generic one; a later block, or one with no click before it, gets the generic line
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload, blocked")
+	dialog.confirm:Click()
+	GetTime = function() return realGetTime() + 1 end
+	dialog.cancel:Click()
+	check(reloads == 2, "the click asks for the reload")
+	lines = ns:CapturePrints(function() Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "Reload()") end)
+	check(#lines == 1 and lines[1] == "The game didn't allow a reload here. Type /reload.", "blocked right after the click: the plain line, once: "..tostring(lines[1]))
+	check(ns.Report:Build():find("ADDON_ACTION_BLOCKED: Reload()", 1, true), "and the block is noted for a bug report")
+	lines = ns:CapturePrints(function() Fire("ADDON_ACTION_FORBIDDEN", "WantedDeadOrDead", "Reload()") end)
+	check(#lines == 1 and lines[1]:find("The client blocked Reload().", 1, true), "a second block gets the generic line: "..tostring(lines[1]))
+	GetTime = realGetTime
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload, blocked late")
+	dialog.confirm:Click()
+	GetTime = function() return realGetTime() + 1 end
+	dialog.cancel:Click()
+	GetTime = function() return realGetTime() + 4 end
+	lines = ns:CapturePrints(function() Fire("ADDON_ACTION_BLOCKED", "WantedDeadOrDead", "Reload()") end)
+	GetTime = realGetTime
+	check(reloads == 3 and lines[1]:find("The client blocked Reload().", 1, true), "a block seconds after the click gets the generic line")
+	for key in pairs(db.reports) do
+		if not queuedKeys[key] then db.reports[key] = nil end
+	end
 	for _, info in ipairs({ { running = "0.2.45", seen = GetServerTime() }, { running = "0.2.46", seen = 1 } }) do
 		WantedAppInfo = info
 		ns:RunCommand("idea", "")
@@ -14996,7 +15044,7 @@ end)()
 	dialog.confirm:Click()
 	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once"), "no app: no reload button")
 	dialog.confirm:Click()
-	check(reloads == 1, "no reload in those states")
+	check(reloads == 3, "no reload in those states")
 	-- The tip dialog gets the same paragraph
 	WantedAppInfo = { running = "0.2.46", seen = GetServerTime() }
 	Report:AskAboutTip(duel, finding)
@@ -15012,7 +15060,7 @@ end)()
 	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
 	dialog.confirm:Click()
 	db.reports = keptQueue
-	queuedBefore = queuedBefore + 13
+	queuedBefore = queuedBefore + 12
 	-- The report window's note carries the line about following reports
 	ns.Report:Show()
 	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")

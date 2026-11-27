@@ -546,17 +546,23 @@ function private.CanReloadToSend()
 end
 
 ---Tells the player where the report they just queued goes, and where to follow it. Where a reload would send it, the
----dialog offers one (ReloadUI is the game's own /reload, with no restriction in combat) and says it is otherwise sent
----at the next /reload or logout; the address stays until the player chooses. Reload now is the dialog's Cancel button:
----Enter (the copy box has the focus) and Escape never reload.
+---dialog offers one and says it is otherwise sent at the next /reload or logout; the address stays until the player
+---chooses. Reload now is the dialog's Cancel button: Enter (the copy box has the focus) and Escape never reload.
+---ReloadUI (Blizzard_SharedXML InterfaceUtil.lua) only calls C_UI.Reload, whose API documentation lists no restriction,
+---but in combat the client blocks it when an addon calls it ("The client blocked Reload()", in a boss fight on
+---2026-11-26). A typed /reload runs it from the game's own chat code and works. So in combat there is no Reload now,
+---and a click on it after a fight started only says to type /reload.
 ---@param id string
 ---@param title string
 function private.ShowSent(id, title)
 	local paragraph, url = private.FollowText(id)
-	local reload = private.CanReloadToSend()
+	local canSend = private.CanReloadToSend()
+	local reload = canSend and not InCombatLockdown()
 	local text = private.SentText().."\n\n"
 	if reload then
 		text = text.."Reload now sends it at once, if the Wanted app is still running. Otherwise it is sent at your next /reload or logout. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).\n\n"
+	elseif canSend then
+		text = text.."It is sent at your next /reload or logout. The game doesn't let Wanted reload during a fight, but typing /reload works. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).\n\n"
 	end
 	-- A second click on Send must not land on Reload now as the dialog opens: it ignores clicks for half a second
 	local shownAt = GetTime()
@@ -569,9 +575,15 @@ function private.ShowSent(id, title)
 		confirmLabel = reload and "Not now" or "OK",
 		cancelLabel = reload and "Reload now" or nil,
 		onCancel = reload and function()
-			if GetTime() - shownAt >= RELOAD_DELAY then
-				ReloadUI()
+			if GetTime() - shownAt < RELOAD_DELAY then
+				return
 			end
+			-- A fight started after the dialog opened: the client would block it
+			if InCombatLockdown() then
+				Wanted:Print("The game doesn't let Wanted reload during a fight. Type /reload after it to send your report.")
+				return
+			end
+			ReloadUI()
 		end or nil,
 	})
 end

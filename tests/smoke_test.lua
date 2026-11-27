@@ -49,7 +49,7 @@ end
 Mock.created = {} -- every frame made, so tests can find one by its fields
 -- Fields the widgets read before any are set: nil until then, as on a real frame
 Mock.tooltipFields = { tooltipTitle = true, tooltipText = true, tooltipAnchor = true, showsTooltip = true, explainHit = true,
-	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true, hidesMenu = true, anchor = true, color = true, shown = true }
+	explainedText = true, owner = true, emptyHintText = true, paint = true, caps = true, rest = true, hovered = true, checked = true, rowCount = true, popup = true, done = true, fitHeight = true, pending = true, hidesMenu = true, anchor = true, color = true, shown = true, pill = true }
 Mock.__index = function(t, k)
 	if Methods[k] then return Methods[k] end
 	if type(k) == "string" and k:sub(1, 1) == "_" then return nil end
@@ -20977,6 +20977,37 @@ print("wanted smoke: races and guild wars off checks pass")
 	ns.Print = realPrint
 	db.reportsRead, db.reportsTold = savedRead, savedTold
 	WantedAppInfo, WantedAppCatchup = savedInfo, savedCatchup
+end)()
+-- An unread answer is marked where the player looks: the Settings menu entry's count box and the Website & app tab
+;(function()
+	local RA, db = ns.ReportAnswers, ns.db
+	local savedRead, savedTold = db.reportsRead, db.reportsTold
+	db.reportsRead, db.reportsTold = {}, {}
+	local function Found(key, field)
+		local found
+		for _, f in ipairs(Mock.created) do
+			if rawget(f, "key") == key and rawget(f, field) then found = f end
+		end
+		return found
+	end
+	RA:Take({ { n = 16, kind = "bug", status = "awaiting", m = 412, at = clock - 7200, seen = false, reply = "r", replyAt = clock - 7200, said = "s" } })
+	ns.UI:Show("web")
+	ns.UI:Refresh(true)
+	local nav, tab = Found("settings", "badge"), Found("web", "pill")
+	check(nav and nav:IsShown() and nav.badge:IsShown() and nav.badge.text._text == "1", "unread answer: the Settings entry shows a count")
+	check(tab and tab.pill:IsShown() and tab.pill.text._text == "1", "unread answer: the Website & app tab shows a count")
+	local label = tab.label:GetStringWidth()
+	check(tab:GetWidth() >= label + 24 + tab.pill:GetWidth(), "the tab is wide enough for its label and the count")
+	ns.UI:Show("home")
+	check(nav.badge:IsShown() and tab.pill:IsShown(), "the marks stay while the answer is unread, on any page")
+	local realDialog = ns.Widgets.Dialog
+	ns.Widgets.Dialog = function(_, options) if options.onShow then options.onShow() end end
+	RA:Open(16)
+	ns.Widgets.Dialog = realDialog
+	ns.UI:Show("web")
+	check(not nav.badge:IsShown() and not tab.pill:IsShown(), "read: both marks clear")
+	RA:Take(nil)
+	db.reportsRead, db.reportsTold = savedRead, savedTold
 end)()
 print("wanted smoke: report answers checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the

@@ -1032,6 +1032,8 @@ check(macros >= 2, "Nearby rows carry target macros, got "..macros)
 end
 -- Last hour: Mine (the default) is what this client saw itself; Everyone is today's list
 do
+	local savedRing, savedPos = {}, ns.db.sightingsPos
+	for i, v in pairs(ns.db.sightings) do savedRing[i] = v end
 	check(ns.db.settings.nearby.hourScope == "mine", "the Last hour tab defaults to Mine")
 	local base = clock
 	local function ListHas(list, guid) for _, d in ipairs(list) do if d.guid == guid then return d end end end
@@ -1064,6 +1066,21 @@ do
 	local same = #everyone == #old
 	for i, d in ipairs(old) do same = same and everyone[i].guid == d.guid and everyone[i].lastSeen == d.lastSeen end
 	check(same, "Everyone is the old list, and no argument still gives it")
+	-- the place under Mine is ours: a sharer's replaced the saved one, our ring sighting gives it back
+	local h50 = ListHas(mine, "Player-9-HR50")
+	check(h50.x == 50 and h50.y == 50 and h50.zone == "Ashenvale" and h50.mapId == 10, "Mine shows the place of our own sighting, not the sharer's (51, 51)")
+	check(ListHas(everyone, "Player-9-HR50").x == 51, "Everyone shows the newest place")
+	-- an own ring entry dated in the future is not counted
+	ns.Store:UpdatePlayer("Player-9-HRFUT", { name = "Future", faction = "Alliance", zone = "Ashenvale" })
+	clock = base + 600
+	ns.Store:AddSighting("Player-9-HRFUT", "Ashenvale", 50, 50, 10)
+	clock = base
+	check(not ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRFUT"), "an own sighting dated in the future is not listed")
+	-- fighting someone counts as seeing them: a kill sets ownSeen
+	ns.db.players["Player-9-HRKILL"] = { name = "Kill Me", faction = "Alliance", zone = "Ashenvale", lastSeen = base - 7200 }
+	Fire("PARTY_KILL", "Player-2-FRIEND", "Player-9-HRKILL")
+	check(ns.Store:GetPlayer("Player-9-HRKILL").ownSeen == base, "a kill sets ownSeen")
+	check(ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRKILL"), "and lists them under Mine")
 	-- the saved ownSeen: set by our own detection, never by a shared sighting
 	check(type(ns.Store:GetPlayer("Player-9-ENEMY").ownSeen) == "number", "our own detection writes ownSeen")
 	check(ns.Store:GetPlayer("Player-9-OTHER").ownSeen == nil and ns.Store:GetPlayer("Player-9-HRSHARED").ownSeen == nil
@@ -1076,6 +1093,7 @@ do
 	clock = base
 	for i = 1, ns.Store.MAX_SIGHTINGS + 5 do ns.Store:AddSighting("Player-9-HRFILL", "Ashenvale", 50, 50, 10, "Some Friend") end
 	local saved = ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSAVED")
+	check(saved and saved.x == nil and saved.zone == nil, "no own place for a record only ownSeen knows, after a sharer's replaced it")
 	check(saved and saved.lastSeen == base - 3000, "with the ring full of shared sightings, one I saw 50 minutes ago still shows under Mine, at my time")
 	check(ns.Store:GetPlayer("Player-9-HRSAVED").ownSeen == base - 3000, "a shared sighting leaves ownSeen alone")
 	check(not ListHas(ns.Enemies:GetLastHour(true), "Player-9-HRSHARED"), "a record without ownSeen and no own entry stays out of Mine")
@@ -1091,11 +1109,10 @@ do
 	ns.NearbyWindow:Refresh()
 	ns.db.settings.nearby.hourScope = "mine"
 	ns.db.settings.detect.tab = "nearby"
-	for i = 1, ns.Store.MAX_SIGHTINGS do
-		local sighting = ns.db.sightings[i]
-		if sighting and sighting.guid:find("^Player%-9%-HR") then ns.db.sightings[i] = nil end
-	end
-	for _, g in ipairs({ "Player-9-HROWN", "Player-9-HR50", "Player-9-HROLD", "Player-9-HRSHARED", "Player-9-HRSAVED" }) do ns.db.players[g] = nil end
+	wipe(ns.db.sightings)
+	for i, v in pairs(savedRing) do ns.db.sightings[i] = v end
+	ns.db.sightingsPos = savedPos
+	for _, g in ipairs({ "Player-9-HROWN", "Player-9-HR50", "Player-9-HROLD", "Player-9-HRSHARED", "Player-9-HRSAVED", "Player-9-HRFUT", "Player-9-HRKILL" }) do ns.db.players[g] = nil end
 end
 ns.db.players["Player-9-OLDEVIL"], ns.db.players["Player-9-EVIL"] = nil, nil
 ns.db.sightings[ns.db.sightingsPos], ns.db.sightingsPos = nil, ns.db.sightingsPos - 1

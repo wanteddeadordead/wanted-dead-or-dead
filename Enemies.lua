@@ -1024,30 +1024,33 @@ function Enemies:GetNearby(order)
 	return list
 end
 
----When this client itself saw each enemy in the last hour, from the sightings ring and the Nearby list: guid -> server
----time. Own ring entries have no sharer (`by`); a sighting shared by another Wanted user never counts, even when it
----is newer than ours and has replaced the saved player's lastSeen. (The saved `ownSeen` is read by GetLastHour.)
----@return table<string, number>
+---When this client itself saw each enemy in the last hour, from the sightings ring and the Nearby list: guid ->
+---{ t = server time, s = our newest ring sighting of them or nil }. Own ring entries have no sharer (`by`); a sighting
+---shared by another Wanted user never counts, even when it is newer than ours and has replaced the saved player's
+---lastSeen. (The saved `ownSeen` is read by GetLastHour.)
+---@return table<string, table>
 function private.OwnLastHour()
 	local own = {}
 	local now = GetServerTime()
 	for sighting in Store:SightingIterator() do
-		local t = sighting.t
-		if not sighting.by and sighting.guid and type(t) == "number" and now - t <= LAST_HOUR and t > (own[sighting.guid] or 0) then
-			own[sighting.guid] = t
+		local t, guid = sighting.t, sighting.guid
+		if not sighting.by and guid and type(t) == "number" and t <= now and now - t <= LAST_HOUR and t > (own[guid] and own[guid].t or 0) then
+			own[guid] = { t = t, s = sighting }
 		end
 	end
 	for guid, entry in pairs(private.nearby) do
 		local t = now - (GetTime() - entry.lastSeen)
-		if t > (own[guid] or 0) then
-			own[guid] = t
+		if t > (own[guid] and own[guid].t or 0) then
+			own[guid] = { t = t, s = own[guid] and own[guid].s }
 		end
 	end
 	return own
 end
 
 ---Enemies seen in the last hour, newest first. Own and shared sightings, or with mineOnly just the enemies this client
----saw itself (each listed with the time it saw them).
+---saw itself (each listed with the time it saw them): the saved ownSeen, an own ring entry or the Nearby list,
+---whichever is newest. The place shown is ours too: when a newer shared sighting replaced the saved place, it is
+---our newest ring sighting's, or none.
 ---@param mineOnly boolean?
 ---@return table[]
 function Enemies:GetLastHour(mineOnly)
@@ -1058,7 +1061,7 @@ function Enemies:GetLastHour(mineOnly)
 		local at = player.lastSeen
 		if own then
 			local saved = type(player.ownSeen) == "number" and player.ownSeen <= now and player.ownSeen or nil
-			at = max(own[guid] or 0, saved or 0)
+			at = max(own[guid] and own[guid].t or 0, saved or 0)
 			at = at > 0 and at or nil
 		end
 		if at and now - at <= LAST_HOUR and player.faction and player.faction ~= private.playerFaction and not Wanted.db.ignore[guid] and strfind(guid, "^Player%-") then
@@ -1066,6 +1069,11 @@ function Enemies:GetLastHour(mineOnly)
 			local d = Enemies:Describe(guid)
 			if own and not d.nearby then
 				d.lastSeen = at
+				if (player.lastSeen or 0) > at then
+					-- A newer shared sighting replaced the saved place: it was never ours
+					local s = own[guid] and own[guid].s
+					d.zone, d.x, d.y, d.mapId = s and s.zone or nil, s and s.x or nil, s and s.y or nil, s and s.mapId or nil
+				end
 			end
 			tinsert(list, d)
 		end

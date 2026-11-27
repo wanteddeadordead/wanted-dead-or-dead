@@ -688,7 +688,7 @@ function private.RecordDeath(guid, name)
 	Wanted:Log("Recorder: death of %s in %s", tostring(name), zone)
 	if not friend then
 		-- The saved players are enemies (the Nearby window, the map and hotspots read them)
-		Store:UpdatePlayer(guid, { name = name })
+		Store:UpdatePlayer(guid, { name = name, ownSeen = GetServerTime() })
 	end
 	local data = private.AddTraits({
 		deathId = deathId,
@@ -747,7 +747,7 @@ function private.HandlePartyKill(attackerGUID, targetGUID)
 	if not name then
 		return
 	end
-	Store:UpdatePlayer(targetGUID, { name = victim and victim.name or name, class = class, race = race })
+	Store:UpdatePlayer(targetGUID, { name = victim and victim.name or name, class = class, race = race, ownSeen = GetServerTime() })
 	local zone, x, y, mapId = Recorder:GetPosition()
 	local now = GetServerTime()
 	local deathId = Store:Hash(strjoin("|", targetGUID, zone, floor(now / 10)))
@@ -847,7 +847,7 @@ function private.HandleHonorGain(text)
 		end
 	end
 	if guid then
-		Store:UpdatePlayer(guid, { name = victimName })
+		Store:UpdatePlayer(guid, { name = victimName, ownSeen = GetServerTime() })
 	end
 	Store:NewRecord("kill", private.AddCensus(private.AddOwnTraits(private.AddTraits({
 		killer = private.playerGUID,

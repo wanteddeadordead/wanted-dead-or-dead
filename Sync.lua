@@ -747,10 +747,10 @@ function private.RequestMembers(attempt)
 		return
 	end
 	if private.ChatLocked() then
-		-- The client blocks ListChannelByName in the chat messaging lockdown too ("The client blocked
-		-- ListChannelByName()", the maintainer in a battleground, 2026-11-27). The UI source (1.60.1 build 70425) has no
-		-- documentation entry for it, so no restriction flag to read; only /chatlist calls it. Asked once the lockdown
-		-- lifts (AfterLockdown)
+		-- Not in the chat messaging lockdown either: in a battleground (the maintainer, 2026-11-27) the client said "The
+		-- client blocked ListChannelByName()" with the chat lockdown on; its taint.log names it a combat block (below).
+		-- The UI source (1.60.1 build 70425) has no documentation entry for it, so no restriction flag to read; only
+		-- /chatlist calls it. Asked once the lockdown lifts (AfterLockdown)
 		private.membersRetrying = false
 		private.membersAfterLockdown = true
 		return
@@ -771,9 +771,13 @@ function private.RequestMembers(attempt)
 		Wanted:Log("!! Sync: no ListChannelByName; can't ask for the member count")
 		return
 	end
-	if Wanted:InCombat() then
+	if Wanted:InCombat() or (InCombatLockdown and InCombatLockdown()) then
 		-- The client blocks ListChannelByName in a fight (ADDON_ACTION_BLOCKED, a player's report 2026-10-15): asked
-		-- once it's over (OnCombatEnd)
+		-- once it's over (OnCombatEnd). The game's own lockdown is asked too: Wanted's flag is set by PLAYER_REGEN_DISABLED
+		-- and starts false at load, and the maintainer's taint.log from a battleground (2026-11-27) has "An action was
+		-- blocked in combat because of taint from WantedDeadOrDead - ListChannelByName()" twice, from the member ticker
+		-- and from the after-combat listener, both with Wanted's flag off. Seen only that way: when the game alone was in
+		-- combat, the next tick (MEMBERS_INTERVAL) asks again
 		private.membersAfterCombat = true
 		return
 	end

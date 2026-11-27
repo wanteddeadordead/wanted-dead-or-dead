@@ -5621,6 +5621,18 @@ end)()
 	RunTimers()
 	check(asks == 3, "and only once")
 	C_ChatInfo.InChatMessagingLockdown = nil
+	-- The game's combat lockdown without Wanted's own fight flag (a battleground, 2026-11-27: "blocked in combat" from
+	-- the member ticker and the after-combat listener): not asked either
+	clock = clock + 300
+	local realLockdown = InCombatLockdown
+	InCombatLockdown = function() return true end
+	for _, f in ipairs(tickers) do f() end
+	RunTimers()
+	check(asks == 3 and not ns:InCombat(), "the member list isn't asked for while the game is in combat lockdown, even with Wanted's flag off")
+	InCombatLockdown = realLockdown
+	for _, f in ipairs(tickers) do f() end
+	RunTimers()
+	check(asks == 4, "the next tick asks once the game is out of it, got "..asks)
 	clock = clockBefore
 	ListChannelByName = realList
 end)()

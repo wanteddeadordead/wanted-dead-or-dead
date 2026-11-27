@@ -284,6 +284,8 @@ function private.GetFrame()
 	-- Once a picture is taken, the same button sends it: the app only sees it after the game saves (a /reload)
 	local shoot = W:Button(buttons, "Upload your wanted poster", "primary", 200, 28, function()
 		if frame.waitingToSend then
+			-- The client blocks an addon's reload in combat (Report.lua, private.ShowSent); a typed /reload works
+			if InCombatLockdown() then Wanted:Print("The game doesn't let Wanted reload during a fight. Type /reload after it to send your poster.") return end
 			ReloadUI()
 		else
 			private.TakeScreenshot()

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - After a bug report, feature idea or tip report is saved and the Wanted app is running, the dialog has a Reload now button that sends it at once, and says it is otherwise sent at your next /reload or logout. Where a reload would send nothing (no app, an old app, the app not running) it has no such button. In a fight it has none either, because the game blocks an addon's reload in combat; typing /reload still works.
+- In a fight, the Duels page's Reload button and the poster's Send it now button no longer try to reload, which the game blocks in combat: they say to type /reload after the fight.
 
 ## [1.30.1] - 2026-11-27
 

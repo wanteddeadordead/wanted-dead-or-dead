@@ -993,7 +993,8 @@ UI:RegisterPage("duels", {
 		segment:Select(private.view, true)
 
 		-- The game hands the app's fight reports to the addon only at a /reload: a button for it while one is due
-		private.reloadButton = W:Button(container, "Reload", "secondary", 80, 26, function() C_UI.Reload() end)
+		-- The client blocks an addon's reload in combat (Report.lua, private.ShowSent); a typed /reload works
+		private.reloadButton = W:Button(container, "Reload", "secondary", 80, 26, function() if InCombatLockdown() then Wanted:Print("The game doesn't let Wanted reload during a fight. Type /reload after it.") return end C_UI.Reload() end)
 		private.reloadButton:SetPoint("TOPRIGHT", 0, -84)
 		W:Explain(private.reloadButton, "Reload", RELOAD_TIP)
 		private.reportText = Theme:Text(container, "small", "")

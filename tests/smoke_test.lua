@@ -14729,7 +14729,8 @@ end)()
 	local keptDuels, keptReports, keptAppInfo = db.duels, db.duelReports, WantedAppInfo
 	-- Reload now in the "saved" dialog calls ReloadUI: counted here, never run
 	local reloads, realReload = 0, ReloadUI
-	ReloadUI = function() reloads = reloads + 1 end
+	local shownAtReload -- whether the dialog was still up when the reload was asked for
+	ReloadUI = function() reloads = reloads + 1 shownAtReload = _G.WantedDialog:IsShown() end
 	local function OnScreen(text) for _, fs in ipairs(Mock.fontStrings) do if fs._shown ~= false and tostring(fs._text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):find(text, 1, true) then return true end end return false end
 	db.reports = {}
 	-- A duel another of the account's characters fought: the tip goes in its name
@@ -14969,7 +14970,7 @@ end)()
 	GetTime = function() return realGetTime() + 1 end
 	dialog.cancel:Click()
 	GetTime = realGetTime
-	check(reloads == 1, "Reload now reloads the UI")
+	check(reloads == 1 and shownAtReload == true, "Reload now reloads the UI, asked for before the dialog closes")
 	-- In combat or an instance (the client blocked it in a dungeon): no Reload now, sent at the next /reload or logout
 	inCombat = true
 	ns:RunCommand("idea", "")

@@ -574,6 +574,7 @@ function private.ShowSent(id, title)
 		-- Reload now is the Cancel button, the only one Enter and Escape never press (Enter in the copy box confirms)
 		confirmLabel = reload and "Not now" or "OK",
 		cancelLabel = reload and "Reload now" or nil,
+		cancelFirst = true, -- the reload is the first thing the click does (the client refuses one asked for later)
 		onCancel = reload and function()
 			if GetTime() - shownAt < RELOAD_DELAY then
 				return

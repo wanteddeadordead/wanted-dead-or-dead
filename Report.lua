@@ -577,9 +577,9 @@ function private.ShowSent(id, title)
 		cancelFirst = true, -- the reload is the first thing the click does (the client refuses one asked for later)
 		onCancel = reload and function()
 			if GetTime() - shownAt < RELOAD_DELAY then
-				return
+				return false -- the dialog stays up
 			end
-			-- Not where the game refuses it (a fight or an instance since the dialog opened): Wanted:Reload says so
+			-- Not where a button can't reload (a fight or an instance since the dialog opened): Wanted:Reload says so
 			Wanted:Reload(ReloadUI)
 		end or nil,
 	})

@@ -1136,12 +1136,13 @@ local function CreateDialog()
 		if frame.decided then
 			return
 		end
-		frame.decided = true
 		local options = frame.options
-		-- A reload has to be asked for first in the click: the client refused one asked for after the dialog closed
-		if options.cancelFirst and options.onCancel then
-			options.onCancel()
+		-- A reload has to be asked for first in the click: the client refused one asked for after the dialog closed.
+		-- An onCancel that returns false turns the click down: the dialog stays and can be clicked again.
+		if options.cancelFirst and options.onCancel and options.onCancel() == false then
+			return
 		end
+		frame.decided = true
 		blocker:Hide()
 		if not options.cancelFirst and options.onCancel then
 			options.onCancel()
@@ -1262,7 +1263,7 @@ end
 ---(of a multiline box, default 255), newLines (Enter in a multiline box starts a new line rather than confirming), tip = { title, body } (the box's tooltip: how to copy what's in it) }, over (a window to centre on, rather than the Wanted window or the screen), width
 ---(of the dialog, default 390), choice = { label, items = { { key, label } }, selected } (a dropdown above the input),
 ---confirmLabel, confirmStyle, validate(value) -> err?, onConfirm(value, chosen key), onCancel (the Cancel button only),
----cancelFirst (onCancel runs before the dialog hides, the first thing the click does; for a reload),
+---cancelFirst (onCancel runs before the dialog hides, the first thing the click does, and returning false turns the click down; for a reload),
 ---onClose (closed with no answer: Escape, the game closing its windows, the main window closing)
 ---Whether a dialog is up (one at a time).
 function W:IsDialogShown()

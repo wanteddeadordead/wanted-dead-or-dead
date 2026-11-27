@@ -2216,6 +2216,11 @@ check(upload:GetText() == "Send it now (/reload)", "after the picture the button
 local reloads = 0
 local realReload = ReloadUI
 ReloadUI = function() reloads = reloads + 1 end
+inCombat = true
+local posterLines = ns:CapturePrints(function() upload:GetScript("OnClick")(upload) end)
+inCombat = false
+check(reloads == 0 and screenshots == shotsBefore + 1 and posterLines[1] and posterLines[1]:find("Type /reload after it to send your poster.", 1, true),
+	"in combat it doesn't reload (the client blocks it) and says to /reload after the fight")
 upload:GetScript("OnClick")(upload)
 check(reloads == 1 and screenshots == shotsBefore + 1, "clicking it reloads, and takes no second picture")
 ReloadUI = realReload
@@ -14712,6 +14717,10 @@ end)()
 	ns.UI:Show("duels")
 	check(Duels:ReportState(duel) == "save" and OnScreen("Fight report waiting") and TipOf("Fight report waiting") == "Reload to send your last duel to the Wanted app." and Reload():IsShown()
 		and Reload().tooltipText:find("only at a /reload", 1, true), "the app's catch-up is older than the duel: reload to save it, why on hover")
+	inCombat = true
+	local lines = ns:CapturePrints(function() Reload()._scripts.OnClick(Reload()) end)
+	inCombat = false
+	check(reloads == 0 and lines[1] and lines[1]:find("Type /reload after it.", 1, true), "in combat the button doesn't reload (the client blocks it) and says to /reload after the fight")
 	Reload()._scripts.OnClick(Reload())
 	check(reloads == 1, "the button reloads the UI")
 	Duels:TakeReports({}, clock)

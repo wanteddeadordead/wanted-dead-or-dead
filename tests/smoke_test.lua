@@ -15219,6 +15219,27 @@ end)()
 	dialog.cancel:Click()
 	GetTime = realGetTime
 	check(reloads == 1, "Reload now reloads the UI")
+	-- In combat the client blocks an addon's reload: no Reload now, and the dialog says to type /reload
+	inCombat = true
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload in a fight")
+	dialog.confirm:Click()
+	check(dialog.confirm:GetText() == "OK" and not OnScreen("Reload now sends it at once") and OnScreen("It is sent at your next /reload or logout. The game doesn't let Wanted reload during a fight, but typing /reload works. The address below works once it has been sent: copy it before you reload (afterwards your reports are listed at wanteddeadordead.com/me/reports).")
+		and dialog.input:GetText():find("^https://wanteddeadordead.com/me/reports%?sent=%d+$"), "in combat: no Reload now, the dialog says to type /reload, and the address is kept")
+	dialog.confirm:Click()
+	check(reloads == 1, "OK in combat does not reload")
+	-- A fight starting after the dialog opened: the click says to /reload after it, and doesn't reload
+	inCombat = false
+	ns:RunCommand("idea", "")
+	dialog.area:SetText("reload then a fight")
+	dialog.confirm:Click()
+	check(dialog.cancel:GetText() == "Reload now", "out of combat Reload now is offered as before")
+	inCombat = true
+	GetTime = function() return realGetTime() + 1 end
+	local lines = ns:CapturePrints(function() dialog.cancel:Click() end)
+	GetTime = realGetTime
+	inCombat = false
+	check(reloads == 1 and lines[1] and lines[1]:find("Type /reload after it to send your report.", 1, true), "a click once a fight started does not reload and says to /reload after it: "..tostring(lines[1]))
 	for _, info in ipairs({ { running = "0.2.45", seen = GetServerTime() }, { running = "0.2.46", seen = 1 } }) do
 		WantedAppInfo = info
 		ns:RunCommand("idea", "")
@@ -15249,7 +15270,7 @@ end)()
 	check(OnScreen("20 reports are already waiting") and not OnScreen("The developers answer on the website.") and not dialog.input:IsShown(), "a full queue shows no address")
 	dialog.confirm:Click()
 	db.reports = keptQueue
-	queuedBefore = queuedBefore + 11
+	queuedBefore = queuedBefore + 13
 	-- The report window's note carries the line about following reports
 	ns.Report:Show()
 	check(OnScreen("You can follow your reports and answer the developers at wanteddeadordead.com/me/reports."), "the report window's note says where to follow reports")

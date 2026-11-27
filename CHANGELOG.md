@@ -4,7 +4,7 @@
 
 - The main window has a size control in its title bar, and Shift + mouse wheel over the window changes its size in 5% steps. Sizes now go from 75% to 150% and look the same at any game UI scale. Your window keeps the size it has now, unless it was larger than the screen: then it shrinks to fit.
 - Settings is an entry of its own at the foot of the menu, above Poker and Safety, instead of a tab under You. Website & app and Tools are its tabs now, after Settings; You keeps the calling card and the Wanted poster.
-- After a bug report, feature idea or tip report is saved and the Wanted app is running, the dialog has a Reload now button that sends it at once, and says it is otherwise sent at your next /reload or logout. Where a reload would send nothing (no app, an old app, the app not running) it has no such button.
+- After a bug report, feature idea or tip report is saved and the Wanted app is running, the dialog has a Reload now button that sends it at once, and says it is otherwise sent at your next /reload or logout. Where a reload would send nothing (no app, an old app, the app not running) it has no such button. In a fight it has none either, because the game blocks an addon's reload in combat; typing /reload still works.
 
 ## [1.30.1] - 2026-11-27
 

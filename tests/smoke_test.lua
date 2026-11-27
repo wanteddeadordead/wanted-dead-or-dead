@@ -8139,6 +8139,10 @@ end)()
 	IsShiftKeyDown = saved.shift
 	Fire("MODIFIER_STATE_CHANGED", "RSHIFT", 0)
 	check(not frame:IsMouseWheelEnabled(), "and off once it's let go")
+	-- Shift let go unseen (Alt+Tab with it held): the next wheel turns the window's wheel off, so the camera has it again
+	frame:EnableMouseWheel(true)
+	frame._scripts.OnMouseWheel(frame, 1)
+	check(not frame:IsMouseWheelEnabled() and near(settings.windowScale, 1), "a wheel without Shift turns the window's wheel off and sizes nothing")
 	local inner = W:Scroll(frame, 200, 100)
 	check(inner:IsMouseWheelEnabled(), "a scrolling area in the window takes the wheel without Shift, as before")
 	frame._scripts.OnMouseWheel(frame, 1)

@@ -230,6 +230,11 @@ function private.Create()
 	-- window isn't protected (no secure frames in it), so turning its wheel on and off works in combat too.
 	frame:EnableMouseWheel(false)
 	frame:SetScript("OnMouseWheel", function(self, delta)
+		-- Shift let go without the game saying so (Alt+Tab away with it held): the wheel goes back to the camera
+		if not IsShiftKeyDown() then
+			self:EnableMouseWheel(false)
+			return
+		end
 		private.ShiftWheel(self, delta)
 	end)
 

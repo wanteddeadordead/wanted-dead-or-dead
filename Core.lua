@@ -144,7 +144,7 @@ local DEFAULTS = {
 			tab = "nearby",
 		},
 		window = nil, -- { point, x, y }
-		-- The window's size (UI): windowScale, in screen pixels, made once from uiScale (up to 1.30.0, kept for older
+		-- The window's size (UI): windowScale, in screen pixels, made once from uiScale (up to 1.30.1, kept for older
 		-- versions) when the window is first made. No defaults: a save without either is a fresh install's.
 		windowScale = nil,
 		uiScale = nil,

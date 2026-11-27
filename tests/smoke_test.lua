@@ -7983,7 +7983,7 @@ end)()
 	UIParent._w, UIParent._h = realW, realH
 	frame:SetScale(ns.UI:GetScale())
 end)()
--- The window's size in screen pixels (after 1.30.0): a size is a share of the window at one unit a pixel, 75% to 150%
+-- The window's size in screen pixels (from 1.31.0): a size is a share of the window at one unit a pixel, 75% to 150%
 -- in 5% steps from its controls; the old setting (uiScale, a scale on UIParent) is converted once so the window keeps
 -- its size on screen; never larger than fits
 ;(function()
@@ -8036,9 +8036,13 @@ end)()
 		frame:Show()
 		check(near(frame:GetScale(), case[4]), "and the window is as large on screen as before: "..frame:GetScale())
 	end
-	-- Junk in the old setting reads as it did (100%)
+	-- Junk in the old setting reads as it did (100%), and so does none (a save from before 1.28.0, at 100% then)
 	Screen(2560, 1440, 0.64)
 	check(near(Convert("junk"), 1.2), "an old setting that isn't a number converts as 100% did")
+	Screen(1920, 1080, 1)
+	check(near(Convert(nil), 1.35) and near(settings.windowScale, 1.40625), "a save from before 1.28.0 (no uiScale) keeps the 100% it had: 140.6%, shown at 135%")
+	Screen(2560, 1440, 0.64)
+	Convert("junk")
 	-- Once: windowScale marks it done, and the old setting is no longer read (it stays, for older versions)
 	settings.uiScale = 1.5
 	check(near(UI:GetScale(), 1.2) and settings.uiScale == 1.5, "converted once: a later uiScale changes nothing and stays saved")
@@ -8049,11 +8053,19 @@ end)()
 	check(UI:GetScale() * 795 <= 1080, "the window fits the screen's height in pixels")
 
 	-- A fresh install: by the screen's height, the drawn size's share of it, 100% to 150%
+	local realFresh = ns.freshInstall
+	ns.freshInstall = true
 	for _, case in ipairs({ { 1080, 1 }, { 1440, 1.2 }, { 1600, 1.35 }, { 2160, 1.5 } }) do
 		Screen(case[1] * 16 / 9, case[1], 1)
 		settings.windowScale, settings.uiScale = nil, nil
-		check(near(UI:GetScale(), case[2]), "a fresh install at "..case[1].."p is "..case[2]..": "..UI:GetScale())
+		UI:OnLoad()
+		check(near(settings.windowScale, case[2]) and near(UI:GetScale(), case[2]), "a fresh install at "..case[1].."p is "..case[2]..", saved as its data loads: "..UI:GetScale())
 	end
+	ns.freshInstall = false
+	settings.windowScale = 1.2
+	UI:OnLoad()
+	check(near(settings.windowScale, 1.2), "a save that isn't new keeps its size at load")
+	ns.freshInstall = realFresh
 
 	-- The controls' range: 75% to 150%, and never larger than fits
 	Screen(2560, 1440, 1)

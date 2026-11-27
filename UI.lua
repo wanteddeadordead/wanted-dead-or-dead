@@ -1039,8 +1039,9 @@ function private.DefaultScale()
 	return max(100, min(UI.SCALE_HIGH, percent)) / 100
 end
 
----The size the window had before sizes were in screen pixels (up to 1.30.0): settings.uiScale on UIParent, 80% to
----150%, and never made smaller than 100% to fit the screen.
+---The size the window had before sizes were in screen pixels (up to 1.30.1): settings.uiScale on UIParent, 80% to
+---150%, and never made smaller than 100% to fit the screen. Before 1.28.0 there was no uiScale and the window was at
+---100%, which is what ClampScale reads nil as.
 function private.OldScale(uiScale)
 	local room = min(UIParent:GetWidth() / WIDTH, UIParent:GetHeight() / HEIGHT)
 	room = floor(room * 100 / Theme.SIZE_STEP) * Theme.SIZE_STEP / 100
@@ -1048,19 +1049,24 @@ function private.OldScale(uiScale)
 end
 
 ---The size saved for the window. Once, the first time the window is made after the update: the old setting
----(settings.uiScale, a scale on UIParent) is turned into the size that keeps the window as large on screen as it was;
----a save without one (a fresh install) takes DefaultScale. settings.windowScale being there marks it done.
+---(settings.uiScale, a scale on UIParent; none before 1.28.0) is turned into the size that keeps the window as large
+---on screen as it was. settings.windowScale being there marks it done; a fresh install has it from UI:OnLoad.
 ---@return number
 function private.SavedScale()
 	local settings = Wanted.db.settings
 	if settings.windowScale == nil then
-		if tonumber(settings.uiScale) then
-			settings.windowScale = private.OldScale(settings.uiScale) / private.PixelBase()
-		else
-			settings.windowScale = private.DefaultScale()
-		end
+		settings.windowScale = private.OldScale(settings.uiScale) / private.PixelBase()
 	end
 	return private.SaneScale(settings.windowScale) or private.DefaultScale()
+end
+
+---A fresh install's window size (DefaultScale) is saved as the saved data loads, so a later session, which can't
+---tell a fresh save from one made before 1.28.0 (neither has uiScale), doesn't convert it.
+function UI:OnLoad()
+	local settings = Wanted.db.settings
+	if Wanted.freshInstall and settings.windowScale == nil then
+		settings.windowScale = private.DefaultScale()
+	end
 end
 
 ---A size that keeps the whole window on screen: no larger than the screen has room for (on the 5% steps, rounded down

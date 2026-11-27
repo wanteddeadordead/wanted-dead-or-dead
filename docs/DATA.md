@@ -216,7 +216,7 @@ at capture front points (`ah-`, `hb-`, `av-` with a lane or a side: they age out
 versions). LibDBIcon may add `lock`. A new key filled in at load: no migration.
 
 Sizes (from 1.28.0, no migration: new keys, filled in from the defaults): `WantedDB.settings.uiScale` the window's
-size up to 1.30.1, `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
+size up to 1.30.1 (from 1.31.0 no default, and no longer read: `windowScale` below), `settings.nearby.scale` the Nearby window's, `settings.detect.hudScale` the TARGETED warning's (no default: read as 1). Each is 0.8 to 1.5 in steps of 0.05, and anything
 else read is put back in range (Theme:ClampScale). The window's size is also kept within what the screen has room for.
 
 `WantedDB.settings.windowScale` (from 1.31.0) is the main window's size in screen pixels: 1 is one of the window's units
@@ -226,11 +226,12 @@ Shift + mouse wheel) set 0.75 to 1.5 in steps of 0.05, never larger than the scr
 than 0.75 for it). It replaces `uiScale`, whose meaning (a scale on UIParent) can only be turned into screen pixels in
 game, so this is not a `MIGRATIONS` step: the first time the window is made after the update (`UI.lua`
 `private.SavedScale`), a missing `windowScale` is made from `uiScale` so the window is as large on screen as before
-(`uiScale` as 1.30.0 applied it, divided by that base). A converted size can be off the steps and outside 0.75 to 1.5;
-it stays as it is until the player changes it, and a 5% step from it goes to the next step (outside the range, only
-back toward it). A save with no `uiScale` either is a fresh install's and takes 1 to 1.5 by the screen's height
-(physical height / 1200, on a 5% step: the window's share of a 1440-pixel screen at a UI scale of 0.64, the size it
-was drawn at). `windowScale` being there marks the conversion done; neither key has a default. `uiScale` stays
+(`uiScale` as 1.30.1 applied it, divided by that base; a save from before 1.28.0 has no `uiScale` and converts as
+100%, the window's size then). A converted size can be off the steps and outside 0.75 to 1.5; it stays as it is until
+the player changes it, and a 5% step from it goes to the next step (outside the range, only back toward it). A fresh
+install gets `windowScale` as its saved data loads (`UI:OnLoad`): 1 to 1.5 by the screen's height (physical height /
+1200, on a 5% step: the window's share of a 1440-pixel screen at a UI scale of 0.64, the size it was drawn at).
+`windowScale` being there marks the conversion done; neither key has a default. `uiScale` stays
 unchanged and unread, so an older version goes on with the size it had. Junk in `windowScale` (not a number from
 0.25 to 4) reads as the fresh install's size and is not converted again.
 

@@ -40,7 +40,7 @@ UI:RegisterPage("card", {
 	tabLabel = "Calling card",
 	-- Pieces unlocked and not looked at yet
 	news = { kind = "card", ids = function() return CallingCard:UnlockedIds() end },
-	tabs = { "card", "poster", "web", "tools" },
+	tabs = { "card", "poster" },
 	-- Calling cards off: the tab goes, and the You entry opens on the next one
 	hidden = function() return not CallingCard:On() end,
 	build = function(container, width)

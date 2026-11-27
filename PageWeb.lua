@@ -179,7 +179,7 @@ UI:RegisterPage("web", {
 	title = "Website & app",
 	order = 6,
 	tabLabel = "Website & app",
-	under = "card",
+	under = "settings",
 	build = function(container, width)
 		-- Everything in a scroll frame: with the setup steps on top, the cards run past the window (2026-10-17)
 		local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")

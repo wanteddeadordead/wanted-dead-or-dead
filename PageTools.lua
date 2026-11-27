@@ -101,7 +101,7 @@ UI:RegisterPage("tools", {
 	title = "Tools",
 	hidden = function() return not Wanted.db.settings.showTools end,
 	order = 7,
-	under = "card",
+	under = "settings",
 	tabLabel = "Tools",
 	build = function(container, width, height)
 		private.BuildNetwork(container, width)

@@ -16,6 +16,18 @@ local private = {}
 -- who hasn't seen it, under the newest notes, even when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.31.0",
+		note = "This update makes the window easier to size and the settings easier to find. The Nearby window's Last "
+			.."hour tab now starts with the enemies you saw yourself.",
+		lines = {
+			"Window size: the slider in the title bar, or Shift + mouse wheel over the window.",
+			"Settings has its own menu entry, with Website & app and Tools as its tabs.",
+			"The Alerts, Nearby window, Sharing and display and Ranks tabs group their settings under headings.",
+			"Nearby > Last hour: Mine lists the enemies you saw yourself, Everyone adds shared sightings.",
+			"After a bug report or idea, a Reload now button sends it right away (needs the Wanted app).",
+		},
+	},
+	{
 		version = "1.30.0",
 		note = "Since November 20 the game no longer lets addons tell layers apart, so races and guild wars can't be "
 			.."judged fairly. They are switched off until there is a fair way to run them.",

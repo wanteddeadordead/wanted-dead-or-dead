@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-11-27
+
 - The main window has a size control in its title bar, and Shift + mouse wheel over the window changes its size in 5% steps. Sizes now go from 75% to 150% and look the same at any game UI scale. Your window keeps the size it has now, unless it was larger than the screen: then it shrinks to fit.
 - Settings is an entry of its own at the foot of the menu, above Poker and Safety, instead of a tab under You. Website & app and Tools are its tabs now, after Settings; You keeps the calling card and the Wanted poster.
+- The settings on the Alerts, Nearby window, Sharing and display and Ranks tabs are grouped under headings, with related options next to each other.
 - After a bug report, feature idea or tip report is saved and the Wanted app is running, the dialog has a Reload now button that sends it at once, and says it is otherwise sent at your next /reload or logout. Where a reload would send nothing (no app, an old app, the app not running) it has no such button. In a fight or inside an instance it has none either, because the game refused that reload inside a dungeon; typing /reload still works. If the game blocks the reload anyway, chat says to type /reload instead of the general "client blocked" line.
 - In a fight or inside an instance, the Duels page's Reload button and the poster's Send it now button no longer try to reload: they say to type /reload.
 - The Nearby window's Last hour tab has a Mine / Everyone switch. Mine, the default, lists only the enemies you saw yourself in the last hour; Everyone also lists those other Wanted users shared with you, as before.

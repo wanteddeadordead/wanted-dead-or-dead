@@ -18735,14 +18735,14 @@ end)()
 	check(selectedEntry == "settings" and ns.UI:IsShown("settings"), "Settings opens as its own entry")
 	ns.db.settings.lastPage = "settings"
 end)()
--- What's new 1.30.0, the newest, takes the default sign-off: the maintainers' line under the note
+-- What's new 1.31.0, the newest, takes the default sign-off: the maintainers' line under the note
 ;(function()
 	local N = ns.WhatsNew
 	N:Show()
 	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
 	local text = body and body._text or ""
 	local note = ns.WHATS_NEW[1]
-	check(note.version == "1.30.0" and note.signed == nil and not text:find("aka", 1, true), "1.30.0's note uses the default sign-off")
+	check(note.version == "1.31.0" and note.signed == nil and not text:find("aka", 1, true), "1.31.0's note uses the default sign-off")
 	check(text:find("The maintainers of Wanted", 1, true), "with the maintainers' line under it")
 	_G.WantedWhatsNewFrame:Hide()
 end)()
@@ -20719,6 +20719,10 @@ print("wanted smoke: layers off checks pass")
 	local since = ns.WhatsNew:Since("1.29.7", "1.30.0")
 	check(#since == 1 and since[1].version == "1.30.0" and #since[1].lines == 4 and since[1].note:find("switched off", 1, true), "an update from 1.29.7 shows the 1.30.0 entry")
 	check(#ns.WhatsNew:Since("1.30.0", "1.30.0") == 0, "and not again")
+	-- An update from 1.30.1 shows the 1.31.0 entry, once
+	since = ns.WhatsNew:Since("1.30.1", "1.31.0")
+	check(#since == 1 and since[1].version == "1.31.0" and #since[1].lines == 5, "an update from 1.30.1 shows the 1.31.0 entry")
+	check(#ns.WhatsNew:Since("1.31.0", "1.31.0") == 0, "and not again")
 	-- Put back: both on for the rest
 	ns.RACES_ON, ns.WARS_ON = true, true
 	WantedAppCatchup = nil

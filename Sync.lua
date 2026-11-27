@@ -514,11 +514,24 @@ end
 ---Takes the sync channel out of every chat window. The game lists a channel in the window it was joined from
 ---by hand (the /join tip), and then shows its every join, leave and owner change there; the addon's own join
 ---names no window. Membership is untouched: only what the windows show.
+---The window's list is only read here, and the game's RemoveChatWindowChannel takes the channel off its record: the
+---window's own RemoveChannel writes nil into its channel list, and from an addon that tainted slot is read back by
+---the next channel joined into it, whose lines a chat lockdown (a battleground, a boss fight) can then drop. The
+---window's list catches up from the game's record at the next UPDATE_CHAT_WINDOWS (login, /reload); until then the
+---sync channel's notices still reach it and HideChannelNotice hides them.
 function private.HideFromChatWindows()
+	if not RemoveChatWindowChannel or not private.channelName then
+		return
+	end
+	local mine = strlower(private.channelName)
 	for i = 1, NUM_CHAT_WINDOWS or 10 do
 		local frame = _G["ChatFrame"..i]
-		if frame and frame.RemoveChannel then
-			frame:RemoveChannel(private.channelName)
+		if frame and type(frame.channelList) == "table" and frame.GetID then
+			for _, name in pairs(frame.channelList) do
+				if type(name) == "string" and strlower(name) == mine then
+					RemoveChatWindowChannel(frame:GetID(), name)
+				end
+			end
 		end
 	end
 end

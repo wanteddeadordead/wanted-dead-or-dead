@@ -443,11 +443,20 @@ ChatFrameUtil = { AddMessageEventFilter = function(event, func)
 	table.insert(chatFilterLists[event], func)
 end }
 -- Chat windows: the game lists a channel in a window when it was joined by hand there, and shows its notices
+-- (window 1 lists the sync channel, as the game spelled it there; window 2 doesn't). The addon calls the game's
+-- RemoveChatWindowChannel and never the window's own RemoveChannel/AddChannel, which write its channel list from addon
+-- code: a slot written that way taints the window's handling of channel lines in a chat lockdown.
 NUM_CHAT_WINDOWS = 2
-removedChannels = {}
+removedChannels = {} -- "window:name" for each RemoveChatWindowChannel
+windowListWrites = {} -- the windows' own methods called by the addon (must stay empty)
+function RemoveChatWindowChannel(id, name) removedChannels[#removedChannels + 1] = id..":"..name end
 for i = 1, NUM_CHAT_WINDOWS do
 	local frame = NewMock("ChatFrame")
-	frame.RemoveChannel = function(_, name) removedChannels[#removedChannels + 1] = i..":"..name end
+	frame.GetID = function() return i end
+	frame.channelList = i == 1 and { "General", "wantednethorde" } or { "General" }
+	frame.zoneChannelList = i == 1 and { 1, 0 } or { 1 }
+	frame.RemoveChannel = function(_, name) windowListWrites[#windowListWrites + 1] = "RemoveChannel "..name end
+	frame.AddChannel = function(_, name) windowListWrites[#windowListWrites + 1] = "AddChannel "..name end
 	_G["ChatFrame"..i] = frame
 end
 ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
@@ -4734,7 +4743,10 @@ end)()
 	removedChannels = {}
 	Fire("PLAYER_ENTERING_WORLD")
 	RunTimers()
-	check(#removedChannels == NUM_CHAT_WINDOWS and removedChannels[1] == "1:WantedNetHorde", "joining takes the channel out of every chat window, got "..table.concat(removedChannels, " "))
+	check(#removedChannels == 1 and removedChannels[1] == "1:wantednethorde", "joining takes the channel out of the chat window that lists it, by the game's call and as the window spells it, got "..table.concat(removedChannels, " "))
+	check(#windowListWrites == 0, "and never through the window's own methods, got "..table.concat(windowListWrites, "; "))
+	check(#ChatFrame1.channelList == 2 and ChatFrame1.channelList[2] == "wantednethorde" and #ChatFrame2.channelList == 1,
+		"the windows' channel lists are only read (the game rebuilds them from its own record)")
 	local notice = chatFilters.CHAT_MSG_CHANNEL_NOTICE
 	local userNotice = chatFilters.CHAT_MSG_CHANNEL_NOTICE_USER
 	check(notice and userNotice, "channel notices are filtered")

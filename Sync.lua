@@ -487,11 +487,14 @@ function Sync:OnEnable()
 		addFilter("CHAT_MSG_CHANNEL_NOTICE_USER", private.HideChannelNotice)
 		-- The member list the addon asks for (RequestMembers) is for counting, not reading
 		addFilter("CHAT_MSG_CHANNEL_LIST", private.HideChannelNotice)
+		-- What someone types in it by hand: a window that lists the channel keeps it in its own list until the next
+		-- UPDATE_CHAT_WINDOWS (HideFromChatWindows writes nothing there), and would show those lines until then
+		addFilter("CHAT_MSG_CHANNEL", private.HideChannelNotice)
 	end
 end
 
----Hides the game's notices about the sync channel (arg9 is the channel's base name), and the ones it gives, under
----a public channel's name, for our own sends it refused a moment ago.
+---Hides the game's notices about the sync channel and lines typed in it (arg9 is the channel's base name), and the
+---notices it gives, under a public channel's name, for our own sends it refused a moment ago.
 function private.HideChannelNotice(_, event, kind, _, _, channelString, _, _, _, channelNumber, baseName)
 	if type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName) then
 		return true
@@ -517,8 +520,9 @@ end
 ---The window's list is only read here, and the game's RemoveChatWindowChannel takes the channel off its record: the
 ---window's own RemoveChannel writes nil into its channel list, and from an addon that tainted slot is read back by
 ---the next channel joined into it, whose lines a chat lockdown (a battleground, a boss fight) can then drop. The
----window's list catches up from the game's record at the next UPDATE_CHAT_WINDOWS (login, /reload); until then the
----sync channel's notices still reach it and HideChannelNotice hides them.
+---window's list catches up from the game's record at the next UPDATE_CHAT_WINDOWS (login, /reload). Until then the
+---sync channel's notices and any line typed in it still reach that window: HideChannelNotice hides them, except in a
+---chat lockdown, where the game skips addon filters for secret lines.
 function private.HideFromChatWindows()
 	if not RemoveChatWindowChannel or not private.channelName then
 		return

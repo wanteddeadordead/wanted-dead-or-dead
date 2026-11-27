@@ -4752,6 +4752,17 @@ end)()
 	check(notice and userNotice, "channel notices are filtered")
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde") == true, "a notice for the sync channel is hidden")
 	check(userNotice(nil, "CHAT_MSG_CHANNEL_NOTICE_USER", "OWNER_CHANGED", "Melyn Perdition", nil, "6. wantednethorde", "", "", 0, 6, "wantednethorde") == true, "an owner change on it is hidden, whatever the case")
+	-- The window that lists it keeps it in its own list until the next UPDATE_CHAT_WINDOWS (the addon writes nothing
+	-- there), so what someone types in the channel by hand is hidden too
+	local function Hidden(...)
+		for _, filter in ipairs(chatFilterLists.CHAT_MSG_CHANNEL or {}) do
+			if filter(nil, "CHAT_MSG_CHANNEL", ...) == true then return true end
+		end
+		return false
+	end
+	check(Hidden("spam", "Griefer", "Orcish", "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde"), "a line typed in the sync channel is hidden")
+	check(Hidden("spam", "Griefer", "Orcish", "6. wantednethorde", "", "", 0, 6, "wantednethorde"), "whatever the case")
+	check(not Hidden("lfg", "Someone", "Orcish", "2. Trade - City", "", "", 2, 2, "Trade - City"), "a line in another channel is not")
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
 ;(function()

@@ -317,6 +317,10 @@ function private.AfterLockdown()
 	end
 	private.GreetRemembered()
 	private.FlushForward()
+	if private.membersAfterLockdown then
+		private.membersAfterLockdown = nil
+		private.RequestMembers()
+	end
 end
 
 -- Locked out of the channel (an owner banned us or set a password): sync goes on by whisper links to the
@@ -740,6 +744,15 @@ end
 ---@param attempt number? set by a retry
 function private.RequestMembers(attempt)
 	if not attempt and private.membersRetrying then
+		return
+	end
+	if private.ChatLocked() then
+		-- The client blocks ListChannelByName in the chat messaging lockdown too ("The client blocked
+		-- ListChannelByName()", the maintainer in a battleground, 2026-11-27). The UI source (1.60.1 build 70425) has no
+		-- documentation entry for it, so no restriction flag to read; only /chatlist calls it. Asked once the lockdown
+		-- lifts (AfterLockdown)
+		private.membersRetrying = false
+		private.membersAfterLockdown = true
 		return
 	end
 	attempt = attempt or 1

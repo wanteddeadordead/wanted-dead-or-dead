@@ -5603,6 +5603,25 @@ end)()
 	Fire("PLAYER_REGEN_ENABLED")
 	RunTimers()
 	check(asks == 2, "a fight with no request in it doesn't ask")
+	-- In the game's chat messaging lockdown the client blocks it too (the maintainer, a battleground, 2026-11-27): not
+	-- asked, nothing said, and asked once the lockdown lifts (the shared clock is put back after: later suites read dates)
+	local clockBefore = clock
+	clock = clock + 300
+	local printedBefore = #printed
+	C_ChatInfo.InChatMessagingLockdown = function() return true end
+	for _, f in ipairs(tickers) do f() end
+	RunTimers()
+	check(asks == 2 and #printed == printedBefore, "the member list isn't asked for in a chat lockdown, and nothing is printed")
+	C_ChatInfo.InChatMessagingLockdown = function() return false end
+	ns.Sync:Greet("Lockdown Over", "Other Realm") -- anything that looks at the lockdown sees it lift
+	clock = clock + 3
+	RunTimers()
+	check(asks == 3, "it's asked for once the lockdown lifts, got "..asks)
+	clock = clock + 3
+	RunTimers()
+	check(asks == 3, "and only once")
+	C_ChatInfo.InChatMessagingLockdown = nil
+	clock = clockBefore
 	ListChannelByName = realList
 end)()
 -- The wait before the next try of the main channel is logged once, not every tick

@@ -5725,6 +5725,9 @@ end)()
 					end
 					if rest:match("^%s*=[^=]") or rest:match("^%s*=$") then
 						found[#found + 1] = file..":"..n
+					elseif not code:sub(from):match("^%s*[%[%.]") then
+						-- the table itself in a variable or an argument (an alias, _G["ChatTypeInfo"]): a write through it can't be seen
+						found[#found + 1] = file..":"..n
 					end
 				end
 			end
@@ -5733,10 +5736,15 @@ end)()
 					found[#found + 1] = file..":"..n
 				end
 			end
+			-- a window's methods, or their global wrappers (ChatFrame_RemoveChannel)
 			for _, method in ipairs({ "RemoveChannel", "AddChannel", "RemoveAllChannels", "SetChannelEnabled", "RegisterForChannels" }) do
-				if code:find("[:.]"..method.."%s*%(") then
+				if code:find("[:._]"..method.."%s*%(") then
 					found[#found + 1] = file..":"..n
 				end
+			end
+			-- a window's channel lists written directly
+			if code:find("[cC]hannelList%s*%b[]%s*=[^=]") or code:find("[cC]hannelList%s*=[^=]") or code:find("[cC]hannelList%s*%b[]%s*=$") then
+				found[#found + 1] = file..":"..n
 			end
 		end
 		return found
@@ -5748,6 +5756,11 @@ end)()
 	check(#ChatStateWrites("tinsert(ChatTypeGroup.SAY, \"X\")", "x") == 1, "and an insert into it")
 	check(#ChatStateWrites("frame:RemoveChannel(private.channelName)", "x") == 1, "the guard sees a window's RemoveChannel")
 	check(#ChatStateWrites("local info = ChatTypeInfo[\"SAY\"] if info == nil then end", "x") == 0, "a read is not a write")
+	check(#ChatStateWrites("local info = ChatTypeInfo info.SAY = {}", "x") == 1, "the guard sees the table taken into a variable")
+	check(#ChatStateWrites("_G[\"ChatTypeInfo\"].SAY = {}", "x") == 1, "and taken by its name from _G")
+	check(#ChatStateWrites("ChatFrame_RemoveChannel(ChatFrame1, name)", "x") == 1, "and the global wrapper of RemoveChannel")
+	check(#ChatStateWrites("frame.channelList[i] = nil", "x") == 1 and #ChatStateWrites("f.zoneChannelList[2] = 0", "x") == 1, "and a window's channel lists written directly")
+	check(#ChatStateWrites("for _, name in pairs(frame.channelList) do if name == x then end end", "x") == 0, "reading a channel list is fine")
 	check(#ChatStateWrites("RemoveChatWindowChannel(frame:GetID(), name) -- not frame:RemoveChannel(name)", "x") == 0, "the game's call and comments are fine")
 	local files = {}
 	for _, toc in ipairs({ { ADDON.."WantedDeadOrDead.toc", ADDON }, { ADDON.."Poker/WantedDeadOrDead_Poker.toc", ADDON.."Poker/" } }) do

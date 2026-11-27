@@ -148,39 +148,10 @@ end
 
 function private.BuildAlerts(column)
 	local content = column.content
-	column:Section("Enemy detection and alerts")
+	column:Section("Enemy detection")
 	local function Root() return Wanted.db.settings end
 	private.Switch(column, Detect, "enabled", "Detect enemy players", "Watch nameplates, your target, focus and mouseover for enemy players.")
-	private.Switch(column, Detect, "sound", "Alert sounds", "Play a beep when an enemy appears (three for Kill on Sight and bounty targets).")
-	private.Switch(column, Detect, "stealth", "Stealth alarm", "Warn when a nearby enemy uses Stealth, Vanish, Prowl, Shadowmeld or Invisibility.")
 	private.Switch(column, Detect, "autoShow", "Open the Nearby window when an enemy appears", "Otherwise open it with right-click on the minimap button, the Enemies page or /wanted nearby.")
-	private.Switch(column, Detect, "risingAlerts", "Warn when a zone fills up with enemies fast", "A warning like RISING FAST: The Barrens when many more enemies show up there than 5 minutes before, from the number chosen below. From your sightings and other Wanted users'.")
-	private.risingMin = W:Segmented(content, {
-		{ key = "5", label = "5" },
-		{ key = "10", label = "10" },
-		{ key = "15", label = "15" },
-		{ key = "25", label = "25" },
-	}, function(key)
-		Detect().risingMin = tonumber(key)
-	end, 56)
-	column:Row("Warn from", private.risingMin, "How many enemies in the last 5 minutes a zone needs for the warning. They must also be at least double the 5 minutes before.")
-	private.Switch(column, Detect, "risingSkipCities", "Skip enemy capital cities", "No rising warning for the other side's capitals, where their players are always crowded. Your own side's capitals still warn.")
-	private.Switch(column, Detect, "risingNearOnly", "Only zones near me", "Warn only about the zone you are in and the zones next to it.")
-	private.Switch(column, Detect, "onlyWhenExposed", "Only when I can be attacked", "Alerts, the TARGETED warning and the Nearby window stay quiet while you're not PvP flagged or are in a sanctuary. Enemies are still seen and shared.", function()
-		Wanted.NearbyWindow:UpdateExposure()
-	end)
-	private.Switch(column, Detect, "deathCard", "Show a card when a player kills you", "Who killed you, your record against them and what's on their head, with Kill on Sight, Post a bounty and Where they've been.")
-	private.Switch(column, Root, "callingCards", "Show calling cards", "The Calling card tab, its window, the toasts for new pieces and the card art on badges and death cards. Off applies at once; turning it on brings your card back at the next /reload.", function()
-		Wanted.CallingCard:Apply()
-	end)
-	private.alerts = W:Segmented(content, {
-		{ key = "all", label = "Every enemy" },
-		{ key = "important", label = "KoS and bounties" },
-		{ key = "none", label = "Nothing" },
-	}, function(key)
-		Detect().alerts = key
-	end, 130)
-	column:Row("Alert for", private.alerts)
 	-- Lost contact: still shown as in sight for a while (they're likely still around), then shaded, then gone
 	private.inSight = W:Segmented(content, {
 		{ key = "30", label = "30s" },
@@ -200,6 +171,21 @@ function private.BuildAlerts(column)
 		Detect().timeout = tonumber(key)
 	end, 56)
 	column:Row("Then shaded for", private.timeout, "How long a gone enemy stays shaded before leaving the list.")
+
+	column:Section("Alerts")
+	private.alerts = W:Segmented(content, {
+		{ key = "all", label = "Every enemy" },
+		{ key = "important", label = "KoS and bounties" },
+		{ key = "none", label = "Nothing" },
+	}, function(key)
+		Detect().alerts = key
+	end, 130)
+	column:Row("Alert for", private.alerts)
+	private.Switch(column, Detect, "sound", "Alert sounds", "Play a beep when an enemy appears (three for Kill on Sight and bounty targets).")
+	private.Switch(column, Detect, "stealth", "Stealth alarm", "Warn when a nearby enemy uses Stealth, Vanish, Prowl, Shadowmeld or Invisibility.")
+	private.Switch(column, Detect, "onlyWhenExposed", "Only when I can be attacked", "Alerts, the TARGETED warning and the Nearby window stay quiet while you're not PvP flagged or are in a sanctuary. Enemies are still seen and shared.", function()
+		Wanted.NearbyWindow:UpdateExposure()
+	end)
 	local previews = {}
 	for _, preview in ipairs({ { "enemy", "Enemy" }, { "important", "Kill on Sight" }, { "stealth", "Stealth" } }) do
 		tinsert(previews, W:Button(content, preview[2], "chip", preview[1] == "important" and 100 or 70, 22, function()
@@ -207,6 +193,26 @@ function private.BuildAlerts(column)
 		end))
 	end
 	column:Row("Hear them", ButtonGroup(content, previews))
+
+	column:Section("Zone fill warning")
+	private.Switch(column, Detect, "risingAlerts", "Warn when a zone fills up with enemies fast", "A warning like RISING FAST: The Barrens when many more enemies show up there than 5 minutes before, from the number chosen below. From your sightings and other Wanted users'.")
+	private.risingMin = W:Segmented(content, {
+		{ key = "5", label = "5" },
+		{ key = "10", label = "10" },
+		{ key = "15", label = "15" },
+		{ key = "25", label = "25" },
+	}, function(key)
+		Detect().risingMin = tonumber(key)
+	end, 56)
+	column:Row("Warn from", private.risingMin, "How many enemies in the last 5 minutes a zone needs for the warning. They must also be at least double the 5 minutes before.")
+	private.Switch(column, Detect, "risingSkipCities", "Skip enemy capital cities", "No rising warning for the other side's capitals, where their players are always crowded. Your own side's capitals still warn.")
+	private.Switch(column, Detect, "risingNearOnly", "Only zones near me", "Warn only about the zone you are in and the zones next to it.")
+
+	column:Section("Cards")
+	private.Switch(column, Detect, "deathCard", "Show a card when a player kills you", "Who killed you, your record against them and what's on their head, with Kill on Sight, Post a bounty and Where they've been.")
+	private.Switch(column, Root, "callingCards", "Show calling cards", "The Calling card tab, its window, the toasts for new pieces and the card art on badges and death cards. Off applies at once; turning it on brings your card back at the next /reload.", function()
+		Wanted.CallingCard:Apply()
+	end)
 
 	column:Section("When an enemy targets you", { "Targeted warning", "Needs enemy detection on. Works from nameplates, your target and focus: someone off screen can't be seen targeting you." })
 	local targeted = private.Switch(column, Detect, "targetWarn", "Show a TARGETED warning", "A warning in the middle of the screen naming whoever has you targeted.", function() Wanted.Alerts:UpdateTargetedHud() end)
@@ -324,16 +330,7 @@ end
 
 function private.BuildNearby(column)
 	local content = column.content
-	column:Section("Row layout")
-	private.layout = W:Segmented(content, {
-		{ key = "auto", label = "Automatic", tip = { "Automatic", "Two-line rows, and one-line rows once more than 8 enemies are around." } },
-		{ key = "normal", label = "Always normal" },
-		{ key = "compact", label = "Always compact" },
-	}, function(key)
-		NearbyShow().layout = key
-		RefreshNearby()
-	end, 130)
-	column:Row("Row layout", private.layout)
+	column:Section("Window")
 	private.opacity = W:Segmented(content, {
 		{ key = "1", label = "Solid" },
 		{ key = "0.75", label = "75%" },
@@ -356,7 +353,16 @@ function private.BuildNearby(column)
 	end, 60)
 	column:Row("Hide it after no enemies for", private.autoHide)
 
-	column:Section("Show in the Nearby window")
+	column:Section("Rows")
+	private.layout = W:Segmented(content, {
+		{ key = "auto", label = "Automatic", tip = { "Automatic", "Two-line rows, and one-line rows once more than 8 enemies are around." } },
+		{ key = "normal", label = "Always normal" },
+		{ key = "compact", label = "Always compact" },
+	}, function(key)
+		NearbyShow().layout = key
+		RefreshNearby()
+	end, 130)
+	column:Row("Row layout", private.layout)
 	private.nearbyShow = W:MultiSelect(content, 320, Options(NEARBY_ITEMS), function(key, checked)
 		NearbyShow()[key] = checked
 		RefreshNearby()
@@ -371,6 +377,7 @@ function private.BuildSharing(column)
 	column:Section("Sharing", { "What Wanted sends to chat", "Wanted never posts in General or Trade. Chat is only sent when you click Call for help or Tell (Local Defense, party, raid, guild)." })
 	private.Switch(column, Detect, "share", "Share the enemies I see", "Other players running Wanted on your faction see where you spotted enemies (on their map and in their alerts).")
 	private.Switch(column, Detect, "sharedAlerts", "Alert me when others see a KoS or bounty target", "Shows where another Wanted user spotted someone on your Kill on Sight list or with a bounty.")
+	column:Section("Across factions")
 	private.Switch(column, Root, "bridge", "Carry bounty notices across factions", "Battle.net friends on the other faction who also run Wanted pass on the bounties each side posts on the other, as hidden game data, never chat. It's how you learn the price on your head.")
 	-- The Wanted community: its members carry bounty notices across too (Bridge)
 	local invite = W:CopyBox(content, 320, Wanted.Bridge.INVITE_URL)
@@ -394,10 +401,10 @@ function private.BuildSharing(column)
 	end)
 	column:Row("Minimap button", private.minimap)
 	private.Switch(column, Root, "showTools", "Show the Tools page", "Network details, test data and the debug log. Handy when reporting a problem; off by default.")
-	private.Switch(column, Root, "sigBackground", "Check signatures in the background", "Bounties, claims and payments are signed by the players who make them. Wanted checks the ones you hold, one a second, never in a fight. Off: only the ones a page shows or reads.")
 
-	column:Section("Kill proof")
+	column:Section("Kill proof and checks")
 	private.Switch(column, Root, "proofShots", "Take a proof screenshot when I kill a bounty target", "A stamp with who, where, when and the kill id goes on screen for a moment and the game saves a screenshot. Posters see that you have proof.")
+	private.Switch(column, Root, "sigBackground", "Check signatures in the background", "Bounties, claims and payments are signed by the players who make them. Wanted checks the ones you hold, one a second, never in a fight. Off: only the ones a page shows or reads.")
 	column:Note("Disputed kill? Post the screenshot:")
 	column.y = column.y - 4
 	local proofLink = column:Add(W:CopyBox(content, 320, Wanted.Proof.DISCORD_URL), 32, 20)
@@ -415,7 +422,7 @@ function private.BuildSharing(column)
 
 	local wars, races = Wanted.WARS_ON, Wanted.RACES_ON
 	if wars or races then
-		column:Section("Guild wars")
+		column:Section("Guild war and race HUDs")
 	end
 	if wars then
 		private.Switch(column, Root, "warHud", "War HUD", "In a war's zone from prep to the end: both guilds, the clock, the lanes and the keep, and the point you stand on.",
@@ -435,6 +442,8 @@ function private.BuildSharing(column)
 		private.resetHuds = W:Button(content, "Reset HUD positions", "secondary", 160, 24, function() Wanted.HudKit:ResetPositions() end)
 		column:Row("HUD positions", private.resetHuds, "Puts the zone, race and war HUDs back under the game's top-centre widgets. Drag a HUD to move it, fold it with its chevron, hide it with its X or /wanted hud.")
 	end
+	-- The stats map stays whatever the toggles say
+	column:Section("Maps")
 	if wars then
 		private.Switch(column, Root, "warMap", "Guild wars on the map", "The war's lanes and the keep, and who holds each zone, on the world map and OpenMap's.",
 			function() Wanted.WarMap:Refresh() end)
@@ -447,13 +456,10 @@ function private.BuildSharing(column)
 		private.Switch(column, Root, "minimapWar", "War and race points on the minimap", "The war's towers, inhibitors and keep, and tonight's race points, as small seals on the minimap while you are in their zone.",
 			function() Wanted.MinimapPins:Refresh() end)
 	end
-	-- The stats map stays whatever the toggles say
-	if not (wars or races) then
-		column:Section("Map")
-	end
 	private.Switch(column, Root, "statsMap", "Current stats on the map", "Each zone's holder, the kills seen there in the last hour, who is ahead and whether it is busy now.",
 		function() Wanted.WarMap:Refresh() end)
 	if wars then
+		column:Section("Guild war notices")
 		private.Switch(column, Root, "warBanner", "Zone banner", "Who holds a campaign zone, and the war on there, as you come into it.")
 		private.Switch(column, Root, "warToasts", "Guild war notifications", "The draw, the time set and the answer, the reminder an hour before, the war's start, the keep opening and the result.")
 	end
@@ -637,7 +643,7 @@ function private.BuildRanks(column)
 	for _, a in ipairs(Ranks.PLATE_ANCHORS) do tinsert(plateChoices, { key = a.key, label = a.label }) end
 	for _, a in ipairs(Ranks.TARGET_ANCHORS) do tinsert(targetChoices, { key = a.key, label = a.label }) end
 
-	column:Section("Blizzard PvP ranks of other players", { "Where ranks come from", "Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none." })
+	column:Section("Where ranks show", { "Where ranks come from", "Blizzard's PvP ranks, as each Wanted player's addon reads their own from the game. Players without Wanted show none." })
 	local plates = private.Switch(column, RankSettings, "nameplates", "Rank on nameplates", "The rank's badge and number left of ranked players' names on nameplates. New plates follow the switch as they come up.\n\n"
 		.."Changes show at once on the nameplates already up. Works with the game's nameplates, ElvUI and Plater.", Update)
 	W:Cog(plates, "Rank on nameplates", function(popup, width)
@@ -669,6 +675,7 @@ function private.BuildRanks(column)
 	if Wanted.FEATURES.chatEmblems then
 		private.Switch(column, Root, "signatureChat", "Emblems in chat", "The emblem a Wanted player picked on wanteddeadordead.com, before what they say in your chat windows.")
 	end
+	column:Section("Reading ranks")
 	private.Switch(column, Root, "honorScout", "Read players' honorable kills", "When you target or mouse over a player, Wanted reads their lifetime honorable kills from the game (out of combat, a few seconds apart) for wanteddeadordead.com's Honorable Kills board.")
 end
 

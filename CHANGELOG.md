@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-11-27
+
 - When the developers answer a bug report, feature idea or tip you sent, or change its status, the game tells you at the next login or /reload (needs Wanted app 0.2.66 or newer). Chat gives one line without the text, the Dashboard a line while an answer is unread, and Website & app a Your reports card; click an answer to read the reply and get the ticket's address to answer on the website. /wanted reports opens it. Opening an answer marks it read on the website.
 
 ## [1.31.0] - 2026-11-27

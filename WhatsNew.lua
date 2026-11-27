@@ -16,6 +16,16 @@ local private = {}
 -- who hasn't seen it, under the newest notes, even when they skipped it.
 Wanted.WHATS_NEW = {
 	{
+		version = "1.32.0",
+		note = "When the developers answer a report you sent, the game now tells you and shows the answer. "
+			.."You reply on the website.",
+		lines = {
+			"Answers show at login: Settings > Website & app > Your reports, or the Dashboard line.",
+			"/wanted reports opens them; click one to read it and copy its website address.",
+			"Needs Wanted app 0.2.66 or newer. Reading an answer here marks it read on the site.",
+		},
+	},
+	{
 		version = "1.31.0",
 		note = "This update makes the window easier to size and the settings easier to find. The Nearby window's Last "
 			.."hour tab now starts with the enemies you saw yourself.",

@@ -18735,14 +18735,14 @@ end)()
 	check(selectedEntry == "settings" and ns.UI:IsShown("settings"), "Settings opens as its own entry")
 	ns.db.settings.lastPage = "settings"
 end)()
--- What's new 1.31.0, the newest, takes the default sign-off: the maintainers' line under the note
+-- What's new 1.32.0, the newest, takes the default sign-off: the maintainers' line under the note
 ;(function()
 	local N = ns.WhatsNew
 	N:Show()
 	local body = _G.WantedWhatsNewFrame and _G.WantedWhatsNewFrame.body
 	local text = body and body._text or ""
 	local note = ns.WHATS_NEW[1]
-	check(note.version == "1.31.0" and note.signed == nil and not text:find("aka", 1, true), "1.31.0's note uses the default sign-off")
+	check(note.version == "1.32.0" and note.signed == nil and not text:find("aka", 1, true), "1.32.0's note uses the default sign-off")
 	check(text:find("The maintainers of Wanted", 1, true), "with the maintainers' line under it")
 	_G.WantedWhatsNewFrame:Hide()
 end)()
@@ -20723,6 +20723,10 @@ print("wanted smoke: layers off checks pass")
 	since = ns.WhatsNew:Since("1.30.1", "1.31.0")
 	check(#since == 1 and since[1].version == "1.31.0" and #since[1].lines == 5, "an update from 1.30.1 shows the 1.31.0 entry")
 	check(#ns.WhatsNew:Since("1.31.0", "1.31.0") == 0, "and not again")
+	-- An update from 1.31.0 shows the 1.32.0 entry, once
+	since = ns.WhatsNew:Since("1.31.0", "1.32.0")
+	check(#since == 1 and since[1].version == "1.32.0" and #since[1].lines == 3, "an update from 1.31.0 shows the 1.32.0 entry")
+	check(#ns.WhatsNew:Since("1.32.0", "1.32.0") == 0, "and not again")
 	-- Put back: both on for the rest
 	ns.RACES_ON, ns.WARS_ON = true, true
 	WantedAppCatchup = nil
@@ -20942,12 +20946,7 @@ print("wanted smoke: races and guild wars off checks pass")
 	_G.WantedDialog:Hide()
 	RunTimers()
 	check(db.reportsRead[61] == nil and #RA:Unread() == 1 and not _G.WantedDialog:IsShown(), "dropped with its window: still unread")
-	W.Dialog = function(self, options)
-		lastDialog = options
-		local up = _G.WantedDialog
-		if up and up:IsShown() then up.frame.decided = true up:Hide() end
-		return origDialog(self, options)
-	end
+	W.Dialog = harnessDialog
 	ns.UI:Show("home")
 	RA:Take({ Ticket(62, 2 ^ 31) })
 	check(#RA:List() == 0, "a message id past 2^31-1 is skipped")

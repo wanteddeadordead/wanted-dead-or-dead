@@ -6620,6 +6620,7 @@ end)()
 	issecretvalue = function(v) return rawequal(v, hard) end
 	local bridgePrivate
 	for i = 1, 30 do local name, value = debug.getupvalue(ns.Bridge.InCommunity, i) if name == "private" then bridgePrivate = value break end if not name then break end end
+	local clockBefore = clock
 	local realMembers, realClubs, realInfo = C_Club.GetClubMembers, C_Club.GetSubscribedClubs, C_Club.GetMemberInfo
 	clubMembers[1].presence = 1
 	ns.Bridge.clubId = "77"
@@ -6639,6 +6640,13 @@ end)()
 	check(ns.Bridge:InCommunity(), "a secret entry among the communities is skipped, the readable one found")
 	check(not table.concat(ns.Bridge:CommunityReport(), "\n"):find("id 77, ", 1, true), "an entry whose type is secret is left out of the report")
 	C_Club.GetSubscribedClubs = realClubs
+	-- The next readable round replaces the targets normally: a member who logged off is gone
+	clubMembers[1].presence = 3
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 3)
+	check(bridgePrivate.targets[301] == nil, "the next readable round replaces the kept targets: a member who logged off is dropped")
+	clubMembers[1].presence = 1
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.targets[301] ~= nil, "and one who is back is a target again")
 	C_Club.GetMemberInfo = function() return hard end
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	check(bridgePrivate.community.members == 6 and bridgePrivate.community.inGame == 0, "secret member info: each member counted, none read")
@@ -6677,6 +6685,7 @@ end)()
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	check(bridgePrivate.community.members == 6 and bridgePrivate.community.inGame >= 1, "readable again: the round runs as before")
 	issecretvalue = realSecretValue
+	clock = clockBefore -- later suites place wars on Eastern days by the clock
 	ns.Bridge.clubId = wantedClub
 	bnFriends[#bnFriends] = nil
 	C_Club = nil

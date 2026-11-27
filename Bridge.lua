@@ -597,6 +597,7 @@ function private.ValidSender(senderID)
 	if not private.Readable(game) then
 		game = nil
 	end
+	-- Unreadable or missing live answer: the game account known from the last scan stands in (kept on purpose)
 	if not game and private.targets[senderID] then
 		game = private.targets[senderID].game
 	end

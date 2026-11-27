@@ -2626,6 +2626,7 @@ do
 	ns.Catchup:Import()
 	check(ns.Sync:GetDirectory().names == 5, "the app's realm-link names are kept, junk and our own realm dropped, got "..ns.Sync:GetDirectory().names)
 	ns.Sync:GreetDirectory()
+	RunFrames() -- the greets go a piece at a time
 	local greeted = {}
 	for _, name in ipairs({ "Dir One", "Dir Two", "Dir Three", "Dir Four", "Same Realmer Two", "Other Place" }) do
 		greeted[name] = #Sent("WHISPER", name) == 1 and Sent("WHISPER", name)[1].tag == "H"
@@ -2651,6 +2652,7 @@ do
 	RunFrames()
 	ClearSent()
 	ns.Sync:GreetDirectory()
+	RunFrames() -- the greets go a piece at a time
 	check(#Sent("WHISPER", "Dir Four") == 0 and #Sent("WHISPER", "Dir One") == 0, "a realm with a live link isn't greeted any more")
 	check(#Sent("WHISPER", "Other Place") == 1, "one without is greeted again, five minutes on")
 	check(ns.Sync:GetDirectory().linked == 1, "the directory counts the realms it reaches")
@@ -2671,6 +2673,7 @@ do
 		"CHANNEL", "Chan Peer", nil, nil, nil, ns.Sync:GetInfo().channelName)
 	RunFrames()
 	ns.Sync:GreetDirectory()
+	RunFrames() -- the greets go a piece at a time
 	check(#Sent("WHISPER", "Far Learned") == 1 and Sent("WHISPER", "Far Learned")[1].tag == "H", "a far-realm name from a peer's hello is greeted")
 	check(#Sent("WHISPER", "Same Realmer") == 0 and #Sent("WHISPER", "Bad|cff") == 0, "our own realm and junk aren't")
 end
@@ -2772,15 +2775,18 @@ do
 	ClearSent()
 	clock = clock + 700
 	syncPrivate.GreetRemembered()
+	RunFrames() -- the greets go a piece at a time
 	check(#Sent("WHISPER", "Old Remembered") == 1, "an old farPeers entry without ri is greeted")
 	ns.db.realm = { id = 6932, name = "" }
 	ns.db.farPeers["Old Remembered"] = { realm = "Some Realm", seen = GetServerTime() }
 	ClearSent()
 	clock = clock + 700
 	syncPrivate.GreetRemembered()
+	RunFrames() -- the greets go a piece at a time
 	check(#Sent("WHISPER", "Old Remembered") == 1, "and so is it when our own realm name is unknown")
 	ns.db.farPeers["Same Number"] = { realm = "#6932", ri = 6932, seen = GetServerTime() }
 	syncPrivate.GreetRemembered()
+	RunFrames() -- the greets go a piece at a time
 	check(ns.db.farPeers["Same Number"] == nil, "an entry on our own number is dropped")
 	-- The directory keys on the number when it has one
 	WantedAppCatchup = { [ns.db.accountMark] = { t = 1, records = {}, links = { { n = "Id Only", r = "", ri = 7100, t = clock }, { n = "Id Same", r = "", ri = 6932, t = clock }, { n = "Id Name", r = "Named", ri = 7100, t = clock } } } }
@@ -2815,6 +2821,90 @@ do
 	-- Later suites place wars and races on Eastern days by the clock: leave it where it was
 	clock = startClock
 end
+-- Greeting players on other realms goes a piece at a time (a round of dozens of hellos in one call was cut off by the game
+-- with "script ran too long"): nothing is sent inside the call, one hello is encoded for the whole round, each greet is
+-- checked again at its turn, and a fight or an instance ends the round
+;(function()
+	local startClock, realProfile = clock, debugprofilestop
+	local syncPrivate
+	for i = 1, 30 do local name, value = debug.getupvalue(ns.Sync.GetInfo, i) if name == "private" then syncPrivate = value break end if not name then break end end
+	local savedDirectory, savedLearned = syncPrivate.directory, syncPrivate.learned
+	syncPrivate.learned = {}
+	local serialize = LibStub("LibSerialize-WantedDeadOrDead")
+	local serialized, realSerialize = 0, serialize.Serialize
+	serialize.Serialize = function(...) serialized = serialized + 1 return realSerialize(...) end
+	-- 8 realms of 3 names (the directory keeps 20): 20 names, each realm greeted at most 3 times a round
+	local list = {}
+	for realm = 1, 8 do
+		for n = 1, 3 do list[#list + 1] = { n = "Pace R"..realm.." N"..n, r = "Pace Realm "..realm, ri = 7100 + realm, t = clock } end
+	end
+	local function Round()
+		clock = clock + 400
+		ns.Sync:TakeDirectory(list)
+		ClearSent()
+		serialized = 0
+		ns.Sync:GreetDirectory()
+	end
+	local function Whispers()
+		local n = 0
+		for _, m in ipairs(addonSent) do if m.chatType == "WHISPER" and m.text:sub(1, 2) == "H:" then n = n + 1 end end
+		return n
+	end
+	-- Nothing goes inside the call; the work is queued; one frame does one piece (a clock that runs 2 ms a look)
+	Round()
+	check(Whispers() == 0 and serialized == 0 and ns:QueuedWork() == 1 + 20, "the round sends nothing in the call: "..Whispers().." sent, "..ns:QueuedWork().." queued")
+	local fake = 0
+	debugprofilestop = function() fake = fake + 2 return fake end
+	local perFrame, frames, last = {}, 0, 0
+	while ns:QueuedWork() > 0 and frames < 100 do
+		ns:DoQueuedWork(3)
+		frames = frames + 1
+		perFrame[frames] = Whispers() - last
+		last = Whispers()
+	end
+	debugprofilestop = realProfile
+	local worst = 0
+	for _, n in ipairs(perFrame) do worst = max(worst, n) end
+	check(frames == 21 and worst == 1 and Whispers() == 20, "one greet a frame, all 20 in the end: "..frames.." frames, at most "..worst.." a frame, "..Whispers().." sent")
+	check(serialized == 1, "the hello is built and encoded once for the round, not once a name: "..serialized)
+	-- Not at all in an instance, nor started in one
+	clock = clock + 400
+	local inside = IsInInstance
+	IsInInstance = function() return true end
+	Round()
+	check(ns:QueuedWork() == 0 and Whispers() == 0, "no round starts in an instance")
+	IsInInstance = inside
+	Round()
+	IsInInstance = function() return true end
+	RunFrames()
+	IsInInstance = inside
+	check(Whispers() == 0, "a round whose player walks into an instance sends nothing more")
+	-- A realm linked before its turn is skipped
+	Round()
+	fake = 0
+	debugprofilestop = function() fake = fake + 2 return fake end
+	ns:DoQueuedWork(3) -- the hello is built; no greet yet
+	debugprofilestop = realProfile
+	syncPrivate.AddLink("Early Linked", "Pace Realm 1", 7101) -- (a hello would wait for the queue to empty)
+	RunFrames()
+	local toFirst = 0
+	for _, m in ipairs(addonSent) do if m.chatType == "WHISPER" and m.target:find("^Pace R1 ") then toFirst = toFirst + 1 end end
+	check(ns.Sync:GetLinks()["Early Linked"] and toFirst == 0, "a realm linked before its turn is skipped: "..toFirst.." greets to it")
+	-- A fight ends the round
+	Round()
+	Fire("PLAYER_REGEN_DISABLED")
+	RunFrames()
+	check(Whispers() == 0, "nothing is sent while the fight lasts")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	RunFrames()
+	check(not ns:InCombat() and Whispers() == 0, "and the round is over when it ends, not carried on")
+	-- Put back
+	serialize.Serialize = realSerialize
+	syncPrivate.directory, syncPrivate.learned = savedDirectory, savedLearned
+	debugprofilestop = realProfile
+	clock = startClock
+end)()
 -- One need request per missing record: a request another player just made for the same origin from the same seq or
 -- earlier covers ours (the fill goes to the whole channel), our own request is not repeated within 15 seconds, and a
 -- need or have the full send queue drops never pauses sync

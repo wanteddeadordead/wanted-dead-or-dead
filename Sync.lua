@@ -69,6 +69,8 @@ local private = {
 	greeted = {}, -- name -> when we last greeted them over a whisper
 	greetedRealm = {}, -- name -> the realm they were greeted on
 	greetedID = {}, -- name -> the realm number they were greeted on, when known
+	encoded = setmetatable({}, { __mode = "k" }), -- message table -> its encoding, for a round that sends one message to many
+	rounds = {}, -- kind of greeting round ("directory", "remembered") -> the round under way, see GreetPaced
 	endedLinks = {}, -- name -> when their link ended because they went offline (their message stays hidden)
 	whispered = {}, -- name -> when we last whispered them addon data (any kind: the game's "not online" stays hidden)
 	offline = {}, -- name -> when the game said they weren't online (no more whispers to them for a while)
@@ -446,6 +448,13 @@ function Sync:OnEnable()
 	Store:OnRecord("*", private.OnOwnRecord)
 	-- What a fight held back goes once it's over
 	Wanted:OnCombatEnd(function()
+		-- A greeting round that a fight interrupted isn't carried on: its ticker starts the next
+		for kind, round in pairs(private.rounds) do
+			if round.stopsInCombat then
+				Wanted:Log("Sync: a fight ended the %s greeting round with %d left", kind, round.left)
+				private.rounds[kind] = nil
+			end
+		end
 		private.FlushLive()
 		private.FlushForward()
 		private.Drain()
@@ -1240,7 +1249,7 @@ function private.Send(tag, tbl, attempt, target, answer)
 		private.Drop("paused", 1)
 		return false
 	end
-	local payload = Encode(tbl)
+	local payload = private.encoded[tbl] or Encode(tbl)
 	local total = ceil(#payload / CHUNK_LEN)
 	Wanted:Log("Sync: send %s%s, %d bytes in %d part(s)", tag, target and (" to "..target) or viaGuild and " to the guild" or "", #payload, total)
 	if viaGuild then
@@ -2955,7 +2964,8 @@ end
 ---@param name string the player's name as a whisper takes it
 ---@param realm string? where they are, if known
 ---@param ri number? their realm's number, if known
-function Sync:Greet(name, realm, ri)
+---@param hello table? the hello's fields a round built once for all it greets (private.GreetPaced)
+function Sync:Greet(name, realm, ri, hello)
 	if type(name) ~= "string" or name == "" or name == Store:GetOrigin()
 		or ((realm or ri) and Sync:IsOwnRealm(realm, ri) and not private.lockedOut) then
 		return
@@ -2970,17 +2980,28 @@ function Sync:Greet(name, realm, ri)
 	private.greetedRealm[name] = realm
 	private.greetedID[name] = ri
 	Wanted:Log("Sync: greeting %s (%s) as a realm link", name, tostring(realm or ri))
-	private.SendLinkHello(name, false)
+	private.SendLinkHello(name, false, hello)
 end
 
-function private.SendLinkHello(name, isAnswer)
+---The link hello's fields: what we hold and who we are. The same for everyone a round greets, so a round builds it once
+---(private.GreetPaced) and hands it to Greet.
+---@param isAnswer boolean
+---@return table
+function private.LinkHelloFields(isAnswer)
 	-- x: locked out of the channel, so a player on this very realm should link by whisper too
 	-- r: our realm's name, else "#<number>", else "?"; ri: its number (omitted when unknown)
 	local id = Wanted:RealmID()
 	local fields = { r = private.RealmField(Wanted:RealmName(), id) or "?", ri = id, a = isAnswer or nil, x = private.lockedOut and 1 or nil }
 	fields.l = Wanted.Shard:Current()
 	fields.lm = fields.l and Wanted.Shard:ZoneMap() or nil
-	private.Send(TAG_HELLO, private.HaveFields(fields), nil, name)
+	return private.HaveFields(fields)
+end
+
+---@param name string
+---@param isAnswer boolean
+---@param hello table? the fields already built for this round (private.GreetPaced)
+function private.SendLinkHello(name, isAnswer, hello)
+	private.Send(TAG_HELLO, hello or private.LinkHelloFields(isAnswer), nil, name)
 end
 
 function private.AddLink(name, realm, ri)
@@ -3293,7 +3314,11 @@ function private.LinkTick()
 	local have = nil
 	for name, link in pairs(private.links) do
 		if chosen[name] then
-			have = have or private.HaveFields({})
+			if not have then
+				-- The same for every link chosen this minute: encoded once
+				have = private.HaveFields({ v = Wanted.VERSION })
+				private.encoded[have] = Encode(have)
+			end
 			if private.Send(TAG_HAVE, have, nil, name) then
 				link.resyncAt, link.keptAt = now, now
 			end
@@ -3305,15 +3330,63 @@ function private.LinkTick()
 	end
 end
 
+---Greets a list of players a piece at a time, through the queued work (a few milliseconds a frame, never in a fight),
+---instead of all in one call: every hello lists what we hold, which took long enough to be cut off by the game when a
+---round greeted dozens of names at once. The hello is built and encoded once for the round (the same for everyone);
+---each greet is checked again when its turn comes: not in an instance, and its realm not linked meanwhile (Greet itself
+---skips a name linked or greeted lately and one while chat is locked). A round of the same kind replaces one under way.
+---@param kind string "directory" or "remembered"
+---@param entries table[] { name, realm, ri, key (the realm's key; the round skips the rest of a realm once linked) }
+---@param stopsInCombat boolean? a fight ends the round (it is started again by its ticker)
+function private.GreetPaced(kind, entries, stopsInCombat)
+	local old = private.rounds[kind]
+	if old and old.left > 0 then
+		Wanted:Log("Sync: a new %s greeting round replaces one with %d left", kind, old.left)
+	end
+	local round = { left = #entries, stopsInCombat = stopsInCombat }
+	private.rounds[kind] = round
+	if #entries == 0 then
+		return
+	end
+	-- Building and encoding the hello is the costly part: its own piece of work, once
+	Wanted:QueueWork(function()
+		if private.rounds[kind] ~= round then
+			return
+		end
+		round.hello = private.LinkHelloFields(false)
+		round.hello.v = Wanted.VERSION
+		private.encoded[round.hello] = Encode(round.hello)
+	end)
+	for _, entry in ipairs(entries) do
+		Wanted:QueueWork(function()
+			if private.rounds[kind] ~= round or not round.hello then
+				return
+			end
+			round.left = round.left - 1
+			if round.left == 0 then
+				private.rounds[kind] = nil
+			end
+			if Wanted:InInstance() or (entry.key and private.LinkedRealms()[entry.key]) then
+				return
+			end
+			Sync:Greet(entry.name, entry.realm, entry.ri, round.hello)
+		end)
+	end
+end
+
 ---At login: greet the realm links remembered from the last week.
 function private.GreetRemembered()
 	local cutoff = GetServerTime() - REMEMBER_LINK_SECONDS
+	local entries = {}
 	for name, info in pairs(Wanted.db.farPeers) do
 		if type(info) ~= "table" or not private.RealmKey(info.realm, info.ri) or Sync:IsOwnRealm(info.realm, info.ri) then
 			Wanted.db.farPeers[name] = nil -- remembered by earlier versions; nobody to greet there
 		elseif (info.seen or 0) >= cutoff then
-			Sync:Greet(name, info.realm, info.ri)
+			tinsert(entries, { name = name, realm = info.realm, ri = info.ri })
 		end
+	end
+	if not Wanted:InInstance() then
+		private.GreetPaced("remembered", entries)
 	end
 end
 
@@ -3369,19 +3442,21 @@ function Sync:GreetDirectory()
 			tinsert(entries, entry)
 		end
 	end
-	if Wanted:InCombat() or #entries == 0 then
+	if Wanted:InCombat() or Wanted:InInstance() or #entries == 0 then
 		return
 	end
-	local now, linked, greets = GetTime(), private.LinkedRealms(), {}
+	local now, linked, greets, chosen = GetTime(), private.LinkedRealms(), {}, {}
 	for _, entry in ipairs(entries) do
 		local realm = private.RealmKey(entry.realm, entry.ri) or entry.name
 		local recent = private.greeted[entry.name] and now - private.greeted[entry.name] < GREET_SECONDS
 		local offline = private.offline[entry.name] and now - private.offline[entry.name] < OFFLINE_SECONDS
 		if not linked[realm] and (greets[realm] or 0) < DIRECTORY_GREETS and not recent and not offline then
 			greets[realm] = (greets[realm] or 0) + 1
-			Sync:Greet(entry.name, entry.realm ~= "" and entry.realm or nil, entry.ri)
+			tinsert(chosen, { name = entry.name, realm = entry.realm ~= "" and entry.realm or nil, ri = entry.ri, key = realm })
 		end
 	end
+	-- Sent a piece at a time, and not at all once a fight starts
+	private.GreetPaced("directory", chosen, true)
 end
 
 ---The names in the directory, for a bug report to leave out.

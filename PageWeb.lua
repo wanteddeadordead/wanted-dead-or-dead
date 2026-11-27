@@ -271,7 +271,8 @@ UI:RegisterPage("web", {
 		private.BuildSite(body, width - 30)
 		private.BuildApp(body, width - 30)
 	end,
-	-- Answers from the developers not read yet; it reaches the Settings menu entry through under
+	-- Answers from the developers not read yet: on its tab, and on the Settings menu entry through under
+	tabBadge = true,
 	badge = function()
 		local unread = #Wanted.ReportAnswers:Unread()
 		return unread > 0 and unread or nil

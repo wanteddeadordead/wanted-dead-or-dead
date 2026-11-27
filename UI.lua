@@ -47,6 +47,7 @@ local GROUPS = {}
 ---out of the menu itself), tabLabel (its tab's label, or a function returning it for a tab named by what it shows), tabTip = { title, body } (its tab's tooltip: what the page is, now
 ---that pages have no subtitle), menuLabel (its menu entry's label, when not its title), atFoot (its menu entry at the
 ---foot of the menu, above Safety, rather than in the list; several stack upward in page order)
+---def.tabBadge: its tab in the header shows the page's badge count too, beside the label.
 ---def.news = { kind, ids = function() -> ids } marks a page whose items count as new until it shows them: its badge is
 ---that count, in blue, unless it has its own.
 function UI:RegisterPage(key, def)
@@ -765,6 +766,26 @@ function UI:MarkViewed(kind, ids)
 	return changed
 end
 
+---A count beside a tab's label (a page with tabBadge): the tab widens to fit it, and goes back when there's none.
+---@param button Frame the tab
+---@param count number? nil or 0 for none
+---@param color table? the count's colour, the accent by default
+function private.MarkTab(button, count, color)
+	private.builtWidths = private.builtWidths or setmetatable({}, { __mode = "k" })
+	private.builtWidths[button] = private.builtWidths[button] or tonumber(button:GetWidth()) or 0
+	if not button.pill then
+		button.pill = W:Pill(button)
+		button.pill:SetPoint("LEFT", button.label, "RIGHT", 6, 0)
+	end
+	if count and count > 0 then
+		button.pill:Set(tostring(count), color or C.accent)
+		button:SetWidth(max(private.builtWidths[button], ceil(button.label:GetStringWidth()) + 24 + 6 + ceil(button.pill:GetWidth())))
+	else
+		button.pill:Hide()
+		button:SetWidth(private.builtWidths[button])
+	end
+end
+
 ---Redraws the window. allBadges: work every menu badge out afresh (opening the window, changing page).
 ---@param allBadges boolean?
 function UI:Refresh(allBadges)
@@ -813,6 +834,10 @@ function UI:Refresh(allBadges)
 						if button.label then
 							button:SetWidth(max(private.builtWidths[button], ceil(button.label:GetStringWidth()) + 24))
 						end
+					end
+					if page and page.tabBadge and page.badge then
+						local count, color = private.Badge(page, allBadges)
+						private.MarkTab(button, type(count) == "number" and count or nil, color)
 					end
 					button:ClearAllPoints()
 					button:SetPoint("LEFT", x, 0)

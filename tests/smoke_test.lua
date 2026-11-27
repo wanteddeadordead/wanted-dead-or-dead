@@ -5694,6 +5694,69 @@ end)()
 	RunTimers()
 end)()
 ;(function()
+	-- No shipped file writes the game's chat state. From an addon, a write into ChatTypeInfo or ChatTypeGroup, or a chat
+	-- window's own channel list (its RemoveChannel/AddChannel), taints what the chat window reads for every line, and in
+	-- a chat lockdown (a battleground, a boss fight) a tainted read with the game's secret values drops the line.
+	local function ChatStateWrites(source, file)
+		local found = {}
+		local n = 0
+		for line in (source.."\n"):gmatch("([^\n]*)\n") do
+			n = n + 1
+			local code = line:gsub("%-%-.*$", "")
+			for name, from in code:gmatch("(ChatType%a+)()") do
+				if name == "ChatTypeInfo" or name == "ChatTypeGroup" then
+					local rest = code:sub(from)
+					-- any chain of [index] and .field after the name, then a single "="
+					while true do
+						local after = rest:match("^%s*%b[]()") or rest:match("^%s*%.[%w_]+()")
+						if not after then break end
+						rest = rest:sub(after)
+					end
+					if rest:match("^%s*=[^=]") or rest:match("^%s*=$") then
+						found[#found + 1] = file..":"..n
+					end
+				end
+			end
+			for _, fn in ipairs({ "rawset", "tinsert", "table.insert", "wipe", "table.wipe", "tremove", "table.remove", "setmetatable" }) do
+				if code:find(fn:gsub("%.", "%%.").."%s*%(%s*ChatType[IG]") then
+					found[#found + 1] = file..":"..n
+				end
+			end
+			for _, method in ipairs({ "RemoveChannel", "AddChannel", "RemoveAllChannels", "SetChannelEnabled", "RegisterForChannels" }) do
+				if code:find("[:.]"..method.."%s*%(") then
+					found[#found + 1] = file..":"..n
+				end
+			end
+		end
+		return found
+	end
+	-- The check itself catches what 1.30.0 did, and leaves reads and the game's own calls alone
+	check(#ChatStateWrites("ChatTypeInfo[a], ChatTypeInfo[b] = ChatTypeInfo[b], ChatTypeInfo[a]", "x") == 1, "the guard sees a swap of chat colours")
+	check(#ChatStateWrites("ChatTypeInfo.CHANNEL1.r = 1", "x") == 1, "the guard sees a field write")
+	check(#ChatStateWrites("ChatTypeGroup[\"WANTED\"] = { \"CHAT_MSG_SAY\" }", "x") == 1, "and a write into ChatTypeGroup")
+	check(#ChatStateWrites("tinsert(ChatTypeGroup.SAY, \"X\")", "x") == 1, "and an insert into it")
+	check(#ChatStateWrites("frame:RemoveChannel(private.channelName)", "x") == 1, "the guard sees a window's RemoveChannel")
+	check(#ChatStateWrites("local info = ChatTypeInfo[\"SAY\"] if info == nil then end", "x") == 0, "a read is not a write")
+	check(#ChatStateWrites("RemoveChatWindowChannel(frame:GetID(), name) -- not frame:RemoveChannel(name)", "x") == 0, "the game's call and comments are fine")
+	local files = {}
+	for _, toc in ipairs({ { ADDON.."WantedDeadOrDead.toc", ADDON }, { ADDON.."Poker/WantedDeadOrDead_Poker.toc", ADDON.."Poker/" } }) do
+		for line in io.lines(toc[1]) do
+			line = line:gsub("\r", "")
+			if line ~= "" and not line:match("^#") and line:match("%.lua$") then
+				files[#files + 1] = toc[2]..line:gsub("\\", "/")
+			end
+		end
+	end
+	local writes = {}
+	for _, path in ipairs(files) do
+		local f = assert(io.open(path, "rb"))
+		for _, at in ipairs(ChatStateWrites(f:read("a"), path)) do writes[#writes + 1] = at end
+		f:close()
+	end
+	check(#files > 50, "every shipped file is scanned, got "..#files)
+	check(#writes == 0, "no shipped file writes the game's chat state: "..table.concat(writes, ", "))
+end)()
+;(function()
 	-- The version book: each player's Wanted version from their messages, for the app to pass on
 	local book = ns.db.addonVersions
 	local me = Ambiguate(ns.Store:GetOrigin())

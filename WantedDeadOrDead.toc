@@ -107,6 +107,7 @@ PageGear.lua
 PageDuels.lua
 PageCalendar.lua
 PageWeb.lua
+ReportAnswers.lua
 PageSettings.lua
 PageTools.lua
 Report.lua

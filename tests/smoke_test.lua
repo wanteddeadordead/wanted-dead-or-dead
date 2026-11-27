@@ -20733,6 +20733,219 @@ print("wanted smoke: layers off checks pass")
 	R:Take(nil)
 end)()
 print("wanted smoke: races and guild wars off checks pass")
+-- Report answers: the developers' answers to the player's reports, from the app's catch-up (ReportAnswers)
+;(function()
+	local RA = ns.ReportAnswers
+	local db = ns.db
+	local W = ns.Widgets
+	local savedRead, savedTold, savedInfo, savedCatchup = db.reportsRead, db.reportsTold, WantedAppInfo, WantedAppCatchup
+	local realPrint = ns.Print
+	local said = {}
+	ns.Print = function(_, fmt, ...) said[#said + 1] = select("#", ...) > 0 and format(fmt, ...) or fmt end
+	db.reportsRead, db.reportsTold = {}, {}
+	local function CloseDialogs()
+		for _ = 1, 20 do
+			if _G.WantedDialog and _G.WantedDialog:IsShown() then _G.WantedDialog:Hide() end
+			RunTimers()
+		end
+	end
+	CloseDialogs()
+	local function Ticket(n, m, extra)
+		local t = { n = n, kind = "bug", status = "awaiting", m = m, at = clock - 7200, seen = false, reply = "Thanks. Does it happen with other map addons off?",
+			replyAt = clock - 7200, said = "The map is blank after I zone into Arathi." }
+		for k, v in pairs(extra or {}) do t[k] = v end
+		return t
+	end
+	local function Loading()
+		Fire("LOADING_SCREEN_DISABLED")
+		RunTimers()
+	end
+
+	-- The data the app writes comes in through the catch-up, at every login
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or clock, records = {}, tickets = { Ticket(16, 412) } } }
+	ns.Catchup:Import()
+	check(RA:List() and #RA:List() == 1 and RA:List()[1].n == 16 and RA:List()[1].m == 412 and RA:List()[1].kind == "bug" and not RA:List()[1].seen,
+		"the catch-up's tickets are taken in")
+	-- An old catch-up with no tickets, and no catch-up at all, leave none
+	WantedAppCatchup = { [db.accountMark] = { t = db.catchupT or clock, records = {} } }
+	ns.Catchup:Import()
+	check(RA:List() == nil, "a catch-up without tickets leaves no list")
+	ns.Catchup:Import()
+	check(RA:List() == nil, "no catch-up leaves no list")
+	-- Never from the snapshot
+	local side = UnitFactionGroup("player")
+	WantedSnapshot = { v = 1, t = clock, day = "2026-11-27", [side] = { t = clock, tickets = { Ticket(5, 9) } } }
+	ns.Catchup:Import()
+	check(RA:List() == nil, "the public snapshot never carries tickets")
+	WantedSnapshot = nil
+
+	-- Bad data is ignored without an error
+	for _, junk in ipairs({ "text", 42, true, { "x", 5, true }, { { n = "16", kind = "bug", status = "open", m = 1 } },
+		{ { n = 0, kind = "bug", status = "open", m = 1 } }, { { n = 1.5, kind = "bug", status = "open", m = 1 } }, { { n = -3, kind = "bug", status = "open", m = 1 } },
+		{ { n = 1, kind = "rant", status = "open", m = 1 } }, { { n = 1, kind = "bug", status = "stuck", m = 1 } }, { { n = 1, kind = "bug", status = "open", m = 0 } },
+		{ { n = 1, kind = "bug", status = "open", m = 1, reply = 5 } }, { { n = 1, kind = "bug", status = "open", m = 1, said = {} } },
+		{ { n = 1 / 0, kind = "bug", status = "open", m = 1 } }, { { n = 1, kind = "bug", status = "open", m = 0 / 0 } }, { [1e9] = Ticket(1, 1) } }) do
+		local ok, err = pcall(RA.Take, RA, junk)
+		check(ok, "bad data is ignored without an error: "..tostring(err))
+		check(type(junk) ~= "table" and RA:List() == nil or type(junk) == "table" and #RA:List() == 0, "bad data leaves nothing to show: "..tostring(junk))
+	end
+	local many = {}
+	for i = 1, 5000 do many[i] = Ticket(i, i) end
+	RA:Take(many)
+	check(#RA:List() == 10, "a huge list is cut to ten tickets, got "..#RA:List())
+	RA:Take({ Ticket(7, 1), Ticket(7, 2) })
+	check(#RA:List() == 1, "a ticket number once")
+
+	-- Both saved maps are cut to the tickets in the list; nothing to cut with no list
+	db.reportsRead, db.reportsTold = { [16] = 412, [99] = 5, [3] = "x" }, { [16] = 412, [98] = 1 }
+	RA:Take({ Ticket(16, 412) })
+	check(db.reportsRead[16] == 412 and db.reportsRead[99] == nil and db.reportsRead[3] == nil and db.reportsTold[16] == 412 and db.reportsTold[98] == nil,
+		"the saved maps keep only the tickets in the list")
+	RA:Take("junk")
+	RA:Take(nil)
+	check(db.reportsRead[16] == 412 and db.reportsTold[16] == 412, "no list: nothing is cut")
+	RA:Take({})
+	check(next(db.reportsRead) == nil and next(db.reportsTold) == nil and RA:List() and #RA:List() == 0, "an empty list cuts both maps")
+	db.reportsRead, db.reportsTold = {}, {}
+
+	-- The three app states, and the empty one
+	WantedAppInfo = nil
+	RA:Take(nil)
+	local state, text = RA:State()
+	check(state == "app" and text == "Answers reach the game through the Wanted app. Read them at wanteddeadordead.com/me/reports.", "no app: "..text)
+	WantedAppInfo = { running = "0.2.65" }
+	state, text = RA:State()
+	check(state == "update" and text == "Answers from the developers show here with Wanted app 0.2.66 or newer. Until then, read them at wanteddeadordead.com/me/reports.", "an older app: "..text)
+	WantedAppInfo = { running = "0.2.66" }
+	state, text = RA:State()
+	check(state == "none" and text == "No answers yet.", "a current app with no list: "..text)
+	RA:Take({})
+	state, text = RA:State()
+	check(state == "none" and text == "No answers yet.", "an empty list: "..text)
+	RA:Take({ Ticket(1, 1) })
+	check(RA:State() == "list", "tickets: the list")
+
+	-- One chat line per answer (ticket and message), never with the text; a new message gives a new line
+	said = {}
+	RA:Take({ Ticket(16, 412) })
+	Loading()
+	check(#said == 1 and said[1] == "The developers answered your bug report #16. Type /wanted reports, or open Settings > Website & app.", "one chat line: "..tostring(said[1]))
+	check(not said[1]:find("map addons", 1, true) and db.reportsTold[16] == 412, "the line has no reply text, and is remembered")
+	Loading()
+	RA:Take({ Ticket(16, 412) })
+	Loading()
+	check(#said == 1, "not again at the next login or loading screen")
+	RA:Take({ Ticket(16, 430) })
+	Loading()
+	check(#said == 2, "a new message on the ticket gives a new line")
+	RA:Take({ Ticket(16, 430, { seen = true }), Ticket(17, 5, { kind = "idea" }) })
+	Loading()
+	check(#said == 3 and said[3]:find("your feature idea #17", 1, true), "an answer already seen on the website gives no line: "..tostring(said[3]))
+	RA:Take({ Ticket(21, 1), Ticket(22, 1, { kind = "tip" }), Ticket(23, 1, { reply = "", status = "fixed" }) })
+	Loading()
+	check(#said == 4 and said[4] == "The developers answered 3 of your reports. Type /wanted reports, or open Settings > Website & app.", "several: "..tostring(said[4]))
+	-- Not in a fight: it waits for the end
+	RA:Take({ Ticket(30, 1) })
+	Fire("PLAYER_REGEN_DISABLED")
+	Loading()
+	check(#said == 4, "no chat line in a fight")
+	Fire("PLAYER_REGEN_ENABLED")
+	RunTimers()
+	check(#said == 5 and said[5]:find("#30", 1, true), "after the fight: "..tostring(said[5]))
+
+	-- Text from the developers and the player: every | doubled, cut to its letters
+	local nasty = "|cff00ff00x|r |Hitem:1|h[x]|h |TInterface\\x:0|t |n new |K0|k |A:a|a end|"
+	RA:Take({ Ticket(40, 1, { reply = nasty, said = nasty }) })
+	local t = RA:List()[1]
+	check(t.reply == gsub(nasty, "|", "||") and t.said == gsub(nasty, "|", "||"), "every | is doubled in reply and said: "..t.reply)
+	local function Paired(s) return not gsub(s, "||", ""):find("|", 1, true) end
+	check(Paired(t.reply) and Paired(t.said), "no | is left alone")
+	for _, code in ipairs({ "|c", "|H", "|T", "|n", "|r", "|h", "|t" }) do
+		check(RA:DialogText(t):find("|"..code, 1, true), "the code "..code.." shows as typed")
+	end
+	RA:Take({ Ticket(41, 1, { reply = "ends with a bar |", said = "|" }) })
+	check(RA:List()[1].reply == "ends with a bar ||" and RA:List()[1].said == "||", "a bare trailing | is doubled")
+	RA:Take({ Ticket(42, 1, { reply = string.rep("a", 1000), said = string.rep("b", 200) }) })
+	check(#RA:List()[1].reply == 1000 and #RA:List()[1].said == 80, "1000-letter reply kept, said cut to 80")
+	RA:Take({ Ticket(43, 1, { reply = string.rep("a", 1500) }) })
+	check(#RA:List()[1].reply == 1000, "a longer reply is cut to 1000 letters")
+	RA:Take({ Ticket(44, 1, { reply = string.rep("\195\169", 1500), said = string.rep("\195\169", 200) }) })
+	check(#RA:List()[1].reply == 2000 and #RA:List()[1].said == 160, "letters are counted, not bytes, and never cut inside one")
+	RA:Take({ Ticket(45, 1, { reply = string.rep("|", 1500) }) })
+	check(#RA:List()[1].reply == 2000, "the cut is before the doubling: 1000 bars become 2000")
+	RA:Take({ Ticket(46, 1, { reply = "a\r\nb\tc\1d\0e\n\n\n\n\nf", said = "one\ntwo" }) })
+	check(RA:List()[1].reply == "a\nb cde\n\nf" and RA:List()[1].said == "one two", "control characters go, breaks collapse: "..RA:List()[1].reply)
+	RA:Take({ Ticket(47, 1, { reply = string.rep("x\n", 500) }) })
+	local _, breaks = RA:List()[1].reply:gsub("\n", "")
+	check(breaks <= 20, "line breaks are capped, got "..breaks)
+
+	-- The dialog: the text, the address built here, and reading marks it read and clears the notices
+	RA:Take({ Ticket(16, 412, { url = "https://evil.example/x", address = "https://evil.example/y", replyAt = 1795300000, reply = "Reply |cffff0000text" }) })
+	ns.UI:Show("home")
+	ns.UI:Refresh(true)
+	local function Find(field)
+		for _, f in ipairs(Mock.created) do if rawget(f, field) ~= nil then return f end end
+	end
+	local homeLine = Find("unread")
+	check(homeLine and homeLine:IsShown() and homeLine.text._text == "A developer answered your report #16", "Home has the line: "..tostring(homeLine and homeLine.text._text))
+	check(not homeLine.text._text:find("Reply", 1, true), "Home never shows the reply")
+	local function SettingsBadge()
+		for _, item in ipairs(ns.UI:Menu()) do if item.key == "settings" then return item.badge end end
+	end
+	check(tonumber(SettingsBadge()) == 1, "Settings has the count: "..tostring(SettingsBadge()))
+	homeLine:Click()
+	local frame = _G.WantedDialog.frame
+	check(_G.WantedDialog:IsShown() and frame.title._text == "Report #16 · Bug report", "the dialog opens: "..tostring(frame.title._text))
+	local body = frame.message._text
+	check(body:find("You said: The map is blank after I zone into Arathi.", 1, true) and body:find("The developers, "..date("%Y-%m-%d", 1795300000)..":\nReply ||cffff0000text", 1, true)
+		and body:find("Status: Awaiting info", 1, true) and body:find("Answer on the website, signed in to the account the Wanted app is connected to.", 1, true), "the dialog's text: "..body)
+	check(frame.copyText == "https://wanteddeadordead.com/me/reports/16" and not body:find("evil", 1, true), "the address is built from the number: "..tostring(frame.copyText))
+	check(frame:GetWidth() == 480, "the dialog is wider")
+	check(db.reportsRead[16] == 412 and #RA:Unread() == 0, "opening records it read")
+	check(not homeLine:IsShown() and SettingsBadge() == nil, "the Home line and the badge clear at once")
+	_G.WantedDialog:Hide()
+	-- Opened again later: shown again, nothing changes
+	RA:Open(16)
+	check(_G.WantedDialog:IsShown() and db.reportsRead[16] == 412, "an answer can be opened again")
+	_G.WantedDialog:Hide()
+	RA:Take({ Ticket(16, 413, { reply = "", status = "fixed", replyAt = 0 }) })
+	check(#RA:Unread() == 1, "a newer message makes it unread again")
+	RA:Open(16)
+	body = frame.message._text
+	check(body:find("^The developers set it to Fixed%.") and not body:find("You said", 1, true), "a status change with no reply: "..body)
+	_G.WantedDialog:Hide()
+	RA:Open(999)
+	check(not _G.WantedDialog:IsShown(), "a ticket not in the list opens nothing")
+
+	-- Website & app: a row per ticket, the new ones marked, and the card's states
+	RA:Take({ Ticket(16, 414), Ticket(15, 3, { seen = true, kind = "tip", status = "closed", said = "|cffff0000x" }) })
+	ns.UI:Show("web")
+	ns.UI:Refresh(true)
+	local card
+	for _, f in ipairs(Mock.created) do if type(rawget(f, "rows")) == "table" and #f.rows == 10 and rawget(f, "note") then card = f end end
+	local rows = {}
+	for _, row in ipairs(card.rows) do if row:IsShown() then rows[#rows + 1] = row end end
+	check(#rows == 2 and rows[1].title._text:find("^#16 · Bug report · Awaiting info · 2h ago") and rows[2].said._text == "||cffff0000x"
+		and rows[1].pill:IsShown() and not rows[2].pill:IsShown(), "the card's rows: "..#rows..tostring(rows[1] and rows[1].title._text).."|"..tostring(rows[2] and rows[2].said._text).."|"..tostring(rows[1] and rows[1].pill:IsShown())..tostring(rows[2] and rows[2].pill:IsShown()))
+	check(not card.note:IsShown(), "no note with a list")
+	rows[1]:Click()
+	check(_G.WantedDialog:IsShown() and _G.WantedDialog.frame.title._text == "Report #16 · Bug report", "a row opens its answer")
+	_G.WantedDialog:Hide()
+	RA:Take({})
+	ns.UI:Refresh(true)
+	check(card.note:IsShown() and card.note._text == "No answers yet." and not card.rows[1]:IsShown(), "an empty list says so")
+	-- The command
+	ns:RunCommand("reports", "")
+	check(ns.UI:IsShown("web"), "/wanted reports opens Website & app")
+
+	-- Put back
+	CloseDialogs()
+	RA:Take(nil)
+	ns.Print = realPrint
+	db.reportsRead, db.reportsTold = savedRead, savedTold
+	WantedAppInfo, WantedAppCatchup = savedInfo, savedCatchup
+end)()
+print("wanted smoke: report answers checks pass")
 -- One module's error at load is reported but doesn't stop the modules after it (a calling-card error once hid the
 -- minimap button). Last, because it loads the addon again.
 ;(function()

@@ -159,6 +159,8 @@ local DEFAULTS = {
 	bountyRequests = {}, -- request id -> bounty asked for from Discord, waiting to be asked on its character (Catchup)
 	requestAnswers = {}, -- request id -> { state = "posted"|"discarded"|"refused", reason, t }, read by the app (Catchup)
 	farPeers = {}, -- name -> { realm, seen } players on other realm names linked by whisper (Sync realm links)
+	reportsRead = {}, -- ticket number -> the developers' message id the player opened in game, read by the app (ReportAnswers)
+	reportsTold = {}, -- ticket number -> the message id the chat line was said for, so it isn't repeated (ReportAnswers)
 	appNudgedAt = nil, -- server time of the last "no Wanted app detected" line (PageWeb), once a day
 	recentPeers = {}, -- name -> seen: the last players heard on the sync channel, to whisper if locked out of it
 	homeCheck = { wait = 5 * 60, tried = 0 }, -- trying the main sync channel again while it turns us away (Sync CheckMain)

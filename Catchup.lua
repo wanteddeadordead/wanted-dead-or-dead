@@ -121,6 +121,7 @@ function Catchup:Import()
 	local snapshot = private.Snapshot()
 	if type(entry) ~= "table" or type(entry.t) ~= "number" then
 		Wanted.Duels:TakeReports(nil, nil)
+		Wanted.ReportAnswers:Take(nil)
 		Wanted.Shard:TakeLayers(nil)
 		if snapshot then
 			-- No app: the site's public data from the daily snapshot (the data addon), the app's step still red
@@ -138,6 +139,8 @@ function Catchup:Import()
 	Wanted.Duels:TakeReports(entry.duelReports, entry.t)
 	-- Reports the app has sent on to the developers, read at every login: they leave the queue
 	Wanted.Report:TakeReceived(entry.reportsReceived)
+	-- The developers' answers to the player's reports (app 0.2.66), read at every login: only shown, never a record
+	Wanted.ReportAnswers:Take(entry.tickets)
 	-- Asked at every login and /reload, even of a catch-up already taken in: the game may know them by now
 	private.LookUpUnnamed(entry.unnamed)
 	-- The sync channel wanteddeadordead.com says everyone moved to, after the old one was taken over

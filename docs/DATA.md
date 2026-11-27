@@ -335,6 +335,17 @@ refused with `off`. `Shard.layersOff` turns it back on; nothing is saved either 
 `WantedDB.appNudgedAt` (server time, or nil) is when the addon last said, minutes into a session, that no Wanted app
 was detected; the line comes once a day (1.23.5, PageWeb).
 
+`WantedDB.reportsRead` and `WantedDB.reportsTold` (from 1.32.0, `ReportAnswers.lua`) are two maps of ticket number to the
+developers' message id (`m`), both `{}` by default (rule 1: no layout change). `reportsRead[n] = m` is written when the
+player opens the answer in game; the Wanted app reads it at every upload and sends it to the website as `ticketsRead`
+(highest ticket number first, at most 20, positive whole numbers only), which marks the ticket seen. `reportsTold[n] = m` is
+the answer the chat line was said for, so it isn't repeated at every login. Both are cut at every login to the tickets in the
+catch-up's `tickets` list (a table, even an empty one; with no list nothing is cut). A newer `m` than the one saved is an
+unread answer again. The list itself is never saved: the catch-up's `tickets = { { n, kind, status, m, at, seen, reply,
+replyAt, said } }` (at most 10; `kind` bug, idea or tip; `status` open, awaiting, fixed or closed) is read at every login
+from the app's catch-up only, never from the snapshot, never sent on the channel, and shown only: the reply and `said` are
+cut to 1000 and 80 letters and every `|` is doubled before display.
+
 Development builds only: `WantedDB.devLog` keeps the last 5000 debug log lines (`{ lines, pos }`, a ring) so
 network traffic can be read back after a session; `/wanted netlog` summarises it. Lines starting `!!` mark
 anomalies (altered records, broken chains, bad messages, limits hit, version locks, rejected notices).

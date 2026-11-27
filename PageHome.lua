@@ -13,6 +13,7 @@ local Challenges = Wanted.Challenges
 local private = {}
 local GAP = 12
 local BAND_HEIGHT = 64
+local ANSWERS_HEIGHT = 34 -- the line for answers to the player's reports, under the setup card
 local CARD_TOP = -(BAND_HEIGHT + GAP)
 local CARD_HEIGHT = 124
 local RAIDS_TOP = CARD_TOP - CARD_HEIGHT - 16
@@ -533,11 +534,48 @@ function private.RefreshStrip()
 	end
 end
 
+---The line under the setup card while an answer from the developers is unread: one answer opens it, several open
+---Website & app. Never the answer's text (streams).
+---@return number height what it takes under the setup card, with the gap above it; 0 while hidden
+function private.RefreshAnswers(top)
+	local card = private.answers
+	local unread = Wanted.ReportAnswers:Unread()
+	card:SetShown(#unread > 0)
+	if #unread == 0 then
+		return 0
+	end
+	card.unread = unread
+	card:ClearAllPoints()
+	card:SetPoint("TOPLEFT", 0, -(top + GAP))
+	card.text:SetText(#unread == 1 and format("A developer answered your report #%d", unread[1].n) or format("%d reports answered", #unread))
+	return ANSWERS_HEIGHT + GAP
+end
+
+---The line for answers to the player's reports, under the setup card.
+function private.BuildAnswers(container, width)
+	local card = W:CardButton(container, function(self)
+		local unread = self.unread
+		if unread and #unread == 1 then
+			Wanted.ReportAnswers:Open(unread[1].n)
+		else
+			UI:Show("web")
+		end
+	end)
+	card:SetSize(width, ANSWERS_HEIGHT)
+	card.text = Theme:Text(card, "body", "", C.text)
+	card.text:SetPoint("LEFT", 16, 0)
+	card.text:SetWidth(width - 48)
+	card:Hide()
+	W:AttachTooltip(card, "Your reports", "The developers answered a report you sent. Opens the answer, or Website & app when there are several.")
+	private.answers = card
+end
+
 function private.Refresh()
 	if not private.band then
 		return
 	end
 	local setupHeight = private.setup.Refresh()
+	setupHeight = setupHeight + private.RefreshAnswers(setupHeight)
 	private.content:ClearAllPoints()
 	private.content:SetPoint("TOPLEFT", 0, -(setupHeight + GAP))
 	private.content:SetPoint("BOTTOMRIGHT")
@@ -589,6 +627,7 @@ UI:RegisterPage("home", {
 		-- The setup marks first (Setup); everything else in a frame that moves down under them
 		private.setup = Wanted.Setup:BuildCard(container, width, true, function() UI:Show("web") end)
 		private.setup:SetPoint("TOPLEFT")
+		private.BuildAnswers(container, width)
 		W:AttachTooltip(private.setup, "Your setup", "What Wanted needs to work in full, and what's missing. Opens Website & app, where the addresses are.")
 		local content = CreateFrame("Frame", nil, container)
 		content:SetPoint("TOPLEFT")

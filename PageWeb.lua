@@ -10,6 +10,8 @@ local private = {}
 
 local SITE = "https://wanteddeadordead.com"
 local SITE_HEIGHT, APP_HEIGHT = 156, 170
+-- The "Your reports" card: its title's room, a row per answered ticket, the room under the last
+local REPORTS_HEAD, REPORT_ROW, REPORTS_FOOT = 40, 40, 10
 
 ---An address with a label over it, in a card.
 local function AddLink(card, y, label, url, width)
@@ -37,6 +39,75 @@ function private.BuildSite(container, width)
 	AddLink(card, -40, "The site", SITE, width)
 	private.playerBox = AddLink(card, -92, "Your page", SITE.."/player/", width)
 	UI:Mark("yourpage", function() return private.playerBox end)
+end
+
+---The developers' answers to the player's reports: a row per ticket (click to read it), or what to do when there are none.
+function private.BuildReports(container, width)
+	local card = W:Card(container)
+	private.reportsCard = card
+	card:SetWidth(width)
+	local label = W:SectionLabel(card, "Your reports")
+	label:SetPoint("TOPLEFT", 16, -14)
+	W:InfoGlyph(card, "Your reports", "When the developers answer a bug report, feature idea or tip you sent, it shows here and on the Dashboard. "
+		.."Click one to read the answer. Answer on the website: the window gives the ticket's address.")
+		:SetPoint("LEFT", label, "RIGHT", 6, 0)
+	card.note = Theme:Text(card, "small", "", C.muted)
+	card.note:SetPoint("TOPLEFT", 16, -REPORTS_HEAD)
+	card.note:SetWidth(width - 32)
+	card.note:SetWordWrap(true)
+	card.rows = {}
+	for i = 1, 10 do
+		local row = CreateFrame("Button", nil, card)
+		row:SetSize(width - 2, REPORT_ROW)
+		row:SetPoint("TOPLEFT", 1, -(REPORTS_HEAD + (i - 1) * REPORT_ROW))
+		row._bg = Theme:Fill(row, C.transparent)
+		row.pill = W:Pill(row)
+		row.pill:SetPoint("RIGHT", -16, 0)
+		row.title = Theme:Text(row, "small", "", C.text)
+		row.title:SetPoint("TOPLEFT", 15, -6)
+		row.title:SetWidth(width - 32 - 110)
+		row.said = Theme:Text(row, "small", "", C.muted)
+		row.said:SetPoint("TOPLEFT", 15, -22)
+		row.said:SetWidth(width - 32 - 110)
+		row:SetScript("OnClick", function(self)
+			if self.n then
+				Wanted.ReportAnswers:Open(self.n)
+			end
+		end)
+		row:SetScript("OnEnter", function(self) Theme:SetBg(self, C.panelAlt) end)
+		row:SetScript("OnLeave", function(self) Theme:SetBg(self, C.transparent) end)
+		row:Hide()
+		card.rows[i] = row
+	end
+end
+
+---Fills the card from the answers taken in.
+---@return number height
+function private.RefreshReports()
+	local card, answers = private.reportsCard, Wanted.ReportAnswers
+	local state, text = answers:State()
+	card.note:SetText(text)
+	card.note:SetShown(state ~= "list")
+	local list = state == "list" and answers:List() or {}
+	local now = GetServerTime()
+	for i, row in ipairs(card.rows) do
+		local t = list[i]
+		row:SetShown(t ~= nil)
+		row.n = t and t.n
+		if t then
+			row.title:SetText(format("#%d · %s · %s · %s", t.n, answers.KINDS[t.kind], answers.STATUSES[t.status], Theme:Ago(now - t.at)))
+			row.said:SetText(t.said)
+			row.pill:Set(answers:IsUnread(t) and "New answer" or nil, C.amber)
+		end
+	end
+	local height = REPORTS_HEAD + REPORTS_FOOT
+	if state == "list" then
+		height = height + #list * REPORT_ROW
+	else
+		height = height + max(ceil(card.note:GetStringHeight() or 0), 14)
+	end
+	card:SetHeight(height)
+	return height
 end
 
 function private.BuildApp(container, width)
@@ -90,6 +161,9 @@ function private.Refresh()
 	-- The setup steps first (Setup), then, without the app, its card: the red light at the top opens this page for
 	-- the download link
 	local top = private.setup.Refresh() + 12
+	private.reportsCard:ClearAllPoints()
+	private.reportsCard:SetPoint("TOPLEFT", 0, -top)
+	top = top + private.RefreshReports() + 12
 	private.siteCard:ClearAllPoints()
 	private.appCard:ClearAllPoints()
 	if Wanted:HasApp() then
@@ -193,8 +267,14 @@ UI:RegisterPage("web", {
 		private.body = body
 		private.setup = Wanted.Setup:BuildCard(body, width - 30)
 		private.setup:SetPoint("TOPLEFT")
+		private.BuildReports(body, width - 30)
 		private.BuildSite(body, width - 30)
 		private.BuildApp(body, width - 30)
+	end,
+	-- Answers from the developers not read yet; it reaches the Settings menu entry through under
+	badge = function()
+		local unread = #Wanted.ReportAnswers:Unread()
+		return unread > 0 and unread or nil
 	end,
 	refresh = private.Refresh,
 })

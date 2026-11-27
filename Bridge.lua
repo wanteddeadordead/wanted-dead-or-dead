@@ -90,7 +90,19 @@ end
 ---A table the game gave that can be read: not secret, and a table (in an encounter or a chat lockdown the club calls
 ---answer with a secret value, which is truthy and can't be iterated or indexed).
 local function Open(value)
-	return type(value) == "table" and not IsSecret(value)
+	return type(value) == "table" and not IsSecret(value) and (not canaccesstable or canaccesstable(value))
+end
+
+---A round that couldn't read its list keeps the targets the last round found from it (source "community" or "friend"),
+---so a boss fight doesn't drop the bridges until the next scan.
+---@param found table gameAccountID -> target
+---@param source string
+local function KeepTargets(found, source)
+	for id, target in pairs(private.targets or {}) do
+		if target.source == source and not found[id] then
+			found[id] = target
+		end
+	end
 end
 
 -- The fields of a game account that are read (compared, used as a key, or sent on)
@@ -294,6 +306,10 @@ function private.AddCommunityTargets(found, room)
 	private.community = seen
 	local clubId = private.CommunityClub()
 	if not clubId then
+		-- (the communities themselves unreadable: keep what the last round found)
+		if C_Club and C_Club.GetSubscribedClubs and not Open(C_Club.GetSubscribedClubs()) then
+			KeepTargets(found, "community")
+		end
 		return
 	end
 	seen.clubId = clubId
@@ -306,6 +322,7 @@ function private.AddCommunityTargets(found, room)
 	if not Open(members) then
 		-- The game hides the member list in an encounter or a chat lockdown: nothing to scan this round
 		Wanted:Log("Bridge: community %s: member list not readable now; skipped", tostring(clubId))
+		KeepTargets(found, "community")
 		return
 	end
 	for _, memberId in ipairs(members) do
@@ -376,6 +393,7 @@ function private.Scan()
 	local friends = BNGetNumFriends()
 	if type(friends) ~= "number" or IsSecret(friends) then
 		friends = 0
+		KeepTargets(found, "friend")
 	end
 	for i = 1, friends do
 		local account = C_BattleNet.GetFriendAccountInfo(i)

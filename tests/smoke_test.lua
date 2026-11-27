@@ -6622,14 +6622,19 @@ end)()
 	for i = 1, 30 do local name, value = debug.getupvalue(ns.Bridge.InCommunity, i) if name == "private" then bridgePrivate = value break end if not name then break end end
 	local realMembers, realClubs, realInfo = C_Club.GetClubMembers, C_Club.GetSubscribedClubs, C_Club.GetMemberInfo
 	clubMembers[1].presence = 1
+	ns.Bridge.clubId = "77"
+	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
+	check(bridgePrivate.targets[301] ~= nil, "control: the community member is a target")
 	C_Club.GetClubMembers = function() return hard end
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	check(bridgePrivate.community.members == 0 and bridgePrivate.community.added == 0, "a secret member list: the round is skipped, counts left at 0")
+	check(bridgePrivate.targets[301] ~= nil, "and the last round's community targets are kept, so a boss fight doesn't drop the bridge")
 	C_Club.GetClubMembers = realMembers
 	C_Club.GetSubscribedClubs = function() return hard end
 	Rescan("CLUB_MEMBER_PRESENCE_UPDATED", "77", 1, 1)
 	local hiddenReport = table.concat(ns.Bridge:CommunityReport(), "\n")
 	check(not ns.Bridge:InCommunity() and hiddenReport:find("none (or hidden for now)", 1, true), "a secret list of communities: none known, no error: "..hiddenReport)
+	check(bridgePrivate.targets[301] ~= nil, "a secret list of communities keeps the targets too")
 	C_Club.GetSubscribedClubs = function() return { hard, { clubId = hard, name = "Wanted" }, { clubId = "77", name = "Wanted", clubType = hard, memberCount = 6 } } end
 	check(ns.Bridge:InCommunity(), "a secret entry among the communities is skipped, the readable one found")
 	check(not table.concat(ns.Bridge:CommunityReport(), "\n"):find("id 77, ", 1, true), "an entry whose type is secret is left out of the report")
@@ -6649,6 +6654,17 @@ end)()
 		check(not bridgePrivate.IsCandidate(game) and not bridgePrivate.IsRealmLinkCandidate(game), "a game account with a secret "..field.." is neither a bridge nor a realm link")
 	end
 	check(not bridgePrivate.IsCandidate(hard) and not bridgePrivate.IsRealmLinkCandidate(hard), "a secret game account is skipped")
+	-- Numbers the game hides: the friend count, a friend's number of game accounts
+	local realNum, realGames, realSecretNow = BNGetNumFriends, C_BattleNet.GetFriendNumGameAccounts, issecretvalue
+	issecretvalue = function(v) return rawequal(v, hard) or v == 1337 end
+	BNGetNumFriends = function() return 1337 end
+	Rescan("BN_FRIEND_INFO_CHANGED")
+	BNGetNumFriends = realNum
+	C_BattleNet.GetFriendNumGameAccounts = function() return 1337 end
+	Rescan("BN_FRIEND_INFO_CHANGED")
+	C_BattleNet.GetFriendNumGameAccounts = realGames
+	issecretvalue = realSecretNow
+	check(true, "a secret friend count and a secret number of game accounts run without an error")
 	local realByID = C_BattleNet.GetGameAccountInfoByID
 	C_BattleNet.GetGameAccountInfoByID = function() return hard end
 	check(bridgePrivate.ValidSender(777) == nil, "a message whose sender's game account is secret is ignored")

@@ -4763,6 +4763,17 @@ end)()
 	check(Hidden("spam", "Griefer", "Orcish", "6. WantedNetHorde", "", "", 0, 6, "WantedNetHorde"), "a line typed in the sync channel is hidden")
 	check(Hidden("spam", "Griefer", "Orcish", "6. wantednethorde", "", "", 0, 6, "wantednethorde"), "whatever the case")
 	check(not Hidden("lfg", "Someone", "Orcish", "2. Trade - City", "", "", 2, 2, "Trade - City"), "a line in another channel is not")
+	check(not Hidden("hi", "Someone", "Orcish", "1. General - Durotar", "", "", 1, 1, "General - Durotar"), "nor a line in General")
+	-- A secret payload (a chat lockdown; the game skips addon filters for those, this is in case it ever doesn't): nothing
+	-- is read and nothing is returned
+	local secret = setmetatable({}, { __index = function() error("secret value indexed") end, __eq = function() error("secret value compared") end })
+	local realSecretValue = issecretvalue
+	issecretvalue = function(v) return rawequal(v, secret) end
+	local channelFilter = chatFilterLists.CHAT_MSG_CHANNEL and chatFilterLists.CHAT_MSG_CHANNEL[1]
+	for _, f in ipairs(chatFilterLists.CHAT_MSG_CHANNEL or {}) do if f == notice then channelFilter = f end end
+	local ok, n = pcall(function(...) return select("#", channelFilter(...)) end, nil, "CHAT_MSG_CHANNEL", secret, secret, "", secret, "", "", 0, secret, secret)
+	issecretvalue = realSecretValue
+	check(ok and n == 0, "a secret line in a channel is left alone, returning nothing: "..tostring(n))
 	check(notice(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", nil, "1. General", "", "", 1, 1, "General") == false, "other channels' notices show")
 end)()
 ;(function()

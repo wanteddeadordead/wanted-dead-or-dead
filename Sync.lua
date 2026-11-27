@@ -488,7 +488,8 @@ function Sync:OnEnable()
 		-- The member list the addon asks for (RequestMembers) is for counting, not reading
 		addFilter("CHAT_MSG_CHANNEL_LIST", private.HideChannelNotice)
 		-- What someone types in it by hand: a window that lists the channel keeps it in its own list until the next
-		-- UPDATE_CHAT_WINDOWS (HideFromChatWindows writes nothing there), and would show those lines until then
+		-- UPDATE_CHAT_WINDOWS (HideFromChatWindows writes nothing there), and would show those lines until then. In a chat
+		-- lockdown the game skips addon filters for secret lines, so there they can still show until a /reload
 		addFilter("CHAT_MSG_CHANNEL", private.HideChannelNotice)
 	end
 end
@@ -496,6 +497,11 @@ end
 ---Hides the game's notices about the sync channel and lines typed in it (arg9 is the channel's base name), and the
 ---notices it gives, under a public channel's name, for our own sends it refused a moment ago.
 function private.HideChannelNotice(_, event, kind, _, _, channelString, _, _, _, channelNumber, baseName)
+	-- A secret line (a chat lockdown) is never read: the game skips addon filters for those, and if it ever didn't,
+	-- nothing returned leaves the line as it is
+	if private.AnySecret(kind, channelString, channelNumber, baseName) then
+		return
+	end
 	if type(baseName) == "string" and private.channelName ~= nil and strlower(baseName) == strlower(private.channelName) then
 		return true
 	end

@@ -20879,6 +20879,10 @@ print("wanted smoke: races and guild wars off checks pass")
 	local _, breaks = RA:List()[1].reply:gsub("\n", "")
 	check(breaks <= 20, "line breaks are capped, got "..breaks)
 
+	RA:Take({ Ticket(48, 1, { reply = "A"..string.rep("\128", 300000), said = "B"..string.rep("\128", 300000) }) })
+	check(#RA:List()[1].reply <= 4000 and #RA:List()[1].said <= 320, "continuation bytes can't pad past the cap")
+	RA:Take({ Ticket(49, 1, { at = 1e12, replyAt = 1e12 }), Ticket(2 ^ 40, 1) })
+	check(#RA:List() == 1 and RA:List()[1].at == 0 and RA:List()[1].replyAt == 0, "huge times are 0 and a huge ticket number is skipped")
 	-- The dialog: the text, the address built here, and reading marks it read and clears the notices
 	RA:Take({ Ticket(16, 412, { url = "https://evil.example/x", address = "https://evil.example/y", replyAt = 1795300000, reply = "Reply |cffff0000text" }) })
 	ns.UI:Show("home")

@@ -24,6 +24,10 @@ local MIN_APP = "0.2.66"
 local SETTLE_SECONDS = 4
 -- Whole numbers the app writes stay below this (a double holds them exactly)
 local MAX_ID = 2 ^ 53
+-- Ticket numbers stay within a 32-bit whole number (what format's %d prints exactly on every client); times stay
+-- before the year 2100, where the game's date() works on every system
+local MAX_N = 2 ^ 31 - 1
+local MAX_TIME = 4102444800
 
 ReportAnswers.KINDS = { bug = "Bug report", idea = "Feature idea", tip = "Tip" }
 ReportAnswers.STATUSES = { open = "Open", awaiting = "Awaiting info", fixed = "Fixed", closed = "Closed" }
@@ -64,6 +68,9 @@ function private.Clean(text, maxLetters, oneLine)
 	if type(text) ~= "string" then
 		return nil
 	end
+	-- A letter is at most 4 bytes: bytes past that can't be kept, however they are counted (stray continuation bytes
+	-- count as no letter), and the steps below needn't run over them
+	text = strsub(text, 1, maxLetters * 4)
 	text = gsub(text, "\r\n?", "\n")
 	text = gsub(text, "%c", function(char)
 		if char == "\n" then
@@ -90,8 +97,8 @@ function private.Clean(text, maxLetters, oneLine)
 end
 
 ---A whole number from 1 up, or nil.
-local function WholeNumber(value)
-	if type(value) == "number" and value == floor(value) and value >= 1 and value <= MAX_ID then
+local function WholeNumber(value, most)
+	if type(value) == "number" and value == floor(value) and value >= 1 and value <= most then
 		return value
 	end
 	return nil
@@ -102,7 +109,7 @@ function private.CleanTicket(t)
 	if type(t) ~= "table" then
 		return nil
 	end
-	local n, m = WholeNumber(t.n), WholeNumber(t.m)
+	local n, m = WholeNumber(t.n, MAX_N), WholeNumber(t.m, MAX_ID)
 	if not n or not m or not ReportAnswers.KINDS[t.kind] or not ReportAnswers.STATUSES[t.status] then
 		return nil
 	end
@@ -110,8 +117,8 @@ function private.CleanTicket(t)
 	if not reply or not said then
 		return nil
 	end
-	local at, replyAt = type(t.at) == "number" and t.at >= 0 and t.at <= MAX_ID and floor(t.at) or 0,
-		type(t.replyAt) == "number" and t.replyAt >= 0 and t.replyAt <= MAX_ID and floor(t.replyAt) or 0
+	local at, replyAt = type(t.at) == "number" and t.at >= 0 and t.at <= MAX_TIME and floor(t.at) or 0,
+		type(t.replyAt) == "number" and t.replyAt >= 0 and t.replyAt <= MAX_TIME and floor(t.replyAt) or 0
 	return { n = n, kind = t.kind, status = t.status, m = m, at = at, seen = t.seen == true, reply = reply,
 		replyAt = reply ~= "" and replyAt or 0, said = said }
 end
@@ -296,8 +303,6 @@ function ReportAnswers:Open(n)
 		return
 	end
 	local db = Wanted.db
-	db.reportsRead[t.n] = max(db.reportsRead[t.n] or 0, t.m)
-	db.reportsTold[t.n] = max(db.reportsTold[t.n] or 0, t.m)
 	Wanted.Widgets:Dialog({
 		title = format("Report #%d · %s", t.n, ReportAnswers.KINDS[t.kind]),
 		text = ReportAnswers:DialogText(t),
@@ -307,6 +312,9 @@ function ReportAnswers:Open(n)
 		cancelLabel = "Close",
 		onConfirm = function() end,
 	})
+	-- After the dialog is built: an error making it never marks the answer read
+	db.reportsRead[t.n] = max(db.reportsRead[t.n] or 0, t.m)
+	db.reportsTold[t.n] = max(db.reportsTold[t.n] or 0, t.m)
 	if Wanted.UI then
 		Wanted.UI:Refresh(true)
 	end

@@ -2,12 +2,11 @@
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-11-27
+
 - In a battleground, Wanted no longer causes "The client blocked ListChannelByName()" and "Interface action failed because of an AddOn": it asks for its sync channel's member count once the game lifts its chat lockdown.
-
 - Lines in chat channels (General, Trade, LocalDefense and the like) could vanish during a battleground, a boss fight or any other time the game locks chat down.
-
 - Greeting players on other realms no longer runs in one burst, which the game could cut off with "script ran too long" and which could cause a hitch. Each greet now goes in its own frame, and none go inside an instance or after a fight starts.
-
 - An error in boss fights for players in the Wanted community is gone: the game hides the community's member list during an encounter, and the cross-faction bridge now skips that round instead of failing.
 
 ## [1.30.0] - 2026-11-25
